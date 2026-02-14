@@ -962,7 +962,12 @@ def generate_briefing() -> str:
         The complete market briefing as a formatted text string.
     """
     today = date.today().strftime("%Y-%m-%d")
-    sections = [f"=== Mirror Market Daily Briefing — {today} ===", ""]
+    sections = [
+        f"=== Mirror Market Daily Briefing — {today} ===",
+        "NOTE: Data is informational only and should not be used as sole basis for trading decisions.",
+        "Some data layers may be delayed or unavailable. Check Data Freshness below.",
+        "",
+    ]
 
     # Data freshness warnings (show at top so stale data is immediately visible)
     freshness = _format_freshness_warnings()

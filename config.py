@@ -184,7 +184,7 @@ WEATHER_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum"
 PSD_URLS = {
     "oilseeds": "https://apps.fas.usda.gov/psdonline/downloads/psd_oilseeds_csv.zip",
     "coffee":   "https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip",
-    "grains":   "https://apps.fas.usda.gov/psdonline/downloads/psd_grains_csv.zip",
+    "grains":   "https://apps.fas.usda.gov/psdonline/downloads/psd_grains_pulses_csv.zip",
     "cotton":   "https://apps.fas.usda.gov/psdonline/downloads/psd_cotton_csv.zip",
 }
 
