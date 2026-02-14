@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files (re-fetchable)
+data/storage/*.db
+data/storage/*.csv
+
+# Environment / secrets
+.env
+
+# OS
+.DS_Store
