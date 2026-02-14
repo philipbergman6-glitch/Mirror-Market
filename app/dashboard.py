@@ -20,6 +20,16 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
+
+# Bridge Streamlit Cloud secrets to environment variables so config.py
+# picks them up via os.getenv(). Only needed on Streamlit Cloud where
+# secrets are stored in st.secrets instead of the shell environment.
+for key in ("USDA_API_KEY", "FRED_API_KEY", "FAS_API_KEY"):
+    if key not in os.environ:
+        try:
+            os.environ[key] = st.secrets[key]
+        except (KeyError, FileNotFoundError):
+            pass
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
@@ -41,13 +51,24 @@ from analysis.forward_curve import analyze_curve
 from analysis.briefing import generate_briefing
 
 # ---------------------------------------------------------------------------
-# Page config
+# Page config (must be the first Streamlit command)
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Mirror Market",
     page_icon="📊",
     layout="wide",
 )
+
+# ---------------------------------------------------------------------------
+# Auto-fetch: run the data pipeline if no database exists yet
+# (needed for Streamlit Cloud, which starts with a clean filesystem)
+# ---------------------------------------------------------------------------
+from config import DB_PATH
+
+if not os.path.exists(DB_PATH):
+    with st.spinner("First launch — fetching market data (this may take a few minutes)..."):
+        from main import run as run_pipeline
+        run_pipeline()
 
 # ---------------------------------------------------------------------------
 # Sidebar navigation
