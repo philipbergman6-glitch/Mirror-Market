@@ -2,7 +2,7 @@
 Mirror Market — main entry point.
 
 Run this script to:
-    1. Fetch commodity prices     (yfinance — always works)
+    1. Fetch commodity prices     (yfinance — always works, includes BMD palm oil)
     2. Fetch USDA crop data       (requires USDA_API_KEY)
     3. Fetch FRED economic data   (requires FRED_API_KEY)
     4. Fetch COT positioning      (CFTC — no key needed)
@@ -13,9 +13,14 @@ Run this script to:
     9. Fetch DCE Chinese futures  (AKShare — no key needed)
    10. Fetch USDA export sales    (requires FAS_API_KEY)
    11. Fetch forward curves       (yfinance — no key needed)
-   12. Clean everything
-   13. Store it all in a local SQLite database
-   14. Print a verification summary
+   12. Fetch WASDE monthly estimates (requires USDA_API_KEY)
+   13. Fetch EIA biofuel/energy   (requires EIA_API_KEY)
+   14. Fetch USDA crush + inspections (requires USDA_API_KEY + AMS report)
+   15. Fetch CONAB Brazil estimates (no key needed)
+   16. Fetch options sentiment    (yfinance — experimental)
+   17. Clean everything
+   18. Store it all in a local SQLite database
+   19. Print a verification summary
 
 Usage:
     python main.py
@@ -32,7 +37,10 @@ from config import setup_logging
 
 from data.fetchers.yfinance_fetcher import fetch_all as fetch_prices
 from data.fetchers.yfinance_fetcher import fetch_currencies
-from data.fetchers.usda_fetcher import fetch_soybean_overview, fetch_all_crop_progress
+from data.fetchers.usda_fetcher import (
+    fetch_soybean_overview, fetch_all_crop_progress,
+    fetch_wasde_estimates, fetch_crush_data, fetch_export_inspections,
+)
 from data.fetchers.fred_fetcher import fetch_all_series
 from data.fetchers.cot_fetcher import fetch_cot_recent
 from data.fetchers.weather_fetcher import fetch_all_regions
@@ -41,11 +49,15 @@ from data.fetchers.worldbank_fetcher import fetch_worldbank_prices
 from data.fetchers.akshare_fetcher import fetch_dce_futures
 from data.fetchers.export_sales_fetcher import fetch_all_export_sales
 from data.fetchers.forward_curve_fetcher import fetch_all_forward_curves
+from data.fetchers.eia_fetcher import fetch_all_eia
+from data.fetchers.conab_fetcher import fetch_conab_estimates
+from data.fetchers.options_fetcher import fetch_options_sentiment
 
 from processing.cleaner import (
     clean_ohlcv, clean_fred_series, clean_cot, clean_weather,
     clean_psd, clean_currencies, clean_worldbank, clean_dce_futures,
     clean_export_sales, clean_forward_curve,
+    clean_wasde, clean_eia, clean_inspections, clean_conab, clean_options,
 )
 from processing.combiner import (
     init_database,
@@ -61,6 +73,11 @@ from processing.combiner import (
     save_crop_progress,
     save_export_sales,
     save_forward_curve,
+    save_wasde,
+    save_inspections,
+    save_eia_data,
+    save_brazil_estimates,
+    save_options_sentiment,
     save_freshness,
     read_prices,
 )
@@ -81,6 +98,8 @@ def run():
         "fred": False, "cot": False, "weather": False,
         "psd": False, "currencies": False, "worldbank": False,
         "dce": False, "export_sales": False, "forward_curve": False,
+        "wasde": False, "eia": False, "crush_inspections": False,
+        "conab": False, "options": False,
     }
 
     # ── Initialise database schema ─────────────────────────────────
@@ -344,6 +363,142 @@ def run():
             logger.warning("[Layer 11] Forward curves returned no data")
     except Exception:
         logger.error("[Layer 11] Forward curves failed — see error above", exc_info=True)
+
+    # ── Layer 12: WASDE Monthly Estimates ────────────────────────
+    wasde_data = {}
+    try:
+        logger.info("[Layer 12] Fetching WASDE monthly estimates ...")
+        wasde_data = fetch_wasde_estimates()
+
+        if wasde_data:
+            logger.info("[Cleaning] Processing WASDE data ...")
+            for key in wasde_data:
+                wasde_data[key] = clean_wasde(wasde_data[key])
+
+            for key, df in wasde_data.items():
+                save_wasde(key, df)
+
+            if any(not df.empty for df in wasde_data.values()):
+                results["wasde"] = True
+                total_rows = sum(len(df) for df in wasde_data.values())
+                save_freshness("wasde", total_rows)
+            else:
+                logger.warning("[Layer 12] WASDE returned no data (API key missing?)")
+        else:
+            logger.info("[Layer 12] WASDE skipped (USDA_API_KEY not set)")
+    except Exception:
+        logger.error("[Layer 12] WASDE failed — see error above", exc_info=True)
+
+    # ── Layer 13: EIA Biofuel/Energy ──────────────────────────────
+    eia_data = {}
+    try:
+        logger.info("[Layer 13] Fetching EIA energy/biofuel data ...")
+        eia_data = fetch_all_eia()
+
+        if eia_data:
+            logger.info("[Cleaning] Processing EIA data ...")
+            for name in eia_data:
+                eia_data[name] = clean_eia(eia_data[name])
+
+            for name, df in eia_data.items():
+                save_eia_data(name, df)
+
+            if any(not df.empty for df in eia_data.values()):
+                results["eia"] = True
+                total_rows = sum(len(df) for df in eia_data.values())
+                save_freshness("eia", total_rows)
+            else:
+                logger.warning("[Layer 13] EIA returned no data")
+        else:
+            logger.info("[Layer 13] EIA skipped (EIA_API_KEY not set)")
+    except Exception:
+        logger.error("[Layer 13] EIA failed — see error above", exc_info=True)
+
+    # ── Layer 14: USDA Crush/Processing + Export Inspections ──────
+    try:
+        logger.info("[Layer 14] Fetching USDA crush data + export inspections ...")
+        total_14 = 0
+
+        # Crush data (same USDA API, stat_category=PROCESSING)
+        crush_df = fetch_crush_data()
+        if not crush_df.empty:
+            save_usda_data(crush_df, "PROCESSING")
+            total_14 += len(crush_df)
+
+        # Export inspections (AMS text report)
+        insp_df = fetch_export_inspections()
+        if not insp_df.empty:
+            insp_df = clean_inspections(insp_df)
+            for commodity in insp_df["commodity"].unique():
+                subset = insp_df[insp_df["commodity"] == commodity]
+                save_inspections(commodity, subset)
+            total_14 += len(insp_df)
+
+        if total_14 > 0:
+            results["crush_inspections"] = True
+            save_freshness("crush_inspections", total_14)
+        else:
+            logger.warning("[Layer 14] Crush/inspections returned no data")
+    except Exception:
+        logger.error("[Layer 14] Crush/inspections failed — see error above", exc_info=True)
+
+    # ── Layer 15: CONAB Brazil Crop Estimates ─────────────────────
+    try:
+        logger.info("[Layer 15] Fetching CONAB Brazil estimates ...")
+        conab_df = fetch_conab_estimates()
+
+        if not conab_df.empty:
+            conab_df = clean_conab(conab_df)
+            save_brazil_estimates(conab_df)
+            results["conab"] = True
+            save_freshness("conab", len(conab_df))
+        else:
+            logger.warning("[Layer 15] CONAB returned no data")
+    except Exception:
+        logger.error("[Layer 15] CONAB failed — see error above", exc_info=True)
+
+    # ── Layer 16: Options Sentiment (experimental) ────────────────
+    options_data = {}
+    try:
+        logger.info("[Layer 16] Fetching options sentiment (experimental) ...")
+        options_data = fetch_options_sentiment()
+
+        if options_data:
+            for name in options_data:
+                options_data[name] = clean_options(options_data[name])
+
+            for name, df in options_data.items():
+                save_options_sentiment(name, df)
+
+            if any(not df.empty for df in options_data.values()):
+                results["options"] = True
+                total_rows = sum(len(df) for df in options_data.values())
+                save_freshness("options", total_rows)
+            else:
+                logger.info("[Layer 16] Options returned no data (expected for ag futures)")
+        else:
+            logger.info("[Layer 16] Options skipped — no data available")
+    except Exception:
+        # Extra-defensive for experimental layer
+        logger.info("[Layer 16] Options failed (experimental, non-critical): %s", exc_info=True)
+
+    # ── Update per-commodity freshness tracking ─────────────────
+    try:
+        from processing.combiner import update_commodity_freshness
+        update_commodity_freshness()
+    except Exception:
+        logger.error("Per-commodity freshness update failed", exc_info=True)
+
+    # ── Run data health check ─────────────────────────────────
+    try:
+        from analysis.health import run_health_check
+        health = run_health_check()
+        if health["issues"]:
+            logger.info("\n%s", health["summary"])
+        else:
+            logger.info("DATA HEALTH: All systems green")
+    except Exception:
+        logger.error("Health check failed", exc_info=True)
 
     # ── Verify ───────────────────────────────────────────────────
     logger.info("=" * 60)

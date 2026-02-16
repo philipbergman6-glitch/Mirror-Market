@@ -28,6 +28,8 @@ import pandas as pd
 from config import (
     USDA_API_KEY, USDA_BASE_URL,
     USDA_CROP_PROGRESS_COMMODITIES,
+    WASDE_COMMODITIES, WASDE_STAT_CATEGORIES,
+    INSPECTIONS_URL,
     REQUEST_TIMEOUT, MAX_RETRIES, RETRY_DELAY,
 )
 
@@ -231,6 +233,167 @@ def fetch_all_crop_progress() -> dict[str, pd.DataFrame]:
     for commodity in USDA_CROP_PROGRESS_COMMODITIES:
         results[commodity] = fetch_crop_progress(commodity)
     return results
+
+
+def fetch_wasde_estimates(
+    year_start: int = 2020,
+    year_end: int = 2026,
+) -> dict[str, pd.DataFrame]:
+    """
+    Fetch WASDE monthly forecast estimates from USDA NASS QuickStats.
+
+    WASDE (World Agricultural Supply and Demand Estimates) is THE most
+    market-moving USDA report. Uses the same API as fetch_usda() but with
+    source_desc="FORECAST" instead of "SURVEY" to get projections.
+
+    Returns dict keyed by "COMMODITY/STAT_CATEGORY" (e.g. "SOYBEANS/PRODUCTION").
+    """
+    if not USDA_API_KEY:
+        logger.warning("USDA_API_KEY not set — skipping WASDE fetch.")
+        return {}
+
+    results = {}
+    for commodity in WASDE_COMMODITIES:
+        for stat_cat in WASDE_STAT_CATEGORIES:
+            params = {
+                "key":                USDA_API_KEY,
+                "commodity_desc":     commodity,
+                "statisticcat_desc":  stat_cat,
+                "agg_level_desc":     "NATIONAL",
+                "source_desc":        "FORECAST",
+                "year__GE":           str(year_start),
+                "year__LE":           str(year_end),
+                "format":             "JSON",
+            }
+
+            key = f"{commodity}/{stat_cat}"
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    logger.info("Requesting WASDE %s (attempt %d) ...", key, attempt)
+                    resp = requests.get(
+                        USDA_BASE_URL, params=params, timeout=REQUEST_TIMEOUT,
+                    )
+
+                    if resp.status_code != 200:
+                        logger.warning("HTTP %d for WASDE %s", resp.status_code, key)
+                        if attempt < MAX_RETRIES:
+                            time.sleep(RETRY_DELAY)
+                            continue
+                        break
+
+                    rows = resp.json().get("data", [])
+                    if not rows:
+                        logger.info("No WASDE rows for %s.", key)
+                        break
+
+                    df = pd.DataFrame(rows)
+                    keep = [
+                        "commodity_desc", "year", "reference_period_desc",
+                        "statisticcat_desc", "Value", "unit_desc",
+                    ]
+                    keep = [c for c in keep if c in df.columns]
+                    df = df[keep]
+                    results[key] = df
+                    logger.info("Got %d WASDE rows for %s.", len(df), key)
+                    break
+
+                except (requests.RequestException, json.JSONDecodeError) as exc:
+                    logger.warning("WASDE %s attempt %d failed: %s", key, attempt, exc)
+                    if attempt < MAX_RETRIES:
+                        time.sleep(RETRY_DELAY)
+
+    return results
+
+
+def fetch_crush_data(
+    year_start: int = 2020,
+    year_end: int = 2026,
+) -> pd.DataFrame:
+    """
+    Fetch monthly soybean crush/processing volumes from USDA NASS.
+
+    Uses the same API with statisticcat_desc="PROCESSING" to get
+    how many bushels of soybeans were actually crushed.
+    """
+    return fetch_usda("SOYBEANS", year_start, year_end, stat_category="PROCESSING")
+
+
+def fetch_export_inspections() -> pd.DataFrame:
+    """
+    Fetch weekly USDA AMS grain export inspections report.
+
+    This report shows actual bushels loaded on ships (not just commitments).
+    Parses the AMS text report for soybean rows.
+
+    Returns a DataFrame with columns: commodity, week_ending, inspections_mt
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            logger.info("Fetching AMS export inspections (attempt %d) ...", attempt)
+            resp = requests.get(INSPECTIONS_URL, timeout=REQUEST_TIMEOUT)
+
+            if resp.status_code != 200:
+                logger.warning("HTTP %d for inspections", resp.status_code)
+                if attempt < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY)
+                    continue
+                return pd.DataFrame()
+
+            text = resp.text
+            rows = []
+
+            # The AMS report is a fixed-width text file.
+            # Parse lines looking for soybean/corn/wheat data.
+            target_crops = {"SOYBEANS", "CORN", "WHEAT"}
+            current_crop = None
+
+            for line in text.split("\n"):
+                line_upper = line.strip().upper()
+
+                # Detect crop headers
+                for crop in target_crops:
+                    if crop in line_upper and "INSPECTION" in line_upper:
+                        current_crop = crop.title()
+                        break
+
+                # Look for lines with numeric data (week ending dates + volumes)
+                if current_crop and line.strip():
+                    parts = line.split()
+                    # Try to find date-like and number-like tokens
+                    for i, part in enumerate(parts):
+                        try:
+                            # Check if this looks like a date (MM/DD/YYYY)
+                            test_date = pd.to_datetime(part, format="%m/%d/%Y", errors="raise")
+                            # Look for a number after the date
+                            for j in range(i + 1, min(i + 4, len(parts))):
+                                try:
+                                    val = float(parts[j].replace(",", ""))
+                                    rows.append({
+                                        "commodity": current_crop,
+                                        "week_ending": test_date.strftime("%Y-%m-%d"),
+                                        "inspections_mt": val,
+                                    })
+                                    break
+                                except ValueError:
+                                    continue
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+            if rows:
+                df = pd.DataFrame(rows)
+                logger.info("Parsed %d inspection rows.", len(df))
+                return df
+            else:
+                logger.info("No parseable inspection data found.")
+                return pd.DataFrame()
+
+        except requests.RequestException as exc:
+            logger.warning("Inspections attempt %d failed: %s", attempt, exc)
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY)
+
+    return pd.DataFrame()
 
 
 # ── Quick self-test ─────────────────────────────────────────────────

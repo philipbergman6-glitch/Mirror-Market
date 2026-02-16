@@ -99,8 +99,9 @@ def clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
                     col, max_gap,
                 )
 
-    # Forward-fill remaining small gaps (Volume can sometimes be NaN)
-    df = df.ffill()
+    # Forward-fill remaining small gaps, but cap at 3 days to avoid
+    # propagating stale data indefinitely when a source stops updating
+    df = df.ffill(limit=3)
 
     # Run sanity checks (warnings only — doesn't block pipeline)
     _validate_price_data(df)
@@ -121,7 +122,7 @@ def clean_fred_series(series: pd.Series) -> pd.Series:
     series = series.copy()
     series.index = pd.to_datetime(series.index)
     series = series.sort_index()
-    series = series.ffill().dropna()
+    series = series.ffill(limit=5).dropna()
     return series
 
 
@@ -171,7 +172,7 @@ def clean_weather(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.sort_values("Date").reset_index(drop=True)
-    df = df.ffill()
+    df = df.ffill(limit=3)
     return df
 
 
@@ -278,8 +279,8 @@ def clean_dce_futures(df: pd.DataFrame) -> pd.DataFrame:
                     col, max_gap,
                 )
 
-    # Forward-fill remaining small gaps
-    df = df.ffill()
+    # Forward-fill remaining small gaps (capped at 3 days)
+    df = df.ffill(limit=3)
 
     return df
 
@@ -343,6 +344,146 @@ def clean_forward_curve(df: pd.DataFrame) -> pd.DataFrame:
         df = df.sort_values("contract_month").reset_index(drop=True)
 
     return df
+
+
+def clean_wasde(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean WASDE forecast data from USDA NASS.
+
+    Steps:
+        1. Ensure year is a string.
+        2. Clean Value column (remove commas, convert to numeric).
+        3. Drop rows with NaN values.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "year" in df.columns:
+        df["year"] = df["year"].astype(str)
+
+    if "Value" in df.columns:
+        df["Value"] = df["Value"].astype(str).str.replace(",", "", regex=False)
+        df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
+        df = df.dropna(subset=["Value"])
+
+    return df.reset_index(drop=True)
+
+
+def clean_eia(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean EIA energy data.
+
+    Same pattern as clean_fred_series but for DataFrames:
+        1. Ensure Date is datetime.
+        2. Sort by date.
+        3. Drop NaN values.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+
+    if "value" in df.columns:
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df = df.dropna(subset=["value"])
+
+    return df
+
+
+def clean_inspections(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean export inspections data from AMS.
+
+    Steps:
+        1. Ensure week_ending is datetime.
+        2. Sort by week_ending.
+        3. Convert inspections_mt to numeric.
+        4. Drop NaN rows.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "week_ending" in df.columns:
+        df["week_ending"] = pd.to_datetime(df["week_ending"])
+        df = df.sort_values("week_ending").reset_index(drop=True)
+
+    if "inspections_mt" in df.columns:
+        df["inspections_mt"] = pd.to_numeric(df["inspections_mt"], errors="coerce")
+        df = df.dropna(subset=["inspections_mt"])
+
+    return df
+
+
+def clean_conab(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean CONAB Brazil crop estimate data.
+
+    Steps:
+        1. Ensure value is numeric.
+        2. Drop rows with NaN values.
+        3. Strip whitespace from string columns.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "value" in df.columns:
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df = df.dropna(subset=["value"])
+
+    for col in ["commodity", "crop_year", "attribute", "source"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
+    return df.reset_index(drop=True)
+
+
+def clean_options(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean options sentiment data.
+
+    Steps:
+        1. Ensure Date is datetime.
+        2. Convert numeric columns.
+        3. Drop rows where put_call_ratio is NaN.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+
+    numeric_cols = ["total_call_oi", "total_put_oi", "put_call_ratio",
+                    "avg_call_iv", "avg_put_iv"]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if "put_call_ratio" in df.columns:
+        df = df.dropna(subset=["put_call_ratio"])
+
+    return df.reset_index(drop=True)
 
 
 def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:

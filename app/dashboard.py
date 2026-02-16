@@ -1,72 +1,57 @@
 """
-Mirror Market — Interactive Dashboard.
+Mirror Market — Soy Complex Trading Dashboard.
 
-A Streamlit + Plotly dashboard with 7 pages for visualising all market data.
+A Streamlit + Plotly dashboard built for a professional soy complex trader.
+Every page focuses exclusively on Soybeans (ZS=F), Soybean Oil (ZL=F),
+and Soybean Meal (ZM=F) — plus the key drivers that move them.
+
+Pages:
+    1. Command Center  — at-a-glance snapshot of all 3 legs + crush + signals
+    2. Technicals       — candlestick charts with RSI/MACD/BBands for each leg
+    3. Supply/Demand    — WASDE balance sheet, CONAB, exports, China, biodiesel
+    4. Relative Value   — crush spread, oil/meal ratio, oil vs palm, bean/corn
+    5. Risk Monitor     — BRL/USD, COT positioning, weather, options sentiment
+    6. Forward Curves   — term structure for all 3 soy contracts
+    7. Briefing         — full text briefing + data health
+
 Run with:  streamlit run app/dashboard.py
-
-Key concepts for learning:
-    - Streamlit turns Python scripts into web apps — no HTML/JS needed
-    - Plotly creates interactive charts (zoom, pan, hover)
-    - st.sidebar for navigation between pages
-    - @st.cache_data caches database reads so pages load fast
-    - All data comes from the same read_*() functions used by the briefing
 """
 
 import sys
 import os
 
-# Ensure the project root is on the Python path so imports work
-# regardless of where streamlit is launched from
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 
-# Bridge Streamlit Cloud secrets to environment variables so config.py
-# picks them up via os.getenv(). Only needed on Streamlit Cloud where
-# secrets are stored in st.secrets instead of the shell environment.
-for key in ("USDA_API_KEY", "FRED_API_KEY", "FAS_API_KEY"):
+# Bridge Streamlit Cloud secrets to environment variables
+for key in ("USDA_API_KEY", "FRED_API_KEY", "FAS_API_KEY", "EIA_API_KEY"):
     if key not in os.environ:
         try:
             os.environ[key] = st.secrets[key]
         except (KeyError, FileNotFoundError):
             pass
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 
-from processing.combiner import (
-    read_prices,
-    read_cot,
-    read_currencies,
-    read_weather,
-    read_economic,
-    read_forward_curve,
-    read_export_sales,
-    read_freshness,
-)
-from analysis.technical import compute_all_technicals
-from analysis.spreads import compute_crush_spread
-from analysis.correlations import commodity_correlation_matrix
-from analysis.forward_curve import analyze_curve
-from analysis.briefing import generate_briefing
-
 # ---------------------------------------------------------------------------
-# Page config (must be the first Streamlit command)
+# Page config (must be first Streamlit command)
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Mirror Market",
-    page_icon="📊",
+    page_title="Soy Complex Desk",
+    page_icon="🫘",
     layout="wide",
 )
 
 # ---------------------------------------------------------------------------
-# Auto-fetch: run the data pipeline if no database exists yet
-# (needed for Streamlit Cloud, which starts with a clean filesystem)
+# Auto-fetch on first launch (Streamlit Cloud)
 # ---------------------------------------------------------------------------
 from config import DB_PATH
 
 if not os.path.exists(DB_PATH):
-    with st.spinner("First launch — fetching market data (this may take a few minutes)..."):
+    with st.spinner("First launch — fetching market data..."):
         from main import run as run_pipeline
         run_pipeline()
 
@@ -74,99 +59,220 @@ if not os.path.exists(DB_PATH):
 # Sidebar navigation
 # ---------------------------------------------------------------------------
 PAGES = [
-    "Overview",
-    "Price Charts",
-    "Forward Curve",
-    "Crush Spread",
-    "COT Positioning",
-    "Weather",
-    "Correlations",
+    "Command Center",
+    "Technicals",
+    "Supply & Demand",
+    "Relative Value",
+    "Risk Monitor",
+    "Forward Curves",
+    "Briefing",
 ]
 
-page = st.sidebar.radio("Navigate", PAGES)
+st.sidebar.markdown("## Soy Complex Desk")
+page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
 
 st.sidebar.divider()
-if st.sidebar.button("🔄 Refresh Data"):
+if st.sidebar.button("Refresh Data"):
     st.cache_data.clear()
     st.rerun()
 
+st.sidebar.divider()
+st.sidebar.caption("Soybeans | Soybean Oil | Soybean Meal")
 
 # ---------------------------------------------------------------------------
-# Cached data loaders
+# Cached analytics loaders
 # ---------------------------------------------------------------------------
-@st.cache_data(ttl=300)
-def load_prices():
-    return read_prices()
+from analysis.soy_analytics import (
+    command_center,
+    supply_analysis,
+    demand_analysis,
+    technicals_analysis,
+    relative_value_analysis,
+    risk_analysis,
+    seasonal_analysis,
+    forward_curve_analysis,
+)
 
 
 @st.cache_data(ttl=300)
-def load_cot():
-    return read_cot()
+def load_command_center():
+    return command_center()
+
+
+@st.cache_data(ttl=300)
+def load_supply():
+    return supply_analysis()
+
+
+@st.cache_data(ttl=300)
+def load_demand():
+    return demand_analysis()
+
+
+@st.cache_data(ttl=300)
+def load_technicals():
+    return technicals_analysis()
+
+
+@st.cache_data(ttl=300)
+def load_relative_value():
+    return relative_value_analysis()
+
+
+@st.cache_data(ttl=300)
+def load_risk():
+    return risk_analysis()
+
+
+@st.cache_data(ttl=300)
+def load_seasonal():
+    return seasonal_analysis()
 
 
 @st.cache_data(ttl=300)
 def load_forward_curves():
-    return read_forward_curve()
-
-
-@st.cache_data(ttl=300)
-def load_weather():
-    return read_weather()
-
-
-@st.cache_data(ttl=300)
-def load_freshness():
-    return read_freshness()
+    return forward_curve_analysis()
 
 
 @st.cache_data(ttl=600)
 def load_briefing():
+    from analysis.briefing import generate_briefing
     return generate_briefing()
 
 
 # ---------------------------------------------------------------------------
-# Page 1: Overview
+# Color helpers
 # ---------------------------------------------------------------------------
-def page_overview():
-    st.title("Mirror Market — Overview")
+def _chg_color(val):
+    """Return green/red color based on positive/negative value."""
+    if pd.isna(val):
+        return "gray"
+    return "green" if val >= 0 else "red"
 
-    # Data freshness status
-    freshness = load_freshness()
-    if not freshness.empty:
-        st.subheader("Data Freshness")
-        display = freshness.copy()
-        if "last_success" in display.columns:
-            display["last_success"] = pd.to_datetime(display["last_success"]).dt.strftime("%Y-%m-%d %H:%M")
-        st.dataframe(display, width="stretch", hide_index=True)
 
-    # Full text briefing
-    st.subheader("Daily Briefing")
-    briefing = load_briefing()
-    st.text(briefing)
+def _delta_str(val):
+    """Format a number as +X.X% or -X.X%."""
+    if pd.isna(val):
+        return "N/A"
+    return f"{val:+.1f}%"
 
 
 # ---------------------------------------------------------------------------
-# Page 2: Price Charts
+# Page 1: Command Center
 # ---------------------------------------------------------------------------
-def page_price_charts():
-    st.title("Price Charts")
+def page_command_center():
+    st.title("Soy Complex — Command Center")
 
-    all_prices = load_prices()
-    if all_prices.empty:
-        st.warning("No price data available. Run `python main.py` first.")
+    data = load_command_center()
+    legs = data["legs"]
+    crush = data["crush"]
+    signals = data["signals"]
+    metrics = data["key_metrics"]
+
+    # --- Top row: 3 soy legs as metric cards ---
+    cols = st.columns(3)
+    for i, leg in enumerate(legs):
+        with cols[i]:
+            if not leg.get("available"):
+                st.metric(leg["name"], "No data")
+                continue
+
+            daily = leg.get("daily_chg", 0)
+            st.metric(
+                leg["name"],
+                f"{leg['close']:,.2f}",
+                delta=_delta_str(daily),
+            )
+
+            # Sub-metrics
+            sub_cols = st.columns(3)
+            rsi = leg.get("rsi")
+            if pd.notna(rsi):
+                rsi_label = "RSI"
+                if rsi > 70:
+                    rsi_label = "RSI (OB)"
+                elif rsi < 30:
+                    rsi_label = "RSI (OS)"
+                sub_cols[0].metric(rsi_label, f"{rsi:.0f}")
+
+            trend = leg.get("trend", "N/A")
+            sub_cols[1].metric("Trend", trend)
+
+            hv = leg.get("hv_20")
+            if pd.notna(hv):
+                sub_cols[2].metric("Vol 20d", f"{hv:.0f}%")
+
+    st.divider()
+
+    # --- Second row: Crush + Key Metrics ---
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if crush.get("available"):
+            val = crush["value_dollars"]
+            trend_label = crush.get("trend", "")
+            st.metric(
+                "Crush Spread",
+                f"${val:.2f}/bu",
+                delta=trend_label if trend_label else None,
+            )
+        else:
+            st.metric("Crush Spread", "N/A")
+
+    with col2:
+        brl = metrics.get("brl_usd")
+        brl_chg = metrics.get("brl_weekly_chg")
+        if brl:
+            st.metric("BRL/USD", f"{brl:.4f}", delta=_delta_str(brl_chg) if brl_chg else None)
+        else:
+            st.metric("BRL/USD", "N/A")
+
+    with col3:
+        dollar = metrics.get("dollar_index")
+        if dollar:
+            st.metric("Dollar Index", f"{dollar:.1f}")
+        else:
+            st.metric("Dollar Index", "N/A")
+
+    with col4:
+        cny = metrics.get("cny_usd")
+        if cny:
+            st.metric("CNY/USD", f"{cny:.4f}")
+        else:
+            st.metric("CNY/USD", "N/A")
+
+    st.divider()
+
+    # --- Signals ---
+    if signals:
+        st.subheader(f"Active Signals ({len(signals)})")
+        for s in signals[:10]:
+            severity = s.get("severity", "info")
+            icon = {"alert": "🔴", "warning": "🟡", "info": "🔵"}.get(severity, "⚪")
+            st.markdown(f"{icon} **[{severity.upper()}]** {s['description']}")
+    else:
+        st.info("No active signals across soy complex")
+
+
+# ---------------------------------------------------------------------------
+# Page 2: Technicals
+# ---------------------------------------------------------------------------
+def page_technicals():
+    st.title("Soy Complex — Technical Analysis")
+
+    data = load_technicals()
+    per_leg = data["per_leg"]
+
+    if not per_leg:
+        st.warning("No price data. Run `python main.py` first.")
         return
 
-    commodities = sorted(all_prices["commodity"].unique())
-    selected = st.selectbox("Select Commodity", commodities)
+    leg_names = [l for l in ["Soybeans", "Soybean Oil", "Soybean Meal"] if l in per_leg]
+    selected = st.selectbox("Select Leg", leg_names)
 
-    df = all_prices[all_prices["commodity"] == selected].copy()
-    df["Date"] = pd.to_datetime(df["Date"])
-    df = df.set_index("Date").sort_index()
+    df = per_leg[selected]
 
-    # Compute technicals
-    df = compute_all_technicals(df)
-
-    # Create subplot figure: candlestick + volume, RSI, MACD
+    # Candlestick + Volume, RSI, MACD — 3-row subplot
     fig = make_subplots(
         rows=3, cols=1,
         shared_xaxes=True,
@@ -178,12 +284,8 @@ def page_price_charts():
     # Candlestick
     fig.add_trace(
         go.Candlestick(
-            x=df.index,
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
-            name="Price",
+            x=df.index, open=df["Open"], high=df["High"],
+            low=df["Low"], close=df["Close"], name="Price",
         ),
         row=1, col=1,
     )
@@ -192,50 +294,36 @@ def page_price_charts():
     for ma, color in [("MA_20", "orange"), ("MA_50", "blue"), ("MA_200", "red")]:
         if ma in df.columns:
             fig.add_trace(
-                go.Scatter(
-                    x=df.index, y=df[ma],
-                    name=ma, line=dict(width=1, color=color),
-                ),
+                go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(width=1, color=color)),
                 row=1, col=1,
             )
 
     # Bollinger Bands
     if "BB_Upper" in df.columns and "BB_Lower" in df.columns:
         fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df["BB_Upper"],
-                name="BB Upper", line=dict(width=1, dash="dot", color="gray"),
-            ),
+            go.Scatter(x=df.index, y=df["BB_Upper"], name="BB Upper",
+                       line=dict(width=1, dash="dot", color="gray")),
             row=1, col=1,
         )
         fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df["BB_Lower"],
-                name="BB Lower", line=dict(width=1, dash="dot", color="gray"),
-                fill="tonexty", fillcolor="rgba(128,128,128,0.1)",
-            ),
+            go.Scatter(x=df.index, y=df["BB_Lower"], name="BB Lower",
+                       line=dict(width=1, dash="dot", color="gray"),
+                       fill="tonexty", fillcolor="rgba(128,128,128,0.1)"),
             row=1, col=1,
         )
 
-    # Volume as bars on price chart
+    # Volume
     if "Volume" in df.columns:
-        colors = ["green" if c >= o else "red"
-                  for c, o in zip(df["Close"], df["Open"])]
+        colors = ["green" if c >= o else "red" for c, o in zip(df["Close"], df["Open"])]
         fig.add_trace(
-            go.Bar(
-                x=df.index, y=df["Volume"],
-                name="Volume", marker_color=colors, opacity=0.3,
-            ),
+            go.Bar(x=df.index, y=df["Volume"], name="Volume", marker_color=colors, opacity=0.3),
             row=1, col=1,
         )
 
     # RSI
     if "RSI" in df.columns:
         fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df["RSI"],
-                name="RSI", line=dict(color="purple"),
-            ),
+            go.Scatter(x=df.index, y=df["RSI"], name="RSI", line=dict(color="purple")),
             row=2, col=1,
         )
         fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
@@ -244,27 +332,18 @@ def page_price_charts():
     # MACD
     if "MACD" in df.columns:
         fig.add_trace(
-            go.Scatter(
-                x=df.index, y=df["MACD"],
-                name="MACD", line=dict(color="blue"),
-            ),
+            go.Scatter(x=df.index, y=df["MACD"], name="MACD", line=dict(color="blue")),
             row=3, col=1,
         )
         if "MACD_Signal" in df.columns:
             fig.add_trace(
-                go.Scatter(
-                    x=df.index, y=df["MACD_Signal"],
-                    name="Signal", line=dict(color="orange"),
-                ),
+                go.Scatter(x=df.index, y=df["MACD_Signal"], name="Signal", line=dict(color="orange")),
                 row=3, col=1,
             )
         if "MACD_Histogram" in df.columns:
-            colors = ["green" if v >= 0 else "red" for v in df["MACD_Histogram"]]
+            hist_colors = ["green" if v >= 0 else "red" for v in df["MACD_Histogram"]]
             fig.add_trace(
-                go.Bar(
-                    x=df.index, y=df["MACD_Histogram"],
-                    name="Histogram", marker_color=colors,
-                ),
+                go.Bar(x=df.index, y=df["MACD_Histogram"], name="Histogram", marker_color=hist_colors),
                 row=3, col=1,
             )
 
@@ -274,375 +353,496 @@ def page_price_charts():
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Signals for this leg
+    leg_signals = [s for s in data["signals"] if s.get("commodity") == selected]
+    if leg_signals:
+        st.subheader(f"Signals — {selected}")
+        for s in leg_signals:
+            severity = s.get("severity", "info")
+            icon = {"alert": "🔴", "warning": "🟡", "info": "🔵"}.get(severity, "⚪")
+            st.markdown(f"{icon} {s['description']}")
 
 
 # ---------------------------------------------------------------------------
-# Page 3: Forward Curve
+# Page 3: Supply & Demand
 # ---------------------------------------------------------------------------
-def page_forward_curve():
-    st.title("Forward Curve")
+def page_supply_demand():
+    st.title("Soy Complex — Supply & Demand")
 
-    fc_data = load_forward_curves()
-    if fc_data.empty:
+    supply = load_supply()
+    demand = load_demand()
+
+    tab1, tab2 = st.tabs(["Supply", "Demand"])
+
+    # ── SUPPLY TAB ──
+    with tab1:
+        # WASDE
+        st.subheader("WASDE Monthly Estimates")
+        wasde = supply.get("wasde", {})
+        if wasde:
+            for commodity, attrs in wasde.items():
+                if "SOYBEAN" not in commodity.upper():
+                    continue
+                st.markdown(f"**{commodity}**")
+                for attr_name, info in attrs.items():
+                    val = info.get("value")
+                    if pd.isna(val):
+                        continue
+                    rev = info.get("revision")
+                    unit = info.get("unit", "")
+                    if rev is not None and rev != 0:
+                        direction = "UP" if rev > 0 else "DOWN"
+                        st.markdown(
+                            f"- {attr_name}: **{val:,.0f}** {unit} "
+                            f"(revised {direction} {abs(rev):,.0f} vs prior month)"
+                        )
+                    else:
+                        st.markdown(f"- {attr_name}: **{val:,.0f}** {unit}")
+        else:
+            st.info("No WASDE data available")
+
+        st.divider()
+
+        # CONAB vs USDA
+        st.subheader("Brazil: CONAB vs USDA")
+        conab = supply.get("conab_vs_usda", {})
+        if conab.get("conab_production"):
+            cols = st.columns(3)
+            cols[0].metric("CONAB (Brazil)", f"{conab['conab_production']:,.0f} 1000 MT")
+            if conab.get("usda_production"):
+                cols[1].metric("USDA (Brazil)", f"{conab['usda_production']:,.0f} 1000 MT")
+                gap = conab.get("gap", 0)
+                cols[2].metric("Gap", f"{gap:+,.0f} 1000 MT")
+        else:
+            st.info("No CONAB data available")
+
+        st.divider()
+
+        # Crop Progress
+        st.subheader("US Crop Conditions")
+        crop = supply.get("crop_progress", {})
+        if crop.get("condition"):
+            for item in crop["condition"]:
+                st.markdown(f"- {item['desc']}: **{item['value']}%**")
+        if crop.get("progress"):
+            for item in crop["progress"]:
+                st.markdown(f"- {item['desc']}: **{item['value']}%**")
+        if not crop:
+            st.info("No crop progress data available")
+
+        st.divider()
+
+        # PSD Global
+        st.subheader("Global Supply (PSD)")
+        psd = supply.get("psd_highlights", [])
+        if psd:
+            for item in psd:
+                st.markdown(
+                    f"- {item['country']} {item['commodity']} {item['attribute']}: "
+                    f"**{item['value']:,.0f}** {item.get('unit', '')}"
+                )
+        else:
+            st.info("No PSD data available")
+
+    # ── DEMAND TAB ──
+    with tab2:
+        # China Buying
+        st.subheader("China Buying Pace")
+        china = demand.get("china_buying", {})
+        if china:
+            cols = st.columns(len(china))
+            for i, (commodity, info) in enumerate(china.items()):
+                with cols[i]:
+                    st.metric(
+                        f"{commodity}",
+                        f"{info['net_sales']:,.0f} MT",
+                        delta=f"{info['pct_of_total']:.0f}% of total",
+                    )
+        else:
+            st.info("No China buying data")
+
+        st.divider()
+
+        # Export Sales
+        st.subheader("Weekly Export Sales")
+        es = demand.get("export_sales", {})
+        if es:
+            for commodity, info in es.items():
+                week_str = info["week_ending"].strftime("%m/%d") if hasattr(info["week_ending"], "strftime") else str(info["week_ending"])
+                st.markdown(f"**{commodity}** (w/e {week_str})")
+                st.markdown(f"- Net sales: **{info['net_sales']:,.0f} MT** | Exports: **{info['exports']:,.0f} MT**")
+                if info.get("top_buyers"):
+                    buyers = ", ".join(f"{b['country']} ({b['mt']:,.0f})" for b in info["top_buyers"])
+                    st.markdown(f"- Top buyers: {buyers}")
+        else:
+            st.info("No export sales data")
+
+        st.divider()
+
+        # Inspections
+        st.subheader("Export Inspections (Actual Shipments)")
+        insp = demand.get("inspections", {})
+        if insp:
+            for commodity, info in insp.items():
+                st.markdown(f"- {commodity}: **{info['volume_mt']:,.0f} MT** inspected")
+        else:
+            st.info("No inspections data")
+
+        st.divider()
+
+        # Biofuel
+        st.subheader("Biofuel & Energy (Soy Oil Demand Driver)")
+        bio = demand.get("biofuel", {})
+        if bio:
+            cols = st.columns(len(bio))
+            for i, (name, info) in enumerate(bio.items()):
+                with cols[i]:
+                    st.metric(
+                        name,
+                        f"{info['value']:,.2f}",
+                        delta=_delta_str(info.get("chg_pct")),
+                    )
+        else:
+            st.info("No EIA data (set EIA_API_KEY to enable)")
+
+        st.divider()
+
+        # DCE vs CBOT
+        st.subheader("DCE China vs CBOT")
+        dce = demand.get("dce_comparison", {})
+        if dce:
+            for name, info in dce.items():
+                parts = [f"DCE: CNY {info['dce_close']:,.0f}"]
+                if info.get("cbot_close"):
+                    parts.append(f"CBOT: {info['cbot_close']:,.2f} USD")
+                st.markdown(f"- {name}: {' | '.join(parts)}")
+        else:
+            st.info("No DCE data")
+
+
+# ---------------------------------------------------------------------------
+# Page 4: Relative Value
+# ---------------------------------------------------------------------------
+def page_relative_value():
+    st.title("Soy Complex — Relative Value")
+
+    data = load_relative_value()
+
+    # --- Crush Spread Chart ---
+    st.subheader("Crush Spread")
+    crush = data.get("crush")
+    if crush:
+        spread_df = crush["series"]
+        spread_df["Date"] = pd.to_datetime(spread_df["Date"])
+
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.metric(
+                "Current",
+                f"${crush['current_dollars']:.2f}/bu",
+                delta="Profitable" if crush["profitable"] else "Negative",
+            )
+
+        with col2:
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=spread_df["Date"],
+                    y=spread_df["crush_spread"] / 100,
+                    mode="lines", name="Crush Spread",
+                    line=dict(color="black", width=2),
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=spread_df["Date"],
+                    y=[max(0, v / 100) for v in spread_df["crush_spread"]],
+                    fill="tozeroy", fillcolor="rgba(0,128,0,0.2)",
+                    line=dict(width=0), name="Profitable",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=spread_df["Date"],
+                    y=[min(0, v / 100) for v in spread_df["crush_spread"]],
+                    fill="tozeroy", fillcolor="rgba(255,0,0,0.2)",
+                    line=dict(width=0), name="Negative",
+                )
+            )
+            fig.add_hline(y=0, line_dash="dash", line_color="gray")
+            fig.update_layout(height=350, xaxis_title="", yaxis_title="$/bu")
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Crush spread needs Soybeans + Oil + Meal data")
+
+    st.divider()
+
+    # --- Oil/Meal Ratio + Soy Oil Share ---
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Oil/Meal Ratio")
+        omr = data.get("oil_meal_ratio")
+        if omr:
+            st.metric("Current", f"{omr['current']:.3f}", delta=f"60d avg: {omr['avg_60d']:.3f}")
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(x=omr["series"].index, y=omr["series"], mode="lines",
+                           name="Oil/Meal Ratio", line=dict(color="darkorange"))
+            )
+            fig.add_hline(y=omr["avg_60d"], line_dash="dash", line_color="gray",
+                          annotation_text="60d avg")
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Need Oil + Meal data")
+
+    with col2:
+        st.subheader("Soy Oil Share of Crush")
+        share = data.get("soy_oil_share")
+        if share:
+            st.metric("Oil % of Product Value", f"{share:.1f}%")
+            st.caption("Higher = biodiesel demand pulling oil; Lower = feed demand pulling meal")
+        else:
+            st.info("Need all 3 legs")
+
+    st.divider()
+
+    # --- Soy Oil vs Palm Oil ---
+    st.subheader("Soy Oil vs Palm Oil")
+    ovp = data.get("oil_vs_palm")
+    if ovp:
+        cols = st.columns(2)
+        cols[0].metric(
+            "Soybean Oil (ZL=F)",
+            f"{ovp['soy_oil']:,.2f}",
+            delta=_delta_str(ovp.get("soy_oil_weekly_chg")),
+        )
+        cols[1].metric(
+            "Palm Oil (BMD)",
+            f"{ovp['palm_oil']:,.2f}",
+            delta=_delta_str(ovp.get("palm_oil_weekly_chg")),
+        )
+    else:
+        st.info("Need Soybean Oil + Palm Oil data")
+
+    st.divider()
+
+    # --- Bean/Corn Ratio ---
+    st.subheader("Soybean/Corn Ratio (Acreage Signal)")
+    bcr = data.get("bean_corn_ratio")
+    if bcr:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            st.metric("Current", f"{bcr['current']:.2f}")
+            st.metric("1Y Average", f"{bcr['avg_1y']:.2f}")
+            if bcr["current"] > bcr["avg_1y"]:
+                st.caption("Above avg = soybeans relatively expensive vs corn = may attract more soy acres")
+            else:
+                st.caption("Below avg = corn relatively expensive = may lose soy acres to corn")
+        with col2:
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(x=bcr["series"].index, y=bcr["series"], mode="lines",
+                           name="Bean/Corn Ratio", line=dict(color="saddlebrown"))
+            )
+            fig.add_hline(y=bcr["avg_1y"], line_dash="dash", line_color="gray",
+                          annotation_text="1Y avg")
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Need Soybeans + Corn data")
+
+
+# ---------------------------------------------------------------------------
+# Page 5: Risk Monitor
+# ---------------------------------------------------------------------------
+def page_risk_monitor():
+    st.title("Soy Complex — Risk Monitor")
+
+    data = load_risk()
+
+    # --- Currencies ---
+    st.subheader("Key Currencies")
+    currencies = data.get("currencies", {})
+    if currencies:
+        cols = st.columns(len(currencies))
+        for i, (pair, info) in enumerate(currencies.items()):
+            with cols[i]:
+                st.metric(
+                    pair,
+                    f"{info['close']:.4f}",
+                    delta=_delta_str(info.get("weekly_chg")),
+                )
+                if info.get("monthly_chg") is not None:
+                    st.caption(f"30d: {info['monthly_chg']:+.1f}%")
+    else:
+        st.info("No currency data")
+
+    st.divider()
+
+    # --- COT Positioning ---
+    st.subheader("COT Positioning — Soy Complex")
+    cot = data.get("cot", {})
+    if cot:
+        # Bar chart
+        fig = go.Figure()
+        commodities = list(cot.keys())
+        comm_nets = [cot[c].get("commercial_net", 0) or 0 for c in commodities]
+        spec_nets = [cot[c].get("spec_net", 0) or 0 for c in commodities]
+
+        fig.add_trace(go.Bar(x=commodities, y=comm_nets, name="Commercials (net)", marker_color="steelblue"))
+        fig.add_trace(go.Bar(x=commodities, y=spec_nets, name="Speculators (net)", marker_color="coral"))
+        fig.update_layout(barmode="group", height=400, yaxis_title="Net Contracts")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Week-over-week changes
+        for leg, info in cot.items():
+            chg = info.get("spec_net_chg")
+            spec = info.get("spec_net", 0) or 0
+            direction = "long" if spec > 0 else "short"
+            parts = [f"Specs net {direction} {abs(spec):,.0f}"]
+            if chg is not None:
+                parts.append(f"(WoW: {chg:+,.0f})")
+            st.markdown(f"- **{leg}**: {' '.join(parts)}")
+    else:
+        st.info("No COT data")
+
+    st.divider()
+
+    # --- Weather Alerts ---
+    st.subheader("Weather — Soy Growing Regions")
+    alerts = data.get("weather_alerts", [])
+    if alerts:
+        for a in alerts:
+            icon = {"Heavy Rain": "🌧️", "Dry": "☀️", "Extreme Heat": "🔥"}.get(a["alert"], "⚠️")
+            st.markdown(
+                f"{icon} **{a['region']}**: {a['alert']} — "
+                f"Max {a['temp_max']:.0f}C, Precip {a['precip']:.0f}mm"
+            )
+    else:
+        st.success("No active weather alerts in soy regions")
+
+    st.divider()
+
+    # --- Options Sentiment ---
+    st.subheader("Options Sentiment")
+    options = data.get("options", {})
+    if options:
+        cols = st.columns(len(options))
+        for i, (leg, info) in enumerate(options.items()):
+            with cols[i]:
+                pc = info.get("put_call_ratio")
+                if pd.notna(pc):
+                    sentiment = "Bearish" if pc > 1.2 else ("Bullish" if pc < 0.7 else "Neutral")
+                    st.metric(leg, f"P/C: {pc:.2f}", delta=sentiment)
+                else:
+                    st.metric(leg, "N/A")
+    else:
+        st.info("No options data (experimental — may not be available for ag futures)")
+
+
+# ---------------------------------------------------------------------------
+# Page 6: Forward Curves
+# ---------------------------------------------------------------------------
+def page_forward_curves():
+    st.title("Soy Complex — Forward Curves")
+
+    data = load_forward_curves()
+
+    if not data:
         st.warning("No forward curve data. Run `python main.py` first.")
         return
 
-    commodities = sorted(fc_data["commodity"].unique())
-    selected = st.selectbox("Select Commodity", commodities)
-
-    subset = fc_data[fc_data["commodity"] == selected].sort_values("contract_month")
-    if len(subset) < 2:
-        st.info(f"Not enough contracts for {selected} curve.")
-        return
-
-    # Analyze
-    result = analyze_curve(subset)
-
-    # Summary metrics
-    if result:
-        cols = st.columns(4)
-        cols[0].metric("Structure", result["structure"].title())
-        cols[1].metric("Front", f"{result['front_price']:.2f}")
-        cols[2].metric("Back", f"{result['back_price']:.2f}")
-        cols[3].metric("Spread", f"{result['spread']:+.2f} ({result['spread_pct']:+.1f}%)")
-
-    # Line chart
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=subset["label"],
-            y=subset["close"],
-            mode="lines+markers",
-            name=selected,
-            line=dict(width=3),
-            marker=dict(size=10),
-        )
-    )
-
-    # Color fill to show contango (green below) / backwardation (red above)
-    front_price = subset.iloc[0]["close"]
-    fig.add_hline(
-        y=front_price,
-        line_dash="dash",
-        line_color="gray",
-        annotation_text=f"Front month: {front_price:.2f}",
-    )
-
-    fig.update_layout(
-        title=f"{selected} Forward Curve",
-        xaxis_title="Contract Month",
-        yaxis_title="Price",
-        height=500,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    # Raw data
-    with st.expander("Raw data"):
-        st.dataframe(subset[["label", "ticker", "close"]], hide_index=True)
-
-
-# ---------------------------------------------------------------------------
-# Page 4: Crush Spread
-# ---------------------------------------------------------------------------
-def page_crush_spread():
-    st.title("Soybean Crush Spread")
-
-    all_prices = load_prices()
-    if all_prices.empty:
-        st.warning("No price data. Run `python main.py` first.")
-        return
-
-    def get_commodity_df(name):
-        subset = all_prices[all_prices["commodity"] == name].copy()
-        if subset.empty:
-            return pd.DataFrame()
-        subset["Date"] = pd.to_datetime(subset["Date"])
-        return subset.set_index("Date").sort_index()
-
-    soybeans = get_commodity_df("Soybeans")
-    oil = get_commodity_df("Soybean Oil")
-    meal = get_commodity_df("Soybean Meal")
-
-    if soybeans.empty or oil.empty or meal.empty:
-        st.warning("Need Soybeans, Soybean Oil, and Soybean Meal data for crush spread.")
-        return
-
-    spread = compute_crush_spread(soybeans, oil, meal)
-    if spread.empty:
-        st.warning("No overlapping dates for crush spread calculation.")
-        return
-
-    spread["Date"] = pd.to_datetime(spread["Date"])
-
-    # Crush spread chart with profitability shading
-    fig = go.Figure()
-
-    # Split into profitable (green) and unprofitable (red)
-    positive = spread[spread["crush_spread"] >= 0]
-    negative = spread[spread["crush_spread"] < 0]
-
-    fig.add_trace(
-        go.Scatter(
-            x=spread["Date"],
-            y=spread["crush_spread"] / 100,  # Convert cents to dollars
-            mode="lines",
-            name="Crush Spread",
-            line=dict(color="black", width=2),
-        )
-    )
-
-    # Fill above zero green, below zero red
-    fig.add_trace(
-        go.Scatter(
-            x=spread["Date"],
-            y=[max(0, v / 100) for v in spread["crush_spread"]],
-            fill="tozeroy",
-            fillcolor="rgba(0,128,0,0.2)",
-            line=dict(width=0),
-            name="Profitable",
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=spread["Date"],
-            y=[min(0, v / 100) for v in spread["crush_spread"]],
-            fill="tozeroy",
-            fillcolor="rgba(255,0,0,0.2)",
-            line=dict(width=0),
-            name="Negative margin",
-        )
-    )
-
-    fig.add_hline(y=0, line_dash="dash", line_color="gray")
-
-    fig.update_layout(
-        title="Soybean Crush Spread ($/bushel)",
-        xaxis_title="Date",
-        yaxis_title="Spread ($/bu)",
-        height=500,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    # Current value
-    latest = spread.iloc[-1]["crush_spread"] / 100
-    st.metric("Current Crush Spread", f"${latest:.2f}/bu",
-              delta="Profitable" if latest > 0 else "Negative")
-
-
-# ---------------------------------------------------------------------------
-# Page 5: COT Positioning
-# ---------------------------------------------------------------------------
-def page_cot():
-    st.title("COT Positioning")
-
-    cot_data = load_cot()
-    if cot_data.empty:
-        st.warning("No COT data. Run `python main.py` first.")
-        return
-
-    # Get latest data for each commodity
-    commodities = sorted(cot_data["commodity"].unique())
-
-    # Summary bar chart: commercial vs speculator net positions
-    latest_rows = []
-    for commodity in commodities:
-        subset = cot_data[cot_data["commodity"] == commodity].sort_values("Date")
-        if subset.empty:
+    for leg in ["Soybeans", "Soybean Oil", "Soybean Meal"]:
+        if leg not in data:
             continue
-        latest = subset.iloc[-1]
-        latest_rows.append({
-            "commodity": commodity,
-            "commercial_net": latest.get("commercial_net", 0),
-            "noncommercial_net": latest.get("noncommercial_net", 0),
-        })
 
-    if not latest_rows:
-        st.info("No recent COT data found.")
-        return
+        leg_data = data[leg]
+        curve_df = leg_data["curve_data"]
+        analysis = leg_data.get("analysis", {})
+        cal = leg_data.get("calendar_spread", {})
 
-    summary = pd.DataFrame(latest_rows)
+        st.subheader(leg)
 
-    fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=summary["commodity"],
-            y=summary["commercial_net"],
-            name="Commercials (net)",
-            marker_color="steelblue",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            x=summary["commodity"],
-            y=summary["noncommercial_net"],
-            name="Speculators (net)",
-            marker_color="coral",
-        )
-    )
+        # Metrics row
+        if analysis:
+            cols = st.columns(4)
+            cols[0].metric("Structure", analysis.get("structure", "N/A").title())
+            cols[1].metric("Front", f"{analysis.get('front_price', 0):.2f}")
+            cols[2].metric("Back", f"{analysis.get('back_price', 0):.2f}")
+            spread_pct = analysis.get("spread_pct", 0)
+            cols[3].metric("Spread", f"{spread_pct:+.1f}%")
 
-    fig.update_layout(
-        title="Latest COT Net Positions by Commodity",
-        barmode="group",
-        xaxis_title="Commodity",
-        yaxis_title="Net Contracts",
-        height=500,
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    # Detailed view per commodity
-    selected = st.selectbox("Detail view", commodities)
-    detail = cot_data[cot_data["commodity"] == selected].sort_values("Date")
-    if not detail.empty:
-        fig2 = go.Figure()
-        fig2.add_trace(
+        # Curve chart
+        fig = go.Figure()
+        fig.add_trace(
             go.Scatter(
-                x=detail["Date"], y=detail["commercial_net"],
-                name="Commercial net", line=dict(color="steelblue"),
+                x=curve_df["label"], y=curve_df["close"],
+                mode="lines+markers", name=leg,
+                line=dict(width=3), marker=dict(size=10),
             )
         )
-        fig2.add_trace(
-            go.Scatter(
-                x=detail["Date"], y=detail["noncommercial_net"],
-                name="Speculator net", line=dict(color="coral"),
+        front_price = curve_df.iloc[0]["close"]
+        fig.add_hline(y=front_price, line_dash="dash", line_color="gray",
+                      annotation_text=f"Front: {front_price:.2f}")
+        fig.update_layout(height=350, xaxis_title="Contract", yaxis_title="Price")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Calendar spread
+        if cal:
+            st.caption(
+                f"Front spread: {cal.get('near_label', '')} → {cal.get('far_label', '')}: "
+                f"{cal.get('spread', 0):+.2f} ({cal.get('spread_pct', 0):+.1f}%)"
             )
-        )
-        fig2.update_layout(
-            title=f"{selected} — COT Net Positions Over Time",
-            height=400,
-        )
-        st.plotly_chart(fig2, width="stretch")
+
+        st.divider()
 
 
 # ---------------------------------------------------------------------------
-# Page 6: Weather
+# Page 7: Briefing
 # ---------------------------------------------------------------------------
-def page_weather():
-    st.title("Weather Alerts")
+def page_briefing():
+    st.title("Soy Complex — Full Briefing")
 
-    weather_data = load_weather()
-    if weather_data.empty:
-        st.warning("No weather data. Run `python main.py` first.")
-        return
+    briefing = load_briefing()
+    st.text(briefing)
 
-    # Build summary table for latest day per region
-    rows = []
-    for region in weather_data["region"].unique():
-        subset = weather_data[weather_data["region"] == region].sort_values("Date")
-        if subset.empty:
-            continue
-        latest = subset.iloc[-1]
-        temp_max = latest.get("temp_max", None)
-        temp_min = latest.get("temp_min", None)
-        precip = latest.get("precipitation", None)
-
-        # Determine alert level
-        alert = "Normal"
-        if pd.notna(precip) and precip > 20:
-            alert = "Heavy Rain"
-        elif pd.notna(precip) and precip < 1:
-            alert = "Dry"
-        if pd.notna(temp_max) and temp_max > 38:
-            alert = "Extreme Heat"
-
-        rows.append({
-            "Region": region,
-            "Temp Max (C)": f"{temp_max:.1f}" if pd.notna(temp_max) else "N/A",
-            "Temp Min (C)": f"{temp_min:.1f}" if pd.notna(temp_min) else "N/A",
-            "Precip (mm)": f"{precip:.1f}" if pd.notna(precip) else "N/A",
-            "Alert": alert,
-            "Date": latest["Date"],
-        })
-
-    if not rows:
-        st.info("No weather data to display.")
-        return
-
-    summary = pd.DataFrame(rows)
-
-    # Color code by alert status
-    def highlight_alerts(row):
-        if row["Alert"] == "Extreme Heat":
-            return ["background-color: #ffcccc"] * len(row)
-        elif row["Alert"] == "Heavy Rain":
-            return ["background-color: #cce5ff"] * len(row)
-        elif row["Alert"] == "Dry":
-            return ["background-color: #fff3cd"] * len(row)
-        return [""] * len(row)
-
-    st.dataframe(
-        summary.style.apply(highlight_alerts, axis=1),
-        width="stretch",
-        hide_index=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Page 7: Correlations
-# ---------------------------------------------------------------------------
-def page_correlations():
-    st.title("Correlation Matrix")
-
-    all_prices = load_prices()
-    if all_prices.empty:
-        st.warning("No price data. Run `python main.py` first.")
-        return
-
-    # Build price_data dict
-    price_data = {}
-    for commodity in all_prices["commodity"].unique():
-        subset = all_prices[all_prices["commodity"] == commodity].copy()
-        subset["Date"] = pd.to_datetime(subset["Date"])
-        subset = subset.set_index("Date").sort_index()
-        price_data[commodity] = subset
-
-    if len(price_data) < 2:
-        st.info("Need at least 2 commodities for correlation analysis.")
-        return
-
-    corr_matrix = commodity_correlation_matrix(price_data)
-    if corr_matrix.empty:
-        st.warning("Could not compute correlation matrix.")
-        return
-
-    # Plotly heatmap
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=corr_matrix.values,
-            x=corr_matrix.columns.tolist(),
-            y=corr_matrix.index.tolist(),
-            colorscale="RdBu_r",
-            zmin=-1,
-            zmax=1,
-            text=[[f"{v:.2f}" for v in row] for row in corr_matrix.values],
-            texttemplate="%{text}",
-            textfont=dict(size=10),
-        )
-    )
-
-    fig.update_layout(
-        title="Cross-Commodity Correlation (Close Prices)",
-        height=600,
-        width=800,
-    )
-    st.plotly_chart(fig, width="stretch")
+    # Data health
+    with st.expander("Data Health"):
+        try:
+            from analysis.health import run_health_check
+            health = run_health_check()
+            issues = health.get("issues", [])
+            if not issues:
+                st.success("All systems green")
+            else:
+                for issue in issues:
+                    sev = issue.get("severity", "info")
+                    if sev == "critical":
+                        st.error(f"[{issue['table']}] {issue['commodity']}: {issue['message']}")
+                    else:
+                        st.warning(f"[{issue['table']}] {issue['commodity']}: {issue['message']}")
+        except Exception:
+            st.info("Health check unavailable")
 
 
 # ---------------------------------------------------------------------------
 # Page router
 # ---------------------------------------------------------------------------
-if page == "Overview":
-    page_overview()
-elif page == "Price Charts":
-    page_price_charts()
-elif page == "Forward Curve":
-    page_forward_curve()
-elif page == "Crush Spread":
-    page_crush_spread()
-elif page == "COT Positioning":
-    page_cot()
-elif page == "Weather":
-    page_weather()
-elif page == "Correlations":
-    page_correlations()
+if page == "Command Center":
+    page_command_center()
+elif page == "Technicals":
+    page_technicals()
+elif page == "Supply & Demand":
+    page_supply_demand()
+elif page == "Relative Value":
+    page_relative_value()
+elif page == "Risk Monitor":
+    page_risk_monitor()
+elif page == "Forward Curves":
+    page_forward_curves()
+elif page == "Briefing":
+    page_briefing()

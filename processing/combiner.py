@@ -176,11 +176,79 @@ CREATE TABLE IF NOT EXISTS forward_curve (
 );
 """
 
+_CREATE_WASDE = """
+CREATE TABLE IF NOT EXISTS wasde (
+    commodity       TEXT NOT NULL,
+    year            TEXT NOT NULL,
+    attribute       TEXT NOT NULL,
+    value           REAL,
+    unit            TEXT,
+    reference_period TEXT,
+    PRIMARY KEY (commodity, year, attribute, reference_period)
+);
+"""
+
+_CREATE_INSPECTIONS = """
+CREATE TABLE IF NOT EXISTS inspections (
+    commodity       TEXT NOT NULL,
+    week_ending     TEXT NOT NULL,
+    inspections_mt  REAL,
+    PRIMARY KEY (commodity, week_ending)
+);
+"""
+
+_CREATE_EIA_ENERGY = """
+CREATE TABLE IF NOT EXISTS eia_energy (
+    series_name TEXT NOT NULL,
+    Date        TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    PRIMARY KEY (series_name, Date)
+);
+"""
+
+_CREATE_BRAZIL_ESTIMATES = """
+CREATE TABLE IF NOT EXISTS brazil_estimates (
+    source      TEXT NOT NULL,
+    commodity   TEXT NOT NULL,
+    crop_year   TEXT NOT NULL,
+    attribute   TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    report_date TEXT,
+    PRIMARY KEY (source, commodity, crop_year, attribute, report_date)
+);
+"""
+
+_CREATE_OPTIONS_SENTIMENT = """
+CREATE TABLE IF NOT EXISTS options_sentiment (
+    commodity       TEXT NOT NULL,
+    Date            TEXT NOT NULL,
+    total_call_oi   REAL,
+    total_put_oi    REAL,
+    put_call_ratio  REAL,
+    avg_call_iv     REAL,
+    avg_put_iv      REAL,
+    PRIMARY KEY (commodity, Date)
+);
+"""
+
 _CREATE_DATA_FRESHNESS = """
 CREATE TABLE IF NOT EXISTS data_freshness (
     layer_name      TEXT    NOT NULL PRIMARY KEY,
     last_success    TEXT    NOT NULL,
     rows_fetched    INTEGER
+);
+"""
+
+_CREATE_COMMODITY_FRESHNESS = """
+CREATE TABLE IF NOT EXISTS commodity_freshness (
+    commodity       TEXT    NOT NULL,
+    table_name      TEXT    NOT NULL,
+    last_date_in_db TEXT,
+    rows_total      INTEGER,
+    checked_at      TEXT    NOT NULL,
+    PRIMARY KEY (commodity, table_name)
 );
 """
 
@@ -211,7 +279,13 @@ def init_database():
         conn.execute(_CREATE_CROP_PROGRESS)
         conn.execute(_CREATE_EXPORT_SALES)
         conn.execute(_CREATE_FORWARD_CURVE)
+        conn.execute(_CREATE_WASDE)
+        conn.execute(_CREATE_INSPECTIONS)
+        conn.execute(_CREATE_EIA_ENERGY)
+        conn.execute(_CREATE_BRAZIL_ESTIMATES)
+        conn.execute(_CREATE_OPTIONS_SENTIMENT)
         conn.execute(_CREATE_DATA_FRESHNESS)
+        conn.execute(_CREATE_COMMODITY_FRESHNESS)
     logger.info("Database initialised (tables verified) at %s", DB_PATH)
 
 
@@ -449,6 +523,71 @@ def read_freshness() -> pd.DataFrame:
     return df
 
 
+def update_commodity_freshness():
+    """
+    Scan every data table and record per-commodity freshness.
+
+    For each commodity/region/pair in each table, records:
+      - The most recent date found in the DB
+      - Total row count
+      - When this check was performed
+
+    This catches the case where one commodity silently stops updating
+    while the rest of the layer succeeds.
+    """
+    from datetime import datetime
+
+    if not os.path.exists(DB_PATH):
+        return
+
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Define which tables to scan and their key/date columns
+    table_specs = [
+        ("prices",          "commodity", "Date"),
+        ("cot",             "commodity", "Date"),
+        ("weather",         "region",    "Date"),
+        ("currencies",      "pair",      "Date"),
+        ("dce_futures",     "commodity", "Date"),
+        ("worldbank_prices","commodity", "Date"),
+        ("forward_curve",   "commodity", "fetched_date"),
+    ]
+
+    with sqlite3.connect(DB_PATH) as conn:
+        for table, key_col, date_col in table_specs:
+            try:
+                rows = conn.execute(
+                    f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
+                    f"FROM {table} GROUP BY {key_col}"
+                ).fetchall()
+            except Exception:
+                continue
+
+            for commodity, last_date, count in rows:
+                conn.execute(
+                    """INSERT OR REPLACE INTO commodity_freshness
+                       (commodity, table_name, last_date_in_db, rows_total, checked_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (commodity, table, last_date, count, now),
+                )
+
+    logger.info("Commodity freshness updated at %s", now)
+
+
+def read_commodity_freshness() -> pd.DataFrame:
+    """Read per-commodity freshness data from SQLite."""
+    if not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql("SELECT * FROM commodity_freshness", conn)
+        except Exception:
+            return pd.DataFrame()
+
+    return df
+
+
 def clear_database():
     """
     Drop all tables so we can do a fresh load.
@@ -464,7 +603,9 @@ def clear_database():
         for table in ("prices", "economic", "usda", "cot", "weather",
                       "psd", "currencies", "worldbank_prices",
                       "dce_futures", "crop_progress", "export_sales",
-                      "forward_curve", "data_freshness"):
+                      "forward_curve", "wasde", "inspections",
+                      "eia_energy", "brazil_estimates", "options_sentiment",
+                      "data_freshness", "commodity_freshness"):
             conn.execute(f"DROP TABLE IF EXISTS {table}")
     logger.info("Database cleared.")
 
@@ -1071,6 +1212,326 @@ def read_dce_futures(commodity: str | None = None) -> pd.DataFrame:
             )
         else:
             df = pd.read_sql("SELECT * FROM dce_futures", conn)
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Layer 12 — WASDE Monthly Estimates
+# ---------------------------------------------------------------------------
+
+def save_wasde(commodity_key: str, df: pd.DataFrame):
+    """
+    Write WASDE forecast data to the 'wasde' table.
+
+    commodity_key is like "SOYBEANS/PRODUCTION" — we split it to get
+    the commodity and attribute for storage.
+    """
+    if df.empty:
+        return
+
+    _ensure_storage_dir()
+    df = df.copy()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("BEGIN")
+        try:
+            for _, row in df.iterrows():
+                commodity = str(row.get("commodity_desc", commodity_key.split("/")[0]))
+                attribute = str(row.get("statisticcat_desc", commodity_key.split("/")[-1]))
+                conn.execute(
+                    """INSERT OR REPLACE INTO wasde
+                       (commodity, year, attribute, value, unit, reference_period)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        commodity,
+                        str(row.get("year", "")),
+                        attribute,
+                        float(row["Value"]) if pd.notna(row.get("Value")) else None,
+                        str(row.get("unit_desc", "")),
+                        str(row.get("reference_period_desc", "")),
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            logger.error("Transaction failed for wasde/%s — rolled back", commodity_key)
+            raise
+
+    logger.info("Saved %d rows for %s → wasde table", len(df), commodity_key)
+
+
+def read_wasde(commodity: str | None = None) -> pd.DataFrame:
+    """Read WASDE forecast data from SQLite."""
+    if not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM wasde WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM wasde", conn)
+        except Exception:
+            return pd.DataFrame()
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Layer 14 — Export Inspections
+# ---------------------------------------------------------------------------
+
+def save_inspections(commodity: str, df: pd.DataFrame):
+    """Write export inspections data to the 'inspections' table."""
+    if df.empty:
+        return
+
+    _ensure_storage_dir()
+    df = df.copy()
+
+    if "week_ending" in df.columns:
+        df["week_ending"] = pd.to_datetime(df["week_ending"]).dt.strftime("%Y-%m-%d")
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("BEGIN")
+        try:
+            for _, row in df.iterrows():
+                conn.execute(
+                    """INSERT OR REPLACE INTO inspections
+                       (commodity, week_ending, inspections_mt)
+                       VALUES (?, ?, ?)""",
+                    (
+                        row.get("commodity", commodity),
+                        row.get("week_ending", ""),
+                        float(row["inspections_mt"]) if pd.notna(row.get("inspections_mt")) else None,
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            logger.error("Transaction failed for inspections/%s — rolled back", commodity)
+            raise
+
+    logger.info("Saved %d rows for %s → inspections table", len(df), commodity)
+
+
+def read_inspections(commodity: str | None = None) -> pd.DataFrame:
+    """Read export inspections data from SQLite."""
+    if not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM inspections WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM inspections", conn)
+        except Exception:
+            return pd.DataFrame()
+
+    if "week_ending" in df.columns:
+        df["week_ending"] = pd.to_datetime(df["week_ending"])
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Layer 13 — EIA Energy/Biofuel
+# ---------------------------------------------------------------------------
+
+def save_eia_data(series_name: str, df: pd.DataFrame):
+    """Write EIA energy data to the 'eia_energy' table."""
+    if df.empty:
+        return
+
+    _ensure_storage_dir()
+    df = df.copy()
+    df["series_name"] = series_name
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("BEGIN")
+        try:
+            for _, row in df.iterrows():
+                conn.execute(
+                    """INSERT OR REPLACE INTO eia_energy
+                       (series_name, Date, value, unit)
+                       VALUES (?, ?, ?, ?)""",
+                    (
+                        row["series_name"],
+                        row["Date"],
+                        float(row["value"]) if pd.notna(row.get("value")) else None,
+                        str(row.get("unit", "")),
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            logger.error("Transaction failed for eia_energy/%s — rolled back", series_name)
+            raise
+
+    logger.info("Saved %d rows for %s → eia_energy table", len(df), series_name)
+
+
+def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
+    """Read EIA energy data from SQLite."""
+    if not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            if series_name:
+                df = pd.read_sql(
+                    "SELECT * FROM eia_energy WHERE series_name = ?",
+                    conn,
+                    params=(series_name,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM eia_energy", conn)
+        except Exception:
+            return pd.DataFrame()
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Layer 15 — CONAB Brazil Estimates
+# ---------------------------------------------------------------------------
+
+def save_brazil_estimates(df: pd.DataFrame):
+    """Write CONAB Brazil crop estimates to the 'brazil_estimates' table."""
+    if df.empty:
+        return
+
+    _ensure_storage_dir()
+    df = df.copy()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("BEGIN")
+        try:
+            for _, row in df.iterrows():
+                conn.execute(
+                    """INSERT OR REPLACE INTO brazil_estimates
+                       (source, commodity, crop_year, attribute, value, unit, report_date)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(row.get("source", "CONAB")),
+                        str(row.get("commodity", "")),
+                        str(row.get("crop_year", "")),
+                        str(row.get("attribute", "")),
+                        float(row["value"]) if pd.notna(row.get("value")) else None,
+                        str(row.get("unit", "")),
+                        str(row.get("report_date", "")),
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            logger.error("Transaction failed for brazil_estimates — rolled back")
+            raise
+
+    logger.info("Saved %d rows → brazil_estimates table", len(df))
+
+
+def read_brazil_estimates(commodity: str | None = None) -> pd.DataFrame:
+    """Read CONAB Brazil estimates from SQLite."""
+    if not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM brazil_estimates WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM brazil_estimates", conn)
+        except Exception:
+            return pd.DataFrame()
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Layer 16 — Options Sentiment
+# ---------------------------------------------------------------------------
+
+def save_options_sentiment(commodity: str, df: pd.DataFrame):
+    """Write options sentiment data to the 'options_sentiment' table."""
+    if df.empty:
+        return
+
+    _ensure_storage_dir()
+    df = df.copy()
+    df["commodity"] = commodity
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("BEGIN")
+        try:
+            for _, row in df.iterrows():
+                conn.execute(
+                    """INSERT OR REPLACE INTO options_sentiment
+                       (commodity, Date, total_call_oi, total_put_oi,
+                        put_call_ratio, avg_call_iv, avg_put_iv)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        row["commodity"],
+                        row["Date"],
+                        float(row["total_call_oi"]) if pd.notna(row.get("total_call_oi")) else None,
+                        float(row["total_put_oi"]) if pd.notna(row.get("total_put_oi")) else None,
+                        float(row["put_call_ratio"]) if pd.notna(row.get("put_call_ratio")) else None,
+                        float(row["avg_call_iv"]) if pd.notna(row.get("avg_call_iv")) else None,
+                        float(row["avg_put_iv"]) if pd.notna(row.get("avg_put_iv")) else None,
+                    ),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            logger.error("Transaction failed for options_sentiment/%s — rolled back", commodity)
+            raise
+
+    logger.info("Saved %d rows for %s → options_sentiment table", len(df), commodity)
+
+
+def read_options_sentiment(commodity: str | None = None) -> pd.DataFrame:
+    """Read options sentiment data from SQLite."""
+    if not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM options_sentiment WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM options_sentiment", conn)
+        except Exception:
+            return pd.DataFrame()
 
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"])

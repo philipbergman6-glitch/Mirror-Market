@@ -66,6 +66,10 @@ COMMODITY_TICKERS = {
     # Soybean meal IS animal feed. Not tracking livestock = blind to demand side.
     "Live Cattle":  "LE=F",   # CME — beef herd expansion = more meal demand
     "Lean Hogs":    "HE=F",   # CME — hog cycle drives meal consumption globally
+
+    # ── Substitute oils ──
+    # Palm oil is the #1 substitute for soy oil — daily tracking shows real-time competition
+    "Palm Oil (BMD)": "FPALM.KL",  # Bursa Malaysia Derivatives — crude palm oil futures
 }
 
 # How far back to pull historical data (yfinance period strings)
@@ -107,6 +111,8 @@ FRED_SERIES = {
 
     # ── Energy/biofuel ──
     "Ethanol PPI":     "WPU06140341",  # Producer Price Index: Ethanol
+    "Soybean Oil PPI": "WPU0612",      # Producer Price Index: Soybean oil
+    "Diesel Price":    "GASDESW",       # US diesel retail (biodiesel competition)
 }
 
 # ---------------------------------------------------------------------------
@@ -318,6 +324,49 @@ FORWARD_CURVE_CONTRACTS = {
     "Cotton":       {"root": "CT", "exchange": "NYB", "months": [3, 5, 7, 10, 12]},
     "Live Cattle":  {"root": "LE", "exchange": "CME", "months": [2, 4, 6, 8, 10, 12]},
     "Lean Hogs":    {"root": "HE", "exchange": "CME", "months": [2, 4, 5, 6, 7, 8, 10, 12]},
+}
+
+# ---------------------------------------------------------------------------
+# Layer 12 — WASDE Monthly Estimates (USDA NASS QuickStats, source_desc=FORECAST)
+# THE most market-moving USDA report — monthly supply/demand projections
+# ---------------------------------------------------------------------------
+WASDE_COMMODITIES = ["SOYBEANS", "CORN", "WHEAT", "COTTON"]
+WASDE_STAT_CATEGORIES = ["PRODUCTION", "YIELD", "AREA HARVESTED"]
+
+# ---------------------------------------------------------------------------
+# Layer 13 — EIA Biofuel/Energy Data
+# Sign up: https://www.eia.gov/opendata/register.php
+# Soybean oil increasingly goes to renewable diesel (~40% of US soy oil demand)
+# ---------------------------------------------------------------------------
+EIA_API_KEY = os.getenv("EIA_API_KEY", "")
+EIA_BASE_URL = "https://api.eia.gov/v2/"
+
+EIA_SERIES = {
+    "Ethanol Production":    {"route": "petroleum/sum/sndw", "series": "W_EPOOXE_YOP_NUS_MBBLD", "frequency": "weekly"},
+    "Biodiesel Production":  {"route": "petroleum/sum/sndm", "series": "M_EPOODY_YOP_NUS_1", "frequency": "monthly"},
+    "Diesel Retail Price":   {"route": "petroleum/pri/gnd/data", "series": "EMD_EPD2D_PTE_NUS_DPG", "frequency": "weekly"},
+}
+
+# ---------------------------------------------------------------------------
+# Layer 14 — USDA Crush/Processing + Export Inspections
+# Crush = domestic demand, Inspections = actual export shipments
+# ---------------------------------------------------------------------------
+INSPECTIONS_URL = "https://www.ams.usda.gov/mnreports/wa_gr101.txt"
+
+# ---------------------------------------------------------------------------
+# Layer 15 — CONAB Brazil Crop Estimates
+# Brazil's official crop agency — often differs from USDA by millions of tonnes
+# ---------------------------------------------------------------------------
+CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt"
+
+# ---------------------------------------------------------------------------
+# Layer 16 — Options Sentiment (experimental — yfinance option_chain)
+# Put/call ratios and implied volatility for soy complex
+# ---------------------------------------------------------------------------
+OPTIONS_COMMODITIES = {
+    "Soybeans": "ZS=F",
+    "Soybean Oil": "ZL=F",
+    "Soybean Meal": "ZM=F",
 }
 
 # ---------------------------------------------------------------------------

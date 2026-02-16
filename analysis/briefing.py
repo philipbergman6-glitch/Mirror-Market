@@ -41,6 +41,11 @@ from processing.combiner import (
     read_export_sales,
     read_forward_curve,
     read_freshness,
+    read_wasde,
+    read_eia_data,
+    read_inspections,
+    read_brazil_estimates,
+    read_options_sentiment,
 )
 from analysis.technical import compute_all_technicals
 from analysis.spreads import compute_crush_spread
@@ -87,29 +92,39 @@ def _load_currency_data() -> dict[str, pd.DataFrame]:
 # ---------------------------------------------------------------------------
 
 def _format_freshness_warnings() -> str:
-    """Check data freshness and return warnings for stale layers."""
+    """Check data freshness and return warnings for stale layers + per-commodity health."""
+    sections = []
+
+    # --- Layer-level freshness (existing logic) ---
     freshness = read_freshness()
-    if freshness.empty:
-        return ""
+    layer_warnings = []
+    if not freshness.empty:
+        now = datetime.utcnow()
+        threshold = timedelta(days=FRESHNESS_WARNING_DAYS)
 
-    warnings = []
-    now = datetime.utcnow()
-    threshold = timedelta(days=FRESHNESS_WARNING_DAYS)
+        for _, row in freshness.iterrows():
+            last = row["last_success"]
+            if pd.notna(last):
+                age = now - last
+                if age > threshold:
+                    days_old = age.days
+                    layer_warnings.append(
+                        f"  WARNING: {row['layer_name']} data is {days_old} days old"
+                    )
 
-    for _, row in freshness.iterrows():
-        last = row["last_success"]
-        if pd.notna(last):
-            age = now - last
-            if age > threshold:
-                days_old = age.days
-                warnings.append(
-                    f"  WARNING: {row['layer_name']} data is {days_old} days old"
-                )
+    if layer_warnings:
+        sections.append("DATA FRESHNESS WARNINGS:\n" + "\n".join(layer_warnings))
 
-    if not warnings:
-        return ""
+    # --- Per-commodity health check ---
+    try:
+        from analysis.health import run_health_check
+        health = run_health_check()
+        if health["issues"]:
+            sections.append(health["summary"])
+    except Exception:
+        pass  # Don't break the briefing if health check fails
 
-    return "DATA FRESHNESS WARNINGS:\n" + "\n".join(warnings)
+    return "\n\n".join(sections)
 
 
 def _format_price_section(price_data: dict[str, pd.DataFrame]) -> tuple[str, list[dict], dict[str, pd.DataFrame]]:
@@ -766,6 +781,232 @@ def _format_forward_curve() -> str:
     return "\n".join(lines)
 
 
+def _format_wasde() -> str:
+    """Format the WASDE ESTIMATES section — monthly USDA supply/demand forecasts."""
+    lines = ["WASDE ESTIMATES (USDA Monthly Forecasts):"]
+    wasde = read_wasde()
+
+    if wasde.empty:
+        return "WASDE ESTIMATES: No data"
+
+    # Group by commodity, show latest reference period with MoM revision
+    for commodity in wasde["commodity"].unique():
+        subset = wasde[wasde["commodity"] == commodity]
+        if subset.empty:
+            continue
+
+        commodity_lines = []
+        for attribute in subset["attribute"].unique():
+            attr_data = subset[subset["attribute"] == attribute].copy()
+            if attr_data.empty:
+                continue
+
+            # Sort by reference_period to get latest and prior month
+            attr_data = attr_data.sort_values("reference_period")
+            latest = attr_data.iloc[-1]
+            val = latest.get("value")
+            unit = latest.get("unit", "")
+            ref = latest.get("reference_period", "")
+
+            if pd.isna(val):
+                continue
+
+            # Month-over-month revision
+            if len(attr_data) >= 2:
+                prev = attr_data.iloc[-2]
+                prev_val = prev.get("value")
+                if pd.notna(prev_val) and prev_val != 0:
+                    revision = val - prev_val
+                    sign = "+" if revision >= 0 else ""
+                    direction = "UP" if revision > 0 else "DOWN"
+                    commodity_lines.append(
+                        f"    {attribute}: {val:,.0f} {unit} "
+                        f"(revised {direction} {sign}{revision:,.0f} vs prior month)"
+                    )
+                    continue
+
+            commodity_lines.append(f"    {attribute}: {val:,.0f} {unit} ({ref})")
+
+        if commodity_lines:
+            lines.append(f"  {commodity}:")
+            lines.extend(commodity_lines)
+
+    if len(lines) == 1:
+        lines.append("  Data available but no forecast data found")
+
+    return "\n".join(lines)
+
+
+def _format_biofuel() -> str:
+    """Format the BIOFUEL/ENERGY section — EIA ethanol, biodiesel, diesel."""
+    lines = ["BIOFUEL & ENERGY (EIA):"]
+    eia = read_eia_data()
+
+    if eia.empty:
+        return "BIOFUEL & ENERGY (EIA): No data (set EIA_API_KEY to enable)"
+
+    for series_name in eia["series_name"].unique():
+        subset = eia[eia["series_name"] == series_name].sort_values("Date")
+        if subset.empty or len(subset) < 2:
+            continue
+
+        latest = subset.iloc[-1]
+        prev = subset.iloc[-2]
+        value = latest["value"]
+        unit = latest.get("unit", "")
+
+        if pd.notna(prev["value"]) and prev["value"] != 0:
+            chg_pct = ((value - prev["value"]) / prev["value"]) * 100
+            sign = "+" if chg_pct >= 0 else ""
+            lines.append(f"  {series_name}: {value:,.2f} {unit} ({sign}{chg_pct:.1f}% vs prior)")
+        else:
+            lines.append(f"  {series_name}: {value:,.2f} {unit}")
+
+    if len(lines) == 1:
+        lines.append("  Data available but no series found")
+
+    return "\n".join(lines)
+
+
+def _format_inspections() -> str:
+    """Format the EXPORT INSPECTIONS section — actual shipments vs commitments."""
+    lines = ["EXPORT INSPECTIONS (USDA Weekly):"]
+    insp = read_inspections()
+
+    if insp.empty:
+        return "EXPORT INSPECTIONS: No data"
+
+    es_data = read_export_sales()
+
+    for commodity in insp["commodity"].unique():
+        subset = insp[insp["commodity"] == commodity].sort_values("week_ending")
+        if subset.empty:
+            continue
+
+        latest = subset.iloc[-1]
+        vol = latest.get("inspections_mt", 0)
+        week = latest["week_ending"]
+        week_str = week.strftime("%m/%d") if hasattr(week, "strftime") else str(week)
+
+        parts = [f"Inspected: {vol:,.0f} MT (w/e {week_str})"]
+
+        # Compare to committed export sales if available
+        if not es_data.empty:
+            es_comm = es_data[es_data["commodity"] == commodity]
+            if not es_comm.empty and "outstanding_sales" in es_comm.columns:
+                latest_es_week = es_comm["week_ending"].max()
+                es_latest = es_comm[es_comm["week_ending"] == latest_es_week]
+                outstanding = es_latest["outstanding_sales"].sum()
+                if outstanding > 0:
+                    parts.append(f"Outstanding sales: {outstanding:,.0f} MT")
+
+        lines.append(f"  {commodity}: {' | '.join(parts)}")
+
+    if len(lines) == 1:
+        lines.append("  No inspection data available")
+
+    return "\n".join(lines)
+
+
+def _format_brazil_estimates() -> str:
+    """Format the BRAZIL ESTIMATES (CONAB) section — compare to USDA PSD."""
+    lines = ["BRAZIL CROP ESTIMATES (CONAB):"]
+    brazil = read_brazil_estimates()
+
+    if brazil.empty:
+        return "BRAZIL CROP ESTIMATES (CONAB): No data"
+
+    psd = read_psd()
+
+    for commodity in brazil["commodity"].unique():
+        subset = brazil[brazil["commodity"] == commodity]
+        if subset.empty:
+            continue
+
+        # Get the latest crop year
+        latest_year = subset["crop_year"].max()
+        latest = subset[subset["crop_year"] == latest_year]
+
+        commodity_parts = []
+        for _, row in latest.iterrows():
+            attr = row.get("attribute", "")
+            val = row.get("value")
+            unit = row.get("unit", "")
+
+            if pd.isna(val):
+                continue
+
+            part = f"{attr}: {val:,.0f} {unit}"
+
+            # Compare to USDA PSD if available
+            if not psd.empty and attr == "Production":
+                psd_match = psd[
+                    (psd["commodity"] == commodity) &
+                    (psd["country"] == "Brazil") &
+                    (psd["attribute"] == "Production")
+                ]
+                if not psd_match.empty:
+                    psd_latest = psd_match[psd_match["year"] == psd_match["year"].max()]
+                    if not psd_latest.empty:
+                        usda_val = psd_latest.iloc[0]["value"]
+                        if pd.notna(usda_val):
+                            gap = val - usda_val
+                            part += f" (vs USDA {usda_val:,.0f} — gap: {gap:+,.0f})"
+
+            commodity_parts.append(f"    {part}")
+
+        if commodity_parts:
+            lines.append(f"  {commodity} ({latest_year}):")
+            lines.extend(commodity_parts)
+
+    if len(lines) == 1:
+        lines.append("  No CONAB estimate data available")
+
+    return "\n".join(lines)
+
+
+def _format_options() -> str:
+    """Format the OPTIONS SENTIMENT section — put/call ratios and IV."""
+    lines = ["OPTIONS SENTIMENT:"]
+    options = read_options_sentiment()
+
+    if options.empty:
+        return "OPTIONS SENTIMENT: No data (experimental — may not be available for ag futures)"
+
+    for commodity in options["commodity"].unique():
+        subset = options[options["commodity"] == commodity].sort_values("Date")
+        if subset.empty:
+            continue
+
+        latest = subset.iloc[-1]
+        pc_ratio = latest.get("put_call_ratio")
+        call_oi = latest.get("total_call_oi", 0)
+        put_oi = latest.get("total_put_oi", 0)
+        call_iv = latest.get("avg_call_iv")
+        put_iv = latest.get("avg_put_iv")
+
+        parts = []
+        if pd.notna(pc_ratio):
+            sentiment = "bearish" if pc_ratio > 1.2 else ("bullish" if pc_ratio < 0.7 else "neutral")
+            parts.append(f"P/C ratio: {pc_ratio:.2f} ({sentiment})")
+        if pd.notna(call_oi):
+            parts.append(f"Call OI: {call_oi:,.0f}")
+        if pd.notna(put_oi):
+            parts.append(f"Put OI: {put_oi:,.0f}")
+        if pd.notna(call_iv):
+            parts.append(f"Call IV: {call_iv:.1%}")
+        if pd.notna(put_iv):
+            parts.append(f"Put IV: {put_iv:.1%}")
+
+        if parts:
+            lines.append(f"  {commodity}: {' | '.join(parts)}")
+
+    if len(lines) == 1:
+        lines.append("  No options data available")
+
+    return "\n".join(lines)
+
+
 def _format_market_drivers(
     price_data: dict[str, pd.DataFrame],
     enriched: dict[str, pd.DataFrame],
@@ -919,6 +1160,99 @@ def _format_market_drivers(
                         f"market expects adequate supply, carrying costs elevated"
                     )
 
+    # --- Palm oil vs soybean oil competition ---
+    if "Palm Oil (BMD)" in enriched and "Soybean Oil" in enriched:
+        palm = enriched["Palm Oil (BMD)"]
+        soy_oil = enriched["Soybean Oil"]
+        if not palm.empty and not soy_oil.empty:
+            palm_weekly = palm.get("weekly_pct_change", pd.Series())
+            oil_weekly = soy_oil.get("weekly_pct_change", pd.Series())
+            if (not palm_weekly.empty and not oil_weekly.empty
+                    and pd.notna(palm_weekly.iloc[-1]) and pd.notna(oil_weekly.iloc[-1])):
+                palm_chg = palm_weekly.iloc[-1]
+                oil_chg = oil_weekly.iloc[-1]
+                if palm_chg - oil_chg > 3:
+                    drivers.append(
+                        f"Palm oil outperforming soybean oil ({palm_chg:+.1f}% vs {oil_chg:+.1f}%): "
+                        f"palm premium widening — may shift demand toward soy oil"
+                    )
+                elif oil_chg - palm_chg > 3:
+                    drivers.append(
+                        f"Soybean oil outperforming palm oil ({oil_chg:+.1f}% vs {palm_chg:+.1f}%): "
+                        f"soy oil premium building — demand may shift to palm"
+                    )
+
+    # --- Biofuel pull on soybean oil ---
+    eia_data_local = read_eia_data()
+    if not eia_data_local.empty:
+        biodiesel = eia_data_local[eia_data_local["series_name"] == "Biodiesel Production"].sort_values("Date")
+        if len(biodiesel) >= 2:
+            latest_bio = biodiesel.iloc[-1]["value"]
+            prev_bio = biodiesel.iloc[-2]["value"]
+            if pd.notna(latest_bio) and pd.notna(prev_bio) and prev_bio > 0:
+                bio_chg = ((latest_bio - prev_bio) / prev_bio) * 100
+                if bio_chg > 5:
+                    drivers.append(
+                        f"Biodiesel production surging ({bio_chg:+.1f}%): "
+                        f"renewable diesel pulling more soybean oil — bullish ZL=F"
+                    )
+                elif bio_chg < -5:
+                    drivers.append(
+                        f"Biodiesel production declining ({bio_chg:+.1f}%): "
+                        f"reduced biofuel pull on soybean oil — bearish ZL=F"
+                    )
+
+    # --- CONAB vs USDA divergence ---
+    brazil_data = read_brazil_estimates()
+    if not brazil_data.empty:
+        psd_data_local = read_psd()
+        soy_conab = brazil_data[
+            (brazil_data["commodity"] == "Soybeans") &
+            (brazil_data["attribute"] == "Production")
+        ]
+        if not soy_conab.empty:
+            latest_year = soy_conab["crop_year"].max()
+            conab_val = soy_conab[soy_conab["crop_year"] == latest_year]["value"].iloc[0]
+
+            if not psd_data_local.empty and pd.notna(conab_val):
+                usda_brazil = psd_data_local[
+                    (psd_data_local["commodity"] == "Soybeans") &
+                    (psd_data_local["country"] == "Brazil") &
+                    (psd_data_local["attribute"] == "Production")
+                ]
+                if not usda_brazil.empty:
+                    usda_val = usda_brazil[usda_brazil["year"] == usda_brazil["year"].max()]["value"]
+                    if not usda_val.empty:
+                        usda_val = usda_val.iloc[0]
+                        if pd.notna(usda_val) and abs(conab_val - usda_val) > 2000:
+                            gap = conab_val - usda_val
+                            direction = "higher" if gap > 0 else "lower"
+                            drivers.append(
+                                f"CONAB vs USDA divergence: CONAB estimates Brazil soybean production "
+                                f"{abs(gap):,.0f} 1000 MT {direction} than USDA — "
+                                f"{'USDA may revise up' if gap > 0 else 'USDA may revise down'}"
+                            )
+
+    # --- Options sentiment extreme ---
+    options_data_local = read_options_sentiment()
+    if not options_data_local.empty:
+        for commodity in options_data_local["commodity"].unique():
+            opt_subset = options_data_local[options_data_local["commodity"] == commodity].sort_values("Date")
+            if opt_subset.empty:
+                continue
+            pc = opt_subset.iloc[-1].get("put_call_ratio")
+            if pd.notna(pc):
+                if pc > 1.5:
+                    drivers.append(
+                        f"Extreme bearish options sentiment in {commodity}: "
+                        f"put/call ratio at {pc:.2f} — contrarian bullish signal"
+                    )
+                elif pc < 0.5:
+                    drivers.append(
+                        f"Extreme bullish options sentiment in {commodity}: "
+                        f"put/call ratio at {pc:.2f} — contrarian bearish signal"
+                    )
+
     # --- Dollar strength + commodities ---
     econ_data = read_economic()
     if not econ_data.empty:
@@ -1006,8 +1340,16 @@ def generate_briefing() -> str:
         sections.append(yield_curve)
         sections.append("")
 
+    # WASDE ESTIMATES — monthly USDA supply/demand forecasts
+    sections.append(_format_wasde())
+    sections.append("")
+
     # EXPORT SALES — weekly USDA demand data
     sections.append(_format_export_sales())
+    sections.append("")
+
+    # EXPORT INSPECTIONS — actual shipments
+    sections.append(_format_inspections())
     sections.append("")
 
     # DCE CHINESE FUTURES — previously dead code
@@ -1016,6 +1358,18 @@ def generate_briefing() -> str:
 
     # FORWARD CURVE — market term structure
     sections.append(_format_forward_curve())
+    sections.append("")
+
+    # BIOFUEL & ENERGY (EIA)
+    sections.append(_format_biofuel())
+    sections.append("")
+
+    # BRAZIL CROP ESTIMATES (CONAB)
+    sections.append(_format_brazil_estimates())
+    sections.append("")
+
+    # OPTIONS SENTIMENT (experimental)
+    sections.append(_format_options())
     sections.append("")
 
     # CURRENCIES
