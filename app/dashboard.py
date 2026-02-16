@@ -47,7 +47,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Auto-fetch on first launch OR when new-layer tables are empty
+# Auto-fetch ONCE per session if DB is missing or new tables are empty
 # ---------------------------------------------------------------------------
 from config import DB_PATH
 import sqlite3
@@ -57,17 +57,13 @@ def _needs_data_refresh() -> bool:
     """Check if database is missing or has empty new-layer tables."""
     if not os.path.exists(DB_PATH):
         return True
-    # Ensure all tables exist
     from processing.combiner import init_database
     init_database()
-    # Check core table + the 3 reliable new tables
-    tables_to_check = ["prices", "wasde", "inspections", "brazil_estimates"]
     try:
         with sqlite3.connect(DB_PATH) as conn:
             prices_count = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
             if prices_count == 0:
-                return True  # Core table empty — definitely need refresh
-            # If prices has data but new tables don't, the DB predates the new layers
+                return True
             for table in ["wasde", "inspections", "brazil_estimates"]:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 if count == 0:
@@ -77,10 +73,13 @@ def _needs_data_refresh() -> bool:
     return False
 
 
-if _needs_data_refresh():
-    with st.spinner("Fetching missing market data..."):
-        from main import run as run_pipeline
-        run_pipeline()
+# Only check once per session — not on every page navigation
+if "data_checked" not in st.session_state:
+    if _needs_data_refresh():
+        with st.spinner("First launch — fetching market data (this only happens once)..."):
+            from main import run as run_pipeline
+            run_pipeline()
+    st.session_state["data_checked"] = True
 
 # ---------------------------------------------------------------------------
 # Sidebar navigation
@@ -101,6 +100,10 @@ page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
 
 st.sidebar.divider()
 if st.sidebar.button("Refresh Data"):
+    with st.sidebar:
+        with st.spinner("Fetching latest data..."):
+            from main import run as run_pipeline
+            run_pipeline()
     st.cache_data.clear()
     st.rerun()
 
