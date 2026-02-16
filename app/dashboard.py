@@ -9,10 +9,11 @@ Pages:
     1. Command Center  — at-a-glance snapshot of all 3 legs + crush + signals
     2. Technicals       — candlestick charts with RSI/MACD/BBands for each leg
     3. Supply/Demand    — WASDE balance sheet, CONAB, exports, China, biodiesel
-    4. Relative Value   — crush spread, oil/meal ratio, oil vs palm, bean/corn
-    5. Risk Monitor     — BRL/USD, COT positioning, weather, options sentiment
+    4. Relative Value   — crush spread, oil/meal ratio, oil vs palm, bean/corn (with 1Y overlays)
+    5. Risk Monitor     — BRL/USD, COT positioning, weather, options, correlations
     6. Forward Curves   — term structure for all 3 soy contracts
-    7. Briefing         — full text briefing + data health
+    7. Seasonal         — monthly avg patterns vs current price for each leg
+    8. Briefing         — full text briefing + data health
 
 Run with:  streamlit run app/dashboard.py
 """
@@ -46,12 +47,38 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Auto-fetch on first launch (Streamlit Cloud)
+# Auto-fetch on first launch OR when new-layer tables are empty
 # ---------------------------------------------------------------------------
 from config import DB_PATH
+import sqlite3
 
-if not os.path.exists(DB_PATH):
-    with st.spinner("First launch — fetching market data..."):
+
+def _needs_data_refresh() -> bool:
+    """Check if database is missing or has empty new-layer tables."""
+    if not os.path.exists(DB_PATH):
+        return True
+    # Ensure all tables exist
+    from processing.combiner import init_database
+    init_database()
+    # Check core table + the 3 reliable new tables
+    tables_to_check = ["prices", "wasde", "inspections", "brazil_estimates"]
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            prices_count = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
+            if prices_count == 0:
+                return True  # Core table empty — definitely need refresh
+            # If prices has data but new tables don't, the DB predates the new layers
+            for table in ["wasde", "inspections", "brazil_estimates"]:
+                count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                if count == 0:
+                    return True
+    except Exception:
+        return True
+    return False
+
+
+if _needs_data_refresh():
+    with st.spinner("Fetching missing market data..."):
         from main import run as run_pipeline
         run_pipeline()
 
@@ -65,6 +92,7 @@ PAGES = [
     "Relative Value",
     "Risk Monitor",
     "Forward Curves",
+    "Seasonal",
     "Briefing",
 ]
 
@@ -547,6 +575,13 @@ def page_relative_value():
 
         with col2:
             fig = go.Figure()
+            # 1Y range shading
+            if crush.get("min_1y") is not None:
+                fig.add_hline(y=crush["avg_1y"], line_dash="dot", line_color="blue",
+                              annotation_text=f"1Y avg: ${crush['avg_1y']:.2f}")
+                fig.add_hrect(y0=crush["min_1y"], y1=crush["max_1y"],
+                              fillcolor="rgba(100,149,237,0.1)", line_width=0,
+                              annotation_text="1Y range")
             fig.add_trace(
                 go.Scatter(
                     x=spread_df["Date"],
@@ -588,6 +623,10 @@ def page_relative_value():
         if omr:
             st.metric("Current", f"{omr['current']:.3f}", delta=f"60d avg: {omr['avg_60d']:.3f}")
             fig = go.Figure()
+            if omr.get("min_1y") is not None:
+                fig.add_hrect(y0=omr["min_1y"], y1=omr["max_1y"],
+                              fillcolor="rgba(255,165,0,0.08)", line_width=0,
+                              annotation_text="1Y range")
             fig.add_trace(
                 go.Scatter(x=omr["series"].index, y=omr["series"], mode="lines",
                            name="Oil/Meal Ratio", line=dict(color="darkorange"))
@@ -644,6 +683,10 @@ def page_relative_value():
                 st.caption("Below avg = corn relatively expensive = may lose soy acres to corn")
         with col2:
             fig = go.Figure()
+            if bcr.get("min_1y") is not None:
+                fig.add_hrect(y0=bcr["min_1y"], y1=bcr["max_1y"],
+                              fillcolor="rgba(139,69,19,0.08)", line_width=0,
+                              annotation_text="1Y range")
             fig.add_trace(
                 go.Scatter(x=bcr["series"].index, y=bcr["series"], mode="lines",
                            name="Bean/Corn Ratio", line=dict(color="saddlebrown"))
@@ -743,6 +786,61 @@ def page_risk_monitor():
     else:
         st.info("No options data (experimental — may not be available for ag futures)")
 
+    st.divider()
+
+    # --- Correlations ---
+    st.subheader("Rolling Correlations")
+    try:
+        from analysis.correlations import rolling_correlation, commodity_vs_currency
+        from processing.combiner import read_prices, read_currencies
+
+        all_prices = read_prices()
+        all_currencies = read_currencies()
+
+        # Build price series for soy legs + corn
+        _corr_series = {}
+        for name in ["Soybeans", "Soybean Oil", "Corn"]:
+            subset = all_prices[all_prices["commodity"] == name].copy() if not all_prices.empty else pd.DataFrame()
+            if not subset.empty:
+                subset["Date"] = pd.to_datetime(subset["Date"])
+                subset = subset.set_index("Date").sort_index()
+                _corr_series[name] = subset["Close"]
+
+        # BRL
+        brl_df = pd.DataFrame()
+        if not all_currencies.empty:
+            brl_sub = all_currencies[all_currencies["pair"] == "BRL/USD"].copy()
+            if not brl_sub.empty:
+                brl_sub["Date"] = pd.to_datetime(brl_sub["Date"])
+                brl_df = brl_sub.set_index("Date").sort_index()
+
+        pairs = []
+        if "Soybeans" in _corr_series and not brl_df.empty:
+            pairs.append(("Soybeans vs BRL/USD", _corr_series["Soybeans"], brl_df["Close"]))
+        if "Soybeans" in _corr_series and "Soybean Oil" in _corr_series:
+            pairs.append(("Soybeans vs Soy Oil", _corr_series["Soybeans"], _corr_series["Soybean Oil"]))
+        if "Soybeans" in _corr_series and "Corn" in _corr_series:
+            pairs.append(("Soybeans vs Corn", _corr_series["Soybeans"], _corr_series["Corn"]))
+
+        if pairs:
+            fig = go.Figure()
+            colors = ["crimson", "darkorange", "steelblue"]
+            for i, (label, sa, sb) in enumerate(pairs):
+                rc = rolling_correlation(sa, sb, window=60)
+                if not rc.empty:
+                    fig.add_trace(
+                        go.Scatter(x=rc.index, y=rc, mode="lines", name=label,
+                                   line=dict(color=colors[i % len(colors)], width=2))
+                    )
+            fig.add_hline(y=0, line_dash="dash", line_color="gray")
+            fig.update_layout(height=400, yaxis_title="60d Rolling Correlation",
+                              yaxis_range=[-1, 1])
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Need price + currency data for correlations")
+    except Exception:
+        st.info("Correlation data unavailable")
+
 
 # ---------------------------------------------------------------------------
 # Page 6: Forward Curves
@@ -802,7 +900,84 @@ def page_forward_curves():
 
 
 # ---------------------------------------------------------------------------
-# Page 7: Briefing
+# Page 7: Seasonal
+# ---------------------------------------------------------------------------
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def page_seasonal():
+    st.title("Soy Complex — Seasonal Patterns")
+
+    data = load_seasonal()
+
+    if not data:
+        st.warning("No seasonal data. Run `python main.py` first.")
+        return
+
+    for leg in ["Soybeans", "Soybean Oil", "Soybean Meal"]:
+        if leg not in data:
+            continue
+
+        leg_data = data[leg]
+        monthly = leg_data.get("monthly")
+        vs_seasonal = leg_data.get("vs_seasonal", {})
+
+        st.subheader(leg)
+
+        # Current vs seasonal metric
+        if vs_seasonal:
+            cols = st.columns(3)
+            cols[0].metric("Current Price", f"{vs_seasonal['current_price']:,.2f}")
+            cols[1].metric("Seasonal Avg (this month)", f"{vs_seasonal['seasonal_avg']:,.2f}")
+            dev = vs_seasonal.get("deviation_pct", 0)
+            cols[2].metric("vs Seasonal", f"{dev:+.1f}%",
+                           delta="Above" if dev > 0 else "Below")
+
+        # Monthly average bar chart
+        if monthly is not None and not monthly.empty:
+            labels = [MONTH_NAMES[m - 1] for m in monthly["month"]]
+            fig = go.Figure()
+            # Min/max range as error bars
+            fig.add_trace(
+                go.Bar(
+                    x=labels,
+                    y=monthly["avg_close"],
+                    name="Avg Close",
+                    marker_color="steelblue",
+                    error_y=dict(
+                        type="data",
+                        symmetric=False,
+                        array=monthly["max_close"] - monthly["avg_close"],
+                        arrayminus=monthly["avg_close"] - monthly["min_close"],
+                        color="rgba(70,130,180,0.4)",
+                    ),
+                )
+            )
+            # Highlight current month
+            if vs_seasonal:
+                from datetime import datetime
+                current_month_idx = datetime.now().month - 1
+                if current_month_idx < len(labels):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[labels[current_month_idx]],
+                            y=[vs_seasonal["current_price"]],
+                            mode="markers",
+                            name="Current",
+                            marker=dict(color="red", size=14, symbol="diamond"),
+                        )
+                    )
+
+            fig.update_layout(height=350, yaxis_title="Price",
+                              xaxis_title="Month", showlegend=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+
+
+# ---------------------------------------------------------------------------
+# Page 8: Briefing
 # ---------------------------------------------------------------------------
 def page_briefing():
     st.title("Soy Complex — Full Briefing")
@@ -844,5 +1019,7 @@ elif page == "Risk Monitor":
     page_risk_monitor()
 elif page == "Forward Curves":
     page_forward_curves()
+elif page == "Seasonal":
+    page_seasonal()
 elif page == "Briefing":
     page_briefing()

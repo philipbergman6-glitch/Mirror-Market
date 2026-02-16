@@ -556,10 +556,15 @@ def relative_value_analysis() -> dict:
             try:
                 spread = compute_crush_spread(beans, oil, meal)
                 if not spread.empty:
+                    crush_vals = spread["crush_spread"] / 100
+                    last_252 = crush_vals.iloc[-252:] if len(crush_vals) >= 252 else crush_vals
                     result["crush"] = {
                         "series": spread,
                         "current_dollars": spread.iloc[-1]["crush_spread"] / 100,
                         "profitable": spread.iloc[-1]["crush_spread"] > 0,
+                        "avg_1y": last_252.mean(),
+                        "min_1y": last_252.min(),
+                        "max_1y": last_252.max(),
                     }
             except Exception:
                 pass
@@ -573,10 +578,13 @@ def relative_value_analysis() -> dict:
             }).dropna()
             if not combined.empty:
                 combined["ratio"] = combined["oil"] / combined["meal"]
+                last_252 = combined["ratio"].iloc[-252:] if len(combined) >= 252 else combined["ratio"]
                 result["oil_meal_ratio"] = {
                     "series": combined["ratio"],
                     "current": combined["ratio"].iloc[-1],
                     "avg_60d": combined["ratio"].iloc[-60:].mean() if len(combined) >= 60 else combined["ratio"].mean(),
+                    "min_1y": last_252.min(),
+                    "max_1y": last_252.max(),
                 }
 
     # --- Soy oil vs Palm oil ---
@@ -605,10 +613,13 @@ def relative_value_analysis() -> dict:
             }).dropna()
             if not combined.empty:
                 combined["ratio"] = combined["beans"] / combined["corn"]
+                last_252 = combined["ratio"].iloc[-252:] if len(combined) >= 252 else combined["ratio"]
                 result["bean_corn_ratio"] = {
                     "series": combined["ratio"],
                     "current": combined["ratio"].iloc[-1],
-                    "avg_1y": combined["ratio"].mean(),
+                    "avg_1y": last_252.mean(),
+                    "min_1y": last_252.min(),
+                    "max_1y": last_252.max(),
                 }
 
     # --- Soy oil share of crush value ---
