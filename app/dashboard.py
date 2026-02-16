@@ -53,32 +53,59 @@ from config import DB_PATH
 import sqlite3
 
 
-def _needs_data_refresh() -> bool:
-    """Check if database is missing or has empty new-layer tables."""
+def _get_empty_tables() -> list[str]:
+    """Return list of important tables that are empty or missing."""
     if not os.path.exists(DB_PATH):
-        return True
+        return ["prices"]  # DB doesn't exist at all
     from processing.combiner import init_database
     init_database()
+    empty = []
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            prices_count = conn.execute("SELECT COUNT(*) FROM prices").fetchone()[0]
-            if prices_count == 0:
-                return True
-            for table in ["wasde", "inspections", "brazil_estimates"]:
+            for table in ["prices", "wasde", "inspections", "brazil_estimates"]:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 if count == 0:
-                    return True
+                    empty.append(table)
     except Exception:
-        return True
-    return False
+        return ["prices"]
+    return empty
 
 
 # Only check once per session — not on every page navigation
 if "data_checked" not in st.session_state:
-    if _needs_data_refresh():
-        with st.spinner("First launch — fetching market data (this only happens once)..."):
-            from main import run as run_pipeline
-            run_pipeline()
+    empty = _get_empty_tables()
+    if empty:
+        # If we have NO data at all, auto-fetch core layers only (fast)
+        if "prices" in empty:
+            with st.spinner("First launch — fetching core price data..."):
+                try:
+                    from processing.combiner import init_database, save_price_data, save_currency_data, save_freshness
+                    from data.fetchers.yfinance_fetcher import fetch_all as fetch_prices, fetch_currencies
+                    from processing.cleaner import clean_ohlcv, clean_currencies
+                    init_database()
+                    # Prices only — fast, no API keys needed
+                    price_data = fetch_prices()
+                    for name in price_data:
+                        price_data[name] = clean_ohlcv(price_data[name])
+                    for name, df in price_data.items():
+                        save_price_data(name, df)
+                    save_freshness("prices", sum(len(df) for df in price_data.values()))
+                    # Currencies — also fast, no key needed
+                    currency_data = fetch_currencies()
+                    for name in currency_data:
+                        currency_data[name] = clean_currencies(currency_data[name])
+                    for pair, df in currency_data.items():
+                        save_currency_data(pair, df)
+                    save_freshness("currencies", sum(len(df) for df in currency_data.values()))
+                except Exception as e:
+                    st.warning(f"Auto-fetch failed: {e}")
+        # Show notice about missing tables (don't block the app)
+        remaining = [t for t in _get_empty_tables() if t != "prices"]
+        if remaining:
+            st.info(
+                f"Some data tables are empty ({', '.join(remaining)}). "
+                "Click **Refresh Data** in the sidebar to run the full pipeline."
+            )
     st.session_state["data_checked"] = True
 
 # ---------------------------------------------------------------------------
