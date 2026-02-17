@@ -176,6 +176,12 @@ GROWING_REGIONS = {
     "India Maharashtra":          {"lat": 19.75,  "lon": 75.71},   # #2 India soybean state
     "Thailand Surat Thani":       {"lat": 9.14,   "lon": 99.33},   # #3 global palm oil
     "China Heilongjiang":         {"lat": 47.36,  "lon": 127.76},  # China domestic soybean belt
+
+    # ── Emerging Markets (soy deep dive) ──
+    "South Africa Free State":    {"lat": -29.12, "lon": 26.21},   # SA #1 soy province
+    "South Africa Mpumalanga":    {"lat": -25.47, "lon": 30.00},   # SA #2 soy province
+    "Nigeria Benue":              {"lat": 7.73,   "lon": 8.52},    # Nigeria soy belt
+    "Nigeria Kaduna":             {"lat": 10.52,  "lon": 7.43},    # Nigeria soy belt
 }
 
 WEATHER_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum"
@@ -254,6 +260,8 @@ CURRENCY_TICKERS = {
 
     # ── Africa ──
     "ETB/USD": "ETBUSD=X",   # Ethiopian Birr — #1 Africa coffee producer
+    "ZAR/USD": "ZARUSD=X",   # South African Rand — emerging soy producer
+    "NGN/USD": "NGNUSD=X",   # Nigerian Naira — emerging soy market (may have limited data)
 }
 
 # ---------------------------------------------------------------------------
@@ -393,3 +401,11 @@ FRESHNESS_WARNING_DAYS = 7
 # ---------------------------------------------------------------------------
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data", "storage")
 DB_PATH = os.path.join(STORAGE_DIR, "mirror_market.db")
+
+# ---------------------------------------------------------------------------
+# Cloud Database (Turso — hosted SQLite)
+# Set these env vars to use Turso instead of local SQLite.
+# Sign up: https://turso.tech (free tier: 9GB, 500 databases)
+# ---------------------------------------------------------------------------
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")

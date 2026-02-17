@@ -22,6 +22,7 @@ import sqlite3
 import pandas as pd
 
 from config import DB_PATH, STORAGE_DIR
+from processing.database import get_connection, is_cloud
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,7 @@ def init_database():
     IF NOT EXISTS clause means it won't destroy existing data.
     """
     _ensure_storage_dir()
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute(_CREATE_PRICES)
         conn.execute(_CREATE_ECONOMIC)
         conn.execute(_CREATE_USDA)
@@ -310,7 +311,7 @@ def save_price_data(name: str, df: pd.DataFrame):
     # Convert Date to ISO string for consistent storage
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -353,7 +354,7 @@ def save_fred_data(name: str, series: pd.Series):
     df["series_name"] = name
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -386,7 +387,7 @@ def save_usda_data(df: pd.DataFrame, stat_category: str):
     df = df.copy()
     df["stat_category"] = stat_category
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -428,7 +429,7 @@ def save_crop_progress(commodity: str, df: pd.DataFrame):
     df = df.copy()
     df["commodity"] = commodity
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -458,10 +459,10 @@ def save_crop_progress(commodity: str, df: pd.DataFrame):
 
 def read_crop_progress(commodity: str | None = None) -> pd.DataFrame:
     """Read crop progress/condition data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
@@ -489,7 +490,7 @@ def save_freshness(layer_name: str, rows_fetched: int = 0):
     _ensure_storage_dir()
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute(
             """INSERT OR REPLACE INTO data_freshness
                (layer_name, last_success, rows_fetched)
@@ -508,10 +509,10 @@ def read_freshness() -> pd.DataFrame:
     pd.DataFrame
         Columns: layer_name, last_success, rows_fetched
     """
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             df = pd.read_sql("SELECT * FROM data_freshness", conn)
         except Exception:
@@ -553,7 +554,7 @@ def update_commodity_freshness():
         ("forward_curve",   "commodity", "fetched_date"),
     ]
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         for table, key_col, date_col in table_specs:
             try:
                 rows = conn.execute(
@@ -576,10 +577,10 @@ def update_commodity_freshness():
 
 def read_commodity_freshness() -> pd.DataFrame:
     """Read per-commodity freshness data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             df = pd.read_sql("SELECT * FROM commodity_freshness", conn)
         except Exception:
@@ -599,7 +600,7 @@ def clear_database():
         >>> clear_database()
     """
     _ensure_storage_dir()
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         for table in ("prices", "economic", "usda", "cot", "weather",
                       "psd", "currencies", "worldbank_prices",
                       "dce_futures", "crop_progress", "export_sales",
@@ -626,7 +627,7 @@ def save_cot_data(name: str, df: pd.DataFrame):
     df["commodity"] = name
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -673,7 +674,7 @@ def save_weather_data(region: str, df: pd.DataFrame):
     df["region"] = region
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -711,10 +712,10 @@ def read_prices(commodity: str | None = None) -> pd.DataFrame:
     commodity : str or None
         If given, filter to just that commodity.  Otherwise return all.
     """
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if commodity:
             df = pd.read_sql(
                 "SELECT * FROM prices WHERE commodity = ?",
@@ -732,10 +733,10 @@ def read_prices(commodity: str | None = None) -> pd.DataFrame:
 
 def read_economic(series_name: str | None = None) -> pd.DataFrame:
     """Read economic (FRED) data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if series_name:
             df = pd.read_sql(
                 "SELECT * FROM economic WHERE series_name = ?",
@@ -753,10 +754,10 @@ def read_economic(series_name: str | None = None) -> pd.DataFrame:
 
 def read_usda(stat_category: str | None = None) -> pd.DataFrame:
     """Read USDA data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if stat_category:
             df = pd.read_sql(
                 "SELECT * FROM usda WHERE stat_category = ?",
@@ -771,10 +772,10 @@ def read_usda(stat_category: str | None = None) -> pd.DataFrame:
 
 def read_cot(commodity: str | None = None) -> pd.DataFrame:
     """Read COT data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if commodity:
             df = pd.read_sql(
                 "SELECT * FROM cot WHERE commodity = ?",
@@ -792,10 +793,10 @@ def read_cot(commodity: str | None = None) -> pd.DataFrame:
 
 def read_weather(region: str | None = None) -> pd.DataFrame:
     """Read weather data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if region:
             df = pd.read_sql(
                 "SELECT * FROM weather WHERE region = ?",
@@ -828,7 +829,7 @@ def save_psd_data(commodity: str, df: pd.DataFrame):
     _ensure_storage_dir()
     df = df.copy()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -856,10 +857,10 @@ def save_psd_data(commodity: str, df: pd.DataFrame):
 
 def read_psd(commodity: str | None = None) -> pd.DataFrame:
     """Read PSD global supply/demand data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if commodity:
             df = pd.read_sql(
                 "SELECT * FROM psd WHERE commodity = ?",
@@ -893,7 +894,7 @@ def save_currency_data(pair: str, df: pd.DataFrame):
     df = df.reset_index()
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -921,10 +922,10 @@ def save_currency_data(pair: str, df: pd.DataFrame):
 
 def read_currencies(pair: str | None = None) -> pd.DataFrame:
     """Read currency data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if pair:
             df = pd.read_sql(
                 "SELECT * FROM currencies WHERE pair = ?",
@@ -960,7 +961,7 @@ def save_worldbank_data(commodity: str, df: pd.DataFrame):
     df["commodity"] = commodity
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -986,10 +987,10 @@ def save_worldbank_data(commodity: str, df: pd.DataFrame):
 
 def read_worldbank_prices(commodity: str | None = None) -> pd.DataFrame:
     """Read World Bank monthly price data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if commodity:
             df = pd.read_sql(
                 "SELECT * FROM worldbank_prices WHERE commodity = ?",
@@ -1027,7 +1028,7 @@ def save_export_sales(commodity: str, df: pd.DataFrame):
     if "week_ending" in df.columns:
         df["week_ending"] = pd.to_datetime(df["week_ending"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1057,10 +1058,10 @@ def save_export_sales(commodity: str, df: pd.DataFrame):
 
 def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
     """Read export sales data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
@@ -1101,7 +1102,7 @@ def save_forward_curve(commodity: str, df: pd.DataFrame):
     df["commodity"] = commodity
     df["fetched_date"] = datetime.utcnow().strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1129,10 +1130,10 @@ def save_forward_curve(commodity: str, df: pd.DataFrame):
 
 def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
     """Read forward curve data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
@@ -1168,7 +1169,7 @@ def save_dce_futures_data(commodity: str, df: pd.DataFrame):
     df["commodity"] = commodity
     df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1200,10 +1201,10 @@ def save_dce_futures_data(commodity: str, df: pd.DataFrame):
 
 def read_dce_futures(commodity: str | None = None) -> pd.DataFrame:
     """Read DCE futures data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         if commodity:
             df = pd.read_sql(
                 "SELECT * FROM dce_futures WHERE commodity = ?",
@@ -1236,7 +1237,7 @@ def save_wasde(commodity_key: str, df: pd.DataFrame):
     _ensure_storage_dir()
     df = df.copy()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1266,10 +1267,10 @@ def save_wasde(commodity_key: str, df: pd.DataFrame):
 
 def read_wasde(commodity: str | None = None) -> pd.DataFrame:
     """Read WASDE forecast data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
@@ -1300,7 +1301,7 @@ def save_inspections(commodity: str, df: pd.DataFrame):
     if "week_ending" in df.columns:
         df["week_ending"] = pd.to_datetime(df["week_ending"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1325,10 +1326,10 @@ def save_inspections(commodity: str, df: pd.DataFrame):
 
 def read_inspections(commodity: str | None = None) -> pd.DataFrame:
     """Read export inspections data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
@@ -1363,7 +1364,7 @@ def save_eia_data(series_name: str, df: pd.DataFrame):
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1389,10 +1390,10 @@ def save_eia_data(series_name: str, df: pd.DataFrame):
 
 def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
     """Read EIA energy data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if series_name:
                 df = pd.read_sql(
@@ -1423,7 +1424,7 @@ def save_brazil_estimates(df: pd.DataFrame):
     _ensure_storage_dir()
     df = df.copy()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1452,10 +1453,10 @@ def save_brazil_estimates(df: pd.DataFrame):
 
 def read_brazil_estimates(commodity: str | None = None) -> pd.DataFrame:
     """Read CONAB Brazil estimates from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
@@ -1487,7 +1488,7 @@ def save_options_sentiment(commodity: str, df: pd.DataFrame):
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         conn.execute("BEGIN")
         try:
             for _, row in df.iterrows():
@@ -1517,10 +1518,10 @@ def save_options_sentiment(commodity: str, df: pd.DataFrame):
 
 def read_options_sentiment(commodity: str | None = None) -> pd.DataFrame:
     """Read options sentiment data from SQLite."""
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(

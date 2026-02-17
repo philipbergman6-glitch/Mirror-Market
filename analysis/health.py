@@ -26,6 +26,7 @@ from config import (
     FORWARD_CURVE_CONTRACTS,
     GROWING_REGIONS,
 )
+from processing.database import get_connection, is_cloud
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def run_health_check() -> dict:
         "issues"     : list[dict] — each issue with severity, table, commodity, message
         "commodity_status" : list[dict] — per-commodity status for dashboard display
     """
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return {
             "summary": "DATABASE NOT FOUND — run 'python main.py' first.",
             "issues": [{"severity": "critical", "table": "all", "commodity": "all",
@@ -89,7 +90,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
     issues = []
     today = datetime.utcnow().date()
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             rows = conn.execute(
                 f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
@@ -175,10 +176,10 @@ def _check_flat_prices() -> list[dict]:
     This could mean the source is returning cached/stale data.
     """
     issues = []
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return issues
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         try:
             commodities = [r[0] for r in conn.execute(
                 "SELECT DISTINCT commodity FROM prices"
@@ -232,10 +233,10 @@ def _build_commodity_status() -> list[dict]:
         ("forward_curve",   "commodity", "fetched_date"),
     ]
 
-    if not os.path.exists(DB_PATH):
+    if not is_cloud() and not os.path.exists(DB_PATH):
         return status_list
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with get_connection() as conn:
         for table, key_col, date_col in table_specs:
             try:
                 rows = conn.execute(

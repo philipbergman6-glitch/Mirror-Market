@@ -1,12 +1,12 @@
 
 
-/# CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform that monitors the global soybean, coffee, palm oil, corn, wheat, sugar, cotton, and livestock markets. It pulls data from 16 source layers (covering 11 commodity futures including BMD palm oil, 11 currency pairs, 20 weather regions, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections, CONAB Brazil estimates, options sentiment, and key economic indicators including the yield curve) into a local SQLite database. The analysis engine produces a daily briefing with technical indicators (MACD, Bollinger Bands, RSI divergence), cross-market correlations, seasonal patterns, crop condition tracking, forward curve analysis, and a Market Drivers narrative that connects dots across data sources. An interactive Streamlit dashboard provides 7 pages of visual analysis.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 16 source layers (covering 11 commodity futures, 13 currency pairs including ZAR/NGN, 24 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections, CONAB Brazil estimates, options sentiment, and key economic indicators) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). An interactive Streamlit dashboard provides 9 pages of visual analysis.
 
 ## Commands
 
@@ -36,6 +36,13 @@ python analysis/briefing.py
 
 Layers 1, 4, 5, 6, 7, 8, 9, 11, 15, 16 work without API keys.
 
+### Optional (Cloud Database)
+
+- `TURSO_DATABASE_URL` — Turso database URL (e.g., `libsql://your-db.turso.io`)
+- `TURSO_AUTH_TOKEN` — Turso authentication token
+
+If not set, uses local SQLite (default). Set both to enable persistent cloud storage on Streamlit Cloud.
+
 ## Architecture
 
 The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**, with an analysis layer on top.
@@ -49,9 +56,9 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
    - **2b. Crop progress/condition** — weekly USDA ratings (% good/excellent, % planted/harvested)
 3. **FRED economic data** — `data/fetchers/fred_fetcher.py` (dollar index, CPI, Fed funds, Treasury 2Y/10Y/30Y, Ethanol PPI, Soybean Oil PPI, Diesel Price)
 4. **COT positioning** — `data/fetchers/cot_fetcher.py` (10 commodities including corn, wheat, sugar, cotton, cattle, hogs)
-5. **Weather** — `data/fetchers/weather_fetcher.py` (20 regions across US, Brazil, Argentina, Paraguay, Colombia, Ethiopia, Ivory Coast, Vietnam, Indonesia, Malaysia, India, Thailand, China)
+5. **Weather** — `data/fetchers/weather_fetcher.py` (24 regions: US, Brazil, Argentina, Paraguay, Colombia, Ethiopia, Ivory Coast, Vietnam, Indonesia, Malaysia, India, Thailand, China, South Africa, Nigeria)
 6. **PSD global supply/demand** — `data/fetchers/psd_fetcher.py` (8 commodities x 27 countries, oilseeds + grains + coffee + cotton)
-7. **Currencies** — `data/fetchers/yfinance_fetcher.py` (11 pairs: BRL, ARS, COP, PYG, CNY, IDR, MYR, VND, INR, THB, ETB)
+7. **Currencies** — `data/fetchers/yfinance_fetcher.py` (13 pairs: BRL, ARS, COP, PYG, CNY, IDR, MYR, VND, INR, THB, ETB, ZAR, NGN)
 8. **World Bank monthly prices** — `data/fetchers/worldbank_fetcher.py` (Robusta, Palm Oil, etc.)
 9. **DCE Chinese futures** — `data/fetchers/akshare_fetcher.py` (5 contracts including DCE Corn)
 10. **Export sales** — `data/fetchers/export_sales_fetcher.py` (weekly USDA FAS demand data — requires `FAS_API_KEY`)
@@ -65,7 +72,9 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 ### Processing Layer
 
 - `processing/cleaner.py` — Normalizes raw data (forward-fill gaps, datetime indices, drop NaN rows). Runs sanity checks (warns on >10% daily moves, zero/negative volume).
-- `processing/combiner.py` — SQLite storage layer. 18 tables, INSERT OR REPLACE upserts, `read_*()` query functions, freshness tracking.
+- `processing/combiner.py` — SQLite storage layer. 18 tables, INSERT OR REPLACE upserts, `read_*()` query functions, freshness tracking. Uses `get_connection()` from database.py.
+- `processing/database.py` — **NEW** — Database connection abstraction. Returns Turso cloud connection when `TURSO_DATABASE_URL` is set, local SQLite otherwise.
+- `processing/units.py` — **NEW** — Metric ton conversion utilities. Converts native exchange units (cents/bu, cents/lb, $/short ton) to USD/MT at the display layer.
 
 ### Analysis Layer
 
@@ -78,10 +87,12 @@ All 7 modules are actively used in the briefing:
 - `analysis/seasonal.py` — Monthly seasonal averages, current vs historical norm
 - `analysis/forward_curve.py` — Forward curve analysis: contango/backwardation, curve slope, calendar spreads
 - `analysis/briefing.py` — ALL data layers + all analysis into a daily text briefing with Market Drivers narrative
+- `analysis/soy_analytics.py` — 9 analyst functions for the soy dashboard: command_center, supply, demand, technicals, relative_value, risk, seasonal, forward_curve, emerging_markets
+- `analysis/health.py` — Per-commodity data health checks (stale data, flat prices, missing commodities)
 
 ### Storage
 
-- Database: `data/storage/mirror_market.db` (SQLite, gitignored)
+- Database: `data/storage/mirror_market.db` (SQLite, gitignored) — or Turso cloud when configured
 - Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `eia_energy`, `brazil_estimates`, `options_sentiment`, `data_freshness`
 - All config lives in `config.py` (tickers, API URLs, region coordinates, thresholds)
 

@@ -27,6 +27,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from processing.units import to_metric_tons, convert_df_to_mt, mt_label
 from processing.combiner import (
     read_prices,
     read_cot,
@@ -66,10 +67,25 @@ SOY_WEATHER_REGIONS = [
     "Paraguay Chaco",
     "India Madhya Pradesh", "India Maharashtra",
     "China Heilongjiang",
+    "South Africa Free State", "South Africa Mpumalanga",
+    "Nigeria Benue", "Nigeria Kaduna",
 ]
 
 # Key currencies for soy trade
-SOY_CURRENCIES = ["BRL/USD", "CNY/USD", "ARS/USD"]
+SOY_CURRENCIES = ["BRL/USD", "CNY/USD", "ARS/USD", "ZAR/USD", "NGN/USD", "INR/USD"]
+
+# Emerging market countries for deep dive
+EMERGING_MARKET_COUNTRIES = ["South Africa", "India", "Nigeria"]
+EMERGING_MARKET_CURRENCIES = {
+    "South Africa": "ZAR/USD",
+    "India": "INR/USD",
+    "Nigeria": "NGN/USD",
+}
+EMERGING_MARKET_WEATHER = {
+    "South Africa": ["South Africa Free State", "South Africa Mpumalanga"],
+    "India": ["India Madhya Pradesh", "India Maharashtra"],
+    "Nigeria": ["Nigeria Benue", "Nigeria Kaduna"],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -143,19 +159,28 @@ def command_center() -> dict:
         latest = df.iloc[-1]
         prev = df.iloc[-2] if len(df) >= 2 else latest
 
+        # Convert prices to USD/MT for display
+        close_mt = to_metric_tons(latest["Close"], leg)
+        ma_50_mt = to_metric_tons(latest.get("MA_50", 0), leg) if pd.notna(latest.get("MA_50")) else None
+        ma_200_mt = to_metric_tons(latest.get("MA_200", 0), leg) if pd.notna(latest.get("MA_200")) else None
+        bb_upper_mt = to_metric_tons(latest.get("BB_Upper", 0), leg) if pd.notna(latest.get("BB_Upper")) else None
+        bb_lower_mt = to_metric_tons(latest.get("BB_Lower", 0), leg) if pd.notna(latest.get("BB_Lower")) else None
+
         leg_info = {
             "name": leg,
             "available": True,
-            "close": latest["Close"],
+            "close": close_mt,
+            "close_native": latest["Close"],
+            "unit": mt_label(leg),
             "daily_chg": latest.get("daily_pct_change", 0),
             "weekly_chg": latest.get("weekly_pct_change", 0),
             "rsi": latest.get("RSI"),
             "macd_hist": latest.get("MACD_Histogram"),
-            "ma_50": latest.get("MA_50"),
-            "ma_200": latest.get("MA_200"),
+            "ma_50": ma_50_mt,
+            "ma_200": ma_200_mt,
             "hv_20": latest.get("HV_20"),
-            "bb_upper": latest.get("BB_Upper"),
-            "bb_lower": latest.get("BB_Lower"),
+            "bb_upper": bb_upper_mt,
+            "bb_lower": bb_lower_mt,
             "volume": latest.get("Volume"),
         }
 
@@ -185,9 +210,13 @@ def command_center() -> dict:
                 spread = compute_crush_spread(beans, oil, meal)
                 if not spread.empty:
                     latest_cents = spread.iloc[-1]["crush_spread"]
+                    # Convert crush spread to USD/MT
+                    # Crush spread is in cents/bu; same conversion as soybeans
+                    crush_mt = to_metric_tons(latest_cents, "Soybeans")
                     crush_info = {
                         "available": True,
-                        "value_dollars": latest_cents / 100,
+                        "value_usd_mt": crush_mt,
+                        "value_dollars_bu": latest_cents / 100,
                         "profitable": latest_cents > 0,
                         "spread_series": spread,
                     }
@@ -506,6 +535,7 @@ def technicals_analysis() -> dict:
     prices = _load_soy_prices()
 
     per_leg = {}
+    per_leg_mt = {}
     all_signals = []
 
     for leg in SOY_LEGS:
@@ -513,6 +543,7 @@ def technicals_analysis() -> dict:
         if df is None or df.empty:
             continue
         per_leg[leg] = df
+        per_leg_mt[leg] = convert_df_to_mt(df, leg)
         signals = detect_all_signals(df, leg)
         all_signals.extend(signals)
 
@@ -521,6 +552,7 @@ def technicals_analysis() -> dict:
 
     return {
         "per_leg": per_leg,
+        "per_leg_mt": per_leg_mt,
         "signals": all_signals,
     }
 
@@ -556,11 +588,13 @@ def relative_value_analysis() -> dict:
             try:
                 spread = compute_crush_spread(beans, oil, meal)
                 if not spread.empty:
-                    crush_vals = spread["crush_spread"] / 100
-                    last_252 = crush_vals.iloc[-252:] if len(crush_vals) >= 252 else crush_vals
+                    # Convert crush spread (cents/bu) to USD/MT
+                    crush_mt = spread["crush_spread"].apply(lambda x: to_metric_tons(x, "Soybeans"))
+                    last_252 = crush_mt.iloc[-252:] if len(crush_mt) >= 252 else crush_mt
                     result["crush"] = {
                         "series": spread,
-                        "current_dollars": spread.iloc[-1]["crush_spread"] / 100,
+                        "current_usd_mt": crush_mt.iloc[-1],
+                        "current_dollars_bu": spread.iloc[-1]["crush_spread"] / 100,
                         "profitable": spread.iloc[-1]["crush_spread"] > 0,
                         "avg_1y": last_252.mean(),
                         "min_1y": last_252.min(),
@@ -593,8 +627,10 @@ def relative_value_analysis() -> dict:
             oil_latest = oil["Close"].iloc[-1]
             palm_latest = palm["Close"].iloc[-1]
             result["oil_vs_palm"] = {
-                "soy_oil": oil_latest,
-                "palm_oil": palm_latest,
+                "soy_oil": to_metric_tons(oil_latest, "Soybean Oil"),
+                "soy_oil_unit": mt_label("Soybean Oil"),
+                "palm_oil": palm_latest,  # Already MYR/MT
+                "palm_oil_unit": mt_label("Palm Oil (BMD)"),
             }
             if len(oil) >= 6 and len(palm) >= 6:
                 result["oil_vs_palm"]["soy_oil_weekly_chg"] = (
@@ -765,12 +801,15 @@ def seasonal_analysis() -> dict:
         if df is None or df.empty:
             continue
 
-        monthly = monthly_seasonal(df)
-        vs_seasonal = current_vs_seasonal(df)
+        # Compute seasonal on MT-converted data
+        df_mt = convert_df_to_mt(df, leg)
+        monthly = monthly_seasonal(df_mt)
+        vs_seasonal = current_vs_seasonal(df_mt)
 
         result[leg] = {
             "monthly": monthly,
             "vs_seasonal": vs_seasonal,
+            "unit": mt_label(leg),
         }
 
     return result
@@ -803,10 +842,134 @@ def forward_curve_analysis() -> dict:
         curve_analysis = analyze_curve(subset)
         cal_spread = calendar_spread(subset, 0, 1) if len(subset) >= 2 else {}
 
+        # Convert forward curve prices to USD/MT
+        subset_mt = subset.copy()
+        if "close" in subset_mt.columns:
+            from processing.units import CONVERSION_FACTORS
+            factor = CONVERSION_FACTORS.get(leg)
+            if factor:
+                subset_mt["close"] = subset_mt["close"] * factor
+
         result[leg] = {
             "curve_data": subset,
+            "curve_data_mt": subset_mt,
             "analysis": curve_analysis,
             "calendar_spread": cal_spread,
+            "unit": mt_label(leg),
         }
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Analyst 9: Emerging Markets — SA, India, Nigeria deep dive
+# ---------------------------------------------------------------------------
+
+def emerging_markets_analysis() -> dict:
+    """
+    Deep dive on emerging soybean markets: South Africa, India, Nigeria.
+
+    Returns dict with:
+        countries: dict per country with PSD production/stocks/trade,
+                   currency trends, and weather alerts
+    """
+    psd = read_psd()
+    all_currencies = read_currencies()
+    weather = read_weather()
+
+    countries = {}
+
+    for country in EMERGING_MARKET_COUNTRIES:
+        entry = {"name": country}
+
+        # --- PSD production data ---
+        if not psd.empty:
+            country_psd = psd[
+                (psd["commodity"] == "Soybeans") & (psd["country"] == country)
+            ]
+            if not country_psd.empty:
+                latest_year = country_psd["year"].max()
+                latest = country_psd[country_psd["year"] == latest_year]
+
+                psd_data = {}
+                for _, row in latest.iterrows():
+                    attr = row.get("attribute", "")
+                    val = row.get("value")
+                    if pd.notna(val):
+                        psd_data[attr] = {
+                            "value": val,
+                            "unit": row.get("unit", "1000 MT"),
+                        }
+
+                # YoY comparison
+                if latest_year > 0:
+                    prev_year = latest_year - 1
+                    prev = country_psd[country_psd["year"] == prev_year]
+                    for attr in psd_data:
+                        prev_match = prev[prev["attribute"] == attr]
+                        if not prev_match.empty:
+                            prev_val = prev_match.iloc[0].get("value")
+                            if pd.notna(prev_val) and prev_val != 0:
+                                psd_data[attr]["yoy_pct"] = (
+                                    (psd_data[attr]["value"] - prev_val) / prev_val
+                                ) * 100
+
+                entry["psd"] = psd_data
+                entry["psd_year"] = latest_year
+
+        # --- Currency ---
+        pair = EMERGING_MARKET_CURRENCIES.get(country)
+        if pair and not all_currencies.empty:
+            subset = all_currencies[all_currencies["pair"] == pair].copy()
+            if not subset.empty:
+                subset["Date"] = pd.to_datetime(subset["Date"])
+                subset = subset.sort_values("Date")
+                latest_row = subset.iloc[-1]
+                currency_info = {"pair": pair, "close": latest_row["Close"]}
+                if len(subset) >= 6:
+                    currency_info["weekly_chg"] = (
+                        (subset["Close"].iloc[-1] - subset["Close"].iloc[-6])
+                        / subset["Close"].iloc[-6]
+                    ) * 100
+                if len(subset) >= 22:
+                    currency_info["monthly_chg"] = (
+                        (subset["Close"].iloc[-1] - subset["Close"].iloc[-22])
+                        / subset["Close"].iloc[-22]
+                    ) * 100
+                entry["currency"] = currency_info
+
+        # --- Weather ---
+        regions = EMERGING_MARKET_WEATHER.get(country, [])
+        weather_alerts = []
+        if not weather.empty:
+            for region in regions:
+                w_subset = weather[weather["region"] == region].sort_values("Date")
+                if w_subset.empty:
+                    continue
+                w_latest = w_subset.iloc[-1]
+                precip = w_latest.get("precipitation", 0)
+                temp_max = w_latest.get("temp_max")
+
+                alert_type = None
+                if pd.notna(precip) and precip > 20:
+                    alert_type = "Heavy Rain"
+                elif pd.notna(precip) and precip < 1:
+                    alert_type = "Dry"
+                if pd.notna(temp_max) and temp_max > 38:
+                    alert_type = "Extreme Heat"
+
+                weather_entry = {
+                    "region": region,
+                    "temp_max": temp_max,
+                    "temp_min": w_latest.get("temp_min"),
+                    "precip": precip,
+                    "date": w_latest["Date"],
+                    "alert": alert_type,
+                }
+                weather_alerts.append(weather_entry)
+
+        entry["weather"] = weather_alerts
+
+        countries[country] = entry
+
+    return {"countries": countries}

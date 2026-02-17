@@ -27,6 +27,7 @@ from config import (
     WEATHER_EXTREME_HEAT_C,
     WEATHER_DRY_THRESHOLD_MM,
 )
+from processing.units import to_metric_tons, mt_label
 from processing.combiner import (
     read_prices,
     read_cot,
@@ -145,8 +146,15 @@ def _format_price_section(price_data: dict[str, pd.DataFrame]) -> tuple[str, lis
         daily_chg = latest.get("daily_pct_change", 0)
         rsi = latest.get("RSI", None)
 
+        # Convert to USD/MT for display
+        close_mt = to_metric_tons(close, commodity)
+        unit = mt_label(commodity)
+
         # Build description parts
-        parts = [f"{close:,.2f}"]
+        if close_mt is not None:
+            parts = [f"{close_mt:,.1f} {unit}"]
+        else:
+            parts = [f"{close:,.2f}"]
         if pd.notna(daily_chg):
             sign = "+" if daily_chg >= 0 else ""
             parts.append(f"({sign}{daily_chg:.1f}%)")
@@ -206,14 +214,14 @@ def _format_crush_spread(price_data: dict[str, pd.DataFrame]) -> str:
             return "CRUSH SPREAD: No overlapping dates"
 
         latest_cents = spread.iloc[-1]["crush_spread"]
-        latest_dollars = latest_cents / 100
+        crush_mt = to_metric_tons(latest_cents, "Soybeans")
         if len(spread) >= 6:
             prev = spread.iloc[-6]["crush_spread"]
             trend = "widening" if latest_cents > prev else "narrowing"
             profitability = "processors profitable" if latest_cents > 0 else "margin squeeze"
-            return f"CRUSH SPREAD: ${latest_dollars:.2f}/bu ({trend} — {profitability})"
+            return f"CRUSH SPREAD: ${crush_mt:,.1f}/MT ({trend} — {profitability})"
         else:
-            return f"CRUSH SPREAD: ${latest_dollars:.2f}/bu"
+            return f"CRUSH SPREAD: ${crush_mt:,.1f}/MT"
     except Exception as exc:
         logger.debug("Crush spread error: %s", exc)
         return "CRUSH SPREAD: Calculation error"
@@ -1007,6 +1015,57 @@ def _format_options() -> str:
     return "\n".join(lines)
 
 
+def _format_emerging_markets() -> str:
+    """Format the EMERGING MARKETS section — SA, India, Nigeria soybean deep dive."""
+    lines = ["EMERGING MARKETS (Soybeans):"]
+
+    try:
+        from analysis.soy_analytics import emerging_markets_analysis
+        data = emerging_markets_analysis()
+    except Exception:
+        return "EMERGING MARKETS: Analysis unavailable"
+
+    countries = data.get("countries", {})
+    if not countries:
+        return "EMERGING MARKETS: No data"
+
+    for country_name, info in countries.items():
+        lines.append(f"  {country_name}:")
+
+        # PSD data
+        psd = info.get("psd", {})
+        year = info.get("psd_year", "")
+        if psd:
+            for attr, vals in psd.items():
+                val = vals["value"]
+                unit = vals.get("unit", "1000 MT")
+                yoy = vals.get("yoy_pct")
+                if yoy is not None:
+                    lines.append(f"    {attr}: {val:,.0f} {unit} ({yoy:+.1f}% YoY)")
+                else:
+                    lines.append(f"    {attr}: {val:,.0f} {unit} ({year})")
+
+        # Currency
+        currency = info.get("currency", {})
+        if currency:
+            pair = currency["pair"]
+            close = currency["close"]
+            parts = [f"{pair}: {close:.4f}"]
+            wk = currency.get("weekly_chg")
+            if wk is not None:
+                parts.append(f"week: {wk:+.1f}%")
+            lines.append(f"    Currency: {', '.join(parts)}")
+
+        # Weather
+        weather_list = info.get("weather", [])
+        active_alerts = [w for w in weather_list if w.get("alert")]
+        if active_alerts:
+            for w in active_alerts:
+                lines.append(f"    Weather: {w['region']} — {w['alert']}")
+
+    return "\n".join(lines)
+
+
 def _format_market_drivers(
     price_data: dict[str, pd.DataFrame],
     enriched: dict[str, pd.DataFrame],
@@ -1390,6 +1449,10 @@ def generate_briefing() -> str:
 
     # WORLD BANK
     sections.append(_format_worldbank())
+    sections.append("")
+
+    # EMERGING MARKETS — SA, India, Nigeria
+    sections.append(_format_emerging_markets())
     sections.append("")
 
     # CORRELATIONS — previously dead code
