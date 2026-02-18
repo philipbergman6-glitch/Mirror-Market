@@ -36,11 +36,16 @@ def get_connection():
     """
     if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
         try:
-            import libsql_experimental as libsql
+            import libsql
+            # libsql needs a local file for caching + sync_url for the cloud DB
+            os.makedirs(STORAGE_DIR, exist_ok=True)
+            local_replica = os.path.join(STORAGE_DIR, "local.db")
             conn = libsql.connect(
-                database=TURSO_DATABASE_URL,
+                local_replica,
+                sync_url=TURSO_DATABASE_URL,
                 auth_token=TURSO_AUTH_TOKEN,
             )
+            conn.sync()
             return conn
         except ImportError:
             # libsql not installed — fall back to local
