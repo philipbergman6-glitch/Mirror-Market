@@ -17,10 +17,9 @@ Run this script to:
    13. Fetch EIA biofuel/energy   (requires EIA_API_KEY)
    14. Fetch USDA crush + inspections (requires USDA_API_KEY + AMS report)
    15. Fetch CONAB Brazil estimates (no key needed)
-   16. Fetch options sentiment    (yfinance — experimental)
-   17. Clean everything
-   18. Store it all in a local SQLite database
-   19. Print a verification summary
+   16. Clean everything
+   17. Store it all in a local SQLite database
+   18. Print a verification summary
 
 Usage:
     python main.py
@@ -35,52 +34,42 @@ import logging
 
 from config import setup_logging
 
-from data.fetchers.yfinance_fetcher import fetch_all as fetch_prices
-from data.fetchers.yfinance_fetcher import fetch_currencies
-from data.fetchers.usda_fetcher import (
+from fetchers.yfinance import fetch_all as fetch_prices, fetch_currencies
+from fetchers.usda import (
     fetch_soybean_overview, fetch_all_crop_progress,
     fetch_wasde_estimates, fetch_crush_data, fetch_export_inspections,
 )
-from data.fetchers.fred_fetcher import fetch_all_series
-from data.fetchers.cot_fetcher import fetch_cot_recent
-from data.fetchers.weather_fetcher import fetch_all_regions
-from data.fetchers.psd_fetcher import fetch_psd_all
-from data.fetchers.worldbank_fetcher import fetch_worldbank_prices
-from data.fetchers.akshare_fetcher import fetch_dce_futures
-from data.fetchers.export_sales_fetcher import fetch_all_export_sales
-from data.fetchers.forward_curve_fetcher import fetch_all_forward_curves
-from data.fetchers.eia_fetcher import fetch_all_eia
-from data.fetchers.conab_fetcher import fetch_conab_estimates
-from data.fetchers.options_fetcher import fetch_options_sentiment
+from fetchers.fred import fetch_all_series
+from fetchers.cot import fetch_cot_recent
+from fetchers.weather import fetch_all_regions
+from fetchers.psd import fetch_psd_all
+from fetchers.worldbank import fetch_worldbank_prices
+from fetchers.akshare import fetch_dce_futures
+from fetchers.export_sales import fetch_all_export_sales
+from fetchers.forward_curve import fetch_all_forward_curves
+from fetchers.eia import fetch_all_eia
+from fetchers.conab import fetch_conab_estimates
+from fetchers.india_domestic import fetch_india_domestic
+from fetchers.cepea import fetch_cepea
+from fetchers.safex import fetch_safex
 
-from processing.cleaner import (
+from pipeline.clean import (
     clean_ohlcv, clean_fred_series, clean_cot, clean_weather,
-    clean_psd, clean_currencies, clean_worldbank, clean_dce_futures,
+    clean_psd, clean_worldbank, clean_dce_futures,
     clean_export_sales, clean_forward_curve,
-    clean_wasde, clean_eia, clean_inspections, clean_conab, clean_options,
+    clean_wasde, clean_eia, clean_inspections, clean_conab,
+    clean_india_domestic, clean_brazil_spot, clean_safex,
 )
-from processing.combiner import (
-    init_database,
-    save_price_data,
-    save_fred_data,
-    save_usda_data,
-    save_cot_data,
-    save_weather_data,
-    save_psd_data,
-    save_currency_data,
-    save_worldbank_data,
-    save_dce_futures_data,
-    save_crop_progress,
-    save_export_sales,
-    save_forward_curve,
-    save_wasde,
-    save_inspections,
-    save_eia_data,
-    save_brazil_estimates,
-    save_options_sentiment,
-    save_freshness,
-    read_prices,
+from pipeline.store import (
+    init_database, save_price_data, save_fred_data, save_usda_data,
+    save_cot_data, save_weather_data, save_psd_data, save_currency_data,
+    save_worldbank_data, save_dce_futures_data, save_crop_progress,
+    save_export_sales, save_forward_curve, save_wasde, save_inspections,
+    save_eia_data, save_brazil_estimates, save_freshness,
+    update_commodity_freshness,
+    save_india_domestic, save_brazil_spot, save_safex,
 )
+from pipeline.query import read_prices
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +88,8 @@ def run():
         "psd": False, "currencies": False, "worldbank": False,
         "dce": False, "export_sales": False, "forward_curve": False,
         "wasde": False, "eia": False, "crush_inspections": False,
-        "conab": False, "options": False,
+        "conab": False,
+        "india_domestic": False, "cepea": False, "safex": False,
     }
 
     # ── Initialise database schema ─────────────────────────────────
@@ -259,7 +249,7 @@ def run():
 
         logger.info("[Cleaning] Processing currency data ...")
         for name in currency_data:
-            currency_data[name] = clean_currencies(currency_data[name])
+            currency_data[name] = clean_ohlcv(currency_data[name])
 
         for pair, df in currency_data.items():
             save_currency_data(pair, df)
@@ -457,34 +447,74 @@ def run():
     except Exception:
         logger.error("[Layer 15] CONAB failed — see error above", exc_info=True)
 
-    # ── Layer 16: Options Sentiment (experimental) ────────────────
-    options_data = {}
+    # ── Layer 16: NCDEX India Domestic Soy Prices ─────────────────
     try:
-        logger.info("[Layer 16] Fetching options sentiment (experimental) ...")
-        options_data = fetch_options_sentiment()
+        logger.info("[Layer 16] Fetching NCDEX India domestic soy prices ...")
+        india_data = fetch_india_domestic()
 
-        if options_data:
-            for name in options_data:
-                options_data[name] = clean_options(options_data[name])
+        if india_data:
+            for name, df in india_data.items():
+                df = clean_india_domestic(df)
+                save_india_domestic(name, df)
 
-            for name, df in options_data.items():
-                save_options_sentiment(name, df)
-
-            if any(not df.empty for df in options_data.values()):
-                results["options"] = True
-                total_rows = sum(len(df) for df in options_data.values())
-                save_freshness("options", total_rows)
-            else:
-                logger.info("[Layer 16] Options returned no data (expected for ag futures)")
+            total_16 = sum(len(df) for df in india_data.values())
+            results["india_domestic"] = True
+            save_freshness("india_domestic", total_16)
+            logger.info("[Layer 16] India domestic: %d rows saved", total_16)
         else:
-            logger.info("[Layer 16] Options skipped — no data available")
+            logger.warning(
+                "[Layer 16] NCDEX returned no data — URL may need verification. "
+                "Check NCDEX_BHAVCOPY_URL_TEMPLATES in config.py."
+            )
     except Exception:
-        # Extra-defensive for experimental layer
-        logger.info("[Layer 16] Options failed (experimental, non-critical): %s", exc_info=True)
+        logger.error("[Layer 16] India domestic failed — see error above", exc_info=True)
+
+    # ── Layer 17: CEPEA Brazil Domestic Soy Spot ──────────────────
+    try:
+        logger.info("[Layer 17] Fetching CEPEA/ESALQ Brazil domestic soy price ...")
+        cepea_data = fetch_cepea()
+
+        if cepea_data:
+            for name, df in cepea_data.items():
+                df = clean_brazil_spot(df)
+                save_brazil_spot(name, df)
+
+            total_17 = sum(len(df) for df in cepea_data.values())
+            results["cepea"] = True
+            save_freshness("cepea", total_17)
+            logger.info("[Layer 17] CEPEA: %d rows saved", total_17)
+        else:
+            logger.warning(
+                "[Layer 17] CEPEA returned no data — page may use JavaScript. "
+                "Check CEPEA_SOYBEAN_URL in config.py."
+            )
+    except Exception:
+        logger.error("[Layer 17] CEPEA failed — see error above", exc_info=True)
+
+    # ── Layer 18: JSE SAFEX South Africa Soy Prices ───────────────
+    try:
+        logger.info("[Layer 18] Fetching JSE SAFEX South Africa soy prices ...")
+        safex_data = fetch_safex()
+
+        if safex_data:
+            for name, df in safex_data.items():
+                df = clean_safex(df)
+                save_safex(name, df)
+
+            total_18 = sum(len(df) for df in safex_data.values())
+            results["safex"] = True
+            save_freshness("safex", total_18)
+            logger.info("[Layer 18] SAFEX: %d rows saved", total_18)
+        else:
+            logger.warning(
+                "[Layer 18] SAFEX returned no data — page may use JavaScript. "
+                "Check SAFEX_STATS_URL in config.py."
+            )
+    except Exception:
+        logger.error("[Layer 18] SAFEX failed — see error above", exc_info=True)
 
     # ── Update per-commodity freshness tracking ─────────────────
     try:
-        from processing.combiner import update_commodity_freshness
         update_commodity_freshness()
     except Exception:
         logger.error("Per-commodity freshness update failed", exc_info=True)

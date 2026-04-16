@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mirror Market — Soy Complex Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<style>
+:root {
+  --bg: #0D1117;
+  --surface: #161B22;
+  --card: #1C2128;
+  --card-hover: #21262D;
+  --border: #30363D;
+  --text: #E6EDF3;
+  --text-muted: #7D8590;
+  --text-dim: #484F58;
+  --green: #2D6A4F;
+  --green-light: #40916C;
+  --bullish: #3FB950;
+  --bearish: #F85149;
+  --soybean: #DAA520;
+  --soy-oil: #FF8C00;
+  --soy-meal: #CD853F;
+  --info: #58A6FF;
+  --warning: #D29922;
+  --font: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; display: flex; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); position: fixed; top: 0; left: 0; bottom: 0; display: flex; flex-direction: column; z-index: 10; }
+.sidebar-brand { padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-brand h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.sidebar-brand span { font-size: 11px; color: var(--text-muted); }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; color: var(--text-muted); text-decoration: none; font-size: 13px; cursor: pointer; transition: background 0.1s, color 0.1s; }
+.nav-item:hover { background: var(--card); color: var(--text); }
+.nav-item.active { background: var(--green); color: #fff; font-weight: 500; }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+.sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); }
+.sidebar-footer h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px; }
+.freshness-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); padding: 3px 0; }
+.dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot-fresh { background: var(--bullish); }
+.dot-stale { background: var(--warning); }
+.dot-old { background: var(--bearish); }
+
+/* Main */
+.main { margin-left: 220px; flex: 1; padding: 24px 32px; max-width: 1400px; }
+.page-section { display: none; }
+.page-section.active { display: block; }
+.page-header h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 2px; }
+.page-header .subtitle { font-size: 13px; color: var(--text-muted); }
+.page-header .ts { font-size: 11px; color: var(--text-dim); font-family: var(--mono); margin-top: 4px; margin-bottom: 24px; }
+
+/* Grid */
+.grid { display: grid; gap: 16px; margin-bottom: 24px; }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+
+/* Metric card */
+.mc { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; }
+.mc:hover { background: var(--card-hover); }
+.mc-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.mc-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.mc-val { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.2; }
+.mc-delta { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.mc-sub { font-size: 12px; color: var(--text-muted); margin-top: 8px; display: flex; gap: 16px; }
+.mc-sub strong { color: var(--text); }
+.up { color: var(--bullish); }
+.down { color: var(--bearish); }
+.muted { color: var(--text-muted); }
+
+/* Signals */
+.signals { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 16px 20px; margin-bottom: 24px; }
+.signals-hdr { font-size: 13px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.sig-count { background: var(--green); color: #fff; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; }
+.sig { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+.sig:last-child { border-bottom: none; }
+.badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 3px; flex-shrink: 0; }
+.badge-alert { background: rgba(248,81,73,0.15); color: var(--bearish); }
+.badge-warning { background: rgba(210,153,34,0.15); color: var(--warning); }
+.badge-info { background: rgba(88,166,255,0.15); color: var(--info); }
+.sig-commodity { color: var(--text-muted); font-weight: 500; width: 100px; flex-shrink: 0; }
+
+/* Chart container */
+.chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 24px; }
+.chart-title { font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+.chart-empty { height: 200px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 13px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.tab { padding: 8px 16px; font-size: 13px; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.1s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); font-weight: 500; border-bottom-color: var(--green-light); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Table */
+.dtable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dtable th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.dtable td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.dtable tr:hover td { background: var(--card-hover); }
+.dtable .num { text-align: right; font-weight: 500; }
+
+/* Briefing */
+.briefing { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 20px; font-family: var(--mono); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-x: auto; }
+
+/* Alerts */
+.alert { padding: 10px 16px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; border-left: 3px solid; }
+.alert-ok { background: rgba(63,185,80,0.08); border-color: var(--bullish); color: var(--bullish); }
+.alert-warn { background: rgba(210,153,34,0.08); border-color: var(--warning); color: var(--warning); }
+.alert-err { background: rgba(248,81,73,0.08); border-color: var(--bearish); color: var(--bearish); }
+.alert-info { background: rgba(88,166,255,0.08); border-color: var(--info); color: var(--info); }
+
+/* Collapsible */
+details { background: var(--card); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 24px; }
+details summary { padding: 12px 16px; font-size: 13px; font-weight: 500; cursor: pointer; list-style: none; }
+details summary::before { content: "\25B6"; font-size: 10px; margin-right: 8px; color: var(--text-dim); display: inline-block; transition: transform 0.15s; }
+details[open] summary::before { transform: rotate(90deg); }
+details .det-content { padding: 0 16px 16px; }
+
+/* Download */
+.dl { display: inline-flex; align-items: center; gap: 6px; color: var(--info); text-decoration: none; font-size: 13px; font-weight: 500; margin-right: 16px; }
+.dl:hover { text-decoration: underline; }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+/* Subheader */
+.subhdr { font-size: 16px; font-weight: 600; margin-bottom: 16px; letter-spacing: -0.01em; }
+
+/* Caption */
+.caption { font-size: 12px; color: var(--text-muted); margin-top: 4px; margin-bottom: 16px; }
+
+/* About section */
+.about-table { margin-bottom: 24px; }
+.about-table td { vertical-align: top; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; padding: 16px; }
+  .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h1>Mirror Market</h1>
+    <span>Soy Complex Desk</span>
+  </div>
+  {% for page in pages %}
+  <a class="nav-item{% if loop.first %} active{% endif %}" data-page="{{ page.id }}">
+    <span class="nav-icon">{{ page.icon }}</span> {{ page.name }}
+  </a>
+  {% endfor %}
+  <div class="sidebar-footer">
+    <h3>Data Freshness</h3>
+    {% for item in freshness_items %}
+    <div class="freshness-row">
+      <span><span class="dot dot-{{ item.status }}"></span>{{ item.name }}</span>
+      <span>{{ item.age }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</nav>
+
+<main class="main">
+
+{# ================================================================ #}
+{# PAGE 1: COMMAND CENTER                                           #}
+{# ================================================================ #}
+<section class="page-section active" id="page-command-center">
+  <div class="page-header">
+    <h2>Command Center</h2>
+    <div class="subtitle">Soy complex snapshot with key metrics and active signals</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if command_center %}
+  <div class="grid grid-3">
+    {% for leg in command_center.legs %}
+    <div class="mc">
+      <div class="mc-label"><span class="mc-dot" style="background: {{ leg.color }}"></span>{{ leg.name }}</div>
+      <div class="mc-val" style="color: {{ leg.color }}">{{ leg.price }}</div>
+      <div class="mc-delta {{ leg.chg_class }}">{{ leg.daily_chg }}</div>
+      <div class="mc-sub">
+        <span>RSI <strong{% if leg.rsi_class %} class="{{ leg.rsi_class }}"{% endif %}>{{ leg.rsi }}</strong></span>
+        <span>Trend <strong class="{{ leg.trend_class }}">{{ leg.trend }}</strong></span>
+        <span>Vol <strong>{{ leg.volatility }}</strong></span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid grid-4">
+    {% for m in command_center.key_metrics %}
+    <div class="mc">
+      <div class="mc-label">{{ m.label }}</div>
+      <div class="mc-val {{ m.val_class }}">{{ m.value }}</div>
+      <div class="mc-delta {{ m.delta_class }}">{{ m.delta }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if command_center.signals %}
+  <div class="signals">
+    <div class="signals-hdr">Active Signals <span class="sig-count">{{ command_center.signals|length }}</span></div>
+    {% for sig in command_center.signals %}
+    <div class="sig">
+      <span class="badge badge-{{ sig.severity }}">{{ sig.severity_label }}</span>
+      <span class="sig-commodity">{{ sig.commodity }}</span>
+      <span>{{ sig.message }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="alert alert-warn">No command center data. Run the pipeline first.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 2: TECHNICALS                                              #}
+{# ================================================================ #}
+<section class="page-section" id="page-technicals">
+  <div class="page-header">
+    <h2>Technicals</h2>
+    <div class="subtitle">Candlestick charts with RSI, MACD, and Bollinger Bands</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if technicals %}
+  <div class="tabs" data-tabgroup="tech">
+    {% for leg in technicals %}
+    <div class="tab{% if loop.first %} active{% endif %}" data-tab="tech-{{ loop.index }}">{{ leg.name }}</div>
+    {% endfor %}
+  </div>
+  {% for leg in technicals %}
+  <div class="tab-panel{% if loop.first %} active{% endif %}" data-tabpanel="tech-{{ loop.index }}">
+    <div class="chart-box">{{ leg.chart_html | safe }}</div>
+    {% if leg.signals %}
+    <div class="signals">
+      <div class="signals-hdr">Signals for {{ leg.name }}</div>
+      {% for sig in leg.signals %}
+      <div class="sig">
+        <span class="badge badge-{{ sig.severity }}">{{ sig.severity_label }}</span>
+        <span>{{ sig.message }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if leg.csv_uri %}
+    <a class="dl" href="{{ leg.csv_uri }}" download="{{ leg.name }}.csv">&#8595; Download CSV</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="alert alert-warn">No technical data available.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 3: SUPPLY & DEMAND                                        #}
+{# ================================================================ #}
+<section class="page-section" id="page-supply-demand">
+  <div class="page-header">
+    <h2>Supply &amp; Demand</h2>
+    <div class="subtitle">WASDE, CONAB, crop progress, export sales, emerging markets</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if supply or demand or emerging_markets %}
+  <div class="tabs" data-tabgroup="sd">
+    <div class="tab active" data-tab="sd-1">Soy Complex</div>
+    <div class="tab" data-tab="sd-2">Competing Crops</div>
+    <div class="tab" data-tab="sd-3">Emerging Markets</div>
+  </div>
+
+  {# Tab 1: Soy Complex #}
+  <div class="tab-panel active" data-tabpanel="sd-1">
+    {% if supply %}
+    {% if supply.wasde_html %}
+    <div class="subhdr">WASDE Monthly Estimates</div>
+    {{ supply.wasde_html | safe }}
+    <hr class="divider">
+    {% endif %}
+    {% if supply.conab_html %}
+    <div class="subhdr">CONAB vs USDA (Brazil)</div>
+    {{ supply.conab_html | safe }}
+    <hr class="divider">
+    {% endif %}
+    {% if supply.crop_progress_html %}
+    <div class="subhdr">Crop Progress &amp; Condition</div>
+    {{ supply.crop_progress_html | safe }}
+    <hr class="divider">
+    {% endif %}
+    {% endif %}
+    {% if demand %}
+    {% if demand.china_html %}
+    <div class="subhdr">China Buying Pace</div>
+    {{ demand.china_html | safe }}
+    <hr class="divider">
+    {% endif %}
+    {% if demand.export_sales_html %}
+    <div class="subhdr">Export Sales</div>
+    {{ demand.export_sales_html | safe }}
+    <hr class="divider">
+    {% endif %}
+    {% if demand.biofuel_html %}
+    <div class="subhdr">Biofuel &amp; Energy</div>
+    {{ demand.biofuel_html | safe }}
+    {% endif %}
+    {% endif %}
+  </div>
+
+  {# Tab 2: Competing Crops #}
+  <div class="tab-panel" data-tabpanel="sd-2">
+    {% if supply and supply.competing_html %}
+    {{ supply.competing_html | safe }}
+    {% else %}
+    <div class="chart-empty">No competing crop data available</div>
+    {% endif %}
+  </div>
+
+  {# Tab 3: Emerging Markets #}
+  <div class="tab-panel" data-tabpanel="sd-3">
+    {% if emerging_markets %}
+    {{ emerging_markets | safe }}
+    {% else %}
+    <div class="chart-empty">No emerging markets data available</div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="alert alert-warn">No supply/demand data available.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 4: RELATIVE VALUE                                          #}
+{# ================================================================ #}
+<section class="page-section" id="page-relative-value">
+  <div class="page-header">
+    <h2>Relative Value</h2>
+    <div class="subtitle">Crush spread, oil/meal ratio, soy vs palm, bean/corn ratio</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if relative_value %}
+  {{ relative_value | safe }}
+  {% else %}
+  <div class="alert alert-warn">No relative value data available.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 5: RISK MONITOR                                           #}
+{# ================================================================ #}
+<section class="page-section" id="page-risk-monitor">
+  <div class="page-header">
+    <h2>Risk Monitor</h2>
+    <div class="subtitle">Currencies, COT positioning, weather threats, correlations</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if risk_monitor %}
+  {{ risk_monitor | safe }}
+  {% else %}
+  <div class="alert alert-warn">No risk data available.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 6: FORWARD CURVES                                         #}
+{# ================================================================ #}
+<section class="page-section" id="page-forward-curves">
+  <div class="page-header">
+    <h2>Forward Curves</h2>
+    <div class="subtitle">Term structure for soy complex contracts</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if forward_curves %}
+  {{ forward_curves | safe }}
+  {% else %}
+  <div class="alert alert-warn">No forward curve data. Run the pipeline first.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 7: SEASONAL                                               #}
+{# ================================================================ #}
+<section class="page-section" id="page-seasonal">
+  <div class="page-header">
+    <h2>Seasonal Patterns</h2>
+    <div class="subtitle">Monthly averages vs current price for each soy leg</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if seasonal %}
+  {{ seasonal | safe }}
+  {% else %}
+  <div class="alert alert-warn">No seasonal data. Run the pipeline first.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 8: BRIEFING                                               #}
+{# ================================================================ #}
+<section class="page-section" id="page-briefing">
+  <div class="page-header">
+    <h2>Full Briefing</h2>
+    <div class="subtitle">Daily market intelligence report</div>
+    <div class="ts">Last updated: {{ generated_at }}</div>
+  </div>
+
+  {% if briefing_text %}
+  <div class="briefing">{{ briefing_text }}</div>
+  {% if briefing_uri %}
+  <div style="margin-top: 16px;">
+    <a class="dl" href="{{ briefing_uri }}" download="mirror_market_briefing.txt">&#8595; Download briefing as TXT</a>
+  </div>
+  {% endif %}
+
+  {% if health_html %}
+  <details style="margin-top: 24px;">
+    <summary>Data Health Check</summary>
+    <div class="det-content">{{ health_html | safe }}</div>
+  </details>
+  {% endif %}
+  {% else %}
+  <div class="alert alert-warn">No briefing data. Run the pipeline first.</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# PAGE 9: ABOUT                                                   #}
+{# ================================================================ #}
+<section class="page-section" id="page-about">
+  <div class="page-header">
+    <h2>About Mirror Market</h2>
+    <div class="subtitle">Data sources, methodology, and project information</div>
+  </div>
+
+  <div class="chart-box">
+    <div class="chart-title">Data Sources (18 Layers)</div>
+    <table class="dtable about-table">
+      <thead>
+        <tr><th>Layer</th><th>Source</th><th>Frequency</th><th>Coverage</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Yahoo Finance (CME/CBOT/ICE)</td><td>Daily</td><td>11 commodity futures</td></tr>
+        <tr><td>2</td><td>USDA NASS QuickStats</td><td>Annual + Weekly</td><td>US soybean production, crop progress</td></tr>
+        <tr><td>3</td><td>Federal Reserve (FRED)</td><td>Daily/Monthly</td><td>Dollar index, CPI, rates, yields</td></tr>
+        <tr><td>4</td><td>CFTC (COT Reports)</td><td>Weekly</td><td>10 commodities positioning</td></tr>
+        <tr><td>5</td><td>Open-Meteo</td><td>Daily + 7d forecast</td><td>24 growing regions, 6 continents</td></tr>
+        <tr><td>6</td><td>USDA FAS (PSD)</td><td>Monthly</td><td>8 commodities x 27 countries</td></tr>
+        <tr><td>7</td><td>Yahoo Finance (FX)</td><td>Daily</td><td>13 currency pairs</td></tr>
+        <tr><td>8</td><td>World Bank Pink Sheet</td><td>Monthly</td><td>Robusta, Palm Oil benchmarks</td></tr>
+        <tr><td>9</td><td>AKShare (DCE)</td><td>Daily</td><td>5 Chinese futures contracts</td></tr>
+        <tr><td>10</td><td>USDA FAS (Export Sales)</td><td>Weekly</td><td>6 commodities, top buyers</td></tr>
+        <tr><td>11</td><td>Yahoo Finance (Contracts)</td><td>Daily</td><td>Forward curves, 10 commodities</td></tr>
+        <tr><td>12</td><td>USDA WASDE</td><td>Monthly</td><td>Supply/demand forecasts</td></tr>
+        <tr><td>13</td><td>EIA</td><td>Weekly/Monthly</td><td>Ethanol, biodiesel, diesel</td></tr>
+        <tr><td>14</td><td>USDA (Crush + Inspections)</td><td>Monthly/Weekly</td><td>Soybean crush, export inspections</td></tr>
+        <tr><td>15</td><td>CONAB</td><td>Monthly</td><td>Brazil crop estimates</td></tr>
+        <tr><td>16</td><td>NCDEX (India)</td><td>Daily</td><td>India domestic soy prices</td></tr>
+        <tr><td>17</td><td>CEPEA (Brazil)</td><td>Daily</td><td>Brazil farm-gate soy prices</td></tr>
+        <tr><td>18</td><td>JSE SAFEX</td><td>Daily</td><td>South Africa soy prices</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="chart-box">
+    <div class="chart-title">Analysis Methodology</div>
+    <table class="dtable">
+      <thead><tr><th>Indicator</th><th>Parameters</th><th>What It Detects</th></tr></thead>
+      <tbody>
+        <tr><td>Simple Moving Average</td><td>20 / 50 / 200 day</td><td>Trend direction at three timeframes</td></tr>
+        <tr><td>RSI</td><td>14-day, Wilder smoothing</td><td>Overbought (&gt;70) / Oversold (&lt;30)</td></tr>
+        <tr><td>MACD</td><td>12 / 26 / 9</td><td>Momentum shifts and trend strength</td></tr>
+        <tr><td>Bollinger Bands</td><td>20-day, 2 std</td><td>Volatility compression and breakouts</td></tr>
+        <tr><td>Crush Spread</td><td>Oil*11 + Meal*2.2 - Beans</td><td>Processing margin profitability</td></tr>
+        <tr><td>Forward Curve</td><td>Sequential months</td><td>Contango / backwardation structure</td></tr>
+        <tr><td>Seasonal</td><td>Historical monthly avg</td><td>Current vs historical norms</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="chart-box">
+    <div class="chart-title">Price Units</div>
+    <p style="color: var(--text-muted); font-size: 13px;">
+      All prices are displayed in <strong style="color: var(--text);">USD per metric ton (USD/MT)</strong> for international comparability.
+      Native exchange units (cents/bushel, cents/pound, $/short ton) are converted at the display layer.
+    </p>
+  </div>
+
+  <div class="caption" style="margin-top: 32px;">
+    Mirror Market is a portfolio project by Philip Bergman. Data sourced from free public APIs.
+    Not financial advice. All data is delayed and provided as-is.
+    <br><br>
+    <a class="dl" href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank">View source on GitHub</a>
+  </div>
+</section>
+
+</main>
+
+<script>
+// Page navigation
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    item.classList.add('active');
+    const pageId = item.dataset.page;
+    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('page-' + pageId).classList.add('active');
+  });
+});
+
+// Tab switching
+document.querySelectorAll('.tabs').forEach(tabBar => {
+  tabBar.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const group = tabBar.dataset.tabgroup;
+      tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const panelId = tab.dataset.tab;
+      document.querySelectorAll('[data-tabpanel^="' + group + '-"]').forEach(p => p.classList.remove('active'));
+      document.querySelector('[data-tabpanel="' + panelId + '"]').classList.add('active');
+    });
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+name: Update Dashboard
+
+on:
+  schedule:
+    # Weekdays at 12:00 UTC (after US market open, captures prior day settlement)
+    - cron: '0 12 * * 1-5'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/generate_html.py'
+      - 'app/templates/**'
+      - 'app/charts.py'
+      - 'analysis/**'
+      - 'pipeline/**'
+      - 'fetchers/**'
+      - 'config.py'
+      - 'main.py'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run data pipeline
+        env:
+          USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          FAS_API_KEY: ${{ secrets.FAS_API_KEY }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+        run: python main.py
+
+      - name: Generate static dashboard
+        run: python scripts/generate_html.py
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

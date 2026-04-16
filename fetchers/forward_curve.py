@@ -22,7 +22,7 @@ from datetime import date
 import pandas as pd
 
 from config import FORWARD_CURVE_CONTRACTS, MONTH_CODES
-from data.fetchers.yfinance_fetcher import fetch_one
+from fetchers.yfinance import fetch_one
 
 logger = logging.getLogger(__name__)
 

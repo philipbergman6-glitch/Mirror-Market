@@ -52,6 +52,25 @@ def _validate_price_data(df: pd.DataFrame, label: str = ""):
             )
 
 
+
+
+def _check_nan_gaps(df: pd.DataFrame, cols: list[str], label: str = "") -> None:
+    """Warn if any column has >5 consecutive NaN values."""
+    prefix = f"[{label}] " if label else ""
+    for col in cols:
+        if col not in df.columns or not df[col].isna().any():
+            continue
+        is_nan = df[col].isna()
+        groups = (is_nan != is_nan.shift()).cumsum()
+        nan_runs = is_nan.groupby(groups).sum()
+        max_gap = int(nan_runs.max()) if not nan_runs.empty else 0
+        if max_gap > 5:
+            logger.warning(
+                "%sColumn '%s' has a gap of %d consecutive missing days — "
+                "forward-fill may be masking a data issue",
+                prefix, col, max_gap,
+            )
+
 def clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean a raw OHLCV DataFrame from yfinance.
@@ -85,19 +104,7 @@ def clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=present, how="all")
 
     # Check for long consecutive NaN gaps before forward-filling
-    for col in present:
-        if df[col].isna().any():
-            # Count consecutive NaN runs
-            is_nan = df[col].isna()
-            groups = (is_nan != is_nan.shift()).cumsum()
-            nan_runs = is_nan.groupby(groups).sum()
-            max_gap = int(nan_runs.max()) if not nan_runs.empty else 0
-            if max_gap > 5:
-                logger.warning(
-                    "Column '%s' has a gap of %d consecutive missing days — "
-                    "forward-fill may be masking a data issue",
-                    col, max_gap,
-                )
+    _check_nan_gaps(df, present)
 
     # Forward-fill remaining small gaps, but cap at 3 days to avoid
     # propagating stale data indefinitely when a source stops updating
@@ -209,18 +216,6 @@ def clean_psd(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def clean_currencies(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Clean currency OHLCV data — same logic as clean_ohlcv().
-
-    Currency data from yfinance has the same format as commodity data,
-    so we reuse the same cleaning steps: datetime index, drop full-NaN
-    rows, forward-fill small gaps.
-
-    Returns cleaned copy (original is not mutated).
-    """
-    return clean_ohlcv(df)
-
 
 def clean_dce_futures(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -266,18 +261,7 @@ def clean_dce_futures(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=present, how="all")
 
     # Warn about long NaN gaps before forward-filling
-    for col in present:
-        if df[col].isna().any():
-            is_nan = df[col].isna()
-            groups = (is_nan != is_nan.shift()).cumsum()
-            nan_runs = is_nan.groupby(groups).sum()
-            max_gap = int(nan_runs.max()) if not nan_runs.empty else 0
-            if max_gap > 5:
-                logger.warning(
-                    "DCE column '%s' has a gap of %d consecutive missing days — "
-                    "forward-fill may be masking a data issue",
-                    col, max_gap,
-                )
+    _check_nan_gaps(df, present, label="DCE")
 
     # Forward-fill remaining small gaps (capped at 3 days)
     df = df.ffill(limit=3)
@@ -455,16 +439,18 @@ def clean_conab(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def clean_options(df: pd.DataFrame) -> pd.DataFrame:
+
+def clean_india_domestic(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean options sentiment data.
+    Clean NCDEX India domestic price data.
 
     Steps:
-        1. Ensure Date is datetime.
-        2. Convert numeric columns.
-        3. Drop rows where put_call_ratio is NaN.
+        1. Copy first (never mutate originals).
+        2. Parse Date to datetime and sort.
+        3. Convert price columns to numeric.
+        4. Drop rows where Close is missing or zero.
 
-    Returns cleaned copy (original is not mutated).
+    Returns cleaned copy.
     """
     if df.empty:
         return df
@@ -473,15 +459,76 @@ def clean_options(df: pd.DataFrame) -> pd.DataFrame:
 
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
 
-    numeric_cols = ["total_call_oi", "total_put_oi", "put_call_ratio",
-                    "avg_call_iv", "avg_put_iv"]
-    for col in numeric_cols:
+    for col in ("Open", "High", "Low", "Close", "Volume"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    if "put_call_ratio" in df.columns:
-        df = df.dropna(subset=["put_call_ratio"])
+    if "Close" in df.columns:
+        df = df.dropna(subset=["Close"])
+        df = df[df["Close"] > 0]
+
+    return df.reset_index(drop=True)
+
+
+def clean_brazil_spot(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean CEPEA Brazil domestic spot price data.
+
+    Steps:
+        1. Copy first.
+        2. Parse Date and sort.
+        3. Convert price_brl_mt to numeric.
+        4. Drop rows with missing or zero prices.
+
+    Returns cleaned copy.
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+
+    if "price_brl_mt" in df.columns:
+        df["price_brl_mt"] = pd.to_numeric(df["price_brl_mt"], errors="coerce")
+        df = df.dropna(subset=["price_brl_mt"])
+        df = df[df["price_brl_mt"] > 0]
+
+    return df.reset_index(drop=True)
+
+
+def clean_safex(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean JSE SAFEX South Africa settlement price data.
+
+    Steps:
+        1. Copy first.
+        2. Parse Date and sort.
+        3. Convert Close and Volume to numeric.
+        4. Drop rows where Close is missing or zero.
+
+    Returns cleaned copy.
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+
+    for col in ("Close", "Volume"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if "Close" in df.columns:
+        df = df.dropna(subset=["Close"])
+        df = df[df["Close"] > 0]
 
     return df.reset_index(drop=True)
 

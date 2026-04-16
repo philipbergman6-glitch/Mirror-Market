@@ -51,14 +51,14 @@ st.set_page_config(
 # Auto-fetch ONCE per session if DB is missing or new tables are empty
 # ---------------------------------------------------------------------------
 from config import DB_PATH
-from processing.database import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud
 
 
 def _get_empty_tables() -> list[str]:
     """Return list of important tables that are empty or missing."""
     if not is_cloud() and not os.path.exists(DB_PATH):
         return ["prices"]  # DB doesn't exist at all
-    from processing.combiner import init_database
+    from pipeline.store import init_database
     init_database()
     empty = []
     try:
@@ -81,9 +81,9 @@ if "data_checked" not in st.session_state:
         if "prices" in empty:
             with st.spinner("First launch — fetching core price data..."):
                 try:
-                    from processing.combiner import init_database, save_price_data, save_currency_data, save_freshness
-                    from data.fetchers.yfinance_fetcher import fetch_all as fetch_prices, fetch_currencies
-                    from processing.cleaner import clean_ohlcv, clean_currencies
+                    from pipeline.store import init_database, save_price_data, save_currency_data, save_freshness
+                    from fetchers.yfinance import fetch_all as fetch_prices, fetch_currencies
+                    from pipeline.clean import clean_ohlcv
                     init_database()
                     # Prices only — fast, no API keys needed
                     price_data = fetch_prices()
@@ -95,7 +95,7 @@ if "data_checked" not in st.session_state:
                     # Currencies — also fast, no key needed
                     currency_data = fetch_currencies()
                     for name in currency_data:
-                        currency_data[name] = clean_currencies(currency_data[name])
+                        currency_data[name] = clean_ohlcv(currency_data[name])
                     for pair, df in currency_data.items():
                         save_currency_data(pair, df)
                     save_freshness("currencies", sum(len(df) for df in currency_data.values()))
@@ -158,7 +158,7 @@ if st.sidebar.button("Refresh Data"):
 st.sidebar.divider()
 st.sidebar.markdown("**Data Freshness**")
 try:
-    from processing.combiner import read_freshness
+    from pipeline.query import read_freshness
     freshness = read_freshness()
     if not freshness.empty:
         from datetime import datetime, timedelta
@@ -747,6 +747,89 @@ def page_supply_demand():
                 elif weather_list:
                     st.success(f"No active weather alerts in {country_name}")
 
+                # ── India NCDEX domestic prices ──────────────────────
+                dom_india = info.get("india_domestic", {})
+                if dom_india:
+                    st.markdown("**NCDEX Domestic Prices (INR/MT → USD/MT)**")
+                    c1, c2, c3 = st.columns(3)
+                    soy_inr = dom_india.get("soybean_ncdex_inr")
+                    oil_inr  = dom_india.get("oil_ncdex_inr")
+                    meal_inr = dom_india.get("meal_ncdex_inr")
+                    if soy_inr:
+                        soy_usd = dom_india.get("soybean_ncdex_usd")
+                        c1.metric("Soybean", f"₹{soy_inr:,.0f}",
+                                  delta=f"${soy_usd:,.0f}/MT USD" if soy_usd else None)
+                    if oil_inr:
+                        c2.metric("Soy Oil", f"₹{oil_inr:,.0f}")
+                    if meal_inr:
+                        c3.metric("Soy Meal", f"₹{meal_inr:,.0f}")
+
+                    crush_usd = dom_india.get("crush_margin_usd")
+                    cbot_crush = dom_india.get("cbot_crush_usd")
+                    premium    = dom_india.get("crush_premium_usd")
+                    if crush_usd is not None or cbot_crush is not None:
+                        st.markdown("**India Crush Margin vs CBOT**")
+                        ca, cb, cc = st.columns(3)
+                        if crush_usd is not None:
+                            ca.metric("India Crush", f"${crush_usd:,.1f}/MT")
+                        if cbot_crush is not None:
+                            cb.metric("CBOT Crush", f"${cbot_crush:,.1f}/MT")
+                        if premium is not None:
+                            cc.metric(
+                                "Crush Premium vs CBOT",
+                                f"${premium:+,.1f}/MT",
+                                delta="India crushers have edge" if premium > 0 else "CBOT competitive",
+                                delta_color="normal" if premium > 0 else "inverse",
+                            )
+
+                # ── Brazil CEPEA domestic price ──────────────────────
+                dom_brazil = info.get("brazil_domestic", {})
+                if dom_brazil:
+                    st.markdown("**CEPEA/ESALQ Farm-Gate Price (BRL/MT → USD/MT)**")
+                    c1, c2, c3 = st.columns(3)
+                    cepea_brl = dom_brazil.get("cepea_soy_brl")
+                    cepea_usd = dom_brazil.get("cepea_soy_usd")
+                    basis     = dom_brazil.get("brazil_cbot_basis_usd")
+                    weekly    = dom_brazil.get("weekly_chg_pct")
+                    cbot_usd  = dom_brazil.get("cbot_usd")
+                    if cepea_brl:
+                        c1.metric("CEPEA Soybean", f"R${cepea_brl:,.2f}/MT",
+                                  delta=_delta_str(weekly) if weekly is not None else None)
+                    if cepea_usd:
+                        c2.metric("CEPEA (USD/MT)", f"${cepea_usd:,.1f}")
+                    if basis is not None:
+                        c3.metric(
+                            "Brazil-CBOT Basis",
+                            f"${basis:+,.1f}/MT",
+                            delta="premium" if basis > 0 else "discount",
+                            delta_color="normal" if basis > 0 else "inverse",
+                        )
+
+                # ── South Africa SAFEX domestic price ───────────────
+                dom_sa = info.get("south_africa_domestic", {})
+                if dom_sa:
+                    st.markdown("**SAFEX/JSE Settlement Prices (ZAR/MT → USD/MT)**")
+                    c1, c2, c3 = st.columns(3)
+                    safex_zar = dom_sa.get("soybean_safex_zar")
+                    safex_usd = dom_sa.get("soybean_safex_usd")
+                    sun_zar   = dom_sa.get("sunflower_safex_zar")
+                    basis     = dom_sa.get("safex_cbot_basis_usd")
+                    weekly    = dom_sa.get("weekly_chg_pct")
+                    if safex_zar:
+                        c1.metric("SAFEX Soybean", f"R{safex_zar:,.0f}/MT",
+                                  delta=_delta_str(weekly) if weekly is not None else None)
+                    if safex_usd:
+                        c2.metric("SAFEX (USD/MT)", f"${safex_usd:,.1f}")
+                    if basis is not None:
+                        c3.metric(
+                            "SAFEX-CBOT Basis",
+                            f"${basis:+,.1f}/MT",
+                            delta="sub-Saharan premium" if basis > 0 else "import parity",
+                            delta_color="normal" if basis > 0 else "off",
+                        )
+                    if sun_zar:
+                        st.metric("Sunflower (SAFEX)", f"R{sun_zar:,.0f}/MT")
+
                 st.divider()
 
 
@@ -766,7 +849,7 @@ def page_relative_value():
         spread_df["Date"] = pd.to_datetime(spread_df["Date"])
 
         # Convert crush spread to USD/MT for charting
-        from processing.units import to_metric_tons, CONVERSION_FACTORS
+        from pipeline.units import to_metric_tons, CONVERSION_FACTORS
         soy_factor = CONVERSION_FACTORS.get("Soybeans", 1)
         spread_mt = spread_df["crush_spread"] * soy_factor
 
@@ -1003,7 +1086,7 @@ def page_risk_monitor():
     st.subheader("Rolling Correlations")
     try:
         from analysis.correlations import rolling_correlation, commodity_vs_currency
-        from processing.combiner import read_prices, read_currencies
+        from pipeline.query import read_prices, read_currencies
 
         all_prices = read_prices()
         all_currencies = read_currencies()
@@ -1079,7 +1162,7 @@ def page_forward_curves():
 
         # Metrics row — convert front/back prices to MT
         if analysis:
-            from processing.units import to_metric_tons
+            from pipeline.units import to_metric_tons
             front_mt = to_metric_tons(analysis.get("front_price", 0), leg)
             back_mt = to_metric_tons(analysis.get("back_price", 0), leg)
             cols = st.columns(4)
@@ -1241,7 +1324,7 @@ def page_about():
 
 Mirror Market is a commodity market intelligence platform focused on the
 global soybean complex (Soybeans, Soybean Oil, Soybean Meal). It pulls
-data from 16 source layers into a database, runs technical and fundamental
+data from 15 source layers into a database, runs technical and fundamental
 analysis, and presents actionable intelligence through this dashboard.
 
 ### Data Sources
@@ -1263,7 +1346,6 @@ analysis, and presents actionable intelligence through this dashboard.
 | Biofuel/Energy | EIA | Weekly/Monthly | Yes |
 | Crush/Inspections | USDA | Weekly/Monthly | Yes |
 | Brazil Estimates | CONAB | Monthly | No |
-| Options Sentiment | yfinance | Daily | No |
 
 ### Price Units
 

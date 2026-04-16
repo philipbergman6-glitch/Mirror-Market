@@ -368,7 +368,49 @@ INSPECTIONS_URL = "https://www.ams.usda.gov/mnreports/wa_gr101.txt"
 CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt"
 
 # ---------------------------------------------------------------------------
-# Layer 16 — Options Sentiment (experimental — yfinance option_chain)
+# Layer 16 — NCDEX India domestic soy prices (free, no API key)
+# NCDEX Bhav Copy: daily settlement prices in INR/quintal or INR/MT
+# ---------------------------------------------------------------------------
+NCDEX_BHAVCOPY_URL_TEMPLATES = [
+    "https://www.ncdex.com/bdocuments/bhavcopy/bhavcopy_{date}.csv",
+    "https://www.ncdex.com/Downloads/Bhavcopy/ncdex_bhavcopy_{date}.csv",
+]
+
+# Maps our commodity name → list of NCDEX symbol aliases to search for in CSV
+NCDEX_SOY_SYMBOLS = {
+    "Soybean (NCDEX)":     ["SYBEANIDR", "SOYBEAN", "SOYBEANIDR"],
+    "Soybean Oil (NCDEX)": ["SYOIL", "REFSOLOIL", "SOYOIL"],
+    "Soybean Meal (NCDEX)":["SOYMEAL", "SYBEANMEAL"],
+}
+
+# Multiplier to convert NCDEX native unit → INR/MT
+# Soybeans/meal are typically Rs/quintal (100 kg) → ×10 = INR/MT
+# Soy oil is typically Rs/10kg → ×100 = INR/MT
+NCDEX_UNIT_MULTIPLIER = {
+    "Soybean (NCDEX)":     10.0,
+    "Soybean Oil (NCDEX)": 100.0,
+    "Soybean Meal (NCDEX)": 1.0,
+}
+
+# ---------------------------------------------------------------------------
+# Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
+# Publishes BRL per 60kg bag for the Paranaguá reference port
+# ---------------------------------------------------------------------------
+CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
+CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
+
+# ---------------------------------------------------------------------------
+# Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)
+# JSE agricultural settlement prices in ZAR/MT
+# ---------------------------------------------------------------------------
+SAFEX_STATS_URL = "https://www.grainsa.co.za/pages/industry-reports/safex-feeds"
+SAFEX_COMMODITIES = {
+    "Soybean (SAFEX)":   "FKBS",
+    "Sunflower (SAFEX)": "FKSU",
+}
+
+# ---------------------------------------------------------------------------
+# Layer 16b — Options Sentiment (experimental — yfinance option_chain)
 # Put/call ratios and implied volatility for soy complex
 # ---------------------------------------------------------------------------
 OPTIONS_COMMODITIES = {

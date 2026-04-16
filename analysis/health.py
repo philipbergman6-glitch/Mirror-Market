@@ -26,7 +26,7 @@ from config import (
     FORWARD_CURVE_CONTRACTS,
     GROWING_REGIONS,
 )
-from processing.database import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,9 @@ def run_health_check() -> dict:
     issues.extend(_check_dce())
     issues.extend(_check_forward_curve())
     issues.extend(_check_flat_prices())
+    issues.extend(_check_india_domestic())
+    issues.extend(_check_brazil_spot())
+    issues.extend(_check_safex())
 
     # Build per-commodity status for the dashboard
     commodity_status = _build_commodity_status()
@@ -213,6 +216,32 @@ def _check_flat_prices() -> list[dict]:
     return issues
 
 
+def _check_india_domestic() -> list[dict]:
+    """
+    Check NCDEX India domestic prices for freshness.
+
+    NCDEX publishes daily (business days), so >2 business days = stale.
+    This is a 'warning' level (not critical) because the fetch URL may need
+    manual verification — the pipeline works without this data.
+    """
+    from config import NCDEX_SOY_SYMBOLS
+    expected = list(NCDEX_SOY_SYMBOLS.keys())
+    return _check_table_freshness("india_domestic_prices", "commodity", "Date", expected)
+
+
+def _check_brazil_spot() -> list[dict]:
+    """Check CEPEA Brazil domestic soy prices for freshness (daily = >2 days stale)."""
+    from config import CEPEA_COMMODITIES
+    return _check_table_freshness("brazil_spot_prices", "commodity", "Date", CEPEA_COMMODITIES)
+
+
+def _check_safex() -> list[dict]:
+    """Check JSE SAFEX South Africa prices for freshness (daily = >2 days stale)."""
+    from config import SAFEX_COMMODITIES
+    expected = list(SAFEX_COMMODITIES.keys())
+    return _check_table_freshness("safex_prices", "commodity", "Date", expected)
+
+
 def _build_commodity_status() -> list[dict]:
     """
     Build a list of per-commodity status entries for dashboard display.
@@ -224,13 +253,16 @@ def _build_commodity_status() -> list[dict]:
     today = datetime.utcnow().date()
 
     table_specs = [
-        ("prices",          "commodity", "Date"),
-        ("cot",             "commodity", "Date"),
-        ("weather",         "region",    "Date"),
-        ("currencies",      "pair",      "Date"),
-        ("dce_futures",     "commodity", "Date"),
-        ("worldbank_prices","commodity", "Date"),
-        ("forward_curve",   "commodity", "fetched_date"),
+        ("prices",                "commodity", "Date"),
+        ("cot",                   "commodity", "Date"),
+        ("weather",               "region",    "Date"),
+        ("currencies",            "pair",      "Date"),
+        ("dce_futures",           "commodity", "Date"),
+        ("worldbank_prices",      "commodity", "Date"),
+        ("forward_curve",         "commodity", "fetched_date"),
+        ("india_domestic_prices", "commodity", "Date"),
+        ("brazil_spot_prices",    "commodity", "Date"),
+        ("safex_prices",          "commodity", "Date"),
     ]
 
     if not is_cloud() and not os.path.exists(DB_PATH):

@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 # Map from Pink Sheet column header substrings to our commodity names.
 # The Pink Sheet headers are multi-row and use descriptive names — we
 # search for these substrings to find the right columns.
+#
+# Layer 8b — Rotterdam CIF benchmark:
+# "Soybean meal" in the World Bank Pink Sheet is defined as
+# "United States origin, CIF Rotterdam" — this IS the global trade benchmark
+# used by international crushers and traders.  So this layer already covers
+# the Rotterdam CIF data gap described in the plan.
 _WB_COMMODITY_MAP = {
     "Coffee, Arabica":  "Coffee Arabica",
     "Coffee, Robusta":  "Coffee Robusta",

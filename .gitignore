@@ -21,3 +21,4 @@ data/storage/*.csv
 
 # OS
 .DS_Store
+.gstack/

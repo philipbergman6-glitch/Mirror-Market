@@ -1,20 +1,22 @@
 # Mirror Market
 
+[![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-GitHub_Pages-2D6A4F?style=for-the-badge)](https://philipbergman6-glitch.github.io/Mirror-Market/)
+
 A commodity market intelligence platform that monitors global agricultural
 markets — soybeans, coffee, palm oil, corn, wheat, sugar, cotton, and
-livestock — pulling data from 11 free sources across 27 countries into a
+livestock — pulling data from 18 free source layers across 27 countries into a
 single database with professional-grade analysis, a daily briefing, and an
-interactive Streamlit dashboard.
+interactive static dashboard.
 
 ## What It Does
 
 Mirror Market runs a data pipeline that collects, cleans, validates, and stores
-market data from 11 independent sources. The analysis engine then processes
+market data from 18 independent layers. The analysis engine then processes
 everything into a daily briefing: technical signals (MACD, Bollinger Bands,
 RSI divergence), crush spreads, forward curve structure, export sales demand,
 cross-market correlations, seasonal patterns, and a "Market Drivers" narrative
 that connects data across sources to surface insights no single section shows
-alone. An interactive Streamlit dashboard provides 7 pages of charts and analysis.
+alone. An interactive Streamlit dashboard provides 9 pages of charts and analysis.
 
 ## Data Sources (All FREE)
 
@@ -272,7 +274,7 @@ Connects dots across data sources — the part no single section shows:
 ### Data Freshness Tracking
 The pipeline records when each layer last succeeded. The briefing shows warnings at the top if any layer is more than 7 days stale (e.g. "WARNING: USDA data is 45 days old").
 
-### Data Validation (`processing/cleaner.py`)
+### Data Validation (`pipeline/clean.py`)
 Sanity checks run during cleaning:
 - Flags daily price moves >10% (possible data corruption or extreme event)
 - Flags zero/negative volume (data gap)
@@ -280,17 +282,19 @@ Sanity checks run during cleaning:
 
 ## Interactive Dashboard
 
-Run with `streamlit run app/dashboard.py`. 7 pages of visual analysis:
+Run with `streamlit run app/dashboard.py`. 9 pages of visual analysis:
 
 | Page | What It Shows |
 |------|--------------|
-| **Overview** | Full text briefing + data freshness status table |
-| **Price Charts** | Candlestick chart per commodity with MA/Bollinger overlays, RSI subplot, MACD subplot, volume bars. Commodity dropdown selector. |
-| **Forward Curve** | Line chart: x=contract month, y=price. Visual contango/backwardation detection with metrics. |
-| **Crush Spread** | Time series with profitability shading (green = profitable, red = negative margin). |
-| **COT Positioning** | Grouped bar chart: commercial vs speculator net positions. Time series detail view. |
-| **Weather** | Color-coded table of 20 regions — red for extreme heat, blue for heavy rain, yellow for dry. |
-| **Correlations** | Plotly heatmap of cross-commodity correlation matrix with values. |
+| **Command Center** | At-a-glance snapshot of all 3 soy legs + crush spread + key signals |
+| **Technicals** | Candlestick charts with RSI/MACD/Bollinger Bands for each soy leg (tabbed) |
+| **Supply & Demand** | WASDE balance sheet, CONAB vs USDA, exports, China, biodiesel (3 tabs: Soy/Competing/EM) |
+| **Relative Value** | Crush spread, oil/meal ratio, soy oil vs palm oil, bean/corn ratio with 1Y overlays |
+| **Risk Monitor** | BRL/USD, COT positioning, weather threats, options data, rolling correlations |
+| **Forward Curves** | Term structure for all 3 soy contracts — contango/backwardation visualised |
+| **Seasonal** | Monthly average patterns vs current price for each soy leg |
+| **Briefing** | Full text briefing + data health check |
+| **About** | Data sources, methodology, price unit explanations |
 
 All pages reuse existing `read_*()` and analysis functions. Data updates when you re-run `python main.py`.
 
@@ -324,23 +328,37 @@ These can be tuned without touching analysis code:
 ## How to Run
 
 ```bash
-# Set API keys (one-time, optional — 8 of 11 layers work without them)
+# Set API keys (one-time, optional — 8 of 18 layers work without them)
 export USDA_API_KEY="your-key-here"
 export FRED_API_KEY="your-key-here"
 export FAS_API_KEY="your-key-here"
+export EIA_API_KEY="your-key-here"
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the pipeline (fetches all 11 layers, cleans, validates, stores)
+# Run the pipeline (fetches all 18 layers, cleans, validates, stores)
 python main.py
 
-# Generate daily briefing
+# Generate the static HTML dashboard
+python scripts/generate_html.py
+# Open docs/index.html in your browser
+
+# Generate daily briefing (text)
 python -c "from analysis.briefing import generate_briefing; print(generate_briefing())"
 
-# Launch interactive dashboard
+# Alternative: Launch interactive Streamlit dashboard (local)
 streamlit run app/dashboard.py
 ```
+
+## Deployment
+
+The dashboard auto-deploys to GitHub Pages via GitHub Actions:
+- **Schedule:** Weekdays at 12:00 UTC (after US market open)
+- **Trigger:** Push to main, or manual workflow dispatch
+- **Pipeline:** Fetches data → generates static HTML → deploys to Pages
+
+To set up: add `USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` as repository secrets.
 
 ## Tech Stack
 
@@ -355,24 +373,30 @@ streamlit run app/dashboard.py
 ```
 Mirror_Market/
     config.py                          # Tickers, API keys, URLs, thresholds
-    main.py                            # Pipeline orchestrator
-    data/
-        fetchers/
-            yfinance_fetcher.py        # Layers 1 + 7 (prices + currencies)
-            usda_fetcher.py            # Layers 2 + 2b (fundamentals + crop progress)
-            fred_fetcher.py            # Layer 3
-            cot_fetcher.py             # Layer 4
-            weather_fetcher.py         # Layer 5
-            psd_fetcher.py             # Layer 6
-            worldbank_fetcher.py       # Layer 8
-            akshare_fetcher.py         # Layer 9
-            export_sales_fetcher.py    # Layer 10 (USDA FAS export sales)
-            forward_curve_fetcher.py   # Layer 11 (individual contract months)
-        storage/
-            mirror_market.db           # SQLite database (gitignored)
-    processing/
-        cleaner.py                     # Data cleaning + validation
-        combiner.py                    # SQLite storage + freshness tracking
+    main.py                            # Pipeline orchestrator (15 layers)
+    fetchers/
+        yfinance.py                    # Layers 1 + 7 (prices + currencies)
+        usda.py                        # Layers 2 + 2b + 12 + 14 (USDA data)
+        fred.py                        # Layer 3 (economic indicators)
+        cot.py                         # Layer 4 (COT positioning)
+        weather.py                     # Layer 5 (24 growing regions)
+        psd.py                         # Layer 6 (global supply/demand)
+        worldbank.py                   # Layer 8 (monthly benchmark prices)
+        akshare.py                     # Layer 9 (DCE Chinese futures)
+        export_sales.py                # Layer 10 (USDA FAS weekly sales)
+        forward_curve.py               # Layer 11 (individual contract months)
+        eia.py                         # Layer 13 (biofuel/energy)
+        conab.py                       # Layer 15 (Brazil crop estimates)
+        india_domestic.py              # Layer 16 (NCDEX India domestic soy — INR/MT)
+        cepea.py                       # Layer 17 (CEPEA Brazil farm-gate soy — BRL/MT)
+        safex.py                       # Layer 18 (JSE SAFEX South Africa soy — ZAR/MT)
+    pipeline/
+        connection.py                  # DB abstraction (Turso cloud or local SQLite)
+        schema.py                      # All 22 CREATE TABLE SQL definitions
+        store.py                       # All save_*() write functions
+        query.py                       # All read_*() query functions
+        clean.py                       # Data cleaning + validation
+        units.py                       # Native exchange units → USD/MT conversion
     analysis/
         technical.py                   # SMA, RSI, MACD, Bollinger, volatility
         signals.py                     # Signal detection (crossovers, divergence, squeeze)
@@ -381,6 +405,13 @@ Mirror_Market/
         seasonal.py                    # Seasonal pattern comparison
         forward_curve.py               # Forward curve analysis (contango/backwardation)
         briefing.py                    # Daily briefing generator (all sections + Market Drivers)
+        soy_analytics.py               # 9 analyst functions for the dashboard
+        health.py                      # Per-commodity data health checks
     app/
-        dashboard.py                   # Interactive Streamlit + Plotly dashboard (7 pages)
+        dashboard.py                   # Interactive Streamlit + Plotly dashboard (9 pages)
+    data/
+        storage/
+            mirror_market.db           # SQLite database (gitignored)
+    scripts/
+        generate_pdf.py                # One-off utility: README → PDF
 ```

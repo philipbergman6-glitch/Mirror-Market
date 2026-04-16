@@ -27,8 +27,8 @@ from datetime import datetime
 
 import pandas as pd
 
-from processing.units import to_metric_tons, convert_df_to_mt, mt_label
-from processing.combiner import (
+from pipeline.units import to_metric_tons, convert_df_to_mt, mt_label
+from pipeline.query import (
     read_prices,
     read_cot,
     read_currencies,
@@ -46,6 +46,9 @@ from processing.combiner import (
     read_forward_curve,
     read_dce_futures,
     read_freshness,
+    read_india_domestic,
+    read_brazil_spot,
+    read_safex,
 )
 from analysis.technical import compute_all_technicals
 from analysis.spreads import compute_crush_spread
@@ -75,16 +78,18 @@ SOY_WEATHER_REGIONS = [
 SOY_CURRENCIES = ["BRL/USD", "CNY/USD", "ARS/USD", "ZAR/USD", "NGN/USD", "INR/USD"]
 
 # Emerging market countries for deep dive
-EMERGING_MARKET_COUNTRIES = ["South Africa", "India", "Nigeria"]
+EMERGING_MARKET_COUNTRIES = ["South Africa", "India", "Nigeria", "Brazil"]
 EMERGING_MARKET_CURRENCIES = {
     "South Africa": "ZAR/USD",
     "India": "INR/USD",
     "Nigeria": "NGN/USD",
+    "Brazil": "BRL/USD",
 }
 EMERGING_MARKET_WEATHER = {
     "South Africa": ["South Africa Free State", "South Africa Mpumalanga"],
     "India": ["India Madhya Pradesh", "India Maharashtra"],
     "Nigeria": ["Nigeria Benue", "Nigeria Kaduna"],
+    "Brazil": ["Brazil Mato Grosso", "Brazil Parana"],
 }
 
 
@@ -845,7 +850,7 @@ def forward_curve_analysis() -> dict:
         # Convert forward curve prices to USD/MT
         subset_mt = subset.copy()
         if "close" in subset_mt.columns:
-            from processing.units import CONVERSION_FACTORS
+            from pipeline.units import CONVERSION_FACTORS
             factor = CONVERSION_FACTORS.get(leg)
             if factor:
                 subset_mt["close"] = subset_mt["close"] * factor
@@ -969,6 +974,191 @@ def emerging_markets_analysis() -> dict:
                 weather_alerts.append(weather_entry)
 
         entry["weather"] = weather_alerts
+
+        # --- India NCDEX domestic prices + crush margin ---
+        if country == "India":
+            india_domestic_entry = {}
+            try:
+                inr_df = read_india_domestic()
+                prices_df = read_prices()
+                currencies_df = read_currencies()
+
+                # Get INR/USD rate for USD conversion
+                inr_usd = None
+                if not currencies_df.empty:
+                    inr_rows = currencies_df[currencies_df["pair"] == "INR/USD"].sort_values("Date")
+                    if not inr_rows.empty:
+                        inr_usd = float(inr_rows["Close"].iloc[-1])
+
+                # Latest NCDEX prices for each soy leg
+                for col_name, store_name in [
+                    ("soybean_ncdex_inr", "Soybean (NCDEX)"),
+                    ("oil_ncdex_inr",     "Soybean Oil (NCDEX)"),
+                    ("meal_ncdex_inr",    "Soybean Meal (NCDEX)"),
+                ]:
+                    if not inr_df.empty:
+                        subset = inr_df[inr_df["commodity"] == store_name].sort_values("Date")
+                        if not subset.empty:
+                            latest_close = float(subset["Close"].iloc[-1])
+                            india_domestic_entry[col_name] = latest_close
+                            usd_key = col_name.replace("_inr", "_usd")
+                            if inr_usd:
+                                india_domestic_entry[usd_key] = round(latest_close * inr_usd, 2)
+
+                # India crush margin: oil×11 + meal×2.2 - beans (INR/MT)
+                beans_inr = india_domestic_entry.get("soybean_ncdex_inr")
+                oil_inr   = india_domestic_entry.get("oil_ncdex_inr")
+                meal_inr  = india_domestic_entry.get("meal_ncdex_inr")
+
+                if all(v is not None for v in [beans_inr, oil_inr, meal_inr]):
+                    crush_inr = (oil_inr * 11.0) + (meal_inr * 2.2) - beans_inr
+                    india_domestic_entry["crush_margin_inr"] = round(crush_inr, 2)
+                    if inr_usd:
+                        india_domestic_entry["crush_margin_usd"] = round(crush_inr * inr_usd, 2)
+
+                    # CBOT crush for comparison
+                    if not prices_df.empty:
+                        from pipeline.units import to_metric_tons
+                        from analysis.spreads import compute_crush_spread
+                        crush_df = compute_crush_spread(prices_df)
+                        if not crush_df.empty:
+                            latest_crush = float(crush_df["crush_spread"].iloc[-1])
+                            # Convert from CBOT units (cents/bu) to USD/MT using soybean factor
+                            crush_usd = to_metric_tons("Soybeans", latest_crush)
+                            if crush_usd is not None:
+                                india_domestic_entry["cbot_crush_usd"] = round(crush_usd, 2)
+                                crush_margin_usd = india_domestic_entry.get("crush_margin_usd")
+                                if crush_margin_usd is not None:
+                                    india_domestic_entry["crush_premium_usd"] = round(
+                                        crush_margin_usd - crush_usd, 2
+                                    )
+
+                # Weekly % change on NCDEX soybean
+                if not inr_df.empty:
+                    soy_rows = inr_df[inr_df["commodity"] == "Soybean (NCDEX)"].sort_values("Date")
+                    if len(soy_rows) >= 6:
+                        chg = (
+                            (soy_rows["Close"].iloc[-1] - soy_rows["Close"].iloc[-6])
+                            / soy_rows["Close"].iloc[-6]
+                        ) * 100
+                        india_domestic_entry["weekly_chg_pct"] = round(chg, 2)
+
+            except Exception as exc:
+                logger.warning("India domestic analytics failed: %s", exc)
+
+            if india_domestic_entry:
+                entry["india_domestic"] = india_domestic_entry
+
+        # --- Brazil CEPEA domestic price + CBOT basis ---
+        if country == "Brazil":
+            brazil_domestic_entry = {}
+            try:
+                brl_df = read_brazil_spot()
+                prices_df = read_prices()
+                currencies_df = read_currencies()
+
+                # Get BRL/USD rate
+                brl_usd = None
+                if not currencies_df.empty:
+                    brl_rows = currencies_df[currencies_df["pair"] == "BRL/USD"].sort_values("Date")
+                    if not brl_rows.empty:
+                        brl_usd = float(brl_rows["Close"].iloc[-1])
+
+                if not brl_df.empty:
+                    cepea_rows = brl_df[brl_df["commodity"] == "Soybean (CEPEA)"].sort_values("Date")
+                    if not cepea_rows.empty:
+                        latest_brl = float(cepea_rows["price_brl"].iloc[-1])
+                        brazil_domestic_entry["cepea_soy_brl"] = round(latest_brl, 2)
+
+                        if brl_usd:
+                            brazil_domestic_entry["cepea_soy_usd"] = round(latest_brl * brl_usd, 2)
+
+                        # Weekly % change
+                        if len(cepea_rows) >= 6:
+                            chg = (
+                                (cepea_rows["price_brl"].iloc[-1] - cepea_rows["price_brl"].iloc[-6])
+                                / cepea_rows["price_brl"].iloc[-6]
+                            ) * 100
+                            brazil_domestic_entry["weekly_chg_pct"] = round(chg, 2)
+
+                # CBOT soybean in USD/MT for basis comparison
+                if not prices_df.empty:
+                    from pipeline.units import to_metric_tons
+                    soy_rows = prices_df[prices_df["commodity"] == "Soybeans"].sort_values("Date")
+                    if not soy_rows.empty:
+                        cbot_close = float(soy_rows["Close"].iloc[-1])
+                        cbot_usd = to_metric_tons("Soybeans", cbot_close)
+                        if cbot_usd is not None:
+                            brazil_domestic_entry["cbot_usd"] = round(cbot_usd, 2)
+                            cepea_usd = brazil_domestic_entry.get("cepea_soy_usd")
+                            if cepea_usd is not None:
+                                brazil_domestic_entry["brazil_cbot_basis_usd"] = round(
+                                    cepea_usd - cbot_usd, 2
+                                )
+
+            except Exception as exc:
+                logger.warning("Brazil domestic analytics failed: %s", exc)
+
+            if brazil_domestic_entry:
+                entry["brazil_domestic"] = brazil_domestic_entry
+
+        # --- South Africa SAFEX domestic price + CBOT basis ---
+        if country == "South Africa":
+            sa_domestic_entry = {}
+            try:
+                safex_df = read_safex()
+                prices_df = read_prices()
+                currencies_df = read_currencies()
+
+                # Get ZAR/USD rate
+                zar_usd = None
+                if not currencies_df.empty:
+                    zar_rows = currencies_df[currencies_df["pair"] == "ZAR/USD"].sort_values("Date")
+                    if not zar_rows.empty:
+                        zar_usd = float(zar_rows["Close"].iloc[-1])
+
+                if not safex_df.empty:
+                    soy_rows = safex_df[safex_df["commodity"] == "Soybean (SAFEX)"].sort_values("Date")
+                    sun_rows = safex_df[safex_df["commodity"] == "Sunflower (SAFEX)"].sort_values("Date")
+
+                    if not soy_rows.empty:
+                        latest_zar = float(soy_rows["Close"].iloc[-1])
+                        sa_domestic_entry["soybean_safex_zar"] = round(latest_zar, 2)
+                        if zar_usd:
+                            sa_domestic_entry["soybean_safex_usd"] = round(latest_zar * zar_usd, 2)
+
+                        if len(soy_rows) >= 6:
+                            chg = (
+                                (soy_rows["Close"].iloc[-1] - soy_rows["Close"].iloc[-6])
+                                / soy_rows["Close"].iloc[-6]
+                            ) * 100
+                            sa_domestic_entry["weekly_chg_pct"] = round(chg, 2)
+
+                    if not sun_rows.empty:
+                        sa_domestic_entry["sunflower_safex_zar"] = round(
+                            float(sun_rows["Close"].iloc[-1]), 2
+                        )
+
+                # CBOT soybean in USD/MT for basis comparison
+                if not prices_df.empty:
+                    from pipeline.units import to_metric_tons
+                    soy_rows = prices_df[prices_df["commodity"] == "Soybeans"].sort_values("Date")
+                    if not soy_rows.empty:
+                        cbot_close = float(soy_rows["Close"].iloc[-1])
+                        cbot_usd = to_metric_tons("Soybeans", cbot_close)
+                        if cbot_usd is not None:
+                            sa_domestic_entry["cbot_usd"] = round(cbot_usd, 2)
+                            safex_usd = sa_domestic_entry.get("soybean_safex_usd")
+                            if safex_usd is not None:
+                                sa_domestic_entry["safex_cbot_basis_usd"] = round(
+                                    safex_usd - cbot_usd, 2
+                                )
+
+            except Exception as exc:
+                logger.warning("South Africa SAFEX analytics failed: %s", exc)
+
+            if sa_domestic_entry:
+                entry["south_africa_domestic"] = sa_domestic_entry
 
         countries[country] = entry
 
