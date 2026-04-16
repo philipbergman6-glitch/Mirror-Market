@@ -4,7 +4,7 @@ Usage:
     python scripts/generate_html.py
 
 Reads from the SQLite database (populated by main.py), calls the same
-analyst functions as the Streamlit dashboard, builds Plotly charts,
+analyst functions from the analysis layer, builds Plotly charts,
 and renders a single index.html via Jinja2.
 """
 

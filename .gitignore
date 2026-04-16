@@ -17,7 +17,6 @@ data/storage/*.csv
 
 # Environment / secrets
 .env
-.streamlit/secrets.toml
 
 # OS
 .DS_Store

@@ -16,7 +16,7 @@ everything into a daily briefing: technical signals (MACD, Bollinger Bands,
 RSI divergence), crush spreads, forward curve structure, export sales demand,
 cross-market correlations, seasonal patterns, and a "Market Drivers" narrative
 that connects data across sources to surface insights no single section shows
-alone. An interactive Streamlit dashboard provides 9 pages of charts and analysis.
+alone. A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of charts and analysis.
 
 ## Data Sources (All FREE)
 
@@ -280,9 +280,9 @@ Sanity checks run during cleaning:
 - Flags zero/negative volume (data gap)
 - Warnings only — doesn't block the pipeline
 
-## Interactive Dashboard
+## Dashboard
 
-Run with `streamlit run app/dashboard.py`. 9 pages of visual analysis:
+Generated with `python scripts/generate_html.py` and deployed to GitHub Pages. 9 pages of visual analysis:
 
 | Page | What It Shows |
 |------|--------------|
@@ -347,8 +347,6 @@ python scripts/generate_html.py
 # Generate daily briefing (text)
 python -c "from analysis.briefing import generate_briefing; print(generate_briefing())"
 
-# Alternative: Launch interactive Streamlit dashboard (local)
-streamlit run app/dashboard.py
 ```
 
 ## Deployment
@@ -365,7 +363,7 @@ To set up: add `USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` as r
 - **Language**: Python 3.10+
 - **Database**: SQLite (local, no server needed)
 - **Data Libraries**: pandas, yfinance, requests, AKShare, cot_reports
-- **Dashboard**: Streamlit + Plotly (interactive charts)
+- **Dashboard**: Static HTML + Plotly (GitHub Pages)
 - **Analysis**: Pure Python/pandas (no paid analytics tools)
 
 ## Project Structure
@@ -408,10 +406,15 @@ Mirror_Market/
         soy_analytics.py               # 9 analyst functions for the dashboard
         health.py                      # Per-commodity data health checks
     app/
-        dashboard.py                   # Interactive Streamlit + Plotly dashboard (9 pages)
+        charts.py                      # Shared Plotly figure builders
+        templates/
+            dashboard.html.j2          # Jinja2 template for static dashboard
+    docs/
+        index.html                     # Generated static dashboard (GitHub Pages)
     data/
         storage/
             mirror_market.db           # SQLite database (gitignored)
     scripts/
+        generate_html.py               # Static HTML dashboard generator
         generate_pdf.py                # One-off utility: README → PDF
 ```

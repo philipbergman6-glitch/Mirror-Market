@@ -1,7 +1,6 @@
 """Shared Plotly figure builders for Mirror Market dashboard.
 
-All functions return go.Figure objects, usable by both the Streamlit
-dashboard (app/dashboard.py) and the static HTML generator
+All functions return go.Figure objects, used by the static HTML generator
 (scripts/generate_html.py).
 """
 

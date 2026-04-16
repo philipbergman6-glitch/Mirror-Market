@@ -5,7 +5,7 @@ Provides a single get_connection() function that returns either:
   - A Turso (libsql) cloud connection when TURSO_DATABASE_URL is set
   - A local SQLite connection as fallback
 
-This allows the same SQL code to work both locally and on Streamlit Cloud
+This allows the same SQL code to work both locally and on cloud platforms
 where the filesystem is ephemeral.
 
 Key concepts for learning:
