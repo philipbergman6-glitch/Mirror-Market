@@ -4,14 +4,14 @@
 
 A commodity market intelligence platform that monitors global agricultural
 markets — soybeans, coffee, palm oil, corn, wheat, sugar, cotton, and
-livestock — pulling data from 18 free source layers across 27 countries into a
+livestock — pulling data from 19 free source layers across 27 countries into a
 single database with professional-grade analysis, a daily briefing, and an
 interactive static dashboard.
 
 ## What It Does
 
 Mirror Market runs a data pipeline that collects, cleans, validates, and stores
-market data from 18 independent layers. The analysis engine then processes
+market data from 19 independent layers. The analysis engine then processes
 everything into a daily briefing: technical signals (MACD, Bollinger Bands,
 RSI divergence), crush spreads, forward curve structure, export sales demand,
 cross-market correlations, seasonal patterns, and a "Market Drivers" narrative
@@ -320,7 +320,7 @@ All pages reuse existing `read_*()` and analysis functions. Data updates when yo
 
 ## Required vs Optional Layers
 
-Each data layer below is one of the 18 source layers the pipeline pulls. The
+Each data layer below is one of the 19 source layers the pipeline pulls. The
 pipeline is built so that **any layer can fail and the rest still run** —
 no API key means that layer is skipped, no exception. The dashboard shows
 "No data" for sections backed by skipped layers.
@@ -360,14 +360,16 @@ no API key means that layer is skipped, no exception. The dashboard shows
 
 ### What you get with zero API keys
 
-11 of 18 layers run with no API keys at all. That gives you:
+14 of 19 layers run with no API keys at all. That gives you:
 
 - Commodity futures + currencies + COT positioning + forward curves
 - Weather (24 regions) and global supply/demand (USDA PSD, 27 countries)
 - DCE Chinese futures, World Bank monthly prices, CONAB Brazil estimates
 - India NCDEX, Brazil CEPEA, and South Africa SAFEX domestic prices
+- WASDE monthly forecasts (USDA OCE XLS)
+- AgRural Paranaguá FOB (Brazil port-side soy basis)
 
-The 7 layers that do require keys (USDA NASS, USDA FAS, FRED, EIA) are all
+The 5 layers that do require keys (USDA NASS, USDA FAS, FRED, EIA) are all
 **free** — just register and copy the key. None of the data sources are paid.
 
 ### What the dashboard shows when a layer is missing
@@ -407,7 +409,7 @@ These can be tuned without touching analysis code:
 ## How to Run
 
 ```bash
-# Set API keys (one-time, optional — 11 of 18 layers work without them)
+# Set API keys (one-time, optional — 14 of 19 layers work without them)
 export USDA_API_KEY="your-key-here"
 export FRED_API_KEY="your-key-here"
 export FAS_API_KEY="your-key-here"
@@ -419,7 +421,7 @@ pip install -r requirements.txt
 # (For development: adds pytest, ruff, mypy, etc.)
 # pip install -r requirements-dev.txt
 
-# Run the pipeline (fetches all 18 layers, cleans, validates, stores)
+# Run the pipeline (fetches all 19 layers, cleans, validates, stores)
 python main.py
 
 # Generate the static HTML dashboard
@@ -453,10 +455,11 @@ To set up: add `USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` as r
 ```
 Mirror_Market/
     config.py                          # Tickers, API keys, URLs, thresholds
-    main.py                            # Pipeline orchestrator (15 layers)
+    main.py                            # Pipeline orchestrator (19 layers)
     fetchers/
         yfinance.py                    # Layers 1 + 7 (prices + currencies)
-        usda.py                        # Layers 2 + 2b + 12 + 14 (USDA data)
+        usda.py                        # Layers 2 + 2b + 14 (USDA data)
+        wasde.py                       # Layer 12 (USDA WASDE OCE XLS — split from usda.py, no API key)
         fred.py                        # Layer 3 (economic indicators)
         cot.py                         # Layer 4 (COT positioning)
         weather.py                     # Layer 5 (24 growing regions)
@@ -470,6 +473,7 @@ Mirror_Market/
         india_domestic.py              # Layer 16 (NCDEX India domestic soy — INR/MT)
         cepea.py                       # Layer 17 (CEPEA Brazil farm-gate soy — BRL/MT)
         safex.py                       # Layer 18 (JSE SAFEX South Africa soy — ZAR/MT)
+        agrural.py                     # Layer 19 (AgRural Paranaguá FOB soy — BRL/MT scraper)
     pipeline/
         connection.py                  # DB abstraction (Turso cloud or local SQLite)
         schema.py                      # All 22 CREATE TABLE SQL definitions
@@ -484,11 +488,14 @@ Mirror_Market/
         correlations.py                # Cross-market correlation analysis
         seasonal.py                    # Seasonal pattern comparison
         forward_curve.py               # Forward curve analysis (contango/backwardation)
+        stocks_to_use.py               # Stocks-to-use ratios from PSD; tight-supply alerts
+        zscore.py                      # Shared z-score helpers (consumed by COT + weather sections)
         loaders.py                     # Shared price/currency loaders (used by briefing + dashboard)
         briefing/                      # Daily briefing package — orchestrator + per-section modules
             __init__.py                #   exports generate_briefing(), generate_briefing_data(), BriefingData
             orchestrator.py            #   stitches sections together
             types.py                   #   BriefingData dataclass
+            snapshot.py                #   distills BriefingData into snapshot_json for the briefings archive
             sections/                  #   one module per section (prices, crush, wasde, ...)
         soy_analytics.py               # 9 analyst functions for the dashboard
         health.py                      # Per-commodity data health checks

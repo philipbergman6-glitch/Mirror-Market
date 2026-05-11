@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 15 source layers (covering 11 commodity futures, 13 currency pairs including ZAR/NGN, 24 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections, CONAB Brazil estimates, and key economic indicators) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 19 source layers (covering 11 commodity futures, 13 currency pairs including ZAR/NGN, 24 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, and AgRural Paranaguá FOB) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
 
 ## Commands
 
@@ -32,12 +32,12 @@ python analysis/briefing.py
 
 ## Required Environment Variables
 
-- `USDA_API_KEY` — USDA NASS QuickStats API key (Layers 2, 12, 14)
+- `USDA_API_KEY` — USDA NASS QuickStats API key (Layers 2, 14)
 - `FRED_API_KEY` — Federal Reserve Economic Data API key (Layer 3)
 - `FAS_API_KEY` — USDA FAS OpenData API key (Layer 10 — export sales)
 - `EIA_API_KEY` — Energy Information Administration API key (Layer 13 — biofuel/energy)
 
-Layers 1, 4, 5, 6, 7, 8, 9, 11, 15 work without API keys.
+Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19 work without API keys.
 
 ### Optional (Cloud Database)
 
@@ -50,7 +50,7 @@ If not set, uses local SQLite (default). Set both to enable persistent cloud sto
 
 The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**, with an analysis layer on top.
 
-### Data Pipeline (15 Layers + sub-layers)
+### Data Pipeline (19 Layers + sub-layers)
 
 `main.py` orchestrates the pipeline. Each layer is independent and wrapped in try/except — if one fails, the rest still run (graceful degradation). After each successful layer, a freshness timestamp is recorded.
 
@@ -66,13 +66,14 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 9. **DCE Chinese futures** — `fetchers/akshare.py` (5 contracts including DCE Corn)
 10. **Export sales** — `fetchers/export_sales.py` (weekly USDA FAS demand data — requires `FAS_API_KEY`)
 11. **Forward curves** — `fetchers/forward_curve.py` (individual contract months via yfinance — contango/backwardation)
-12. **WASDE monthly estimates** — `fetchers/usda.py` (USDA monthly supply/demand forecasts — `source_desc=FORECAST`)
+12. **WASDE monthly estimates** — `fetchers/wasde.py` (USDA OCE monthly XLS — `wasdeMMYY.xls`, no API key required)
 13. **EIA biofuel/energy** — `fetchers/eia.py` (ethanol production, biodiesel production, diesel prices — requires `EIA_API_KEY`)
 14. **USDA crush + inspections** — `fetchers/usda.py` (monthly soybean crush volumes + weekly AMS export inspections)
 15. **CONAB Brazil estimates** — `fetchers/conab.py` (Brazil's official crop agency — production, area, yield)
 16. **India domestic soy prices** — `fetchers/india_domestic.py` (NCDEX Bhav Copy — INR/MT, no API key)
 17. **Brazil domestic soy spot** — `fetchers/cepea.py` (CEPEA/ESALQ index — BRL/MT, no API key)
 18. **South Africa domestic soy** — `fetchers/safex.py` (JSE SAFEX settlement — ZAR/MT, no API key)
+19. **AgRural Paranaguá FOB** — `fetchers/agrural.py` (Brazil port-side soy FOB scraper — BRL/MT, no API key)
 
 ### Pipeline Layer
 
@@ -102,7 +103,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 ### Storage
 
 - Database: `data/storage/mirror_market.db` (SQLite, gitignored) — or Turso cloud when configured
-- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `eia_energy`, `brazil_estimates`, `options_sentiment`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`
+- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
 - All config lives in `config.py` (tickers, API URLs, region coordinates, thresholds)
 
 ### Briefing Sections (in order)
@@ -110,26 +111,29 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 1. Data Freshness Warnings
 2. Prices (10 commodities with MA, RSI, MACD, volatility)
 3. Crush Spread
-4. Economic Context (FRED — dollar index, CPI, rates, ethanol PPI)
-5. USDA Fundamentals (YoY production/yield)
-6. Crop Conditions (weekly USDA % good/excellent, progress)
-7. Yield Curve (2Y/10Y spread with recession signal)
-8. WASDE Estimates (monthly USDA supply/demand forecasts with MoM revisions)
-9. Export Sales (weekly USDA FAS demand data, top buyers)
-10. Export Inspections (actual shipments vs committed sales)
-11. DCE Chinese Futures (vs CBOT comparison)
-12. Forward Curve (contango/backwardation per commodity)
-13. Biofuel & Energy (EIA — ethanol, biodiesel production, diesel prices)
-14. Brazil Crop Estimates (CONAB vs USDA comparison)
-15. Currencies (11 pairs with trade impact)
-16. COT Positioning (10 commodities)
-17. Weather Alerts (20 regions)
-18. Global Supply — PSD (27 countries)
-19. World Bank Prices
-20. Correlations (cross-commodity + commodity-vs-currency)
-21. Seasonal Analysis
-22. Market Drivers (BRL + exports, COT + RSI crowding, weather + price premium, dollar impact, corn/soy acreage competition, livestock demand, export sales pace, forward curve structure, palm oil vs soy oil, biofuel pull, CONAB vs USDA divergence)
-23. Signals (sorted by severity)
+4. Brazil Basis (Paranaguá FOB vs CBOT, USD/MT — Layer 19 × Layer 1)
+5. Economic Context (FRED — dollar index, CPI, rates, ethanol PPI)
+6. USDA Fundamentals (YoY production/yield)
+7. Crop Conditions (weekly USDA % good/excellent, progress)
+8. Yield Curve (2Y/10Y spread with recession signal)
+9. WASDE Estimates (monthly USDA supply/demand forecasts with MoM revisions)
+10. Stocks-to-Use (US balance-sheet tightness from PSD; tight-supply alerts)
+11. Export Sales (weekly USDA FAS demand data, top buyers)
+12. Export Inspections (actual shipments vs committed sales)
+13. DCE Chinese Futures (vs CBOT comparison)
+14. Forward Curve (contango/backwardation per commodity)
+15. Biofuel & Energy (EIA — ethanol, biodiesel production, diesel prices)
+16. Brazil Crop Estimates (CONAB vs USDA comparison)
+17. Currencies (11 pairs with trade impact)
+18. COT Positioning (10 commodities)
+19. Weather Alerts (20 regions)
+20. Global Supply — PSD (27 countries)
+21. World Bank Prices
+22. Emerging Markets (South Africa SAFEX + Brazil CEPEA + India NCDEX + Nigeria deep dive)
+23. Correlations (cross-commodity + commodity-vs-currency)
+24. Seasonal Analysis
+25. Market Drivers (BRL + exports, COT + RSI crowding, weather + price premium, dollar impact, corn/soy acreage competition, livestock demand, export sales pace, forward curve structure, palm oil vs soy oil, biofuel pull, CONAB vs USDA divergence)
+26. Signals (sorted by severity)
 
 ## Key Patterns
 
@@ -176,6 +180,6 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 **Not affected:**
 - `analysis/spreads.py` — crush spread, oil/meal ratio, bean/corn ratio. Computed on raw active-contract closes; the artifact appears on each leg simultaneously and largely cancels.
 - `analysis/soy_analytics.py` emerging-markets basis — CEPEA/SAFEX/India crush vs CBOT compare raw `Close` values, level-sensitive but consistent.
-- Layers 2–18 (USDA fundamentals, FRED, weather, PSD, currencies, forward curve, COT, WASDE, EIA, CONAB, domestic spot prices). None depend on a continuous front-month price.
+- Layers 2–19 (USDA fundamentals, FRED, weather, PSD, currencies, forward curve, COT, WASDE, EIA, CONAB, domestic spot prices, AgRural FOB). None depend on a continuous front-month price.
 
 **Future work (deferred):** a Panama-adjusted `adj_close` column on the `prices` table with the dual-column read pattern (technicals use adjusted, spreads/basis stay on raw). See plan `~/.claude/plans/ontinuous-contract-roll-for-glowing-kernighan.md` for the Phase 2 spike gate and Phase 3 scope.
