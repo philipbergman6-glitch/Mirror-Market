@@ -1,0 +1,34 @@
+# Scraper test fixtures
+
+These files are the inputs the scraper unit tests use to verify HTML/CSV
+parsing without hitting the network.
+
+## Provenance
+
+| File | Source | Captured |
+|------|--------|----------|
+| `ams_inspections.txt` | USDA AMS report `wa_gr101.txt` | live download 2026-05-11 |
+| `safex_grainsa.html` | Grain SA SAFEX feeds page | live download 2026-05-11 |
+| `cepea_soybean.html` | CEPEA/ESALQ soybean indicator | synthetic (live returned HTTP 403 anti-bot) |
+| `ncdex_bhavcopy.csv` | NCDEX Bhav Copy | synthetic (live URL templates 404 — see config.py) |
+| `agrural_paranagua.html` | AgRural soja+milho price page | live download 2026-05-11 |
+
+## Treat fixtures as snapshots
+
+When the live site changes shape (column renamed, table moved, format
+swapped), the parser will start raising `ScraperShapeError` and tests
+will continue to pass against this frozen fixture. **That divergence
+is the alert.** Re-capture the fixture only after the parser has been
+updated for the new shape.
+
+## Re-capturing live fixtures
+
+```bash
+.venv/bin/python -c "
+import requests
+ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
+r = requests.get('https://www.ams.usda.gov/mnreports/wa_gr101.txt',
+                 headers={'User-Agent': ua}, timeout=20)
+open('tests/fixtures/ams_inspections.txt', 'wb').write(r.content)
+"
+```

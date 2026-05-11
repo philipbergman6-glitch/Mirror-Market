@@ -20,14 +20,16 @@ Key concepts for learning:
 
 import logging
 import os
-import time
 
 import pandas as pd
+import requests
 
 from config import (
-    COT_REPORT_TYPE, COT_COMMODITIES,
-    MAX_RETRIES, RETRY_DELAY,
+    COT_COMMODITIES,
+    COT_REPORT_TYPE,
+    MAX_RETRIES,
 )
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +93,16 @@ def fetch_cot_year(year: int) -> pd.DataFrame:
             logger.info("Got %d COT rows for %d", len(df), year)
             return df
 
-        except Exception as exc:
+        except (requests.RequestException, KeyError, ValueError, IndexError) as exc:
+            # cot_reports wraps the CFTC text download; failure modes are
+            # transport errors and schema drift (KeyError/IndexError) when
+            # the report layout changes.
             logger.warning(
                 "Attempt %d/%d failed for COT %d: %s",
                 attempt, MAX_RETRIES, year, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for COT %d — returning empty DataFrame",
                  MAX_RETRIES, year)

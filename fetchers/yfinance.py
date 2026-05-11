@@ -13,12 +13,13 @@ Key concepts for learning:
 """
 
 import logging
-import time
 
-import yfinance as yf
 import pandas as pd
+import requests
+import yfinance as yf
 
-from config import COMMODITY_TICKERS, CURRENCY_TICKERS, DEFAULT_HISTORY_PERIOD, MAX_RETRIES, RETRY_DELAY
+from config import COMMODITY_TICKERS, CURRENCY_TICKERS, DEFAULT_HISTORY_PERIOD, MAX_RETRIES
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +59,16 @@ def fetch_one(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame
 
             return data
 
-        except Exception as exc:
+        except (requests.RequestException, ValueError, KeyError, AttributeError) as exc:
+            # yfinance can raise transport errors, KeyError on schema drift,
+            # and AttributeError when the upstream API returns an unexpected
+            # response shape. Caught explicitly so unrelated bugs surface.
             logger.warning(
                 "Attempt %d/%d failed for %s: %s",
                 attempt, MAX_RETRIES, ticker, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for %s — returning empty DataFrame", MAX_RETRIES, ticker)
     return pd.DataFrame()

@@ -7,8 +7,11 @@ Used by the analysis layer and dashboard.
 Extracted from the original processing/combiner.py.
 """
 
+import json
 import logging
 import os
+import sqlite3
+from typing import Any
 
 import pandas as pd
 
@@ -142,7 +145,8 @@ def read_crop_progress(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM crop_progress", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for crop_progress: %s", exc)
             return pd.DataFrame()
 
     return df
@@ -223,7 +227,8 @@ def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM export_sales", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for export_sales: %s", exc)
             return pd.DataFrame()
 
     if "week_ending" in df.columns:
@@ -247,7 +252,8 @@ def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM forward_curve", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for forward_curve: %s", exc)
             return pd.DataFrame()
 
     return df
@@ -289,7 +295,8 @@ def read_wasde(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM wasde", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for wasde: %s", exc)
             return pd.DataFrame()
 
     return df
@@ -310,7 +317,8 @@ def read_inspections(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM inspections", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for inspections: %s", exc)
             return pd.DataFrame()
 
     if "week_ending" in df.columns:
@@ -334,7 +342,8 @@ def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM eia_energy", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for eia_energy: %s", exc)
             return pd.DataFrame()
 
     if "Date" in df.columns:
@@ -358,32 +367,9 @@ def read_brazil_estimates(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM brazil_estimates", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for brazil_estimates: %s", exc)
             return pd.DataFrame()
-
-    return df
-
-
-def read_options_sentiment(commodity: str | None = None) -> pd.DataFrame:
-    """Read options sentiment data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM options_sentiment WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM options_sentiment", conn)
-        except Exception:
-            return pd.DataFrame()
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
 
     return df
 
@@ -403,7 +389,8 @@ def read_india_domestic(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM india_domestic_prices", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for india_domestic_prices: %s", exc)
             return pd.DataFrame()
 
     if "Date" in df.columns:
@@ -427,7 +414,8 @@ def read_brazil_spot(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM brazil_spot_prices", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for brazil_spot_prices: %s", exc)
             return pd.DataFrame()
 
     if "Date" in df.columns:
@@ -451,7 +439,8 @@ def read_safex(commodity: str | None = None) -> pd.DataFrame:
                 )
             else:
                 df = pd.read_sql("SELECT * FROM safex_prices", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for safex_prices: %s", exc)
             return pd.DataFrame()
 
     if "Date" in df.columns:
@@ -467,7 +456,8 @@ def read_freshness() -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Columns: layer_name, last_success, rows_fetched
+        Columns: layer_name, last_success, last_attempt, rows_fetched, status
+        (last_attempt and status default to NaN/'success' for legacy rows.)
     """
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
@@ -475,12 +465,79 @@ def read_freshness() -> pd.DataFrame:
     with get_connection() as conn:
         try:
             df = pd.read_sql("SELECT * FROM data_freshness", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for data_freshness: %s", exc)
             return pd.DataFrame()
 
-    if "last_success" in df.columns:
-        df["last_success"] = pd.to_datetime(df["last_success"])
+    for col in ("last_success", "last_attempt"):
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
 
+    if "status" not in df.columns:
+        df["status"] = "success"
+
+    return df
+
+
+def read_briefing(briefing_date: str) -> dict[str, Any] | None:
+    """Read one archived briefing by date. Returns None if absent.
+
+    Returns a dict with keys: briefing_date, text, signals (list),
+    snapshot (dict), generated_at. JSON columns are decoded.
+    """
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return None
+    with get_connection() as conn:
+        try:
+            row = conn.execute(
+                "SELECT briefing_date, text, signals_json, snapshot_json, generated_at "
+                "FROM briefings WHERE briefing_date = ?",
+                (briefing_date,),
+            ).fetchone()
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for briefings: %s", exc)
+            return None
+    if row is None:
+        return None
+    return {
+        "briefing_date": row[0],
+        "text": row[1],
+        "signals": json.loads(row[2]) if row[2] else [],
+        "snapshot": json.loads(row[3]) if row[3] else {},
+        "generated_at": row[4],
+    }
+
+
+def read_briefings(
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.DataFrame:
+    """Read archived briefings, optionally filtered by date range (inclusive).
+
+    Returns a DataFrame with columns:
+        briefing_date, text, signals_json, snapshot_json, generated_at
+    JSON columns are left as strings — callers can decode per-row.
+    """
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+    sql = "SELECT * FROM briefings"
+    clauses: list[str] = []
+    params: list[str] = []
+    if start_date:
+        clauses.append("briefing_date >= ?")
+        params.append(start_date)
+    if end_date:
+        clauses.append("briefing_date <= ?")
+        params.append(end_date)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY briefing_date"
+    with get_connection() as conn:
+        try:
+            df = pd.read_sql(sql, conn, params=tuple(params) if params else None)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for briefings: %s", exc)
+            return pd.DataFrame()
     return df
 
 
@@ -492,7 +549,8 @@ def read_commodity_freshness() -> pd.DataFrame:
     with get_connection() as conn:
         try:
             df = pd.read_sql("SELECT * FROM commodity_freshness", conn)
-        except Exception:
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for commodity_freshness: %s", exc)
             return pd.DataFrame()
 
     return df

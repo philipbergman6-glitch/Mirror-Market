@@ -13,21 +13,21 @@ Key concepts for learning:
     - Retry logic wraps each HTTP call to handle transient failures
 """
 
+import json
 import logging
-import time
 from datetime import date
 
 import pandas as pd
 import requests
 
 from config import (
+    EXPORT_SALES_COMMODITIES,
     FAS_API_KEY,
     FAS_BASE_URL,
-    EXPORT_SALES_COMMODITIES,
-    REQUEST_TIMEOUT,
     MAX_RETRIES,
-    RETRY_DELAY,
+    REQUEST_TIMEOUT,
 )
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +63,13 @@ def _fas_get(endpoint: str) -> dict | list | None:
             resp = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
             resp.raise_for_status()
             return resp.json()
-        except Exception as exc:
+        except (requests.RequestException, json.JSONDecodeError, ValueError) as exc:
             logger.warning(
                 "FAS API attempt %d/%d failed for %s: %s",
                 attempt, MAX_RETRIES, endpoint, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for FAS endpoint %s", MAX_RETRIES, endpoint)
     return None
@@ -133,7 +133,7 @@ def fetch_export_sales(commodity_code: str, market_year: int | None = None) -> p
 
         return df
 
-    except Exception as exc:
+    except (ValueError, KeyError, TypeError) as exc:
         logger.error("Error parsing export sales for code %s: %s", commodity_code, exc)
         return pd.DataFrame()
 

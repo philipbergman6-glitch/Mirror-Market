@@ -22,8 +22,9 @@ from jinja2 import Environment, FileSystemLoader
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.charts import (
+from app.charts import (  # noqa: E402  (must follow sys.path.insert above)
     COLORS,
+    build_basis_chart,
     build_bean_corn_ratio_chart,
     build_correlations_chart,
     build_cot_chart,
@@ -32,7 +33,6 @@ from app.charts import (
     build_oil_meal_ratio_chart,
     build_seasonal_chart,
     build_technical_chart,
-    chg_color,
     delta_str,
 )
 
@@ -299,6 +299,32 @@ def _build_supply(data: dict) -> dict | None:
                 lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}{rev_str}</div>')
         out["wasde_html"] = "\n".join(lines) if lines else ""
 
+    # Stocks-to-use (US balance sheet, from PSD)
+    stu = data.get("stocks_to_use", {})
+    if stu:
+        cards = ['<div class="grid grid-4">']
+        for commodity, info in stu.items():
+            ratio_pct = info["current_ratio"] * 100
+            my = info["marketing_year"]
+            is_tight = info.get("is_tight", False)
+            lo = info.get("prior_low")
+            hi = info.get("prior_high")
+            range_str = ""
+            if lo is not None and hi is not None:
+                range_str = f"Prior 5-yr: {lo * 100:.1f}%–{hi * 100:.1f}%"
+            delta_cls = "down" if is_tight else "muted"
+            delta_text = "[TIGHT] below 5-yr low" if is_tight else range_str
+            val_cls = ' class="down"' if is_tight else ""
+            cards.append(
+                f'<div class="mc">'
+                f'<div class="mc-label">{_esc(commodity)} (MY {my})</div>'
+                f'<div class="mc-val"{val_cls}>{ratio_pct:.1f}%</div>'
+                f'<div class="mc-delta {delta_cls}">{_esc(delta_text)}</div>'
+                f'</div>'
+            )
+        cards.append('</div>')
+        out["stocks_to_use_html"] = "\n".join(cards)
+
     # Competing crops WASDE
     if wasde:
         lines = []
@@ -326,7 +352,7 @@ def _build_supply(data: dict) -> dict | None:
         cp = conab["conab_production"]
         up = conab.get("usda_production")
         gap = conab.get("gap", 0)
-        html_parts = [f'<div class="grid grid-3">']
+        html_parts = ['<div class="grid grid-3">']
         html_parts.append(f'<div class="mc"><div class="mc-label">CONAB (Brazil)</div><div class="mc-val">{cp:,.0f}</div><div class="mc-delta muted">1000 MT</div></div>')
         if up:
             html_parts.append(f'<div class="mc"><div class="mc-label">USDA (Brazil)</div><div class="mc-val">{up:,.0f}</div><div class="mc-delta muted">1000 MT</div></div>')
@@ -469,6 +495,21 @@ def _build_emerging_markets(data: dict) -> str:
             cards.append('</div>')
             parts.append("\n".join(cards))
 
+            # AgRural Paranaguá FOB — USD/MT only (raw BRL/saca is not redistributable
+            # under AgRural terms; the derived USD basis is the publishable figure).
+            agrural_usd = dom_brazil.get("agrural_soy_usd")
+            agrural_basis = dom_brazil.get("agrural_cbot_basis_usd")
+            if agrural_usd is not None or agrural_basis is not None:
+                parts.append('<div class="subhdr" style="font-size:14px;">AgRural Paranaguá FOB</div>')
+                ag_cards = ['<div class="grid grid-3">']
+                if agrural_usd is not None:
+                    ag_cards.append(f'<div class="mc"><div class="mc-label">AgRural (USD)</div><div class="mc-val">${agrural_usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+                if agrural_basis is not None:
+                    ab_cls = "up" if agrural_basis > 0 else "down"
+                    ag_cards.append(f'<div class="mc"><div class="mc-label">AgRural−CBOT Basis</div><div class="mc-val {ab_cls}">${agrural_basis:+,.1f}</div><div class="mc-delta muted">{"premium" if agrural_basis > 0 else "discount"}</div></div>')
+                ag_cards.append('</div>')
+                parts.append("\n".join(ag_cards))
+
         # South Africa SAFEX
         dom_sa = info.get("south_africa_domestic", {})
         if dom_sa:
@@ -515,6 +556,66 @@ def _build_relative_value(data: dict) -> str:
             parts.append(f'<div class="grid grid-2"><div class="mc"><div class="mc-label">Current (USD/MT)</div><div class="mc-val {"up" if prof else "down"}">${cur:,.1f}</div><div class="mc-delta {"up" if prof else "down"}">{"Profitable" if prof else "Negative"}</div></div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
         except Exception as e:
             log.warning("  Crush spread chart failed: %s", e)
+
+        parts.append('<hr class="divider">')
+
+    # Brazil basis — Paranaguá FOB (primary) + CEPEA Paraná (secondary) vs CBOT
+    basis = data.get("basis", {})
+    sources = basis.get("sources", {}) if basis else {}
+    primary_label = basis.get("primary") if basis else None
+    if sources and primary_label and primary_label in sources:
+        primary_stats = sources[primary_label]
+        secondary_label = next((lbl for lbl in sources if lbl != primary_label), None)
+        secondary_stats = sources.get(secondary_label) if secondary_label else None
+
+        subhdr_label = (
+            f"Brazil Basis ({primary_label} · {secondary_label} vs CBOT)"
+            if secondary_label else f"Brazil Basis ({primary_label} vs CBOT)"
+        )
+        parts.append(f'<div class="subhdr">{subhdr_label}</div>')
+
+        try:
+            fig = build_basis_chart(basis, primary_stats)
+            cur = primary_stats.get("current_usd_mt", 0.0)
+            direction = primary_stats.get("direction", "")
+            avg = primary_stats.get("avg_1y", 0.0)
+            pct = primary_stats.get("percentile_1y", 0.0)
+            # Negative basis (Brazilian discount) is export-competitive — bullish for trade flow.
+            val_class = "up" if cur < 0 else "down"
+            delta_label = f"1Y avg ${avg:+,.1f} · {pct:.0f}th pctile"
+
+            tiles = [
+                f'<div class="mc"><div class="mc-label">{primary_label} (USD/MT)</div>'
+                f'<div class="mc-val {val_class}">${cur:+,.1f}</div>'
+                f'<div class="mc-delta {val_class}">Brazilian {direction}</div>'
+                f'<div class="caption">{delta_label}</div></div>'
+            ]
+            if secondary_stats is not None:
+                sec_cur = secondary_stats.get("current_usd_mt", 0.0)
+                sec_direction = secondary_stats.get("direction", "")
+                sec_class = "up" if sec_cur < 0 else "down"
+                tiles.append(
+                    f'<div class="mc"><div class="mc-label">{secondary_label} (USD/MT)</div>'
+                    f'<div class="mc-val {sec_class}">${sec_cur:+,.1f}</div>'
+                    f'<div class="mc-delta {sec_class}">Brazilian {sec_direction}</div></div>'
+                )
+            wedge = basis.get("wedge_usd_mt")
+            if wedge is not None:
+                wedge_class = "up" if wedge > 0 else "down"
+                tiles.append(
+                    f'<div class="mc"><div class="mc-label">Port − Farm wedge</div>'
+                    f'<div class="mc-val {wedge_class}">${wedge:+,.1f}</div>'
+                    f'<div class="mc-delta muted">Paranaguá minus CEPEA</div></div>'
+                )
+
+            parts.append(
+                f'<div class="grid grid-2">'
+                f'<div>{"".join(tiles)}</div>'
+                f'<div class="chart-box">{_fig_to_html(fig)}</div>'
+                f'</div>'
+            )
+        except Exception as e:
+            log.warning("  Brazil basis chart failed: %s", e)
 
         parts.append('<hr class="divider">')
 
@@ -605,21 +706,6 @@ def _build_risk_monitor(data: dict) -> str:
         parts.append('<div class="subhdr">Weather Alerts</div>')
         for w in weather:
             parts.append(f'<div class="alert alert-warn">{_esc(w.get("region", ""))}: {_esc(w.get("alert", ""))} — Max {w.get("temp_max", "N/A")}C, Precip {w.get("precip", 0):.0f}mm</div>')
-        parts.append('<hr class="divider">')
-
-    # Options
-    options = data.get("options", {})
-    if options:
-        parts.append('<div class="subhdr">Options Sentiment</div>')
-        cards = [f'<div class="grid grid-{min(len(options), 3)}">']
-        for leg, info in options.items():
-            pcr = info.get("put_call_ratio")
-            if pcr:
-                sentiment = "Bearish" if pcr > 1 else "Bullish" if pcr < 0.7 else "Neutral"
-                sc = "down" if pcr > 1 else "up" if pcr < 0.7 else "muted"
-                cards.append(f'<div class="mc"><div class="mc-label">{_esc(leg)}</div><div class="mc-val">{pcr:.2f}</div><div class="mc-delta {sc}">{sentiment}</div></div>')
-        cards.append('</div>')
-        parts.append("\n".join(cards))
         parts.append('<hr class="divider">')
 
     # Correlations
@@ -790,6 +876,8 @@ def generate():
     log.info("Starting HTML generation...")
 
     # Load analysts
+    from analysis.briefing import generate_briefing
+    from analysis.health import run_health_check
     from analysis.soy_analytics import (
         command_center,
         demand_analysis,
@@ -801,8 +889,6 @@ def generate():
         supply_analysis,
         technicals_analysis,
     )
-    from analysis.briefing import generate_briefing
-    from analysis.health import run_health_check
 
     # Call all analysts
     log.info("Calling analysts...")

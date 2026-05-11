@@ -16,6 +16,70 @@ Key concepts for learning:
 
 import pandas as pd
 
+from config import FORWARD_CURVE_CONTRACTS
+
+
+def is_near_roll(date, commodity: str, *, window: int = 3) -> bool:
+    """Return True if `date` is within `window` business days of an estimated roll.
+
+    The roll date for each active delivery month is approximated as the first
+    business day of that month — a simple, calendar-only rule that runs without
+    any contract-level data. Used to flag technicals that may reflect a roll-day
+    discontinuity in the yfinance front-month series rather than an economic move.
+    """
+    if commodity not in FORWARD_CURVE_CONTRACTS:
+        return False
+
+    try:
+        ts = pd.Timestamp(date).normalize()
+    except (TypeError, ValueError):
+        return False
+    if pd.isna(ts):
+        return False
+
+    months = FORWARD_CURVE_CONTRACTS[commodity]["months"]
+
+    for month_offset in range(-2, 3):
+        ref = ts + pd.DateOffset(months=month_offset)
+        if ref.month not in months:
+            continue
+        first_of_month = pd.Timestamp(year=ref.year, month=ref.month, day=1)
+        roll_date = pd.bdate_range(start=first_of_month, periods=1)[0]
+        bdays = (
+            len(pd.bdate_range(ts, roll_date)) - 1
+            if roll_date >= ts
+            else len(pd.bdate_range(roll_date, ts)) - 1
+        )
+        if bdays <= window:
+            return True
+
+    return False
+
+
+def demote_near_roll_signals(signals: list[dict], *, window: int = 3) -> list[dict]:
+    """Return a copy of `signals` with near-roll entries demoted to severity=info.
+
+    yfinance front-month series have artificial price gaps on contract roll days,
+    which can spawn false MA/MACD crossovers, RSI extremes, and Bollinger squeezes.
+    Anything within `window` business days of a calendar-estimated roll is downgraded
+    to `info` and tagged `(near-roll)` so downstream consumers can distinguish.
+    """
+    out: list[dict] = []
+    for sig in signals:
+        date = sig.get("date")
+        commodity = sig.get("commodity")
+        if date is None or commodity is None or not is_near_roll(date, commodity, window=window):
+            out.append(sig)
+            continue
+
+        demoted = dict(sig)
+        demoted["severity"] = "info"
+        desc = demoted.get("description", "")
+        if "(near-roll)" not in desc:
+            demoted["description"] = f"{desc} (near-roll)" if desc else "(near-roll)"
+        out.append(demoted)
+    return out
+
 
 def detect_ma_crossovers(df: pd.DataFrame, commodity: str) -> list[dict]:
     """
@@ -37,7 +101,7 @@ def detect_ma_crossovers(df: pd.DataFrame, commodity: str) -> list[dict]:
     list[dict]
         Each dict has: date, commodity, signal_type, severity, description
     """
-    signals = []
+    signals: list[dict] = []
 
     if len(df) < 2:
         return signals
@@ -46,46 +110,50 @@ def detect_ma_crossovers(df: pd.DataFrame, commodity: str) -> list[dict]:
     yesterday = df.iloc[-2]
 
     # --- 20/50 crossover (moderate signal) ---
-    if "MA_20" in df.columns and "MA_50" in df.columns:
-        if (pd.notna(today["MA_20"]) and pd.notna(today["MA_50"])
-                and pd.notna(yesterday["MA_20"]) and pd.notna(yesterday["MA_50"])):
-            if yesterday["MA_20"] <= yesterday["MA_50"] and today["MA_20"] > today["MA_50"]:
-                signals.append({
-                    "date": today.name if hasattr(today.name, "date") else str(today.name),
-                    "commodity": commodity,
-                    "signal_type": "golden_cross_20_50",
-                    "severity": "warning",
-                    "description": f"{commodity} golden cross (20-day MA crossed above 50-day MA)",
-                })
-            if yesterday["MA_20"] >= yesterday["MA_50"] and today["MA_20"] < today["MA_50"]:
-                signals.append({
-                    "date": today.name if hasattr(today.name, "date") else str(today.name),
-                    "commodity": commodity,
-                    "signal_type": "death_cross_20_50",
-                    "severity": "warning",
-                    "description": f"{commodity} death cross (20-day MA crossed below 50-day MA)",
-                })
+    if (
+        "MA_20" in df.columns and "MA_50" in df.columns
+        and pd.notna(today["MA_20"]) and pd.notna(today["MA_50"])
+        and pd.notna(yesterday["MA_20"]) and pd.notna(yesterday["MA_50"])
+    ):
+        if yesterday["MA_20"] <= yesterday["MA_50"] and today["MA_20"] > today["MA_50"]:
+            signals.append({
+                "date": today.name if hasattr(today.name, "date") else str(today.name),
+                "commodity": commodity,
+                "signal_type": "golden_cross_20_50",
+                "severity": "warning",
+                "description": f"{commodity} golden cross (20-day MA crossed above 50-day MA)",
+            })
+        if yesterday["MA_20"] >= yesterday["MA_50"] and today["MA_20"] < today["MA_50"]:
+            signals.append({
+                "date": today.name if hasattr(today.name, "date") else str(today.name),
+                "commodity": commodity,
+                "signal_type": "death_cross_20_50",
+                "severity": "warning",
+                "description": f"{commodity} death cross (20-day MA crossed below 50-day MA)",
+            })
 
     # --- 50/200 crossover (major signal — the "big" golden/death cross) ---
-    if "MA_50" in df.columns and "MA_200" in df.columns:
-        if (pd.notna(today["MA_50"]) and pd.notna(today["MA_200"])
-                and pd.notna(yesterday["MA_50"]) and pd.notna(yesterday["MA_200"])):
-            if yesterday["MA_50"] <= yesterday["MA_200"] and today["MA_50"] > today["MA_200"]:
-                signals.append({
-                    "date": today.name if hasattr(today.name, "date") else str(today.name),
-                    "commodity": commodity,
-                    "signal_type": "golden_cross_50_200",
-                    "severity": "alert",
-                    "description": f"{commodity} MAJOR golden cross (50-day MA crossed above 200-day MA)",
-                })
-            if yesterday["MA_50"] >= yesterday["MA_200"] and today["MA_50"] < today["MA_200"]:
-                signals.append({
-                    "date": today.name if hasattr(today.name, "date") else str(today.name),
-                    "commodity": commodity,
-                    "signal_type": "death_cross_50_200",
-                    "severity": "alert",
-                    "description": f"{commodity} MAJOR death cross (50-day MA crossed below 200-day MA)",
-                })
+    if (
+        "MA_50" in df.columns and "MA_200" in df.columns
+        and pd.notna(today["MA_50"]) and pd.notna(today["MA_200"])
+        and pd.notna(yesterday["MA_50"]) and pd.notna(yesterday["MA_200"])
+    ):
+        if yesterday["MA_50"] <= yesterday["MA_200"] and today["MA_50"] > today["MA_200"]:
+            signals.append({
+                "date": today.name if hasattr(today.name, "date") else str(today.name),
+                "commodity": commodity,
+                "signal_type": "golden_cross_50_200",
+                "severity": "alert",
+                "description": f"{commodity} MAJOR golden cross (50-day MA crossed above 200-day MA)",
+            })
+        if yesterday["MA_50"] >= yesterday["MA_200"] and today["MA_50"] < today["MA_200"]:
+            signals.append({
+                "date": today.name if hasattr(today.name, "date") else str(today.name),
+                "commodity": commodity,
+                "signal_type": "death_cross_50_200",
+                "severity": "alert",
+                "description": f"{commodity} MAJOR death cross (50-day MA crossed below 200-day MA)",
+            })
 
     return signals
 
@@ -111,7 +179,7 @@ def detect_volume_spikes(df: pd.DataFrame, commodity: str, threshold: float = 2.
     list[dict]
         Signal dicts if volume spike detected.
     """
-    signals = []
+    signals: list[dict] = []
 
     if "Volume" not in df.columns or len(df) < 21:
         return signals
@@ -151,7 +219,7 @@ def detect_rsi_extremes(df: pd.DataFrame, commodity: str) -> list[dict]:
     list[dict]
         Signal dicts for RSI extremes.
     """
-    signals = []
+    signals: list[dict] = []
 
     if "RSI" not in df.columns or df.empty:
         return signals
@@ -206,7 +274,7 @@ def detect_rsi_divergence(df: pd.DataFrame, commodity: str, lookback: int = 20) 
     list[dict]
         Signal dicts for detected divergences.
     """
-    signals = []
+    signals: list[dict] = []
 
     if "RSI" not in df.columns or "Close" not in df.columns or len(df) < lookback + 1:
         return signals
@@ -222,7 +290,7 @@ def detect_rsi_divergence(df: pd.DataFrame, commodity: str, lookback: int = 20) 
     rsi_at_price_high_idx = recent["Close"].idxmax()
     rsi_at_price_high = recent.loc[rsi_at_price_high_idx, "RSI"] if pd.notna(rsi_at_price_high_idx) else None
 
-    if (pd.notna(rsi_at_price_high)
+    if (rsi_at_price_high is not None and pd.notna(rsi_at_price_high)
             and current["Close"] >= price_high * 0.99  # price at/near high
             and current["RSI"] < rsi_at_price_high - 5  # RSI meaningfully lower
             and rsi_at_price_high_idx != df.index[-1]):  # not the same bar
@@ -239,7 +307,7 @@ def detect_rsi_divergence(df: pd.DataFrame, commodity: str, lookback: int = 20) 
     rsi_at_price_low_idx = recent["Close"].idxmin()
     rsi_at_price_low = recent.loc[rsi_at_price_low_idx, "RSI"] if pd.notna(rsi_at_price_low_idx) else None
 
-    if (pd.notna(rsi_at_price_low)
+    if (rsi_at_price_low is not None and pd.notna(rsi_at_price_low)
             and current["Close"] <= price_low * 1.01  # price at/near low
             and current["RSI"] > rsi_at_price_low + 5  # RSI meaningfully higher
             and rsi_at_price_low_idx != df.index[-1]):  # not the same bar
@@ -273,7 +341,7 @@ def detect_macd_crossover(df: pd.DataFrame, commodity: str) -> list[dict]:
     list[dict]
         Signal dicts for MACD crossovers.
     """
-    signals = []
+    signals: list[dict] = []
 
     if "MACD" not in df.columns or "MACD_Signal" not in df.columns or len(df) < 2:
         return signals
@@ -326,7 +394,7 @@ def detect_bollinger_squeeze(df: pd.DataFrame, commodity: str) -> list[dict]:
     list[dict]
         Signal dicts for Bollinger squeezes.
     """
-    signals = []
+    signals: list[dict] = []
 
     if "BB_Width" not in df.columns or len(df) < 120:
         return signals
@@ -365,7 +433,7 @@ def detect_all_signals(df: pd.DataFrame, commodity: str) -> list[dict]:
     list[dict]
         Combined list of all detected signals.
     """
-    signals = []
+    signals: list[dict] = []
     signals.extend(detect_ma_crossovers(df, commodity))
     signals.extend(detect_volume_spikes(df, commodity))
     signals.extend(detect_rsi_extremes(df, commodity))

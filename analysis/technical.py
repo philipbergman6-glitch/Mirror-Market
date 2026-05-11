@@ -16,7 +16,7 @@ Key concepts for learning:
 import pandas as pd
 
 
-def add_moving_averages(df: pd.DataFrame, windows: list[int] = [20, 50, 200]) -> pd.DataFrame:
+def add_moving_averages(df: pd.DataFrame, windows: list[int] | None = None) -> pd.DataFrame:
     """
     Add moving average columns (e.g. MA_20, MA_50, MA_200).
 
@@ -28,14 +28,16 @@ def add_moving_averages(df: pd.DataFrame, windows: list[int] = [20, 50, 200]) ->
     ----------
     df : pd.DataFrame
         Must have a 'Close' column.
-    windows : list[int]
-        Moving average window sizes to compute.
+    windows : list[int] | None
+        Moving average window sizes to compute. Defaults to [20, 50, 200].
 
     Returns
     -------
     pd.DataFrame
         Same DataFrame with new MA_N columns added.
     """
+    if windows is None:
+        windows = [20, 50, 200]
     df = df.copy()
     for w in windows:
         df[f"MA_{w}"] = df["Close"].rolling(window=w).mean()
@@ -198,7 +200,7 @@ def calculate_bollinger(df: pd.DataFrame, window: int = 20, num_std: float = 2.0
     return df
 
 
-def calculate_volatility(df: pd.DataFrame, windows: list[int] = [20, 60]) -> pd.DataFrame:
+def calculate_volatility(df: pd.DataFrame, windows: list[int] | None = None) -> pd.DataFrame:
     """
     Add historical volatility columns (annualised).
 
@@ -214,14 +216,16 @@ def calculate_volatility(df: pd.DataFrame, windows: list[int] = [20, 60]) -> pd.
     ----------
     df : pd.DataFrame
         Must have a 'Close' column.
-    windows : list[int]
-        Rolling window sizes (default [20, 60]).
+    windows : list[int] | None
+        Rolling window sizes. Defaults to [20, 60].
 
     Returns
     -------
     pd.DataFrame
         Same DataFrame with 'HV_20', 'HV_60' (etc.) columns as percentages.
     """
+    if windows is None:
+        windows = [20, 60]
     df = df.copy()
     daily_returns = df["Close"].pct_change()
     for w in windows:

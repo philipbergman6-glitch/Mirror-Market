@@ -17,15 +17,18 @@ Key concepts for learning:
 
 import json
 import logging
-import time
 
-import requests
 import pandas as pd
+import requests
 
 from config import (
-    OPENMETEO_FORECAST_URL, GROWING_REGIONS, WEATHER_DAILY_VARS,
-    REQUEST_TIMEOUT, MAX_RETRIES, RETRY_DELAY,
+    GROWING_REGIONS,
+    MAX_RETRIES,
+    OPENMETEO_FORECAST_URL,
+    REQUEST_TIMEOUT,
+    WEATHER_DAILY_VARS,
 )
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +87,7 @@ def fetch_region_weather(
             if resp.status_code != 200:
                 logger.warning("HTTP %d: %s", resp.status_code, resp.text[:200])
                 if attempt < MAX_RETRIES:
-                    time.sleep(RETRY_DELAY)
+                    retry_sleep(attempt)
                     continue
                 return pd.DataFrame()
 
@@ -114,7 +117,7 @@ def fetch_region_weather(
                 attempt, MAX_RETRIES, region_name, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error(
         "All %d attempts failed for weather %s — returning empty DataFrame",

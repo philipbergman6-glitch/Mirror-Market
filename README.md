@@ -280,6 +280,26 @@ Sanity checks run during cleaning:
 - Flags zero/negative volume (data gap)
 - Warnings only — doesn't block the pipeline
 
+## Trader-grade signals
+
+The analysis layer ships a set of signals modelled on the metrics commodity
+desks actually watch — not just generic technicals. Each one is computed from
+the layers above and surfaced in both the daily briefing and the dashboard.
+
+| Signal | Where it lives | What it tells you |
+|--------|----------------|-------------------|
+| **Stocks-to-use ratio** | `analysis/stocks_to_use.py` | US balance-sheet tightness from PSD: `ending_stocks / total_use`. Falling ratio = tightening supply; below historical bands triggers a tight-supply alert in the briefing. |
+| **Brazil basis** | `analysis/spreads.compute_brazil_basis` | Paranaguá FOB (Layer 19, AgRural) minus CBOT front-month, both converted to USD/MT. Positive basis = Brazilian origin trading at a premium to Chicago; the trade-convention number desks quote daily. |
+| **Soy-oil value share** | `analysis/spreads.py` | Share of the crushed bean's value attributable to oil vs meal: `(oil × 11) / ((oil × 11) + (meal × 2.2))`. Rising share = biofuel/edible-oil demand pulling the complex; falling share = livestock/meal-led market. |
+| **COT positioning z-scores** | `analysis/zscore.py` (consumed in COT section) | Rolling z-score of managed-money net positioning vs its own history. \|z\| ≥ 2 flags extreme positioning and elevated reversal risk — far more informative than raw net contracts. |
+| **Weather anomaly z-scores** | `analysis/zscore.py` (consumed in weather section) | Rolling z-score for precipitation and temperature per region vs the multi-year seasonal norm. Surfaces *anomalies* (dry vs normal-for-this-week) rather than absolute thresholds, which matters in shoulder seasons. |
+| **Briefing archive** | `briefings` table (see `pipeline/schema.py`, `pipeline/store.save_briefing`) | Every generated briefing is persisted with date, text, and a structured `snapshot_json` payload. Enables time-series review, A/B comparison of revisions, and downstream backtesting against subsequent price action. |
+
+> Snapshot coverage caveat: `analysis/briefing/snapshot.py` currently captures
+> prices/technicals, crush spread, and COT into `snapshot_json`. Brazil basis,
+> stocks-to-use, and the z-score sections are *rendered* in the text briefing
+> but not yet in the structured snapshot — tracked as a backtesting follow-up.
+
 ## Dashboard
 
 Generated with `python scripts/generate_html.py` and deployed to GitHub Pages. 9 pages of visual analysis:
@@ -297,6 +317,65 @@ Generated with `python scripts/generate_html.py` and deployed to GitHub Pages. 9
 | **About** | Data sources, methodology, price unit explanations |
 
 All pages reuse existing `read_*()` and analysis functions. Data updates when you re-run `python main.py`.
+
+## Required vs Optional Layers
+
+Each data layer below is one of the 18 source layers the pipeline pulls. The
+pipeline is built so that **any layer can fail and the rest still run** —
+no API key means that layer is skipped, no exception. The dashboard shows
+"No data" for sections backed by skipped layers.
+
+| Layer | Source | Key required | Runs without key |
+|------:|--------|--------------|------------------|
+| 1     | Yahoo Finance — commodity futures      | —                  | yes |
+| 2     | USDA NASS — crop fundamentals (annual) | `USDA_API_KEY`     | no  |
+| 2b    | USDA NASS — crop progress (weekly)     | `USDA_API_KEY`     | no  |
+| 3     | FRED — economic indicators             | `FRED_API_KEY`     | no  |
+| 4     | CFTC — COT positioning                 | —                  | yes |
+| 5     | Open-Meteo — weather (24 regions)      | —                  | yes |
+| 6     | USDA PSD — global supply/demand        | —                  | yes |
+| 7     | Yahoo Finance — currency pairs         | —                  | yes |
+| 8     | World Bank — monthly benchmark prices  | —                  | yes |
+| 9     | AKShare — DCE Chinese futures          | —                  | yes |
+| 10    | USDA FAS — weekly export sales         | `FAS_API_KEY`      | no  |
+| 11    | Yahoo Finance — forward contract months| —                  | yes |
+| 12    | USDA WASDE — monthly forecasts (OCE XLS)| —                 | yes |
+| 13    | EIA — biofuel & energy                 | `EIA_API_KEY`      | no  |
+| 14    | USDA — crush + export inspections      | `USDA_API_KEY`     | no  |
+| 15    | CONAB — Brazil crop estimates          | —                  | yes |
+| 16    | NCDEX — India domestic soy             | —                  | yes |
+| 17    | CEPEA — Brazil farm-gate soy           | —                  | yes |
+| 18    | JSE SAFEX — South Africa soy           | —                  | yes |
+| 19    | AgRural — Paranaguá FOB soy            | —                  | yes |
+
+> **Layer 12 note**: WASDE no longer routes through NASS QuickStats — `fetchers/wasde.py`
+> pulls the canonical XLS from USDA OCE (`wasdeMMYY.xls`) directly, so no API key
+> is required.
+>
+> **Layer 19 note**: AgRural is an HTML scraper against `precossojaemilho` and is
+> fragile by nature — page-shape changes are caught by `ScraperShapeError` and
+> degrade gracefully (the layer is skipped, the rest of the pipeline runs).
+> Stored raw BRL/MT is used internally; the public dashboard exposes only the
+> derived USD/MT Brazil basis (Paranaguá FOB vs CBOT).
+
+### What you get with zero API keys
+
+11 of 18 layers run with no API keys at all. That gives you:
+
+- Commodity futures + currencies + COT positioning + forward curves
+- Weather (24 regions) and global supply/demand (USDA PSD, 27 countries)
+- DCE Chinese futures, World Bank monthly prices, CONAB Brazil estimates
+- India NCDEX, Brazil CEPEA, and South Africa SAFEX domestic prices
+
+The 7 layers that do require keys (USDA NASS, USDA FAS, FRED, EIA) are all
+**free** — just register and copy the key. None of the data sources are paid.
+
+### What the dashboard shows when a layer is missing
+
+The static HTML dashboard renders every page even when its source layer is
+empty. Charts collapse to "No data available" placeholders; the daily
+briefing emits the section header with a "No data" line. This is by design
+so layer failures are visible rather than hidden.
 
 ## What's Missing (Optional Paid Upgrades)
 
@@ -328,14 +407,17 @@ These can be tuned without touching analysis code:
 ## How to Run
 
 ```bash
-# Set API keys (one-time, optional — 8 of 18 layers work without them)
+# Set API keys (one-time, optional — 11 of 18 layers work without them)
 export USDA_API_KEY="your-key-here"
 export FRED_API_KEY="your-key-here"
 export FAS_API_KEY="your-key-here"
 export EIA_API_KEY="your-key-here"
 
-# Install dependencies
+# Install runtime dependencies
 pip install -r requirements.txt
+
+# (For development: adds pytest, ruff, mypy, etc.)
+# pip install -r requirements-dev.txt
 
 # Run the pipeline (fetches all 18 layers, cleans, validates, stores)
 python main.py
@@ -402,7 +484,12 @@ Mirror_Market/
         correlations.py                # Cross-market correlation analysis
         seasonal.py                    # Seasonal pattern comparison
         forward_curve.py               # Forward curve analysis (contango/backwardation)
-        briefing.py                    # Daily briefing generator (all sections + Market Drivers)
+        loaders.py                     # Shared price/currency loaders (used by briefing + dashboard)
+        briefing/                      # Daily briefing package — orchestrator + per-section modules
+            __init__.py                #   exports generate_briefing(), generate_briefing_data(), BriefingData
+            orchestrator.py            #   stitches sections together
+            types.py                   #   BriefingData dataclass
+            sections/                  #   one module per section (prices, crush, wasde, ...)
         soy_analytics.py               # 9 analyst functions for the dashboard
         health.py                      # Per-commodity data health checks
     app/

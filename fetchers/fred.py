@@ -18,15 +18,18 @@ Key concepts for learning:
 
 import json
 import logging
-import time
 
-import requests
 import pandas as pd
+import requests
 
 from config import (
-    FRED_API_KEY, FRED_BASE_URL, FRED_SERIES,
-    REQUEST_TIMEOUT, MAX_RETRIES, RETRY_DELAY,
+    FRED_API_KEY,
+    FRED_BASE_URL,
+    FRED_SERIES,
+    MAX_RETRIES,
+    REQUEST_TIMEOUT,
 )
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +73,7 @@ def fetch_series(
             if resp.status_code != 200:
                 logger.warning("HTTP %d: %s", resp.status_code, resp.text[:200])
                 if attempt < MAX_RETRIES:
-                    time.sleep(RETRY_DELAY)
+                    retry_sleep(attempt)
                     continue
                 return pd.Series(dtype=float)
 
@@ -98,7 +101,7 @@ def fetch_series(
                 attempt, MAX_RETRIES, series_id, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for FRED %s — returning empty Series",
                  MAX_RETRIES, series_id)

@@ -1,18 +1,21 @@
 """
-Crush spread calculation for soybeans.
+Spread calculations for the soy complex.
 
-The crush spread measures how profitable it is to "crush" (process)
-soybeans into soybean oil and soybean meal.
+Two daily, cross-market relationships are computed here:
 
-Key concepts for learning:
-    - Soybeans are crushed into two products: oil (cooking, biodiesel) and meal (animal feed)
-    - The crush margin = value of products - cost of raw soybeans
-    - Positive margin = profitable to crush → processors buy more beans → supports prices
-    - Negative margin = losses → processors slow down → less demand for beans
-    - This is one of the most important relationships in agricultural commodities
+1. Crush spread (CBOT board crush): (Oil × 11) + (Meal × 2.2) − Soybeans.
+   Tells you whether processors can profitably crush beans into oil+meal.
+
+2. Brazil basis (CEPEA Paraná farm-gate vs CBOT): the price differential
+   between Brazilian domestic soy and CBOT futures, normalized to USD/MT.
+   Negative basis = Brazilian product trades below CBOT (export-competitive).
+   This is a Brazil-domestic-vs-CBOT spread; the true Paranaguá port FOB
+   premium is a future fetcher (Phase 2).
 """
 
 import pandas as pd
+
+from pipeline.units import to_metric_tons
 
 
 def compute_crush_spread(
@@ -44,7 +47,10 @@ def compute_crush_spread(
     Returns
     -------
     pd.DataFrame
-        Columns: Date, crush_spread, soybeans_close, oil_close, meal_close
+        Columns: Date, soybeans_close, oil_close, meal_close, crush_spread, oil_value_share
+
+        oil_value_share = (oil x 11) / (oil x 11 + meal x 2.2), range 0-1.
+        Rising share = biodiesel/oil demand dominating; falling = meal/livestock demand dominating.
     """
     # Align all three on the same dates using inner join
     combined = pd.DataFrame({
@@ -53,13 +59,117 @@ def compute_crush_spread(
         "meal_close":     meal_df["Close"],
     }).dropna()
 
-    combined["crush_spread"] = (
-        combined["oil_close"] * 11
-        + combined["meal_close"] * 2.2
-        - combined["soybeans_close"]
-    )
+    oil_value = combined["oil_close"] * 11
+    meal_value = combined["meal_close"] * 2.2
+    combined["crush_spread"] = oil_value + meal_value - combined["soybeans_close"]
+    combined["oil_value_share"] = oil_value / (oil_value + meal_value)
 
     result = combined.reset_index()
-    result.columns = ["Date", "soybeans_close", "oil_close", "meal_close", "crush_spread"]
+    result.columns = ["Date", "soybeans_close", "oil_close", "meal_close", "crush_spread", "oil_value_share"]
 
     return result
+
+
+def compute_brazil_basis(
+    soybeans_df: pd.DataFrame,
+    cepea_df: pd.DataFrame,
+    brl_usd_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Compute the daily Brazil-domestic-vs-CBOT basis in USD/MT.
+
+    Formula (all aligned on Date):
+        cbot_usd_mt  = to_metric_tons(soybeans_close_cents_bu, "Soybeans")
+        cepea_usd_mt = cepea_price_brl_mt * brl_usd_rate     # USD per BRL
+        basis_usd_mt = cepea_usd_mt − cbot_usd_mt
+        basis_pct    = basis_usd_mt / cbot_usd_mt
+
+    The stored BRL/USD series uses Yahoo Finance ticker BRLUSD=X, which
+    quotes USD per BRL (≈ 0.18). To convert BRL/MT → USD/MT, multiply.
+    (This matches the convention already used in
+    `analysis/soy_analytics.emerging_markets_analysis`.)
+
+    Negative basis = Brazilian product trades at a discount to CBOT
+    (export-competitive). Positive basis = domestic premium.
+
+    Parameters
+    ----------
+    soybeans_df : pd.DataFrame
+        CBOT soybean prices with DatetimeIndex and a 'Close' column in
+        cents/bushel (native CBOT unit).
+    cepea_df : pd.DataFrame
+        CEPEA spot prices with a price column in BRL/MT. Accepts either
+        a 'Date' column or a DatetimeIndex, and either column name:
+        `price_brl_mt` (raw fetcher output) or `price_brl` (the DB schema
+        rename in `save_brazil_spot`). Both are BRL/MT.
+    brl_usd_df : pd.DataFrame
+        BRL/USD rate with DatetimeIndex and a 'Close' column. Close is
+        USD-per-BRL (yfinance BRLUSD=X convention).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: Date, cbot_usd_mt, cepea_usd_mt, brl_usd, basis_usd_mt,
+        basis_pct. Rows where any input is missing or where brl_usd ≤ 0
+        are dropped. Empty inputs return an empty DataFrame with the
+        expected columns.
+    """
+    empty_columns = ["Date", "cbot_usd_mt", "cepea_usd_mt", "brl_usd",
+                     "basis_usd_mt", "basis_pct"]
+
+    if soybeans_df.empty or cepea_df.empty or brl_usd_df.empty:
+        return pd.DataFrame(columns=empty_columns)
+
+    # Normalize CEPEA into a Date-indexed Series of BRL/MT. The fetcher emits
+    # `price_brl_mt`; the storage layer renames it to `price_brl` (still BRL/MT)
+    # when persisting, so `read_brazil_spot()` returns the latter. Accept both.
+    cepea = cepea_df.copy()
+    if "Date" in cepea.columns:
+        cepea["Date"] = pd.to_datetime(cepea["Date"])
+        cepea = cepea.set_index("Date")
+    if "price_brl_mt" in cepea.columns:
+        price_col = "price_brl_mt"
+    elif "price_brl" in cepea.columns:
+        price_col = "price_brl"
+    else:
+        raise KeyError(
+            "cepea_df must have a 'price_brl_mt' or 'price_brl' column (BRL/MT)"
+        )
+    cepea_series = pd.to_numeric(cepea[price_col], errors="coerce").dropna()
+
+    soybeans_close = pd.to_numeric(soybeans_df["Close"], errors="coerce").dropna()
+    brl_close = pd.to_numeric(brl_usd_df["Close"], errors="coerce").dropna()
+
+    combined = pd.DataFrame({
+        "soybeans_cents_bu": soybeans_close,
+        "cepea_brl_mt":      cepea_series,
+        "brl_usd":           brl_close,
+    }).dropna()
+
+    # Drop rows where the FX rate would produce divide-by-zero downstream
+    # (basis_pct denominator) or nonsensical USD values.
+    combined = combined[combined["brl_usd"] > 0]
+    if combined.empty:
+        return pd.DataFrame(columns=empty_columns)
+
+    cbot_usd_mt = combined["soybeans_cents_bu"].apply(
+        lambda v: to_metric_tons(v, "Soybeans")
+    )
+    cepea_usd_mt = combined["cepea_brl_mt"] * combined["brl_usd"]
+    basis_usd_mt = cepea_usd_mt - cbot_usd_mt
+    basis_pct = basis_usd_mt / cbot_usd_mt
+
+    result = pd.DataFrame({
+        "cbot_usd_mt":  cbot_usd_mt,
+        "cepea_usd_mt": cepea_usd_mt,
+        "brl_usd":      combined["brl_usd"],
+        "basis_usd_mt": basis_usd_mt,
+        "basis_pct":    basis_pct,
+    }).reset_index().rename(columns={"index": "Date"})
+
+    # Reset_index from a DatetimeIndex named "Date" already labels the column
+    # "Date"; the rename above is a no-op safety net for unnamed indices.
+    if "Date" not in result.columns and result.columns[0] != "Date":
+        result = result.rename(columns={result.columns[0]: "Date"})
+
+    return result[empty_columns]

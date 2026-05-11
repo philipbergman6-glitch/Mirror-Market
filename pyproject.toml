@@ -1,0 +1,52 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "--cov --cov-fail-under=70"
+
+[tool.coverage.run]
+source = ["pipeline", "analysis", "app"]
+omit = [
+    "tests/*",
+    "scripts/*",
+    "fetchers/*",
+    "main.py",
+    "config.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = [
+    ".venv",
+    "docs",
+    "data",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "DTZ003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+# generate_html.py builds long HTML f-strings; wrapping hurts readability
+"scripts/generate_html.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+strict_equality = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+exclude = [
+    "^\\.venv/",
+    "^docs/",
+    "^data/",
+    "^scripts/",
+]

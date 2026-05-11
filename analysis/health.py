@@ -12,8 +12,7 @@ Key concepts for learning:
 
 import logging
 import os
-import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -91,7 +90,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
     Returns a list of issue dicts.
     """
     issues = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
 
     with get_connection() as conn:
         try:
@@ -123,7 +122,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
             })
 
     # Check for stale data
-    for key, (last_date, count) in found.items():
+    for key, (last_date, _count) in found.items():
         if last_date is None:
             continue
         try:
@@ -178,7 +177,7 @@ def _check_flat_prices() -> list[dict]:
     Detect commodities where the Close price hasn't changed for 3+ consecutive days.
     This could mean the source is returning cached/stale data.
     """
-    issues = []
+    issues: list[dict] = []
     if not is_cloud() and not os.path.exists(DB_PATH):
         return issues
 
@@ -232,6 +231,9 @@ def _check_india_domestic() -> list[dict]:
 def _check_brazil_spot() -> list[dict]:
     """Check CEPEA Brazil domestic soy prices for freshness (daily = >2 days stale)."""
     from config import CEPEA_COMMODITIES
+    # TODO Phase 2.1: also flag when Paranaguá FOB (AgRural) vs CEPEA Paraná
+    # diverges beyond the historical port-vs-farm wedge band — a structural break
+    # there is a stronger trade signal than either source's absolute freshness.
     return _check_table_freshness("brazil_spot_prices", "commodity", "Date", CEPEA_COMMODITIES)
 
 
@@ -249,8 +251,8 @@ def _build_commodity_status() -> list[dict]:
     Each entry: {commodity, table, last_date, rows, age_days, status}
     status is one of: "fresh", "aging", "stale", "missing"
     """
-    status_list = []
-    today = datetime.utcnow().date()
+    status_list: list[dict] = []
+    today = datetime.now(timezone.utc).date()
 
     table_specs = [
         ("prices",                "commodity", "Date"),

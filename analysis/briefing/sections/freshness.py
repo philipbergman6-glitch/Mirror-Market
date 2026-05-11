@@ -1,0 +1,42 @@
+"""Data freshness warnings — shown at the top of the briefing."""
+
+from datetime import datetime, timedelta, timezone
+
+import pandas as pd
+
+from config import FRESHNESS_WARNING_DAYS
+from pipeline.query import read_freshness
+
+
+def format() -> str:  # noqa: A001 — module-scope name, no conflict with builtin
+    """Stale-layer warnings + per-commodity health summary."""
+    sections = []
+
+    freshness = read_freshness()
+    layer_warnings = []
+    if not freshness.empty:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        threshold = timedelta(days=FRESHNESS_WARNING_DAYS)
+
+        for _, row in freshness.iterrows():
+            last = row["last_success"]
+            if pd.notna(last):
+                age = now - last
+                if age > threshold:
+                    days_old = age.days
+                    layer_warnings.append(
+                        f"  WARNING: {row['layer_name']} data is {days_old} days old"
+                    )
+
+    if layer_warnings:
+        sections.append("DATA FRESHNESS WARNINGS:\n" + "\n".join(layer_warnings))
+
+    try:
+        from analysis.health import run_health_check
+        health = run_health_check()
+        if health["issues"]:
+            sections.append(health["summary"])
+    except Exception:
+        pass
+
+    return "\n\n".join(sections)

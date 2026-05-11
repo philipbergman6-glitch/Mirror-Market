@@ -199,19 +199,6 @@ CREATE TABLE IF NOT EXISTS brazil_estimates (
 );
 """
 
-_CREATE_OPTIONS_SENTIMENT = """
-CREATE TABLE IF NOT EXISTS options_sentiment (
-    commodity       TEXT NOT NULL,
-    Date            TEXT NOT NULL,
-    total_call_oi   REAL,
-    total_put_oi    REAL,
-    put_call_ratio  REAL,
-    avg_call_iv     REAL,
-    avg_put_iv      REAL,
-    PRIMARY KEY (commodity, Date)
-);
-"""
-
 _CREATE_INDIA_DOMESTIC = """
 CREATE TABLE IF NOT EXISTS india_domestic_prices (
     Date        TEXT NOT NULL,
@@ -250,8 +237,10 @@ CREATE TABLE IF NOT EXISTS safex_prices (
 _CREATE_DATA_FRESHNESS = """
 CREATE TABLE IF NOT EXISTS data_freshness (
     layer_name      TEXT    NOT NULL PRIMARY KEY,
-    last_success    TEXT    NOT NULL,
-    rows_fetched    INTEGER
+    last_success    TEXT,                              -- null if never succeeded
+    last_attempt    TEXT,                              -- timestamp of most recent run
+    rows_fetched    INTEGER,
+    status          TEXT    NOT NULL DEFAULT 'success' -- 'success' | 'failed'
 );
 """
 
@@ -266,4 +255,90 @@ CREATE TABLE IF NOT EXISTS commodity_freshness (
 );
 """
 
+_CREATE_BRIEFINGS = """
+CREATE TABLE IF NOT EXISTS briefings (
+    briefing_date   TEXT    NOT NULL PRIMARY KEY,
+    text            TEXT    NOT NULL,
+    signals_json    TEXT,
+    snapshot_json   TEXT,
+    generated_at    TEXT    NOT NULL
+);
+"""
+
+
+# Bundle for callers that need every table's DDL in one iterable.
+ALL_SCHEMAS = (
+    _CREATE_PRICES,
+    _CREATE_ECONOMIC,
+    _CREATE_USDA,
+    _CREATE_COT,
+    _CREATE_WEATHER,
+    _CREATE_PSD,
+    _CREATE_CURRENCIES,
+    _CREATE_WORLDBANK,
+    _CREATE_DCE_FUTURES,
+    _CREATE_CROP_PROGRESS,
+    _CREATE_EXPORT_SALES,
+    _CREATE_FORWARD_CURVE,
+    _CREATE_WASDE,
+    _CREATE_INSPECTIONS,
+    _CREATE_EIA_ENERGY,
+    _CREATE_BRAZIL_ESTIMATES,
+    _CREATE_DATA_FRESHNESS,
+    _CREATE_COMMODITY_FRESHNESS,
+    _CREATE_INDIA_DOMESTIC,
+    _CREATE_BRAZIL_SPOT,
+    _CREATE_SAFEX,
+    _CREATE_BRIEFINGS,
+)
+
+
+# Belt-and-suspenders: explicit UNIQUE INDEXes on every PK column set.
+# PRIMARY KEY already implies a unique index in SQLite, but defining them
+# explicitly keeps the contract visible and protects any older user DBs
+# that may pre-date the current PK constraints.
+UNIQUE_INDEXES = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_prices_commodity_date "
+    "ON prices (commodity, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_economic_series_date "
+    "ON economic (series_name, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_usda_cat_year_desc "
+    "ON usda (stat_category, year, short_desc);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cot_commodity_date "
+    "ON cot (commodity, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_weather_region_date "
+    "ON weather (region, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_psd_commodity_country_year_attr "
+    "ON psd (commodity, country, year, attribute);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_currencies_pair_date "
+    "ON currencies (pair, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_worldbank_commodity_date "
+    "ON worldbank_prices (commodity, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_dce_futures_commodity_date "
+    "ON dce_futures (commodity, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_crop_progress_commodity_week_desc "
+    "ON crop_progress (commodity, week_ending, short_desc);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_export_sales_commodity_week_country "
+    "ON export_sales (commodity, week_ending, country);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_forward_curve_commodity_contract "
+    "ON forward_curve (commodity, contract_month);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_wasde_commodity_year_attr_period "
+    "ON wasde (commodity, year, attribute, reference_period);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_inspections_commodity_week "
+    "ON inspections (commodity, week_ending);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_eia_energy_series_date "
+    "ON eia_energy (series_name, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_brazil_estimates_keys "
+    "ON brazil_estimates (source, commodity, crop_year, attribute, report_date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_commodity_freshness_keys "
+    "ON commodity_freshness (commodity, table_name);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_india_domestic_date_commodity "
+    "ON india_domestic_prices (Date, commodity);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_brazil_spot_date_commodity "
+    "ON brazil_spot_prices (Date, commodity);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_safex_date_commodity "
+    "ON safex_prices (Date, commodity);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
+    "ON briefings (briefing_date);",
+)
 

@@ -241,6 +241,9 @@ details .det-content { padding: 0 16px 16px; }
   </div>
 
   {% if technicals %}
+  <div class="alert alert-warn" style="margin-bottom: 16px;">
+    Charts use the yfinance front-month series. On contract roll days the underlying contract changes, which can introduce artificial price gaps; signals within ±3 trading days of a roll are demoted to <em>info</em> severity. Crush spread, basis, and absolute price levels elsewhere on the dashboard are unaffected.
+  </div>
   <div class="tabs" data-tabgroup="tech">
     {% for leg in technicals %}
     <div class="tab{% if loop.first %} active{% endif %}" data-tab="tech-{{ loop.index }}">{{ leg.name }}</div>
@@ -293,6 +296,11 @@ details .det-content { padding: 0 16px 16px; }
     {% if supply.wasde_html %}
     <div class="subhdr">WASDE Monthly Estimates</div>
     {{ supply.wasde_html | safe }}
+    <hr class="divider">
+    {% endif %}
+    {% if supply.stocks_to_use_html %}
+    <div class="subhdr">Stocks-to-Use (US balance sheet)</div>
+    {{ supply.stocks_to_use_html | safe }}
     <hr class="divider">
     {% endif %}
     {% if supply.conab_html %}

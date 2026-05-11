@@ -15,12 +15,12 @@ Key concepts for learning:
 """
 
 import logging
-import time
 
 import pandas as pd
 import requests
 
-from config import MAX_RETRIES, REQUEST_TIMEOUT, RETRY_DELAY, WORLDBANK_PRICES_URL
+from config import MAX_RETRIES, WORLDBANK_PRICES_URL
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +53,13 @@ def _download_pink_sheet() -> bytes:
             logger.info("Pink Sheet downloaded (%d KB)", len(resp.content) // 1024)
             return resp.content
 
-        except Exception as exc:
+        except requests.RequestException as exc:
             logger.warning(
                 "Attempt %d/%d failed for Pink Sheet: %s",
                 attempt, MAX_RETRIES, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for Pink Sheet download", MAX_RETRIES)
     return b""
@@ -91,7 +91,10 @@ def _parse_pink_sheet(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
             header=None,
             engine="openpyxl",
         )
-    except Exception as exc:
+    except (ValueError, KeyError, OSError) as exc:
+        # openpyxl raises ValueError on a malformed workbook and OSError
+        # when the bytes aren't a valid zip; KeyError fires if the
+        # "Monthly Prices" sheet is missing.
         logger.error("Failed to parse Pink Sheet xlsx: %s", exc)
         return {}
 

@@ -1,7 +1,7 @@
 """One-time script to convert README.md to a clean PDF."""
-import markdown
 import fpdf
 import fpdf.html
+import markdown
 from fpdf import FPDF
 
 

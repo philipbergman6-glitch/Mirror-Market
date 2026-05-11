@@ -1,953 +1,505 @@
+"""Database write functions for Mirror Market.
+
+`upsert_dataframe` factors all batch INSERT OR REPLACE writes into one
+executemany call — replaces 19 iterrows loops with a single helper. Each
+`save_*` function reshapes its input DataFrame (rename, date-format, add
+key columns), then delegates to `_save` for the transactional write.
 """
-Database write (store) functions for Mirror Market.
 
-All save_* functions write cleaned DataFrames into SQLite/Turso tables.
-Uses INSERT OR REPLACE so the pipeline is safe to re-run.
-
-Extracted from the original processing/combiner.py.
-"""
-
+import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
 import pandas as pd
 
 from config import DB_PATH, STORAGE_DIR
 from pipeline.connection import get_connection, is_cloud
-from pipeline.schema import (
-    _CREATE_PRICES, _CREATE_ECONOMIC, _CREATE_USDA, _CREATE_COT,
-    _CREATE_WEATHER, _CREATE_PSD, _CREATE_CURRENCIES, _CREATE_WORLDBANK,
-    _CREATE_DCE_FUTURES, _CREATE_CROP_PROGRESS, _CREATE_EXPORT_SALES,
-    _CREATE_FORWARD_CURVE, _CREATE_WASDE, _CREATE_INSPECTIONS,
-    _CREATE_EIA_ENERGY, _CREATE_BRAZIL_ESTIMATES, _CREATE_OPTIONS_SENTIMENT,
-    _CREATE_DATA_FRESHNESS, _CREATE_COMMODITY_FRESHNESS,
-    _CREATE_INDIA_DOMESTIC, _CREATE_BRAZIL_SPOT, _CREATE_SAFEX,
-)
+from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
 logger = logging.getLogger(__name__)
 
 
+# --- Lifecycle --------------------------------------------------------------
+
+
 def _ensure_storage_dir():
-    """Create the storage directory if it doesn't exist yet."""
     os.makedirs(STORAGE_DIR, exist_ok=True)
 
 
-def init_database():
-    """
-    Create tables if they don't exist yet.
+def _migrate_data_freshness(conn) -> None:
+    """Add status/last_attempt to data_freshness if absent. Idempotent."""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(data_freshness)").fetchall()}
+    except Exception:
+        return
+    for col, ddl in (
+        ("status", "ALTER TABLE data_freshness ADD COLUMN status TEXT NOT NULL DEFAULT 'success'"),
+        ("last_attempt", "ALTER TABLE data_freshness ADD COLUMN last_attempt TEXT"),
+    ):
+        if col not in cols:
+            try:
+                conn.execute(ddl)
+            except Exception as exc:
+                logger.warning("Could not add %s column to data_freshness: %s", col, exc)
 
-    Call this once at startup. It's safe to call repeatedly — the
-    IF NOT EXISTS clause means it won't destroy existing data.
-    """
+
+def init_database():
+    """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
     with get_connection() as conn:
-        conn.execute(_CREATE_PRICES)
-        conn.execute(_CREATE_ECONOMIC)
-        conn.execute(_CREATE_USDA)
-        conn.execute(_CREATE_COT)
-        conn.execute(_CREATE_WEATHER)
-        conn.execute(_CREATE_PSD)
-        conn.execute(_CREATE_CURRENCIES)
-        conn.execute(_CREATE_WORLDBANK)
-        conn.execute(_CREATE_DCE_FUTURES)
-        conn.execute(_CREATE_CROP_PROGRESS)
-        conn.execute(_CREATE_EXPORT_SALES)
-        conn.execute(_CREATE_FORWARD_CURVE)
-        conn.execute(_CREATE_WASDE)
-        conn.execute(_CREATE_INSPECTIONS)
-        conn.execute(_CREATE_EIA_ENERGY)
-        conn.execute(_CREATE_BRAZIL_ESTIMATES)
-        conn.execute(_CREATE_OPTIONS_SENTIMENT)
-        conn.execute(_CREATE_DATA_FRESHNESS)
-        conn.execute(_CREATE_COMMODITY_FRESHNESS)
-        conn.execute(_CREATE_INDIA_DOMESTIC)
-        conn.execute(_CREATE_BRAZIL_SPOT)
-        conn.execute(_CREATE_SAFEX)
+        for ddl in ALL_SCHEMAS:
+            conn.execute(ddl)
+        for index_sql in UNIQUE_INDEXES:
+            conn.execute(index_sql)
+        _migrate_data_freshness(conn)
     logger.info("Database initialised (tables verified) at %s", DB_PATH)
 
 
 def clear_database():
-    """
-    Drop all tables so we can do a fresh load.
-
-    Manual-only utility — NOT called during the normal pipeline.
-    Use from the Python REPL if you need a clean slate:
-
-        >>> from pipeline.store import clear_database
-        >>> clear_database()
-    """
+    """Drop all tables. Manual-only utility."""
     _ensure_storage_dir()
+    tables = [
+        "prices", "economic", "usda", "cot", "weather", "psd",
+        "currencies", "worldbank_prices", "dce_futures", "crop_progress",
+        "export_sales", "forward_curve", "wasde", "inspections",
+        "eia_energy", "brazil_estimates", "data_freshness",
+        "commodity_freshness", "india_domestic_prices",
+        "brazil_spot_prices", "safex_prices", "briefings",
+    ]
     with get_connection() as conn:
-        for table in ("prices", "economic", "usda", "cot", "weather",
-                      "psd", "currencies", "worldbank_prices",
-                      "dce_futures", "crop_progress", "export_sales",
-                      "forward_curve", "wasde", "inspections",
-                      "eia_energy", "brazil_estimates", "options_sentiment",
-                      "data_freshness", "commodity_freshness",
-                      "india_domestic_prices", "brazil_spot_prices", "safex_prices"):
+        for table in tables:
             conn.execute(f"DROP TABLE IF EXISTS {table}")
     logger.info("Database cleared.")
 
 
-def save_price_data(name: str, df: pd.DataFrame):
-    """
-    Write an OHLCV DataFrame to the 'prices' table in SQLite.
+# --- Generic helpers --------------------------------------------------------
 
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
+
+def upsert_dataframe(conn, table: str, df: pd.DataFrame, key_cols: list[str]) -> int:
+    """Bulk INSERT OR REPLACE a DataFrame into `table` via executemany.
+
+    The DataFrame's columns must match the destination table's columns
+    exactly — pre-shape the df before calling. NaN → NULL.
+
+    `key_cols` is informational (used in debug log); uniqueness is
+    enforced by the table's PRIMARY KEY / UNIQUE INDEX. Returns rows
+    written. Empty df returns 0 without opening the DB.
     """
     if df.empty:
-        return
+        return 0
+    cols = list(df.columns)
+    sql = (
+        f"INSERT OR REPLACE INTO {table} ({','.join(cols)}) "
+        f"VALUES ({','.join('?' * len(cols))})"
+    )
+    df_obj = df.astype(object).where(df.notna(), None)
+    rows = list(df_obj.itertuples(index=False, name=None))
+    conn.executemany(sql, rows)
+    logger.debug("upsert %s: %d rows (keys=%s)", table, len(rows), ",".join(key_cols))
+    return len(rows)
 
-    df = df.copy()
-    df["commodity"] = name
 
-    # Reset index so the Date becomes a normal column (SQLite-friendly)
-    df = df.reset_index()
-
-    # Convert Date to ISO string for consistent storage
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
+def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
+    """Open a connection and run a transactional upsert. Logs result."""
+    if df.empty:
+        return 0
     with get_connection() as conn:
         conn.execute("BEGIN")
         try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO prices
-                       (commodity, Date, Open, High, Low, Close, Volume)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row["commodity"],
-                        row["Date"],
-                        float(row["Open"]) if pd.notna(row.get("Open")) else None,
-                        float(row["High"]) if pd.notna(row.get("High")) else None,
-                        float(row["Low"]) if pd.notna(row.get("Low")) else None,
-                        float(row["Close"]) if pd.notna(row.get("Close")) else None,
-                        float(row["Volume"]) if pd.notna(row.get("Volume")) else None,
-                    ),
-                )
+            n = upsert_dataframe(conn, table, df, key_cols)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
-            logger.error("Transaction failed for prices/%s — rolled back", name)
+            logger.error("Transaction failed for %s — rolled back", label)
             raise
+    logger.info("Saved %d rows for %s → %s table", n, label, table)
+    return n
 
-    logger.info("Saved %d rows for %s → prices table", len(df), name)
+
+def _date(s: pd.Series) -> pd.Series:
+    """ISO-format a date column. NaT becomes NaT and is NULLed at write."""
+    return pd.to_datetime(s, errors="coerce").dt.strftime("%Y-%m-%d")
+
+
+def _str_cols(df: pd.DataFrame, *cols: str, default: str = "") -> pd.DataFrame:
+    """In-place: ensure each `cols` column exists and is string-typed."""
+    for c in cols:
+        if c not in df.columns:
+            df[c] = default
+        df[c] = df[c].fillna(default).astype(str)
+    return df
+
+
+# --- save_* functions -------------------------------------------------------
+
+
+def save_price_data(name: str, df: pd.DataFrame):
+    """Write OHLCV → 'prices'."""
+    if df.empty:
+        return
+    df = df.reset_index().copy()
+    df["commodity"] = name
+    df["Date"] = _date(df["Date"])
+    df = df[["commodity", "Date", "Open", "High", "Low", "Close", "Volume"]]
+    _save("prices", df, ["commodity", "Date"], f"prices/{name}")
 
 
 def save_fred_data(name: str, series: pd.Series):
-    """
-    Write a FRED Series to the 'economic' table.
-
-    Uses INSERT OR REPLACE to avoid duplicates on re-run.
-    """
+    """Write FRED Series → 'economic'."""
     if series.empty:
         return
-
     df = series.reset_index()
     df.columns = ["Date", "value"]
     df["series_name"] = name
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO economic
-                       (series_name, Date, value)
-                       VALUES (?, ?, ?)""",
-                    (row["series_name"], row["Date"], float(row["value"])),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for economic/%s — rolled back", name)
-            raise
-
-    logger.info("Saved %d rows for %s → economic table", len(df), name)
+    df["Date"] = _date(df["Date"])
+    _save("economic", df[["series_name", "Date", "value"]],
+          ["series_name", "Date"], f"economic/{name}")
 
 
 def save_usda_data(df: pd.DataFrame, stat_category: str):
-    """
-    Write a USDA DataFrame to the 'usda' table.
-
-    Uses INSERT OR REPLACE to avoid duplicates on re-run.
-    """
+    """Write USDA → 'usda'."""
     if df.empty:
         return
-
     df = df.copy()
     df["stat_category"] = stat_category
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO usda
-                       (stat_category, year, short_desc, Value,
-                        unit_desc, state_name, reference_period_desc)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row.get("stat_category", ""),
-                        row.get("year", ""),
-                        row.get("short_desc", ""),
-                        row.get("Value", ""),
-                        row.get("unit_desc", ""),
-                        row.get("state_name", ""),
-                        row.get("reference_period_desc", ""),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for usda/%s — rolled back", stat_category)
-            raise
-
-    logger.info("Saved %d rows for USDA/%s → usda table", len(df), stat_category)
+    cols = ["stat_category", "year", "short_desc", "Value",
+            "unit_desc", "state_name", "reference_period_desc"]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
+    _save("usda", df[cols], ["stat_category", "year", "short_desc"], f"usda/{stat_category}")
 
 
 def save_crop_progress(commodity: str, df: pd.DataFrame):
-    """
-    Write crop progress/condition data to the 'crop_progress' table.
+    """Write crop progress → 'crop_progress'. Source 'statisticcat_desc' → 'stat_category'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "statisticcat_desc" in df.columns:
+        df["stat_category"] = df["statisticcat_desc"]
+    cols = ["commodity", "week_ending", "year", "short_desc",
+            "Value", "unit_desc", "stat_category"]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
+    _save("crop_progress", df[cols],
+          ["commodity", "week_ending", "short_desc"], f"crop_progress/{commodity}")
 
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
+
+def save_cot_data(name: str, df: pd.DataFrame):
+    """Write COT positioning → 'cot'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = name
+    df["Date"] = _date(df["Date"])
+    _save("cot", df[[
+        "commodity", "Date", "commercial_long", "commercial_short", "commercial_net",
+        "noncommercial_long", "noncommercial_short", "noncommercial_net", "total_open_interest",
+    ]], ["commodity", "Date"], f"cot/{name}")
+
+
+def save_weather_data(region: str, df: pd.DataFrame):
+    """Write weather → 'weather'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["region"] = region
+    df["Date"] = _date(df["Date"])
+    _save("weather", df[["region", "Date", "temp_max", "temp_min", "precipitation"]],
+          ["region", "Date"], f"weather/{region}")
+
+
+def save_psd_data(commodity: str, df: pd.DataFrame):
+    """Write PSD → 'psd'. Drops rows with NaN year (INTEGER NOT NULL key)."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "commodity" not in df.columns:
+        df["commodity"] = commodity
+    df = _str_cols(df, "commodity", "country", "attribute", "unit")
+    df = df.dropna(subset=["year"])
+    if df.empty:
+        return
+    df["year"] = df["year"].astype(int)
+    _save("psd", df[["commodity", "country", "year", "attribute", "value", "unit"]],
+          ["commodity", "country", "year", "attribute"], f"psd/{commodity}")
+
+
+def save_currency_data(pair: str, df: pd.DataFrame):
+    """Write currency OHLC → 'currencies'."""
+    if df.empty:
+        return
+    df = df.reset_index().copy()
+    df["pair"] = pair
+    df["Date"] = _date(df["Date"])
+    _save("currencies", df[["pair", "Date", "Open", "High", "Low", "Close"]],
+          ["pair", "Date"], f"currencies/{pair}")
+
+
+def save_worldbank_data(commodity: str, df: pd.DataFrame):
+    """Write World Bank monthly prices → 'worldbank_prices'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    df["Date"] = _date(df["Date"])
+    df = _str_cols(df, "unit")
+    _save("worldbank_prices", df[["commodity", "Date", "price", "unit"]],
+          ["commodity", "Date"], f"worldbank/{commodity}")
+
+
+def save_export_sales(commodity: str, df: pd.DataFrame):
+    """Write weekly export sales → 'export_sales'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "week_ending" in df.columns:
+        df["week_ending"] = _date(df["week_ending"])
+    df = _str_cols(df, "country")
+    _save("export_sales", df[[
+        "commodity", "week_ending", "country",
+        "net_sales", "weekly_exports", "accumulated_exports", "outstanding_sales",
+    ]], ["commodity", "week_ending", "country"], f"export_sales/{commodity}")
+
+
+def save_forward_curve(commodity: str, df: pd.DataFrame):
+    """Write forward curve → 'forward_curve'. Stamps fetched_date with today UTC."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    df = _str_cols(df, "contract_month", "label", "ticker")
+    _save(
+        "forward_curve",
+        df[["commodity", "contract_month", "label", "ticker", "close", "fetched_date"]],
+        ["commodity", "contract_month"],
+        f"forward_curve/{commodity}",
+    )
+
+
+def save_dce_futures_data(commodity: str, df: pd.DataFrame):
+    """Write DCE futures → 'dce_futures'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    df["Date"] = _date(df["Date"])
+    _save("dce_futures", df[[
+        "commodity", "Date", "Open", "High", "Low", "Close",
+        "Volume", "Open_Interest", "Settle",
+    ]], ["commodity", "Date"], f"dce_futures/{commodity}")
+
+
+def save_wasde(commodity_key: str, df: pd.DataFrame):
+    """Write WASDE forecast → 'wasde'.
+
+    commodity_key (e.g., 'SOYBEANS/PRODUCTION') is used as a fallback when
+    source columns commodity_desc / statisticcat_desc are missing or NaN.
     """
     if df.empty:
         return
+    df = df.copy()
+    parts = commodity_key.split("/")
+    c_default = parts[0] if parts else ""
+    a_default = parts[-1] if len(parts) > 1 else c_default
+    df["commodity"] = (df["commodity_desc"] if "commodity_desc" in df.columns
+                       else pd.Series([c_default] * len(df), index=df.index))
+    df["attribute"] = (df["statisticcat_desc"] if "statisticcat_desc" in df.columns
+                       else pd.Series([a_default] * len(df), index=df.index))
+    df["commodity"] = df["commodity"].fillna(c_default).astype(str)
+    df["attribute"] = df["attribute"].fillna(a_default).astype(str)
+    df["year"] = df.get("year", pd.Series([""] * len(df), index=df.index)).fillna("").astype(str)
+    df["value"] = df.get("Value")
+    df["unit"] = df.get("unit_desc", pd.Series([""] * len(df), index=df.index)).fillna("").astype(str)
+    df["reference_period"] = df.get(
+        "reference_period_desc", pd.Series([""] * len(df), index=df.index)
+    ).fillna("").astype(str)
+    _save("wasde", df[["commodity", "year", "attribute", "value", "unit", "reference_period"]],
+          ["commodity", "year", "attribute", "reference_period"], f"wasde/{commodity_key}")
 
+
+def save_inspections(commodity: str, df: pd.DataFrame):
+    """Write export inspections → 'inspections'."""
+    if df.empty:
+        return
     df = df.copy()
     df["commodity"] = commodity
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO crop_progress
-                       (commodity, week_ending, year, short_desc,
-                        Value, unit_desc, stat_category)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row.get("commodity", commodity),
-                        row.get("week_ending", ""),
-                        row.get("year", ""),
-                        row.get("short_desc", ""),
-                        row.get("Value", ""),
-                        row.get("unit_desc", ""),
-                        row.get("statisticcat_desc", ""),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for crop_progress/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → crop_progress table", len(df), commodity)
+    if "week_ending" in df.columns:
+        df["week_ending"] = _date(df["week_ending"])
+    _save("inspections", df[["commodity", "week_ending", "inspections_mt"]],
+          ["commodity", "week_ending"], f"inspections/{commodity}")
 
 
-def save_freshness(layer_name: str, rows_fetched: int = 0):
+def save_eia_data(series_name: str, df: pd.DataFrame):
+    """Write EIA energy → 'eia_energy'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["series_name"] = series_name
+    if "Date" in df.columns:
+        df["Date"] = _date(df["Date"])
+    df = _str_cols(df, "unit")
+    _save("eia_energy", df[["series_name", "Date", "value", "unit"]],
+          ["series_name", "Date"], f"eia/{series_name}")
+
+
+def save_brazil_estimates(df: pd.DataFrame):
+    """Write CONAB estimates → 'brazil_estimates'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df = _str_cols(df, "source", "commodity", "crop_year", "attribute", "unit", "report_date")
+    df["source"] = df["source"].replace("", "CONAB")
+    _save(
+        "brazil_estimates",
+        df[["source", "commodity", "crop_year", "attribute", "value", "unit", "report_date"]],
+        ["source", "commodity", "crop_year", "attribute", "report_date"],
+        "brazil_estimates",
+    )
+
+
+def save_india_domestic(commodity: str, df: pd.DataFrame):
+    """Write NCDEX India domestic (INR/MT) → 'india_domestic_prices'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "Date" in df.columns:
+        df["Date"] = _date(df["Date"])
+    if "Unit" in df.columns:
+        df["unit"] = df["Unit"].fillna("INR/MT").astype(str)
+    else:
+        df["unit"] = "INR/MT"
+    _save("india_domestic_prices",
+          df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit"]],
+          ["Date", "commodity"], f"india_domestic/{commodity}")
+
+
+def save_brazil_spot(commodity: str, df: pd.DataFrame):
+    """Write CEPEA spot (BRL/MT) → 'brazil_spot_prices'. Renames price_brl_mt → price_brl."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "Date" in df.columns:
+        df["Date"] = _date(df["Date"])
+    if "price_brl_mt" in df.columns:
+        df["price_brl"] = df["price_brl_mt"]
+    if "Unit" in df.columns:
+        df["unit"] = df["Unit"].fillna("BRL/MT").astype(str)
+    else:
+        df["unit"] = "BRL/MT"
+    _save("brazil_spot_prices", df[["Date", "commodity", "price_brl", "unit"]],
+          ["Date", "commodity"], f"brazil_spot/{commodity}")
+
+
+def save_safex(commodity: str, df: pd.DataFrame):
+    """Write JSE SAFEX (ZAR/MT) → 'safex_prices'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "Date" in df.columns:
+        df["Date"] = _date(df["Date"])
+    if "Unit" in df.columns:
+        df["unit"] = df["Unit"].fillna("ZAR/MT").astype(str)
+    else:
+        df["unit"] = "ZAR/MT"
+    _save("safex_prices", df[["Date", "commodity", "Close", "Volume", "unit"]],
+          ["Date", "commodity"], f"safex/{commodity}")
+
+
+# --- Briefing archive -------------------------------------------------------
+
+
+def save_briefing(
+    briefing_date: str,
+    text: str,
+    signals: list[dict] | None = None,
+    snapshot: dict[str, Any] | None = None,
+) -> None:
+    """Archive a generated briefing. INSERT OR REPLACE keyed on briefing_date.
+
+    `signals` and `snapshot` are serialized to JSON with `default=str` so
+    pandas Timestamps and numpy scalars survive without a custom encoder.
     """
-    Record the last successful fetch timestamp for a data layer.
-
-    Called after each layer succeeds in the pipeline so the briefing
-    can warn about stale data.
-    """
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-
+    if not briefing_date or not text:
+        raise ValueError("briefing_date and text are required")
+    signals_json = json.dumps(signals or [], default=str)
+    snapshot_json = json.dumps(snapshot or {}, default=str)
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     with get_connection() as conn:
         conn.execute(
-            """INSERT OR REPLACE INTO data_freshness
-               (layer_name, last_success, rows_fetched)
-               VALUES (?, ?, ?)""",
-            (layer_name, now, rows_fetched),
+            """INSERT OR REPLACE INTO briefings
+               (briefing_date, text, signals_json, snapshot_json, generated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (briefing_date, text, signals_json, snapshot_json, generated_at),
         )
-    logger.debug("Freshness recorded for %s at %s (%d rows)", layer_name, now, rows_fetched)
+    logger.info("Archived briefing for %s (%d signals)", briefing_date, len(signals or []))
+
+
+# --- Freshness tracking (special-case: bespoke SQL) -------------------------
+
+
+def save_freshness(layer_name: str, rows_fetched: int = 0, status: str = "success") -> None:
+    """Record a freshness row. Success stamps last_success; failed preserves it."""
+    if status not in ("success", "failed"):
+        raise ValueError(f"status must be 'success' or 'failed', got {status!r}")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    with get_connection() as conn:
+        prior_success: str | None
+        if status == "success":
+            prior_success = now
+        else:
+            row = conn.execute(
+                "SELECT last_success FROM data_freshness WHERE layer_name = ?",
+                (layer_name,),
+            ).fetchone()
+            prior_success = row[0] if row else None
+        conn.execute(
+            """INSERT OR REPLACE INTO data_freshness
+               (layer_name, last_success, last_attempt, rows_fetched, status)
+               VALUES (?, ?, ?, ?, ?)""",
+            (layer_name, prior_success, now, rows_fetched, status),
+        )
+    logger.debug("Freshness recorded for %s at %s (status=%s, %d rows)",
+                 layer_name, now, status, rows_fetched)
 
 
 def update_commodity_freshness():
-    """
-    Scan every data table and record per-commodity freshness.
-
-    For each commodity/region/pair in each table, records:
-      - The most recent date found in the DB
-      - Total row count
-      - When this check was performed
-
-    This catches the case where one commodity silently stops updating
-    while the rest of the layer succeeds.
-    """
+    """Scan data tables, record per-commodity last_date + row count."""
     if not is_cloud() and not os.path.exists(DB_PATH):
         return
-
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Define which tables to scan and their key/date columns
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     table_specs = [
-        ("prices",          "commodity", "Date"),
-        ("cot",             "commodity", "Date"),
-        ("weather",         "region",    "Date"),
-        ("currencies",      "pair",      "Date"),
-        ("dce_futures",     "commodity", "Date"),
-        ("worldbank_prices","commodity", "Date"),
-        ("forward_curve",   "commodity", "fetched_date"),
+        ("prices", "commodity", "Date"),
+        ("cot", "commodity", "Date"),
+        ("weather", "region", "Date"),
+        ("currencies", "pair", "Date"),
+        ("dce_futures", "commodity", "Date"),
+        ("worldbank_prices", "commodity", "Date"),
+        ("forward_curve", "commodity", "fetched_date"),
     ]
-
     with get_connection() as conn:
         for table, key_col, date_col in table_specs:
             try:
                 rows = conn.execute(
-                    f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
+                    f"SELECT {key_col}, MAX({date_col}), COUNT(*) "
                     f"FROM {table} GROUP BY {key_col}"
                 ).fetchall()
             except Exception:
                 continue
-
-            for commodity, last_date, count in rows:
-                conn.execute(
+            if rows:
+                conn.executemany(
                     """INSERT OR REPLACE INTO commodity_freshness
                        (commodity, table_name, last_date_in_db, rows_total, checked_at)
                        VALUES (?, ?, ?, ?, ?)""",
-                    (commodity, table, last_date, count, now),
+                    [(c, table, ld, ct, now) for c, ld, ct in rows],
                 )
-
     logger.info("Commodity freshness updated at %s", now)
-
-
-def save_cot_data(name: str, df: pd.DataFrame):
-    """
-    Write COT positioning data to the 'cot' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = name
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO cot
-                       (commodity, Date, commercial_long, commercial_short,
-                        commercial_net, noncommercial_long, noncommercial_short,
-                        noncommercial_net, total_open_interest)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row["commodity"],
-                        row["Date"],
-                        float(row["commercial_long"]) if pd.notna(row.get("commercial_long")) else None,
-                        float(row["commercial_short"]) if pd.notna(row.get("commercial_short")) else None,
-                        float(row["commercial_net"]) if pd.notna(row.get("commercial_net")) else None,
-                        float(row["noncommercial_long"]) if pd.notna(row.get("noncommercial_long")) else None,
-                        float(row["noncommercial_short"]) if pd.notna(row.get("noncommercial_short")) else None,
-                        float(row["noncommercial_net"]) if pd.notna(row.get("noncommercial_net")) else None,
-                        float(row["total_open_interest"]) if pd.notna(row.get("total_open_interest")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for cot/%s — rolled back", name)
-            raise
-
-    logger.info("Saved %d rows for %s → cot table", len(df), name)
-
-
-def save_weather_data(region: str, df: pd.DataFrame):
-    """
-    Write weather data to the 'weather' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["region"] = region
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO weather
-                       (region, Date, temp_max, temp_min, precipitation)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (
-                        row["region"],
-                        row["Date"],
-                        float(row["temp_max"]) if pd.notna(row.get("temp_max")) else None,
-                        float(row["temp_min"]) if pd.notna(row.get("temp_min")) else None,
-                        float(row["precipitation"]) if pd.notna(row.get("precipitation")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for weather/%s — rolled back", region)
-            raise
-
-    logger.info("Saved %d rows for %s → weather table", len(df), region)
-
-
-def save_psd_data(commodity: str, df: pd.DataFrame):
-    """
-    Write PSD data to the 'psd' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO psd
-                       (commodity, country, year, attribute, value, unit)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        str(row.get("commodity", commodity)),
-                        str(row.get("country", "")),
-                        int(row["year"]) if pd.notna(row.get("year")) else None,
-                        str(row.get("attribute", "")),
-                        float(row["value"]) if pd.notna(row.get("value")) else None,
-                        str(row.get("unit", "")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for psd/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → psd table", len(df), commodity)
-
-
-def save_currency_data(pair: str, df: pd.DataFrame):
-    """
-    Write currency OHLCV data to the 'currencies' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["pair"] = pair
-    df = df.reset_index()
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO currencies
-                       (pair, Date, Open, High, Low, Close)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        row["pair"],
-                        row["Date"],
-                        float(row["Open"]) if pd.notna(row.get("Open")) else None,
-                        float(row["High"]) if pd.notna(row.get("High")) else None,
-                        float(row["Low"]) if pd.notna(row.get("Low")) else None,
-                        float(row["Close"]) if pd.notna(row.get("Close")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for currencies/%s — rolled back", pair)
-            raise
-
-    logger.info("Saved %d rows for %s → currencies table", len(df), pair)
-
-
-def save_worldbank_data(commodity: str, df: pd.DataFrame):
-    """
-    Write World Bank monthly prices to the 'worldbank_prices' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO worldbank_prices
-                       (commodity, Date, price, unit)
-                       VALUES (?, ?, ?, ?)""",
-                    (
-                        row["commodity"],
-                        row["Date"],
-                        float(row["price"]) if pd.notna(row.get("price")) else None,
-                        str(row.get("unit", "")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for worldbank/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → worldbank_prices table", len(df), commodity)
-
-
-def save_export_sales(commodity: str, df: pd.DataFrame):
-    """
-    Write export sales data to the 'export_sales' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-
-    if "week_ending" in df.columns:
-        df["week_ending"] = pd.to_datetime(df["week_ending"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO export_sales
-                       (commodity, week_ending, country, net_sales,
-                        weekly_exports, accumulated_exports, outstanding_sales)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row.get("commodity", commodity),
-                        row.get("week_ending", ""),
-                        str(row.get("country", "")),
-                        float(row["net_sales"]) if pd.notna(row.get("net_sales")) else None,
-                        float(row["weekly_exports"]) if pd.notna(row.get("weekly_exports")) else None,
-                        float(row["accumulated_exports"]) if pd.notna(row.get("accumulated_exports")) else None,
-                        float(row["outstanding_sales"]) if pd.notna(row.get("outstanding_sales")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for export_sales/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → export_sales table", len(df), commodity)
-
-
-def save_forward_curve(commodity: str, df: pd.DataFrame):
-    """
-    Write forward curve data to the 'forward_curve' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-    df["fetched_date"] = datetime.utcnow().strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO forward_curve
-                       (commodity, contract_month, label, ticker, close, fetched_date)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        row.get("commodity", commodity),
-                        str(row.get("contract_month", "")),
-                        str(row.get("label", "")),
-                        str(row.get("ticker", "")),
-                        float(row["close"]) if pd.notna(row.get("close")) else None,
-                        row.get("fetched_date", ""),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for forward_curve/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d contracts for %s → forward_curve table", len(df), commodity)
-
-
-def save_dce_futures_data(commodity: str, df: pd.DataFrame):
-    """
-    Write DCE futures data to the 'dce_futures' table.
-
-    Uses INSERT OR REPLACE so re-running the pipeline updates existing
-    rows instead of creating duplicates.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-    df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO dce_futures
-                       (commodity, Date, Open, High, Low, Close,
-                        Volume, Open_Interest, Settle)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row["commodity"],
-                        row["Date"],
-                        float(row["Open"]) if pd.notna(row.get("Open")) else None,
-                        float(row["High"]) if pd.notna(row.get("High")) else None,
-                        float(row["Low"]) if pd.notna(row.get("Low")) else None,
-                        float(row["Close"]) if pd.notna(row.get("Close")) else None,
-                        float(row["Volume"]) if pd.notna(row.get("Volume")) else None,
-                        float(row["Open_Interest"]) if pd.notna(row.get("Open_Interest")) else None,
-                        float(row["Settle"]) if pd.notna(row.get("Settle")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for dce_futures/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → dce_futures table", len(df), commodity)
-
-
-def save_wasde(commodity_key: str, df: pd.DataFrame):
-    """
-    Write WASDE forecast data to the 'wasde' table.
-
-    commodity_key is like "SOYBEANS/PRODUCTION" — we split it to get
-    the commodity and attribute for storage.
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                commodity = str(row.get("commodity_desc", commodity_key.split("/")[0]))
-                attribute = str(row.get("statisticcat_desc", commodity_key.split("/")[-1]))
-                conn.execute(
-                    """INSERT OR REPLACE INTO wasde
-                       (commodity, year, attribute, value, unit, reference_period)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        commodity,
-                        str(row.get("year", "")),
-                        attribute,
-                        float(row["Value"]) if pd.notna(row.get("Value")) else None,
-                        str(row.get("unit_desc", "")),
-                        str(row.get("reference_period_desc", "")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for wasde/%s — rolled back", commodity_key)
-            raise
-
-    logger.info("Saved %d rows for %s → wasde table", len(df), commodity_key)
-
-
-def save_inspections(commodity: str, df: pd.DataFrame):
-    """Write export inspections data to the 'inspections' table."""
-    if df.empty:
-        return
-
-    df = df.copy()
-
-    if "week_ending" in df.columns:
-        df["week_ending"] = pd.to_datetime(df["week_ending"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO inspections
-                       (commodity, week_ending, inspections_mt)
-                       VALUES (?, ?, ?)""",
-                    (
-                        row.get("commodity", commodity),
-                        row.get("week_ending", ""),
-                        float(row["inspections_mt"]) if pd.notna(row.get("inspections_mt")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for inspections/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → inspections table", len(df), commodity)
-
-
-def save_eia_data(series_name: str, df: pd.DataFrame):
-    """Write EIA energy data to the 'eia_energy' table."""
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["series_name"] = series_name
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO eia_energy
-                       (series_name, Date, value, unit)
-                       VALUES (?, ?, ?, ?)""",
-                    (
-                        row["series_name"],
-                        row["Date"],
-                        float(row["value"]) if pd.notna(row.get("value")) else None,
-                        str(row.get("unit", "")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for eia_energy/%s — rolled back", series_name)
-            raise
-
-    logger.info("Saved %d rows for %s → eia_energy table", len(df), series_name)
-
-
-def save_brazil_estimates(df: pd.DataFrame):
-    """Write CONAB Brazil crop estimates to the 'brazil_estimates' table."""
-    if df.empty:
-        return
-
-    df = df.copy()
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO brazil_estimates
-                       (source, commodity, crop_year, attribute, value, unit, report_date)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        str(row.get("source", "CONAB")),
-                        str(row.get("commodity", "")),
-                        str(row.get("crop_year", "")),
-                        str(row.get("attribute", "")),
-                        float(row["value"]) if pd.notna(row.get("value")) else None,
-                        str(row.get("unit", "")),
-                        str(row.get("report_date", "")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for brazil_estimates — rolled back")
-            raise
-
-    logger.info("Saved %d rows → brazil_estimates table", len(df))
-
-
-def save_india_domestic(commodity: str, df: pd.DataFrame):
-    """
-    Write NCDEX India domestic price data to the 'india_domestic_prices' table.
-
-    Prices are stored in INR/MT (native units — conversion to USD/MT happens
-    in the analysis layer using the INR/USD rate from the currencies table).
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO india_domestic_prices
-                       (Date, commodity, Open, High, Low, Close, Volume, unit)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row["Date"],
-                        row["commodity"],
-                        float(row["Open"]) if pd.notna(row.get("Open")) else None,
-                        float(row["High"]) if pd.notna(row.get("High")) else None,
-                        float(row["Low"]) if pd.notna(row.get("Low")) else None,
-                        float(row["Close"]) if pd.notna(row.get("Close")) else None,
-                        float(row["Volume"]) if pd.notna(row.get("Volume")) else None,
-                        str(row.get("Unit", "INR/MT")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for india_domestic/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → india_domestic_prices table", len(df), commodity)
-
-
-def save_brazil_spot(commodity: str, df: pd.DataFrame):
-    """
-    Write CEPEA Brazil domestic spot price to the 'brazil_spot_prices' table.
-
-    Prices are stored in BRL/MT (native units — conversion to USD/MT happens
-    in the analysis layer using the BRL/USD rate from the currencies table).
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO brazil_spot_prices
-                       (Date, commodity, price_brl, unit)
-                       VALUES (?, ?, ?, ?)""",
-                    (
-                        row["Date"],
-                        row["commodity"],
-                        float(row["price_brl_mt"]) if pd.notna(row.get("price_brl_mt")) else None,
-                        str(row.get("Unit", "BRL/MT")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for brazil_spot/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → brazil_spot_prices table", len(df), commodity)
-
-
-def save_safex(commodity: str, df: pd.DataFrame):
-    """
-    Write JSE SAFEX South Africa settlement prices to the 'safex_prices' table.
-
-    Prices are stored in ZAR/MT (native units — conversion to USD/MT happens
-    in the analysis layer using the ZAR/USD rate from the currencies table).
-    """
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO safex_prices
-                       (Date, commodity, Close, Volume, unit)
-                       VALUES (?, ?, ?, ?, ?)""",
-                    (
-                        row["Date"],
-                        row["commodity"],
-                        float(row["Close"]) if pd.notna(row.get("Close")) else None,
-                        float(row["Volume"]) if pd.notna(row.get("Volume")) else None,
-                        str(row.get("Unit", "ZAR/MT")),
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for safex/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → safex_prices table", len(df), commodity)
-
-
-def save_options_sentiment(commodity: str, df: pd.DataFrame):
-    """Write options sentiment data to the 'options_sentiment' table."""
-    if df.empty:
-        return
-
-    df = df.copy()
-    df["commodity"] = commodity
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"]).dt.strftime("%Y-%m-%d")
-
-    with get_connection() as conn:
-        conn.execute("BEGIN")
-        try:
-            for _, row in df.iterrows():
-                conn.execute(
-                    """INSERT OR REPLACE INTO options_sentiment
-                       (commodity, Date, total_call_oi, total_put_oi,
-                        put_call_ratio, avg_call_iv, avg_put_iv)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        row["commodity"],
-                        row["Date"],
-                        float(row["total_call_oi"]) if pd.notna(row.get("total_call_oi")) else None,
-                        float(row["total_put_oi"]) if pd.notna(row.get("total_put_oi")) else None,
-                        float(row["put_call_ratio"]) if pd.notna(row.get("put_call_ratio")) else None,
-                        float(row["avg_call_iv"]) if pd.notna(row.get("avg_call_iv")) else None,
-                        float(row["avg_put_iv"]) if pd.notna(row.get("avg_put_iv")) else None,
-                    ),
-                )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            logger.error("Transaction failed for options_sentiment/%s — rolled back", commodity)
-            raise
-
-    logger.info("Saved %d rows for %s → options_sentiment table", len(df), commodity)

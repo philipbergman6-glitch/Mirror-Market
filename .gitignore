@@ -11,6 +11,13 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Test / lint artifacts
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+
 # Data files (re-fetchable)
 data/storage/*.db
 data/storage/*.csv

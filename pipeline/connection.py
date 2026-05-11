@@ -15,10 +15,21 @@ Key concepts for learning:
     - Free Turso tier: 9GB storage, 500 databases
 """
 
+import logging
 import os
 import sqlite3
 
-from config import DB_PATH, STORAGE_DIR, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+from config import DB_PATH, STORAGE_DIR, TURSO_AUTH_TOKEN, TURSO_DATABASE_URL
+
+logger = logging.getLogger(__name__)
+
+
+class TursoUnavailableError(RuntimeError):
+    """Raised when Turso is required (MIRROR_REQUIRE_TURSO=1) but unreachable."""
+
+
+def _require_turso() -> bool:
+    return os.getenv("MIRROR_REQUIRE_TURSO", "").strip() == "1"
 
 
 def get_connection():
@@ -29,10 +40,8 @@ def get_connection():
     (via environment variables), connects to a hosted Turso database.
     Otherwise, falls back to the local SQLite file.
 
-    Returns
-    -------
-    connection
-        A database connection object supporting standard DB-API 2.0 methods.
+    When MIRROR_REQUIRE_TURSO=1, a failed Turso connection raises
+    TursoUnavailableError instead of silently falling back to local.
     """
     if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
         try:
@@ -47,12 +56,16 @@ def get_connection():
             )
             conn.sync()
             return conn
-        except ImportError:
-            # libsql not installed — fall back to local
-            pass
-        except Exception:
-            # Connection failed — fall back to local
-            pass
+        except ImportError as exc:
+            msg = "libsql not installed; cannot use Turso cloud database"
+            if _require_turso():
+                raise TursoUnavailableError(msg) from exc
+            logger.error("%s — falling back to local SQLite", msg)
+        except Exception as exc:
+            msg = f"Turso connection failed: {exc}"
+            if _require_turso():
+                raise TursoUnavailableError(msg) from exc
+            logger.error("%s — falling back to local SQLite", msg)
 
     # Local SQLite fallback
     os.makedirs(STORAGE_DIR, exist_ok=True)

@@ -31,50 +31,106 @@ Key concepts for learning:
 """
 
 import logging
+import sys
 
 from config import setup_logging
-
-from fetchers.yfinance import fetch_all as fetch_prices, fetch_currencies
-from fetchers.usda import (
-    fetch_soybean_overview, fetch_all_crop_progress,
-    fetch_wasde_estimates, fetch_crush_data, fetch_export_inspections,
-)
-from fetchers.fred import fetch_all_series
-from fetchers.cot import fetch_cot_recent
-from fetchers.weather import fetch_all_regions
-from fetchers.psd import fetch_psd_all
-from fetchers.worldbank import fetch_worldbank_prices
+from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
+from fetchers.cepea import fetch_cepea
+from fetchers.conab import fetch_conab_estimates
+from fetchers.cot import fetch_cot_recent
+from fetchers.eia import fetch_all_eia
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
-from fetchers.eia import fetch_all_eia
-from fetchers.conab import fetch_conab_estimates
+from fetchers.fred import fetch_all_series
 from fetchers.india_domestic import fetch_india_domestic
-from fetchers.cepea import fetch_cepea
+from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
-
-from pipeline.clean import (
-    clean_ohlcv, clean_fred_series, clean_cot, clean_weather,
-    clean_psd, clean_worldbank, clean_dce_futures,
-    clean_export_sales, clean_forward_curve,
-    clean_wasde, clean_eia, clean_inspections, clean_conab,
-    clean_india_domestic, clean_brazil_spot, clean_safex,
+from fetchers.usda import (
+    fetch_all_crop_progress,
+    fetch_crush_data,
+    fetch_export_inspections,
+    fetch_soybean_overview,
 )
-from pipeline.store import (
-    init_database, save_price_data, save_fred_data, save_usda_data,
-    save_cot_data, save_weather_data, save_psd_data, save_currency_data,
-    save_worldbank_data, save_dce_futures_data, save_crop_progress,
-    save_export_sales, save_forward_curve, save_wasde, save_inspections,
-    save_eia_data, save_brazil_estimates, save_freshness,
-    update_commodity_freshness,
-    save_india_domestic, save_brazil_spot, save_safex,
+from fetchers.wasde import fetch_wasde_estimates
+from fetchers.weather import fetch_all_regions
+from fetchers.worldbank import fetch_worldbank_prices
+from fetchers.yfinance import fetch_all as fetch_prices
+from fetchers.yfinance import fetch_currencies
+from pipeline.clean import (
+    clean_brazil_spot,
+    clean_conab,
+    clean_cot,
+    clean_dce_futures,
+    clean_eia,
+    clean_export_sales,
+    clean_forward_curve,
+    clean_fred_series,
+    clean_india_domestic,
+    clean_inspections,
+    clean_ohlcv,
+    clean_psd,
+    clean_safex,
+    clean_wasde,
+    clean_weather,
+    clean_worldbank,
 )
 from pipeline.query import read_prices
+from pipeline.store import (
+    init_database,
+    save_brazil_estimates,
+    save_brazil_spot,
+    save_cot_data,
+    save_crop_progress,
+    save_currency_data,
+    save_dce_futures_data,
+    save_eia_data,
+    save_export_sales,
+    save_forward_curve,
+    save_fred_data,
+    save_freshness,
+    save_india_domestic,
+    save_inspections,
+    save_price_data,
+    save_psd_data,
+    save_safex,
+    save_usda_data,
+    save_wasde,
+    save_weather_data,
+    save_worldbank_data,
+    update_commodity_freshness,
+)
 
 logger = logging.getLogger(__name__)
 
+# Layers whose failure means the pipeline run is unusable for traders.
+# main() exits non-zero if any of these fail so CI can fail the deploy.
+CRITICAL_LAYERS = ("prices", "fred")
 
-def run():
+
+def _mark_failed(layer: str) -> None:
+    """Best-effort 'failed' freshness row — never crashes the pipeline itself."""
+    try:
+        save_freshness(layer, status="failed")
+    except Exception:
+        logger.exception("Could not record failed-freshness row for %s", layer)
+
+
+def _mark_empty(layer: str) -> None:
+    """Record a successful run that returned zero rows.
+
+    Distinct from _mark_failed: the layer ran to completion and the upstream
+    legitimately had nothing to publish (no inspection report this week, no
+    matching contracts traded, etc). Without this, an empty result is
+    indistinguishable from "the layer never ran" on the dashboard.
+    """
+    try:
+        save_freshness(layer, rows_fetched=0, status="success")
+    except Exception:
+        logger.exception("Could not record empty-success freshness row for %s", layer)
+
+
+def run() -> int:
     setup_logging()
 
     logger.info("=" * 60)
@@ -90,6 +146,7 @@ def run():
         "wasde": False, "eia": False, "crush_inspections": False,
         "conab": False,
         "india_domestic": False, "cepea": False, "safex": False,
+        "agrural": False,
     }
 
     # ── Initialise database schema ─────────────────────────────────
@@ -115,7 +172,8 @@ def run():
         else:
             logger.warning("[Layer 1] All tickers returned empty data")
     except Exception:
-        logger.error("[Layer 1] Prices failed — see error above", exc_info=True)
+        logger.exception("[Layer 1] Prices failed — see error above")
+        _mark_failed("prices")
 
     # ── Layer 2: USDA Fundamentals ───────────────────────────────
     usda_data = {}
@@ -132,8 +190,10 @@ def run():
             save_freshness("usda", total_rows)
         else:
             logger.warning("[Layer 2] USDA returned no data (API key missing?)")
+            _mark_empty("usda")
     except Exception:
-        logger.error("[Layer 2] USDA failed — see error above", exc_info=True)
+        logger.exception("[Layer 2] USDA failed — see error above")
+        _mark_failed("usda")
 
     # ── Layer 2b: USDA Crop Progress/Condition ─────────────────────
     crop_progress_data = {}
@@ -150,8 +210,10 @@ def run():
             save_freshness("crop_progress", total_rows)
         else:
             logger.warning("[Layer 2b] Crop progress returned no data (API key missing?)")
+            _mark_empty("crop_progress")
     except Exception:
-        logger.error("[Layer 2b] Crop progress failed — see error above", exc_info=True)
+        logger.exception("[Layer 2b] Crop progress failed — see error above")
+        _mark_failed("crop_progress")
 
     # ── Layer 3: FRED Economic Context ───────────────────────────
     fred_data = {}
@@ -173,7 +235,8 @@ def run():
         else:
             logger.warning("[Layer 3] FRED returned no data (API key missing?)")
     except Exception:
-        logger.error("[Layer 3] FRED failed — see error above", exc_info=True)
+        logger.exception("[Layer 3] FRED failed — see error above")
+        _mark_failed("fred")
 
     # ── Layer 4: COT Positioning ─────────────────────────────────
     cot_data = {}
@@ -194,8 +257,10 @@ def run():
             save_freshness("cot", total_rows)
         else:
             logger.warning("[Layer 4] COT returned no data")
+            _mark_empty("cot")
     except Exception:
-        logger.error("[Layer 4] COT failed — see error above", exc_info=True)
+        logger.exception("[Layer 4] COT failed — see error above")
+        _mark_failed("cot")
 
     # ── Layer 5: Weather ─────────────────────────────────────────
     weather_data = {}
@@ -216,8 +281,10 @@ def run():
             save_freshness("weather", total_rows)
         else:
             logger.warning("[Layer 5] Weather returned no data")
+            _mark_empty("weather")
     except Exception:
-        logger.error("[Layer 5] Weather failed — see error above", exc_info=True)
+        logger.exception("[Layer 5] Weather failed — see error above")
+        _mark_failed("weather")
 
     # ── Layer 6: PSD Global Supply/Demand ────────────────────────
     psd_data = {}
@@ -238,8 +305,10 @@ def run():
             save_freshness("psd", total_rows)
         else:
             logger.warning("[Layer 6] PSD returned no data")
+            _mark_empty("psd")
     except Exception:
-        logger.error("[Layer 6] PSD failed — see error above", exc_info=True)
+        logger.exception("[Layer 6] PSD failed — see error above")
+        _mark_failed("psd")
 
     # ── Layer 7: Currencies ──────────────────────────────────────
     currency_data = {}
@@ -260,8 +329,10 @@ def run():
             save_freshness("currencies", total_rows)
         else:
             logger.warning("[Layer 7] Currencies returned no data")
+            _mark_empty("currencies")
     except Exception:
-        logger.error("[Layer 7] Currencies failed — see error above", exc_info=True)
+        logger.exception("[Layer 7] Currencies failed — see error above")
+        _mark_failed("currencies")
 
     # ── Layer 8: World Bank Monthly Prices ───────────────────────
     wb_data = {}
@@ -282,8 +353,10 @@ def run():
             save_freshness("worldbank", total_rows)
         else:
             logger.warning("[Layer 8] World Bank returned no data")
+            _mark_empty("worldbank")
     except Exception:
-        logger.error("[Layer 8] World Bank failed — see error above", exc_info=True)
+        logger.exception("[Layer 8] World Bank failed — see error above")
+        _mark_failed("worldbank")
 
     # ── Layer 9: DCE Chinese Futures ──────────────────────────────
     dce_data = {}
@@ -304,8 +377,10 @@ def run():
             save_freshness("dce", total_rows)
         else:
             logger.warning("[Layer 9] DCE returned no data")
+            _mark_empty("dce")
     except Exception:
-        logger.error("[Layer 9] DCE failed — see error above", exc_info=True)
+        logger.exception("[Layer 9] DCE failed — see error above")
+        _mark_failed("dce")
 
     # ── Layer 10: USDA Export Sales ─────────────────────────────
     export_sales_data = {}
@@ -327,10 +402,12 @@ def run():
                 save_freshness("export_sales", total_rows)
             else:
                 logger.warning("[Layer 10] Export sales returned no data (FAS_API_KEY missing?)")
+                _mark_empty("export_sales")
         else:
             logger.info("[Layer 10] Export sales skipped (FAS_API_KEY not set)")
     except Exception:
-        logger.error("[Layer 10] Export sales failed — see error above", exc_info=True)
+        logger.exception("[Layer 10] Export sales failed — see error above")
+        _mark_failed("export_sales")
 
     # ── Layer 11: Forward Curves ────────────────────────────────
     forward_curve_data = {}
@@ -351,8 +428,10 @@ def run():
             save_freshness("forward_curve", total_rows)
         else:
             logger.warning("[Layer 11] Forward curves returned no data")
+            _mark_empty("forward_curve")
     except Exception:
-        logger.error("[Layer 11] Forward curves failed — see error above", exc_info=True)
+        logger.exception("[Layer 11] Forward curves failed — see error above")
+        _mark_failed("forward_curve")
 
     # ── Layer 12: WASDE Monthly Estimates ────────────────────────
     wasde_data = {}
@@ -373,11 +452,14 @@ def run():
                 total_rows = sum(len(df) for df in wasde_data.values())
                 save_freshness("wasde", total_rows)
             else:
-                logger.warning("[Layer 12] WASDE returned no data (API key missing?)")
+                logger.warning("[Layer 12] WASDE returned no data — OCE archive may be unreachable")
+                _mark_empty("wasde")
         else:
-            logger.info("[Layer 12] WASDE skipped (USDA_API_KEY not set)")
+            logger.warning("[Layer 12] WASDE returned no files — OCE archive unreachable?")
+            _mark_empty("wasde")
     except Exception:
-        logger.error("[Layer 12] WASDE failed — see error above", exc_info=True)
+        logger.exception("[Layer 12] WASDE failed — see error above")
+        _mark_failed("wasde")
 
     # ── Layer 13: EIA Biofuel/Energy ──────────────────────────────
     eia_data = {}
@@ -399,10 +481,12 @@ def run():
                 save_freshness("eia", total_rows)
             else:
                 logger.warning("[Layer 13] EIA returned no data")
+                _mark_empty("eia")
         else:
             logger.info("[Layer 13] EIA skipped (EIA_API_KEY not set)")
     except Exception:
-        logger.error("[Layer 13] EIA failed — see error above", exc_info=True)
+        logger.exception("[Layer 13] EIA failed — see error above")
+        _mark_failed("eia")
 
     # ── Layer 14: USDA Crush/Processing + Export Inspections ──────
     try:
@@ -429,8 +513,10 @@ def run():
             save_freshness("crush_inspections", total_14)
         else:
             logger.warning("[Layer 14] Crush/inspections returned no data")
+            _mark_empty("crush_inspections")
     except Exception:
-        logger.error("[Layer 14] Crush/inspections failed — see error above", exc_info=True)
+        logger.exception("[Layer 14] Crush/inspections failed — see error above")
+        _mark_failed("crush_inspections")
 
     # ── Layer 15: CONAB Brazil Crop Estimates ─────────────────────
     try:
@@ -444,8 +530,10 @@ def run():
             save_freshness("conab", len(conab_df))
         else:
             logger.warning("[Layer 15] CONAB returned no data")
+            _mark_empty("conab")
     except Exception:
-        logger.error("[Layer 15] CONAB failed — see error above", exc_info=True)
+        logger.exception("[Layer 15] CONAB failed — see error above")
+        _mark_failed("conab")
 
     # ── Layer 16: NCDEX India Domestic Soy Prices ─────────────────
     try:
@@ -466,8 +554,10 @@ def run():
                 "[Layer 16] NCDEX returned no data — URL may need verification. "
                 "Check NCDEX_BHAVCOPY_URL_TEMPLATES in config.py."
             )
+            _mark_empty("india_domestic")
     except Exception:
-        logger.error("[Layer 16] India domestic failed — see error above", exc_info=True)
+        logger.exception("[Layer 16] India domestic failed — see error above")
+        _mark_failed("india_domestic")
 
     # ── Layer 17: CEPEA Brazil Domestic Soy Spot ──────────────────
     try:
@@ -488,8 +578,10 @@ def run():
                 "[Layer 17] CEPEA returned no data — page may use JavaScript. "
                 "Check CEPEA_SOYBEAN_URL in config.py."
             )
+            _mark_empty("cepea")
     except Exception:
-        logger.error("[Layer 17] CEPEA failed — see error above", exc_info=True)
+        logger.exception("[Layer 17] CEPEA failed — see error above")
+        _mark_failed("cepea")
 
     # ── Layer 18: JSE SAFEX South Africa Soy Prices ───────────────
     try:
@@ -510,14 +602,40 @@ def run():
                 "[Layer 18] SAFEX returned no data — page may use JavaScript. "
                 "Check SAFEX_STATS_URL in config.py."
             )
+            _mark_empty("safex")
     except Exception:
-        logger.error("[Layer 18] SAFEX failed — see error above", exc_info=True)
+        logger.exception("[Layer 18] SAFEX failed — see error above")
+        _mark_failed("safex")
+
+    # ── Layer 19: AgRural Paranaguá FOB Soy Quote ────────────────
+    try:
+        logger.info("[Layer 19] Fetching AgRural Paranaguá FOB soy quote ...")
+        agrural_data = fetch_agrural()
+
+        if agrural_data:
+            for name, df in agrural_data.items():
+                df = clean_brazil_spot(df)
+                save_brazil_spot(name, df)
+
+            total_19 = sum(len(df) for df in agrural_data.values())
+            results["agrural"] = True
+            save_freshness("agrural", total_19)
+            logger.info("[Layer 19] AgRural: %d rows saved", total_19)
+        else:
+            logger.warning(
+                "[Layer 19] AgRural returned no data — page shape may have changed. "
+                "Check AGRURAL_URL in config.py."
+            )
+            _mark_empty("agrural")
+    except Exception:
+        logger.exception("[Layer 19] AgRural failed — see error above")
+        _mark_failed("agrural")
 
     # ── Update per-commodity freshness tracking ─────────────────
     try:
         update_commodity_freshness()
     except Exception:
-        logger.error("Per-commodity freshness update failed", exc_info=True)
+        logger.exception("Per-commodity freshness update failed")
 
     # ── Run data health check ─────────────────────────────────
     try:
@@ -528,7 +646,7 @@ def run():
         else:
             logger.info("DATA HEALTH: All systems green")
     except Exception:
-        logger.error("Health check failed", exc_info=True)
+        logger.exception("Health check failed")
 
     # ── Verify ───────────────────────────────────────────────────
     logger.info("=" * 60)
@@ -558,6 +676,19 @@ def run():
         logger.warning("Failed:    %s", ", ".join(failed))
     logger.info("Database saved to: data/storage/mirror_market.db")
 
+    # ── Exit code ────────────────────────────────────────────────
+    # Non-critical layer failures are logged but do not fail the run.
+    # If a critical layer (prices or FRED economic) failed, exit 1 so
+    # CI/deploy workflows can react.
+    critical_failures = [name for name in CRITICAL_LAYERS if not results.get(name)]
+    if critical_failures:
+        logger.error(
+            "Critical layer(s) failed: %s — pipeline exiting with status 1",
+            ", ".join(critical_failures),
+        )
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    run()
+    sys.exit(run())

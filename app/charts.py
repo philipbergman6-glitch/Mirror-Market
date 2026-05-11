@@ -122,7 +122,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     # Volume
     if "Volume" in df.columns:
         vol_colors = [COLORS["bullish"] if c >= o else COLORS["bearish"]
-                      for c, o in zip(df["Close"], df["Open"])]
+                      for c, o in zip(df["Close"], df["Open"], strict=False)]
         fig.add_trace(
             go.Bar(x=df.index, y=df["Volume"], name="Volume",
                    marker_color=vol_colors, opacity=0.3),
@@ -207,7 +207,7 @@ def build_crush_spread_chart(
         go.Scatter(
             x=spread_df["Date"],
             y=[max(0, v) for v in spread_mt],
-            fill="tozeroy", fillcolor=f"rgba(63,185,80,0.15)",
+            fill="tozeroy", fillcolor="rgba(63,185,80,0.15)",
             line=dict(width=0), name="Profitable",
         )
     )
@@ -215,8 +215,98 @@ def build_crush_spread_chart(
         go.Scatter(
             x=spread_df["Date"],
             y=[min(0, v) for v in spread_mt],
-            fill="tozeroy", fillcolor=f"rgba(248,81,73,0.15)",
+            fill="tozeroy", fillcolor="rgba(248,81,73,0.15)",
             line=dict(width=0), name="Negative",
+        )
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"])
+    fig.update_layout(height=350, xaxis_title="", yaxis_title="USD/MT", **_DARK_LAYOUT)
+    return fig
+
+
+def build_basis_chart(
+    basis_payload: pd.DataFrame | dict,
+    stats: dict,
+) -> go.Figure:
+    """Brazil basis time series with discount/premium zones.
+
+    Negative basis (Brazilian discount = export-competitive) is shaded in
+    the bullish-for-trade green; positive basis (domestic premium = import
+    pull) is shaded in the bearish red. Zero is the meaningful threshold.
+
+    Args:
+        basis_payload: either
+            - a DataFrame with 'Date' + 'basis_usd_mt' (single-source legacy path), or
+            - the multi-source basis dict from `relative_value_analysis()`:
+              {"primary": str, "sources": {label: {"series": df, ...}}, "wedge_usd_mt": ...}.
+              The primary source renders as a solid line; any secondary source
+              renders as a dashed muted line.
+        stats: dict with keys avg_1y, min_1y, max_1y for the primary source
+            (used for the 1Y range backdrop and average horizontal line).
+    """
+    if isinstance(basis_payload, dict) and "sources" in basis_payload:
+        primary_label = basis_payload["primary"]
+        sources = basis_payload["sources"]
+        primary_df = sources[primary_label]["series"]
+        secondary_label = next(
+            (lbl for lbl in sources if lbl != primary_label), None
+        )
+        secondary_df = sources[secondary_label]["series"] if secondary_label else None
+    else:
+        primary_label = "Brazil Basis"
+        primary_df = basis_payload
+        secondary_label = None
+        secondary_df = None
+
+    fig = go.Figure()
+
+    if stats.get("min_1y") is not None:
+        fig.add_hline(
+            y=stats["avg_1y"], line_dash="dot", line_color=COLORS["info"],
+            annotation_text=f"1Y avg: ${stats['avg_1y']:+,.1f}",
+            annotation_font_color=COLORS["text_muted"],
+        )
+        fig.add_hrect(
+            y0=stats["min_1y"], y1=stats["max_1y"],
+            fillcolor="rgba(88,166,255,0.06)", line_width=0,
+            annotation_text="1Y range",
+            annotation_font_color=COLORS["text_dim"],
+        )
+
+    primary_series = primary_df["basis_usd_mt"]
+    fig.add_trace(
+        go.Scatter(
+            x=primary_df["Date"], y=primary_series,
+            mode="lines", name=primary_label,
+            line=dict(color=COLORS["text"], width=2),
+        )
+    )
+    if secondary_df is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=secondary_df["Date"], y=secondary_df["basis_usd_mt"],
+                mode="lines", name=secondary_label,
+                line=dict(color=COLORS["text_muted"], width=1.5, dash="dash"),
+            )
+        )
+    # Discount zone (negative basis = export-competitive Brazil) — primary only.
+    fig.add_trace(
+        go.Scatter(
+            x=primary_df["Date"],
+            y=[min(0, v) for v in primary_series],
+            fill="tozeroy", fillcolor="rgba(63,185,80,0.15)",
+            line=dict(width=0), name="Brazilian discount",
+            showlegend=False,
+        )
+    )
+    # Premium zone (positive basis = domestic pull) — primary only.
+    fig.add_trace(
+        go.Scatter(
+            x=primary_df["Date"],
+            y=[max(0, v) for v in primary_series],
+            fill="tozeroy", fillcolor="rgba(248,81,73,0.15)",
+            line=dict(width=0), name="Brazilian premium",
+            showlegend=False,
         )
     )
     fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"])

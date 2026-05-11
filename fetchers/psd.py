@@ -15,7 +15,6 @@ Key concepts for learning:
 
 import io
 import logging
-import time
 import zipfile
 
 import pandas as pd
@@ -28,8 +27,8 @@ from config import (
     PSD_TARGET_COUNTRIES,
     PSD_URLS,
     REQUEST_TIMEOUT,
-    RETRY_DELAY,
 )
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -72,13 +71,14 @@ def fetch_psd_commodity_group(group_name: str) -> pd.DataFrame:
             )
             return df
 
-        except Exception as exc:
+        except (requests.RequestException, zipfile.BadZipFile,
+                pd.errors.ParserError, ValueError, KeyError) as exc:
             logger.warning(
                 "Attempt %d/%d failed for PSD %s: %s",
                 attempt, MAX_RETRIES, group_name, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for PSD %s", MAX_RETRIES, group_name)
     return pd.DataFrame()

@@ -73,7 +73,14 @@ COMMODITY_TICKERS = {
 }
 
 # How far back to pull historical data (yfinance period strings)
-DEFAULT_HISTORY_PERIOD = "2y"
+# 15y gives ~15 monthly observations per calendar month — enough to extract
+# real soy seasonality (US harvest pressure, SA harvest, summer weather rallies)
+# without bleeding into structural regime changes (pre-2010 ethanol ramp).
+DEFAULT_HISTORY_PERIOD = "15y"
+
+# Minimum observations per calendar month for a seasonal average to be reported.
+# Below this we return None rather than a noisy short-window mean.
+SEASONAL_MIN_YEARS_PER_MONTH = 5
 
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
@@ -335,11 +342,35 @@ FORWARD_CURVE_CONTRACTS = {
 }
 
 # ---------------------------------------------------------------------------
-# Layer 12 — WASDE Monthly Estimates (USDA NASS QuickStats, source_desc=FORECAST)
-# THE most market-moving USDA report — monthly supply/demand projections
+# Layer 12 — WASDE Monthly Estimates (USDA OCE — oce-wasde-report-data.xls)
+# THE most market-moving USDA report — monthly supply/demand projections.
+# NASS QuickStats does not serve WASDE forecast rows, so this layer pulls
+# the canonical XLS artifact directly from USDA OCE.
 # ---------------------------------------------------------------------------
 WASDE_COMMODITIES = ["SOYBEANS", "CORN", "WHEAT", "COTTON"]
-WASDE_STAT_CATEGORIES = ["PRODUCTION", "YIELD", "AREA HARVESTED"]
+
+# URL template — USDA OCE publishes one .xls per month as
+# https://www.usda.gov/oce/commodity/wasde/wasdeMMYY.xls
+WASDE_URL_TEMPLATE = "https://www.usda.gov/oce/commodity/wasde/wasde{mm:02d}{yy:02d}.xls"
+
+# How many monthly XLS files to attempt on first run. After backfill the
+# pipeline still re-downloads the latest file every run, but historical
+# rows are idempotent (INSERT OR REPLACE on the wasde PK).
+WASDE_BACKFILL_MONTHS = 12
+
+# Where each commodity's balance-sheet table lives inside the XLS.
+# Sheets are named "Page N" (matching the PDF page numbers). Some sheets
+# contain multiple sub-tables stacked vertically; `header_text` is the
+# col-0 label that marks the start of the section. None means "the entire
+# sheet is one table" (Wheat and Cotton each have their own page).
+WASDE_LAYOUT = {
+    "WHEAT":        {"sheet": "Page 11", "header_text": None},
+    "CORN":         {"sheet": "Page 12", "header_text": "CORN"},
+    "SOYBEANS":     {"sheet": "Page 15", "header_text": "SOYBEANS"},
+    "SOYBEAN_OIL":  {"sheet": "Page 15", "header_text": "SOYBEAN OIL"},
+    "SOYBEAN_MEAL": {"sheet": "Page 15", "header_text": "SOYBEAN MEAL"},
+    "COTTON":       {"sheet": "Page 17", "header_text": None},
+}
 
 # ---------------------------------------------------------------------------
 # Layer 13 — EIA Biofuel/Energy Data
@@ -350,9 +381,21 @@ EIA_API_KEY = os.getenv("EIA_API_KEY", "")
 EIA_BASE_URL = "https://api.eia.gov/v2/"
 
 EIA_SERIES = {
-    "Ethanol Production":    {"route": "petroleum/sum/sndw", "series": "W_EPOOXE_YOP_NUS_MBBLD", "frequency": "weekly"},
-    "Biodiesel Production":  {"route": "petroleum/sum/sndm", "series": "M_EPOODY_YOP_NUS_1", "frequency": "monthly"},
-    "Diesel Retail Price":   {"route": "petroleum/pri/gnd/data", "series": "EMD_EPD2D_PTE_NUS_DPG", "frequency": "weekly"},
+    "Ethanol Production": {
+        "route": "petroleum/sum/sndw",
+        "series": "W_EPOOXE_YOP_NUS_MBBLD",
+        "frequency": "weekly",
+    },
+    "Biodiesel Production": {
+        "route": "petroleum/sum/sndm",
+        "series": "M_EPOODY_YOP_NUS_1",
+        "frequency": "monthly",
+    },
+    "Diesel Retail Price": {
+        "route": "petroleum/pri/gnd/data",
+        "series": "EMD_EPD2D_PTE_NUS_DPG",
+        "frequency": "weekly",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -394,7 +437,8 @@ NCDEX_UNIT_MULTIPLIER = {
 
 # ---------------------------------------------------------------------------
 # Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
-# Publishes BRL per 60kg bag for the Paranaguá reference port
+# Farm-gate reference indicator for Paraná state in BRL per 60kg bag.
+# This is NOT the Paranaguá port FOB — see Layer 19 (AgRural) for that.
 # ---------------------------------------------------------------------------
 CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
 CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
@@ -410,14 +454,15 @@ SAFEX_COMMODITIES = {
 }
 
 # ---------------------------------------------------------------------------
-# Layer 16b — Options Sentiment (experimental — yfinance option_chain)
-# Put/call ratios and implied volatility for soy complex
+# Layer 19 — AgRural Paranaguá FOB soy quote (free, no API key)
+# Trade-convention Brazil basis benchmark: daily Paranaguá port buy price
+# in BRL per 60kg bag, converted to BRL/MT downstream.
+#
+# Redistribution constraint: raw BRL/saca quotes are stored locally only.
+# The public dashboard publishes only the derived USD/MT basis.
 # ---------------------------------------------------------------------------
-OPTIONS_COMMODITIES = {
-    "Soybeans": "ZS=F",
-    "Soybean Oil": "ZL=F",
-    "Soybean Meal": "ZM=F",
-}
+AGRURAL_URL = "https://agrural.com.br/precossojaemilho/"
+AGRURAL_COMMODITIES = ["Soybean (AgRural Paranaguá FOB)"]
 
 # ---------------------------------------------------------------------------
 # Analysis thresholds — configurable per-commodity where appropriate

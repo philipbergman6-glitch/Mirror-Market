@@ -16,13 +16,13 @@ Key concepts for learning:
 
 import io
 import logging
-import time
-from datetime import datetime
+from datetime import datetime, timezone
 
-import requests
 import pandas as pd
+import requests
 
-from config import CONAB_URL, REQUEST_TIMEOUT, MAX_RETRIES, RETRY_DELAY
+from config import CONAB_URL, MAX_RETRIES, REQUEST_TIMEOUT
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +61,12 @@ def fetch_conab_estimates() -> pd.DataFrame:
             if resp.status_code != 200:
                 logger.warning("HTTP %d for CONAB", resp.status_code)
                 if attempt < MAX_RETRIES:
-                    time.sleep(RETRY_DELAY)
+                    retry_sleep(attempt)
                     continue
                 return pd.DataFrame()
 
-            # Try to parse as tab-separated text
+            # Try to parse as tab-separated text, then fall back to semicolon
+            # (commonly used in Brazilian government CSV exports).
             text = resp.text
             try:
                 df = pd.read_csv(
@@ -74,8 +75,7 @@ def fetch_conab_estimates() -> pd.DataFrame:
                     encoding="utf-8",
                     on_bad_lines="skip",
                 )
-            except Exception:
-                # Try semicolon separator (common in Brazilian data)
+            except (pd.errors.ParserError, ValueError, UnicodeDecodeError):
                 try:
                     df = pd.read_csv(
                         io.StringIO(text),
@@ -83,7 +83,7 @@ def fetch_conab_estimates() -> pd.DataFrame:
                         encoding="utf-8",
                         on_bad_lines="skip",
                     )
-                except Exception as exc:
+                except (pd.errors.ParserError, ValueError, UnicodeDecodeError) as exc:
                     logger.warning("Could not parse CONAB data: %s", exc)
                     return pd.DataFrame()
 
@@ -112,7 +112,7 @@ def fetch_conab_estimates() -> pd.DataFrame:
 
             # Melt into long format: commodity, crop_year, attribute, value
             rows = []
-            today = datetime.utcnow().strftime("%Y-%m-%d")
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             # Map commodity names to English
             commodity_map = {
@@ -160,7 +160,7 @@ def fetch_conab_estimates() -> pd.DataFrame:
         except requests.RequestException as exc:
             logger.warning("CONAB attempt %d failed: %s", attempt, exc)
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error("All %d attempts failed for CONAB", MAX_RETRIES)
     return pd.DataFrame()

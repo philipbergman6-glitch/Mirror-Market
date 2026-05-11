@@ -16,12 +16,13 @@ Key concepts for learning:
 """
 
 import logging
-import time
 
 import akshare as ak
 import pandas as pd
+import requests
 
-from config import DCE_CONTRACTS, MAX_RETRIES, RETRY_DELAY
+from config import DCE_CONTRACTS, MAX_RETRIES
+from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +51,16 @@ def fetch_one(symbol: str) -> pd.DataFrame:
 
             return data
 
-        except Exception as exc:
+        except (requests.RequestException, ValueError, KeyError, AttributeError) as exc:
+            # AKShare wraps the upstream Sina API; observed failure modes are
+            # transport errors, schema drift (KeyError), and intermittent
+            # AttributeError when the response payload is malformed.
             logger.warning(
                 "Attempt %d/%d failed for DCE %s: %s",
                 attempt, MAX_RETRIES, symbol, exc,
             )
             if attempt < MAX_RETRIES:
-                time.sleep(RETRY_DELAY)
+                retry_sleep(attempt)
 
     logger.error(
         "All %d attempts failed for DCE %s — returning empty DataFrame",

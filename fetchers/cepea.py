@@ -2,75 +2,93 @@
 Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price.
 
 CEPEA (Centro de Estudos Avançados em Economia Aplicada) at ESALQ/USP
-is Brazil's leading agricultural commodity price research center.  Their
-Soybean Indicator tracks the farm-gate price at Paranaguá port (Brazil's
-main soy export terminal) in BRL per 60kg bag.
+is Brazil's leading agricultural commodity price research center. The URL
+this fetcher hits returns the standard CEPEA/ESALQ Soybean Indicator — a
+daily farm-gate reference price for **Paraná state** (the country's
+benchmark soy origin), quoted in BRL per 60kg bag.
+
+This is NOT the Paranaguá port FOB/CIF premium. CEPEA publishes a separate
+Paranaguá indicator with port-specific pricing; a future fetcher (AgRural
+or CEPEA Paranaguá) will add that as a parallel layer.
 
 Why it matters:
-    Brazilian farm-gate prices drive planting decisions.  When BRL weakens,
-    Brazilian farmers effectively receive MORE BRL for their soy even at
-    the same USD CBOT price — making them more competitive exporters.
-    Tracking CEPEA in BRL reveals when Brazilian farmers are "happy" to sell
-    vs holding back (which tightens global supply).
+    Brazilian farm-gate prices drive planting decisions. When BRL weakens,
+    Brazilian farmers receive MORE BRL for their soy even at the same USD
+    CBOT price — making them more competitive exporters. The
+    farm-gate-vs-CBOT spread is computed at the analysis layer as the
+    "Brazil basis" indicator.
 
 Unit conversion:
-    CEPEA publishes BRL / 60kg bag.
+    CEPEA publishes BRL / 60kg bag → we store BRL/MT.
     BRL/MT = (BRL per bag) / 60 × 1000
 
 USD/MT conversion happens at the analysis layer using the BRL/USD rate from
 the currencies table — NOT in this fetcher (display-layer-only conversion rule).
 
-Source: CEPEA/ESALQ indicator page — no API key required.
-
-Key concepts for learning:
-    - pd.read_html() extracts tables from HTML pages automatically
-    - The CEPEA page may have JavaScript — we try requests first, then
-      describe what to do if it fails
-    - Parsing mixed-format date strings from Brazilian pages
+Parser strategy:
+    Use BeautifulSoup to locate a <table> whose header contains a date-like
+    column ("Date" / "Data") and a price-like column ("Value" / "Valor"
+    / "Price" / "Preço"). Validate the shape, then parse rows with explicit
+    Brazilian-format number handling. Missing structure raises
+    ScraperShapeError so a silent zero-row result can't be confused with
+    "the upstream JavaScript page failed to render".
 """
 
+from __future__ import annotations
+
 import logging
-import time
+import re
+from collections.abc import Sequence
 from datetime import datetime
 
 import pandas as pd
 import requests
+from bs4 import BeautifulSoup
 
-from config import CEPEA_SOYBEAN_URL, MAX_RETRIES, REQUEST_TIMEOUT, RETRY_DELAY
+from config import CEPEA_SOYBEAN_URL, MAX_RETRIES, REQUEST_TIMEOUT
+from fetchers._backoff import retry_sleep
+from pipeline.results import ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
+_DATE_HEADER_KEYWORDS = ("date", "data", "dia")
+_PRICE_HEADER_KEYWORDS = ("value", "valor", "price", "preco", "preço")
+_DATE_FORMATS: tuple[str, ...] = ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y")
+_DECIMAL_RE = re.compile(r"-?\d[\d.,]*")
+
 
 def _parse_brl_price(val: str) -> float | None:
-    """
-    Convert a Brazilian-format price string to float.
+    """Convert a Brazilian-format price string to float.
 
-    Brazilian number format uses period as thousands separator and comma
-    as decimal: "1.234,56" → 1234.56
-
-    Examples:
-        "1.234,56" → 1234.56
-        "123,45"   → 123.45
-        "1234.56"  → 1234.56  (US format — also handled)
+    Brazilian: period thousands, comma decimal — ``"1.234,56" → 1234.56``.
+    Also handles US-style ``"1234.56"`` and bare ``"123,45"``.
+    Returns None on any unparseable value (caller filters those out).
     """
-    if not val or str(val).strip() in ("", "-", "N/A", "nan"):
+    if not val:
         return None
+    s = str(val).strip()
+    if s in ("", "-", "—", "N/A", "nan"):
+        return None
+    match = _DECIMAL_RE.search(s)
+    if not match:
+        return None
+    s = match.group(0)
     try:
-        val = str(val).strip()
-        # Brazilian format: remove thousands periods, replace decimal comma
-        if "," in val and "." in val:
-            # "1.234,56" format
-            val = val.replace(".", "").replace(",", ".")
-        elif "," in val:
-            # "1234,56" format
-            val = val.replace(",", ".")
-        return float(val)
-    except (ValueError, TypeError):
+        if "," in s and "." in s:
+            s = s.replace(".", "").replace(",", ".")
+        elif "," in s:
+            s = s.replace(",", ".")
+        return float(s)
+    except ValueError:
         return None
 
 
 def _fetch_cepea_page() -> str:
-    """Download the CEPEA soybean indicator page HTML."""
+    """Download the CEPEA soybean indicator page HTML.
+
+    Exponential backoff with jitter on transient failures. Returns the
+    raw HTML body on success, empty string on full retry exhaustion.
+    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -94,124 +112,129 @@ def _fetch_cepea_page() -> str:
             logger.warning("CEPEA: Request failed (attempt %d): %s", attempt, exc)
 
         if attempt < MAX_RETRIES:
-            time.sleep(RETRY_DELAY)
+            retry_sleep(attempt)
 
     return ""
 
 
-def _parse_cepea_tables(html: str) -> pd.DataFrame:
+def _normalize(text: str) -> str:
+    return text.strip().lower()
+
+
+def _find_price_table(soup: BeautifulSoup) -> tuple[int, int, list[list[str]]]:
+    """Locate the price table and return (date_idx, price_idx, body_rows).
+
+    Walks all <table> elements; for each, scans rows to find a header
+    that contains both a date-like keyword and a price-like keyword.
+    Raises ScraperShapeError when nothing matches — that's the alert
+    signal that the upstream page has changed shape.
     """
-    Extract the price table from CEPEA HTML using pd.read_html().
+    tables = soup.find_all("table")
+    if not tables:
+        raise ScraperShapeError("CEPEA: no <table> elements on page (JavaScript-rendered?)")
 
-    CEPEA's soybean indicator page has a table with columns like:
-        Date | Value (BRL/60kg bag) | ...
+    for table in tables:
+        rows = table.find_all("tr")
+        if not rows:
+            continue
 
-    We search all tables found for one that contains date + price data.
+        for header_idx, row in enumerate(rows):
+            cells = [_normalize(c.get_text(" ", strip=True)) for c in row.find_all(["th", "td"])]
+            if not cells:
+                continue
 
-    Returns a DataFrame with columns: Date, price_brl_mt, Unit
-    or an empty DataFrame if parsing fails.
+            date_col = next(
+                (i for i, c in enumerate(cells)
+                 if any(k in c for k in _DATE_HEADER_KEYWORDS)),
+                None,
+            )
+            price_col = next(
+                (i for i, c in enumerate(cells)
+                 if any(k in c for k in _PRICE_HEADER_KEYWORDS)),
+                None,
+            )
+
+            if date_col is None or price_col is None:
+                continue
+
+            body: list[list[str]] = []
+            for data_row in rows[header_idx + 1:]:
+                body_cells = [c.get_text(" ", strip=True) for c in data_row.find_all(["th", "td"])]
+                # Skip blank/separator rows but tolerate rows that have an
+                # extra trailing column (e.g. variation %).
+                if len(body_cells) > max(date_col, price_col):
+                    body.append(body_cells)
+
+            if not body:
+                raise ScraperShapeError(
+                    "CEPEA: header found but no data rows beneath it — page may be empty"
+                )
+
+            return date_col, price_col, body
+
+    raise ScraperShapeError(
+        "CEPEA: no table contained a recognisable date+price header — "
+        "page may use JavaScript rendering or has been restructured"
+    )
+
+
+def _parse_cepea_tables(html: str) -> pd.DataFrame:
+    """Extract the price table from CEPEA HTML.
+
+    Returns a DataFrame with columns Date, price_brl_mt, Unit (BRL/MT)
+    sorted newest-first. Raises ScraperShapeError if the page no longer
+    has a recognisable price table.
     """
     if not html:
         return pd.DataFrame()
 
-    try:
-        tables = pd.read_html(html, decimal=",", thousands=".")
-    except Exception as exc:
-        logger.warning("CEPEA: pd.read_html() failed: %s", exc)
-        return pd.DataFrame()
+    soup = BeautifulSoup(html, "html.parser")
+    date_idx, price_idx, body = _find_price_table(soup)
 
-    if not tables:
-        logger.warning("CEPEA: No HTML tables found on page")
-        return pd.DataFrame()
-
-    logger.info("CEPEA: Found %d HTML tables — searching for price data", len(tables))
-
-    # Search each table for one that looks like price data
-    for i, tbl in enumerate(tables):
-        tbl.columns = [str(c).strip().lower() for c in tbl.columns]
-
-        # Look for a date-like column and a numeric price column
-        date_col = None
-        price_col = None
-
-        for col in tbl.columns:
-            if "date" in col or "data" in col or "dia" in col:
-                date_col = col
-            if "value" in col or "valor" in col or "price" in col or "preco" in col or "preço" in col:
-                price_col = col
-
-        if date_col is None or price_col is None:
-            # Try positional: first column as date, second as price
-            if len(tbl.columns) >= 2:
-                date_col = tbl.columns[0]
-                price_col = tbl.columns[1]
-
-        if date_col is None or price_col is None:
+    rows: list[dict[str, object]] = []
+    for cells in body:
+        date_str = cells[date_idx].strip()
+        parsed_date = None
+        for fmt in _DATE_FORMATS:
+            try:
+                parsed_date = datetime.strptime(date_str, fmt).date()
+                break
+            except ValueError:
+                continue
+        if parsed_date is None:
             continue
 
-        logger.debug("CEPEA: Table %d — date_col=%s, price_col=%s", i, date_col, price_col)
+        price_per_bag = _parse_brl_price(cells[price_idx])
+        if price_per_bag is None or price_per_bag <= 0:
+            continue
 
-        # Parse dates and prices
-        rows = []
-        for _, row in tbl.iterrows():
-            date_val = str(row.get(date_col, "")).strip()
-            price_val = str(row.get(price_col, "")).strip()
+        price_brl_mt = (price_per_bag / 60.0) * 1000.0
+        rows.append({
+            "Date": str(parsed_date),
+            "price_brl_mt": round(price_brl_mt, 2),
+            "Unit": "BRL/MT",
+        })
 
-            # Try parsing the date
-            parsed_date = None
-            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
-                try:
-                    parsed_date = datetime.strptime(date_val, fmt).date()
-                    break
-                except ValueError:
-                    continue
+    if not rows:
+        # Header existed, body existed, but every row failed to parse —
+        # treat as shape change rather than success-with-empty.
+        raise ScraperShapeError(
+            "CEPEA: located price table but every row failed to parse (date+price)"
+        )
 
-            if parsed_date is None:
-                continue
-
-            # Parse the price (BRL per 60kg bag)
-            price_per_bag = _parse_brl_price(price_val)
-            if price_per_bag is None or price_per_bag <= 0:
-                continue
-
-            # Convert: BRL/60kg → BRL/MT
-            price_brl_mt = (price_per_bag / 60.0) * 1000.0
-
-            rows.append({
-                "Date": str(parsed_date),
-                "price_brl_mt": round(price_brl_mt, 2),
-                "Unit": "BRL/MT",
-            })
-
-        if rows:
-            result = pd.DataFrame(rows)
-            result = result.drop_duplicates("Date").sort_values("Date", ascending=False)
-            logger.info(
-                "CEPEA: Parsed %d price rows, latest = %.2f BRL/MT (%s)",
-                len(result),
-                result["price_brl_mt"].iloc[0],
-                result["Date"].iloc[0],
-            )
-            return result
-
-    logger.warning(
-        "CEPEA: No price table found in %d HTML tables. "
-        "Page may use JavaScript rendering — check %s manually.",
-        len(tables), CEPEA_SOYBEAN_URL,
+    result = pd.DataFrame(rows).drop_duplicates("Date").sort_values("Date", ascending=False)
+    logger.info(
+        "CEPEA: Parsed %d price rows, latest = %.2f BRL/MT (%s)",
+        len(result), result["price_brl_mt"].iloc[0], result["Date"].iloc[0],
     )
-    return pd.DataFrame()
+    return result
 
 
 def fetch_cepea() -> dict[str, pd.DataFrame]:
-    """
-    Fetch CEPEA/ESALQ Brazil soybean domestic price.
+    """Fetch CEPEA/ESALQ Brazil soybean domestic price.
 
-    Returns
-    -------
-    dict
-        {"Soybean (CEPEA)": DataFrame}
-        DataFrame columns: Date, price_brl_mt, Unit
-        Returns {} if fetch/parse fails.
+    Returns ``{"Soybean (CEPEA)": df}`` on success, ``{}`` on transport
+    failure or upstream structure change.
     """
     logger.info("Fetching CEPEA/ESALQ Brazil soybean price ...")
     html = _fetch_cepea_page()
@@ -223,13 +246,20 @@ def fetch_cepea() -> dict[str, pd.DataFrame]:
         )
         return {}
 
-    df = _parse_cepea_tables(html)
+    try:
+        df = _parse_cepea_tables(html)
+    except ScraperShapeError as exc:
+        logger.error("CEPEA: page structure changed — %s", exc)
+        return {}
 
     if df.empty:
         logger.warning("CEPEA: Parsed empty DataFrame — check page structure.")
         return {}
 
     return {"Soybean (CEPEA)": df}
+
+
+__all__: Sequence[str] = ("_parse_cepea_tables", "fetch_cepea")
 
 
 # ── Quick self-test ──────────────────────────────────────────────────────────
