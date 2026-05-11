@@ -462,8 +462,8 @@ def test_clean_wasde_happy_path():
     df = _make_wasde()
     out = clean_wasde(df)
 
-    # Year coerced to string
-    assert out["year"].dtype == object
+    # Year coerced to string (object on older pandas, StringDtype on pandas >=3.0)
+    assert pd.api.types.is_string_dtype(out["year"])
     assert out["year"].tolist() == ["2025", "2026"]
 
     # Comma stripped, numeric

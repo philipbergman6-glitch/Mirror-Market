@@ -19,7 +19,9 @@ def _make_cot_history(n_weeks: int, *, latest_spec_net: float, seed: int = 1) ->
     """COT history ending today. The first n-1 weeks form the baseline,
     the last row carries `latest_spec_net` so the z-score is controllable."""
     rng = np.random.default_rng(seed=seed)
-    dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=n_weeks, freq="W")
+    # freq="7D" guarantees exactly n_weeks rows; freq="W" anchors to Sunday and
+    # silently drops one period when `end` is not a Sunday (pandas 3.x).
+    dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=n_weeks, freq="7D")
     baseline_spec_net = rng.normal(loc=50_000, scale=10_000, size=n_weeks - 1)
     spec_net = np.append(baseline_spec_net, latest_spec_net)
     return pd.DataFrame({
@@ -60,7 +62,7 @@ def test_cot_section_omits_zscore_when_baseline_has_no_variance(patched_db):
     # 156 weeks but every spec_net is identical => std=0 => no z-score
     n = 156
     df = pd.DataFrame({
-        "Date": pd.date_range(end=pd.Timestamp.today().normalize(), periods=n, freq="W"),
+        "Date": pd.date_range(end=pd.Timestamp.today().normalize(), periods=n, freq="7D"),
         "commercial_long": np.full(n, 100.0),
         "commercial_short": np.full(n, 80.0),
         "commercial_net": np.full(n, 20.0),
