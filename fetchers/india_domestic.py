@@ -78,16 +78,41 @@ def _try_fetch_bhavcopy(target_date: date) -> pd.DataFrame | None:
         try:
             resp = requests.get(url, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
-            logger.debug("Request failed for %s: %s", url, exc)
+            logger.warning("NCDEX request failed for %s: %s", url, exc)
             continue
 
-        if resp.status_code != 200 or len(resp.content) <= 200:
+        content_type = resp.headers.get("Content-Type", "?")
+        size = len(resp.content)
+
+        if resp.status_code != 200:
+            logger.warning(
+                "NCDEX %s → HTTP %d (Content-Type=%s, %d bytes)",
+                url, resp.status_code, content_type, size,
+            )
+            continue
+
+        if "csv" not in content_type.lower() and "text/plain" not in content_type.lower():
+            # Live evidence (2026-05): ncdex.com serves a JS fingerprint
+            # interstitial on every URL with Content-Type=text/html. Surface
+            # that so logs explain why the layer is failing.
+            logger.warning(
+                "NCDEX %s → HTTP 200 but Content-Type=%s (%d bytes) — "
+                "likely anti-bot interstitial, not a CSV",
+                url, content_type, size,
+            )
+            continue
+
+        if size <= 200:
+            logger.warning(
+                "NCDEX %s → HTTP 200 but only %d bytes — empty or stub",
+                url, size,
+            )
             continue
 
         try:
             df = pd.read_csv(io.StringIO(resp.text), on_bad_lines="skip")
         except (ValueError, pd.errors.ParserError) as parse_err:
-            logger.debug("CSV parse failed for %s: %s", url, parse_err)
+            logger.warning("NCDEX CSV parse failed for %s: %s", url, parse_err)
             continue
 
         if not df.empty:

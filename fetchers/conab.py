@@ -5,17 +5,22 @@ Brazil's official crop agency publishes monthly production, area, and yield
 estimates that often differ from USDA by millions of tonnes. Getting both
 gives you the range of uncertainty.
 
-Source: CONAB data portal — historical series download.
+Source: CONAB data portal — historical series download (SerieHistoricaGraos.txt).
 No API key required.
 
-Key concepts for learning:
-    - CONAB publishes in Portuguese — column headers need translation.
-    - The data is a tab-separated text file with crop-year rows.
-    - We parse it defensively since the format may change between updates.
+File format (verified live 2026-05):
+    ano_agricola;dsc_safra_previsao;uf;produto;id_produto;
+    area_plantada_mil_ha;producao_mil_t;produtividade_mil_ha_mil_t
+
+The file is semicolon-separated and per-state (UF column), so we aggregate
+across the 27 UFs to produce national totals comparable to USDA/PSD figures.
 """
+
+from __future__ import annotations
 
 import io
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -26,32 +31,112 @@ from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
-# Portuguese → English column mapping for common CONAB headers
-_CONAB_COLUMNS = {
-    "produto": "commodity",
-    "safra": "crop_year",
-    "área plantada": "area",
-    "area plantada": "area",
-    "área (mil ha)": "area",
-    "produtividade": "yield",
-    "produtividade (kg/ha)": "yield",
-    "produção": "production",
-    "producao": "production",
-    "produção (mil t)": "production",
+_REQUIRED_COLUMNS: tuple[str, ...] = (
+    "ano_agricola",
+    "uf",
+    "produto",
+    "area_plantada_mil_ha",
+    "producao_mil_t",
+)
+
+# Portuguese commodity (normalized: lowercase, stripped) → English label
+# SerieHistoricaGraos.txt is grains+oilseeds+cotton only; coffee is in a
+# separate CONAB file and is not tracked here.
+_COMMODITY_MAP: dict[str, str] = {
+    "soja": "Soybeans",
+    "milho": "Corn",
+    "trigo": "Wheat",
+    "algodao em pluma": "Cotton",
 }
 
-# Commodities we care about
-_TARGET_COMMODITIES = {"soja", "milho", "algodão", "trigo", "café"}
+
+def _parse_csv(text: str) -> pd.DataFrame:
+    """Parse the CONAB semicolon-separated text into a DataFrame."""
+    return pd.read_csv(
+        io.StringIO(text),
+        sep=";",
+        encoding="utf-8",
+        on_bad_lines="skip",
+        dtype=str,
+    )
+
+
+def _aggregate_national(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate per-state rows to national totals.
+
+    Sums area and production across UFs for each (crop_year, commodity).
+    Yield is recomputed from the aggregated totals (kg/ha) rather than
+    averaged across states.
+    """
+    df = df.copy()
+
+    # Strip whitespace from string columns (CONAB pads with trailing spaces)
+    for col in ("ano_agricola", "uf", "produto"):
+        df[col] = df[col].astype(str).str.strip()
+
+    # Normalize produto for matching
+    df["produto_norm"] = df["produto"].str.lower()
+    df = df[df["produto_norm"].isin(_COMMODITY_MAP)]
+
+    if df.empty:
+        return df
+
+    # Numeric conversion — CONAB uses '.' decimal in the new format
+    for col in ("area_plantada_mil_ha", "producao_mil_t"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+    grouped = (
+        df.groupby(["ano_agricola", "produto_norm"], as_index=False)
+        .agg(
+            area=("area_plantada_mil_ha", "sum"),
+            production=("producao_mil_t", "sum"),
+        )
+    )
+
+    # yield in kg/ha = (production[1000 t] / area[1000 ha]) * 1000
+    grouped["yield_kg_ha"] = (
+        grouped["production"].div(grouped["area"].replace(0, pd.NA)) * 1000.0
+    )
+
+    # Drop years where production is zero (commodity not grown that year)
+    grouped = grouped[grouped["production"] > 0].reset_index(drop=True)
+    return grouped
+
+
+def _melt_to_long(grouped: pd.DataFrame, report_date: str) -> pd.DataFrame:
+    """Reshape aggregated DataFrame into the long format the pipeline expects."""
+    rows: list[dict[str, object]] = []
+    for _, row in grouped.iterrows():
+        commodity_en = _COMMODITY_MAP[row["produto_norm"]]
+        crop_year = row["ano_agricola"]
+
+        for attr, value, unit in (
+            ("Production", row["production"], "1000 MT"),
+            ("Area", row["area"], "1000 HA"),
+            ("Yield", row["yield_kg_ha"], "KG/HA"),
+        ):
+            if pd.isna(value):
+                continue
+            rows.append({
+                "source": "CONAB",
+                "commodity": commodity_en,
+                "crop_year": crop_year,
+                "attribute": attr,
+                "value": float(value),
+                "unit": unit,
+                "report_date": report_date,
+            })
+
+    return pd.DataFrame(rows)
 
 
 def fetch_conab_estimates() -> pd.DataFrame:
-    """
-    Fetch CONAB historical series data for Brazilian crop estimates.
+    """Fetch CONAB historical series data for Brazilian crop estimates.
 
     Returns a DataFrame with columns:
         source, commodity, crop_year, attribute, value, unit, report_date
 
-    Empty DataFrame if the download fails or can't be parsed.
+    Empty DataFrame if the download fails or the file schema is unrecognized.
     """
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -65,27 +150,11 @@ def fetch_conab_estimates() -> pd.DataFrame:
                     continue
                 return pd.DataFrame()
 
-            # Try to parse as tab-separated text, then fall back to semicolon
-            # (commonly used in Brazilian government CSV exports).
-            text = resp.text
             try:
-                df = pd.read_csv(
-                    io.StringIO(text),
-                    sep="\t",
-                    encoding="utf-8",
-                    on_bad_lines="skip",
-                )
-            except (pd.errors.ParserError, ValueError, UnicodeDecodeError):
-                try:
-                    df = pd.read_csv(
-                        io.StringIO(text),
-                        sep=";",
-                        encoding="utf-8",
-                        on_bad_lines="skip",
-                    )
-                except (pd.errors.ParserError, ValueError, UnicodeDecodeError) as exc:
-                    logger.warning("Could not parse CONAB data: %s", exc)
-                    return pd.DataFrame()
+                df = _parse_csv(resp.text)
+            except (pd.errors.ParserError, ValueError, UnicodeDecodeError) as exc:
+                logger.warning("Could not parse CONAB data: %s", exc)
+                return pd.DataFrame()
 
             if df.empty:
                 logger.info("CONAB data parsed but empty.")
@@ -94,68 +163,29 @@ def fetch_conab_estimates() -> pd.DataFrame:
             # Normalize column names
             df.columns = [c.strip().lower() for c in df.columns]
 
-            # Rename known Portuguese columns
-            rename = {}
-            for col in df.columns:
-                for pt_name, en_name in _CONAB_COLUMNS.items():
-                    if pt_name in col:
-                        rename[col] = en_name
-                        break
-            if rename:
-                df = df.rename(columns=rename)
-
-            # Filter to target commodities if 'commodity' column exists
-            if "commodity" in df.columns:
-                df["commodity_lower"] = df["commodity"].str.strip().str.lower()
-                df = df[df["commodity_lower"].isin(_TARGET_COMMODITIES)]
-                df = df.drop(columns=["commodity_lower"])
-
-            # Melt into long format: commodity, crop_year, attribute, value
-            rows = []
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-            # Map commodity names to English
-            commodity_map = {
-                "soja": "Soybeans",
-                "milho": "Corn",
-                "algodão": "Cotton",
-                "trigo": "Wheat",
-                "café": "Coffee",
-            }
-
-            for _, row in df.iterrows():
-                crop_year = str(row.get("crop_year", row.get("safra", "")))
-                raw_commodity = str(row.get("commodity", "")).strip().lower()
-                en_commodity = commodity_map.get(raw_commodity, raw_commodity.title())
-
-                for attr in ["production", "area", "yield"]:
-                    if attr in row.index and pd.notna(row[attr]):
-                        try:
-                            val = float(str(row[attr]).replace(",", ".").replace(" ", ""))
-                        except (ValueError, TypeError):
-                            continue
-
-                        unit = "1000 MT" if attr == "production" else (
-                            "1000 HA" if attr == "area" else "KG/HA"
-                        )
-
-                        rows.append({
-                            "source": "CONAB",
-                            "commodity": en_commodity,
-                            "crop_year": crop_year,
-                            "attribute": attr.title(),
-                            "value": val,
-                            "unit": unit,
-                            "report_date": today,
-                        })
-
-            if rows:
-                result = pd.DataFrame(rows)
-                logger.info("Parsed %d CONAB estimate rows.", len(result))
-                return result
-            else:
-                logger.info("CONAB data parsed but no target commodities found.")
+            missing = [c for c in _REQUIRED_COLUMNS if c not in df.columns]
+            if missing:
+                logger.error(
+                    "CONAB schema unrecognized — missing columns %s. Got: %s",
+                    missing, list(df.columns),
+                )
                 return pd.DataFrame()
+
+            grouped = _aggregate_national(df)
+            if grouped.empty:
+                logger.info(
+                    "CONAB data parsed but no target commodities found "
+                    "(looked for %s).", sorted(_COMMODITY_MAP),
+                )
+                return pd.DataFrame()
+
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            result = _melt_to_long(grouped, report_date=today)
+            logger.info(
+                "Parsed %d CONAB estimate rows across %d (year, commodity) pairs.",
+                len(result), len(grouped),
+            )
+            return result
 
         except requests.RequestException as exc:
             logger.warning("CONAB attempt %d failed: %s", attempt, exc)
@@ -164,6 +194,9 @@ def fetch_conab_estimates() -> pd.DataFrame:
 
     logger.error("All %d attempts failed for CONAB", MAX_RETRIES)
     return pd.DataFrame()
+
+
+__all__: Sequence[str] = ("fetch_conab_estimates",)
 
 
 # ── Quick self-test ─────────────────────────────────────────────────
@@ -176,4 +209,7 @@ if __name__ == "__main__":
         logger.info("CONAB: no data returned")
     else:
         logger.info("CONAB: %d rows", len(data))
-        logger.info("\n%s", data.head(10).to_string(index=False))
+        latest_year = data["crop_year"].max()
+        logger.info("Latest crop year: %s", latest_year)
+        latest = data[data["crop_year"] == latest_year]
+        logger.info("\n%s", latest.to_string(index=False))

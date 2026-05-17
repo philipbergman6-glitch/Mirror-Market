@@ -536,52 +536,24 @@ def run() -> int:
         _mark_failed("conab")
 
     # ── Layer 16: NCDEX India Domestic Soy Prices ─────────────────
-    try:
-        logger.info("[Layer 16] Fetching NCDEX India domestic soy prices ...")
-        india_data = fetch_india_domestic()
-
-        if india_data:
-            for name, df in india_data.items():
-                df = clean_india_domestic(df)
-                save_india_domestic(name, df)
-
-            total_16 = sum(len(df) for df in india_data.values())
-            results["india_domestic"] = True
-            save_freshness("india_domestic", total_16)
-            logger.info("[Layer 16] India domestic: %d rows saved", total_16)
-        else:
-            logger.warning(
-                "[Layer 16] NCDEX returned no data — URL may need verification. "
-                "Check NCDEX_BHAVCOPY_URL_TEMPLATES in config.py."
-            )
-            _mark_empty("india_domestic")
-    except Exception:
-        logger.exception("[Layer 16] India domestic failed — see error above")
-        _mark_failed("india_domestic")
+    # DISABLED 2026-05: ncdex.com now serves a JavaScript fingerprint
+    # interstitial (__hd_fingerprint cookie via /__verify/fp) on every URL,
+    # including the Bhav Copy endpoints. requests.get() cannot pass it.
+    # Re-enable when a new source is wired up (alternate India spot soy
+    # feed or a headless-browser bypass). The fetcher's diagnostic logging
+    # will confirm the wall is still in place if you run it standalone.
+    logger.info("[Layer 16] NCDEX disabled — blocked by ncdex.com anti-bot wall")
+    _mark_empty("india_domestic")
 
     # ── Layer 17: CEPEA Brazil Domestic Soy Spot ──────────────────
-    try:
-        logger.info("[Layer 17] Fetching CEPEA/ESALQ Brazil domestic soy price ...")
-        cepea_data = fetch_cepea()
-
-        if cepea_data:
-            for name, df in cepea_data.items():
-                df = clean_brazil_spot(df)
-                save_brazil_spot(name, df)
-
-            total_17 = sum(len(df) for df in cepea_data.values())
-            results["cepea"] = True
-            save_freshness("cepea", total_17)
-            logger.info("[Layer 17] CEPEA: %d rows saved", total_17)
-        else:
-            logger.warning(
-                "[Layer 17] CEPEA returned no data — page may use JavaScript. "
-                "Check CEPEA_SOYBEAN_URL in config.py."
-            )
-            _mark_empty("cepea")
-    except Exception:
-        logger.exception("[Layer 17] CEPEA failed — see error above")
-        _mark_failed("cepea")
+    # DISABLED 2026-05-12: cepea.esalq.usp.br is fronted by a Cloudflare
+    # Turnstile JavaScript challenge that cannot be solved with header
+    # tweaks (HTTP 403 on every URL). Layer last had real data on
+    # 2026-02-20. Re-enable when an alternate Brazil spot source is wired
+    # up (Infosimples, Playwright, or another index). fetchers/cepea.py
+    # is intentionally kept on disk so re-enabling is a one-line revert.
+    logger.info("[Layer 17] CEPEA disabled — Cloudflare Turnstile JS challenge")
+    _mark_empty("cepea")
 
     # ── Layer 18: JSE SAFEX South Africa Soy Prices ───────────────
     try:

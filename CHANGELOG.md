@@ -4,6 +4,60 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — Upstream source repairs (2026-05)
+
+Two layers were silently failing on every pipeline run; both are now fixed
+or explicitly disabled with diagnostic logging.
+
+### Layer 15 (CONAB) — schema rewrite
+
+CONAB's `SerieHistoricaGraos.txt` switched to a semicolon-separated,
+per-UF schema (`ano_agricola; dsc_safra_previsao; uf; produto; id_produto;
+area_plantada_mil_ha; producao_mil_t; produtividade_mil_ha_mil_t`) and
+the old fetcher silently parsed it as a 1-column DataFrame, so every row
+was discarded by the commodity filter. `fetchers/conab.py` now:
+
+* Parses with `sep=";"` directly (no `\t` fallback).
+* Targets `{soja, milho, trigo, algodao em pluma}` (no accents, lowercase).
+* Aggregates the 27 UF rows to national totals per (year, commodity).
+* Recomputes yield in kg/ha from aggregated production/area instead of
+  averaging per-state yields.
+* Drops coffee — `SerieHistoricaGraos.txt` is grains+oilseeds+cotton only.
+* Hard-fails (empty return + `logger.error` listing the columns it got)
+  if the required schema columns are missing again.
+
+Self-test now returns 597 rows / 199 (year, commodity) pairs; latest
+2025/26 figures match published CONAB totals (Soybeans 179.2 MMT, Corn
+139.6 MMT, Cotton lint 3.8 MMT).
+
+### Layer 16 (NCDEX India) — disabled
+
+`ncdex.com` now serves a JavaScript fingerprint interstitial
+(`__hd_fingerprint` cookie issued via POST to `/__verify/fp`) on every
+URL, including the homepage. Plain `requests.get()` returns a 6.5 KB
+HTML error page with `Content-Type=text/html`, regardless of URL. The
+silent skip in `fetchers/india_domestic.py` masked this — there's no
+URL update that fixes it.
+
+* Diagnostic logging added: status code, Content-Type, and size are now
+  logged on every failed fetch attempt, so the anti-bot wall is visible.
+* `main.py` short-circuits the layer with `_mark_empty("india_domestic")`
+  and an explanatory log line.
+* Fetcher code, config templates, and downstream consumers
+  (`analysis/briefing/sections/emerging_markets.py`, the dashboard) are
+  preserved — they already degrade gracefully when the table is empty.
+
+Re-enabling requires either an alternate India spot-soy source
+(AgMarknet, SOPA, NSE) or a Playwright-based bypass that executes the
+fingerprint JS and captures the cookie.
+
+### Tests
+
+No test changes — the CONAB output shape `(source, commodity, crop_year,
+attribute, value, unit, report_date)` is unchanged, so `clean_conab`,
+`save_brazil_estimates`, and the briefing section all keep working.
+Full suite still passes: 111 tests green.
+
 ## Unreleased — Run 7: Trader-grade analytics
 
 Goal: layer trader-grade signals on top of the existing pipeline —

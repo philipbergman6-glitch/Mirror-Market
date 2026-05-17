@@ -298,7 +298,7 @@ DCE_CONTRACTS = {
 # Weekly export sales — the #1 indicator of Chinese buying pace
 # ---------------------------------------------------------------------------
 FAS_API_KEY = os.getenv("FAS_API_KEY", "")
-FAS_BASE_URL = "https://apps.fas.usda.gov/opendataweb/api/esr"
+FAS_BASE_URL = "https://apps.fas.usda.gov/OpenData/api/esr"
 
 # USDA FAS commodity codes for Export Sales Reporting
 # Codes sourced from /api/esr/commodities endpoint
@@ -413,6 +413,12 @@ CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHi
 # ---------------------------------------------------------------------------
 # Layer 16 — NCDEX India domestic soy prices (free, no API key)
 # NCDEX Bhav Copy: daily settlement prices in INR/quintal or INR/MT
+#
+# DISABLED 2026-05: ncdex.com serves a JS fingerprint anti-bot wall
+# (__hd_fingerprint cookie issued via POST to /__verify/fp) on every URL,
+# including the homepage. requests.get() returns an HTML error page (HTTP
+# 404 + Content-Type=text/html, 6.5 KB). Templates kept for reference;
+# main.py short-circuits this layer. See README "Layer 16 note".
 # ---------------------------------------------------------------------------
 NCDEX_BHAVCOPY_URL_TEMPLATES = [
     "https://www.ncdex.com/bdocuments/bhavcopy/bhavcopy_{date}.csv",

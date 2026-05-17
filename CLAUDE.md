@@ -69,9 +69,9 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 12. **WASDE monthly estimates** — `fetchers/wasde.py` (USDA OCE monthly XLS — `wasdeMMYY.xls`, no API key required)
 13. **EIA biofuel/energy** — `fetchers/eia.py` (ethanol production, biodiesel production, diesel prices — requires `EIA_API_KEY`)
 14. **USDA crush + inspections** — `fetchers/usda.py` (monthly soybean crush volumes + weekly AMS export inspections)
-15. **CONAB Brazil estimates** — `fetchers/conab.py` (Brazil's official crop agency — production, area, yield)
-16. **India domestic soy prices** — `fetchers/india_domestic.py` (NCDEX Bhav Copy — INR/MT, no API key)
-17. **Brazil domestic soy spot** — `fetchers/cepea.py` (CEPEA/ESALQ index — BRL/MT, no API key)
+15. **CONAB Brazil estimates** — `fetchers/conab.py` (Brazil's official crop agency — production, area, yield; aggregates 27 UFs to national totals for Soybeans, Corn, Wheat, Cotton lint; coffee is in a separate CONAB file and not tracked here)
+16. **India domestic soy prices** — `fetchers/india_domestic.py` (NCDEX Bhav Copy — INR/MT, no API key) — **DISABLED 2026-05**: `ncdex.com` serves a JS fingerprint anti-bot wall (`__hd_fingerprint` cookie via `/__verify/fp`) on every URL; `main.py` short-circuits this layer via `_mark_empty`. The fetcher's diagnostic logging surfaces the wall in logs. Re-enabling requires an alternate source or a Playwright bypass — not a URL update.
+17. **Brazil domestic soy spot** — `fetchers/cepea.py` (CEPEA/ESALQ index — BRL/MT, no API key) — **DISABLED 2026-05-12**: `cepea.esalq.usp.br` is fronted by a Cloudflare Turnstile JS challenge (HTTP 403 on every URL); `main.py` short-circuits this layer via `_mark_empty`. Last real data was 2026-02-20. Re-enabling requires an alternate Brazil spot source (Infosimples, Playwright bypass, or another index) — not a URL update.
 18. **South Africa domestic soy** — `fetchers/safex.py` (JSE SAFEX settlement — ZAR/MT, no API key)
 19. **AgRural Paranaguá FOB** — `fetchers/agrural.py` (Brazil port-side soy FOB scraper — BRL/MT, no API key)
 

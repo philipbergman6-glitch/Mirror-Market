@@ -343,14 +343,28 @@ no API key means that layer is skipped, no exception. The dashboard shows
 | 13    | EIA — biofuel & energy                 | `EIA_API_KEY`      | no  |
 | 14    | USDA — crush + export inspections      | `USDA_API_KEY`     | no  |
 | 15    | CONAB — Brazil crop estimates          | —                  | yes |
-| 16    | NCDEX — India domestic soy             | —                  | yes |
-| 17    | CEPEA — Brazil farm-gate soy           | —                  | yes |
+| 16    | NCDEX — India domestic soy *(disabled)*| —                  | yes |
+| 17    | CEPEA — Brazil farm-gate soy *(disabled)*| —                | yes |
 | 18    | JSE SAFEX — South Africa soy           | —                  | yes |
 | 19    | AgRural — Paranaguá FOB soy            | —                  | yes |
 
 > **Layer 12 note**: WASDE no longer routes through NASS QuickStats — `fetchers/wasde.py`
 > pulls the canonical XLS from USDA OCE (`wasdeMMYY.xls`) directly, so no API key
 > is required.
+>
+> **Layer 16 note (disabled 2026-05)**: `ncdex.com` now serves a JavaScript
+> fingerprint interstitial (`__hd_fingerprint` cookie via `/__verify/fp`) on
+> every URL — `requests.get()` cannot pass it, so the Bhav Copy download
+> returns an HTML error page. The fetcher is preserved with diagnostic
+> logging in `fetchers/india_domestic.py`; the pipeline call in `main.py`
+> is short-circuited via `_mark_empty`. Re-enabling requires a different
+> India spot-soy source (AgMarknet, SOPA, NSE) or a Playwright-based
+> bypass — the URL templates themselves are not the issue.
+>
+> **Layer 17 note (DISABLED 2026-05-12)**: `cepea.esalq.usp.br` is fronted
+> by a Cloudflare Turnstile JavaScript challenge; `main.py` short-circuits
+> this layer via `_mark_empty`. Re-enabling requires an alternate Brazil
+> spot source (Infosimples, Playwright bypass, or another index).
 >
 > **Layer 19 note**: AgRural is an HTML scraper against `precossojaemilho` and is
 > fragile by nature — page-shape changes are caught by `ScraperShapeError` and

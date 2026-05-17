@@ -74,6 +74,7 @@ def fetch_eia_series(
     params = {
         "api_key":   EIA_API_KEY,
         "frequency": frequency,
+        "facets[series][]": series_id,
         "start":     start_date,
         "sort[0][column]": "period",
         "sort[0][direction]": "desc",
@@ -94,6 +95,13 @@ def fetch_eia_series(
 
             payload = resp.json()
             data = payload.get("response", {}).get("data", [])
+
+            if not isinstance(data, list):
+                logger.warning(
+                    "EIA %s returned non-list data (likely error): %r",
+                    name, str(data)[:200],
+                )
+                return pd.DataFrame()
 
             if not data:
                 logger.info("No data returned for EIA %s.", name)
