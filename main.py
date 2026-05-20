@@ -36,14 +36,12 @@ import sys
 from config import setup_logging
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
-from fetchers.cepea import fetch_cepea
 from fetchers.conab import fetch_conab_estimates
 from fetchers.cot import fetch_cot_recent
 from fetchers.eia import fetch_all_eia
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
-from fetchers.india_domestic import fetch_india_domestic
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
 from fetchers.usda import (
@@ -66,7 +64,6 @@ from pipeline.clean import (
     clean_export_sales,
     clean_forward_curve,
     clean_fred_series,
-    clean_india_domestic,
     clean_inspections,
     clean_ohlcv,
     clean_psd,
@@ -89,7 +86,6 @@ from pipeline.store import (
     save_forward_curve,
     save_fred_data,
     save_freshness,
-    save_india_domestic,
     save_inspections,
     save_price_data,
     save_psd_data,

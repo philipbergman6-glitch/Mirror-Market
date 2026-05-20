@@ -68,8 +68,6 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_crush_data": empty_df,
         "fetch_export_inspections": empty_df,
         "fetch_conab_estimates": empty_df,
-        "fetch_india_domestic": empty_dict,
-        "fetch_cepea": empty_dict,
         "fetch_safex": empty_dict,
     }
     for name, retval in patches.items():
