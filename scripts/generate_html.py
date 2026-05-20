@@ -12,7 +12,7 @@ import base64
 import html as html_lib
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -114,13 +114,13 @@ def _build_freshness_items() -> list[dict]:
     if freshness.empty:
         return []
 
-    now = datetime.now(tz=None)
+    now = datetime.now(timezone.utc)
     items = []
     for _, row in freshness.iterrows():
         layer = row["layer_name"]
         last = row["last_success"]
         if pd.notna(last):
-            last_dt = pd.to_datetime(last)
+            last_dt = pd.to_datetime(last, utc=True)
             age = now - last_dt
             if age < timedelta(days=1):
                 status = "fresh"
@@ -912,7 +912,7 @@ def generate():
     log.info("Building template context...")
     context = {
         "pages": PAGES,
-        "generated_at": datetime.now(tz=None).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "freshness_items": _build_freshness_items(),
         "command_center": _build_command_center(cc_data),
         "technicals": _build_technicals(tech_data),
