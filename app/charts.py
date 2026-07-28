@@ -16,32 +16,32 @@ from plotly.subplots import make_subplots
 COLORS = {
     "primary": "#1B4332",
     "secondary": "#2D6A4F",
-    "accent": "#40916C",
-    "bullish": "#3FB950",
-    "bearish": "#F85149",
-    "neutral": "#7D8590",
-    "bg": "#0D1117",
-    "surface": "#161B22",
-    "card": "#1C2128",
-    "border": "#30363D",
-    "text": "#E6EDF3",
-    "text_muted": "#7D8590",
-    "text_dim": "#484F58",
-    "soybean": "#DAA520",
-    "soy_oil": "#FF8C00",
-    "soy_meal": "#CD853F",
-    "info": "#58A6FF",
-    "warning": "#D29922",
+    "accent": "#2D6A4F",
+    "bullish": "#1F7A3D",
+    "bearish": "#C23B2E",
+    "neutral": "#5D6660",
+    "bg": "#FAFAF7",
+    "surface": "#FFFFFF",
+    "card": "#FFFFFF",
+    "border": "#D8DCD8",
+    "text": "#191C1A",
+    "text_muted": "#5D6660",
+    "text_dim": "#9BA39E",
+    "soybean": "#8B6914",
+    "soy_oil": "#B05E10",
+    "soy_meal": "#8A5A2B",
+    "info": "#2F5D8F",
+    "warning": "#A8730A",
 }
 
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-# Shared dark layout defaults applied to every figure
-_DARK_LAYOUT = dict(
+# Shared light editorial layout defaults applied to every figure
+_BASE_LAYOUT = dict(
     paper_bgcolor=COLORS["card"],
     plot_bgcolor=COLORS["surface"],
-    font=dict(color=COLORS["text"], family="Geist, sans-serif", size=12),
+    font=dict(color=COLORS["text"], family="Inter, sans-serif", size=12),
     xaxis=dict(gridcolor=COLORS["border"], zerolinecolor=COLORS["border"]),
     yaxis=dict(gridcolor=COLORS["border"], zerolinecolor=COLORS["border"]),
     legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
@@ -115,7 +115,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
         fig.add_trace(
             go.Scatter(x=df.index, y=df["BB_Lower"], name="BB Lower",
                        line=dict(width=1, dash="dot", color=COLORS["text_dim"]),
-                       fill="tonexty", fillcolor="rgba(72,79,88,0.1)"),
+                       fill="tonexty", fillcolor="rgba(155,163,158,0.12)"),
             row=1, col=1,
         )
 
@@ -161,14 +161,14 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
                 row=3, col=1,
             )
 
-    dark = {**_DARK_LAYOUT}
-    dark["legend"] = dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)", font=dict(size=11))
+    base = {**_BASE_LAYOUT}
+    base["legend"] = dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)", font=dict(size=11))
     fig.update_layout(
         height=900,
         xaxis_rangeslider_visible=False,
         showlegend=True,
         yaxis_title="USD/MT",
-        **dark,
+        **base,
     )
     return fig
 
@@ -192,7 +192,7 @@ def build_crush_spread_chart(
                       annotation_text=f"1Y avg: ${crush['avg_1y']:,.1f}",
                       annotation_font_color=COLORS["text_muted"])
         fig.add_hrect(y0=crush["min_1y"], y1=crush["max_1y"],
-                      fillcolor="rgba(88,166,255,0.06)", line_width=0,
+                      fillcolor="rgba(47,93,143,0.07)", line_width=0,
                       annotation_text="1Y range",
                       annotation_font_color=COLORS["text_dim"])
 
@@ -207,7 +207,7 @@ def build_crush_spread_chart(
         go.Scatter(
             x=spread_df["Date"],
             y=[max(0, v) for v in spread_mt],
-            fill="tozeroy", fillcolor="rgba(63,185,80,0.15)",
+            fill="tozeroy", fillcolor="rgba(31,122,61,0.12)",
             line=dict(width=0), name="Profitable",
         )
     )
@@ -215,12 +215,12 @@ def build_crush_spread_chart(
         go.Scatter(
             x=spread_df["Date"],
             y=[min(0, v) for v in spread_mt],
-            fill="tozeroy", fillcolor="rgba(248,81,73,0.15)",
+            fill="tozeroy", fillcolor="rgba(194,59,46,0.10)",
             line=dict(width=0), name="Negative",
         )
     )
     fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"])
-    fig.update_layout(height=350, xaxis_title="", yaxis_title="USD/MT", **_DARK_LAYOUT)
+    fig.update_layout(height=350, xaxis_title="", yaxis_title="USD/MT", **_BASE_LAYOUT)
     return fig
 
 
@@ -268,7 +268,7 @@ def build_basis_chart(
         )
         fig.add_hrect(
             y0=stats["min_1y"], y1=stats["max_1y"],
-            fillcolor="rgba(88,166,255,0.06)", line_width=0,
+            fillcolor="rgba(47,93,143,0.07)", line_width=0,
             annotation_text="1Y range",
             annotation_font_color=COLORS["text_dim"],
         )
@@ -294,7 +294,7 @@ def build_basis_chart(
         go.Scatter(
             x=primary_df["Date"],
             y=[min(0, v) for v in primary_series],
-            fill="tozeroy", fillcolor="rgba(63,185,80,0.15)",
+            fill="tozeroy", fillcolor="rgba(31,122,61,0.12)",
             line=dict(width=0), name="Brazilian discount",
             showlegend=False,
         )
@@ -304,13 +304,13 @@ def build_basis_chart(
         go.Scatter(
             x=primary_df["Date"],
             y=[max(0, v) for v in primary_series],
-            fill="tozeroy", fillcolor="rgba(248,81,73,0.15)",
+            fill="tozeroy", fillcolor="rgba(194,59,46,0.10)",
             line=dict(width=0), name="Brazilian premium",
             showlegend=False,
         )
     )
     fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"])
-    fig.update_layout(height=350, xaxis_title="", yaxis_title="USD/MT", **_DARK_LAYOUT)
+    fig.update_layout(height=350, xaxis_title="", yaxis_title="USD/MT", **_BASE_LAYOUT)
     return fig
 
 
@@ -323,7 +323,7 @@ def build_oil_meal_ratio_chart(omr: dict) -> go.Figure:
     fig = go.Figure()
     if omr.get("min_1y") is not None:
         fig.add_hrect(y0=omr["min_1y"], y1=omr["max_1y"],
-                      fillcolor="rgba(255,140,0,0.06)", line_width=0,
+                      fillcolor="rgba(176,94,16,0.07)", line_width=0,
                       annotation_text="1Y range",
                       annotation_font_color=COLORS["text_dim"])
     fig.add_trace(
@@ -332,7 +332,7 @@ def build_oil_meal_ratio_chart(omr: dict) -> go.Figure:
     )
     fig.add_hline(y=omr["avg_60d"], line_dash="dash", line_color=COLORS["text_dim"],
                   annotation_text="60d avg", annotation_font_color=COLORS["text_muted"])
-    fig.update_layout(height=300, **_DARK_LAYOUT)
+    fig.update_layout(height=300, **_BASE_LAYOUT)
     return fig
 
 
@@ -345,7 +345,7 @@ def build_bean_corn_ratio_chart(bcr: dict) -> go.Figure:
     fig = go.Figure()
     if bcr.get("min_1y") is not None:
         fig.add_hrect(y0=bcr["min_1y"], y1=bcr["max_1y"],
-                      fillcolor="rgba(205,133,63,0.06)", line_width=0,
+                      fillcolor="rgba(138,90,43,0.07)", line_width=0,
                       annotation_text="1Y range",
                       annotation_font_color=COLORS["text_dim"])
     fig.add_trace(
@@ -354,7 +354,7 @@ def build_bean_corn_ratio_chart(bcr: dict) -> go.Figure:
     )
     fig.add_hline(y=bcr["avg_1y"], line_dash="dash", line_color=COLORS["text_dim"],
                   annotation_text="1Y avg", annotation_font_color=COLORS["text_muted"])
-    fig.update_layout(height=300, **_DARK_LAYOUT)
+    fig.update_layout(height=300, **_BASE_LAYOUT)
     return fig
 
 
@@ -373,7 +373,7 @@ def build_cot_chart(cot: dict) -> go.Figure:
                          marker_color=COLORS["info"]))
     fig.add_trace(go.Bar(x=commodities, y=spec_nets, name="Speculators (net)",
                          marker_color=COLORS["soy_oil"]))
-    fig.update_layout(barmode="group", height=400, yaxis_title="Net Contracts", **_DARK_LAYOUT)
+    fig.update_layout(barmode="group", height=400, yaxis_title="Net Contracts", **_BASE_LAYOUT)
     return fig
 
 
@@ -400,7 +400,7 @@ def build_correlations_chart(
             )
     fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"])
     fig.update_layout(height=400, yaxis_title="60d Rolling Correlation",
-                      yaxis_range=[-1, 1], **_DARK_LAYOUT)
+                      yaxis_range=[-1, 1], **_BASE_LAYOUT)
     return fig
 
 
@@ -429,7 +429,7 @@ def build_forward_curve_chart(
     fig.add_hline(y=front_price_mt, line_dash="dash", line_color=COLORS["text_dim"],
                   annotation_text=f"Front: {front_price_mt:,.1f}",
                   annotation_font_color=COLORS["text_muted"])
-    fig.update_layout(height=350, xaxis_title="Contract", yaxis_title=unit, **_DARK_LAYOUT)
+    fig.update_layout(height=350, xaxis_title="Contract", yaxis_title=unit, **_BASE_LAYOUT)
     return fig
 
 
@@ -461,7 +461,7 @@ def build_seasonal_chart(
                 symmetric=False,
                 array=monthly["max_close"] - monthly["avg_close"],
                 arrayminus=monthly["avg_close"] - monthly["min_close"],
-                color="rgba(88,166,255,0.3)",
+                color="rgba(47,93,143,0.3)",
             ),
         )
     )
@@ -480,5 +480,5 @@ def build_seasonal_chart(
             )
 
     fig.update_layout(height=350, yaxis_title=unit, xaxis_title="Month",
-                      showlegend=True, **_DARK_LAYOUT)
+                      showlegend=True, **_BASE_LAYOUT)
     return fig

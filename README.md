@@ -2,527 +2,78 @@
 
 [![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-GitHub_Pages-2D6A4F?style=for-the-badge)](https://philipbergman6-glitch.github.io/Mirror-Market/)
 
-A commodity market intelligence platform that monitors global agricultural
-markets — soybeans, coffee, palm oil, corn, wheat, sugar, cotton, and
-livestock — pulling data from 19 free source layers across 27 countries into a
-single database with professional-grade analysis, a daily briefing, and an
-interactive static dashboard.
-
-## What It Does
-
-Mirror Market runs a data pipeline that collects, cleans, validates, and stores
-market data from 19 independent layers. The analysis engine then processes
-everything into a daily briefing: technical signals (MACD, Bollinger Bands,
-RSI divergence), crush spreads, forward curve structure, export sales demand,
-cross-market correlations, seasonal patterns, and a "Market Drivers" narrative
-that connects data across sources to surface insights no single section shows
-alone. A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of charts and analysis.
-
-## Data Sources (All FREE)
-
-### Layer 1 — Commodity Futures Prices
-**Source**: Yahoo Finance (CME/CBOT/ICE) | **Frequency**: Daily (~15 min delay)
-
-| Ticker | Contract | What It Tells You |
-|--------|----------|-------------------|
-| ZS=F | Soybeans | Benchmark global soybean price. Most-traded ag future. Driven by US/Brazil planting, Chinese demand, and weather. |
-| ZL=F | Soybean Oil | Used in cooking oil and biodiesel. Competes with palm oil. Rising biofuel mandates push this up. |
-| ZM=F | Soybean Meal | Animal feed ingredient. ~65% of a crushed soybean's value. Tight protein meal supply lifts this. |
-| KC=F | Coffee (Arabica) | Premium coffee bean. Brazil is #1 producer. Weather in Minas Gerais moves this market. |
-| ZC=F | Corn | Largest US crop. THE #1 driver of soybean acreage — when corn is more profitable, farmers plant less soy. |
-| ZW=F | Wheat | Competes for acreage. Food inflation proxy. Global supply disruptions (Black Sea, drought) ripple into all grains. |
-| SB=F | Sugar | Competes with ethanol for processing capacity. Affects biofuel demand dynamics (soybean oil vs ethanol). |
-| CT=F | Cotton | Competes for acreage in US South, Brazil, and India. A cotton rally can pull area away from soybeans. |
-| LE=F | Live Cattle | Beef herd expansion = more soybean meal demand. Livestock cycles are the demand side of soybeans. |
-| HE=F | Lean Hogs | Hog cycle drives meal consumption globally. China's hog herd is the world's largest meal consumer. |
-
-**How it's used**: Price lines in the briefing, all technical indicators (MA, RSI, MACD, Bollinger, volatility), crush spread calculation, seasonal comparison, correlation matrix, signal detection. Market Drivers section uses corn/soy price ratio to flag acreage competition and livestock prices to flag feed demand shifts.
-
-### Layer 2 — USDA Crop Fundamentals
-**Source**: USDA NASS QuickStats API | **Frequency**: Annual (updated ~January) | **Requires**: `USDA_API_KEY`
-
-Fetches US soybean production, yield (bushels/acre), and area harvested.
-
-**How it's used**: Briefing shows year-over-year changes — e.g. "US soybean production: 4,165M bu (+3.2% YoY)". Helps answer: is the US growing more or less soybeans than last year?
-
-### Layer 2b — USDA Crop Progress & Condition
-**Source**: USDA NASS QuickStats API | **Frequency**: Weekly (during growing season) | **Requires**: `USDA_API_KEY`
-
-The most price-moving weekly report for US crops. Fetches for soybeans and corn:
-- **Progress**: % planted, emerged, blooming, setting pods, dropping leaves, harvested
-- **Condition**: % rated excellent, good, fair, poor, very poor
-
-A drop in good/excellent % = potential yield loss = price rally. This is the data that moves markets intraweek.
-
-**How it's used**: Briefing shows latest condition ratings and week-over-week changes. A 3+ point drop in good/excellent ratings is a strong bullish signal.
-
-### Layer 3 — Economic Context (FRED)
-**Source**: Federal Reserve Economic Data | **Frequency**: Daily/Monthly | **Requires**: `FRED_API_KEY`
-
-| Series | What It Tells You |
-|--------|-------------------|
-| US Dollar Index (DTWEXBGS) | Strong dollar = commodities get more expensive for foreign buyers = downward price pressure. Weak dollar = tailwind for commodities. |
-| CPI (CPIAUCSL) | Inflation backdrop. High CPI can drive commodity demand as an inflation hedge. |
-| Fed Funds Rate (FEDFUNDS) | Interest rate environment. Rising rates strengthen the dollar (headwind for commodities) and increase storage costs. |
-| Treasury 2Y (DGS2) | Short-term yield. Moves with Fed expectations. |
-| Treasury 10Y (DGS10) | Long-term yield. The 2Y/10Y spread is the classic recession signal. |
-| Treasury 30Y (DGS30) | Ultra-long yield. Reflects inflation expectations decades out. |
-| Ethanol PPI (WPU06140341) | Producer price index for ethanol. Tracks biofuel cost — soybean oil competes with ethanol for blend mandates. |
-
-**How it's used**: Briefing shows latest values with directional commentary (e.g. "Dollar Index: 104.52 (up 0.3% — headwind for commodities)"). The yield curve section shows the 2Y/10Y spread — when it inverts (goes negative), it signals recession risk and potential commodity demand destruction. Market Drivers section flags dollar moves >0.5% as a cross-market signal.
-
-### Layer 4 — COT Positioning (Commitment of Traders)
-**Source**: CFTC via cot_reports library | **Frequency**: Weekly (published Fridays, data from prior Tuesday)
-
-Tracks positioning for 10 commodities: Soybeans, Soybean Oil, Soybean Meal, Coffee, Corn, Wheat, Sugar, Cotton, Live Cattle, and Lean Hogs.
-
-Shows how different trader groups are positioned in each commodity:
-- **Commercials** (hedgers): Farmers, processors, exporters. They trade to manage business risk. When they are heavily short, they expect prices to drop.
-- **Non-commercials** (speculators): Hedge funds, managed money. They trade for profit. Extreme spec positions often mark turning points.
-
-**How it's used**: Briefing shows net positions for each group. Market Drivers section flags "crowded trades" — when spec positioning is extreme AND RSI confirms overbought/oversold, reversal risk is elevated.
-
-### Layer 5 — Weather Data
-**Source**: Open-Meteo API | **Frequency**: Daily + 7-day forecast
-
-Monitors 20 growing regions across 6 continents:
-
-| Region | Why It Matters |
-|--------|---------------|
-| **US Midwest (Iowa)** | Heart of the US soybean belt. Summer heat/drought during pod-fill (Jul-Aug) can slash yields. |
-| **US Illinois** | #1 US soybean state by production. |
-| **Brazil Mato Grosso** | Brazil's #1 soybean state (~30% of production). Dry conditions during planting (Oct-Nov) delay the crop. |
-| **Brazil Parana** | Brazil's #2 soybean state. Frost risk during June-July (southern hemisphere winter). |
-| **Brazil Minas Gerais** | Coffee capital of Brazil. #1 Arabica state. Frost or drought here moves global coffee prices. |
-| **Brazil Bahia** | Cacao + coffee region. Northeast Brazil growing area. |
-| **Argentina Pampas** | #3 soybean exporter. La Nina brings drought here; El Nino brings floods. |
-| **Argentina Cordoba** | #2 Argentina soybean province. |
-| **Paraguay Chaco** | #4 global soybean exporter. Expanding soy frontier. |
-| **Colombia Coffee Region** | #3 Arabica producer. Too much rain during harvest = quality issues. |
-| **Ethiopia Sidama** | #1 Africa coffee producer. Birthplace of Arabica. |
-| **Ivory Coast** | #1 cocoa producer (cross-reference for tropical agriculture conditions). |
-| **Vietnam Central Highlands** | #2 global Robusta producer. Drought during dry season (Jan-Apr) damages trees. |
-| **Indonesia Riau (Sumatra)** | #1 palm oil belt. El Nino = drought = lower yields. |
-| **Malaysia Sabah (Borneo)** | #2 palm oil state. Flooding during monsoon season disrupts harvest. |
-| **India Madhya Pradesh** | India's soybean capital. Monsoon timing drives the entire crop. |
-| **India Maharashtra** | #2 India soybean state. Late monsoon onset = delayed planting. |
-| **Thailand Surat Thani** | #3 global palm oil producer. |
-| **China Heilongjiang** | China's domestic soybean belt. Non-GMO soybeans for food use. |
-
-**How it's used**: Briefing flags heavy rain (>20mm), extreme heat (>38C), and dry conditions (<1mm). Market Drivers section connects weather alerts with rising prices to identify "weather premiums building."
-
-### Layer 6 — Global Supply & Demand (PSD)
-**Source**: USDA Foreign Agricultural Service (bulk CSV) | **Frequency**: Monthly
-
-Production, imports, exports, crush, beginning stocks, ending stocks, domestic consumption, total supply, and total distribution for **8 commodities** across **27 countries**.
-
-**Commodities**: Soybeans, Soybean Oil, Soybean Meal, Palm Oil, Coffee, Corn, Wheat, Cotton
-
-**Countries**: United States, Brazil, Argentina, Paraguay, Uruguay, Bolivia, Colombia, Mexico, China, India, Indonesia, Malaysia, Thailand, Vietnam, Japan, South Korea, Pakistan, Bangladesh, European Union, Ethiopia, Nigeria, South Africa, Ivory Coast, Tanzania, Uganda, Kenya, Australia
-
-**How it's used**: Briefing highlights the numbers that move markets — Brazil soybean production, China soybean imports, US production, Indonesia palm oil output. Year-over-year changes in these figures drive long-term price trends. The global view across 27 countries prevents blind spots — e.g. a surge in Indian soybean imports or a drop in Argentine production shows up here before it hits prices.
-
-### Layer 7 — Currency Exchange Rates
-**Source**: Yahoo Finance | **Frequency**: Daily
-
-| Pair | Why It Matters |
-|------|---------------|
-| BRL/USD | Brazilian Real. Brazil exports ~50% of global soybeans. Weak BRL = Brazilian farmers get more Reais per dollar = incentivized to sell = more supply hitting world markets = price pressure. **This is the single most important currency for soybeans.** |
-| ARS/USD | Argentine Peso. Argentina is #3 soybean exporter. Chronic devaluation here affects export pacing. |
-| COP/USD | Colombian Peso. #3 Arabica coffee producer. |
-| PYG/USD | Paraguayan Guarani. #4 global soybean exporter. |
-| CNY/USD | Chinese Yuan. China imports ~60% of globally traded soybeans. Yuan moves affect their buying power. |
-| IDR/USD | Indonesian Rupiah. #1 palm oil producer. |
-| MYR/USD | Malaysian Ringgit. #2 palm oil producer. |
-| VND/USD | Vietnamese Dong. #2 Robusta coffee producer. |
-| INR/USD | Indian Rupee. Major soybean and palm oil consumer/processor. |
-| THB/USD | Thai Baht. #3 global palm oil producer. |
-| ETB/USD | Ethiopian Birr. #1 Africa coffee producer. Birr volatility affects Ethiopian export competitiveness. |
-
-**How it's used**: Briefing shows exchange rates with trade impact commentary (e.g. "Real weakening — Brazil exports cheaper"). Correlation analysis measures how tightly currencies and commodity prices move together. Market Drivers flags when BRL moves >1% in a week.
-
-### Layer 8 — World Bank Monthly Prices
-**Source**: World Bank Pink Sheet (Excel) | **Frequency**: Monthly
-
-Provides benchmark prices for commodities not covered by daily CBOT futures:
-- **Robusta Coffee** — no daily free source, this is the best free data
-- **Palm Oil** — CPO (crude palm oil) benchmark
-- Also covers Soybeans, Soybean Oil, Soybean Meal (cross-reference with CBOT)
-
-**How it's used**: Briefing shows month-over-month percentage changes. Useful for longer-term trend analysis on Robusta and Palm Oil.
-
-### Layer 9 — DCE Chinese Futures
-**Source**: AKShare (Dalian Commodity Exchange) | **Frequency**: Daily
-
-| Contract | What It Tells You |
-|----------|-------------------|
-| DCE Soybean (A0) | Chinese domestic soybean price. China is the world's largest soybean importer (~100M MT/year). When DCE prices rise relative to CBOT, it signals strong Chinese demand. |
-| DCE Soybean Meal (M0) | Chinese meal price. Hog herd expansion = more meal demand = higher prices. |
-| DCE Soybean Oil (Y0) | Chinese cooking oil price. Government reserve releases can cap upside. |
-| DCE Palm Oil (P0) | Chinese palm oil price. Competes directly with soybean oil. |
-| DCE Corn (C0) | Chinese corn price. China feed demand indicator — corn and soybean meal are both animal feed. |
-
-**How it's used**: Briefing shows DCE prices in CNY alongside CBOT prices in USD, so you can see the China-vs-US price gap. A widening gap suggests Chinese import demand is heating up.
-
-### Layer 10 — USDA Export Sales
-**Source**: USDA FAS OpenData API (ESR) | **Frequency**: Weekly (Thursdays) | **Requires**: `FAS_API_KEY`
-
-Weekly export sales data — the #1 indicator of demand pace. Every grain trader checks this every Thursday.
-
-| Data Point | What It Tells You |
-|-----------|-------------------|
-| Net Sales | New export sales minus cancellations. Rising = strong demand. |
-| Weekly Exports | Actual shipments that week. Pace matters — behind USDA projections = bearish. |
-| Accumulated Exports | Season-to-date total. Compare to USDA forecast to gauge demand pace. |
-| Outstanding Sales | Sold but not yet shipped. Large outstanding = shipping bottleneck or basis play. |
-| Top Buyers | Who is buying — China's share of soybean sales is the key demand signal. |
-
-**Commodities tracked**: Soybeans, Soybean Oil, Soybean Meal, Corn, Wheat, Cotton.
-
-**How it's used**: Briefing shows weekly net sales and top 3 buyer destinations per commodity. Market Drivers flags when China accounts for >30% of weekly soybean purchases (strong demand signal).
-
-### Layer 11 — Forward Curves
-**Source**: Yahoo Finance (individual contract months) | **Frequency**: Daily
-
-The forward curve shows the price of each upcoming delivery month — revealing market structure:
-
-| Structure | What It Means | Price Pattern |
-|-----------|--------------|---------------|
-| **Contango** | Adequate supply, storage costs priced in | Future > Spot (upward-sloping) |
-| **Backwardation** | Tight supply, strong immediate demand | Spot > Future (downward-sloping) |
-
-Constructs tickers programmatically (e.g. `ZSN26.CBT` = Soybeans Jul 2026) and fetches the latest close for each contract month.
-
-**Commodities tracked**: Soybeans, Soybean Oil, Soybean Meal, Corn, Wheat, Coffee, Sugar, Cotton, Live Cattle, Lean Hogs.
-
-**How it's used**: Briefing shows the term structure (contango/backwardation) per commodity with spread percentages. Market Drivers flags backwardation (tight supply signal) and steep contango (>5%). Dashboard provides a visual forward curve chart for each commodity.
-
-## Global Coverage
-
-### Countries Tracked (27 via PSD)
-
-| Region | Countries |
-|--------|-----------|
-| **Americas** | United States, Brazil, Argentina, Paraguay, Uruguay, Bolivia, Colombia, Mexico |
-| **Asia** | China, India, Indonesia, Malaysia, Thailand, Vietnam, Japan, South Korea, Pakistan, Bangladesh |
-| **Europe** | European Union |
-| **Africa** | Ethiopia, Nigeria, South Africa, Ivory Coast, Tanzania, Uganda, Kenya |
-| **Oceania** | Australia |
-
-### Commodities by Region
-
-| Commodity | Key Producers Tracked | Key Importers Tracked |
-|-----------|----------------------|----------------------|
-| **Soybeans** | US, Brazil, Argentina, Paraguay, Uruguay, India, China (Heilongjiang) | China, EU, Japan, South Korea, Indonesia |
-| **Coffee** | Brazil, Vietnam, Colombia, Ethiopia, India, Indonesia | EU, US, Japan |
-| **Palm Oil** | Indonesia, Malaysia, Thailand | China, India, EU, Pakistan, Bangladesh |
-| **Corn** | US, Brazil, Argentina | China, Japan, South Korea, Mexico, EU |
-| **Wheat** | US, EU, Australia, Argentina, India | China, Indonesia, Nigeria, Brazil |
-| **Cotton** | US, India, Brazil, Australia | China, Bangladesh, Vietnam, Pakistan |
-| **Livestock (feed demand)** | US (cattle + hogs) | — (tracked as demand signal for soybean meal) |
-
-## Analysis Features
-
-### Technical Indicators (`analysis/technical.py`)
-- **Moving Averages** (20/50/200-day SMA) — trend direction at three timeframes
-- **RSI** (14-day, Wilder smoothing) — overbought/oversold momentum
-- **MACD** (12/26/9) — momentum shifts and trend strength
-- **Bollinger Bands** (20-day, 2 std) — volatility compression and breakout detection
-- **Historical Volatility** (20-day and 60-day, annualised) — how much the price is swinging
-- **Price Changes** — daily and weekly percentage moves
-
-### Trading Signals (`analysis/signals.py`)
-- **20/50 MA crossover** — short-term golden/death cross (severity: warning)
-- **50/200 MA crossover** — major trend shift, the "big" golden/death cross (severity: alert)
-- **RSI extremes** — overbought (>70) or oversold (<30)
-- **RSI divergence** — price makes new high but RSI doesn't (bearish) or vice versa. This is the most reliable RSI signal.
-- **MACD crossover** — momentum turning up or down
-- **Bollinger Band squeeze** — volatility at 120-day low, breakout imminent
-- **Volume spike** — today's volume >2x the 20-day average
-
-### Crush Spread (`analysis/spreads.py`)
-Soybean processing margin: `(Oil price x 11) + (Meal price x 2.2) - Bean price`. Positive = profitable to crush. Widening spread = processors buying more beans = price support.
-
-### Forward Curve Analysis (`analysis/forward_curve.py`)
-- **Contango/backwardation detection** — classifies term structure based on sequential price changes
-- **Curve slope** — average price change per month across the curve
-- **Calendar spreads** — price difference between any two contract months
-- Summary includes structure type, front/back prices, spread, and market implication
-
-### Correlations (`analysis/correlations.py`)
-- Cross-commodity matrix (e.g. Soybeans vs Soybean Meal: +0.77 strong positive)
-- Commodity-vs-currency (e.g. Soybeans vs BRL/USD: how tightly are they linked?)
-- Rolling correlation (how the relationship changes over time)
-
-### Seasonal Patterns (`analysis/seasonal.py`)
-Compares current price to its historical average for this calendar month. Shows "Above seasonal (+5.2%)" or "Below seasonal (-3.1%)". Soybeans typically peak Jun-Jul (weather uncertainty) and dip at harvest (Oct-Nov).
-
-### Yield Curve Analysis
-Uses the 2Y/10Y Treasury spread from FRED data. When the spread is negative (inverted), it signals recession risk — historically the most reliable recession predictor. This matters for commodities because recession = demand destruction = bearish pressure.
-
-### Market Drivers Narrative (`analysis/briefing.py`)
-Connects dots across data sources — the part no single section shows:
-- **BRL + exports**: Weak Real = cheaper Brazilian soy/coffee on world markets
-- **COT + RSI crowding**: Specs heavily long AND RSI overbought = reversal risk
-- **Weather + price**: Active weather alerts in growing regions AND prices rising = weather premium building
-- **Dollar strength**: Strong dollar = headwind for all USD-denominated commodities
-- **Corn/soy acreage competition**: Corn/soy price ratio signals which crop farmers will plant next season. High ratio = less soybean acreage = bullish soybeans.
-- **Livestock demand**: Rising cattle/hog prices = expanding herds = more soybean meal demand = price support
-- **Export sales pace**: China accounting for >30% of weekly soybean purchases signals strong demand
-- **Forward curve structure**: Backwardation signals tight supply; steep contango signals adequate supply
-
-### Data Freshness Tracking
-The pipeline records when each layer last succeeded. The briefing shows warnings at the top if any layer is more than 7 days stale (e.g. "WARNING: USDA data is 45 days old").
-
-### Data Validation (`pipeline/clean.py`)
-Sanity checks run during cleaning:
-- Flags daily price moves >10% (possible data corruption or extreme event)
-- Flags zero/negative volume (data gap)
-- Warnings only — doesn't block the pipeline
-
-## Trader-grade signals
-
-The analysis layer ships a set of signals modelled on the metrics commodity
-desks actually watch — not just generic technicals. Each one is computed from
-the layers above and surfaced in both the daily briefing and the dashboard.
-
-| Signal | Where it lives | What it tells you |
-|--------|----------------|-------------------|
-| **Stocks-to-use ratio** | `analysis/stocks_to_use.py` | US balance-sheet tightness from PSD: `ending_stocks / total_use`. Falling ratio = tightening supply; below historical bands triggers a tight-supply alert in the briefing. |
-| **Brazil basis** | `analysis/spreads.compute_brazil_basis` | Paranaguá FOB (Layer 19, AgRural) minus CBOT front-month, both converted to USD/MT. Positive basis = Brazilian origin trading at a premium to Chicago; the trade-convention number desks quote daily. |
-| **Soy-oil value share** | `analysis/spreads.py` | Share of the crushed bean's value attributable to oil vs meal: `(oil × 11) / ((oil × 11) + (meal × 2.2))`. Rising share = biofuel/edible-oil demand pulling the complex; falling share = livestock/meal-led market. |
-| **COT positioning z-scores** | `analysis/zscore.py` (consumed in COT section) | Rolling z-score of managed-money net positioning vs its own history. \|z\| ≥ 2 flags extreme positioning and elevated reversal risk — far more informative than raw net contracts. |
-| **Weather anomaly z-scores** | `analysis/zscore.py` (consumed in weather section) | Rolling z-score for precipitation and temperature per region vs the multi-year seasonal norm. Surfaces *anomalies* (dry vs normal-for-this-week) rather than absolute thresholds, which matters in shoulder seasons. |
-| **Briefing archive** | `briefings` table (see `pipeline/schema.py`, `pipeline/store.save_briefing`) | Every generated briefing is persisted with date, text, and a structured `snapshot_json` payload. Enables time-series review, A/B comparison of revisions, and downstream backtesting against subsequent price action. |
-
-> Snapshot coverage caveat: `analysis/briefing/snapshot.py` currently captures
-> prices/technicals, crush spread, and COT into `snapshot_json`. Brazil basis,
-> stocks-to-use, and the z-score sections are *rendered* in the text briefing
-> but not yet in the structured snapshot — tracked as a backtesting follow-up.
-
-## Dashboard
-
-Generated with `python scripts/generate_html.py` and deployed to GitHub Pages. 9 pages of visual analysis:
-
-| Page | What It Shows |
-|------|--------------|
-| **Command Center** | At-a-glance snapshot of all 3 soy legs + crush spread + key signals |
-| **Technicals** | Candlestick charts with RSI/MACD/Bollinger Bands for each soy leg (tabbed) |
-| **Supply & Demand** | WASDE balance sheet, CONAB vs USDA, exports, China, biodiesel (3 tabs: Soy/Competing/EM) |
-| **Relative Value** | Crush spread, oil/meal ratio, soy oil vs palm oil, bean/corn ratio with 1Y overlays |
-| **Risk Monitor** | BRL/USD, COT positioning, weather threats, options data, rolling correlations |
-| **Forward Curves** | Term structure for all 3 soy contracts — contango/backwardation visualised |
-| **Seasonal** | Monthly average patterns vs current price for each soy leg |
-| **Briefing** | Full text briefing + data health check |
-| **About** | Data sources, methodology, price unit explanations |
-
-All pages reuse existing `read_*()` and analysis functions. Data updates when you re-run `python main.py`.
-
-## Required vs Optional Layers
-
-Each data layer below is one of the 19 source layers the pipeline pulls. The
-pipeline is built so that **any layer can fail and the rest still run** —
-no API key means that layer is skipped, no exception. The dashboard shows
-"No data" for sections backed by skipped layers.
-
-| Layer | Source | Key required | Runs without key |
-|------:|--------|--------------|------------------|
-| 1     | Yahoo Finance — commodity futures      | —                  | yes |
-| 2     | USDA NASS — crop fundamentals (annual) | `USDA_API_KEY`     | no  |
-| 2b    | USDA NASS — crop progress (weekly)     | `USDA_API_KEY`     | no  |
-| 3     | FRED — economic indicators             | `FRED_API_KEY`     | no  |
-| 4     | CFTC — COT positioning                 | —                  | yes |
-| 5     | Open-Meteo — weather (24 regions)      | —                  | yes |
-| 6     | USDA PSD — global supply/demand        | —                  | yes |
-| 7     | Yahoo Finance — currency pairs         | —                  | yes |
-| 8     | World Bank — monthly benchmark prices  | —                  | yes |
-| 9     | AKShare — DCE Chinese futures          | —                  | yes |
-| 10    | USDA FAS — weekly export sales         | `FAS_API_KEY`      | no  |
-| 11    | Yahoo Finance — forward contract months| —                  | yes |
-| 12    | USDA WASDE — monthly forecasts (OCE XLS)| —                 | yes |
-| 13    | EIA — biofuel & energy                 | `EIA_API_KEY`      | no  |
-| 14    | USDA — crush + export inspections      | `USDA_API_KEY`     | no  |
-| 15    | CONAB — Brazil crop estimates          | —                  | yes |
-| 16    | NCDEX — India domestic soy *(disabled)*| —                  | yes |
-| 17    | CEPEA — Brazil farm-gate soy *(disabled)*| —                | yes |
-| 18    | JSE SAFEX — South Africa soy           | —                  | yes |
-| 19    | AgRural — Paranaguá FOB soy            | —                  | yes |
-
-> **Layer 12 note**: WASDE no longer routes through NASS QuickStats — `fetchers/wasde.py`
-> pulls the canonical XLS from USDA OCE (`wasdeMMYY.xls`) directly, so no API key
-> is required.
->
-> **Layer 16 note (disabled 2026-05)**: `ncdex.com` now serves a JavaScript
-> fingerprint interstitial (`__hd_fingerprint` cookie via `/__verify/fp`) on
-> every URL — `requests.get()` cannot pass it, so the Bhav Copy download
-> returns an HTML error page. The fetcher is preserved with diagnostic
-> logging in `fetchers/india_domestic.py`; the pipeline call in `main.py`
-> is short-circuited via `_mark_empty`. Re-enabling requires a different
-> India spot-soy source (AgMarknet, SOPA, NSE) or a Playwright-based
-> bypass — the URL templates themselves are not the issue.
->
-> **Layer 17 note (DISABLED 2026-05-12)**: `cepea.esalq.usp.br` is fronted
-> by a Cloudflare Turnstile JavaScript challenge; `main.py` short-circuits
-> this layer via `_mark_empty`. Re-enabling requires an alternate Brazil
-> spot source (Infosimples, Playwright bypass, or another index).
->
-> **Layer 19 note**: AgRural is an HTML scraper against `precossojaemilho` and is
-> fragile by nature — page-shape changes are caught by `ScraperShapeError` and
-> degrade gracefully (the layer is skipped, the rest of the pipeline runs).
-> Stored raw BRL/MT is used internally; the public dashboard exposes only the
-> derived USD/MT Brazil basis (Paranaguá FOB vs CBOT).
-
-### What you get with zero API keys
-
-14 of 19 layers run with no API keys at all. That gives you:
-
-- Commodity futures + currencies + COT positioning + forward curves
-- Weather (24 regions) and global supply/demand (USDA PSD, 27 countries)
-- DCE Chinese futures, World Bank monthly prices, CONAB Brazil estimates
-- India NCDEX, Brazil CEPEA, and South Africa SAFEX domestic prices
-- WASDE monthly forecasts (USDA OCE XLS)
-- AgRural Paranaguá FOB (Brazil port-side soy basis)
-
-The 5 layers that do require keys (USDA NASS, USDA FAS, FRED, EIA) are all
-**free** — just register and copy the key. None of the data sources are paid.
-
-### What the dashboard shows when a layer is missing
-
-The static HTML dashboard renders every page even when its source layer is
-empty. Charts collapse to "No data available" placeholders; the daily
-briefing emits the section header with a "No data" line. This is by design
-so layer failures are visible rather than hidden.
-
-## What's Missing (Optional Paid Upgrades)
-
-| Missing Data | Why | Upgrade Cost | Service |
-|-------------|-----|-------------|---------|
-| **Daily Robusta Coffee prices** | Not available on free platforms | ~$10-50/month | Commodities-API.com (symbol: ROBUSTA) |
-| **Daily Palm Oil prices** | Not available on free platforms | ~$10-50/month | Commodities-API.com (symbol: CPO) |
-| **ICE certified coffee stocks** | Requires exchange subscription | Varies | ICE Data Services |
-| **Real-time prices** | Exchange licensing fees | $500+/month | Barchart cmdtyView |
-
-**Note**: The free World Bank monthly data for Robusta and Palm Oil is sufficient
-for trend analysis and seasonal studies. Daily prices would add granularity for
-shorter-term trading decisions.
-
-## Configurable Thresholds (`config.py`)
-
-These can be tuned without touching analysis code:
-
-| Threshold | Default | What It Controls |
-|-----------|---------|-----------------|
-| `RSI_OVERBOUGHT` | 70 | RSI level that flags overbought |
-| `RSI_OVERSOLD` | 30 | RSI level that flags oversold |
-| `VOLUME_SPIKE_MULTIPLIER` | 2.0 | Multiple of 20-day avg volume to flag as unusual |
-| `WEATHER_HEAVY_RAIN_MM` | 20 | Precipitation threshold for heavy rain alert |
-| `WEATHER_EXTREME_HEAT_C` | 38 | Temperature threshold for crop stress alert |
-| `WEATHER_DRY_THRESHOLD_MM` | 1 | Below this = "dry conditions" alert |
-| `FRESHNESS_WARNING_DAYS` | 7 | Days before stale data warning appears |
-
-## How to Run
+Commodity market intelligence for the soy complex (soybeans, soybean oil, soybean meal) and competing crops. A Python pipeline pulls 19 free data source layers across 27 countries into SQLite, an analysis engine turns them into signals and a daily text briefing, and a static dashboard — a light, editorial "morning scan" page — deploys automatically to GitHub Pages every weekday.
+
+All prices are shown in **USD per metric ton** for international comparability.
+
+## The Dashboard
+
+One scrolling page in scan order, every section collapsible:
+
+**01 Overnight** prices · **02 Signals** · **03 Crush & Relative Value** · **04 Supply & Demand** (WASDE, CONAB, exports, emerging markets) · **05 Risk** (currencies, COT, weather) · **06 Forward Curves** · **07 Seasonal** · **08 Technicals** · **09 Full Briefing** · **10 About**
+
+## Data Sources (all free)
+
+| # | Source | Coverage |
+|--:|--------|----------|
+| 1 | Yahoo Finance | 11 commodity futures (daily) |
+| 2 | USDA NASS* | US production, yield, weekly crop conditions |
+| 3 | FRED* | Dollar index, CPI, rates, yield curve |
+| 4 | CFTC | COT positioning, 10 commodities (weekly) |
+| 5 | Open-Meteo | Weather in 24 growing regions, 6 continents |
+| 6 | USDA PSD | Supply/demand, 8 commodities × 27 countries |
+| 7 | Yahoo Finance | 13 currency pairs |
+| 8 | World Bank | Monthly benchmark prices (Robusta, palm oil) |
+| 9 | AKShare | DCE Chinese futures, 5 contracts |
+| 10 | USDA FAS* | Weekly export sales + top buyers |
+| 11 | Yahoo Finance | Forward curves (contango/backwardation) |
+| 12 | USDA WASDE | Monthly supply/demand forecasts |
+| 13 | EIA* | Ethanol, biodiesel, diesel |
+| 14 | USDA* | Monthly crush + weekly export inspections |
+| 15 | CONAB | Brazil official crop estimates |
+| 16 | NCDEX | India domestic soy *(currently disabled — anti-bot wall)* |
+| 17 | CEPEA | Brazil farm-gate soy *(currently disabled — Cloudflare)* |
+| 18 | JSE SAFEX | South Africa soy settlements |
+| 19 | AgRural | Paranaguá FOB — Brazil port basis |
+
+\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`). **14 of 19 layers run with no keys at all.** Any layer can fail and the rest still run.
+
+## Analysis
+
+- **Technicals** — SMA 20/50/200, RSI (Wilder), MACD, Bollinger Bands, volatility
+- **Signals** — MA/MACD crossovers, RSI extremes and divergence, volume spikes, Bollinger squeeze, ranked by severity
+- **Trader metrics** — crush spread and soy-oil value share, Brazil basis (Paranaguá vs CBOT), stocks-to-use tightness, COT and weather z-scores, bean/corn acreage ratio
+- **Market Drivers** — a narrative that connects layers: BRL + exports, positioning + RSI crowding, weather premiums, dollar impact, China buying pace
+- **Daily briefing** — 26-section text report, archived to the database with a structured snapshot for backtesting
+
+## Run It
 
 ```bash
-# Set API keys (one-time, optional — 14 of 19 layers work without them)
-export USDA_API_KEY="your-key-here"
-export FRED_API_KEY="your-key-here"
-export FAS_API_KEY="your-key-here"
-export EIA_API_KEY="your-key-here"
-
-# Install runtime dependencies
 pip install -r requirements.txt
 
-# (For development: adds pytest, ruff, mypy, etc.)
-# pip install -r requirements-dev.txt
-
-# Run the pipeline (fetches all 19 layers, cleans, validates, stores)
-python main.py
-
-# Generate the static HTML dashboard
-python scripts/generate_html.py
-# Open docs/index.html in your browser
-
-# Generate daily briefing (text)
+python main.py                      # fetch → clean → validate → store (19 layers)
+python scripts/generate_html.py     # build the dashboard → docs/index.html
 python -c "from analysis.briefing import generate_briefing; print(generate_briefing())"
-
 ```
 
 ## Deployment
 
-The dashboard auto-deploys to GitHub Pages via GitHub Actions:
-- **Schedule:** Weekdays at 12:00 UTC (after US market open)
-- **Trigger:** Push to main, or manual workflow dispatch
-- **Pipeline:** Fetches data → generates static HTML → deploys to Pages
+GitHub Actions runs the pipeline and redeploys the dashboard to Pages every weekday at 12:00 UTC (and on every push to `main`). API keys live in repository secrets. Optional Turso cloud storage via `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`; defaults to local SQLite.
 
-To set up: add `USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` as repository secrets.
-
-## Tech Stack
-
-- **Language**: Python 3.10+
-- **Database**: SQLite (local, no server needed)
-- **Data Libraries**: pandas, yfinance, requests, AKShare, cot_reports
-- **Dashboard**: Static HTML + Plotly (GitHub Pages)
-- **Analysis**: Pure Python/pandas (no paid analytics tools)
-
-## Project Structure
+## Layout
 
 ```
-Mirror_Market/
-    config.py                          # Tickers, API keys, URLs, thresholds
-    main.py                            # Pipeline orchestrator (19 layers)
-    fetchers/
-        yfinance.py                    # Layers 1 + 7 (prices + currencies)
-        usda.py                        # Layers 2 + 2b + 14 (USDA data)
-        wasde.py                       # Layer 12 (USDA WASDE OCE XLS — split from usda.py, no API key)
-        fred.py                        # Layer 3 (economic indicators)
-        cot.py                         # Layer 4 (COT positioning)
-        weather.py                     # Layer 5 (24 growing regions)
-        psd.py                         # Layer 6 (global supply/demand)
-        worldbank.py                   # Layer 8 (monthly benchmark prices)
-        akshare.py                     # Layer 9 (DCE Chinese futures)
-        export_sales.py                # Layer 10 (USDA FAS weekly sales)
-        forward_curve.py               # Layer 11 (individual contract months)
-        eia.py                         # Layer 13 (biofuel/energy)
-        conab.py                       # Layer 15 (Brazil crop estimates)
-        india_domestic.py              # Layer 16 (NCDEX India domestic soy — INR/MT)
-        cepea.py                       # Layer 17 (CEPEA Brazil farm-gate soy — BRL/MT)
-        safex.py                       # Layer 18 (JSE SAFEX South Africa soy — ZAR/MT)
-        agrural.py                     # Layer 19 (AgRural Paranaguá FOB soy — BRL/MT scraper)
-    pipeline/
-        connection.py                  # DB abstraction (Turso cloud or local SQLite)
-        schema.py                      # All 22 CREATE TABLE SQL definitions
-        store.py                       # All save_*() write functions
-        query.py                       # All read_*() query functions
-        clean.py                       # Data cleaning + validation
-        units.py                       # Native exchange units → USD/MT conversion
-    analysis/
-        technical.py                   # SMA, RSI, MACD, Bollinger, volatility
-        signals.py                     # Signal detection (crossovers, divergence, squeeze)
-        spreads.py                     # Crush spread calculation
-        correlations.py                # Cross-market correlation analysis
-        seasonal.py                    # Seasonal pattern comparison
-        forward_curve.py               # Forward curve analysis (contango/backwardation)
-        stocks_to_use.py               # Stocks-to-use ratios from PSD; tight-supply alerts
-        zscore.py                      # Shared z-score helpers (consumed by COT + weather sections)
-        loaders.py                     # Shared price/currency loaders (used by briefing + dashboard)
-        briefing/                      # Daily briefing package — orchestrator + per-section modules
-            __init__.py                #   exports generate_briefing(), generate_briefing_data(), BriefingData
-            orchestrator.py            #   stitches sections together
-            types.py                   #   BriefingData dataclass
-            snapshot.py                #   distills BriefingData into snapshot_json for the briefings archive
-            sections/                  #   one module per section (prices, crush, wasde, ...)
-        soy_analytics.py               # 9 analyst functions for the dashboard
-        health.py                      # Per-commodity data health checks
-    app/
-        charts.py                      # Shared Plotly figure builders
-        templates/
-            dashboard.html.j2          # Jinja2 template for static dashboard
-    docs/
-        index.html                     # Generated static dashboard (GitHub Pages)
-    data/
-        storage/
-            mirror_market.db           # SQLite database (gitignored)
-    scripts/
-        generate_html.py               # Static HTML dashboard generator
-        generate_pdf.py                # One-off utility: README → PDF
+main.py            pipeline orchestrator (19 layers, graceful degradation)
+fetchers/          one module per data source
+pipeline/          schema, store, query, clean, unit conversion, DB connection
+analysis/          technicals, signals, spreads, briefing package, dashboard analytics
+app/               Plotly chart builders + Jinja2 template
+scripts/           static dashboard generator
+docs/index.html    the generated dashboard (GitHub Pages)
 ```
+
+Design system in `DESIGN.md` · architecture details in `ARCHITECTURE.md` and `CLAUDE.md`.
+
+---
+
+*A project by Philip Bergman. Free public data, delayed, provided as-is — not financial advice.*

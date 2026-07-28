@@ -43,17 +43,18 @@ OUTPUT_DIR = PROJECT_ROOT / "docs"
 OUTPUT_FILE = OUTPUT_DIR / "index.html"
 TEMPLATE_DIR = PROJECT_ROOT / "app" / "templates"
 
-# Page definitions for sidebar nav
-PAGES = [
-    {"id": "command-center", "name": "Command Center", "icon": "\u25A0"},
-    {"id": "technicals", "name": "Technicals", "icon": "\u25B2"},
-    {"id": "supply-demand", "name": "Supply & Demand", "icon": "\u2584"},
-    {"id": "relative-value", "name": "Relative Value", "icon": "\u2300"},
-    {"id": "risk-monitor", "name": "Risk Monitor", "icon": "\u26A0"},
-    {"id": "forward-curves", "name": "Forward Curves", "icon": "\u2192"},
-    {"id": "seasonal", "name": "Seasonal", "icon": "\u2605"},
-    {"id": "briefing", "name": "Briefing", "icon": "\u270E"},
-    {"id": "about", "name": "About", "icon": "\u2139"},
+# Numbered sections for the index nav (scan order)
+SECTIONS = [
+    {"id": "overnight", "no": "01", "name": "Overnight"},
+    {"id": "signals", "no": "02", "name": "Signals"},
+    {"id": "relative-value", "no": "03", "name": "Crush & Value"},
+    {"id": "supply-demand", "no": "04", "name": "Supply & Demand"},
+    {"id": "risk", "no": "05", "name": "Risk"},
+    {"id": "forward-curves", "no": "06", "name": "Curves"},
+    {"id": "seasonal", "no": "07", "name": "Seasonal"},
+    {"id": "technicals", "no": "08", "name": "Technicals"},
+    {"id": "briefing", "no": "09", "name": "Briefing"},
+    {"id": "about", "no": "10", "name": "About"},
 ]
 
 LEG_COLORS = {
@@ -136,6 +137,18 @@ def _build_freshness_items() -> list[dict]:
             age_str = "never"
         items.append({"name": layer, "status": status, "age": age_str})
     return items
+
+
+def _build_masthead(freshness_items: list[dict], now: datetime) -> dict:
+    """Masthead meta: date line, freshness counts, stale-layer note."""
+    fresh = [i for i in freshness_items if i["status"] == "fresh"]
+    stale = [i for i in freshness_items if i["status"] != "fresh"]
+    return {
+        "day_line": now.strftime("%A · %-d %B %Y"),
+        "fresh_count": len(fresh),
+        "total_layers": len(freshness_items),
+        "stale_layers": stale,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +237,7 @@ def _build_command_center(data: dict) -> dict | None:
             "severity": sev,
             "severity_label": sev.upper(),
             "commodity": sig.get("commodity", ""),
-            "message": sig.get("message", ""),
+            "message": sig.get("description") or sig.get("message", ""),
         })
 
     return {"legs": legs, "key_metrics": key_metrics, "signals": signals}
@@ -253,7 +266,7 @@ def _build_technicals(data: dict) -> list[dict] | None:
         sig_items = [{
             "severity": s.get("severity", "info"),
             "severity_label": s.get("severity", "info").upper(),
-            "message": s.get("message", ""),
+            "message": s.get("description") or s.get("message", ""),
         } for s in leg_signals]
 
         # CSV download (last 252 trading days)
@@ -910,10 +923,13 @@ def generate():
 
     # Build template context
     log.info("Building template context...")
+    now = datetime.now(timezone.utc)
+    freshness_items = _build_freshness_items()
     context = {
-        "pages": PAGES,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "freshness_items": _build_freshness_items(),
+        "sections": SECTIONS,
+        "generated_at": now.strftime("%Y-%m-%d %H:%M UTC"),
+        "masthead": _build_masthead(freshness_items, now),
+        "freshness_items": freshness_items,
         "command_center": _build_command_center(cc_data),
         "technicals": _build_technicals(tech_data),
         "supply": _build_supply(supply_data),
