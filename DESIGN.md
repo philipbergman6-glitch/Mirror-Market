@@ -1,145 +1,102 @@
 # Design System — Mirror Market
 
 ## Product Context
-- **What this is:** Commodity market intelligence platform monitoring global agricultural markets with 18 data source layers across 27 countries
-- **Who it's for:** Defense tech hiring managers and engineers viewing the project from GitHub as a resume portfolio piece
-- **Space/industry:** Commodity trading, agricultural markets, fintech dashboards
+- **What this is:** Commodity market intelligence platform monitoring global agricultural markets with 19 data source layers across 27 countries
+- **Who it's for:** Business professionals (managers, stakeholders) reviewing the daily state of the soy complex — plus engineers viewing the project from GitHub
+- **Space/industry:** Commodity trading, agricultural markets, market research
 - **Project type:** Data-heavy analytics dashboard (static HTML, generated from Python)
 
 ## Aesthetic Direction
-- **Direction:** Industrial/Utilitarian — Bloomberg Terminal meets modern developer tools
-- **Decoration level:** Minimal — typography and data do all the work
-- **Mood:** Serious, functional, competent. Should feel like a real tool built by someone who understands markets, not a tutorial project or Dribbble eye-candy
-- **Reference sites:** Bloomberg Terminal, GitHub dark theme, Fortress (Bloomberg-inspired Next.js template)
+- **Direction:** "Morning Scan" — a light editorial front page. The dashboard reads like the morning edition of a serious financial paper: a masthead, numbered sections in scan order, heavy rules, generous whitespace
+- **Decoration level:** Minimal — typography, rules, and data do all the work
+- **Mood:** Calm, authoritative, professional. A daily read, not a trading terminal
+- **Reference:** chosen 2026-07 from three prototypes; canonical mockup at `.scratch/soy-trader-app/assets/design-directions/direction-c-morning-scan.html`
 
 ## Typography
-- **Display/Hero:** Geist (600-700 weight) — clean, modern, built for developer tools. Signals engineering craft over generic fintech
-- **Body:** Geist (400 weight) — same family for visual cohesion
-- **UI/Labels:** Geist (500 weight, 11px uppercase with 0.04em tracking)
-- **Data/Numbers:** Geist with `font-variant-numeric: tabular-nums` — aligned decimal places in metric cards and tables
-- **Code/Briefing:** JetBrains Mono (400-500 weight) — for the briefing text section and data freshness timestamps
-- **Loading:** Google Fonts CDN (`https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500`)
+- **Display/Headlines:** Archivo (700–800 weight) — masthead at 42px/-0.03em, big stat headlines at 30–32px/-0.02em, section heads at 15px uppercase 0.05em tracking
+- **Body/UI:** Inter (400–600 weight) — 14px body, 13px dense rows, 12px captions
+- **Data/Numbers:** IBM Plex Mono (400–500) with `font-variant-numeric: tabular-nums` — every numeric value uses the `.num` class
+- **Loading:** Google Fonts CDN (`Archivo:wght@500;600;700;800`, `Inter:wght@400;500;600`, `IBM+Plex+Mono:wght@400;500`)
 - **Scale:**
-  - Page title: 28px / weight 700 / tracking -0.02em
-  - Section head: 20px / weight 600 / tracking -0.01em
-  - Card title: 13px / weight 600
-  - Body: 14px / weight 400 / line-height 1.5
-  - Label: 11px / weight 500 / uppercase / tracking 0.04em
-  - Caption: 12px / weight 400 / muted color
-  - Data value: 28px / weight 600 / tabular-nums / tracking -0.02em
-  - Mono: 12-13px / weight 400 / line-height 1.7
+  - Masthead: 42px / Archivo 800 / tracking -0.03em / line-height 1
+  - Big stat: 30–32px / Archivo 700 / tracking -0.02em
+  - Section head: 15px / Archivo 700 / uppercase / tracking 0.05em, preceded by a mono section number in green
+  - Body: 14px / Inter 400 / line-height 1.45
+  - Dense row / label: 13px; caption: 12px muted
+  - Card metric value: 32px / Archivo 700 (mono for the digits)
 
 ## Color
-- **Approach:** Restrained dark palette — GitHub dark as the foundation, green accent from original brand
+- **Approach:** Paper-and-ink light palette with the soy-green brand accent. No dark mode
 - **Surfaces:**
-  - Background: `#0D1117`
-  - Surface: `#161B22`
-  - Card: `#1C2128`
-  - Card hover: `#21262D`
-  - Border: `#30363D`
+  - Paper (page background): `#FAFAF7`
+  - Card: `#FFFFFF`
+  - Rule (light border): `#D8DCD8`
+  - Rule heavy (masthead/section dividers): `#191C1A`
 - **Text:**
-  - Primary: `#E6EDF3`
-  - Muted: `#7D8590`
-  - Dim: `#484F58`
+  - Ink (primary): `#191C1A`
+  - Muted: `#5D6660`
+  - Dim: `#9BA39E`
 - **Brand:**
-  - Green accent: `#2D6A4F` — nav active state, section headers, primary buttons
-  - Green accent light: `#40916C` — hover states, tab underlines
+  - Soy green: `#2D6A4F` — masthead accent word, section numbers, links, pills
 - **Directional:**
-  - Bullish: `#3FB950`
-  - Bearish: `#F85149`
-- **Commodity:**
-  - Soybean: `#DAA520` (goldenrod)
-  - Soy Oil: `#FF8C00` (dark orange)
-  - Soy Meal: `#CD853F` (peru)
+  - Up/bullish: `#1F7A3D`
+  - Down/bearish: `#C23B2E`
+- **Commodity (ink-compatible, darker than the old dark-theme set):**
+  - Soybean: `#8B6914`
+  - Soy Oil: `#B05E10`
+  - Soy Meal: `#8A5A2B`
 - **Semantic:**
-  - Success: `#3FB950` (same as bullish)
-  - Warning: `#D29922`
-  - Error: `#F85149` (same as bearish)
-  - Info: `#58A6FF`
-- **Alert backgrounds:** Semantic color at 8% opacity (e.g., `rgba(63,185,80,0.08)`) with 3px left border
-- **Badge backgrounds:** Semantic color at 15% opacity with text in the semantic color
+  - Warning: `#A8730A` (badge fill `#E8C983` with ink text `#4A3608`)
+  - Error/alert: `#C23B2E` (badge fill solid, white text)
+  - Info: `#2F5D8F` (neutral badge fill `#E4E8E4`, muted text)
+- **Alert backgrounds:** semantic color at ~8% opacity with a 3px left border
+- **CSS variable contract:** generated HTML snippets reference `--text`, `--text-muted`, `--text-dim`, `--bullish`, `--bearish`, `--green-light`, `--warning`, `--info` — the template must define all of these, mapped to the palette above
 
 ## Spacing
-- **Base unit:** 8px
-- **Density:** Comfortable
-- **Scale:** 2px, 4px, 8px, 12px, 16px, 20px, 24px, 32px, 48px
-- **Card padding:** 16px vertical, 20px horizontal
-- **Grid gap:** 16px between cards
-- **Section margin:** 24px between sections
+- **Base unit:** 8px; density comfortable
+- **Page:** max-width 1180px, centered, 32px side padding, 64px bottom
+- **Sections:** 22–28px vertical padding, separated by a 1px light rule
+- **Cards:** 16–18px padding, 16px grid gap
+- **Border radius:** 8px cards, 3px badges
 
 ## Layout
-- **Approach:** Grid-disciplined
-- **Navigation:** Fixed left sidebar, 220px wide
-  - Brand header with title + subtitle
-  - Nav items: icon (16px) + label, 8px vertical padding, 16px horizontal
-  - Active: green accent background, white text
-  - Bottom section: data freshness indicators with colored dots
-- **Grid:**
-  - 3-column for soy leg metric cards
-  - 4-column for key metrics row
-  - Full-width for charts and signals
-- **Max content width:** 1400px
-- **Border radius:** 6px for cards/containers, 4px for buttons/inputs, 3px for badges, 10px for pills/counts, 2px for color dots
-- **Responsive:** Cards stack to 1 column below 768px, sidebar collapses to top bar
+- **Approach:** Single scrolling editorial page in scan order — no sidebar, no hidden pages
+- **Masthead:** brand title (two-line, accent word in green) + right-aligned meta (day/date, pipeline run time, layer freshness count, units note), sitting on a 3px heavy rule
+- **Stale note:** a single warning line directly under the masthead when any layer is stale
+- **Index nav:** slim sticky bar under the masthead with mono section numbers linking to anchors
+- **Sections:** numbered (`01`, `02`, …) with an Archivo uppercase title and a right-aligned dim "why you're looking at this" note
+- **Grids:** 3-up for soy leg cards, 4-up for metric rows, 2-up for headline+chart pairs; dotted-rule key/value rows for watchlists
+- **Responsive:** grids collapse to 1 column below 768px; index nav scrolls horizontally
 
 ## Motion
-- **Approach:** Minimal-functional
-- **Tab switches:** Instant `display` toggle (no animation)
-- **Hover states:** `background` transition 0.1s, `color` transition 0.1s
-- **Collapsible arrow:** `transform` rotate 0.15s
-- **Charts:** Plotly handles all chart interactivity (hover, zoom, pan) natively
+- **Approach:** Minimal-functional. Instant tab toggles, 0.1s hover transitions, native smooth-scroll for anchor links. Plotly handles chart interactivity
 
 ## Component Patterns
 
-### Metric Card
-```
-.metric-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px 20px;
-}
-- Label: 11px uppercase muted, with optional color dot
-- Value: 28px weight 600 tabular-nums, colored by commodity
-- Delta: 13px weight 500, green/red by direction
-- Sub-metrics: 12px muted, flex row with 16px gap
-```
+### Leg card (price card)
+White card, 1px rule border, 8px radius. Uppercase muted commodity name (in its commodity color), Archivo 32px mono price with small unit, directional change line (▲/▼ + % in up/down color), 12px sub-row (RSI · trend · vol).
 
-### Signal Item
-```
-- Flex row: badge (10px uppercase, colored background) + commodity name (100px, muted) + description text
-- Separated by 1px border-bottom
-- Count shown in green pill next to section header
-```
+### Section head
+`<span class="sec-no">01</span>` mono green number + Archivo uppercase `<h2>` + optional right-aligned dim `.why` note.
 
-### Data Table
-```
-- Headers: 11px uppercase dim, left-aligned (numbers right-aligned)
-- Cells: 13px primary text, tabular-nums, 8px vertical padding
-- Row hover: card-hover background
-- No zebra striping — border-bottom separation only
-```
+### Signal row
+Flex row: solid badge (alert red/white, warn `#E8C983`/dark, info neutral gray) + muted commodity name (min-width 96px) + message. Dotted rule between rows.
 
-### Briefing Block
-```
-- JetBrains Mono, 12px, line-height 1.7
-- Section headers in green accent light, weight 600
-- Bullish values in green, bearish in red
-- White-space: pre-wrap
-```
+### Key/value watch row
+`.kv` flex row, label muted left, mono value right, dotted bottom rule. Used for watchlists and dense stat lists.
 
-### Collapsible (details/summary)
-```
-- Native HTML <details><summary>
-- Triangle arrow rotates on open
-- Card background with border
-```
+### Big stat headline
+Archivo 30px mono number in directional color + 14px dim unit suffix + 13px muted caption underneath. For crush spread, basis, and other single-number stories.
+
+### Briefing block
+IBM Plex Mono 12px / line-height 1.7, `white-space: pre-wrap`, on a white card. Section headers tinted green, directional percentages tinted up/down.
+
+### Charts (Plotly)
+White paper/plot background, `#D8DCD8` gridlines, Inter 12px font, ink text. Traces use the commodity/directional palette above. No chart borders beyond the card that contains them.
 
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
-| 2026-04-16 | GitHub dark palette over pure black | Proven readable for dense data, cohesive with where repo visitors see the project |
-| 2026-04-16 | Geist typography over generic sans-serifs | Signals developer craft, distinguishes from template dashboards |
-| 2026-04-16 | Dark theme only (no light mode toggle) | Trading desks use dark themes. Simplifies implementation. Consistent with product identity |
-| 2026-04-16 | Minimal decoration | Data-first approach. Typography and color hierarchy do the visual work |
-| 2026-04-16 | Fixed sidebar nav over top nav | Standard for data dashboards. Provides persistent navigation + data freshness at a glance |
+| 2026-04-16 | GitHub dark palette, Geist, sidebar nav | Original terminal-style system (superseded) |
+| 2026-07-28 | **Full redesign to "Morning Scan" light editorial system** | Chosen by the user from three prototyped directions; audience is business professionals — a calm front-page read beats terminal density. Single scrolling page in scan order replaces sidebar + hidden pages |
+| 2026-07-28 | Keep the CSS variable contract (`--text`, `--bullish`, …) | Python HTML builders emit inline `var(...)` references; remapping variables to the light palette restyles all generated snippets without touching builder logic |
