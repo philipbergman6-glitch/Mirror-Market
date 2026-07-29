@@ -31,6 +31,9 @@ from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
+# api.data.gov gateway auth header (2026 ESRQS migration)
+_AUTH_HEADER = "X-Api-Key"
+
 
 def _current_market_year() -> int:
     """
@@ -56,7 +59,7 @@ def _fas_get(endpoint: str) -> dict | list | None:
         return None
 
     url = f"{FAS_BASE_URL}{endpoint}"
-    headers = {"API_KEY": FAS_API_KEY}
+    headers = {_AUTH_HEADER: FAS_API_KEY}
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
