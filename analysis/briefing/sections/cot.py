@@ -8,7 +8,7 @@ the signal.
 
 import pandas as pd
 
-from analysis.zscore import format_zscore, zscore
+from analysis.zscore import format_zscore, trailing_zscore
 from pipeline.query import read_cot
 
 _LOOKBACK = pd.Timedelta(days=365 * 3)
@@ -16,16 +16,7 @@ _LOOKBACK = pd.Timedelta(days=365 * 3)
 
 def _zscore_for(subset: pd.DataFrame, column: str, latest_date: pd.Timestamp) -> float | None:
     """Z-score of the latest value in `column` vs the trailing 3-year baseline."""
-    if column not in subset.columns:
-        return None
-    cutoff = latest_date - _LOOKBACK
-    baseline = subset.loc[
-        (subset["Date"] >= cutoff) & (subset["Date"] < latest_date), column
-    ]
-    latest_value = subset.loc[subset["Date"] == latest_date, column]
-    if latest_value.empty:
-        return None
-    return zscore(float(latest_value.iloc[-1]), baseline)
+    return trailing_zscore(subset, column, latest_date, _LOOKBACK)
 
 
 def _format_side(label: str, value: float, z: float | None) -> str:

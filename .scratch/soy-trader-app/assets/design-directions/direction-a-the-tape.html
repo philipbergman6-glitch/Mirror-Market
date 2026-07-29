@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direction A — The Tape · Mirror Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0C10;
+    --panel: #10141B;
+    --panel-2: #151A23;
+    --line: #232B38;
+    --text: #D7DEE8;
+    --muted: #6E7A8A;
+    --dim: #46505E;
+    --amber: #E8A33D;
+    --up: #3FB950;
+    --down: #F0554D;
+    --warn: #D29922;
+    --info: #58A6FF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 13px;
+  }
+  .label { font-family: 'Archivo', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ── Tape header ─────────────────────────── */
+  .tape {
+    display: flex; align-items: stretch; border-bottom: 1px solid var(--line);
+    background: var(--panel); overflow-x: auto; white-space: nowrap;
+  }
+  .tape-brand {
+    padding: 14px 20px; border-right: 1px solid var(--line);
+    font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.06em;
+  }
+  .tape-brand span { color: var(--amber); }
+  .tape-cell { padding: 10px 20px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+  .tape-cell .sym { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; }
+  .tape-cell .px { font-size: 15px; font-weight: 600; }
+  .tape-cell .chg { font-size: 11px; }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .tape-clock { margin-left: auto; padding: 14px 20px; color: var(--dim); font-size: 11px; align-self: center; }
+
+  .wrap { max-width: 1360px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: 2fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 20px; margin-bottom: 40px; }
+  .cell { background: var(--panel); padding: 16px 18px; }
+  .cell h2 { font-family: 'Archivo', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); margin-bottom: 12px; }
+  .span2 { grid-column: 1 / -1; }
+
+  /* legs table */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: right; font-family: 'Archivo', sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); padding: 4px 10px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; }
+  td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  .commodity { color: var(--text); font-weight: 500; }
+  .dot { display: inline-block; width: 7px; height: 7px; margin-right: 8px; }
+  .bean { background: #DAA520; } .oil { background: #FF8C00; } .meal { background: #CD853F; }
+
+  /* signals */
+  .sig { display: flex; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .sig:last-child { border-bottom: none; }
+  .badge { font-family: 'Archivo', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; padding: 2px 7px; min-width: 58px; text-align: center; }
+  .b-alert { background: rgba(240,85,77,0.16); color: var(--down); }
+  .b-warn  { background: rgba(210,153,34,0.16); color: var(--warn); }
+  .b-info  { background: rgba(88,166,255,0.14); color: var(--info); }
+  .sig .who { color: var(--muted); min-width: 90px; font-size: 12px; }
+  .sig .what { font-size: 12px; }
+
+  /* headline pairs */
+  .pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .headline .big { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; margin: 2px 0; }
+  .headline .sub { font-size: 11px; color: var(--muted); }
+
+  /* stat strips (weather / s2u / freshness) */
+  .strip { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12px; align-items: baseline; }
+  .strip:last-child { border-bottom: none; }
+  .strip .k { color: var(--muted); min-width: 150px; }
+  .flag { color: var(--warn); }
+  .crit { color: var(--down); }
+</style>
+</head>
+<body>
+
+<header class="tape">
+  <div class="tape-brand">MIRROR<span>/</span>MARKET</div>
+  <div class="tape-cell"><span class="sym">SOYBEANS ZS=F</span><span class="px num">$385.80<span style="color:var(--dim);font-size:10px"> /MT</span></span><span class="chg num down">▼ −0.84% o/n</span></div>
+  <div class="tape-cell"><span class="sym">SOYBEAN OIL ZL=F</span><span class="px num">$1,058.40<span style="color:var(--dim);font-size:10px"> /MT</span></span><span class="chg num up">▲ +1.32% o/n</span></div>
+  <div class="tape-cell"><span class="sym">SOYBEAN MEAL ZM=F</span><span class="px num">$325.10<span style="color:var(--dim);font-size:10px"> /MT</span></span><span class="chg num down">▼ −0.41% o/n</span></div>
+  <div class="tape-cell"><span class="sym">USD/BRL</span><span class="px num">5.412</span><span class="chg num up">▲ +0.22%</span></div>
+  <div class="tape-clock">TUE 28 JUL 2026 · 06:42 ET · DB 05:30</div>
+</header>
+
+<main class="wrap">
+
+  <section class="cell">
+    <h2>Soy Complex — USD/MT</h2>
+    <table>
+      <thead><tr><th>Leg</th><th>Last</th><th>1D</th><th>1W</th><th>RSI</th><th>vs 200D</th><th>HV20</th><th>Trend</th></tr></thead>
+      <tbody>
+        <tr><td class="commodity"><span class="dot bean"></span>Soybeans</td><td class="num">385.80</td><td class="num down">−0.84%</td><td class="num down">−2.10%</td><td class="num">41.2</td><td class="num down">−3.8%</td><td class="num">14.9%</td><td class="down">Bearish</td></tr>
+        <tr><td class="commodity"><span class="dot oil"></span>Soybean Oil</td><td class="num">1,058.40</td><td class="num up">+1.32%</td><td class="num up">+4.65%</td><td class="num crit">72.8</td><td class="num up">+6.1%</td><td class="num">22.3%</td><td class="up">Bullish</td></tr>
+        <tr><td class="commodity"><span class="dot meal"></span>Soybean Meal</td><td class="num">325.10</td><td class="num down">−0.41%</td><td class="num down">−1.24%</td><td class="num">38.5</td><td class="num down">−5.2%</td><td class="num">16.1%</td><td class="down">Bearish</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="cell">
+    <h2>Crush · Basis</h2>
+    <div class="pair-row">
+      <div class="headline">
+        <div class="label">Board Crush</div>
+        <div class="big num up">$1.62<span style="font-size:12px;color:var(--muted)">/bu</span></div>
+        <div class="sub">oil share 44% · widening 5D</div>
+      </div>
+      <div class="headline">
+        <div class="label">Paranaguá FOB − CBOT</div>
+        <div class="big num down">−$12.40<span style="font-size:12px;color:var(--muted)">/MT</span></div>
+        <div class="sub">Brazil discount, harvest pressure</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cell span2">
+    <h2>Signals — by severity <span style="color:var(--dim)">(6)</span></h2>
+    <div class="sig"><span class="badge b-alert">ALERT</span><span class="who">Soybean Oil</span><span class="what">RSI 72.8 overbought — extended above upper Bollinger band 3 consecutive sessions</span></div>
+    <div class="sig"><span class="badge b-alert">ALERT</span><span class="who">Soybeans</span><span class="what">50/200 MA bearish crossover confirmed at $391.20/MT</span></div>
+    <div class="sig"><span class="badge b-warn">WARN</span><span class="who">Soybean Meal</span><span class="what">Volume spike 2.4× 20-day average on down move</span></div>
+    <div class="sig"><span class="badge b-warn">WARN</span><span class="who">Soybeans</span><span class="what">MACD histogram negative 8 sessions, momentum deteriorating</span></div>
+    <div class="sig"><span class="badge b-info">INFO</span><span class="who">Soybean Oil</span><span class="what">Bollinger squeeze released upward (near-roll)</span></div>
+    <div class="sig"><span class="badge b-info">INFO</span><span class="who">Corn</span><span class="what">Bean/corn ratio 2.41 — above 10Y planting-decision median</span></div>
+  </section>
+
+  <section class="cell">
+    <h2>Weather Watch</h2>
+    <div class="strip"><span class="k">Mato Grosso, BR</span><span class="flag">14-day rainfall −62% vs norm — safrinha stress</span></div>
+    <div class="strip"><span class="k">Rosario belt, AR</span><span>Normal · 28mm this week</span></div>
+    <div class="strip"><span class="k">US Midwest</span><span>Normal · pod-set window favorable</span></div>
+    <div class="strip"><span class="k">Madhya Pradesh, IN</span><span class="flag">Monsoon onset 9 days late</span></div>
+  </section>
+
+  <section class="cell">
+    <h2>Supply · Freshness</h2>
+    <div class="strip"><span class="k">US soy stocks/use</span><span class="crit">4.2% — tight-supply alert (10Y avg 8.9%)</span></div>
+    <div class="strip"><span class="k">World stocks/use</span><span>27.8% — comfortable</span></div>
+    <div class="strip"><span class="k">CEPEA Brazil spot</span><span class="crit">STALE — last 2026-02-20 (source disabled)</span></div>
+    <div class="strip"><span class="k">NCDEX India</span><span class="crit">DISABLED — anti-bot wall</span></div>
+    <div class="strip"><span class="k">All other layers</span><span class="up">fresh &lt; 24h</span></div>
+  </section>
+
+</main>
+</body>
+</html>

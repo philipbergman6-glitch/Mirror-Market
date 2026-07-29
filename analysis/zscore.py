@@ -46,6 +46,32 @@ def zscore(
     return (float(latest) - float(clean.mean())) / std
 
 
+def trailing_zscore(
+    subset: pd.DataFrame,
+    column: str,
+    latest_date: pd.Timestamp,
+    lookback: pd.Timedelta,
+    *,
+    min_observations: int = DEFAULT_MIN_OBSERVATIONS,
+) -> float | None:
+    """Z-score of the value at `latest_date` vs the trailing `lookback` window.
+
+    `subset` must hold one entity's rows with a `Date` column. The baseline is
+    `[latest_date - lookback, latest_date)` — the latest observation is excluded
+    so it doesn't bias the mean/std toward itself.
+    """
+    if column not in subset.columns:
+        return None
+    cutoff = latest_date - lookback
+    baseline = subset.loc[
+        (subset["Date"] >= cutoff) & (subset["Date"] < latest_date), column
+    ]
+    latest_value = subset.loc[subset["Date"] == latest_date, column]
+    if latest_value.empty:
+        return None
+    return zscore(float(latest_value.iloc[-1]), baseline, min_observations=min_observations)
+
+
 def format_zscore(z: float | None) -> str:
     """Render a z-score as '+2.3σ' / '-1.4σ'. Returns '' when z is None."""
     if z is None:

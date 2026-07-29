@@ -9,7 +9,7 @@ reader sees both the raw value and the deviation.
 
 import pandas as pd
 
-from analysis.zscore import format_zscore, zscore
+from analysis.zscore import format_zscore, trailing_zscore
 from config import WEATHER_DRY_THRESHOLD_MM, WEATHER_EXTREME_HEAT_C, WEATHER_HEAVY_RAIN_MM
 from pipeline.query import read_weather
 
@@ -17,16 +17,7 @@ _LOOKBACK = pd.Timedelta(days=90)
 
 
 def _zscore_for(subset: pd.DataFrame, column: str, latest_date: pd.Timestamp) -> float | None:
-    if column not in subset.columns:
-        return None
-    cutoff = latest_date - _LOOKBACK
-    baseline = subset.loc[
-        (subset["Date"] >= cutoff) & (subset["Date"] < latest_date), column
-    ]
-    latest_value = subset.loc[subset["Date"] == latest_date, column]
-    if latest_value.empty:
-        return None
-    return zscore(float(latest_value.iloc[-1]), baseline)
+    return trailing_zscore(subset, column, latest_date, _LOOKBACK)
 
 
 def _annotate(text: str, z: float | None) -> str:

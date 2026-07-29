@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direction B — Crush · Mirror Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #171209;
+    --card: #201910;
+    --card-2: #281f13;
+    --line: #3A2E1C;
+    --text: #EFE6D5;
+    --muted: #9C8C71;
+    --dim: #675A44;
+    --gold: #E3B341;
+    --oil: #FF9838;
+    --meal: #C99A6B;
+    --up: #7DC46B;
+    --down: #E86A5E;
+    --warn: #E3B341;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Space Grotesk', sans-serif; font-size: 14px; }
+  .num { font-family: 'Spline Sans Mono', monospace; font-variant-numeric: tabular-nums; }
+  .up { color: var(--up); } .down { color: var(--down); }
+
+  header { display: flex; align-items: baseline; gap: 20px; padding: 26px 36px 0; max-width: 1280px; margin: 0 auto; }
+  .brand { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 600; color: var(--gold); }
+  .date { color: var(--muted); font-size: 13px; }
+  .fresh-pill { margin-left: auto; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px; }
+  .fresh-pill b { color: var(--warn); font-weight: 500; }
+
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 36px 48px; display: flex; flex-direction: column; gap: 20px; }
+  h2 { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--gold); margin-bottom: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; }
+
+  /* ── Hero: crush flow ───────────────────── */
+  .hero { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 0; background: linear-gradient(160deg, #241B0F 0%, #1C150C 100%); border: 1px solid var(--line); border-radius: 14px; padding: 30px 34px; }
+  .hero .node { text-align: center; }
+  .hero .node .name { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .hero .node .px { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 600; letter-spacing: -0.01em; }
+  .hero .node .px small { font-size: 14px; color: var(--dim); font-family: 'Space Grotesk', sans-serif; }
+  .hero .node .chg { font-size: 13px; margin-top: 4px; }
+  .n-bean .px { color: var(--gold); } .n-oil .px { color: var(--oil); } .n-meal .px { color: var(--meal); }
+  .arrow { color: var(--dim); font-size: 22px; padding: 0 22px; }
+  .arrow small { display: block; font-size: 10px; letter-spacing: 0.08em; text-align: center; }
+  .hero-margin { grid-column: 1 / -1; margin-top: 22px; padding-top: 18px; border-top: 1px dashed var(--line); display: flex; align-items: baseline; gap: 16px; justify-content: center; }
+  .hero-margin .label { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .hero-margin .val { font-family: 'Fraunces', serif; font-size: 30px; color: var(--up); }
+  .hero-margin .note { color: var(--muted); font-size: 13px; }
+
+  .row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+
+  /* signals */
+  .sig { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .sig:last-child { border-bottom: none; }
+  .badge { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; padding: 3px 10px; border-radius: 999px; min-width: 54px; text-align: center; }
+  .b-alert { background: rgba(232,106,94,0.15); color: var(--down); }
+  .b-warn { background: rgba(227,179,65,0.14); color: var(--warn); }
+  .b-info { background: rgba(156,140,113,0.15); color: var(--muted); }
+  .sig .who { color: var(--muted); min-width: 96px; font-size: 13px; }
+
+  /* right column stacks */
+  .kv { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: var(--muted); }
+  .basis-big { font-family: 'Fraunces', serif; font-size: 30px; color: var(--down); }
+  .flag { color: var(--warn); } .crit { color: var(--down); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Mirror Market</div>
+  <div class="date">Tuesday 28 July 2026 · pipeline run 05:30 ET</div>
+  <div class="fresh-pill">17 / 19 layers fresh · <b>CEPEA + NCDEX stale</b></div>
+</header>
+
+<main class="wrap">
+
+  <!-- Signature: the crush, drawn as what it is -->
+  <section class="hero">
+    <div class="node n-bean">
+      <div class="name">Soybeans</div>
+      <div class="px num">$385.80<small> /MT</small></div>
+      <div class="chg num down">▼ 0.84% overnight</div>
+    </div>
+    <div class="arrow">→<small>crush</small></div>
+    <div class="node n-oil">
+      <div class="name">Soybean Oil · ×11 lb</div>
+      <div class="px num">$1,058.40<small> /MT</small></div>
+      <div class="chg num up">▲ 1.32% overnight</div>
+    </div>
+    <div class="arrow">+<small>&nbsp;</small></div>
+    <div class="node n-meal">
+      <div class="name">Soybean Meal · ×2.2 st</div>
+      <div class="px num">$325.10<small> /MT</small></div>
+      <div class="chg num down">▼ 0.41% overnight</div>
+    </div>
+    <div class="hero-margin">
+      <span class="label">Board crush margin</span>
+      <span class="val num">$1.62/bu</span>
+      <span class="note">widening 5 days · oil share 44% and rising — oil is carrying the crush</span>
+    </div>
+  </section>
+
+  <div class="row">
+    <section class="card">
+      <h2>Signals</h2>
+      <div class="sig"><span class="badge b-alert">Alert</span><span class="who">Soybean Oil</span><span>RSI 72.8 overbought — 3 sessions above upper Bollinger band</span></div>
+      <div class="sig"><span class="badge b-alert">Alert</span><span class="who">Soybeans</span><span>50/200 MA bearish crossover at $391.20/MT</span></div>
+      <div class="sig"><span class="badge b-warn">Warn</span><span class="who">Soybean Meal</span><span>Volume spike 2.4× average on down move</span></div>
+      <div class="sig"><span class="badge b-warn">Warn</span><span class="who">Soybeans</span><span>MACD histogram negative 8 sessions</span></div>
+      <div class="sig"><span class="badge b-info">Info</span><span class="who">Soybean Oil</span><span>Bollinger squeeze released upward (near-roll)</span></div>
+      <div class="sig"><span class="badge b-info">Info</span><span class="who">Corn</span><span>Bean/corn ratio 2.41 — above planting-decision median</span></div>
+    </section>
+
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <section class="card">
+        <h2>Brazil basis — Paranaguá FOB vs CBOT</h2>
+        <div class="basis-big num">−$12.40 /MT</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px">Brazil at a discount — harvest pressure, BRL 5.41 softening</div>
+      </section>
+
+      <section class="card">
+        <h2>Watchlist</h2>
+        <div class="kv"><span class="k">US soy stocks/use</span><span class="crit num">4.2% · tight (10Y avg 8.9%)</span></div>
+        <div class="kv"><span class="k">Mato Grosso rainfall</span><span class="flag">−62% vs norm, 14-day</span></div>
+        <div class="kv"><span class="k">MP India monsoon</span><span class="flag">onset 9 days late</span></div>
+        <div class="kv"><span class="k">US Midwest</span><span>normal · pod-set favorable</span></div>
+        <div class="kv"><span class="k">CEPEA / NCDEX</span><span class="crit">stale — sources disabled</span></div>
+      </section>
+    </div>
+  </div>
+
+</main>
+</body>
+</html>
