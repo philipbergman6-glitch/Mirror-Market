@@ -393,12 +393,13 @@ EIA_BASE_URL = "https://api.eia.gov/v2/"
 
 EIA_SERIES = {
     "Ethanol Production": {
-        "route": "petroleum/sum/sndw",
+        "route": "petroleum/sum/sndw/data",
         "series": "W_EPOOXE_YOP_NUS_MBBLD",
         "frequency": "weekly",
     },
     "Biodiesel Production": {
-        "route": "petroleum/sum/sndm",
+        # EIA retired the sndm route; monthly S&D now lives under snd
+        "route": "petroleum/sum/snd/data",
         "series": "M_EPOODY_YOP_NUS_1",
         "frequency": "monthly",
     },

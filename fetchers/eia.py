@@ -13,7 +13,8 @@ Set it as an environment variable:
 
 Key concepts for learning:
     - EIA API v2 uses a route-based system: you specify a data route
-      (like "petroleum/sum/sndw") and filter with query parameters.
+      ending in "/data" (like "petroleum/sum/sndw/data"), request the
+      value column via "data[0]=value", and filter with query parameters.
     - The API returns JSON with a "response.data" array.
     - Same retry pattern as our other fetchers.
 """
@@ -51,7 +52,7 @@ def fetch_eia_series(
     name : str
         Human-readable name (e.g. "Ethanol Production").
     route : str
-        API route (e.g. "petroleum/sum/sndw").
+        API route (e.g. "petroleum/sum/sndw/data").
     series_id : str
         The series identifier within that route.
     frequency : str
@@ -74,6 +75,7 @@ def fetch_eia_series(
     params = {
         "api_key":   EIA_API_KEY,
         "frequency": frequency,
+        "data[0]":   "value",
         "facets[series][]": series_id,
         "start":     start_date,
         "sort[0][column]": "period",
