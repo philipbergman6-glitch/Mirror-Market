@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
 
@@ -546,7 +547,9 @@ def _currencies_block(currency_data: dict[str, pd.DataFrame]) -> dict[str, dict[
         if close is None:
             continue
 
-        def pct_back(sessions: int) -> float | None:
+        def pct_back(
+            sessions: int, *, df: pd.DataFrame = df, close: float = close
+        ) -> float | None:
             if len(df) <= sessions:
                 return None
             base = _num(df["Close"].iloc[-(sessions + 1)])
