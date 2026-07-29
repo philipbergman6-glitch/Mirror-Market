@@ -298,7 +298,9 @@ DCE_CONTRACTS = {
 # Weekly export sales — the #1 indicator of Chinese buying pace
 # ---------------------------------------------------------------------------
 FAS_API_KEY = os.getenv("FAS_API_KEY", "")
-FAS_BASE_URL = "https://apps.fas.usda.gov/OpenData/api/esr"
+# New api.data.gov-fronted host (2026 ESRQS migration). The legacy
+# apps.fas.usda.gov/OpenData host returns 500 for every key.
+FAS_BASE_URL = "https://api.fas.usda.gov/api/esr"
 
 # USDA FAS commodity codes for Export Sales Reporting
 # Codes sourced from /api/esr/commodities endpoint
