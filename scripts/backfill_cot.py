@@ -22,8 +22,6 @@ import logging
 import os
 import sys
 
-import pandas as pd
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config import COT_COMMODITIES, COT_REPORT_TYPE, setup_logging
