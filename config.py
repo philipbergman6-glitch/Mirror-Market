@@ -400,7 +400,7 @@ EIA_SERIES = {
     "Biodiesel Production": {
         # EIA retired the sndm route; monthly S&D now lives under snd
         "route": "petroleum/sum/snd/data",
-        "series": "M_EPOODY_YOP_NUS_1",
+        "series": "M_EPOORDB_YNP_NUS_MBBLD",
         "frequency": "monthly",
     },
     "Diesel Retail Price": {
