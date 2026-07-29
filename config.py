@@ -302,13 +302,15 @@ FAS_BASE_URL = "https://apps.fas.usda.gov/OpenData/api/esr"
 
 # USDA FAS commodity codes for Export Sales Reporting
 # Codes sourced from /api/esr/commodities endpoint
+# ESR uses its own small-integer commodity codes (see /api/esr/commodities),
+# NOT the 7-digit GATS/PSD codes. The API returns 500 on unknown codes.
 EXPORT_SALES_COMMODITIES = {
-    "Soybeans":     "2222000",
-    "Soybean Oil":  "4232000",
-    "Soybean Meal": "0813100",
-    "Corn":         "0440000",
-    "Wheat":        "0410000",
-    "Cotton":       "2631000",
+    "Soybeans":     "801",
+    "Soybean Oil":  "902",
+    "Soybean Meal": "901",   # ESR name: "Soybean cake & meal"
+    "Corn":         "401",
+    "Wheat":        "107",   # ESR name: "All Wheat"
+    "Cotton":       "1404",  # ESR name: "All Upland Cotton"
 }
 
 # ---------------------------------------------------------------------------
@@ -352,6 +354,15 @@ WASDE_COMMODITIES = ["SOYBEANS", "CORN", "WHEAT", "COTTON"]
 # URL template — USDA OCE publishes one .xls per month as
 # https://www.usda.gov/oce/commodity/wasde/wasdeMMYY.xls
 WASDE_URL_TEMPLATE = "https://www.usda.gov/oce/commodity/wasde/wasde{mm:02d}{yy:02d}.xls"
+
+# Fallback archive — USDA-ESMIS at the National Agricultural Library.
+# usda.gov keeps only the last few months at the canonical path (older files
+# 404), and reissued reports get a "v2" filename (wasde0526v2.xls) the
+# template cannot construct. This keyless JSON API indexes every release with
+# its exact per-release file URLs; one page (25 releases) covers ~2 years.
+WASDE_ESMIS_API_URL = (
+    "https://esmis.nal.usda.gov/api/v1/release/findByIdentifier/wasde?latest=false"
+)
 
 # How many monthly XLS files to attempt on first run. After backfill the
 # pipeline still re-downloads the latest file every run, but historical

@@ -75,22 +75,66 @@ def _fas_get(endpoint: str) -> dict | list | None:
     return None
 
 
-def fetch_export_sales(commodity_code: str, market_year: int | None = None) -> pd.DataFrame:
+def fetch_country_map() -> dict[int, str]:
+    """
+    Fetch the ESR country reference table → {countryCode: countryName}.
+
+    The export endpoints return numeric country codes only; this map turns
+    them into readable names. Empty dict on failure.
+    """
+    data = _fas_get("/countries")
+    if not isinstance(data, list):
+        return {}
+
+    mapping: dict[int, str] = {}
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        code = row.get("countryCode")
+        name = row.get("countryName") or row.get("countryDescription")
+        if code is None or not name:
+            continue
+        try:
+            mapping[int(code)] = str(name).strip()
+        except (TypeError, ValueError):
+            continue
+    return mapping
+
+
+# ESR API field → our column. Listed in fallback order per target column:
+# the first source field present wins.
+_FIELD_SOURCES = {
+    "week_ending": ["weekEndingDate"],
+    "net_sales": ["currentMYNetSales", "netSales"],
+    "weekly_exports": ["weeklyExports", "currentWeekExports"],
+    "accumulated_exports": ["accumulatedExports"],
+    "outstanding_sales": ["outstandingSales"],
+}
+
+
+def fetch_export_sales(
+    commodity_code: str,
+    market_year: int | None = None,
+    country_map: dict[int, str] | None = None,
+) -> pd.DataFrame:
     """
     Fetch weekly export sales for a single commodity.
 
     Parameters
     ----------
     commodity_code : str
-        USDA FAS commodity code (e.g. "2222000" for soybeans).
+        ESR commodity code (e.g. "801" for soybeans — see /api/esr/commodities).
     market_year : int or None
         Marketing year to fetch. Defaults to current marketing year.
+    country_map : dict or None
+        {countryCode: countryName} from fetch_country_map(). Fetched on
+        demand if not supplied.
 
     Returns
     -------
     pd.DataFrame
-        Columns: weekEndingDate, commodity, country, netSales, exports,
-                 accumulatedExports, outstandingSales
+        Columns: week_ending, country, net_sales, weekly_exports,
+                 accumulated_exports, outstanding_sales
         Empty DataFrame if the request fails or no API key is set.
     """
     if not FAS_API_KEY:
@@ -111,27 +155,40 @@ def fetch_export_sales(commodity_code: str, market_year: int | None = None) -> p
         if df.empty:
             return df
 
-        # Keep the columns we care about (API returns many fields)
-        keep_cols = [
-            "weekEndingDate", "countryDescription",
-            "netSales", "currentWeekExports",
-            "accumulatedExports", "outstandingSales",
-        ]
-        present = [c for c in keep_cols if c in df.columns]
-        df = df[present].copy()
+        out = pd.DataFrame(index=df.index)
+        for target, sources in _FIELD_SOURCES.items():
+            source = next((s for s in sources if s in df.columns), None)
+            if source is None:
+                logger.error(
+                    "ESR response for code %s missing expected field for '%s' "
+                    "(looked for %s) — got columns %s",
+                    commodity_code, target, sources, list(df.columns),
+                )
+                return pd.DataFrame()
+            out[target] = df[source]
 
-        # Rename for consistency
-        rename = {
-            "weekEndingDate": "week_ending",
-            "countryDescription": "country",
-            "currentWeekExports": "weekly_exports",
-            "netSales": "net_sales",
-            "accumulatedExports": "accumulated_exports",
-            "outstandingSales": "outstanding_sales",
-        }
-        df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+        # Country arrives as a numeric code; translate to a name.
+        if "countryDescription" in df.columns:
+            out["country"] = df["countryDescription"]
+        elif "countryCode" in df.columns:
+            if country_map is None:
+                country_map = fetch_country_map()
+            codes = pd.to_numeric(df["countryCode"], errors="coerce")
+            out["country"] = [
+                country_map.get(int(c), str(int(c))) if pd.notna(c) else "Unknown"
+                for c in codes
+            ]
+        else:
+            logger.error(
+                "ESR response for code %s has no country field — got columns %s",
+                commodity_code, list(df.columns),
+            )
+            return pd.DataFrame()
 
-        return df
+        return out[[
+            "week_ending", "country", "net_sales", "weekly_exports",
+            "accumulated_exports", "outstanding_sales",
+        ]]
 
     except (ValueError, KeyError, TypeError) as exc:
         logger.error("Error parsing export sales for code %s: %s", commodity_code, exc)
@@ -154,10 +211,13 @@ def fetch_all_export_sales() -> dict[str, pd.DataFrame]:
 
     results = {}
     market_year = _current_market_year()
+    country_map = fetch_country_map()
+    if not country_map:
+        logger.warning("ESR country lookup failed — country codes will be shown raw")
 
     for name, code in EXPORT_SALES_COMMODITIES.items():
         logger.info("Fetching export sales for %s (code %s, MY %d) ...", name, code, market_year)
-        df = fetch_export_sales(code, market_year)
+        df = fetch_export_sales(code, market_year, country_map)
         results[name] = df
         if not df.empty:
             logger.info("  Got %d rows for %s", len(df), name)
