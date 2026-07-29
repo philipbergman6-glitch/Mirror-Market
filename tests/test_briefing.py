@@ -322,3 +322,49 @@ def test_generate_briefing_with_fully_populated_db(patched_db):
     assert "WASDE ESTIMATES" in out
     assert "EXPORT SALES" in out
     assert "BIOFUEL & ENERGY" in out
+
+
+def test_near_roll_demotion_reaches_archive_and_display(patched_db, monkeypatch):
+    """Regression (#14): signals_json must store the same demoted severities the
+    briefing text prints — demotion is applied once, upstream, not per-consumer.
+    """
+    import json
+    import sqlite3
+
+    from analysis.briefing import orchestrator
+
+    near_roll_signal = {
+        "date": pd.Timestamp("2026-07-01"),  # estimated Soybeans July roll date
+        "commodity": "Soybeans",
+        "signal_type": "golden_cross_50_200",
+        "severity": "alert",
+        "description": "Soybeans MAJOR golden cross",
+    }
+    monkeypatch.setattr(
+        orchestrator.prices, "format",
+        lambda price_data: ("PRICES:", [dict(near_roll_signal)], {}),
+    )
+    monkeypatch.setattr(
+        orchestrator.stocks_to_use, "format", lambda: ("STOCKS-TO-USE:", []),
+    )
+
+    data = generate_briefing_data(archive=True)
+
+    # BriefingData.signals carries the demoted list ...
+    assert len(data.signals) == 1
+    assert data.signals[0]["severity"] == "info"
+    assert "(near-roll)" in data.signals[0]["description"]
+
+    # ... the displayed section agrees ...
+    assert "[INFO]" in data.section("signals")
+    assert "[ALERT]" not in data.section("signals")
+
+    # ... and so does the archived signals_json.
+    conn = sqlite3.connect(str(patched_db))
+    (signals_json,) = conn.execute(
+        "SELECT signals_json FROM briefings ORDER BY briefing_date DESC LIMIT 1"
+    ).fetchone()
+    conn.close()
+    stored = json.loads(signals_json)
+    assert stored[0]["severity"] == "info"
+    assert "(near-roll)" in stored[0]["description"]
