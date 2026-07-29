@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import pandas as pd
@@ -608,11 +609,11 @@ def _weather_block() -> dict[str, dict[str, Any]]:
     return out
 
 
-def _psd_highlights_block() -> dict[str, dict[str, Any]]:
+def _psd_highlights_block() -> dict[str, dict[str, Any] | None]:
     psd = read_psd()
     if psd.empty:
         return {}
-    out: dict[str, dict[str, Any]] = {}
+    out: dict[str, dict[str, Any] | None] = {}
     for key, (commodity, country, attribute) in _PSD_HIGHLIGHTS.items():
         match = psd[
             (psd["commodity"] == commodity)
@@ -693,7 +694,7 @@ def _correlations_block(
 def _seasonal_block(price_data: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for commodity, df in price_data.items():
-        result = _safe(f"seasonal.{commodity}", lambda df=df: current_vs_seasonal(df), {})
+        result = _safe(f"seasonal.{commodity}", partial(current_vs_seasonal, df), {})
         if not result:
             continue
         out[str(commodity)] = {
