@@ -195,6 +195,7 @@ def test_fetch_wasde_estimates_skips_unpublished_months(monkeypatch):
     """If every download returns None (no published files), we get an empty dict
     without raising."""
     monkeypatch.setattr(wasde_mod, "_download", lambda y, m: None)
+    monkeypatch.setattr(wasde_mod, "_esmis_xls_index", lambda: {})
 
     result = fetch_wasde_estimates(backfill_months=3, today=date(2026, 5, 5))
     assert result == {}
@@ -254,3 +255,113 @@ def test_fetch_wasde_estimates_keeps_going_when_one_parse_fails(monkeypatch, cap
     # April and February survive; March was dropped on parse failure.
     df = result["WHEAT/Production"]
     assert set(df["reference_period_desc"]) == {"2026-04-15", "2026-02-15"}
+
+
+# ---------------------------------------------------------------------------
+# ESMIS archive fallback (usda.gov 404s months older than ~4 months)
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_wasde_estimates_falls_back_to_esmis_for_404_months(monkeypatch):
+    """Months missing from usda.gov are re-fetched via their exact ESMIS URL;
+    the index is fetched once, and months absent from it are skipped."""
+    index_calls: list[bool] = []
+    fallback_urls: list[str] = []
+
+    def fake_direct(year: int, month: int) -> bytes | None:
+        # Only the newest month survives on usda.gov.
+        return b"direct" if (year, month) == (2026, 4) else None
+
+    def fake_index() -> dict[tuple[int, int], str]:
+        index_calls.append(True)
+        # 2026-02 absent — mimics a cancelled release (e.g. Oct 2025 shutdown).
+        return {(2026, 3): "https://esmis.example/wasde0326v2.xls"}
+
+    def fake_download_url(url: str, year: int, month: int) -> bytes | None:
+        fallback_urls.append(url)
+        return b"esmis"
+
+    parsed_dates: list[str] = []
+
+    def fake_parse_xls(content: bytes, report_date: str) -> list[dict]:
+        parsed_dates.append(report_date)
+        return [{
+            "commodity_desc": "CORN",
+            "statisticcat_desc": "Production",
+            "year": "2025/26",
+            "Value": 15000.0,
+            "unit_desc": "Million Bushels",
+            "reference_period_desc": report_date,
+        }]
+
+    monkeypatch.setattr(wasde_mod, "_download", fake_direct)
+    monkeypatch.setattr(wasde_mod, "_esmis_xls_index", fake_index)
+    monkeypatch.setattr(wasde_mod, "_download_url", fake_download_url)
+    monkeypatch.setattr(wasde_mod, "_parse_xls", fake_parse_xls)
+
+    result = fetch_wasde_estimates(backfill_months=3, today=date(2026, 4, 15))
+
+    assert index_calls == [True]  # fetched once despite two misses
+    assert fallback_urls == ["https://esmis.example/wasde0326v2.xls"]
+    assert parsed_dates == ["2026-04-15", "2026-03-15"]  # Feb skipped
+    assert "CORN/Production" in result
+
+
+def test_esmis_xls_index_maps_release_month_to_xls_url(monkeypatch):
+    """The index keys on release_datetime month and picks the .xls file —
+    including v2 reissue filenames the URL template cannot construct."""
+    payload = {
+        "results": [
+            {
+                "release_datetime": "2026-06-11T12:00:00+0000",
+                "files": [
+                    "https://esmis.example/f/wasde0626v2.pdf",
+                    "https://esmis.example/f/wasde0626v2.xls",
+                ],
+            },
+            {
+                "release_datetime": "2025-08-12T12:00:00+0000",
+                "files": ["https://esmis.example/f/wasde0825.xls"],
+            },
+            # No .xls at all → excluded from the index.
+            {
+                "release_datetime": "2025-07-11T12:00:00+0000",
+                "files": ["https://esmis.example/f/wasde0725.pdf"],
+            },
+            # Malformed date → excluded.
+            {"release_datetime": "", "files": ["https://esmis.example/f/x.xls"]},
+        ]
+    }
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict:
+            return payload
+
+    monkeypatch.setattr(
+        wasde_mod.requests, "get", lambda url, timeout: FakeResponse()
+    )
+
+    index = wasde_mod._esmis_xls_index()
+    assert index == {
+        (2026, 6): "https://esmis.example/f/wasde0626v2.xls",
+        (2025, 8): "https://esmis.example/f/wasde0825.xls",
+    }
+
+
+def test_esmis_xls_index_returns_empty_on_http_error(monkeypatch):
+    class FakeResponse:
+        status_code = 503
+
+        @staticmethod
+        def json() -> dict:
+            return {}
+
+    monkeypatch.setattr(
+        wasde_mod.requests, "get", lambda url, timeout: FakeResponse()
+    )
+    monkeypatch.setattr(wasde_mod, "retry_sleep", lambda attempt: None)
+
+    assert wasde_mod._esmis_xls_index() == {}

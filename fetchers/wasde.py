@@ -26,6 +26,7 @@ from config import (
     MAX_RETRIES,
     REQUEST_TIMEOUT,
     WASDE_BACKFILL_MONTHS,
+    WASDE_ESMIS_API_URL,
     WASDE_LAYOUT,
     WASDE_URL_TEMPLATE,
 )
@@ -82,8 +83,19 @@ def fetch_wasde_estimates(
     logger.info("[WASDE] Attempting %d monthly XLS files", len(months))
 
     rows_by_key: dict[str, list[dict]] = {}
+    esmis_index: dict[tuple[int, int], str] | None = None
     for year, month in months:
         content = _download(year, month)
+        if content is None:
+            # usda.gov serves only the last few months at the canonical path;
+            # older releases and v2 reissues live in the ESMIS archive. The
+            # index is fetched once, on the first miss.
+            if esmis_index is None:
+                esmis_index = _esmis_xls_index()
+            alt_url = esmis_index.get((year, month))
+            if alt_url is not None:
+                logger.info("[WASDE] %04d-%02d falling back to ESMIS: %s", year, month, alt_url)
+                content = _download_url(alt_url, year, month)
         if content is None:
             continue
         report_date = f"{year:04d}-{month:02d}-15"
@@ -119,7 +131,10 @@ def _build_url(year: int, month: int) -> str:
 
 def _download(year: int, month: int) -> bytes | None:
     """Fetch a single WASDE XLS with retry. None on missing-report or hard failure."""
-    url = _build_url(year, month)
+    return _download_url(_build_url(year, month), year, month)
+
+
+def _download_url(url: str, year: int, month: int) -> bytes | None:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             resp = requests.get(url, timeout=REQUEST_TIMEOUT, allow_redirects=False)
@@ -131,6 +146,11 @@ def _download(year: int, month: int) -> bytes | None:
             if 300 <= resp.status_code < 400:
                 logger.info("[WASDE] %04d-%02d not published yet (HTTP %d)", year, month, resp.status_code)
                 return None
+            # 404 → file removed from this host (usda.gov drops back-months).
+            # Deterministic, so don't burn retries — let the caller fall back.
+            if resp.status_code == 404:
+                logger.info("[WASDE] HTTP 404 for %s", url)
+                return None
             logger.warning("[WASDE] HTTP %d for %s", resp.status_code, url)
         except requests.RequestException as exc:
             logger.warning("[WASDE] %s attempt %d failed: %s", url, attempt, exc)
@@ -138,6 +158,52 @@ def _download(year: int, month: int) -> bytes | None:
             retry_sleep(attempt)
     logger.error("[WASDE] All %d attempts failed for %s", MAX_RETRIES, url)
     return None
+
+
+def _esmis_xls_index() -> dict[tuple[int, int], str]:
+    """Map (year, month) → exact .xls URL from the USDA-ESMIS archive API.
+
+    One API page lists the 25 most recent releases (~2 years — comfortably
+    more than ``WASDE_BACKFILL_MONTHS``). Months with no release at all
+    (e.g. October 2025, cancelled by the government shutdown) are simply
+    absent. Returns ``{}`` on failure so the caller degrades to skipping.
+    """
+    payload = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = requests.get(WASDE_ESMIS_API_URL, timeout=REQUEST_TIMEOUT)
+            if resp.status_code == 200:
+                payload = resp.json()
+                break
+            logger.warning("[WASDE] ESMIS index HTTP %d", resp.status_code)
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("[WASDE] ESMIS index attempt %d failed: %s", attempt, exc)
+        if attempt < MAX_RETRIES:
+            retry_sleep(attempt)
+    if payload is None:
+        logger.error("[WASDE] ESMIS index unavailable after %d attempts", MAX_RETRIES)
+        return {}
+
+    index: dict[tuple[int, int], str] = {}
+    for release in payload.get("results", []):
+        released = str(release.get("release_datetime", ""))
+        xls_url = next(
+            (
+                f for f in (release.get("files") or [])
+                if f.lower().endswith((".xls", ".xlsx"))
+            ),
+            None,
+        )
+        if len(released) < 7 or xls_url is None:
+            continue
+        try:
+            key = (int(released[:4]), int(released[5:7]))
+        except ValueError:
+            continue
+        # Releases come newest-first; keep the first (newest) file per month.
+        index.setdefault(key, xls_url)
+    logger.info("[WASDE] ESMIS index holds %d monthly releases", len(index))
+    return index
 
 
 def _parse_xls(content: bytes, report_date: str) -> list[dict]:
