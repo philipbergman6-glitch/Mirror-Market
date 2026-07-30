@@ -724,25 +724,17 @@ def _build_risk_monitor(data: dict) -> str:
     # Correlations
     try:
         from analysis.correlations import rolling_correlation
-        from pipeline.query import read_currencies, read_prices
+        from analysis.loaders import load_currencies, load_prices
 
-        all_prices = read_prices()
-        all_currencies = read_currencies()
+        all_prices = load_prices()
+        all_currencies = load_currencies()
 
-        corr_series = {}
-        for name in ["Soybeans", "Soybean Oil", "Corn"]:
-            subset = all_prices[all_prices["commodity"] == name].copy() if not all_prices.empty else pd.DataFrame()
-            if not subset.empty:
-                subset["Date"] = pd.to_datetime(subset["Date"])
-                subset = subset.set_index("Date").sort_index()
-                corr_series[name] = subset["Close"]
-
-        brl_df = pd.DataFrame()
-        if not all_currencies.empty:
-            brl_sub = all_currencies[all_currencies["pair"] == "BRL/USD"].copy()
-            if not brl_sub.empty:
-                brl_sub["Date"] = pd.to_datetime(brl_sub["Date"])
-                brl_df = brl_sub.set_index("Date").sort_index()
+        corr_series = {
+            name: all_prices[name]["Close"]
+            for name in ["Soybeans", "Soybean Oil", "Corn"]
+            if name in all_prices and not all_prices[name].empty
+        }
+        brl_df = all_currencies.get("BRL/USD", pd.DataFrame())
 
         pairs = []
         if "Soybeans" in corr_series and not brl_df.empty:
@@ -757,7 +749,7 @@ def _build_risk_monitor(data: dict) -> str:
             fig = build_correlations_chart(pairs, rolling_correlation)
             parts.append(f'<div class="chart-box">{_fig_to_html(fig)}</div>')
     except Exception:
-        pass
+        log.warning("Correlations section failed", exc_info=True)
 
     return "\n".join(parts)
 

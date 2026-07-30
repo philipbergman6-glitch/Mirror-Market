@@ -16,7 +16,7 @@ Key concepts for learning:
 
 import pandas as pd
 
-from config import FORWARD_CURVE_CONTRACTS
+from config import FORWARD_CURVE_CONTRACTS, VOLUME_SPIKE_MULTIPLIER
 
 
 def is_near_roll(date, commodity: str, *, window: int = 3) -> bool:
@@ -162,7 +162,9 @@ def detect_ma_crossovers(df: pd.DataFrame, commodity: str) -> list[dict]:
     return signals
 
 
-def detect_volume_spikes(df: pd.DataFrame, commodity: str, threshold: float = 2.0) -> list[dict]:
+def detect_volume_spikes(
+    df: pd.DataFrame, commodity: str, threshold: float = VOLUME_SPIKE_MULTIPLIER
+) -> list[dict]:
     """
     Detect when today's volume is unusually high.
 

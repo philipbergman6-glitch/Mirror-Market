@@ -594,6 +594,14 @@ RSI_OVERSOLD = 30
 # Volume spike: multiple of 20-day average volume to flag as unusual
 VOLUME_SPIKE_MULTIPLIER = 2.0
 
+# Soybean crush yield factors — one 60-lb bushel of beans yields ~11 lbs
+# of oil (priced in cents/lb) and ~44 lbs of meal (priced in $/short ton,
+# hence 44/2000*100 = 2.2 in cents/bu terms). Board-crush convention;
+# shared by the CBOT crush spread and every domestic crush-margin
+# comparison so a yield-assumption change is a one-line edit.
+CRUSH_OIL_FACTOR = 11.0
+CRUSH_MEAL_FACTOR = 2.2
+
 # Weather alert thresholds
 WEATHER_HEAVY_RAIN_MM = 20      # mm precipitation to flag
 WEATHER_EXTREME_HEAT_C = 38     # degrees C to flag as crop stress
