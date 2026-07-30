@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS economic (
 );
 """
 
+# reference_period_desc is part of the key: monthly series (NASS crush)
+# publish one row per month under the same short_desc/year, and the old
+# 3-column key collapsed them to a single surviving month.
 _CREATE_USDA = """
 CREATE TABLE IF NOT EXISTS usda (
     stat_category           TEXT,
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS usda (
     unit_desc               TEXT,
     state_name              TEXT,
     reference_period_desc   TEXT,
-    PRIMARY KEY (stat_category, year, short_desc)
+    PRIMARY KEY (stat_category, year, short_desc, reference_period_desc)
 );
 """
 
@@ -139,6 +142,7 @@ CREATE TABLE IF NOT EXISTS export_sales (
     weekly_exports      REAL,
     accumulated_exports REAL,
     outstanding_sales   REAL,
+    unit                TEXT,
     PRIMARY KEY (commodity, week_ending, country)
 );
 """
@@ -335,8 +339,8 @@ UNIQUE_INDEXES = (
     "ON prices (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_economic_series_date "
     "ON economic (series_name, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_usda_cat_year_desc "
-    "ON usda (stat_category, year, short_desc);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_usda_cat_year_desc_period "
+    "ON usda (stat_category, year, short_desc, reference_period_desc);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_cot_commodity_date "
     "ON cot (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_weather_region_date "

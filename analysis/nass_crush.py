@@ -32,6 +32,17 @@ def _numeric_value(raw: object) -> float | None:
 def latest_crush() -> dict | None:
     """Return the latest monthly NASS crush volume with YoY comparison.
 
+    NOTE: the `usda` table's primary key is (stat_category, year,
+    short_desc), so upserts keep only one monthly row per year. The YoY
+    comparison therefore degrades to None whenever the surviving
+    prior-year row is a different month — never a wrong-month %.
+    """
+    return summarize_crush(read_usda("CRUSHED"))
+
+
+def summarize_crush(usda: pd.DataFrame) -> dict | None:
+    """Distill NASS CRUSHED rows into the latest-month summary.
+
     Returns
     -------
     dict | None
@@ -39,7 +50,6 @@ def latest_crush() -> dict | None:
         NASS month string (e.g. "JUN") and yoy_pct is None when the same
         month a year earlier is absent. None when no usable rows exist.
     """
-    usda = read_usda("CRUSHED")
     if usda.empty:
         return None
 

@@ -351,6 +351,16 @@ EXPORT_SALES_COMMODITIES = {
     "Cotton":       "1404",  # ESR name: "All Upland Cotton"
 }
 
+# Marketing-year start month per ESR commodity. Requesting every commodity
+# with the September grain year is wrong for part of the calendar: wheat's
+# MY starts Jun 1 and cotton's Aug 1, so from June/August onward those two
+# must roll to the next market year before the soy complex does.
+EXPORT_SALES_MY_START_MONTH = {
+    "Wheat": 6,
+    "Cotton": 8,
+}
+EXPORT_SALES_DEFAULT_MY_START = 9
+
 # ---------------------------------------------------------------------------
 # Layer 11 — Forward Curve (individual contract months via yfinance)
 #

@@ -197,12 +197,11 @@ def test_inspections_section_degrades_without_port_flows(patched_db: Path) -> No
 # NASS crush
 # ---------------------------------------------------------------------------
 
+# NOTE: the usda table PK is (stat_category, year, short_desc), so at
+# most one CRUSHED row per year survives storage — seed accordingly.
 _CRUSH_ROWS = [
     ("CRUSHED", "2026", "SOYBEANS - CRUSHED, MEASURED IN TONS", "6,143,000", "TONS", "US TOTAL", "MAY"),
-    ("CRUSHED", "2026", "SOYBEANS - CRUSHED, MEASURED IN TONS", "5,900,000", "TONS", "US TOTAL", "APR"),
     ("CRUSHED", "2025", "SOYBEANS - CRUSHED, MEASURED IN TONS", "5,850,000", "TONS", "US TOTAL", "MAY"),
-    # withheld value must be skipped, not crash
-    ("CRUSHED", "2026", "SOYBEANS - CRUSHED, MEASURED IN TONS", "(D)", "TONS", "US TOTAL", "JUN"),
 ]
 
 
@@ -217,6 +216,50 @@ def test_latest_crush_returns_latest_month_with_yoy(patched_db: Path) -> None:
     assert crush["year"] == 2026
     assert crush["period"] == "MAY"
     assert crush["yoy_pct"] == pytest.approx((6_143_000 - 5_850_000) / 5_850_000 * 100)
+
+
+def test_summarize_crush_orders_months_and_skips_withheld() -> None:
+    import pandas as pd
+
+    from analysis.nass_crush import summarize_crush
+
+    df = pd.DataFrame({
+        "stat_category": ["CRUSHED"] * 4,
+        "year": ["2026", "2026", "2025", "2026"],
+        "short_desc": ["SOYBEANS - CRUSHED, MEASURED IN TONS"] * 4,
+        "Value": ["6,143,000", "5,900,000", "5,850,000", "(D)"],
+        "unit_desc": ["TONS"] * 4,
+        "state_name": ["US TOTAL"] * 4,
+        "reference_period_desc": ["MAY", "APR", "MAY", "JUN"],
+    })
+
+    crush = summarize_crush(df)
+
+    # (D) JUN row is unparseable and dropped; MAY 2026 wins over APR.
+    assert crush["period"] == "MAY"
+    assert crush["value"] == 6_143_000.0
+    assert crush["yoy_pct"] == pytest.approx(5.0085, rel=1e-3)
+
+
+def test_summarize_crush_yoy_none_on_month_mismatch() -> None:
+    import pandas as pd
+
+    from analysis.nass_crush import summarize_crush
+
+    df = pd.DataFrame({
+        "stat_category": ["CRUSHED"] * 2,
+        "year": ["2026", "2025"],
+        "short_desc": ["SOYBEANS - CRUSHED, MEASURED IN TONS"] * 2,
+        "Value": ["6,143,000", "6,000,000"],
+        "unit_desc": ["TONS"] * 2,
+        "state_name": ["US TOTAL"] * 2,
+        "reference_period_desc": ["MAY", "DEC"],
+    })
+
+    crush = summarize_crush(df)
+
+    assert crush["value"] == 6_143_000.0
+    assert crush["yoy_pct"] is None
 
 
 def test_latest_crush_none_without_rows(patched_db: Path) -> None:

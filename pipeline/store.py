@@ -45,12 +45,68 @@ def _migrate_data_freshness(conn) -> None:
                 logger.warning("Could not add %s column to data_freshness: %s", col, exc)
 
 
+def _migrate_export_sales_unit(conn) -> None:
+    """Add the unit column to export_sales if absent. Idempotent."""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(export_sales)").fetchall()}
+    except Exception:
+        return
+    if cols and "unit" not in cols:
+        try:
+            conn.execute("ALTER TABLE export_sales ADD COLUMN unit TEXT")
+        except Exception as exc:
+            logger.warning("Could not add unit column to export_sales: %s", exc)
+
+
+def _migrate_usda_pk(conn) -> None:
+    """Rebuild the usda table with reference_period_desc in the PK. Idempotent.
+
+    The original 3-column key collapsed monthly NASS series (crush) to one
+    surviving row per year. SQLite can't alter a PK in place, so detect the
+    old shape and rebuild. The stale 3-column unique index is dropped in
+    both cases — left behind, it would keep collapsing rows on upsert.
+    """
+    try:
+        conn.execute("DROP INDEX IF EXISTS ux_usda_cat_year_desc")
+        pk_cols = {r[1] for r in conn.execute("PRAGMA table_info(usda)").fetchall() if r[5]}
+    except Exception:
+        return
+    if "reference_period_desc" in pk_cols or not pk_cols:
+        return
+    try:
+        conn.execute("ALTER TABLE usda RENAME TO usda_old_pk")
+        conn.execute(
+            """CREATE TABLE usda (
+                   stat_category           TEXT,
+                   year                    TEXT,
+                   short_desc              TEXT,
+                   Value                   TEXT,
+                   unit_desc               TEXT,
+                   state_name              TEXT,
+                   reference_period_desc   TEXT,
+                   PRIMARY KEY (stat_category, year, short_desc, reference_period_desc)
+               )"""
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO usda
+               SELECT stat_category, year, short_desc, Value,
+                      unit_desc, state_name, reference_period_desc
+               FROM usda_old_pk"""
+        )
+        conn.execute("DROP TABLE usda_old_pk")
+        logger.info("Migrated usda table PK to include reference_period_desc")
+    except Exception:
+        logger.exception("usda PK migration failed — leaving table as-is")
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
     with get_connection() as conn:
         for ddl in ALL_SCHEMAS:
             conn.execute(ddl)
+        _migrate_usda_pk(conn)
+        _migrate_export_sales_unit(conn)
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -280,10 +336,10 @@ def save_export_sales(commodity: str, df: pd.DataFrame):
     df["commodity"] = commodity
     if "week_ending" in df.columns:
         df["week_ending"] = _date(df["week_ending"])
-    df = _str_cols(df, "country")
+    df = _str_cols(df, "country", "unit")
     _save("export_sales", df[[
-        "commodity", "week_ending", "country",
-        "net_sales", "weekly_exports", "accumulated_exports", "outstanding_sales",
+        "commodity", "week_ending", "country", "net_sales",
+        "weekly_exports", "accumulated_exports", "outstanding_sales", "unit",
     ]], ["commodity", "week_ending", "country"], f"export_sales/{commodity}")
 
 

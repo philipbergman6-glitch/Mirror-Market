@@ -30,7 +30,7 @@ ESR_COUNTRIES = [
 
 STORAGE_COLUMNS = [
     "week_ending", "country", "net_sales", "weekly_exports",
-    "accumulated_exports", "outstanding_sales",
+    "accumulated_exports", "outstanding_sales", "unit",
 ]
 
 
@@ -39,7 +39,9 @@ STORAGE_COLUMNS = [
 def test_parses_real_esr_fields(mock_get):
     mock_get.return_value = [ESR_EXPORT_ROW]
 
-    df = export_sales.fetch_export_sales("801", 2026, {5700: "China"})
+    df = export_sales.fetch_export_sales(
+        "801", 2026, {5700: "China"}, unit_map={1: "Metric Tons"}
+    )
 
     assert list(df.columns) == STORAGE_COLUMNS
     row = df.iloc[0]
@@ -49,6 +51,7 @@ def test_parses_real_esr_fields(mock_get):
     assert row["accumulated_exports"] == 13506
     assert row["outstanding_sales"] == 352846
     assert row["week_ending"] == "2026-07-23T00:00:00"
+    assert row["unit"] == "Metric Tons"
 
 
 @patch.object(export_sales, "FAS_API_KEY", "test-key")
