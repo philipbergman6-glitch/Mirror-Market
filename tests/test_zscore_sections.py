@@ -80,6 +80,8 @@ def test_cot_section_omits_zscore_when_baseline_has_no_variance(patched_db):
 
 
 def test_weather_section_annotates_alerts_with_zscore(patched_db):
+    # Region deliberately outside WEATHER_SOY_POD_FILL_MONTHS so the heat
+    # threshold doesn't depend on the calendar month the test runs in.
     today = pd.Timestamp.today().normalize()
     dates = pd.date_range(end=today, periods=90, freq="D")
     rng = np.random.default_rng(seed=2)
@@ -90,7 +92,7 @@ def test_weather_section_annotates_alerts_with_zscore(patched_db):
     temp[-1] = 42.0
     precip[-1] = 30.0
     df = pd.DataFrame({"Date": dates, "temp_max": temp, "temp_min": temp - 8, "precipitation": precip})
-    store.save_weather_data("US Midwest (Iowa)", df)
+    store.save_weather_data("China Heilongjiang", df)
 
     out = weather.format()
 
@@ -107,7 +109,7 @@ def test_weather_section_omits_zscore_with_insufficient_history(patched_db):
         "temp_min": [18.0, 20.0, 17.0, 18.0, 22.0],
         "precipitation": [5.0, 10.0, 0.5, 2.0, 25.0],
     })
-    store.save_weather_data("US Midwest (Iowa)", df)
+    store.save_weather_data("China Heilongjiang", df)
 
     out = weather.format()
 

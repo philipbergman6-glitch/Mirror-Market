@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS weather (
     temp_max        REAL,
     temp_min        REAL,
     precipitation   REAL,
+    is_forecast     INTEGER,
     PRIMARY KEY (region, Date)
 );
 """

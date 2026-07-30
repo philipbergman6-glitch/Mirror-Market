@@ -422,13 +422,34 @@ WASDE_BACKFILL_MONTHS = 12
 # contain multiple sub-tables stacked vertically; `header_text` is the
 # col-0 label that marks the start of the section. None means "the entire
 # sheet is one table" (Wheat and Cotton each have their own page).
+# "sheet" is only a fast-path hint — the parser locates each table by its
+# "title" text (e.g. "U.S. Wheat Supply and Use"), so a USDA repagination
+# (tables drifting to a different "Page N") doesn't silently break parsing.
 WASDE_LAYOUT = {
-    "WHEAT":        {"sheet": "Page 11", "header_text": None},
-    "CORN":         {"sheet": "Page 12", "header_text": "CORN"},
-    "SOYBEANS":     {"sheet": "Page 15", "header_text": "SOYBEANS"},
-    "SOYBEAN_OIL":  {"sheet": "Page 15", "header_text": "SOYBEAN OIL"},
-    "SOYBEAN_MEAL": {"sheet": "Page 15", "header_text": "SOYBEAN MEAL"},
-    "COTTON":       {"sheet": "Page 17", "header_text": None},
+    "WHEAT": {
+        "sheet": "Page 11", "header_text": None,
+        "title": "U.S. Wheat Supply and Use",
+    },
+    "CORN": {
+        "sheet": "Page 12", "header_text": "CORN",
+        "title": "U.S. Feed Grain and Corn Supply and Use",
+    },
+    "SOYBEANS": {
+        "sheet": "Page 15", "header_text": "SOYBEANS",
+        "title": "U.S. Soybeans and Products Supply and Use",
+    },
+    "SOYBEAN_OIL": {
+        "sheet": "Page 15", "header_text": "SOYBEAN OIL",
+        "title": "U.S. Soybeans and Products Supply and Use",
+    },
+    "SOYBEAN_MEAL": {
+        "sheet": "Page 15", "header_text": "SOYBEAN MEAL",
+        "title": "U.S. Soybeans and Products Supply and Use",
+    },
+    "COTTON": {
+        "sheet": "Page 17", "header_text": None,
+        "title": "U.S. Cotton Supply and Use",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -498,7 +519,7 @@ NCDEX_SOY_SYMBOLS = {
 NCDEX_UNIT_MULTIPLIER = {
     "Soybean (NCDEX)":     10.0,
     "Soybean Oil (NCDEX)": 100.0,
-    "Soybean Meal (NCDEX)": 1.0,
+    "Soybean Meal (NCDEX)": 10.0,  # Rs/quintal → INR/MT, same as beans
 }
 
 # ---------------------------------------------------------------------------
@@ -573,6 +594,31 @@ VOLUME_SPIKE_MULTIPLIER = 2.0
 WEATHER_HEAVY_RAIN_MM = 20      # mm precipitation to flag
 WEATHER_EXTREME_HEAT_C = 38     # degrees C to flag as crop stress
 WEATHER_DRY_THRESHOLD_MM = 1    # below this = "dry conditions"
+
+# Agronomic alerting (observed rows only — forecast rows are excluded)
+# Pod-fill heat stress: soy yield loss starts well below the generic 38C
+# extreme-heat bar. During pod fill, sustained days >34C abort pods.
+WEATHER_POD_FILL_HEAT_C = 34
+# Soy regions with their pod-fill months (US: Jul-Aug; South America: Jan-Feb).
+# Keys must match GROWING_REGIONS names.
+WEATHER_SOY_POD_FILL_MONTHS = {
+    "US Midwest (Iowa)":   (7, 8),
+    "US Illinois":         (7, 8),
+    "Brazil Mato Grosso":  (1, 2),
+    "Brazil Parana":       (1, 2),
+    "Argentina Pampas":    (1, 2),
+    "Argentina Cordoba":   (1, 2),
+    "Paraguay Chaco":      (1, 2),
+}
+# Consecutive-dry-day spell: days with precip < WEATHER_DRY_THRESHOLD_MM.
+WEATHER_DRY_SPELL_ALERT_DAYS = 10
+# 30-day precipitation deficit vs the region's trailing norm. The norm is the
+# mean daily precip over the baseline window immediately preceding the 30-day
+# window; we require a minimum number of baseline days before trusting it.
+WEATHER_PRECIP_DEFICIT_WINDOW_DAYS = 30
+WEATHER_PRECIP_DEFICIT_BASELINE_DAYS = 90
+WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS = 45
+WEATHER_PRECIP_DEFICIT_ALERT_PCT = 40   # alert when 30d total ≥40% below norm
 
 # Data freshness: warn if a layer hasn't updated in this many days
 FRESHNESS_WARNING_DAYS = 7

@@ -58,6 +58,22 @@ def _migrate_export_sales_unit(conn) -> None:
             logger.warning("Could not add unit column to export_sales: %s", exc)
 
 
+def _migrate_weather_is_forecast(conn) -> None:
+    """Add the is_forecast column to weather if absent. Idempotent.
+
+    NULL means the row predates the flag — treated as observed downstream.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(weather)").fetchall()}
+    except Exception:
+        return
+    if cols and "is_forecast" not in cols:
+        try:
+            conn.execute("ALTER TABLE weather ADD COLUMN is_forecast INTEGER")
+        except Exception as exc:
+            logger.warning("Could not add is_forecast column to weather: %s", exc)
+
+
 def _migrate_usda_pk(conn) -> None:
     """Rebuild the usda table with reference_period_desc in the PK. Idempotent.
 
@@ -107,6 +123,7 @@ def init_database():
             conn.execute(ddl)
         _migrate_usda_pk(conn)
         _migrate_export_sales_unit(conn)
+        _migrate_weather_is_forecast(conn)
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -121,6 +138,7 @@ def clear_database():
         "prices", "economic", "usda", "cot", "weather", "psd",
         "currencies", "worldbank_prices", "dce_futures", "crop_progress",
         "export_sales", "forward_curve", "wasde", "inspections",
+        "inspection_port_flows", "gulf_bids",
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
         "brazil_spot_prices", "safex_prices", "briefings",
@@ -285,7 +303,10 @@ def save_weather_data(region: str, df: pd.DataFrame):
     df = df.copy()
     df["region"] = region
     df["Date"] = _date(df["Date"])
-    _save("weather", df[["region", "Date", "temp_max", "temp_min", "precipitation"]],
+    if "is_forecast" not in df.columns:
+        df["is_forecast"] = None  # legacy callers: NULL = observed
+    _save("weather",
+          df[["region", "Date", "temp_max", "temp_min", "precipitation", "is_forecast"]],
           ["region", "Date"], f"weather/{region}")
 
 

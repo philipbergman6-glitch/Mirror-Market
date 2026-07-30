@@ -374,43 +374,46 @@ def test_each_detector_handles_empty_dataframe(detector):
 # is_near_roll / demote_near_roll_signals
 # ---------------------------------------------------------------------------
 # Soybeans contract months are [1, 3, 5, 7, 8, 9, 11]. The estimated roll
-# date is the first business day of each delivery month; for July 2026 that
-# is Wednesday 2026-07-01.
+# date is the first business day on/after the 15th of each delivery month
+# (CME expiry is the business day before the 15th); for July 2026 that is
+# Wednesday 2026-07-15.
 
 
 def test_is_near_roll_on_estimated_roll_date():
-    assert is_near_roll("2026-07-01", "Soybeans") is True
+    assert is_near_roll("2026-07-15", "Soybeans") is True
 
 
 def test_is_near_roll_within_window_after_roll():
-    # 2026-07-06 (Mon) is +3 business days from 2026-07-01 (Wed)
-    assert is_near_roll("2026-07-06", "Soybeans") is True
+    # 2026-07-20 (Mon) is +3 business days from 2026-07-15 (Wed)
+    assert is_near_roll("2026-07-20", "Soybeans") is True
 
 
 def test_is_near_roll_within_window_before_roll():
-    # 2026-06-26 (Fri) is -3 business days from 2026-07-01 (Wed)
-    assert is_near_roll("2026-06-26", "Soybeans") is True
+    # 2026-07-10 (Fri) is -3 business days from 2026-07-15 (Wed)
+    assert is_near_roll("2026-07-10", "Soybeans") is True
 
 
 def test_is_near_roll_outside_window():
-    # 2026-07-07 (Tue) is +4 business days from 2026-07-01
-    assert is_near_roll("2026-07-07", "Soybeans") is False
+    # 2026-07-21 (Tue) is +4 business days from 2026-07-15
+    assert is_near_roll("2026-07-21", "Soybeans") is False
+    # The old first-of-month anchor is no longer a roll window
+    assert is_near_roll("2026-07-01", "Soybeans") is False
     # Mid-April: nearest soy rolls are early March / early May (~9+ bdays away)
     assert is_near_roll("2026-04-15", "Soybeans") is False
 
 
 def test_is_near_roll_unknown_commodity_returns_false():
-    assert is_near_roll("2026-07-01", "Bitcoin") is False
+    assert is_near_roll("2026-07-15", "Bitcoin") is False
 
 
 def test_is_near_roll_accepts_pd_timestamp():
-    assert is_near_roll(pd.Timestamp("2026-07-01"), "Soybeans") is True
+    assert is_near_roll(pd.Timestamp("2026-07-15"), "Soybeans") is True
 
 
 def test_demote_near_roll_signals_demotes_warning_to_info():
     signals = [
         {
-            "date": pd.Timestamp("2026-07-01"),
+            "date": pd.Timestamp("2026-07-15"),
             "commodity": "Soybeans",
             "signal_type": "golden_cross_20_50",
             "severity": "warning",
@@ -425,7 +428,7 @@ def test_demote_near_roll_signals_demotes_warning_to_info():
 def test_demote_near_roll_signals_demotes_alert_to_info():
     signals = [
         {
-            "date": pd.Timestamp("2026-07-01"),
+            "date": pd.Timestamp("2026-07-15"),
             "commodity": "Soybeans",
             "signal_type": "golden_cross_50_200",
             "severity": "alert",
@@ -454,7 +457,7 @@ def test_demote_near_roll_signals_leaves_far_signals_unchanged():
 
 def test_demote_near_roll_signals_does_not_mutate_input():
     original = {
-        "date": pd.Timestamp("2026-07-01"),
+        "date": pd.Timestamp("2026-07-15"),
         "commodity": "Soybeans",
         "signal_type": "macd_bullish",
         "severity": "info",
@@ -470,7 +473,7 @@ def test_demote_near_roll_signals_handles_missing_keys():
     # Defensive: signals missing date or commodity are passed through unchanged.
     signals = [
         {"severity": "warning", "description": "stray"},
-        {"date": pd.Timestamp("2026-07-01"), "severity": "warning", "description": "no commodity"},
+        {"date": pd.Timestamp("2026-07-15"), "severity": "warning", "description": "no commodity"},
     ]
     out = demote_near_roll_signals(signals)
     assert out == signals

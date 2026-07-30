@@ -38,6 +38,11 @@ from analysis.briefing.sections.export_sales import (
     year_ago_accumulated,
 )
 from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
+from analysis.briefing.sections.weather import (
+    consecutive_dry_days,
+    observed_only,
+    precip_deficit_30d,
+)
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
 from analysis.forward_curve import analyze_curve, curve_slope
@@ -62,6 +67,7 @@ from pipeline.query import (
     read_eia_data,
     read_export_sales,
     read_forward_curve,
+    read_gulf_bids,
     read_inspections,
     read_port_flows,
     read_psd,
@@ -456,6 +462,27 @@ def _soy_pace_fields(subset: pd.DataFrame, week: Any) -> dict[str, Any]:
     }
 
 
+def _gulf_bids_block() -> dict[str, Any]:
+    bids = read_gulf_bids("Soybeans")
+    if bids.empty:
+        return {}
+    latest_date = bids["report_date"].max()
+    latest = bids[bids["report_date"] == latest_date]
+    return {
+        "report_date": str(latest_date.date()),
+        "deliveries": {
+            str(row["delivery"]): {
+                "basis_low_cents_bu": _num(row["basis_low"]),
+                "basis_high_cents_bu": _num(row["basis_high"]),
+                "futures_month": int(row["futures_month"]),
+                "avg_price_usd_bu": _num(row["average"]),
+                "year_ago_usd_bu": _num(row["year_ago"]),
+            }
+            for _, row in latest.iterrows()
+        },
+    }
+
+
 def _port_flows_block() -> dict[str, dict[str, Any]]:
     flows = read_port_flows()
     if flows.empty or "port_area" not in flows.columns:
@@ -674,15 +701,28 @@ def _weather_block() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for region, subset in weather.groupby("region"):
         subset = subset.sort_values("Date")
-        latest = subset.iloc[-1]
+        # Forecast rows are model output, not readings — latest values,
+        # z-scores, and agronomic aggregates all run on observed rows only
+        # (NULL is_forecast = observed, pre-flag data).
+        observed = observed_only(subset)
+        if observed.empty:
+            continue
+        latest = observed.iloc[-1]
         latest_date = latest["Date"]
+        total_30d, deficit_pct = precip_deficit_30d(observed)
         out[str(region)] = {
             "date": _date_str(latest_date),
             "precipitation_mm": _num(latest.get("precipitation")),
             "temp_max_c": _num(latest.get("temp_max")),
             "temp_min_c": _num(latest.get("temp_min")),
-            "precip_z90d": trailing_zscore(subset, "precipitation", latest_date, _WEATHER_LOOKBACK),
-            "temp_max_z90d": trailing_zscore(subset, "temp_max", latest_date, _WEATHER_LOOKBACK),
+            "precip_z90d": trailing_zscore(
+                observed, "precipitation", latest_date, _WEATHER_LOOKBACK
+            ),
+            "temp_max_z90d": trailing_zscore(observed, "temp_max", latest_date, _WEATHER_LOOKBACK),
+            "consecutive_dry_days": consecutive_dry_days(observed),
+            "precip_30d_mm": _num(total_30d),
+            "precip_30d_deficit_pct": _num(deficit_pct),
+            "forecast_days": int(len(subset) - len(observed)),
         }
     return out
 
@@ -780,6 +820,9 @@ def _seasonal_block(price_data: dict[str, pd.DataFrame]) -> dict[str, dict[str, 
             "seasonal_avg": _num(result.get("seasonal_avg")),
             "deviation_pct": _num(result.get("deviation_pct")),
             "n_years": int(result["n_years"]) if result.get("n_years") else None,
+            "current_dev_pct": _num(result.get("current_dev_pct")),
+            "seasonal_dev_pct": _num(result.get("seasonal_dev_pct")),
+            "detrended_delta_pct": _num(result.get("detrended_delta_pct")),
         }
     return out
 
@@ -815,6 +858,7 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "export_sales": _safe("export_sales", _export_sales_block, {}),
         "inspections": _safe("inspections", _inspections_block, {}),
         "port_flows": _safe("port_flows", _port_flows_block, {}),
+        "gulf_bids": _safe("gulf_bids", _gulf_bids_block, {}),
         "nass_crush": _safe("nass_crush", _nass_crush_block, None),
         "dce": _safe("dce", lambda: _dce_block(data.price_data), {}),
         "forward_curve": _safe("forward_curve", _forward_curve_block, {}),
