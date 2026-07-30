@@ -40,7 +40,7 @@ from config import (
     REQUEST_TIMEOUT,
 )
 from fetchers._backoff import retry_sleep
-from pipeline.results import ScraperShapeError
+from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
@@ -221,12 +221,14 @@ def _extract_soy_prices(raw_df: pd.DataFrame, fetch_date: date) -> dict[str, pd.
     return results
 
 
-def fetch_india_domestic() -> dict[str, pd.DataFrame]:
+def fetch_india_domestic() -> FetchResult:
     """Fetch NCDEX India domestic soy prices for the most recent trading day.
 
     Walks back up to ``_LOOKBACK_DAYS`` calendar days, skipping weekends.
-    Returns ``{commodity_name: DataFrame}`` (Date/Open/High/Low/Close/Volume/Unit)
-    or ``{}`` when every attempt fails.
+    Returns ``FetchResult.ok`` with ``{commodity_name: DataFrame}``
+    (Date/Open/High/Low/Close/Volume/Unit). NCDEX publishes every trading
+    day, so exhausting the lookback window or a schema change is
+    ``FetchResult.failed``.
     """
     today = date.today()
 
@@ -245,9 +247,9 @@ def fetch_india_domestic() -> dict[str, pd.DataFrame]:
                     results = _extract_soy_prices(raw_df, target_date)
                 except ScraperShapeError as exc:
                     logger.error("NCDEX: Bhav Copy schema changed — %s", exc)
-                    return {}
+                    return FetchResult.failed(str(exc))
                 if results:
-                    return results
+                    return FetchResult.ok(results)
                 logger.info(
                     "NCDEX: Bhav Copy for %s fetched but soy symbols not found — "
                     "may need to update NCDEX_SOY_SYMBOLS in config.py",
@@ -260,11 +262,12 @@ def fetch_india_domestic() -> dict[str, pd.DataFrame]:
 
     logger.warning(
         "NCDEX: Could not fetch Bhav Copy for last %d trading days. "
-        "Check NCDEX_BHAVCOPY_URL_TEMPLATES in config.py. "
-        "Returning empty — pipeline continues without NCDEX data.",
+        "Check NCDEX_BHAVCOPY_URL_TEMPLATES in config.py.",
         _LOOKBACK_DAYS,
     )
-    return {}
+    return FetchResult.failed(
+        f"NCDEX: no Bhav Copy reachable in the last {_LOOKBACK_DAYS} days"
+    )
 
 
 __all__: Sequence[str] = ("_extract_soy_prices", "fetch_india_domestic")
@@ -275,11 +278,11 @@ if __name__ == "__main__":
     from config import setup_logging
     setup_logging()
 
-    data = fetch_india_domestic()
-    if not data:
-        logger.info("NCDEX: No data returned. URL may need verification — see README.")
+    result = fetch_india_domestic()
+    if not result.has_rows:
+        logger.info("NCDEX: %s — %s", result.status, result.error)
     else:
-        for name, df in data.items():
+        for name, df in result.data.items():
             logger.info(
                 "%s: %d rows, latest Close = %.2f INR/MT",
                 name, len(df), df["Close"].iloc[-1],

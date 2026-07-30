@@ -37,6 +37,24 @@ def setup_logging(level=logging.INFO):
 # ---------------------------------------------------------------------------
 REQUEST_TIMEOUT = 30    # seconds — used by every fetcher's HTTP calls
 MAX_RETRIES = 3         # how many times to retry a failed request
+
+# Minimum non-empty keys for a multi-key layer to count as fully healthy.
+# Below the floor the layer is recorded as failed freshness ("partial") —
+# 1 of 13 currencies is an outage, not a success. Layers not listed here
+# succeed with any non-empty key.
+LAYER_MIN_KEYS = {
+    "prices": 8,       # of 11 tickers
+    "currencies": 10,  # of 13 pairs
+    "fred": 8,         # of 10 series
+    "weather": 18,     # of 24 regions
+    "cot": 7,          # of 10 commodities
+    "psd": 5,          # of 8 commodities
+    "dce": 3,          # of 5 contracts
+}
+
+# Systemic-outage backstop: exit non-zero when more than this many active
+# (non-disabled) layers fail in one run, even if the critical layers passed.
+MAX_FAILED_LAYERS = 5
 RETRY_DELAY = 2         # seconds between retries
 
 # ---------------------------------------------------------------------------

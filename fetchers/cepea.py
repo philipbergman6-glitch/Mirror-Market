@@ -230,33 +230,31 @@ def _parse_cepea_tables(html: str) -> pd.DataFrame:
     return result
 
 
-def fetch_cepea() -> dict[str, pd.DataFrame]:
+def fetch_cepea() -> FetchResult:
     """Fetch CEPEA/ESALQ Brazil soybean domestic price.
 
-    Returns ``{"Soybean (CEPEA)": df}`` on success, ``{}`` on transport
-    failure or upstream structure change.
+    Returns ``FetchResult.ok({"Soybean (CEPEA)": df})`` on success. The
+    indicator publishes every business day, so a download failure, structure
+    change, or empty parse is always ``FetchResult.failed``.
     """
     logger.info("Fetching CEPEA/ESALQ Brazil soybean price ...")
     html = _fetch_cepea_page()
 
     if not html:
-        logger.warning(
-            "CEPEA: Could not download page. "
-            "Returning empty — pipeline continues without CEPEA data."
-        )
-        return {}
+        logger.warning("CEPEA: Could not download page.")
+        return FetchResult.failed("CEPEA: page download failed")
 
     try:
         df = _parse_cepea_tables(html)
     except ScraperShapeError as exc:
         logger.error("CEPEA: page structure changed — %s", exc)
-        return {}
+        return FetchResult.failed(str(exc))
 
     if df.empty:
         logger.warning("CEPEA: Parsed empty DataFrame — check page structure.")
-        return {}
+        return FetchResult.failed("CEPEA: parser produced zero rows")
 
-    return {"Soybean (CEPEA)": df}
+    return FetchResult.ok({"Soybean (CEPEA)": df})
 
 
 __all__: Sequence[str] = ("_parse_cepea_tables", "fetch_cepea")
@@ -267,11 +265,11 @@ if __name__ == "__main__":
     from config import setup_logging
     setup_logging()
 
-    data = fetch_cepea()
-    if not data:
-        logger.info("CEPEA: No data returned. Check URL or page structure.")
+    result = fetch_cepea()
+    if not result.has_rows:
+        logger.info("CEPEA: %s — %s", result.status, result.error)
     else:
-        for name, df in data.items():
+        for name, df in result.data.items():
             logger.info(
                 "%s: %d rows\n%s",
                 name, len(df), df.head(5).to_string(index=False),

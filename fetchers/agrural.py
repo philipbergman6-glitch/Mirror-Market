@@ -66,7 +66,7 @@ from bs4 import BeautifulSoup
 from config import AGRURAL_URL, MAX_RETRIES, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
 from fetchers.cepea import _parse_brl_price
-from pipeline.results import ScraperShapeError
+from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
@@ -301,33 +301,32 @@ def _parse_agrural_table(html: str) -> pd.DataFrame:
     return df
 
 
-def fetch_agrural() -> dict[str, pd.DataFrame]:
+def fetch_agrural() -> FetchResult:
     """Fetch AgRural Paranaguá FOB soybean price.
 
-    Returns ``{"Soybean (AgRural Paranaguá FOB)": df}`` on success,
-    ``{}`` on transport failure or upstream structure change.
+    Returns ``FetchResult.ok({"Soybean (AgRural Paranaguá FOB)": df})`` on
+    success. There is no legitimate "quiet day" for this source — the table
+    always carries a quote — so a download failure, structure change, or
+    empty parse is always ``FetchResult.failed``.
     """
     logger.info("Fetching AgRural Paranaguá FOB soy quote ...")
     html = _fetch_agrural_page()
 
     if not html:
-        logger.warning(
-            "AgRural: Could not download page. "
-            "Returning empty — pipeline continues without AgRural data."
-        )
-        return {}
+        logger.warning("AgRural: Could not download page.")
+        return FetchResult.failed("AgRural: page download failed")
 
     try:
         df = _parse_agrural_table(html)
     except ScraperShapeError as exc:
         logger.error("AgRural: page structure changed — %s", exc)
-        return {}
+        return FetchResult.failed(str(exc))
 
     if df.empty:
         logger.warning("AgRural: Parsed empty DataFrame — check page structure.")
-        return {}
+        return FetchResult.failed("AgRural: parser produced zero rows")
 
-    return {_AGRURAL_COMMODITY: df}
+    return FetchResult.ok({_AGRURAL_COMMODITY: df})
 
 
 __all__: Sequence[str] = ("_parse_agrural_table", "fetch_agrural")
@@ -338,11 +337,11 @@ if __name__ == "__main__":
     from config import setup_logging
     setup_logging()
 
-    data = fetch_agrural()
-    if not data:
-        logger.info("AgRural: No data returned. Check URL or page structure.")
+    result = fetch_agrural()
+    if not result.has_rows:
+        logger.info("AgRural: %s — %s", result.status, result.error)
     else:
-        for name, df in data.items():
+        for name, df in result.data.items():
             logger.info(
                 "%s: %d rows\n%s",
                 name, len(df), df.head(5).to_string(index=False),

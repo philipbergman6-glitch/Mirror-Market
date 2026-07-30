@@ -18,7 +18,13 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-from config import COMMODITY_TICKERS, CURRENCY_TICKERS, DEFAULT_HISTORY_PERIOD, MAX_RETRIES
+from config import (
+    COMMODITY_TICKERS,
+    CURRENCY_TICKERS,
+    DEFAULT_HISTORY_PERIOD,
+    MAX_RETRIES,
+    REQUEST_TIMEOUT,
+)
 from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
@@ -43,10 +49,17 @@ def fetch_one(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame
     """
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            data = yf.download(ticker, period=period, progress=False)
+            data = yf.download(ticker, period=period, progress=False, timeout=REQUEST_TIMEOUT)
 
             if data.empty:
-                logger.warning("No data returned for %s", ticker)
+                # An empty frame is usually Yahoo throttling, not a real
+                # "no such ticker" — burn a retry instead of giving up.
+                logger.warning(
+                    "No data returned for %s (attempt %d/%d)", ticker, attempt, MAX_RETRIES
+                )
+                if attempt < MAX_RETRIES:
+                    retry_sleep(attempt)
+                    continue
                 return data
 
             # yfinance sometimes returns multi-level columns when downloading

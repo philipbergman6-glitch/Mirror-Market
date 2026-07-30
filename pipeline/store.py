@@ -356,6 +356,22 @@ def save_inspections(commodity: str, df: pd.DataFrame):
           ["commodity", "week_ending"], f"inspections/{commodity}")
 
 
+def save_port_flows(df: pd.DataFrame):
+    """Write AMS port-area export inspections → 'inspection_port_flows'."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "week_ending" in df.columns:
+        df["week_ending"] = _date(df["week_ending"])
+    df = _str_cols(df, "region", "port_area", "commodity")
+    _save(
+        "inspection_port_flows",
+        df[["week_ending", "region", "port_area", "commodity", "inspections_mt"]],
+        ["week_ending", "region", "port_area", "commodity"],
+        "inspection_port_flows",
+    )
+
+
 def save_eia_data(series_name: str, df: pd.DataFrame):
     """Write EIA energy → 'eia_energy'."""
     if df.empty:

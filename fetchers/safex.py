@@ -41,7 +41,7 @@ from config import (
     SAFEX_STATS_URL,
 )
 from fetchers._backoff import retry_sleep
-from pipeline.results import ScraperShapeError
+from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
@@ -229,31 +229,33 @@ def _parse_safex_table(html: str) -> dict[str, pd.DataFrame]:
     return results
 
 
-def fetch_safex() -> dict[str, pd.DataFrame]:
+def fetch_safex() -> FetchResult:
     """Fetch SAFEX South Africa soy prices from Grain SA.
 
     Returns
     -------
-    dict
-        ``{commodity_name: DataFrame}`` (Date, Close, Volume, Unit).
-        Returns ``{}`` if the page can't be downloaded or the upstream
-        structure no longer matches the expected schema.
+    FetchResult
+        ``ok`` with ``{commodity_name: DataFrame}`` (Date, Close, Volume,
+        Unit) on success; ``failed`` when the page can't be downloaded or
+        no longer matches the expected structure; ``empty`` when the page
+        parsed cleanly but carried no rows.
     """
     logger.info("Fetching SAFEX prices from Grain SA ...")
     html = _fetch_page()
 
     if not html:
-        logger.warning(
-            "Grain SA SAFEX: Could not download page. "
-            "Returning empty — pipeline continues without SAFEX data."
-        )
-        return {}
+        logger.warning("Grain SA SAFEX: Could not download page.")
+        return FetchResult.failed("SAFEX: page download failed")
 
     try:
-        return _parse_safex_table(html)
+        data = _parse_safex_table(html)
     except ScraperShapeError as exc:
         logger.error("Grain SA SAFEX: page structure changed — %s", exc)
-        return {}
+        return FetchResult.failed(str(exc))
+
+    if not any(not df.empty for df in data.values()):
+        return FetchResult.empty("SAFEX: page parsed but no rows")
+    return FetchResult.ok(data)
 
 
 # Re-export for tests
@@ -265,11 +267,11 @@ if __name__ == "__main__":
     from config import setup_logging
     setup_logging()
 
-    data = fetch_safex()
-    if not data:
-        logger.info("SAFEX: No data returned.")
+    result = fetch_safex()
+    if not result.has_rows:
+        logger.info("SAFEX: %s — %s", result.status, result.error)
     else:
-        for name, df in data.items():
+        for name, df in result.data.items():
             logger.info(
                 "%s: Close = %.1f ZAR/MT, Volume = %s, Date = %s",
                 name,

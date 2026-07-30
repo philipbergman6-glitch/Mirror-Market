@@ -327,6 +327,31 @@ def read_inspections(commodity: str | None = None) -> pd.DataFrame:
     return df
 
 
+def read_port_flows(commodity: str | None = None) -> pd.DataFrame:
+    """Read AMS port-area export inspections from SQLite."""
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with get_connection() as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM inspection_port_flows WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM inspection_port_flows", conn)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for inspection_port_flows: %s", exc)
+            return pd.DataFrame()
+
+    if "week_ending" in df.columns:
+        df["week_ending"] = pd.to_datetime(df["week_ending"])
+
+    return df
+
+
 def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
     """Read EIA energy data from SQLite."""
     if not is_cloud() and not os.path.exists(DB_PATH):

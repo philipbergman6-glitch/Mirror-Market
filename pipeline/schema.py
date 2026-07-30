@@ -176,6 +176,17 @@ CREATE TABLE IF NOT EXISTS inspections (
 );
 """
 
+_CREATE_INSPECTION_PORT_FLOWS = """
+CREATE TABLE IF NOT EXISTS inspection_port_flows (
+    week_ending     TEXT NOT NULL,
+    region          TEXT NOT NULL,
+    port_area       TEXT NOT NULL,
+    commodity       TEXT NOT NULL,
+    inspections_mt  REAL,
+    PRIMARY KEY (week_ending, region, port_area, commodity)
+);
+"""
+
 _CREATE_EIA_ENERGY = """
 CREATE TABLE IF NOT EXISTS eia_energy (
     series_name TEXT NOT NULL,
@@ -282,6 +293,7 @@ ALL_SCHEMAS = (
     _CREATE_FORWARD_CURVE,
     _CREATE_WASDE,
     _CREATE_INSPECTIONS,
+    _CREATE_INSPECTION_PORT_FLOWS,
     _CREATE_EIA_ENERGY,
     _CREATE_BRAZIL_ESTIMATES,
     _CREATE_DATA_FRESHNESS,
