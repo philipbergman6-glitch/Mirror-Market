@@ -93,7 +93,7 @@ def generate_briefing_data(*, archive: bool = True) -> BriefingData:
         "stocks_to_use": stu_text,
         "export_sales": export_sales.format(),
         "inspections": inspections.format(),
-        "dce": dce.format(price_data),
+        "dce": dce.format(price_data, currency_data),
         "forward_curve": forward_curve.format(),
         "eia": eia.format(),
         "conab": conab.format(),

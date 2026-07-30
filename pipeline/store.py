@@ -624,9 +624,16 @@ def save_briefing(
 
 
 def save_freshness(layer_name: str, rows_fetched: int = 0, status: str = "success") -> None:
-    """Record a freshness row. Success stamps last_success; failed preserves it."""
-    if status not in ("success", "failed"):
-        raise ValueError(f"status must be 'success' or 'failed', got {status!r}")
+    """Record a freshness row. Success stamps last_success; failed/disabled preserve it.
+
+    'disabled' marks a layer intentionally short-circuited (e.g. an upstream
+    anti-bot wall) — distinct from 'failed' so it doesn't read as an outage,
+    and distinct from 'success' so it doesn't fabricate freshness.
+    """
+    if status not in ("success", "failed", "disabled"):
+        raise ValueError(
+            f"status must be 'success', 'failed' or 'disabled', got {status!r}"
+        )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     with get_connection() as conn:
         prior_success: str | None

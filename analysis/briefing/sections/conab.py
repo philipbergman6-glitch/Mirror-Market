@@ -43,9 +43,19 @@ def format() -> str:  # noqa: A001
                     psd_latest = psd_match[psd_match["year"] == psd_match["year"].max()]
                     if not psd_latest.empty:
                         usda_val = psd_latest.iloc[0]["value"]
+                        usda_unit = str(psd_latest.iloc[0].get("unit", "") or "")
                         if pd.notna(usda_val):
-                            gap = val - usda_val
-                            part += f" (vs USDA {usda_val:,.0f} — gap: {gap:+,.0f})"
+                            # Only derive a gap when both legs are metric tons.
+                            # PSD reports cotton in 1000 480-lb bales vs CONAB's
+                            # 1000 MT lint — subtracting those fabricates a gap.
+                            if "MT" in usda_unit.upper():
+                                gap = val - usda_val
+                                part += f" (vs USDA {usda_val:,.0f} — gap: {gap:+,.0f})"
+                            else:
+                                part += (
+                                    f" (vs USDA {usda_val:,.0f} {usda_unit.strip()}"
+                                    " — units differ, no gap)"
+                                )
 
             commodity_parts.append(f"    {part}")
 

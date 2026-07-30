@@ -70,16 +70,15 @@ def analyze_curve(df: pd.DataFrame) -> dict:
             decreases += 1
 
     total_moves = increases + decreases
+    # The front→back spread sign decides contango vs backwardation — a
+    # move count alone can label a -13% inverted curve "contango" when the
+    # inversion happens in one large step. Monotonicity only sets strength.
     if total_moves == 0:
         structure = "flat"
-    elif increases > decreases * 2:
-        structure = "contango"
-    elif decreases > increases * 2:
-        structure = "backwardation"
-    elif increases > decreases:
-        structure = "mild contango"
-    elif decreases > increases:
-        structure = "mild backwardation"
+    elif spread > 0:
+        structure = "contango" if decreases == 0 else "mild contango"
+    elif spread < 0:
+        structure = "backwardation" if increases == 0 else "mild backwardation"
     else:
         structure = "mixed"
 

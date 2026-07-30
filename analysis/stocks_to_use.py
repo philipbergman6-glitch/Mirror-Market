@@ -17,8 +17,12 @@ from datetime import date
 import pandas as pd
 
 # PSD attribute strings — see config.PSD_TARGET_ATTRIBUTES.
+# Total use is Domestic Consumption + Exports. PSD's "Total Distribution"
+# is NOT usable here: it equals Total Supply (Beginning Stocks + Production
+# + Imports), which understates the ratio's denominator meaning.
 _ENDING_STOCKS = "Ending Stocks"
-_TOTAL_USE = "Total Distribution"
+_DOMESTIC_CONSUMPTION = "Domestic Consumption"
+_EXPORTS = "Exports"
 
 # Sample-size guard mirrors the SEASONAL_MIN_YEARS_PER_MONTH pattern in
 # analysis/seasonal.py: we won't fire an alert without at least this
@@ -57,7 +61,7 @@ def compute_stocks_to_use(
 
     df = psd_df[
         (psd_df["country"] == country)
-        & (psd_df["attribute"].isin([_ENDING_STOCKS, _TOTAL_USE]))
+        & (psd_df["attribute"].isin([_ENDING_STOCKS, _DOMESTIC_CONSUMPTION, _EXPORTS]))
     ]
     if df.empty:
         return pd.DataFrame(columns=empty_cols)
@@ -69,15 +73,14 @@ def compute_stocks_to_use(
         aggfunc="last",
     ).reset_index()
     wide.columns.name = None
-    wide = wide.rename(
-        columns={_ENDING_STOCKS: "ending_stocks", _TOTAL_USE: "total_use"},
-    )
+    wide = wide.rename(columns={_ENDING_STOCKS: "ending_stocks"})
 
-    for col in ("ending_stocks", "total_use"):
+    for col in ("ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS):
         if col not in wide.columns:
             wide[col] = pd.NA
 
-    wide = wide.dropna(subset=["ending_stocks", "total_use"])
+    wide = wide.dropna(subset=["ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS])
+    wide["total_use"] = wide[_DOMESTIC_CONSUMPTION] + wide[_EXPORTS]
     wide = wide[wide["total_use"] > 0]
     if wide.empty:
         return pd.DataFrame(columns=empty_cols)

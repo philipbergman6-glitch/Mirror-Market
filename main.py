@@ -132,6 +132,18 @@ def _mark_empty(layer: str) -> None:
         logger.exception("Could not record empty-success freshness row for %s", layer)
 
 
+def _mark_disabled(layer: str) -> None:
+    """Record an intentionally disabled layer without fabricating freshness.
+
+    Unlike _mark_empty this does NOT stamp last_success, so a hard-disabled
+    layer (anti-bot wall) never reads as freshly successful on the dashboard.
+    """
+    try:
+        save_freshness(layer, rows_fetched=0, status="disabled")
+    except Exception:
+        logger.exception("Could not record disabled freshness row for %s", layer)
+
+
 def _finalize_layer(layer: str, data: dict) -> bool:
     """Record freshness for a dict-of-frames layer; return overall success.
 
@@ -265,9 +277,12 @@ def run() -> int:
         "dce": False, "export_sales": False, "forward_curve": False,
         "wasde": False, "eia": False, "crush_inspections": False,
         "conab": False,
-        "india_domestic": False, "cepea": False, "safex": False,
+        "cepea": False, "safex": False,
         "agrural": False, "gulf_bids": False,
     }
+    # Layers intentionally short-circuited (upstream anti-bot walls) —
+    # reported separately so the Failed list only carries real outages.
+    disabled = sorted(DISABLED_LAYERS)
 
     # ── Initialise database schema ─────────────────────────────────
     init_database()
@@ -441,7 +456,7 @@ def run() -> int:
     # feed or a headless-browser bypass). The fetcher's diagnostic logging
     # will confirm the wall is still in place if you run it standalone.
     logger.info("[Layer 16] NCDEX disabled — blocked by ncdex.com anti-bot wall")
-    _mark_empty("india_domestic")
+    _mark_disabled("india_domestic")
 
     # ── Layers 17-20: FetchResult scraper layers ──────────────────
     # Layer 17: re-enabled 2026-07-30 via Notícias Agrícolas, which
@@ -524,6 +539,8 @@ def run() -> int:
     logger.info("-" * 60)
     if succeeded:
         logger.info("Succeeded: %s", ", ".join(succeeded))
+    if disabled:
+        logger.info("Disabled:  %s", ", ".join(disabled))
     if failed:
         logger.warning("Failed:    %s", ", ".join(failed))
     logger.info("Database saved to: data/storage/mirror_market.db")

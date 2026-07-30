@@ -45,7 +45,11 @@ def _psd_frame(
     country: str = "United States",
     pairs: list[tuple[int, float, float]] | None = None,
 ) -> pd.DataFrame:
-    """Build a PSD-shaped frame from (year, ending_stocks, total_use) tuples."""
+    """Build a PSD-shaped frame from (year, ending_stocks, total_use) tuples.
+
+    Total use is split 80/20 into Domestic Consumption and Exports — the
+    two attributes `compute_stocks_to_use` sums for its denominator.
+    """
     pairs = pairs or []
     rows: list[dict] = []
     for year, stocks, use in pairs:
@@ -55,7 +59,11 @@ def _psd_frame(
         ))
         rows.append(_psd_row(
             commodity=commodity, country=country, year=year,
-            attribute="Total Distribution", value=use,
+            attribute="Domestic Consumption", value=use * 0.8,
+        ))
+        rows.append(_psd_row(
+            commodity=commodity, country=country, year=year,
+            attribute="Exports", value=use * 0.2,
         ))
     return pd.DataFrame(rows)
 
@@ -102,11 +110,13 @@ def test_compute_drops_rows_missing_a_component():
     rows = [
         _psd_row(commodity="Soybeans", country="United States", year=2025,
                  attribute="Ending Stocks", value=100.0),
-        # Total Distribution missing for 2025
+        # Domestic Consumption + Exports missing for 2025
         _psd_row(commodity="Soybeans", country="United States", year=2024,
                  attribute="Ending Stocks", value=80.0),
         _psd_row(commodity="Soybeans", country="United States", year=2024,
-                 attribute="Total Distribution", value=1000.0),
+                 attribute="Domestic Consumption", value=800.0),
+        _psd_row(commodity="Soybeans", country="United States", year=2024,
+                 attribute="Exports", value=200.0),
     ]
     out = compute_stocks_to_use(pd.DataFrame(rows))
     assert len(out) == 1

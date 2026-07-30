@@ -632,8 +632,26 @@ WEATHER_PRECIP_DEFICIT_BASELINE_DAYS = 90
 WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS = 45
 WEATHER_PRECIP_DEFICIT_ALERT_PCT = 40   # alert when 30d total ≥40% below norm
 
-# Data freshness: warn if a layer hasn't updated in this many days
+# Data freshness: warn if a layer hasn't updated in this many days.
+# FRESHNESS_WARNING_DAYS is the default for daily layers; layers with a
+# slower publication cadence get their own threshold below — otherwise
+# weekly COT (Friday release of Tuesday data) and monthly WASDE/PSD would
+# warn permanently and train the reader to ignore the freshness block.
 FRESHNESS_WARNING_DAYS = 7
+FRESHNESS_WARNING_DAYS_BY_LAYER = {
+    # Weekly publications — allow a missed week before warning.
+    "cot": 12,
+    "export_sales": 12,
+    "crop_progress": 12,
+    "crush_inspections": 12,
+    # Monthly publications — allow ~6 weeks.
+    "wasde": 42,
+    "psd": 42,
+    "conab": 42,
+    "worldbank": 42,
+    "eia": 42,
+    "usda": 400,  # annual NASS crop data
+}
 
 # ---------------------------------------------------------------------------
 # Storage

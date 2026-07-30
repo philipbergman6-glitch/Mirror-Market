@@ -319,14 +319,15 @@ def test_psd_section_no_argentina_block_when_absent(patched_db: Path) -> None:
 
 def test_stocks_to_use_section_includes_meal_and_oil(patched_db: Path) -> None:
     rows = []
-    for commodity, stocks, dist in [
+    for commodity, stocks, use in [
         ("Soybeans", 8_435.0, 131_448.0),
         ("Soybean Meal", 500.0, 60_000.0),
         ("Soybean Oil", 800.0, 13_000.0),
     ]:
         rows.extend([
             (commodity, "United States", 2026, "Ending Stocks", stocks, "(1000 MT)"),
-            (commodity, "United States", 2026, "Total Distribution", dist, "(1000 MT)"),
+            (commodity, "United States", 2026, "Domestic Consumption", use * 0.8, "(1000 MT)"),
+            (commodity, "United States", 2026, "Exports", use * 0.2, "(1000 MT)"),
         ])
     _seed_psd(patched_db, rows)
 

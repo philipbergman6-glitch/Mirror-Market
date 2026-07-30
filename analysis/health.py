@@ -216,25 +216,27 @@ def _check_flat_prices() -> list[dict]:
 
 
 def _check_india_domestic() -> list[dict]:
-    """
-    Check NCDEX India domestic prices for freshness.
-
-    NCDEX publishes daily (business days), so >2 business days = stale.
-    This is a 'warning' level (not critical) because the fetch URL may need
-    manual verification — the pipeline works without this data.
-    """
-    from config import NCDEX_SOY_SYMBOLS
-    expected = list(NCDEX_SOY_SYMBOLS.keys())
-    return _check_table_freshness("india_domestic_prices", "commodity", "Date", expected)
+    """NCDEX layer is hard-disabled (anti-bot wall) — expecting its commodities
+    would emit permanent false CRITICALs. Re-add the expectation when an
+    alternate India source is wired in (see main.py Layer 16)."""
+    return []
 
 
 def _check_brazil_spot() -> list[dict]:
-    """Check CEPEA Brazil domestic soy prices for freshness (daily = >2 days stale)."""
-    from config import CEPEA_COMMODITIES
+    """Check Brazil domestic soy prices for freshness (daily = >2 days stale).
+
+    Expectations are AgRural Paranaguá FOB plus the CEPEA indicators
+    (re-enabled 2026-07-30 via Notícias Agrícolas — see main.py Layer 17);
+    both layers write to brazil_spot_prices.
+    """
+    from config import AGRURAL_COMMODITIES, CEPEA_COMMODITIES
     # TODO Phase 2.1: also flag when Paranaguá FOB (AgRural) vs CEPEA Paraná
     # diverges beyond the historical port-vs-farm wedge band — a structural break
     # there is a stronger trade signal than either source's absolute freshness.
-    return _check_table_freshness("brazil_spot_prices", "commodity", "Date", CEPEA_COMMODITIES)
+    return _check_table_freshness(
+        "brazil_spot_prices", "commodity", "Date",
+        AGRURAL_COMMODITIES + CEPEA_COMMODITIES,
+    )
 
 
 def _check_safex() -> list[dict]:

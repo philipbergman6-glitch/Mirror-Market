@@ -18,7 +18,12 @@ from typing import cast
 
 import pandas as pd
 
-from config import FORWARD_CURVE_CONTRACTS, VOLUME_SPIKE_MULTIPLIER
+from config import (
+    FORWARD_CURVE_CONTRACTS,
+    RSI_OVERBOUGHT,
+    RSI_OVERSOLD,
+    VOLUME_SPIKE_MULTIPLIER,
+)
 
 
 def is_near_roll(date, commodity: str, *, window: int = 3) -> bool:
@@ -62,6 +67,19 @@ def is_near_roll(date, commodity: str, *, window: int = 3) -> bool:
     return False
 
 
+# Signal types derived from the front-month price series — the only ones a
+# roll-day discontinuity can fake. Fundamental signals (e.g. PSD stocks-to-use
+# tightness) must never be demoted by the roll calendar.
+TECHNICAL_SIGNAL_TYPES = frozenset({
+    "golden_cross_20_50", "death_cross_20_50",
+    "golden_cross_50_200", "death_cross_50_200",
+    "macd_bullish", "macd_bearish",
+    "rsi_overbought", "rsi_oversold",
+    "bullish_divergence", "bearish_divergence",
+    "bollinger_squeeze", "volume_spike",
+})
+
+
 def demote_near_roll_signals(signals: list[dict], *, window: int = 3) -> list[dict]:
     """Return a copy of `signals` with near-roll entries demoted to severity=info.
 
@@ -69,12 +87,18 @@ def demote_near_roll_signals(signals: list[dict], *, window: int = 3) -> list[di
     which can spawn false MA/MACD crossovers, RSI extremes, and Bollinger squeezes.
     Anything within `window` business days of a calendar-estimated roll is downgraded
     to `info` and tagged `(near-roll)` so downstream consumers can distinguish.
+    Only price-derived signal types (TECHNICAL_SIGNAL_TYPES) are eligible.
     """
     out: list[dict] = []
     for sig in signals:
         date = sig.get("date")
         commodity = sig.get("commodity")
-        if date is None or commodity is None or not is_near_roll(date, commodity, window=window):
+        if (
+            date is None
+            or commodity is None
+            or sig.get("signal_type") not in TECHNICAL_SIGNAL_TYPES
+            or not is_near_roll(date, commodity, window=window)
+        ):
             out.append(sig)
             continue
 
@@ -236,7 +260,7 @@ def detect_rsi_extremes(df: pd.DataFrame, commodity: str) -> list[dict]:
     if pd.isna(latest_rsi):
         return signals
 
-    if latest_rsi > 70:
+    if latest_rsi > RSI_OVERBOUGHT:
         signals.append({
             "date": df.index[-1] if hasattr(df.index[-1], "date") else str(df.index[-1]),
             "commodity": commodity,
@@ -244,7 +268,7 @@ def detect_rsi_extremes(df: pd.DataFrame, commodity: str) -> list[dict]:
             "severity": "warning",
             "description": f"{commodity} RSI overbought ({latest_rsi:.0f})",
         })
-    elif latest_rsi < 30:
+    elif latest_rsi < RSI_OVERSOLD:
         signals.append({
             "date": df.index[-1] if hasattr(df.index[-1], "date") else str(df.index[-1]),
             "commodity": commodity,

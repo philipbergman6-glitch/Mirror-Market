@@ -34,7 +34,13 @@ from analysis.seasonal import current_vs_seasonal, monthly_seasonal
 from analysis.signals import demote_near_roll_signals, detect_all_signals
 from analysis.spreads import compute_brazil_basis, compute_crush_spread
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
-from config import CRUSH_MEAL_FACTOR, CRUSH_OIL_FACTOR
+from config import (
+    CRUSH_MEAL_FACTOR,
+    CRUSH_OIL_FACTOR,
+    WEATHER_DRY_THRESHOLD_MM,
+    WEATHER_EXTREME_HEAT_C,
+    WEATHER_HEAVY_RAIN_MM,
+)
 from pipeline.query import (
     read_brazil_estimates,
     read_brazil_spot,
@@ -58,6 +64,9 @@ logger = logging.getLogger(__name__)
 
 # The 3 soy legs — everything in this module focuses on these
 SOY_LEGS = ["Soybeans", "Soybean Oil", "Soybean Meal"]
+
+# Minimum observations before 1Y basis distribution stats are reported.
+_BASIS_STATS_MIN_OBS = 20
 
 # Key growing regions for soy
 SOY_WEATHER_REGIONS = [
@@ -180,11 +189,13 @@ def command_center() -> dict:
             "volume": latest.get("Volume"),
         }
 
-        # Trend assessment
-        if pd.notna(leg_info["ma_200"]):
-            leg_info["trend"] = "Bullish" if latest["Close"] > leg_info["ma_200"] else "Bearish"
-        elif pd.notna(leg_info["ma_50"]):
-            leg_info["trend"] = "Bullish" if latest["Close"] > leg_info["ma_50"] else "Bearish"
+        # Trend assessment — compare in native units (Close vs the raw MA
+        # columns); mixing the native Close with the MT-converted MA made
+        # the verdict a unit artifact, not a trend.
+        if pd.notna(latest.get("MA_200")):
+            leg_info["trend"] = "Bullish" if latest["Close"] > latest["MA_200"] else "Bearish"
+        elif pd.notna(latest.get("MA_50")):
+            leg_info["trend"] = "Bullish" if latest["Close"] > latest["MA_50"] else "Bearish"
         else:
             leg_info["trend"] = "N/A"
 
@@ -683,17 +694,26 @@ def relative_value_analysis() -> dict:
             basis_series = basis_df["basis_usd_mt"]
             last_252 = basis_series.iloc[-252:] if len(basis_series) >= 252 else basis_series
             current = float(basis_series.iloc[-1])
-            rank_count = (last_252 < current).sum() if len(last_252) else 0
-            pct_rank = (rank_count / len(last_252) * 100) if len(last_252) else 0.0
-            sources[label] = {
+            entry: dict[str, Any] = {
                 "series": basis_df,
                 "current_usd_mt": current,
                 "direction": "discount" if current < 0 else "premium",
-                "avg_1y": float(last_252.mean()),
-                "min_1y": float(last_252.min()),
-                "max_1y": float(last_252.max()),
-                "percentile_1y": float(pct_rank),
+                "n_obs": int(len(last_252)),
+                "avg_1y": None,
+                "min_1y": None,
+                "max_1y": None,
+                "percentile_1y": None,
             }
+            # Distributional stats need real history — computed over a
+            # handful of rows they read as context ("1Y avg", "0th pctile")
+            # while actually restating the current print.
+            if len(last_252) >= _BASIS_STATS_MIN_OBS:
+                rank_count = (last_252 < current).sum()
+                entry["avg_1y"] = float(last_252.mean())
+                entry["min_1y"] = float(last_252.min())
+                entry["max_1y"] = float(last_252.max())
+                entry["percentile_1y"] = float(rank_count / len(last_252) * 100)
+            sources[label] = entry
 
         if sources:
             primary = "Paranaguá FOB" if "Paranaguá FOB" in sources else "CEPEA Paraná"
@@ -841,13 +861,15 @@ def risk_analysis() -> dict:
             temp_max = latest.get("temp_max")
             temp_min = latest.get("temp_min")
 
+            # Heat outranks rain conditions; elif chain keeps one alert per
+            # region without a later check silently overwriting an earlier one.
             alert_type = None
-            if pd.notna(precip) and precip > 20:
-                alert_type = "Heavy Rain"
-            elif pd.notna(precip) and precip < 1:
-                alert_type = "Dry"
-            if pd.notna(temp_max) and temp_max > 38:
+            if pd.notna(temp_max) and temp_max > WEATHER_EXTREME_HEAT_C:
                 alert_type = "Extreme Heat"
+            elif pd.notna(precip) and precip > WEATHER_HEAVY_RAIN_MM:
+                alert_type = "Heavy Rain"
+            elif pd.notna(precip) and precip < WEATHER_DRY_THRESHOLD_MM:
+                alert_type = "Dry"
 
             entry = {
                 "region": region,
@@ -1032,12 +1054,12 @@ def emerging_markets_analysis() -> dict:
                 temp_max = w_latest.get("temp_max")
 
                 alert_type = None
-                if pd.notna(precip) and precip > 20:
-                    alert_type = "Heavy Rain"
-                elif pd.notna(precip) and precip < 1:
-                    alert_type = "Dry"
-                if pd.notna(temp_max) and temp_max > 38:
+                if pd.notna(temp_max) and temp_max > WEATHER_EXTREME_HEAT_C:
                     alert_type = "Extreme Heat"
+                elif pd.notna(precip) and precip > WEATHER_HEAVY_RAIN_MM:
+                    alert_type = "Heavy Rain"
+                elif pd.notna(precip) and precip < WEATHER_DRY_THRESHOLD_MM:
+                    alert_type = "Dry"
 
                 weather_entry = {
                     "region": region,

@@ -10,7 +10,7 @@ import pandas as pd
 
 from analysis.signals import detect_all_signals
 from analysis.technical import compute_all_technicals
-from config import RSI_OVERBOUGHT
+from config import RSI_OVERBOUGHT, RSI_OVERSOLD
 from pipeline.units import mt_label, to_metric_tons
 
 
@@ -67,7 +67,7 @@ def format(price_data: dict[str, pd.DataFrame]) -> tuple[str, list[dict], dict[s
         if pd.notna(rsi):
             if rsi > RSI_OVERBOUGHT:
                 parts.append(f"RSI {rsi:.0f} (overbought)")
-            elif rsi < 30:
+            elif rsi < RSI_OVERSOLD:
                 parts.append(f"RSI {rsi:.0f} (oversold)")
 
         macd_hist = latest.get("MACD_Histogram", None)

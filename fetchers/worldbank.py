@@ -221,7 +221,9 @@ def _parse_pink_sheet(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
             df = pd.DataFrame({
                 "Date": dates,
                 "price": prices,
-                "unit": "$/mt" if commodity_name != "Coffee Arabica" else "cents/lb",
+                # Pink Sheet quotes both coffees in $/kg; the soy complex
+                # and palm oil are $/mt. The old label put Robusta 1000x off.
+                "unit": "$/kg" if commodity_name.startswith("Coffee") else "$/mt",
             })
             results[commodity_name] = df
             logger.info(
