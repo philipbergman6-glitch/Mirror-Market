@@ -54,7 +54,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 
 `main.py` orchestrates the pipeline. Each layer is independent and wrapped in try/except — if one fails, the rest still run (graceful degradation). After each successful layer, a freshness timestamp is recorded.
 
-1. **Commodity prices** — `fetchers/yfinance.py` (11 futures: soy complex, palm oil BMD, corn, wheat, sugar, cotton, cattle, hogs)
+1. **Commodity prices** — `fetchers/yfinance.py` (11 futures: soy complex, palm oil CME `CPO=F` (settlement-marked, zero volume by design), corn, wheat, sugar, cotton, cattle, hogs)
 2. **USDA crop data** — `fetchers/usda.py` (production, yield, area harvested)
    - **2b. Crop progress/condition** — weekly USDA ratings (% good/excellent, % planted/harvested)
 3. **FRED economic data** — `fetchers/fred.py` (dollar index, CPI, Fed funds, Treasury 2Y/10Y/30Y, Ethanol PPI, Soybean Oil PPI, Diesel Price)

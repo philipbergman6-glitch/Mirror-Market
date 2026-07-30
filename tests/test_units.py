@@ -39,6 +39,8 @@ NUMERIC_CONVERSIONS = [
     ("Lean Hogs", 80.0, 80.0 * 2204.62 / 100),
     # USD/short ton / 0.907185 = USD/MT
     ("Soybean Meal", 300.0, 300.0 / 0.907185),
+    # USD/MT already (CME calendar swap) — identity
+    ("Palm Oil (CME)", 1127.5, 1127.5),
 ]
 
 
@@ -46,11 +48,6 @@ NUMERIC_CONVERSIONS = [
                          ids=[c[0] for c in NUMERIC_CONVERSIONS])
 def test_to_metric_tons_numeric(commodity, native, expected):
     assert to_metric_tons(native, commodity) == pytest.approx(expected)
-
-
-def test_to_metric_tons_palm_oil_returns_none():
-    # Palm Oil needs FX conversion, not a fixed unit conversion
-    assert to_metric_tons(4000.0, "Palm Oil (BMD)") is None
 
 
 def test_to_metric_tons_unknown_commodity_returns_none():
@@ -61,7 +58,7 @@ def test_conversion_factors_table_covers_documented_commodities():
     expected_keys = {
         "Soybeans", "Soybean Oil", "Soybean Meal",
         "Corn", "Wheat", "Sugar", "Cotton", "Coffee",
-        "Live Cattle", "Lean Hogs", "Palm Oil (BMD)",
+        "Live Cattle", "Lean Hogs", "Palm Oil (CME)",
     }
     assert expected_keys.issubset(set(CONVERSION_FACTORS.keys()))
 
@@ -122,10 +119,10 @@ def test_convert_df_to_mt_does_not_mutate_input():
     pdt.assert_frame_equal(df, before)
 
 
-def test_convert_df_to_mt_palm_oil_returns_unchanged_copy():
+def test_convert_df_to_mt_palm_oil_identity_conversion():
     df = _make_price_df()
-    out = convert_df_to_mt(df, "Palm Oil (BMD)")
-    # Returned copy is identical in value
+    out = convert_df_to_mt(df, "Palm Oil (CME)")
+    # CPO=F is natively USD/MT — factor 1.0 leaves values unchanged
     pdt.assert_frame_equal(out, df)
     # But it is a distinct object (a copy)
     assert out is not df
@@ -145,7 +142,7 @@ def test_convert_df_to_mt_unknown_commodity_returns_unchanged_copy():
 @pytest.mark.parametrize(
     "commodity,expected",
     [
-        ("Palm Oil (BMD)", "MYR/MT"),
+        ("Palm Oil (CME)", "USD/MT"),
         ("Soybeans", "USD/MT"),
         ("Corn", "USD/MT"),
         ("Soybean Meal", "USD/MT"),
@@ -173,7 +170,7 @@ def test_mt_label(commodity, expected):
         ("Live Cattle", "cents/lb"),
         ("Lean Hogs", "cents/lb"),
         ("Soybean Meal", "$/short ton"),
-        ("Palm Oil (BMD)", "MYR/MT"),
+        ("Palm Oil (CME)", "USD/MT"),
         ("NotARealCommodity", ""),  # default branch
     ],
 )

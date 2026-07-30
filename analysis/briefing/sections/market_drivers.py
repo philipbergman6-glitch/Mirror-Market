@@ -163,8 +163,8 @@ def format(  # noqa: A001
                         f"market expects adequate supply, carrying costs elevated"
                     )
 
-    if "Palm Oil (BMD)" in enriched and "Soybean Oil" in enriched:
-        palm = enriched["Palm Oil (BMD)"]
+    if "Palm Oil (CME)" in enriched and "Soybean Oil" in enriched:
+        palm = enriched["Palm Oil (CME)"]
         soy_oil = enriched["Soybean Oil"]
         if not palm.empty and not soy_oil.empty:
             palm_weekly = palm.get("weekly_pct_change", pd.Series())

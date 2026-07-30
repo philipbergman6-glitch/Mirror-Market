@@ -17,6 +17,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Commodities exempt from the zero-volume sanity warning. CPO=F (Palm Oil)
+# is a settlement-marked calendar swap: volume is ~0 every day by design,
+# so the warning would fire on every run without indicating a data gap.
+ZERO_VOLUME_EXEMPT = {"Palm Oil (CME)"}
+
 
 def _validate_price_data(df: pd.DataFrame, label: str = ""):
     """
@@ -24,7 +29,8 @@ def _validate_price_data(df: pd.DataFrame, label: str = ""):
 
     Checks:
         - Daily close change >10% (possible data corruption or extreme event)
-        - Zero or negative volume (missing data)
+        - Zero or negative volume (missing data) — skipped for commodities
+          in ZERO_VOLUME_EXEMPT
 
     These are warnings only — they don't block the pipeline.
     """
@@ -43,7 +49,7 @@ def _validate_price_data(df: pd.DataFrame, label: str = ""):
         )
 
     # Check for zero or negative volume
-    if "Volume" in df.columns:
+    if "Volume" in df.columns and label not in ZERO_VOLUME_EXEMPT:
         bad_volume = df[df["Volume"] <= 0]
         if not bad_volume.empty:
             logger.warning(
@@ -71,7 +77,7 @@ def _check_nan_gaps(df: pd.DataFrame, cols: list[str], label: str = "") -> None:
                 prefix, col, max_gap,
             )
 
-def clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
+def clean_ohlcv(df: pd.DataFrame, label: str = "") -> pd.DataFrame:
     """
     Clean a raw OHLCV DataFrame from yfinance.
 
@@ -84,6 +90,9 @@ def clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df : pd.DataFrame
         Raw output from yfinance (Open, High, Low, Close, Volume).
+    label : str
+        Commodity/pair name — prefixes warning logs and drives per-commodity
+        sanity-check exemptions (see ZERO_VOLUME_EXEMPT).
 
     Returns
     -------
@@ -104,14 +113,14 @@ def clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=present, how="all")
 
     # Check for long consecutive NaN gaps before forward-filling
-    _check_nan_gaps(df, present)
+    _check_nan_gaps(df, present, label=label)
 
     # Forward-fill remaining small gaps, but cap at 3 days to avoid
     # propagating stale data indefinitely when a source stops updating
     df = df.ffill(limit=3)
 
     # Run sanity checks (warnings only — doesn't block pipeline)
-    _validate_price_data(df)
+    _validate_price_data(df, label=label)
 
     return df
 

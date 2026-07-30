@@ -94,7 +94,7 @@ EMERGING_MARKET_WEATHER = {
 # Helper: filter the shared loaders down to the soy-relevant subset.
 # ---------------------------------------------------------------------------
 
-_SOY_PRICE_TARGETS = SOY_LEGS + ["Palm Oil (BMD)", "Corn"]
+_SOY_PRICE_TARGETS = SOY_LEGS + ["Palm Oil (CME)", "Corn"]
 
 
 def _load_soy_prices() -> dict[str, pd.DataFrame]:
@@ -592,7 +592,7 @@ def relative_value_analysis() -> dict:
     beans = prices.get("Soybeans")
     oil = prices.get("Soybean Oil")
     meal = prices.get("Soybean Meal")
-    palm = prices.get("Palm Oil (BMD)")
+    palm = prices.get("Palm Oil (CME)")
     corn = prices.get("Corn")
 
     result = {}
@@ -701,8 +701,8 @@ def relative_value_analysis() -> dict:
         result["oil_vs_palm"] = {
             "soy_oil": to_metric_tons(oil_latest, "Soybean Oil"),
             "soy_oil_unit": mt_label("Soybean Oil"),
-            "palm_oil": palm_latest,  # Already MYR/MT
-            "palm_oil_unit": mt_label("Palm Oil (BMD)"),
+            "palm_oil": to_metric_tons(palm_latest, "Palm Oil (CME)"),
+            "palm_oil_unit": mt_label("Palm Oil (CME)"),
         }
         if len(oil) >= 6 and len(palm) >= 6:
             result["oil_vs_palm"]["soy_oil_weekly_chg"] = (
