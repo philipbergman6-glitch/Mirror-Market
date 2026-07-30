@@ -33,9 +33,20 @@ jobs:
   build-deploy:
     needs: check
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      # Persistent cloud DB — without it every scheduled run starts from an
+      # empty SQLite and snapshot-only history (AgRural, SAFEX) never
+      # accumulates. Secrets must be added in repo settings.
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      # Fail loudly if Turso is configured but unreachable, instead of
+      # silently falling back to an ephemeral local file. Evaluates to '0'
+      # until the secrets exist, so CI still passes pre-configuration.
+      MIRROR_REQUIRE_TURSO: ${{ secrets.TURSO_DATABASE_URL != '' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 

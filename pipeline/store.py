@@ -15,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 from config import DB_PATH, STORAGE_DIR
-from pipeline.connection import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud, maybe_sync
 from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ def init_database():
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
+        maybe_sync(conn)
     logger.info("Database initialised (tables verified) at %s", DB_PATH)
 
 
@@ -114,6 +115,7 @@ def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
             conn.execute("ROLLBACK")
             logger.error("Transaction failed for %s — rolled back", label)
             raise
+        maybe_sync(conn)
     logger.info("Saved %d rows for %s → %s table", n, label, table)
     return n
 
@@ -459,6 +461,7 @@ def save_briefing(
                VALUES (?, ?, ?, ?, ?)""",
             (briefing_date, text, signals_json, snapshot_json, generated_at),
         )
+        maybe_sync(conn)
     logger.info("Archived briefing for %s (%d signals)", briefing_date, len(signals or []))
 
 
@@ -486,6 +489,7 @@ def save_freshness(layer_name: str, rows_fetched: int = 0, status: str = "succes
                VALUES (?, ?, ?, ?, ?)""",
             (layer_name, prior_success, now, rows_fetched, status),
         )
+        maybe_sync(conn)
     logger.debug("Freshness recorded for %s at %s (status=%s, %d rows)",
                  layer_name, now, status, rows_fetched)
 
@@ -520,4 +524,5 @@ def update_commodity_freshness():
                        VALUES (?, ?, ?, ?, ?)""",
                     [(c, table, ld, ct, now) for c, ld, ct in rows],
                 )
+        maybe_sync(conn)
     logger.info("Commodity freshness updated at %s", now)

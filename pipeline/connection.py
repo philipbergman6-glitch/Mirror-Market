@@ -72,6 +72,25 @@ def get_connection():
     return sqlite3.connect(DB_PATH)
 
 
+def maybe_sync(conn) -> None:
+    """Sync a libsql connection after writes; no-op for plain sqlite3.
+
+    Embedded-replica writes are only durable at the primary once synced.
+    Under MIRROR_REQUIRE_TURSO=1 a failed sync raises (a silent sync
+    failure would mean CI "succeeds" while writing to an ephemeral file);
+    otherwise it logs and continues.
+    """
+    sync = getattr(conn, "sync", None)
+    if not callable(sync):
+        return
+    try:
+        sync()
+    except Exception as exc:
+        if _require_turso():
+            raise TursoUnavailableError(f"Turso sync failed after write: {exc}") from exc
+        logger.error("Turso sync failed after write: %s", exc)
+
+
 def is_cloud() -> bool:
     """Check if we're configured to use Turso cloud database."""
     return bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
