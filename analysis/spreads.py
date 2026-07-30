@@ -15,6 +15,7 @@ Two daily, cross-market relationships are computed here:
 
 import pandas as pd
 
+from config import CRUSH_MEAL_FACTOR, CRUSH_OIL_FACTOR
 from pipeline.units import to_metric_tons
 
 
@@ -59,8 +60,8 @@ def compute_crush_spread(
         "meal_close":     meal_df["Close"],
     }).dropna()
 
-    oil_value = combined["oil_close"] * 11
-    meal_value = combined["meal_close"] * 2.2
+    oil_value = combined["oil_close"] * CRUSH_OIL_FACTOR
+    meal_value = combined["meal_close"] * CRUSH_MEAL_FACTOR
     combined["crush_spread"] = oil_value + meal_value - combined["soybeans_close"]
     combined["oil_value_share"] = oil_value / (oil_value + meal_value)
 

@@ -1,11 +1,14 @@
 """Data freshness warnings — shown at the top of the briefing."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
 from config import FRESHNESS_WARNING_DAYS
 from pipeline.query import read_freshness
+
+logger = logging.getLogger(__name__)
 
 
 def format() -> str:  # noqa: A001 — module-scope name, no conflict with builtin
@@ -37,6 +40,6 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
         if health["issues"]:
             sections.append(health["summary"])
     except Exception:
-        pass
+        logger.warning("Health check unavailable for briefing", exc_info=True)
 
     return "\n\n".join(sections)

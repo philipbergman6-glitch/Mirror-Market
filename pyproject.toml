@@ -40,7 +40,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "DTZ003"]
 "scripts/generate_html.py" = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 strict_equality = true
 ignore_missing_imports = true
 warn_unused_ignores = true

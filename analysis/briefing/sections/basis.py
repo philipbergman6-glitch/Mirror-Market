@@ -53,10 +53,9 @@ def format(  # noqa: A001
     agrural_basis = _basis_for_source(soybeans, brl_usd, "Soybean (AgRural Paranaguá FOB)")
     cepea_basis = _basis_for_source(soybeans, brl_usd, "Soybean (CEPEA)")
 
-    if agrural_basis is None and cepea_basis is None:
-        return "BRAZIL BASIS: Insufficient data"
-
     if agrural_basis is None:
+        if cepea_basis is None:
+            return "BRAZIL BASIS: Insufficient data"
         return _format_basis_line("CEPEA Paraná", cepea_basis)
 
     headline = _format_basis_line("Paranaguá FOB", agrural_basis)

@@ -14,9 +14,11 @@ Key concepts for learning:
     - RSI extremes: overbought/oversold conditions may signal reversals
 """
 
+from typing import cast
+
 import pandas as pd
 
-from config import FORWARD_CURVE_CONTRACTS
+from config import FORWARD_CURVE_CONTRACTS, VOLUME_SPIKE_MULTIPLIER
 
 
 def is_near_roll(date, commodity: str, *, window: int = 3) -> bool:
@@ -162,7 +164,9 @@ def detect_ma_crossovers(df: pd.DataFrame, commodity: str) -> list[dict]:
     return signals
 
 
-def detect_volume_spikes(df: pd.DataFrame, commodity: str, threshold: float = 2.0) -> list[dict]:
+def detect_volume_spikes(
+    df: pd.DataFrame, commodity: str, threshold: float = VOLUME_SPIKE_MULTIPLIER
+) -> list[dict]:
     """
     Detect when today's volume is unusually high.
 
@@ -292,7 +296,10 @@ def detect_rsi_divergence(df: pd.DataFrame, commodity: str, lookback: int = 20) 
     # Bearish divergence: price at/near high of lookback, RSI below its lookback high
     price_high = recent["Close"].max()
     rsi_at_price_high_idx = recent["Close"].idxmax()
-    rsi_at_price_high = recent.loc[rsi_at_price_high_idx, "RSI"] if pd.notna(rsi_at_price_high_idx) else None
+    rsi_at_price_high = (
+        cast(float, recent.loc[rsi_at_price_high_idx, "RSI"])
+        if pd.notna(rsi_at_price_high_idx) else None
+    )
 
     if (rsi_at_price_high is not None and pd.notna(rsi_at_price_high)
             and current["Close"] >= price_high * 0.99  # price at/near high
@@ -309,7 +316,10 @@ def detect_rsi_divergence(df: pd.DataFrame, commodity: str, lookback: int = 20) 
     # Bullish divergence: price at/near low of lookback, RSI above its lookback low
     price_low = recent["Close"].min()
     rsi_at_price_low_idx = recent["Close"].idxmin()
-    rsi_at_price_low = recent.loc[rsi_at_price_low_idx, "RSI"] if pd.notna(rsi_at_price_low_idx) else None
+    rsi_at_price_low = (
+        cast(float, recent.loc[rsi_at_price_low_idx, "RSI"])
+        if pd.notna(rsi_at_price_low_idx) else None
+    )
 
     if (rsi_at_price_low is not None and pd.notna(rsi_at_price_low)
             and current["Close"] <= price_low * 1.01  # price at/near low

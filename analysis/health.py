@@ -137,7 +137,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
                     "message": f"STALE in {table} — last date is {last_date} ({age_days} days ago)",
                 })
         except Exception:
-            pass
+            logger.warning("Staleness check failed for %s/%s", table, key, exc_info=True)
 
     return issues
 

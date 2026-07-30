@@ -21,6 +21,64 @@ from pipeline.connection import get_connection, is_cloud
 logger = logging.getLogger(__name__)
 
 
+def _read_table(
+    table: str,
+    filter_col: str | None = None,
+    filter_value: str | None = None,
+    *,
+    date_cols: tuple[str, ...] = ("Date",),
+    missing_ok: bool = True,
+    sql: str | None = None,
+    where_prefix: str = "",
+) -> pd.DataFrame:
+    """Shared body for the read_* functions.
+
+    Parameters
+    ----------
+    table : str
+        Table name (also used in the warning log line).
+    filter_col, filter_value : str or None
+        Optional equality filter appended as a parameterised WHERE clause.
+    date_cols : tuple of str
+        Columns parsed to datetime when present.
+    missing_ok : bool
+        True: a missing/unmigrated table logs a warning and returns empty
+        (newer tables that may not exist in a pre-migration DB).
+        False: the error propagates — core tables that init_database always
+        creates, where a read failure means something is genuinely broken.
+    sql : str or None
+        Override for the base SELECT (e.g. the forward-curve latest-snapshot
+        join). Defaults to ``SELECT * FROM {table}``.
+    where_prefix : str
+        Table alias prefix for the WHERE column when ``sql`` uses one.
+    """
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    base = sql or f"SELECT * FROM {table}"  # noqa: S608 — table names are literals below
+    with get_connection() as conn:
+        try:
+            if filter_value:
+                df = pd.read_sql(
+                    f"{base} WHERE {where_prefix}{filter_col} = ?",
+                    conn,
+                    params=(filter_value,),
+                )
+            else:
+                df = pd.read_sql(base, conn)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            if not missing_ok:
+                raise
+            logger.warning("Read failed for %s: %s", table, exc)
+            return pd.DataFrame()
+
+    for col in date_cols:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col])
+
+    return df
+
+
 def read_prices(commodity: str | None = None) -> pd.DataFrame:
     """
     Read price data back from SQLite.
@@ -30,211 +88,56 @@ def read_prices(commodity: str | None = None) -> pd.DataFrame:
     commodity : str or None
         If given, filter to just that commodity.  Otherwise return all.
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if commodity:
-            df = pd.read_sql(
-                "SELECT * FROM prices WHERE commodity = ?",
-                conn,
-                params=(commodity,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM prices", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("prices", "commodity", commodity, missing_ok=False)
 
 
 def read_economic(series_name: str | None = None) -> pd.DataFrame:
     """Read economic (FRED) data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if series_name:
-            df = pd.read_sql(
-                "SELECT * FROM economic WHERE series_name = ?",
-                conn,
-                params=(series_name,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM economic", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("economic", "series_name", series_name, missing_ok=False)
 
 
 def read_usda(stat_category: str | None = None) -> pd.DataFrame:
     """Read USDA data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if stat_category:
-            df = pd.read_sql(
-                "SELECT * FROM usda WHERE stat_category = ?",
-                conn,
-                params=(stat_category,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM usda", conn)
-
-    return df
+    return _read_table(
+        "usda", "stat_category", stat_category, date_cols=(), missing_ok=False
+    )
 
 
 def read_cot(commodity: str | None = None) -> pd.DataFrame:
     """Read COT data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if commodity:
-            df = pd.read_sql(
-                "SELECT * FROM cot WHERE commodity = ?",
-                conn,
-                params=(commodity,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM cot", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("cot", "commodity", commodity, missing_ok=False)
 
 
 def read_weather(region: str | None = None) -> pd.DataFrame:
     """Read weather data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if region:
-            df = pd.read_sql(
-                "SELECT * FROM weather WHERE region = ?",
-                conn,
-                params=(region,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM weather", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("weather", "region", region, missing_ok=False)
 
 
 def read_crop_progress(commodity: str | None = None) -> pd.DataFrame:
     """Read crop progress/condition data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM crop_progress WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM crop_progress", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for crop_progress: %s", exc)
-            return pd.DataFrame()
-
-    return df
+    return _read_table("crop_progress", "commodity", commodity, date_cols=())
 
 
 def read_psd(commodity: str | None = None) -> pd.DataFrame:
     """Read PSD global supply/demand data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if commodity:
-            df = pd.read_sql(
-                "SELECT * FROM psd WHERE commodity = ?",
-                conn,
-                params=(commodity,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM psd", conn)
-
-    return df
+    return _read_table("psd", "commodity", commodity, date_cols=(), missing_ok=False)
 
 
 def read_currencies(pair: str | None = None) -> pd.DataFrame:
     """Read currency data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if pair:
-            df = pd.read_sql(
-                "SELECT * FROM currencies WHERE pair = ?",
-                conn,
-                params=(pair,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM currencies", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("currencies", "pair", pair, missing_ok=False)
 
 
 def read_worldbank_prices(commodity: str | None = None) -> pd.DataFrame:
     """Read World Bank monthly price data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if commodity:
-            df = pd.read_sql(
-                "SELECT * FROM worldbank_prices WHERE commodity = ?",
-                conn,
-                params=(commodity,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM worldbank_prices", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("worldbank_prices", "commodity", commodity, missing_ok=False)
 
 
 def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
     """Read export sales data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM export_sales WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM export_sales", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for export_sales: %s", exc)
-            return pd.DataFrame()
-
-    if "week_ending" in df.columns:
-        df["week_ending"] = pd.to_datetime(df["week_ending"])
-
-    return df
+    return _read_table(
+        "export_sales", "commodity", commodity, date_cols=("week_ending",)
+    )
 
 
 def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
@@ -245,270 +148,76 @@ def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
     recent curve, so this filters to each commodity's latest fetched_date.
     Query the table directly for history.
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
     latest_sql = (
         "SELECT fc.* FROM forward_curve fc "
         "JOIN (SELECT commodity, MAX(fetched_date) AS max_fd "
         "      FROM forward_curve GROUP BY commodity) latest "
         "ON fc.commodity = latest.commodity AND fc.fetched_date = latest.max_fd"
     )
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    latest_sql + " WHERE fc.commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql(latest_sql, conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for forward_curve: %s", exc)
-            return pd.DataFrame()
-
-    return df
+    return _read_table(
+        "forward_curve",
+        "commodity",
+        commodity,
+        date_cols=(),
+        sql=latest_sql,
+        where_prefix="fc.",
+    )
 
 
 def read_dce_futures(commodity: str | None = None) -> pd.DataFrame:
     """Read DCE futures data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        if commodity:
-            df = pd.read_sql(
-                "SELECT * FROM dce_futures WHERE commodity = ?",
-                conn,
-                params=(commodity,),
-            )
-        else:
-            df = pd.read_sql("SELECT * FROM dce_futures", conn)
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("dce_futures", "commodity", commodity, missing_ok=False)
 
 
 def read_wasde(commodity: str | None = None) -> pd.DataFrame:
     """Read WASDE forecast data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM wasde WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM wasde", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for wasde: %s", exc)
-            return pd.DataFrame()
-
-    return df
+    return _read_table("wasde", "commodity", commodity, date_cols=())
 
 
 def read_inspections(commodity: str | None = None) -> pd.DataFrame:
     """Read export inspections data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM inspections WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM inspections", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for inspections: %s", exc)
-            return pd.DataFrame()
-
-    if "week_ending" in df.columns:
-        df["week_ending"] = pd.to_datetime(df["week_ending"])
-
-    return df
+    return _read_table(
+        "inspections", "commodity", commodity, date_cols=("week_ending",)
+    )
 
 
 def read_port_flows(commodity: str | None = None) -> pd.DataFrame:
     """Read AMS port-area export inspections from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM inspection_port_flows WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM inspection_port_flows", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for inspection_port_flows: %s", exc)
-            return pd.DataFrame()
-
-    if "week_ending" in df.columns:
-        df["week_ending"] = pd.to_datetime(df["week_ending"])
-
-    return df
+    return _read_table(
+        "inspection_port_flows", "commodity", commodity, date_cols=("week_ending",)
+    )
 
 
 def read_gulf_bids(commodity: str | None = None) -> pd.DataFrame:
     """Read AMS CIF Gulf export bids from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM gulf_bids WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM gulf_bids", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for gulf_bids: %s", exc)
-            return pd.DataFrame()
-
-    if "report_date" in df.columns:
-        df["report_date"] = pd.to_datetime(df["report_date"])
-
-    return df
+    return _read_table(
+        "gulf_bids", "commodity", commodity, date_cols=("report_date",)
+    )
 
 
 def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
     """Read EIA energy data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if series_name:
-                df = pd.read_sql(
-                    "SELECT * FROM eia_energy WHERE series_name = ?",
-                    conn,
-                    params=(series_name,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM eia_energy", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for eia_energy: %s", exc)
-            return pd.DataFrame()
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("eia_energy", "series_name", series_name)
 
 
 def read_brazil_estimates(commodity: str | None = None) -> pd.DataFrame:
     """Read CONAB Brazil estimates from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM brazil_estimates WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM brazil_estimates", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for brazil_estimates: %s", exc)
-            return pd.DataFrame()
-
-    return df
+    return _read_table("brazil_estimates", "commodity", commodity, date_cols=())
 
 
 def read_india_domestic(commodity: str | None = None) -> pd.DataFrame:
     """Read NCDEX India domestic prices from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM india_domestic_prices WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM india_domestic_prices", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for india_domestic_prices: %s", exc)
-            return pd.DataFrame()
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("india_domestic_prices", "commodity", commodity)
 
 
 def read_brazil_spot(commodity: str | None = None) -> pd.DataFrame:
     """Read CEPEA Brazil domestic spot prices from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM brazil_spot_prices WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM brazil_spot_prices", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for brazil_spot_prices: %s", exc)
-            return pd.DataFrame()
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("brazil_spot_prices", "commodity", commodity)
 
 
 def read_safex(commodity: str | None = None) -> pd.DataFrame:
     """Read JSE SAFEX South Africa settlement prices from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
-        return pd.DataFrame()
-
-    with get_connection() as conn:
-        try:
-            if commodity:
-                df = pd.read_sql(
-                    "SELECT * FROM safex_prices WHERE commodity = ?",
-                    conn,
-                    params=(commodity,),
-                )
-            else:
-                df = pd.read_sql("SELECT * FROM safex_prices", conn)
-        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
-            logger.warning("Read failed for safex_prices: %s", exc)
-            return pd.DataFrame()
-
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-
-    return df
+    return _read_table("safex_prices", "commodity", commodity)
 
 
 def read_freshness() -> pd.DataFrame:

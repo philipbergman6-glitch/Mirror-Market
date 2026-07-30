@@ -50,6 +50,10 @@ LAYER_MIN_KEYS = {
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 8 commodities
     "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
+    "usda": 2,         # of 3 stats (production, area harvested, yield)
+    "export_sales": 4,  # of 6 commodities
+    "forward_curve": 7,  # of 10 commodities
+    "eia": 2,          # of 3 series
 }
 
 # Systemic-outage backstop: exit non-zero when more than this many active
@@ -589,6 +593,14 @@ RSI_OVERSOLD = 30
 
 # Volume spike: multiple of 20-day average volume to flag as unusual
 VOLUME_SPIKE_MULTIPLIER = 2.0
+
+# Soybean crush yield factors — one 60-lb bushel of beans yields ~11 lbs
+# of oil (priced in cents/lb) and ~44 lbs of meal (priced in $/short ton,
+# hence 44/2000*100 = 2.2 in cents/bu terms). Board-crush convention;
+# shared by the CBOT crush spread and every domestic crush-margin
+# comparison so a yield-assumption change is a one-line edit.
+CRUSH_OIL_FACTOR = 11.0
+CRUSH_MEAL_FACTOR = 2.2
 
 # Weather alert thresholds
 WEATHER_HEAVY_RAIN_MM = 20      # mm precipitation to flag
