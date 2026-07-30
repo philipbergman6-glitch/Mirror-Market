@@ -519,6 +519,15 @@ NOTICIAS_AGRICOLAS_URLS = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 20 — US Gulf export basis bids (USDA AMS report 3147, no API key)
+# Daily "Louisiana and Texas Export Bids" PDF — CIF Gulf (NOLA barge)
+# export-elevator bids for soybeans/corn/wheat, basis in cents/bu over the
+# named CBOT contract. The legacy mnreports .txt grain bid endpoints froze
+# in 2020-2022 after the MARS migration; this PDF is the live keyless feed.
+# ---------------------------------------------------------------------------
+AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
+
+# ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)
 # JSE agricultural settlement prices in ZAR/MT
 # ---------------------------------------------------------------------------

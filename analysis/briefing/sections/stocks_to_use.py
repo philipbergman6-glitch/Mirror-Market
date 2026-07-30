@@ -15,18 +15,20 @@ from analysis.stocks_to_use import (
     compute_stocks_to_use,
     detect_tight_supply,
 )
-from config import WASDE_COMMODITIES
 from pipeline.query import read_psd
 
-# config.WASDE_COMMODITIES uses NASS-style uppercase names; PSD uses
-# title-case. Map between them so the briefing's commodity universe
-# stays consistent with the rest of the project.
-_NAME_MAP = {
-    "SOYBEANS": "Soybeans",
-    "CORN":     "Corn",
-    "WHEAT":    "Wheat",
-    "COTTON":   "Cotton",
-}
+# US balance sheets shown in the briefing (PSD title-case names). The
+# first four mirror config.WASDE_COMMODITIES; Soybean Meal and Soybean
+# Oil come from PSD only — WASDE's NASS-style list omits them but their
+# US balance sheets matter as much to the soy complex as the beans.
+_S2U_COMMODITIES = (
+    "Soybeans",
+    "Corn",
+    "Wheat",
+    "Cotton",
+    "Soybean Meal",
+    "Soybean Oil",
+)
 
 
 def format() -> tuple[str, list[dict]]:  # noqa: A001
@@ -36,7 +38,7 @@ def format() -> tuple[str, list[dict]]:  # noqa: A001
     if stu.empty:
         return "STOCKS-TO-USE (US): No data", []
 
-    psd_names = [_NAME_MAP[c] for c in WASDE_COMMODITIES if c in _NAME_MAP]
+    psd_names = list(_S2U_COMMODITIES)
     signals = detect_tight_supply(stu, commodities=psd_names)
     tight = {s["commodity"] for s in signals}
 

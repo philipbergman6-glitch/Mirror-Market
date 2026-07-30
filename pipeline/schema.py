@@ -187,6 +187,26 @@ CREATE TABLE IF NOT EXISTS inspection_port_flows (
 );
 """
 
+_CREATE_GULF_BIDS = """
+CREATE TABLE IF NOT EXISTS gulf_bids (
+    report_date   TEXT NOT NULL,
+    commodity     TEXT NOT NULL,
+    location      TEXT NOT NULL,
+    delivery      TEXT NOT NULL,
+    sale_type     TEXT,
+    basis_low     REAL,
+    basis_high    REAL,
+    futures_month INTEGER,
+    basis_change  TEXT,
+    price_low     REAL,
+    price_high    REAL,
+    average       REAL,
+    year_ago      REAL,
+    freight       TEXT,
+    PRIMARY KEY (report_date, commodity, location, delivery)
+);
+"""
+
 _CREATE_EIA_ENERGY = """
 CREATE TABLE IF NOT EXISTS eia_energy (
     series_name TEXT NOT NULL,
@@ -294,6 +314,7 @@ ALL_SCHEMAS = (
     _CREATE_WASDE,
     _CREATE_INSPECTIONS,
     _CREATE_INSPECTION_PORT_FLOWS,
+    _CREATE_GULF_BIDS,
     _CREATE_EIA_ENERGY,
     _CREATE_BRAZIL_ESTIMATES,
     _CREATE_DATA_FRESHNESS,

@@ -372,6 +372,27 @@ def save_port_flows(df: pd.DataFrame):
     )
 
 
+def save_gulf_bids(df: pd.DataFrame):
+    """Write AMS CIF Gulf export bids → 'gulf_bids'."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "report_date" in df.columns:
+        df["report_date"] = _date(df["report_date"])
+    df = _str_cols(df, "commodity", "location", "delivery", "sale_type",
+                   "basis_change", "freight")
+    _save(
+        "gulf_bids",
+        df[[
+            "report_date", "commodity", "location", "delivery", "sale_type",
+            "basis_low", "basis_high", "futures_month", "basis_change",
+            "price_low", "price_high", "average", "year_ago", "freight",
+        ]],
+        ["report_date", "commodity", "location", "delivery"],
+        "gulf_bids",
+    )
+
+
 def save_eia_data(series_name: str, df: pd.DataFrame):
     """Write EIA energy → 'eia_energy'."""
     if df.empty:

@@ -352,6 +352,31 @@ def read_port_flows(commodity: str | None = None) -> pd.DataFrame:
     return df
 
 
+def read_gulf_bids(commodity: str | None = None) -> pd.DataFrame:
+    """Read AMS CIF Gulf export bids from SQLite."""
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with get_connection() as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM gulf_bids WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM gulf_bids", conn)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for gulf_bids: %s", exc)
+            return pd.DataFrame()
+
+    if "report_date" in df.columns:
+        df["report_date"] = pd.to_datetime(df["report_date"])
+
+    return df
+
+
 def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
     """Read EIA energy data from SQLite."""
     if not is_cloud() and not os.path.exists(DB_PATH):

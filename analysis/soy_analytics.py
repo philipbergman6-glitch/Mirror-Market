@@ -29,6 +29,7 @@ import pandas as pd
 
 from analysis.forward_curve import analyze_curve, calendar_spread
 from analysis.loaders import load_currencies, load_prices
+from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal, monthly_seasonal
 from analysis.signals import demote_near_roll_signals, detect_all_signals
 from analysis.spreads import compute_brazil_basis, compute_crush_spread
@@ -325,6 +326,11 @@ def supply_analysis() -> dict:
             ("Soybeans", "United States", "Ending Stocks"),
             ("Soybean Oil", "United States", "Production"),
             ("Soybean Meal", "United States", "Production"),
+            # Argentina — #1 soymeal/oil exporter.
+            ("Soybean Meal", "Argentina", "Production"),
+            ("Soybean Meal", "Argentina", "Exports"),
+            ("Soybean Oil", "Argentina", "Production"),
+            ("Soybean Oil", "Argentina", "Exports"),
         ]
         latest_year = psd["year"].max()
         for commodity, country, attribute in key_rows:
@@ -348,7 +354,8 @@ def supply_analysis() -> dict:
     stu_summary: dict[str, dict[str, Any]] = {}
     if not psd.empty:
         stu_df = compute_stocks_to_use(psd, country="United States")
-        wasde_psd_names = ("Soybeans", "Corn", "Wheat", "Cotton")
+        # WASDE row crops + the soy product balance sheets (PSD-only).
+        wasde_psd_names = ("Soybeans", "Corn", "Wheat", "Cotton", "Soybean Meal", "Soybean Oil")
         tight = {
             s["commodity"]
             for s in detect_tight_supply(stu_df, commodities=list(wasde_psd_names))
@@ -480,6 +487,15 @@ def demand_analysis() -> dict:
                 "volume_mt": latest.get("inspections_mt", 0),
             }
 
+    # --- NASS actual crush (monthly, soybeans processed into meal/oil) ---
+    crush_summary: dict[str, Any] = {}
+    try:
+        crush = latest_crush()
+        if crush:
+            crush_summary = crush
+    except Exception as exc:
+        logger.debug("NASS crush summary failed: %s", exc)
+
     # --- Biofuel (EIA) ---
     eia = read_eia_data()
     biofuel = {}
@@ -525,6 +541,7 @@ def demand_analysis() -> dict:
         "export_sales": export_summary,
         "inspections": inspection_summary,
         "china_buying": china_buying,
+        "crush": crush_summary,
         "biofuel": biofuel,
         "dce_comparison": dce_comparison,
     }

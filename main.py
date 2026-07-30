@@ -42,6 +42,7 @@ from fetchers.eia import fetch_all_eia
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
+from fetchers.gulf_bids import fetch_gulf_bids
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
@@ -87,6 +88,7 @@ from pipeline.store import (
     save_forward_curve,
     save_fred_data,
     save_freshness,
+    save_gulf_bids,
     save_inspections,
     save_port_flows,
     save_price_data,
@@ -187,7 +189,7 @@ def run() -> int:
         "wasde": False, "eia": False, "crush_inspections": False,
         "conab": False,
         "india_domestic": False, "cepea": False, "safex": False,
-        "agrural": False,
+        "agrural": False, "gulf_bids": False,
     }
 
     # ── Initialise database schema ─────────────────────────────────
@@ -622,6 +624,23 @@ def run() -> int:
     except Exception:
         logger.exception("[Layer 19] AgRural failed — see error above")
         _mark_failed("agrural")
+
+    # ── Layer 20: US Gulf Export Basis Bids (AMS 3147) ────────────
+    try:
+        logger.info("[Layer 20] Fetching AMS Gulf export bids ...")
+        gulf_result = fetch_gulf_bids()
+
+        if gulf_result.has_rows:
+            save_gulf_bids(gulf_result.data["gulf_bids"])
+            results["gulf_bids"] = True
+            save_freshness("gulf_bids", gulf_result.total_rows)
+            logger.info("[Layer 20] Gulf bids: %d rows saved", gulf_result.total_rows)
+        else:
+            logger.error("[Layer 20] Gulf bids failed: %s", gulf_result.error)
+            _mark_failed("gulf_bids")
+    except Exception:
+        logger.exception("[Layer 20] Gulf bids failed — see error above")
+        _mark_failed("gulf_bids")
 
     # ── Update per-commodity freshness tracking ─────────────────
     try:

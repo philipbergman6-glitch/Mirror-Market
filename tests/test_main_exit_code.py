@@ -72,6 +72,8 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_conab_estimates": empty_df,
         "fetch_safex": FetchResult.empty(),
         "fetch_agrural": FetchResult.empty(),
+        "fetch_noticias_agricolas": FetchResult.empty(),
+        "fetch_gulf_bids": FetchResult.empty(),
     }
     for name, retval in patches.items():
         monkeypatch.setattr(main, name, mock.Mock(return_value=retval))
