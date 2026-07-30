@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS economic (
 );
 """
 
+# reference_period_desc is part of the key: monthly series (NASS crush)
+# publish one row per month under the same short_desc/year, and the old
+# 3-column key collapsed them to a single surviving month.
 _CREATE_USDA = """
 CREATE TABLE IF NOT EXISTS usda (
     stat_category           TEXT,
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS usda (
     unit_desc               TEXT,
     state_name              TEXT,
     reference_period_desc   TEXT,
-    PRIMARY KEY (stat_category, year, short_desc)
+    PRIMARY KEY (stat_category, year, short_desc, reference_period_desc)
 );
 """
 
@@ -64,6 +67,7 @@ CREATE TABLE IF NOT EXISTS weather (
     temp_max        REAL,
     temp_min        REAL,
     precipitation   REAL,
+    is_forecast     INTEGER,
     PRIMARY KEY (region, Date)
 );
 """
@@ -139,10 +143,15 @@ CREATE TABLE IF NOT EXISTS export_sales (
     weekly_exports      REAL,
     accumulated_exports REAL,
     outstanding_sales   REAL,
+    unit                TEXT,
     PRIMARY KEY (commodity, week_ending, country)
 );
 """
 
+# fetched_date is part of the key: each pipeline run stores that day's full
+# curve, so term-structure history accumulates instead of being overwritten.
+# Readers wanting "the current curve" filter to the latest fetched_date
+# (see pipeline/query.read_forward_curve).
 _CREATE_FORWARD_CURVE = """
 CREATE TABLE IF NOT EXISTS forward_curve (
     commodity       TEXT    NOT NULL,
@@ -151,7 +160,7 @@ CREATE TABLE IF NOT EXISTS forward_curve (
     ticker          TEXT,
     close           REAL,
     fetched_date    TEXT    NOT NULL,
-    PRIMARY KEY (commodity, contract_month)
+    PRIMARY KEY (commodity, contract_month, fetched_date)
 );
 """
 
@@ -173,6 +182,37 @@ CREATE TABLE IF NOT EXISTS inspections (
     week_ending     TEXT NOT NULL,
     inspections_mt  REAL,
     PRIMARY KEY (commodity, week_ending)
+);
+"""
+
+_CREATE_INSPECTION_PORT_FLOWS = """
+CREATE TABLE IF NOT EXISTS inspection_port_flows (
+    week_ending     TEXT NOT NULL,
+    region          TEXT NOT NULL,
+    port_area       TEXT NOT NULL,
+    commodity       TEXT NOT NULL,
+    inspections_mt  REAL,
+    PRIMARY KEY (week_ending, region, port_area, commodity)
+);
+"""
+
+_CREATE_GULF_BIDS = """
+CREATE TABLE IF NOT EXISTS gulf_bids (
+    report_date   TEXT NOT NULL,
+    commodity     TEXT NOT NULL,
+    location      TEXT NOT NULL,
+    delivery      TEXT NOT NULL,
+    sale_type     TEXT,
+    basis_low     REAL,
+    basis_high    REAL,
+    futures_month INTEGER,
+    basis_change  TEXT,
+    price_low     REAL,
+    price_high    REAL,
+    average       REAL,
+    year_ago      REAL,
+    freight       TEXT,
+    PRIMARY KEY (report_date, commodity, location, delivery)
 );
 """
 
@@ -282,6 +322,8 @@ ALL_SCHEMAS = (
     _CREATE_FORWARD_CURVE,
     _CREATE_WASDE,
     _CREATE_INSPECTIONS,
+    _CREATE_INSPECTION_PORT_FLOWS,
+    _CREATE_GULF_BIDS,
     _CREATE_EIA_ENERGY,
     _CREATE_BRAZIL_ESTIMATES,
     _CREATE_DATA_FRESHNESS,
@@ -302,8 +344,8 @@ UNIQUE_INDEXES = (
     "ON prices (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_economic_series_date "
     "ON economic (series_name, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_usda_cat_year_desc "
-    "ON usda (stat_category, year, short_desc);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_usda_cat_year_desc_period "
+    "ON usda (stat_category, year, short_desc, reference_period_desc);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_cot_commodity_date "
     "ON cot (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_weather_region_date "
@@ -320,8 +362,8 @@ UNIQUE_INDEXES = (
     "ON crop_progress (commodity, week_ending, short_desc);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_export_sales_commodity_week_country "
     "ON export_sales (commodity, week_ending, country);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_forward_curve_commodity_contract "
-    "ON forward_curve (commodity, contract_month);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_forward_curve_commodity_contract_date "
+    "ON forward_curve (commodity, contract_month, fetched_date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_wasde_commodity_year_attr_period "
     "ON wasde (commodity, year, attribute, reference_period);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_inspections_commodity_week "

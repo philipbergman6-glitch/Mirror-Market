@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 19 source layers (covering 11 commodity futures, 13 currency pairs including ZAR/NGN, 24 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, and AgRural Paranaguá FOB) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 20 source layers (covering 11 commodity futures, 13 currency pairs including ZAR/NGN, 24 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, and AMS CIF Gulf export bids) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
 
 ## Commands
 
@@ -27,7 +27,7 @@ python scripts/generate_html.py
 # Open docs/index.html in your browser
 
 # Run a single analysis module standalone
-python analysis/briefing.py
+python -m analysis.briefing
 ```
 
 ## Required Environment Variables
@@ -39,12 +39,12 @@ python analysis/briefing.py
 
 Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19 work without API keys.
 
-### Optional (Cloud Database)
+### Optional (Cloud Database — dormant)
 
 - `TURSO_DATABASE_URL` — Turso database URL (e.g., `libsql://your-db.turso.io`)
 - `TURSO_AUTH_TOKEN` — Turso authentication token
 
-If not set, uses local SQLite (default). Set both to enable persistent cloud storage via Turso.
+**Decision 2026-07-30: no cloud DB.** CI persistence uses git-committed CSVs instead (see "Git-based history persistence" below). The Turso code path in `pipeline/connection.py` remains as dormant optional code for local use — it requires `pip install libsql` (deliberately not in `requirements.txt`) plus both env vars. Nothing in CI sets them.
 
 ## Architecture
 
@@ -62,18 +62,19 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 5. **Weather** — `fetchers/weather.py` (24 regions: US, Brazil, Argentina, Paraguay, Colombia, Ethiopia, Ivory Coast, Vietnam, Indonesia, Malaysia, India, Thailand, China, South Africa, Nigeria)
 6. **PSD global supply/demand** — `fetchers/psd.py` (8 commodities x 27 countries, oilseeds + grains + coffee + cotton)
 7. **Currencies** — `fetchers/yfinance.py` (13 pairs: BRL, ARS, COP, PYG, CNY, IDR, MYR, VND, INR, THB, ETB, ZAR, NGN)
-8. **World Bank monthly prices** — `fetchers/worldbank.py` (Robusta, Palm Oil, etc.)
-9. **DCE Chinese futures** — `fetchers/akshare.py` (5 contracts including DCE Corn)
+8. **World Bank monthly prices** — `fetchers/worldbank.py` (Robusta, Palm Oil, Rapeseed Oil, Sunflower Oil, etc. — current xlsx link resolved from the CMO landing page each run; the GUID deep link rotates yearly and stale links serve frozen data with HTTP 200)
+9. **Chinese futures** — `fetchers/akshare.py` (7 contracts: 5 DCE incl. Corn + CZCE Rapeseed Oil/Meal — the only free daily rapeseed benchmark)
 10. **Export sales** — `fetchers/export_sales.py` (weekly USDA FAS demand data — requires `FAS_API_KEY`)
 11. **Forward curves** — `fetchers/forward_curve.py` (individual contract months via yfinance — contango/backwardation)
 12. **WASDE monthly estimates** — `fetchers/wasde.py` (USDA OCE monthly XLS — `wasdeMMYY.xls`, no API key required)
 13. **EIA biofuel/energy** — `fetchers/eia.py` (ethanol production, biodiesel production, diesel prices — requires `EIA_API_KEY`)
-14. **USDA crush + inspections** — `fetchers/usda.py` (monthly soybean crush volumes + weekly AMS export inspections)
+14. **USDA crush + inspections** — `fetchers/usda.py` (monthly soybean crush volumes + weekly AMS export inspections, incl. the WA_GR101 Table C port-area breakdown → `inspection_port_flows`)
 15. **CONAB Brazil estimates** — `fetchers/conab.py` (Brazil's official crop agency — production, area, yield; aggregates 27 UFs to national totals for Soybeans, Corn, Wheat, Cotton lint; coffee is in a separate CONAB file and not tracked here)
 16. **India domestic soy prices** — `fetchers/india_domestic.py` (NCDEX Bhav Copy — INR/MT, no API key) — **DISABLED 2026-05**: `ncdex.com` serves a JS fingerprint anti-bot wall (`__hd_fingerprint` cookie via `/__verify/fp`) on every URL; `main.py` short-circuits this layer via `_mark_empty`. The fetcher's diagnostic logging surfaces the wall in logs. Re-enabling requires an alternate source or a Playwright bypass — not a URL update.
-17. **Brazil domestic soy spot** — `fetchers/cepea.py` (CEPEA/ESALQ index — BRL/MT, no API key) — **DISABLED 2026-05-12**: `cepea.esalq.usp.br` is fronted by a Cloudflare Turnstile JS challenge (HTTP 403 on every URL); `main.py` short-circuits this layer via `_mark_empty`. Last real data was 2026-02-20. Re-enabling requires an alternate Brazil spot source (Infosimples, Playwright bypass, or another index) — not a URL update.
+17. **Brazil domestic soy spot** — `fetchers/noticias_agricolas.py` (CEPEA/ESALQ Paraná + ESALQ/B3 Paranaguá indicators republished server-rendered by Notícias Agrícolas — BRL/MT, no API key). Re-enabled 2026-07-30; cepea.org.br itself is still Cloudflare-Turnstile-walled and `fetchers/cepea.py` stays on disk only as a fallback. Historical gap backfill: `scripts/backfill_cepea_gap.py` (one session per `/YYYY-MM-DD` archive page).
 18. **South Africa domestic soy** — `fetchers/safex.py` (JSE SAFEX settlement — ZAR/MT, no API key)
 19. **AgRural Paranaguá FOB** — `fetchers/agrural.py` (Brazil port-side soy FOB scraper — BRL/MT, no API key)
+20. **US Gulf export bids** — `fetchers/gulf_bids.py` (AMS report 3147 "Louisiana and Texas Export Bids" daily PDF — CIF NOLA-barge soybean/corn/wheat bids, basis in cents/bu over the named CBOT contract; no API key)
 
 ### Pipeline Layer
 
@@ -102,9 +103,14 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 
 ### Storage
 
-- Database: `data/storage/mirror_market.db` (SQLite, gitignored) — or Turso cloud when configured
-- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
+- Database: `data/storage/mirror_market.db` (SQLite, gitignored)
+- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `gulf_bids`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
+- `forward_curve` keys on `(commodity, contract_month, fetched_date)` — one full curve per run accumulates term-structure history; `read_forward_curve()` returns only each commodity's latest snapshot.
 - All config lives in `config.py` (tickers, API URLs, region coordinates, thresholds)
+
+### Git-based history persistence (`pipeline/history.py`)
+
+CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal by re-downloading full history, but snapshot-only sources don't: AgRural (1 row/day — the Brazil basis source), SAFEX, forward curve, CONAB survey revisions, inspections (>3 weeks), Gulf bids, CEPEA (>~10 sessions), WASDE (>12 months). These tables round-trip through CSVs in `data/history/` (committed to git): `main.py` calls `import_history()` after `init_database()` (INSERT OR IGNORE — DB rows win over CSVs) and `export_history()` after the layers (atomic per-table writes, PK-sorted for stable diffs; empty tables never overwrite a populated CSV). The deploy workflow commits `data/history/` back to `main` with `[skip ci]`. A failed import aborts the run so a bad seed can never be exported over good history. Cloud DB (Turso/Supabase) was explicitly rejected for this — do not reintroduce it as a CI requirement.
 
 ### Briefing Sections (in order)
 
@@ -112,6 +118,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 2. Prices (10 commodities with MA, RSI, MACD, volatility)
 3. Crush Spread
 4. Brazil Basis (Paranaguá FOB vs CBOT, USD/MT — Layer 19 × Layer 1)
+4b. US Gulf Basis (CIF NOLA barge — AMS export bids, Layer 20)
 5. Economic Context (FRED — dollar index, CPI, rates, ethanol PPI)
 6. USDA Fundamentals (YoY production/yield)
 7. Crop Conditions (weekly USDA % good/excellent, progress)
@@ -124,9 +131,9 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 14. Forward Curve (contango/backwardation per commodity)
 15. Biofuel & Energy (EIA — ethanol, biodiesel production, diesel prices)
 16. Brazil Crop Estimates (CONAB vs USDA comparison)
-17. Currencies (11 pairs with trade impact)
+17. Currencies (13 pairs with trade impact)
 18. COT Positioning (10 commodities)
-19. Weather Alerts (20 regions)
+19. Weather Alerts (24 regions)
 20. Global Supply — PSD (27 countries)
 21. World Bank Prices
 22. Emerging Markets (South Africa SAFEX + Brazil CEPEA + India NCDEX + Nigeria deep dive)
@@ -175,7 +182,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 **Affected analyses:**
 - `analysis/technical.py` — SMA crossovers, RSI (Wilder), MACD (EMA-based), Bollinger Bands, historical volatility. All compute on `Close` and propagate the discontinuity.
-- `analysis/signals.py` — MA/MACD crossovers, RSI extremes, RSI divergence, Bollinger squeeze. Mitigated: signals within ±3 business days of an estimated roll date (first business day of an active delivery month — see `analysis.signals.is_near_roll`) are demoted to `info` severity and tagged `(near-roll)` in both the briefing and the dashboard.
+- `analysis/signals.py` — MA/MACD crossovers, RSI extremes, RSI divergence, Bollinger squeeze. Mitigated: signals within ±3 business days of an estimated roll date (first business day on/after the 15th of an active delivery month — CME expiry; validated against 15y of ZS=F gaps — see `analysis.signals.is_near_roll`) are demoted to `info` severity and tagged `(near-roll)` in both the briefing and the dashboard.
 
 **Not affected:**
 - `analysis/spreads.py` — crush spread, oil/meal ratio, bean/corn ratio. Computed on raw active-contract closes; the artifact appears on each leg simultaneously and largely cancels.

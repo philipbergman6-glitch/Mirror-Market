@@ -15,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 from config import DB_PATH, STORAGE_DIR
-from pipeline.connection import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud, maybe_sync
 from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
 logger = logging.getLogger(__name__)
@@ -45,15 +45,130 @@ def _migrate_data_freshness(conn) -> None:
                 logger.warning("Could not add %s column to data_freshness: %s", col, exc)
 
 
+def _migrate_export_sales_unit(conn) -> None:
+    """Add the unit column to export_sales if absent. Idempotent."""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(export_sales)").fetchall()}
+    except Exception:
+        return
+    if cols and "unit" not in cols:
+        try:
+            conn.execute("ALTER TABLE export_sales ADD COLUMN unit TEXT")
+        except Exception as exc:
+            logger.warning("Could not add unit column to export_sales: %s", exc)
+
+
+def _migrate_weather_is_forecast(conn) -> None:
+    """Add the is_forecast column to weather if absent. Idempotent.
+
+    NULL means the row predates the flag — treated as observed downstream.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(weather)").fetchall()}
+    except Exception:
+        return
+    if cols and "is_forecast" not in cols:
+        try:
+            conn.execute("ALTER TABLE weather ADD COLUMN is_forecast INTEGER")
+        except Exception as exc:
+            logger.warning("Could not add is_forecast column to weather: %s", exc)
+
+
+def _migrate_usda_pk(conn) -> None:
+    """Rebuild the usda table with reference_period_desc in the PK. Idempotent.
+
+    The original 3-column key collapsed monthly NASS series (crush) to one
+    surviving row per year. SQLite can't alter a PK in place, so detect the
+    old shape and rebuild. The stale 3-column unique index is dropped in
+    both cases — left behind, it would keep collapsing rows on upsert.
+    """
+    try:
+        conn.execute("DROP INDEX IF EXISTS ux_usda_cat_year_desc")
+        pk_cols = {r[1] for r in conn.execute("PRAGMA table_info(usda)").fetchall() if r[5]}
+    except Exception:
+        return
+    if "reference_period_desc" in pk_cols or not pk_cols:
+        return
+    try:
+        conn.execute("ALTER TABLE usda RENAME TO usda_old_pk")
+        conn.execute(
+            """CREATE TABLE usda (
+                   stat_category           TEXT,
+                   year                    TEXT,
+                   short_desc              TEXT,
+                   Value                   TEXT,
+                   unit_desc               TEXT,
+                   state_name              TEXT,
+                   reference_period_desc   TEXT,
+                   PRIMARY KEY (stat_category, year, short_desc, reference_period_desc)
+               )"""
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO usda
+               SELECT stat_category, year, short_desc, Value,
+                      unit_desc, state_name, reference_period_desc
+               FROM usda_old_pk"""
+        )
+        conn.execute("DROP TABLE usda_old_pk")
+        logger.info("Migrated usda table PK to include reference_period_desc")
+    except Exception:
+        logger.exception("usda PK migration failed — leaving table as-is")
+
+
+def _migrate_forward_curve_pk(conn) -> None:
+    """Rebuild forward_curve with fetched_date in the PK. Idempotent.
+
+    The original (commodity, contract_month) key overwrote the whole curve
+    every run, making term-structure history structurally impossible.
+    SQLite can't alter a PK in place, so detect the old shape and rebuild.
+    The stale 2-column unique index is dropped in both cases — left behind,
+    it would keep collapsing one row per contract on upsert.
+    """
+    try:
+        conn.execute("DROP INDEX IF EXISTS ux_forward_curve_commodity_contract")
+        pk_cols = {r[1] for r in conn.execute("PRAGMA table_info(forward_curve)").fetchall() if r[5]}
+    except Exception:
+        return
+    if "fetched_date" in pk_cols or not pk_cols:
+        return
+    try:
+        conn.execute("ALTER TABLE forward_curve RENAME TO forward_curve_old_pk")
+        conn.execute(
+            """CREATE TABLE forward_curve (
+                   commodity       TEXT    NOT NULL,
+                   contract_month  TEXT    NOT NULL,
+                   label           TEXT,
+                   ticker          TEXT,
+                   close           REAL,
+                   fetched_date    TEXT    NOT NULL,
+                   PRIMARY KEY (commodity, contract_month, fetched_date)
+               )"""
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO forward_curve
+               SELECT commodity, contract_month, label, ticker, close, fetched_date
+               FROM forward_curve_old_pk"""
+        )
+        conn.execute("DROP TABLE forward_curve_old_pk")
+        logger.info("Migrated forward_curve table PK to include fetched_date")
+    except Exception:
+        logger.exception("forward_curve PK migration failed — leaving table as-is")
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
     with get_connection() as conn:
         for ddl in ALL_SCHEMAS:
             conn.execute(ddl)
+        _migrate_usda_pk(conn)
+        _migrate_forward_curve_pk(conn)
+        _migrate_export_sales_unit(conn)
+        _migrate_weather_is_forecast(conn)
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
+        maybe_sync(conn)
     logger.info("Database initialised (tables verified) at %s", DB_PATH)
 
 
@@ -64,6 +179,7 @@ def clear_database():
         "prices", "economic", "usda", "cot", "weather", "psd",
         "currencies", "worldbank_prices", "dce_futures", "crop_progress",
         "export_sales", "forward_curve", "wasde", "inspections",
+        "inspection_port_flows", "gulf_bids",
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
         "brazil_spot_prices", "safex_prices", "briefings",
@@ -114,6 +230,7 @@ def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
             conn.execute("ROLLBACK")
             logger.error("Transaction failed for %s — rolled back", label)
             raise
+        maybe_sync(conn)
     logger.info("Saved %d rows for %s → %s table", n, label, table)
     return n
 
@@ -227,7 +344,10 @@ def save_weather_data(region: str, df: pd.DataFrame):
     df = df.copy()
     df["region"] = region
     df["Date"] = _date(df["Date"])
-    _save("weather", df[["region", "Date", "temp_max", "temp_min", "precipitation"]],
+    if "is_forecast" not in df.columns:
+        df["is_forecast"] = None  # legacy callers: NULL = observed
+    _save("weather",
+          df[["region", "Date", "temp_max", "temp_min", "precipitation", "is_forecast"]],
           ["region", "Date"], f"weather/{region}")
 
 
@@ -278,10 +398,10 @@ def save_export_sales(commodity: str, df: pd.DataFrame):
     df["commodity"] = commodity
     if "week_ending" in df.columns:
         df["week_ending"] = _date(df["week_ending"])
-    df = _str_cols(df, "country")
+    df = _str_cols(df, "country", "unit")
     _save("export_sales", df[[
-        "commodity", "week_ending", "country",
-        "net_sales", "weekly_exports", "accumulated_exports", "outstanding_sales",
+        "commodity", "week_ending", "country", "net_sales",
+        "weekly_exports", "accumulated_exports", "outstanding_sales", "unit",
     ]], ["commodity", "week_ending", "country"], f"export_sales/{commodity}")
 
 
@@ -296,7 +416,7 @@ def save_forward_curve(commodity: str, df: pd.DataFrame):
     _save(
         "forward_curve",
         df[["commodity", "contract_month", "label", "ticker", "close", "fetched_date"]],
-        ["commodity", "contract_month"],
+        ["commodity", "contract_month", "fetched_date"],
         f"forward_curve/{commodity}",
     )
 
@@ -352,6 +472,43 @@ def save_inspections(commodity: str, df: pd.DataFrame):
         df["week_ending"] = _date(df["week_ending"])
     _save("inspections", df[["commodity", "week_ending", "inspections_mt"]],
           ["commodity", "week_ending"], f"inspections/{commodity}")
+
+
+def save_port_flows(df: pd.DataFrame):
+    """Write AMS port-area export inspections → 'inspection_port_flows'."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "week_ending" in df.columns:
+        df["week_ending"] = _date(df["week_ending"])
+    df = _str_cols(df, "region", "port_area", "commodity")
+    _save(
+        "inspection_port_flows",
+        df[["week_ending", "region", "port_area", "commodity", "inspections_mt"]],
+        ["week_ending", "region", "port_area", "commodity"],
+        "inspection_port_flows",
+    )
+
+
+def save_gulf_bids(df: pd.DataFrame):
+    """Write AMS CIF Gulf export bids → 'gulf_bids'."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "report_date" in df.columns:
+        df["report_date"] = _date(df["report_date"])
+    df = _str_cols(df, "commodity", "location", "delivery", "sale_type",
+                   "basis_change", "freight")
+    _save(
+        "gulf_bids",
+        df[[
+            "report_date", "commodity", "location", "delivery", "sale_type",
+            "basis_low", "basis_high", "futures_month", "basis_change",
+            "price_low", "price_high", "average", "year_ago", "freight",
+        ]],
+        ["report_date", "commodity", "location", "delivery"],
+        "gulf_bids",
+    )
 
 
 def save_eia_data(series_name: str, df: pd.DataFrame):
@@ -459,6 +616,7 @@ def save_briefing(
                VALUES (?, ?, ?, ?, ?)""",
             (briefing_date, text, signals_json, snapshot_json, generated_at),
         )
+        maybe_sync(conn)
     logger.info("Archived briefing for %s (%d signals)", briefing_date, len(signals or []))
 
 
@@ -486,6 +644,7 @@ def save_freshness(layer_name: str, rows_fetched: int = 0, status: str = "succes
                VALUES (?, ?, ?, ?, ?)""",
             (layer_name, prior_success, now, rows_fetched, status),
         )
+        maybe_sync(conn)
     logger.debug("Freshness recorded for %s at %s (status=%s, %d rows)",
                  layer_name, now, status, rows_fetched)
 
@@ -520,4 +679,5 @@ def update_commodity_freshness():
                        VALUES (?, ?, ?, ?, ?)""",
                     [(c, table, ld, ct, now) for c, ld, ct in rows],
                 )
+        maybe_sync(conn)
     logger.info("Commodity freshness updated at %s", now)

@@ -60,8 +60,9 @@ def fetch_region_weather(
     Returns
     -------
     pd.DataFrame
-        Columns: Date, temp_max, temp_min, precipitation
-        Empty DataFrame on failure.
+        Columns: Date, temp_max, temp_min, precipitation, is_forecast
+        (1 for rows dated after today — Open-Meteo forecast; 0 for
+        observed/past rows). Empty DataFrame on failure.
     """
     params = {
         "latitude":      lat,
@@ -104,6 +105,13 @@ def fetch_region_weather(
                 "temp_min":      daily.get("temperature_2m_min"),
                 "precipitation": daily.get("precipitation_sum"),
             })
+
+            # Rows dated after today are model forecast, not observations.
+            # Downstream z-scores and agronomic alerts must exclude them.
+            today = pd.Timestamp.today().normalize()
+            df["is_forecast"] = (
+                pd.to_datetime(df["Date"]) > today
+            ).astype(int)
 
             logger.info(
                 "Got %d days of weather for %s (%.1f°, %.1f°)",

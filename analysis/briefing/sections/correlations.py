@@ -14,7 +14,7 @@ def format(  # noqa: A001
     if len(price_data) >= 2:
         corr_matrix = commodity_correlation_matrix(price_data)
         if not corr_matrix.empty:
-            lines.append("  Cross-commodity (Close prices):")
+            lines.append("  Cross-commodity (daily returns):")
             shown = set()
             for i, row_name in enumerate(corr_matrix.index):
                 for j, col_name in enumerate(corr_matrix.columns):

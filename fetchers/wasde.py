@@ -18,6 +18,7 @@ import io
 import logging
 import re
 from datetime import date, datetime, timezone
+from urllib.parse import urljoin
 
 import pandas as pd
 import requests
@@ -141,9 +142,28 @@ def _download_url(url: str, year: int, month: int) -> bytes | None:
             if resp.status_code == 200 and resp.content:
                 logger.debug("[WASDE] Downloaded %s (%d bytes)", url, len(resp.content))
                 return resp.content
-            # 3xx → unpublished month (Akamai sends a 302 to an apology page).
-            # Not retryable — silently skip.
+            # 3xx → follow once. Akamai 302s unpublished months to an HTML
+            # apology page, but a redirect can also point at the real file
+            # (host reshuffles) — decide by what the destination serves:
+            # OLE (.xls) / zip (.xlsx) magic bytes = real report, anything
+            # else = unpublished.
             if 300 <= resp.status_code < 400:
+                location = resp.headers.get("Location")
+                if location:
+                    try:
+                        follow = requests.get(
+                            urljoin(url, location),
+                            timeout=REQUEST_TIMEOUT,
+                            allow_redirects=True,
+                        )
+                        content = follow.content
+                        if follow.status_code == 200 and (
+                            content[:4] == b"\xd0\xcf\x11\xe0" or content[:2] == b"PK"
+                        ):
+                            logger.info("[WASDE] Followed redirect for %s", url)
+                            return content
+                    except requests.RequestException as exc:
+                        logger.debug("[WASDE] Redirect follow failed for %s: %s", url, exc)
                 logger.info("[WASDE] %04d-%02d not published yet (HTTP %d)", year, month, resp.status_code)
                 return None
             # 404 → file removed from this host (usda.gov drops back-months).
@@ -206,15 +226,51 @@ def _esmis_xls_index() -> dict[tuple[int, int], str]:
     return index
 
 
+def _resolve_sheet(xl: pd.ExcelFile, layout: dict, commodity: str) -> str | None:
+    """Find the sheet holding a table by its title text, not its page number.
+
+    The pinned "Page N" is tried first (fast path) but must actually carry
+    the expected title — USDA repaginates the report occasionally, and a
+    page-number pin would then silently parse the wrong table. Falls back
+    to scanning every sheet's top rows for the title.
+    """
+    title = layout.get("title")
+    pinned = layout.get("sheet")
+
+    def has_title(sheet: str) -> bool:
+        try:
+            head = pd.read_excel(xl, sheet_name=sheet, header=None, nrows=8)
+        except Exception:
+            return False
+        col0 = " ".join(str(v) for v in head.iloc[:, 0].tolist())
+        return title.lower() in col0.lower()
+
+    if not title:
+        return pinned if pinned in xl.sheet_names else None
+
+    if pinned in xl.sheet_names and has_title(pinned):
+        return pinned
+
+    for sheet in xl.sheet_names:
+        if sheet != pinned and has_title(sheet):
+            logger.info(
+                "[WASDE] %s table found on %r (pinned %r stale — repagination)",
+                commodity, sheet, pinned,
+            )
+            return sheet
+
+    logger.warning("[WASDE] No sheet carries title %r for %s", title, commodity)
+    return None
+
+
 def _parse_xls(content: bytes, report_date: str) -> list[dict]:
     """Top-level parser: walk WASDE_LAYOUT, yield one row dict per data point."""
     xl = pd.ExcelFile(io.BytesIO(content))
     rows: list[dict] = []
     for commodity, layout in WASDE_LAYOUT.items():
-        sheet = layout["sheet"]
         header_text = layout["header_text"]
-        if sheet not in xl.sheet_names:
-            logger.warning("[WASDE] Sheet %r missing for %s", sheet, commodity)
+        sheet = _resolve_sheet(xl, layout, commodity)
+        if sheet is None:
             continue
         df = pd.read_excel(xl, sheet_name=sheet, header=None)
         stop_labels = _sheet_stop_labels(sheet, header_text)

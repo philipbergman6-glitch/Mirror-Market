@@ -238,20 +238,32 @@ def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
 
 
 def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
-    """Read forward curve data from SQLite."""
+    """Read the latest forward-curve snapshot per commodity.
+
+    The table accumulates one full curve per fetched_date (history for
+    term-structure analysis); every current consumer wants only the most
+    recent curve, so this filters to each commodity's latest fetched_date.
+    Query the table directly for history.
+    """
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
+    latest_sql = (
+        "SELECT fc.* FROM forward_curve fc "
+        "JOIN (SELECT commodity, MAX(fetched_date) AS max_fd "
+        "      FROM forward_curve GROUP BY commodity) latest "
+        "ON fc.commodity = latest.commodity AND fc.fetched_date = latest.max_fd"
+    )
     with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
-                    "SELECT * FROM forward_curve WHERE commodity = ?",
+                    latest_sql + " WHERE fc.commodity = ?",
                     conn,
                     params=(commodity,),
                 )
             else:
-                df = pd.read_sql("SELECT * FROM forward_curve", conn)
+                df = pd.read_sql(latest_sql, conn)
         except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
             logger.warning("Read failed for forward_curve: %s", exc)
             return pd.DataFrame()
@@ -323,6 +335,56 @@ def read_inspections(commodity: str | None = None) -> pd.DataFrame:
 
     if "week_ending" in df.columns:
         df["week_ending"] = pd.to_datetime(df["week_ending"])
+
+    return df
+
+
+def read_port_flows(commodity: str | None = None) -> pd.DataFrame:
+    """Read AMS port-area export inspections from SQLite."""
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with get_connection() as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM inspection_port_flows WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM inspection_port_flows", conn)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for inspection_port_flows: %s", exc)
+            return pd.DataFrame()
+
+    if "week_ending" in df.columns:
+        df["week_ending"] = pd.to_datetime(df["week_ending"])
+
+    return df
+
+
+def read_gulf_bids(commodity: str | None = None) -> pd.DataFrame:
+    """Read AMS CIF Gulf export bids from SQLite."""
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    with get_connection() as conn:
+        try:
+            if commodity:
+                df = pd.read_sql(
+                    "SELECT * FROM gulf_bids WHERE commodity = ?",
+                    conn,
+                    params=(commodity,),
+                )
+            else:
+                df = pd.read_sql("SELECT * FROM gulf_bids", conn)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for gulf_bids: %s", exc)
+            return pd.DataFrame()
+
+    if "report_date" in df.columns:
+        df["report_date"] = pd.to_datetime(df["report_date"])
 
     return df
 

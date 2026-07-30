@@ -22,6 +22,8 @@ import requests
 
 from config import (
     EXPORT_SALES_COMMODITIES,
+    EXPORT_SALES_DEFAULT_MY_START,
+    EXPORT_SALES_MY_START_MONTH,
     FAS_API_KEY,
     FAS_BASE_URL,
     MAX_RETRIES,
@@ -35,16 +37,16 @@ logger = logging.getLogger(__name__)
 _AUTH_HEADER = "X-Api-Key"
 
 
-def _current_market_year() -> int:
+def _current_market_year(start_month: int = EXPORT_SALES_DEFAULT_MY_START) -> int:
     """
-    Return the current USDA marketing year.
+    Return the current USDA marketing year for a given MY start month.
 
-    Most grain marketing years start in September, so:
-        - Sep 2025 → Aug 2026 = marketing year 2026
-        - Sep 2024 → Aug 2025 = marketing year 2025
+    The soy complex and corn start Sep 1 (Sep 2025 → Aug 2026 = MY 2026);
+    wheat starts Jun 1 and cotton Aug 1 (see EXPORT_SALES_MY_START_MONTH),
+    so their MY rolls forward earlier in the calendar.
     """
     today = date.today()
-    if today.month >= 9:
+    if today.month >= start_month:
         return today.year + 1
     return today.year
 
@@ -104,6 +106,33 @@ def fetch_country_map() -> dict[int, str]:
     return mapping
 
 
+def fetch_unit_map() -> dict[int, str]:
+    """
+    Fetch the ESR units-of-measure reference → {unitId: unitName}.
+
+    Export rows carry a numeric unitId; without translating it, cotton's
+    running bales were being displayed as if they were metric tons.
+    Empty dict on failure.
+    """
+    data = _fas_get("/unitsOfMeasure")
+    if not isinstance(data, list):
+        return {}
+
+    mapping: dict[int, str] = {}
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        code = row.get("unitId")
+        name = row.get("unitNames") or row.get("unitName") or row.get("unitDescription")
+        if code is None or not name:
+            continue
+        try:
+            mapping[int(code)] = str(name).strip()
+        except (TypeError, ValueError):
+            continue
+    return mapping
+
+
 # ESR API field → our column. Listed in fallback order per target column:
 # the first source field present wins.
 _FIELD_SOURCES = {
@@ -119,6 +148,7 @@ def fetch_export_sales(
     commodity_code: str,
     market_year: int | None = None,
     country_map: dict[int, str] | None = None,
+    unit_map: dict[int, str] | None = None,
 ) -> pd.DataFrame:
     """
     Fetch weekly export sales for a single commodity.
@@ -137,7 +167,7 @@ def fetch_export_sales(
     -------
     pd.DataFrame
         Columns: week_ending, country, net_sales, weekly_exports,
-                 accumulated_exports, outstanding_sales
+                 accumulated_exports, outstanding_sales, unit
         Empty DataFrame if the request fails or no API key is set.
     """
     if not FAS_API_KEY:
@@ -188,9 +218,22 @@ def fetch_export_sales(
             )
             return pd.DataFrame()
 
+        # Unit of measure — translate unitId so non-MT commodities
+        # (cotton reports running bales) aren't mislabeled downstream.
+        if "unitId" in df.columns:
+            if unit_map is None:
+                unit_map = fetch_unit_map()
+            unit_ids = pd.to_numeric(df["unitId"], errors="coerce")
+            out["unit"] = [
+                unit_map.get(int(u), str(int(u))) if pd.notna(u) else ""
+                for u in unit_ids
+            ]
+        else:
+            out["unit"] = ""
+
         return out[[
             "week_ending", "country", "net_sales", "weekly_exports",
-            "accumulated_exports", "outstanding_sales",
+            "accumulated_exports", "outstanding_sales", "unit",
         ]]
 
     except (ValueError, KeyError, TypeError) as exc:
@@ -213,14 +256,18 @@ def fetch_all_export_sales() -> dict[str, pd.DataFrame]:
         return {}
 
     results = {}
-    market_year = _current_market_year()
     country_map = fetch_country_map()
     if not country_map:
         logger.warning("ESR country lookup failed — country codes will be shown raw")
+    unit_map = fetch_unit_map()
+    if not unit_map:
+        logger.warning("ESR unit lookup failed — unit ids will be shown raw")
 
     for name, code in EXPORT_SALES_COMMODITIES.items():
+        start_month = EXPORT_SALES_MY_START_MONTH.get(name, EXPORT_SALES_DEFAULT_MY_START)
+        market_year = _current_market_year(start_month)
         logger.info("Fetching export sales for %s (code %s, MY %d) ...", name, code, market_year)
-        df = fetch_export_sales(code, market_year, country_map)
+        df = fetch_export_sales(code, market_year, country_map, unit_map)
         results[name] = df
         if not df.empty:
             logger.info("  Got %d rows for %s", len(df), name)

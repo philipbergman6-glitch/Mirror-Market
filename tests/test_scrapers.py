@@ -265,19 +265,23 @@ def test_agrural_parse_accepts_accent_stripped_paranagua() -> None:
     assert df["price_brl_mt"].iloc[0] == round((129.50 / 60.0) * 1000.0, 2)
 
 
-def test_agrural_fetch_returns_empty_on_transport_failure(monkeypatch) -> None:
-    """fetch_agrural() must degrade gracefully when the page can't be downloaded."""
+def test_agrural_fetch_returns_failed_on_transport_failure(monkeypatch) -> None:
+    """fetch_agrural() must report failed when the page can't be downloaded."""
     monkeypatch.setattr("fetchers.agrural._fetch_agrural_page", lambda: "")
-    assert fetch_agrural() == {}
+    result = fetch_agrural()
+    assert result.status == "failed"
+    assert result.data == {}
 
 
-def test_agrural_fetch_returns_empty_on_shape_error(monkeypatch) -> None:
-    """Structural change → fetcher returns {} (logged at ERROR), not crash."""
+def test_agrural_fetch_returns_failed_on_shape_error(monkeypatch) -> None:
+    """Structural change → FetchResult.failed (logged at ERROR), not crash."""
     monkeypatch.setattr(
         "fetchers.agrural._fetch_agrural_page",
         lambda: "<html><body><p>maintenance</p></body></html>",
     )
-    assert fetch_agrural() == {}
+    result = fetch_agrural()
+    assert result.status == "failed"
+    assert result.data == {}
 
 
 # ── NCDEX (India Bhav Copy) ─────────────────────────────────────────────────

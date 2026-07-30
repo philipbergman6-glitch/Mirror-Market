@@ -12,6 +12,13 @@ def format() -> str:  # noqa: A001
     if usda_data.empty:
         return "USDA FUNDAMENTALS: No data"
 
+    # Monthly CRUSHED rows would spam the annual YoY table — they get
+    # their own line in the crush section instead.
+    if "stat_category" in usda_data.columns:
+        usda_data = usda_data[usda_data["stat_category"] != "CRUSHED"].copy()
+    if usda_data.empty:
+        return "USDA FUNDAMENTALS: No data"
+
     usda_data["year_int"] = pd.to_numeric(usda_data["year"], errors="coerce")
     usda_data = usda_data.dropna(subset=["year_int"])
 

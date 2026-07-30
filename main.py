@@ -33,7 +33,7 @@ Key concepts for learning:
 import logging
 import sys
 
-from config import setup_logging
+from config import LAYER_MIN_KEYS, MAX_FAILED_LAYERS, setup_logging
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
 from fetchers.conab import fetch_conab_estimates
@@ -42,6 +42,8 @@ from fetchers.eia import fetch_all_eia
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
+from fetchers.gulf_bids import fetch_gulf_bids
+from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
 from fetchers.usda import (
@@ -72,6 +74,7 @@ from pipeline.clean import (
     clean_weather,
     clean_worldbank,
 )
+from pipeline.history import HistoryImportError, export_history, import_history
 from pipeline.query import read_prices
 from pipeline.store import (
     init_database,
@@ -86,7 +89,9 @@ from pipeline.store import (
     save_forward_curve,
     save_fred_data,
     save_freshness,
+    save_gulf_bids,
     save_inspections,
+    save_port_flows,
     save_price_data,
     save_psd_data,
     save_safex,
@@ -103,9 +108,19 @@ logger = logging.getLogger(__name__)
 # main() exits non-zero if any of these fail so CI can fail the deploy.
 CRITICAL_LAYERS = ("prices", "fred")
 
+# Layers deliberately switched off (upstream anti-bot walls) — excluded from
+# the failed-layer count so they don't trip the systemic-outage backstop.
+DISABLED_LAYERS = frozenset({"india_domestic"})
+
+
+# Layers hard-failed during the current run() — transport/parse/shape
+# failures, not quiet empties. Feeds the systemic-outage backstop.
+_HARD_FAILURES: set[str] = set()
+
 
 def _mark_failed(layer: str) -> None:
     """Best-effort 'failed' freshness row — never crashes the pipeline itself."""
+    _HARD_FAILURES.add(layer)
     try:
         save_freshness(layer, status="failed")
     except Exception:
@@ -126,8 +141,41 @@ def _mark_empty(layer: str) -> None:
         logger.exception("Could not record empty-success freshness row for %s", layer)
 
 
+def _finalize_layer(layer: str, data: dict) -> bool:
+    """Record freshness for a dict-of-frames layer; return overall success.
+
+    Applies the per-layer expected-count floor from LAYER_MIN_KEYS: a layer
+    where only 1 of 13 keys returned data is an outage, not a success, so
+    below-floor runs are logged as partial and recorded as failed freshness
+    (which preserves last_success for staleness display). All-empty is
+    recorded as empty-success — unless the layer is critical, where empty
+    and failed are equally unusable.
+    """
+    non_empty = sum(1 for v in data.values() if not v.empty)
+    total_rows = sum(len(v) for v in data.values())
+    floor = LAYER_MIN_KEYS.get(layer, 1)
+
+    if non_empty == 0:
+        logger.warning("[%s] returned no data", layer)
+        if layer in CRITICAL_LAYERS:
+            _mark_failed(layer)
+        else:
+            _mark_empty(layer)
+        return False
+    if non_empty < floor:
+        logger.warning(
+            "[%s] partial: only %d/%d keys returned data (floor %d) — recording as failed",
+            layer, non_empty, len(data), floor,
+        )
+        _mark_failed(layer)
+        return False
+    save_freshness(layer, total_rows)
+    return True
+
+
 def run() -> int:
     setup_logging()
+    _HARD_FAILURES.clear()
 
     logger.info("=" * 60)
     logger.info("  Mirror Market — Data Pipeline")
@@ -142,11 +190,20 @@ def run() -> int:
         "wasde": False, "eia": False, "crush_inspections": False,
         "conab": False,
         "india_domestic": False, "cepea": False, "safex": False,
-        "agrural": False,
+        "agrural": False, "gulf_bids": False,
     }
 
     # ── Initialise database schema ─────────────────────────────────
     init_database()
+
+    # ── Seed snapshot-only history from git-committed CSVs ─────────
+    # Must hard-fail: exporting later from a DB that failed to seed
+    # would overwrite the committed CSVs with today-only data.
+    try:
+        import_history()
+    except HistoryImportError:
+        logger.exception("History import failed — aborting before any export can clobber it")
+        return 1
 
     # ── Layer 1: Commodity Prices ────────────────────────────────
     price_data = {}
@@ -161,12 +218,7 @@ def run() -> int:
         for name, df in price_data.items():
             save_price_data(name, df)
 
-        if any(not df.empty for df in price_data.values()):
-            results["prices"] = True
-            total_rows = sum(len(df) for df in price_data.values())
-            save_freshness("prices", total_rows)
-        else:
-            logger.warning("[Layer 1] All tickers returned empty data")
+        results["prices"] = _finalize_layer("prices", price_data)
     except Exception:
         logger.exception("[Layer 1] Prices failed — see error above")
         _mark_failed("prices")
@@ -224,12 +276,7 @@ def run() -> int:
         for name, series in fred_data.items():
             save_fred_data(name, series)
 
-        if any(not s.empty for s in fred_data.values()):
-            results["fred"] = True
-            total_rows = sum(len(s) for s in fred_data.values())
-            save_freshness("fred", total_rows)
-        else:
-            logger.warning("[Layer 3] FRED returned no data (API key missing?)")
+        results["fred"] = _finalize_layer("fred", fred_data)
     except Exception:
         logger.exception("[Layer 3] FRED failed — see error above")
         _mark_failed("fred")
@@ -247,13 +294,7 @@ def run() -> int:
         for name, df in cot_data.items():
             save_cot_data(name, df)
 
-        if any(not df.empty for df in cot_data.values()):
-            results["cot"] = True
-            total_rows = sum(len(df) for df in cot_data.values())
-            save_freshness("cot", total_rows)
-        else:
-            logger.warning("[Layer 4] COT returned no data")
-            _mark_empty("cot")
+        results["cot"] = _finalize_layer("cot", cot_data)
     except Exception:
         logger.exception("[Layer 4] COT failed — see error above")
         _mark_failed("cot")
@@ -271,13 +312,7 @@ def run() -> int:
         for region, df in weather_data.items():
             save_weather_data(region, df)
 
-        if any(not df.empty for df in weather_data.values()):
-            results["weather"] = True
-            total_rows = sum(len(df) for df in weather_data.values())
-            save_freshness("weather", total_rows)
-        else:
-            logger.warning("[Layer 5] Weather returned no data")
-            _mark_empty("weather")
+        results["weather"] = _finalize_layer("weather", weather_data)
     except Exception:
         logger.exception("[Layer 5] Weather failed — see error above")
         _mark_failed("weather")
@@ -295,13 +330,7 @@ def run() -> int:
         for name, df in psd_data.items():
             save_psd_data(name, df)
 
-        if any(not df.empty for df in psd_data.values()):
-            results["psd"] = True
-            total_rows = sum(len(df) for df in psd_data.values())
-            save_freshness("psd", total_rows)
-        else:
-            logger.warning("[Layer 6] PSD returned no data")
-            _mark_empty("psd")
+        results["psd"] = _finalize_layer("psd", psd_data)
     except Exception:
         logger.exception("[Layer 6] PSD failed — see error above")
         _mark_failed("psd")
@@ -319,13 +348,7 @@ def run() -> int:
         for pair, df in currency_data.items():
             save_currency_data(pair, df)
 
-        if any(not df.empty for df in currency_data.values()):
-            results["currencies"] = True
-            total_rows = sum(len(df) for df in currency_data.values())
-            save_freshness("currencies", total_rows)
-        else:
-            logger.warning("[Layer 7] Currencies returned no data")
-            _mark_empty("currencies")
+        results["currencies"] = _finalize_layer("currencies", currency_data)
     except Exception:
         logger.exception("[Layer 7] Currencies failed — see error above")
         _mark_failed("currencies")
@@ -367,13 +390,7 @@ def run() -> int:
         for name, df in dce_data.items():
             save_dce_futures_data(name, df)
 
-        if any(not df.empty for df in dce_data.values()):
-            results["dce"] = True
-            total_rows = sum(len(df) for df in dce_data.values())
-            save_freshness("dce", total_rows)
-        else:
-            logger.warning("[Layer 9] DCE returned no data")
-            _mark_empty("dce")
+        results["dce"] = _finalize_layer("dce", dce_data)
     except Exception:
         logger.exception("[Layer 9] DCE failed — see error above")
         _mark_failed("dce")
@@ -496,17 +513,27 @@ def run() -> int:
             total_14 += len(crush_df)
 
         # Export inspections (AMS text report)
-        insp_df = fetch_export_inspections()
-        if not insp_df.empty:
+        insp_result = fetch_export_inspections()
+        insp_df = insp_result.data.get("inspections")
+        if insp_df is not None and not insp_df.empty:
             insp_df = clean_inspections(insp_df)
             for commodity in insp_df["commodity"].unique():
                 subset = insp_df[insp_df["commodity"] == commodity]
                 save_inspections(commodity, subset)
             total_14 += len(insp_df)
 
+        # Port-area breakdown (Table C of the same report)
+        flows_df = insp_result.data.get("port_flows")
+        if flows_df is not None and not flows_df.empty:
+            save_port_flows(flows_df)
+            total_14 += len(flows_df)
+
         if total_14 > 0:
             results["crush_inspections"] = True
             save_freshness("crush_inspections", total_14)
+        elif insp_result.status == "failed":
+            logger.error("[Layer 14] Inspections failed: %s", insp_result.error)
+            _mark_failed("crush_inspections")
         else:
             logger.warning("[Layer 14] Crush/inspections returned no data")
             _mark_empty("crush_inspections")
@@ -542,34 +569,47 @@ def run() -> int:
     _mark_empty("india_domestic")
 
     # ── Layer 17: CEPEA Brazil Domestic Soy Spot ──────────────────
-    # DISABLED 2026-05-12: cepea.esalq.usp.br is fronted by a Cloudflare
-    # Turnstile JavaScript challenge that cannot be solved with header
-    # tweaks (HTTP 403 on every URL). Layer last had real data on
-    # 2026-02-20. Re-enable when an alternate Brazil spot source is wired
-    # up (Infosimples, Playwright, or another index). fetchers/cepea.py
-    # is intentionally kept on disk so re-enabling is a one-line revert.
-    logger.info("[Layer 17] CEPEA disabled — Cloudflare Turnstile JS challenge")
-    _mark_empty("cepea")
+    # Re-enabled 2026-07-30 via Notícias Agrícolas, which republishes the
+    # CEPEA/ESALQ indicators server-rendered (cepea.org.br itself is still
+    # behind a Cloudflare Turnstile challenge; fetchers/cepea.py kept on
+    # disk in case the direct source ever reopens).
+    try:
+        logger.info("[Layer 17] Fetching CEPEA indicators via Notícias Agrícolas ...")
+        na_result = fetch_noticias_agricolas()
+
+        if na_result.has_rows:
+            for name, df in na_result.data.items():
+                df = clean_brazil_spot(df)
+                save_brazil_spot(name, df)
+
+            results["cepea"] = True
+            save_freshness("cepea", na_result.total_rows)
+            logger.info("[Layer 17] CEPEA via NA: %d rows saved", na_result.total_rows)
+        else:
+            logger.error("[Layer 17] CEPEA via NA failed: %s", na_result.error)
+            _mark_failed("cepea")
+    except Exception:
+        logger.exception("[Layer 17] CEPEA via NA failed — see error above")
+        _mark_failed("cepea")
 
     # ── Layer 18: JSE SAFEX South Africa Soy Prices ───────────────
     try:
         logger.info("[Layer 18] Fetching JSE SAFEX South Africa soy prices ...")
-        safex_data = fetch_safex()
+        safex_result = fetch_safex()
 
-        if safex_data:
-            for name, df in safex_data.items():
+        if safex_result.has_rows:
+            for name, df in safex_result.data.items():
                 df = clean_safex(df)
                 save_safex(name, df)
 
-            total_18 = sum(len(df) for df in safex_data.values())
             results["safex"] = True
-            save_freshness("safex", total_18)
-            logger.info("[Layer 18] SAFEX: %d rows saved", total_18)
+            save_freshness("safex", safex_result.total_rows)
+            logger.info("[Layer 18] SAFEX: %d rows saved", safex_result.total_rows)
+        elif safex_result.status == "failed":
+            logger.error("[Layer 18] SAFEX failed: %s", safex_result.error)
+            _mark_failed("safex")
         else:
-            logger.warning(
-                "[Layer 18] SAFEX returned no data — page may use JavaScript. "
-                "Check SAFEX_STATS_URL in config.py."
-            )
+            logger.warning("[Layer 18] SAFEX empty: %s", safex_result.error)
             _mark_empty("safex")
     except Exception:
         logger.exception("[Layer 18] SAFEX failed — see error above")
@@ -578,26 +618,48 @@ def run() -> int:
     # ── Layer 19: AgRural Paranaguá FOB Soy Quote ────────────────
     try:
         logger.info("[Layer 19] Fetching AgRural Paranaguá FOB soy quote ...")
-        agrural_data = fetch_agrural()
+        agrural_result = fetch_agrural()
 
-        if agrural_data:
-            for name, df in agrural_data.items():
+        if agrural_result.has_rows:
+            for name, df in agrural_result.data.items():
                 df = clean_brazil_spot(df)
                 save_brazil_spot(name, df)
 
-            total_19 = sum(len(df) for df in agrural_data.values())
             results["agrural"] = True
-            save_freshness("agrural", total_19)
-            logger.info("[Layer 19] AgRural: %d rows saved", total_19)
+            save_freshness("agrural", agrural_result.total_rows)
+            logger.info("[Layer 19] AgRural: %d rows saved", agrural_result.total_rows)
         else:
-            logger.warning(
-                "[Layer 19] AgRural returned no data — page shape may have changed. "
-                "Check AGRURAL_URL in config.py."
-            )
-            _mark_empty("agrural")
+            logger.error("[Layer 19] AgRural failed: %s", agrural_result.error)
+            _mark_failed("agrural")
     except Exception:
         logger.exception("[Layer 19] AgRural failed — see error above")
         _mark_failed("agrural")
+
+    # ── Layer 20: US Gulf Export Basis Bids (AMS 3147) ────────────
+    try:
+        logger.info("[Layer 20] Fetching AMS Gulf export bids ...")
+        gulf_result = fetch_gulf_bids()
+
+        if gulf_result.has_rows:
+            save_gulf_bids(gulf_result.data["gulf_bids"])
+            results["gulf_bids"] = True
+            save_freshness("gulf_bids", gulf_result.total_rows)
+            logger.info("[Layer 20] Gulf bids: %d rows saved", gulf_result.total_rows)
+        else:
+            logger.error("[Layer 20] Gulf bids failed: %s", gulf_result.error)
+            _mark_failed("gulf_bids")
+    except Exception:
+        logger.exception("[Layer 20] Gulf bids failed — see error above")
+        _mark_failed("gulf_bids")
+
+    # ── Export snapshot-only history back to git-committed CSVs ──
+    # Failure exits non-zero so the workflow's commit step never runs
+    # against half-written files (writes are atomic per table anyway).
+    try:
+        export_history()
+    except Exception:
+        logger.exception("History export failed — pipeline exiting with status 1")
+        return 1
 
     # ── Update per-commodity freshness tracking ─────────────────
     try:
@@ -653,6 +715,18 @@ def run() -> int:
         logger.error(
             "Critical layer(s) failed: %s — pipeline exiting with status 1",
             ", ".join(critical_failures),
+        )
+        return 1
+
+    # Systemic-outage backstop: no single non-critical layer fails the run,
+    # but a broad sweep of hard failures (transport/parse — not quiet
+    # empties) means the environment itself is broken (network, DNS,
+    # expired keys) and the deploy should not look green.
+    active_failures = sorted(_HARD_FAILURES - DISABLED_LAYERS)
+    if len(active_failures) > MAX_FAILED_LAYERS:
+        logger.error(
+            "%d active layers failed (threshold %d): %s — pipeline exiting with status 1",
+            len(active_failures), MAX_FAILED_LAYERS, ", ".join(active_failures),
         )
         return 1
     return 0

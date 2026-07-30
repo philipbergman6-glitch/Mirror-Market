@@ -188,7 +188,12 @@ def clean_weather(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.sort_values("Date").reset_index(drop=True)
-    df = df.ffill(limit=3)
+    # is_forecast is a flag, not a measurement — hold it out of the
+    # forward-fill so a gap never inherits a neighboring day's flag.
+    measure_cols = [c for c in df.columns if c != "is_forecast"]
+    df[measure_cols] = df[measure_cols].ffill(limit=3)
+    if "is_forecast" in df.columns:
+        df["is_forecast"] = pd.to_numeric(df["is_forecast"], errors="coerce")
     return df
 
 

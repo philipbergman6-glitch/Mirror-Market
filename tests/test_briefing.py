@@ -334,7 +334,7 @@ def test_near_roll_demotion_reaches_archive_and_display(patched_db, monkeypatch)
     from analysis.briefing import orchestrator
 
     near_roll_signal = {
-        "date": pd.Timestamp("2026-07-01"),  # estimated Soybeans July roll date
+        "date": pd.Timestamp("2026-07-15"),  # estimated Soybeans July roll date (mid-month expiry)
         "commodity": "Soybeans",
         "signal_type": "golden_cross_50_200",
         "severity": "alert",

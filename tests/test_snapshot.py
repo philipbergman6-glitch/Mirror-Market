@@ -51,6 +51,8 @@ def test_empty_db_yields_v2_skeleton_without_raising(patched_db: Path) -> None:
     assert snapshot["yield_curve"] is None
     assert snapshot["cot"] == {}
     assert snapshot["weather"] == {}
+    assert snapshot["port_flows"] == {}
+    assert snapshot["nass_crush"] is None
     # Whole thing must be JSON-native without default=str.
     json.dumps(snapshot)
 
@@ -158,6 +160,118 @@ def test_export_sales_block_aggregates_china_share(patched_db: Path) -> None:
     assert row["china_pct"] == pytest.approx(60.0)
     assert row["top_buyers"][0]["country"].startswith("CHINA")
     assert len(row["top_buyers"]) == 3
+
+
+def test_export_sales_block_soy_pace_fields(patched_db: Path) -> None:
+    conn = sqlite3.connect(str(patched_db))
+    conn.executemany(
+        "INSERT INTO export_sales (commodity, week_ending, country, net_sales,"
+        " weekly_exports, accumulated_exports, outstanding_sales)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("Soybeans", "2026-07-23", "MEXICO", 2e5, 1e5, 40e6, 10e6),
+            ("Soybeans", "2025-07-24", "MEXICO", 1.0, 1.0, 38e6, 1e6),
+            ("Corn", "2026-07-23", "MEXICO", 2e5, 1e5, 40e6, 10e6),
+        ],
+    )
+    conn.execute(
+        "INSERT INTO wasde (commodity, year, attribute, value, unit, reference_period)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        ("SOYBEANS", "2025/26", "Exports", 1660.0, "Million Bushels", "2026-07-15"),
+    )
+    conn.commit()
+    conn.close()
+
+    snapshot = build_snapshot(_empty_briefing())
+    row = snapshot["export_sales"]["Soybeans"]
+
+    assert row["marketing_year"] == "2025/26"
+    assert row["wasde_export_forecast_raw"] == 1660.0
+    assert row["wasde_export_forecast_unit"] == "Million Bushels"
+    assert row["wasde_export_forecast_mt"] == pytest.approx(1660.0 * 1e6 / 36.7437)
+    assert row["yr_ago_week_ending"] == "2025-07-24"
+    assert row["yr_ago_accumulated_exports_mt"] == pytest.approx(38e6)
+    # commitments % is derived downstream, never stored
+    assert "commitments_pct" not in row
+    # non-soybean rows don't get pace fields
+    assert "marketing_year" not in snapshot["export_sales"]["Corn"]
+    json.dumps(snapshot)
+
+
+def test_port_flows_block_stores_region_subtotals(patched_db: Path) -> None:
+    conn = sqlite3.connect(str(patched_db))
+    conn.executemany(
+        "INSERT INTO inspection_port_flows (week_ending, region, port_area,"
+        " commodity, inspections_mt) VALUES (?, ?, ?, ?, ?)",
+        [
+            ("2026-07-24", "GULF", "SUBTOTAL", "Soybeans", 600_000.0),
+            ("2026-07-24", "PACIFIC", "SUBTOTAL", "Soybeans", 300_000.0),
+            # port-level rows must not leak into the block
+            ("2026-07-24", "GULF", "MISSISSIPPI RIVER", "Soybeans", 400_000.0),
+            ("2026-07-17", "GULF", "SUBTOTAL", "Soybeans", 500_000.0),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    snapshot = build_snapshot(_empty_briefing())
+    row = snapshot["port_flows"]["Soybeans"]
+
+    assert row["week_ending"] == "2026-07-24"
+    assert row["regions_mt"] == {"GULF": 600_000.0, "PACIFIC": 300_000.0}
+    assert row["prev_week_ending"] == "2026-07-17"
+    assert row["prev_regions_mt"] == {"GULF": 500_000.0}
+    json.dumps(snapshot)
+
+
+def test_nass_crush_block_and_usda_block_exclusion(patched_db: Path) -> None:
+    conn = sqlite3.connect(str(patched_db))
+    conn.executemany(
+        "INSERT INTO usda (stat_category, year, short_desc, Value, unit_desc,"
+        " state_name, reference_period_desc) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("CRUSHED", "2026", "SOYBEANS - CRUSHED, MEASURED IN TONS",
+             "6,143,000", "TONS", "US TOTAL", "MAY"),
+            ("CRUSHED", "2025", "SOYBEANS - CRUSHED, MEASURED IN TONS",
+             "5,850,000", "TONS", "US TOTAL", "MAY"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    snapshot = build_snapshot(_empty_briefing())
+
+    row = snapshot["nass_crush"]
+    assert row["value"] == 6_143_000.0
+    assert row["unit"] == "TONS"
+    assert row["year"] == 2026
+    assert row["month"] == 5
+    assert row["yoy_pct"] == pytest.approx(5.0085, rel=1e-3)
+    # monthly crush rows must not pollute the annual usda block
+    assert snapshot["usda"] == {}
+    json.dumps(snapshot)
+
+
+def test_psd_highlights_include_argentina(patched_db: Path) -> None:
+    conn = sqlite3.connect(str(patched_db))
+    conn.executemany(
+        "INSERT INTO psd (commodity, country, year, attribute, value, unit)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            ("Soybean Meal", "Argentina", 2026, "Exports", 29_400.0, "(1000 MT)"),
+            ("Soybean Oil", "Argentina", 2026, "Exports", 6_650.0, "(1000 MT)"),
+            ("Soybeans", "Argentina", 2026, "Production", 52_000.0, "(1000 MT)"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    snapshot = build_snapshot(_empty_briefing())
+    highlights = snapshot["psd_highlights"]
+
+    assert highlights["argentina_meal_exports"]["value"] == 29_400.0
+    assert highlights["argentina_oil_exports"]["value"] == 6_650.0
+    assert highlights["argentina_soy_production"]["year"] == 2026
 
 
 def test_wasde_block_keeps_string_marketing_years(patched_db: Path) -> None:

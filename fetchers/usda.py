@@ -35,7 +35,7 @@ from config import (
     USDA_CROP_PROGRESS_COMMODITIES,
 )
 from fetchers._backoff import retry_sleep
-from pipeline.results import ScraperShapeError
+from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
@@ -377,19 +377,124 @@ def _parse_inspections(
     return df
 
 
-def fetch_export_inspections() -> pd.DataFrame:
+# Table C ("BY REGION AND PORT AREA") column order after the port-area
+# field. TOTALS is deliberately not stored.
+_PORT_FLOW_COMMODITIES = (
+    "Wheat", "Rye", "Corn Yellow", "Corn White", "Sorghum", "Soybeans", "Flaxseed",
+)
+_PORT_TABLE_TITLE = "BY REGION AND PORT AREA"
+_PORT_NUM_RE = re.compile(r"^[\d,]+$")
+
+
+def _parse_port_flows(text: str) -> pd.DataFrame:
+    """Parse WA_GR101 Table C — grain export inspections by region and port area.
+
+    The table gives each port area's weekly inspected tonnage per grain
+    (METRIC TONS), with a SUBTOTAL row per region (GULF, PACIFIC, ...) —
+    the free US export-flow breakdown a physical buyer reads as "how much
+    moved through the Gulf vs the PNW this week". SUBTOTAL rows are stored
+    with ``port_area='SUBTOTAL'``; the grand TOTAL row is dropped.
+
+    Returns columns: ``week_ending``, ``region``, ``port_area``,
+    ``commodity``, ``inspections_mt``. Raises ScraperShapeError on any
+    structural mismatch.
+    """
+    lines = text.splitlines()
+
+    title_idx = None
+    for i, line in enumerate(lines):
+        if _PORT_TABLE_TITLE in line.upper():
+            title_idx = i
+            break
+    if title_idx is None:
+        raise ScraperShapeError(
+            f"AMS inspections: no '{_PORT_TABLE_TITLE}' table title found"
+        )
+
+    week_ending = None
+    for line in lines[title_idx + 1: title_idx + 4]:
+        m = re.search(r"WEEK ENDING\s+([A-Z]{3}\s+\d{1,2},\s+\d{4})", line.upper())
+        if m:
+            week_ending = datetime.strptime(m.group(1), "%b %d, %Y").date().isoformat()
+            break
+    if week_ending is None:
+        raise ScraperShapeError(
+            "AMS inspections: port-area table has no 'WEEK ENDING' date line"
+        )
+
+    header_idx = None
+    for i in range(title_idx + 1, min(title_idx + 10, len(lines))):
+        if "REGION" in lines[i] and "PORT AREA" in lines[i]:
+            header_idx = i
+            break
+    if header_idx is None:
+        raise ScraperShapeError(
+            "AMS inspections: port-area table header 'REGION  PORT AREA' not found"
+        )
+
+    rows: list[dict[str, object]] = []
+    region = ""
+    for raw_line in lines[header_idx + 1:]:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("-"):
+            continue
+
+        # Fields are separated by runs of 2+ spaces; single spaces stay
+        # inside a field ("MISSISSIPPI R.", "ST LAWR SWY"). The region
+        # field only appears on the first row of its group; continuation
+        # and SUBTOTAL rows split with a leading empty field.
+        fields = re.split(r"\s{2,}", raw_line.rstrip())
+        if len(fields) < 3:
+            continue
+        if fields[0]:
+            region = fields[0]
+        port_area = fields[1]
+        values = fields[2:]
+        if port_area == "TOTAL":
+            break
+
+        if not all(_PORT_NUM_RE.match(v) for v in values):
+            continue
+        if len(values) != len(_PORT_FLOW_COMMODITIES) + 1:  # +1 for TOTALS
+            raise ScraperShapeError(
+                f"AMS inspections: port row '{stripped}' has {len(values)} numeric "
+                f"columns, expected {len(_PORT_FLOW_COMMODITIES) + 1}"
+            )
+
+        for commodity, token in zip(_PORT_FLOW_COMMODITIES, values, strict=False):
+            rows.append({
+                "week_ending": week_ending,
+                "region": region,
+                "port_area": port_area,
+                "commodity": commodity,
+                "inspections_mt": float(token.replace(",", "")),
+            })
+
+    if not rows:
+        raise ScraperShapeError(
+            "AMS inspections: port-area table header located but no data rows"
+        )
+    return pd.DataFrame(rows)
+
+
+def fetch_export_inspections() -> FetchResult:
     """Fetch the weekly USDA AMS grain export inspections report.
 
-    Returns a DataFrame with ``commodity``, ``week_ending``,
-    ``inspections_mt``. Returns an empty DataFrame when the report
-    cannot be downloaded or the upstream layout has changed.
+    Returns ``FetchResult.ok`` with two frames:
+    ``data['inspections']`` — commodity, week_ending, inspections_mt
+    (national weekly totals) and ``data['port_flows']`` — week_ending,
+    region, port_area, commodity, inspections_mt (Table C breakdown; may
+    be absent if only that table's layout changed). Transport failure or
+    a stale/misshapen main table is ``FetchResult.failed``.
     """
+    resp = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info("Fetching AMS export inspections (attempt %d) ...", attempt)
             resp = requests.get(INSPECTIONS_URL, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
             logger.warning("Inspections attempt %d failed: %s", attempt, exc)
+            resp = None
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
             continue
@@ -399,18 +504,30 @@ def fetch_export_inspections() -> pd.DataFrame:
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
                 continue
-            return pd.DataFrame()
+            return FetchResult.failed(f"AMS inspections: HTTP {resp.status_code}")
+        break
 
-        try:
-            df = _parse_inspections(resp.text)
-        except ScraperShapeError as exc:
-            logger.error("AMS inspections: shape changed — %s", exc)
-            return pd.DataFrame()
+    if resp is None or resp.status_code != 200:
+        return FetchResult.failed("AMS inspections: download failed after retries")
 
-        logger.info("Parsed %d inspection rows.", len(df))
-        return df
+    try:
+        df = _parse_inspections(resp.text)
+    except ScraperShapeError as exc:
+        logger.error("AMS inspections: shape changed — %s", exc)
+        return FetchResult.failed(str(exc))
 
-    return pd.DataFrame()
+    data = {"inspections": df}
+    try:
+        data["port_flows"] = _parse_port_flows(resp.text)
+    except ScraperShapeError as exc:
+        # Port table is supplementary — losing it degrades, not fails.
+        logger.error("AMS inspections: port-area table unparseable — %s", exc)
+
+    logger.info(
+        "Parsed %d inspection rows, %d port-flow rows.",
+        len(df), len(data.get("port_flows", ())),
+    )
+    return FetchResult.ok(data)
 
 
 # ── Quick self-test ─────────────────────────────────────────────────

@@ -37,6 +37,24 @@ def setup_logging(level=logging.INFO):
 # ---------------------------------------------------------------------------
 REQUEST_TIMEOUT = 30    # seconds — used by every fetcher's HTTP calls
 MAX_RETRIES = 3         # how many times to retry a failed request
+
+# Minimum non-empty keys for a multi-key layer to count as fully healthy.
+# Below the floor the layer is recorded as failed freshness ("partial") —
+# 1 of 13 currencies is an outage, not a success. Layers not listed here
+# succeed with any non-empty key.
+LAYER_MIN_KEYS = {
+    "prices": 8,       # of 11 tickers
+    "currencies": 10,  # of 13 pairs
+    "fred": 8,         # of 10 series
+    "weather": 18,     # of 24 regions
+    "cot": 7,          # of 10 commodities
+    "psd": 5,          # of 8 commodities
+    "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
+}
+
+# Systemic-outage backstop: exit non-zero when more than this many active
+# (non-disabled) layers fail in one run, even if the critical layers passed.
+MAX_FAILED_LAYERS = 5
 RETRY_DELAY = 2         # seconds between retries
 
 # ---------------------------------------------------------------------------
@@ -280,10 +298,16 @@ CURRENCY_TICKERS = {
 
 # ---------------------------------------------------------------------------
 # Layer 8 — World Bank Pink Sheet (monthly Robusta, Palm Oil, etc.)
+# The xlsx deep link contains a GUID that rotates yearly, and stale links
+# keep returning HTTP 200 with frozen data (the 2025 GUID silently served
+# Dec-2025 data through mid-2026). The fetcher therefore resolves the
+# current link from the landing page first; WORLDBANK_PRICES_URL is only
+# the fallback when the landing page is unreachable.
 # ---------------------------------------------------------------------------
+WORLDBANK_CMO_LANDING_URL = "https://www.worldbank.org/en/research/commodity-markets"
 WORLDBANK_PRICES_URL = (
     "https://thedocs.worldbank.org/en/doc/"
-    "18675f1d1639c7a34d463f59263ba0a2-0050012025/related/"
+    "74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/"
     "CMO-Historical-Data-Monthly.xlsx"
 )
 
@@ -297,6 +321,11 @@ DCE_CONTRACTS = {
     "DCE Soybean Oil":  "Y0",   # Soybean Oil continuous
     "DCE Palm Oil":     "P0",   # Palm Oil continuous
     "DCE Corn":         "C0",   # Corn continuous — China feed demand
+    # CZCE rapeseed complex — same Sina feed, different exchange. The only
+    # free *daily* rapeseed benchmark (Matif ECO has no free feed);
+    # substitute-oil signal for the soy oil book.
+    "CZCE Rapeseed Oil":  "OI0",  # Rapeseed Oil continuous
+    "CZCE Rapeseed Meal": "RM0",  # Rapeseed Meal continuous
 }
 
 # ---------------------------------------------------------------------------
@@ -321,6 +350,16 @@ EXPORT_SALES_COMMODITIES = {
     "Wheat":        "107",   # ESR name: "All Wheat"
     "Cotton":       "1404",  # ESR name: "All Upland Cotton"
 }
+
+# Marketing-year start month per ESR commodity. Requesting every commodity
+# with the September grain year is wrong for part of the calendar: wheat's
+# MY starts Jun 1 and cotton's Aug 1, so from June/August onward those two
+# must roll to the next market year before the soy complex does.
+EXPORT_SALES_MY_START_MONTH = {
+    "Wheat": 6,
+    "Cotton": 8,
+}
+EXPORT_SALES_DEFAULT_MY_START = 9
 
 # ---------------------------------------------------------------------------
 # Layer 11 — Forward Curve (individual contract months via yfinance)
@@ -383,13 +422,34 @@ WASDE_BACKFILL_MONTHS = 12
 # contain multiple sub-tables stacked vertically; `header_text` is the
 # col-0 label that marks the start of the section. None means "the entire
 # sheet is one table" (Wheat and Cotton each have their own page).
+# "sheet" is only a fast-path hint — the parser locates each table by its
+# "title" text (e.g. "U.S. Wheat Supply and Use"), so a USDA repagination
+# (tables drifting to a different "Page N") doesn't silently break parsing.
 WASDE_LAYOUT = {
-    "WHEAT":        {"sheet": "Page 11", "header_text": None},
-    "CORN":         {"sheet": "Page 12", "header_text": "CORN"},
-    "SOYBEANS":     {"sheet": "Page 15", "header_text": "SOYBEANS"},
-    "SOYBEAN_OIL":  {"sheet": "Page 15", "header_text": "SOYBEAN OIL"},
-    "SOYBEAN_MEAL": {"sheet": "Page 15", "header_text": "SOYBEAN MEAL"},
-    "COTTON":       {"sheet": "Page 17", "header_text": None},
+    "WHEAT": {
+        "sheet": "Page 11", "header_text": None,
+        "title": "U.S. Wheat Supply and Use",
+    },
+    "CORN": {
+        "sheet": "Page 12", "header_text": "CORN",
+        "title": "U.S. Feed Grain and Corn Supply and Use",
+    },
+    "SOYBEANS": {
+        "sheet": "Page 15", "header_text": "SOYBEANS",
+        "title": "U.S. Soybeans and Products Supply and Use",
+    },
+    "SOYBEAN_OIL": {
+        "sheet": "Page 15", "header_text": "SOYBEAN OIL",
+        "title": "U.S. Soybeans and Products Supply and Use",
+    },
+    "SOYBEAN_MEAL": {
+        "sheet": "Page 15", "header_text": "SOYBEAN MEAL",
+        "title": "U.S. Soybeans and Products Supply and Use",
+    },
+    "COTTON": {
+        "sheet": "Page 17", "header_text": None,
+        "title": "U.S. Cotton Supply and Use",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -459,7 +519,7 @@ NCDEX_SOY_SYMBOLS = {
 NCDEX_UNIT_MULTIPLIER = {
     "Soybean (NCDEX)":     10.0,
     "Soybean Oil (NCDEX)": 100.0,
-    "Soybean Meal (NCDEX)": 1.0,
+    "Soybean Meal (NCDEX)": 10.0,  # Rs/quintal → INR/MT, same as beans
 }
 
 # ---------------------------------------------------------------------------
@@ -469,6 +529,34 @@ NCDEX_UNIT_MULTIPLIER = {
 # ---------------------------------------------------------------------------
 CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
 CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
+
+# cepea.org.br itself sits behind a Cloudflare Turnstile challenge
+# (2026-05). Notícias Agrícolas republishes the same CEPEA/ESALQ
+# indicators server-rendered — this is the active Layer 17 source.
+# Appending /YYYY-MM-DD to a URL returns that date's page (~10 sessions
+# per page), which is how the backfill script walks the gap.
+# Commodity keys reuse the historical names so stored history continues.
+NOTICIAS_AGRICOLAS_URLS = {
+    # CEPEA/ESALQ Paraná — the classic farm-gate CEPEA soy indicator
+    "Soybean (CEPEA)": (
+        "https://www.noticiasagricolas.com.br/cotacoes/soja/"
+        "indicador-cepea-esalq-soja-parana"
+    ),
+    # ESALQ/B3 Paranaguá — port-side indicator, cross-check for AgRural FOB
+    "Soybean (ESALQ/B3 Paranaguá)": (
+        "https://www.noticiasagricolas.com.br/cotacoes/soja/"
+        "soja-indicador-cepea-esalq-porto-paranagua"
+    ),
+}
+
+# ---------------------------------------------------------------------------
+# Layer 20 — US Gulf export basis bids (USDA AMS report 3147, no API key)
+# Daily "Louisiana and Texas Export Bids" PDF — CIF Gulf (NOLA barge)
+# export-elevator bids for soybeans/corn/wheat, basis in cents/bu over the
+# named CBOT contract. The legacy mnreports .txt grain bid endpoints froze
+# in 2020-2022 after the MARS migration; this PDF is the live keyless feed.
+# ---------------------------------------------------------------------------
+AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 
 # ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)
@@ -507,6 +595,31 @@ WEATHER_HEAVY_RAIN_MM = 20      # mm precipitation to flag
 WEATHER_EXTREME_HEAT_C = 38     # degrees C to flag as crop stress
 WEATHER_DRY_THRESHOLD_MM = 1    # below this = "dry conditions"
 
+# Agronomic alerting (observed rows only — forecast rows are excluded)
+# Pod-fill heat stress: soy yield loss starts well below the generic 38C
+# extreme-heat bar. During pod fill, sustained days >34C abort pods.
+WEATHER_POD_FILL_HEAT_C = 34
+# Soy regions with their pod-fill months (US: Jul-Aug; South America: Jan-Feb).
+# Keys must match GROWING_REGIONS names.
+WEATHER_SOY_POD_FILL_MONTHS = {
+    "US Midwest (Iowa)":   (7, 8),
+    "US Illinois":         (7, 8),
+    "Brazil Mato Grosso":  (1, 2),
+    "Brazil Parana":       (1, 2),
+    "Argentina Pampas":    (1, 2),
+    "Argentina Cordoba":   (1, 2),
+    "Paraguay Chaco":      (1, 2),
+}
+# Consecutive-dry-day spell: days with precip < WEATHER_DRY_THRESHOLD_MM.
+WEATHER_DRY_SPELL_ALERT_DAYS = 10
+# 30-day precipitation deficit vs the region's trailing norm. The norm is the
+# mean daily precip over the baseline window immediately preceding the 30-day
+# window; we require a minimum number of baseline days before trusting it.
+WEATHER_PRECIP_DEFICIT_WINDOW_DAYS = 30
+WEATHER_PRECIP_DEFICIT_BASELINE_DAYS = 90
+WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS = 45
+WEATHER_PRECIP_DEFICIT_ALERT_PCT = 40   # alert when 30d total ≥40% below norm
+
 # Data freshness: warn if a layer hasn't updated in this many days
 FRESHNESS_WARNING_DAYS = 7
 
@@ -515,6 +628,12 @@ FRESHNESS_WARNING_DAYS = 7
 # ---------------------------------------------------------------------------
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data", "storage")
 DB_PATH = os.path.join(STORAGE_DIR, "mirror_market.db")
+
+# Git-committed CSV snapshots of snapshot-only tables (AgRural, SAFEX,
+# forward curve, ...). CI runs on an ephemeral DB; these files are the
+# persistence layer — imported at pipeline start, exported at pipeline end,
+# committed back to the repo by the workflow. See pipeline/history.py.
+HISTORY_DIR = os.path.join(os.path.dirname(__file__), "data", "history")
 
 # ---------------------------------------------------------------------------
 # Cloud Database (Turso — hosted SQLite)

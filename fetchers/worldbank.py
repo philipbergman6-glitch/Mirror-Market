@@ -15,11 +15,12 @@ Key concepts for learning:
 """
 
 import logging
+import re
 
 import pandas as pd
 import requests
 
-from config import MAX_RETRIES, WORLDBANK_PRICES_URL
+from config import MAX_RETRIES, WORLDBANK_CMO_LANDING_URL, WORLDBANK_PRICES_URL
 from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
@@ -40,15 +41,51 @@ _WB_COMMODITY_MAP = {
     "Soybeans":         "Soybeans",
     "Soybean oil":      "Soybean Oil",
     "Soybean meal":     "Soybean Meal",
+    # Substitute-oil benchmarks — no free daily futures feed exists for
+    # Matif rapeseed or sunflower oil, so the Pink Sheet monthly $/mt
+    # series are the implementable route.
+    "Rapeseed oil":     "Rapeseed Oil",
+    "Sunflower oil":    "Sunflower Oil",
 }
+
+_CMO_XLSX_LINK_RE = re.compile(
+    r"https://thedocs\.worldbank\.org/[^\"' ]*CMO-Historical-Data-Monthly\.xlsx"
+)
+
+
+def _resolve_pink_sheet_url() -> str:
+    """Resolve the current Pink Sheet xlsx link from the CMO landing page.
+
+    The deep link's GUID rotates yearly and old links keep serving stale
+    data with HTTP 200, so the landing page is the only reliable pointer.
+    Falls back to the pinned WORLDBANK_PRICES_URL when unreachable.
+    """
+    try:
+        resp = requests.get(
+            WORLDBANK_CMO_LANDING_URL,
+            timeout=60,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        resp.raise_for_status()
+        match = _CMO_XLSX_LINK_RE.search(resp.text)
+        if match:
+            url = match.group(0)
+            if url != WORLDBANK_PRICES_URL:
+                logger.info("Pink Sheet link resolved from landing page: %s", url)
+            return url
+        logger.warning("CMO landing page had no Monthly xlsx link — using pinned URL")
+    except requests.RequestException as exc:
+        logger.warning("CMO landing page unreachable (%s) — using pinned URL", exc)
+    return WORLDBANK_PRICES_URL
 
 
 def _download_pink_sheet() -> bytes:
     """Download the Pink Sheet xlsx file, return raw bytes."""
+    url = _resolve_pink_sheet_url()
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info("Downloading World Bank Pink Sheet ...")
-            resp = requests.get(WORLDBANK_PRICES_URL, timeout=60)
+            resp = requests.get(url, timeout=60)
             resp.raise_for_status()
             logger.info("Pink Sheet downloaded (%d KB)", len(resp.content) // 1024)
             return resp.content
@@ -211,7 +248,23 @@ def fetch_worldbank_prices() -> dict[str, pd.DataFrame]:
     if not raw_bytes:
         return {}
 
-    return _parse_pink_sheet(raw_bytes)
+    results = _parse_pink_sheet(raw_bytes)
+
+    # Stale-file guard: a rotated-away GUID keeps serving old data with
+    # HTTP 200, so check the newest month actually present.
+    latest = max(
+        (df["Date"].max() for df in results.values() if not df.empty),
+        default=None,
+    )
+    if latest is not None:
+        age_days = (pd.Timestamp.today() - latest).days
+        if age_days > 100:
+            logger.error(
+                "Pink Sheet data ends %s (%d days ago) — the download link "
+                "is probably a stale GUID; check WORLDBANK_CMO_LANDING_URL",
+                latest.strftime("%Y-%m"), age_days,
+            )
+    return results
 
 
 # ── Quick self-test ─────────────────────────────────────────────────

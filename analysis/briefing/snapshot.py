@@ -32,11 +32,22 @@ from typing import Any
 import pandas as pd
 
 from analysis.briefing.sections.cot import _LOOKBACK as _COT_LOOKBACK
+from analysis.briefing.sections.export_sales import (
+    soy_marketing_year,
+    wasde_soy_export_forecast,
+    year_ago_accumulated,
+)
 from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
+from analysis.briefing.sections.weather import (
+    consecutive_dry_days,
+    observed_only,
+    precip_deficit_30d,
+)
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
 from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
+from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal
 from analysis.spreads import compute_brazil_basis, compute_crush_spread
 from analysis.stocks_to_use import (
@@ -56,7 +67,9 @@ from pipeline.query import (
     read_eia_data,
     read_export_sales,
     read_forward_curve,
+    read_gulf_bids,
     read_inspections,
+    read_port_flows,
     read_psd,
     read_usda,
     read_wasde,
@@ -85,6 +98,10 @@ _PSD_HIGHLIGHTS = {
     "china_soy_imports": ("Soybeans", "China", "Imports"),
     "us_soy_production": ("Soybeans", "United States", "Production"),
     "indonesia_palm_production": ("Palm Oil", "Indonesia", "Production"),
+    # Argentina — #1 soymeal/oil exporter.
+    "argentina_soy_production": ("Soybeans", "Argentina", "Production"),
+    "argentina_meal_exports": ("Soybean Meal", "Argentina", "Exports"),
+    "argentina_oil_exports": ("Soybean Oil", "Argentina", "Exports"),
 }
 
 _CORRELATION_CURRENCY_PAIRS = (
@@ -279,6 +296,9 @@ def _usda_block() -> dict[str, dict[str, Any]]:
     if usda.empty or "year" not in usda.columns:
         return {}
     usda = usda.copy()
+    # Monthly CRUSHED rows live in the nass_crush block, not the annual table.
+    if "stat_category" in usda.columns:
+        usda = usda[usda["stat_category"] != "CRUSHED"]
     usda["year_int"] = pd.to_numeric(usda["year"], errors="coerce")
     years = sorted(usda["year_int"].dropna().unique())
     if not years:
@@ -405,7 +425,7 @@ def _export_sales_block() -> dict[str, dict[str, Any]]:
         if total_net not in (None, 0) and china_net is not None:
             china_pct = china_net / total_net * 100
         buyers = week_data[week_data["net_sales"].notna()].nlargest(3, "net_sales")
-        out[str(commodity)] = {
+        entry: dict[str, Any] = {
             "week_ending": _date_str(week),
             "total_net_sales_mt": total_net,
             "total_exports_mt": _num(week_data["weekly_exports"].sum()),
@@ -418,7 +438,92 @@ def _export_sales_block() -> dict[str, dict[str, Any]]:
                 for _, r in buyers.iterrows()
             ],
         }
+        if str(commodity) == "Soybeans":
+            entry.update(
+                _safe("export_sales.pace", partial(_soy_pace_fields, subset, week), {})
+            )
+        out[str(commodity)] = entry
     return out
+
+
+def _soy_pace_fields(subset: pd.DataFrame, week: Any) -> dict[str, Any]:
+    """Raw pace inputs for soybeans — commitments % stays derived downstream."""
+    week_ts = pd.Timestamp(week)
+    my = soy_marketing_year(week_ts)
+    forecast = wasde_soy_export_forecast(my)
+    yr_ago = year_ago_accumulated(subset, week_ts)
+    return {
+        "marketing_year": my,
+        "wasde_export_forecast_mt": _num(forecast["value_mt"]),
+        "wasde_export_forecast_raw": _num(forecast["raw_value"]),
+        "wasde_export_forecast_unit": forecast["unit"],
+        "yr_ago_week_ending": _date_str(yr_ago["week_ending"]),
+        "yr_ago_accumulated_exports_mt": _num(yr_ago["accumulated_mt"]),
+    }
+
+
+def _gulf_bids_block() -> dict[str, Any]:
+    bids = read_gulf_bids("Soybeans")
+    if bids.empty:
+        return {}
+    latest_date = bids["report_date"].max()
+    latest = bids[bids["report_date"] == latest_date]
+    return {
+        "report_date": str(latest_date.date()),
+        "deliveries": {
+            str(row["delivery"]): {
+                "basis_low_cents_bu": _num(row["basis_low"]),
+                "basis_high_cents_bu": _num(row["basis_high"]),
+                "futures_month": int(row["futures_month"]),
+                "avg_price_usd_bu": _num(row["average"]),
+                "year_ago_usd_bu": _num(row["year_ago"]),
+            }
+            for _, row in latest.iterrows()
+        },
+    }
+
+
+def _port_flows_block() -> dict[str, dict[str, Any]]:
+    flows = read_port_flows()
+    if flows.empty or "port_area" not in flows.columns:
+        return {}
+    subtotals = flows[flows["port_area"] == "SUBTOTAL"]
+    if subtotals.empty:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for commodity, subset in subtotals.groupby("commodity"):
+        weeks = sorted(subset["week_ending"].dropna().unique())
+        if not weeks:
+            continue
+
+        def regions_mt(week: Any, *, subset: pd.DataFrame = subset) -> dict[str, float | None]:
+            rows = subset[subset["week_ending"] == week]
+            return {
+                str(region): _num(rows_r["inspections_mt"].sum())
+                for region, rows_r in rows.groupby("region")
+            }
+
+        latest, prev = weeks[-1], weeks[-2] if len(weeks) >= 2 else None
+        out[str(commodity)] = {
+            "week_ending": _date_str(latest),
+            "regions_mt": regions_mt(latest),
+            "prev_week_ending": _date_str(prev) if prev is not None else None,
+            "prev_regions_mt": regions_mt(prev) if prev is not None else None,
+        }
+    return out
+
+
+def _nass_crush_block() -> dict[str, Any] | None:
+    crush = latest_crush()
+    if not crush:
+        return None
+    return {
+        "value": _num(crush["value"]),
+        "unit": crush["unit"] or None,
+        "year": crush["year"],
+        "month": crush["month"],
+        "yoy_pct": _num(crush["yoy_pct"]),
+    }
 
 
 def _inspections_block() -> dict[str, dict[str, Any]]:
@@ -596,15 +701,28 @@ def _weather_block() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for region, subset in weather.groupby("region"):
         subset = subset.sort_values("Date")
-        latest = subset.iloc[-1]
+        # Forecast rows are model output, not readings — latest values,
+        # z-scores, and agronomic aggregates all run on observed rows only
+        # (NULL is_forecast = observed, pre-flag data).
+        observed = observed_only(subset)
+        if observed.empty:
+            continue
+        latest = observed.iloc[-1]
         latest_date = latest["Date"]
+        total_30d, deficit_pct = precip_deficit_30d(observed)
         out[str(region)] = {
             "date": _date_str(latest_date),
             "precipitation_mm": _num(latest.get("precipitation")),
             "temp_max_c": _num(latest.get("temp_max")),
             "temp_min_c": _num(latest.get("temp_min")),
-            "precip_z90d": trailing_zscore(subset, "precipitation", latest_date, _WEATHER_LOOKBACK),
-            "temp_max_z90d": trailing_zscore(subset, "temp_max", latest_date, _WEATHER_LOOKBACK),
+            "precip_z90d": trailing_zscore(
+                observed, "precipitation", latest_date, _WEATHER_LOOKBACK
+            ),
+            "temp_max_z90d": trailing_zscore(observed, "temp_max", latest_date, _WEATHER_LOOKBACK),
+            "consecutive_dry_days": consecutive_dry_days(observed),
+            "precip_30d_mm": _num(total_30d),
+            "precip_30d_deficit_pct": _num(deficit_pct),
+            "forecast_days": int(len(subset) - len(observed)),
         }
     return out
 
@@ -702,6 +820,9 @@ def _seasonal_block(price_data: dict[str, pd.DataFrame]) -> dict[str, dict[str, 
             "seasonal_avg": _num(result.get("seasonal_avg")),
             "deviation_pct": _num(result.get("deviation_pct")),
             "n_years": int(result["n_years"]) if result.get("n_years") else None,
+            "current_dev_pct": _num(result.get("current_dev_pct")),
+            "seasonal_dev_pct": _num(result.get("seasonal_dev_pct")),
+            "detrended_delta_pct": _num(result.get("detrended_delta_pct")),
         }
     return out
 
@@ -736,6 +857,9 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "stocks_to_use": _safe("stocks_to_use", _stocks_to_use_block, {}),
         "export_sales": _safe("export_sales", _export_sales_block, {}),
         "inspections": _safe("inspections", _inspections_block, {}),
+        "port_flows": _safe("port_flows", _port_flows_block, {}),
+        "gulf_bids": _safe("gulf_bids", _gulf_bids_block, {}),
+        "nass_crush": _safe("nass_crush", _nass_crush_block, None),
         "dce": _safe("dce", lambda: _dce_block(data.price_data), {}),
         "forward_curve": _safe("forward_curve", _forward_curve_block, {}),
         "eia": _safe("eia", _eia_block, {}),
