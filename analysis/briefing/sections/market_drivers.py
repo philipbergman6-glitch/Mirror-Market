@@ -8,7 +8,12 @@ indicators applied) produced by the prices section.
 import pandas as pd
 
 from analysis.forward_curve import analyze_curve
-from config import RSI_OVERBOUGHT, WEATHER_EXTREME_HEAT_C, WEATHER_HEAVY_RAIN_MM
+from config import (
+    RSI_OVERBOUGHT,
+    RSI_OVERSOLD,
+    WEATHER_EXTREME_HEAT_C,
+    WEATHER_HEAVY_RAIN_MM,
+)
 from pipeline.query import (
     read_brazil_estimates,
     read_cot,
@@ -61,7 +66,7 @@ def format(  # noqa: A001
                             f"Crowded long in {commodity}: Specs net long {spec_net:,.0f} contracts "
                             f"AND RSI at {rsi_val:.0f} — reversal risk elevated"
                         )
-                    elif spec_net < 0 and rsi_val < 30:
+                    elif spec_net < 0 and rsi_val < RSI_OVERSOLD:
                         drivers.append(
                             f"Crowded short in {commodity}: Specs net short {abs(spec_net):,.0f} contracts "
                             f"AND RSI at {rsi_val:.0f} — short squeeze risk"

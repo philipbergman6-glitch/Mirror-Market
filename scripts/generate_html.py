@@ -120,10 +120,23 @@ def _build_freshness_items() -> list[dict]:
     for _, row in freshness.iterrows():
         layer = row["layer_name"]
         last = row["last_success"]
+        row_status = str(row.get("status") or "success")
+
+        # An intentionally disabled layer must not read as fresh or as an
+        # outage — it gets its own bucket and is excluded from counts.
+        if row_status == "disabled":
+            items.append({"name": layer, "status": "disabled", "age": "disabled"})
+            continue
+
         if pd.notna(last):
             last_dt = pd.to_datetime(last, utc=True)
             age = now - last_dt
-            if age < timedelta(days=1):
+            if row_status == "failed":
+                # Last run failed: show the age of the last GOOD run, never
+                # a green badge — the old code rendered a dead layer "0h ago".
+                status = "old"
+                age_str = f"failed · last good {age.days}d ago"
+            elif age < timedelta(days=1):
                 status = "fresh"
                 age_str = f"{int(age.total_seconds() // 3600)}h ago"
             elif age < timedelta(days=7):
@@ -134,19 +147,24 @@ def _build_freshness_items() -> list[dict]:
                 age_str = f"{age.days}d ago"
         else:
             status = "old"
-            age_str = "never"
+            age_str = "failed · never succeeded" if row_status == "failed" else "never"
         items.append({"name": layer, "status": status, "age": age_str})
     return items
 
 
 def _build_masthead(freshness_items: list[dict], now: datetime) -> dict:
-    """Masthead meta: date line, freshness counts, stale-layer note."""
-    fresh = [i for i in freshness_items if i["status"] == "fresh"]
-    stale = [i for i in freshness_items if i["status"] != "fresh"]
+    """Masthead meta: date line, freshness counts, stale-layer note.
+
+    Disabled layers are excluded from both numerator and denominator so
+    "N/M layers fresh" only describes layers that are supposed to run.
+    """
+    active = [i for i in freshness_items if i["status"] != "disabled"]
+    fresh = [i for i in active if i["status"] == "fresh"]
+    stale = [i for i in active if i["status"] != "fresh"]
     return {
         "day_line": now.strftime("%A · %-d %B %Y"),
         "fresh_count": len(fresh),
-        "total_layers": len(freshness_items),
+        "total_layers": len(active),
         "stale_layers": stale,
     }
 
@@ -493,20 +511,24 @@ def _build_emerging_markets(data: dict) -> str:
         # Brazil domestic
         dom_brazil = info.get("brazil_domestic", {})
         if dom_brazil:
-            parts.append('<div class="subhdr" style="font-size:14px;">CEPEA Farm-Gate Price</div>')
             brl = dom_brazil.get("cepea_soy_brl")
             usd = dom_brazil.get("cepea_soy_usd")
             basis = dom_brazil.get("brazil_cbot_basis_usd")
-            cards = ['<div class="grid grid-3">']
-            if brl:
-                cards.append(f'<div class="mc"><div class="mc-label">CEPEA Soybean</div><div class="mc-val">R${brl:,.2f}</div><div class="mc-delta muted">BRL/MT</div></div>')
-            if usd:
-                cards.append(f'<div class="mc"><div class="mc-label">CEPEA (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
-            if basis is not None:
-                bc = "up" if basis > 0 else "down"
-                cards.append(f'<div class="mc"><div class="mc-label">Brazil-CBOT Basis</div><div class="mc-val {bc}">${basis:+,.1f}</div><div class="mc-delta muted">{"premium" if basis > 0 else "discount"}</div></div>')
-            cards.append('</div>')
-            parts.append("\n".join(cards))
+            # Only render the CEPEA block when CEPEA actually has values —
+            # AgRural populates the same dict, and an unconditional header
+            # left "CEPEA Farm-Gate Price" hanging over nothing.
+            if brl or usd or basis is not None:
+                parts.append('<div class="subhdr" style="font-size:14px;">CEPEA Farm-Gate Price</div>')
+                cards = ['<div class="grid grid-3">']
+                if brl:
+                    cards.append(f'<div class="mc"><div class="mc-label">CEPEA Soybean</div><div class="mc-val">R${brl:,.2f}</div><div class="mc-delta muted">BRL/MT</div></div>')
+                if usd:
+                    cards.append(f'<div class="mc"><div class="mc-label">CEPEA (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+                if basis is not None:
+                    bc = "up" if basis > 0 else "down"
+                    cards.append(f'<div class="mc"><div class="mc-label">Brazil-CBOT Basis</div><div class="mc-val {bc}">${basis:+,.1f}</div><div class="mc-delta muted">{"premium" if basis > 0 else "discount"}</div></div>')
+                cards.append('</div>')
+                parts.append("\n".join(cards))
 
             # AgRural Paranaguá FOB — USD/MT only (raw BRL/saca is not redistributable
             # under AgRural terms; the derived USD basis is the publishable figure).
@@ -591,11 +613,15 @@ def _build_relative_value(data: dict) -> str:
             fig = build_basis_chart(basis, primary_stats)
             cur = primary_stats.get("current_usd_mt", 0.0)
             direction = primary_stats.get("direction", "")
-            avg = primary_stats.get("avg_1y", 0.0)
-            pct = primary_stats.get("percentile_1y", 0.0)
+            avg = primary_stats.get("avg_1y")
+            pct = primary_stats.get("percentile_1y")
+            n_obs = primary_stats.get("n_obs", 0)
             # Negative basis (Brazilian discount) is export-competitive — bullish for trade flow.
             val_class = "up" if cur < 0 else "down"
-            delta_label = f"1Y avg ${avg:+,.1f} · {pct:.0f}th pctile"
+            if avg is not None and pct is not None:
+                delta_label = f"1Y avg ${avg:+,.1f} · {pct:.0f}th pctile"
+            else:
+                delta_label = f"history building ({n_obs} obs — stats at 20)"
 
             tiles = [
                 f'<div class="mc"><div class="mc-label">{primary_label} (USD/MT)</div>'

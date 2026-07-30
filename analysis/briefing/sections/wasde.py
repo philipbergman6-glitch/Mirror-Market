@@ -5,6 +5,21 @@ import pandas as pd
 from pipeline.query import read_wasde
 
 
+def _fmt(val: float) -> str:
+    """Format a WASDE value keeping decimals that carry signal.
+
+    Yields move in tenths of a bushel and farm prices in cents — rounding
+    $10.50/bu to "11" is materially misleading. Small magnitudes keep two
+    decimals, mid magnitudes one, big balance-sheet numbers none.
+    """
+    mag = abs(val)
+    if mag < 100:
+        return f"{val:,.2f}"
+    if mag < 1000:
+        return f"{val:,.1f}"
+    return f"{val:,.0f}"
+
+
 def format() -> str:  # noqa: A001
     lines = ["WASDE ESTIMATES (USDA Monthly Forecasts):"]
     wasde = read_wasde()
@@ -42,15 +57,21 @@ def format() -> str:  # noqa: A001
                 prev_val = prev.get("value")
                 if pd.notna(prev_val) and prev_val != 0:
                     revision = val - prev_val
-                    sign = "+" if revision >= 0 else ""
-                    direction = "UP" if revision > 0 else "DOWN"
-                    commodity_lines.append(
-                        f"    {attribute}: {val:,.0f} {unit} "
-                        f"(revised {direction} {sign}{revision:,.0f} vs prior month)"
-                    )
+                    if revision == 0:
+                        commodity_lines.append(
+                            f"    {attribute}: {_fmt(val)} {unit} "
+                            "(unchanged vs prior month)"
+                        )
+                    else:
+                        sign = "+" if revision > 0 else ""
+                        direction = "UP" if revision > 0 else "DOWN"
+                        commodity_lines.append(
+                            f"    {attribute}: {_fmt(val)} {unit} "
+                            f"(revised {direction} {sign}{_fmt(revision)} vs prior month)"
+                        )
                     continue
 
-            commodity_lines.append(f"    {attribute}: {val:,.0f} {unit} ({ref})")
+            commodity_lines.append(f"    {attribute}: {_fmt(val)} {unit} ({ref})")
 
         if commodity_lines:
             lines.append(f"  {commodity}:")

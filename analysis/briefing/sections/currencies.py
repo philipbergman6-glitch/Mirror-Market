@@ -3,6 +3,19 @@
 import pandas as pd
 
 
+def _fmt_rate(close: float) -> str:
+    """Format an FX rate with enough significant digits to be readable.
+
+    Fixed 4-decimal formatting rendered VND/USD as 0.0000 and made
+    ARS/NGN indistinguishable. Small rates get more precision.
+    """
+    if close >= 0.01:
+        return f"{close:.4f}"
+    if close >= 0.0001:
+        return f"{close:.6f}"
+    return f"{close:.8f}"
+
+
 def format(currency_data: dict[str, pd.DataFrame]) -> str:  # noqa: A001
     lines = ["CURRENCIES:"]
 
@@ -26,18 +39,18 @@ def format(currency_data: dict[str, pd.DataFrame]) -> str:  # noqa: A001
                     impact = "Brazil exports cheaper" if chg_pct < 0 else "Brazil exports dearer"
                     comment = f"({direction} — {impact})"
                 elif "CNY" in pair:
-                    direction = "Yuan weakening" if chg_pct < 0 else "Yuan stable"
+                    direction = "Yuan weakening" if chg_pct < 0 else "Yuan strengthening"
                     comment = f"({direction})"
                 elif "ARS" in pair:
-                    direction = "Peso weakening" if chg_pct < 0 else "Peso stable"
+                    direction = "Peso weakening" if chg_pct < 0 else "Peso strengthening"
                     comment = f"({direction})"
                 elif "IDR" in pair:
-                    direction = "Rupiah weakening" if chg_pct < 0 else "Rupiah stable"
+                    direction = "Rupiah weakening" if chg_pct < 0 else "Rupiah strengthening"
                     comment = f"({direction})"
                 elif "MYR" in pair:
-                    direction = "Ringgit weakening" if chg_pct < 0 else "Ringgit stable"
+                    direction = "Ringgit weakening" if chg_pct < 0 else "Ringgit strengthening"
                     comment = f"({direction})"
 
-        lines.append(f"  {pair}: {close:.4f} {comment}")
+        lines.append(f"  {pair}: {_fmt_rate(close)} {comment}")
 
     return "\n".join(lines)
