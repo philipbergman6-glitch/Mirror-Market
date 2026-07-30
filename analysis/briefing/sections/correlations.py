@@ -1,5 +1,7 @@
 """CORRELATIONS section — cross-commodity + commodity-vs-currency."""
 
+from typing import cast
+
 import pandas as pd
 
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
@@ -23,8 +25,11 @@ def format(  # noqa: A001
                     pair_key = tuple(sorted([row_name, col_name]))
                     if pair_key in shown:
                         continue
-                    r = corr_matrix.iloc[i, j]
-                    if pd.notna(r) and abs(r) > 0.5:
+                    r_val = corr_matrix.iloc[i, j]
+                    if pd.isna(r_val):
+                        continue
+                    r = cast(float, r_val)
+                    if abs(r) > 0.5:
                         strength = "strong" if abs(r) > 0.7 else "moderate"
                         direction = "positive" if r > 0 else "negative"
                         lines.append(f"    {row_name} vs {col_name}: {r:.2f} ({strength} {direction})")

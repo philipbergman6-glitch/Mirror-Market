@@ -661,7 +661,7 @@ def relative_value_analysis() -> dict:
         beans is not None and not beans.empty
         and brl_usd is not None and not brl_usd.empty
     ):
-        sources = {}
+        sources: dict[str, dict[str, Any]] = {}
         for label, commodity in (
             ("Paranaguá FOB", "Soybean (AgRural Paranaguá FOB)"),
             ("CEPEA Paraná", "Soybean (CEPEA)"),

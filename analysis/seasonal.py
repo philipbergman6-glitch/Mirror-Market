@@ -76,8 +76,9 @@ def monthly_seasonal(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = df.copy()
-    df["month"] = df.index.month
-    df["year"] = df.index.year
+    idx = pd.DatetimeIndex(df.index)
+    df["month"] = idx.month
+    df["year"] = idx.year
     df["dev_pct"] = _trend_deviation_pct(df["Close"])
 
     seasonal = df.groupby("month").agg(

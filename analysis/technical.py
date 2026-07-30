@@ -13,6 +13,8 @@ Key concepts for learning:
     - Rolling windows: pandas .rolling(n) looks at the last n rows.
 """
 
+from typing import cast
+
 import pandas as pd
 
 
@@ -78,7 +80,7 @@ def add_rsi(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     # Use Wilder smoothing after the initial SMA seed value
     first_valid = avg_gain.first_valid_index()
     if first_valid is not None:
-        start_loc = avg_gain.index.get_loc(first_valid) + 1
+        start_loc = cast(int, avg_gain.index.get_loc(first_valid)) + 1
         for i in range(start_loc, len(avg_gain)):
             avg_gain.iloc[i] = (avg_gain.iloc[i - 1] * (period - 1) + gain.iloc[i]) / period
             avg_loss.iloc[i] = (avg_loss.iloc[i - 1] * (period - 1) + loss.iloc[i]) / period
