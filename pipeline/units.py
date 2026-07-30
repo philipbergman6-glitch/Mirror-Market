@@ -2,7 +2,7 @@
 Metric ton conversion utilities for display-layer price conversion.
 
 All commodity futures prices are stored in their native exchange units
-(cents/bushel, cents/lb, $/short ton, MYR/MT). This module converts
+(cents/bushel, cents/lb, $/short ton). This module converts
 them to USD/MT for professional international display.
 
 Key concept: Raw database data stays in native units — conversion
@@ -17,7 +17,7 @@ Conversion factors:
     Corn:         1 MT = 39.368 bushels
     Wheat:        1 MT = 36.7437 bushels
     Sugar/Cotton/Coffee/Cattle/Hogs: 1 MT = 2204.62 lbs
-    Palm Oil:     already MYR/MT (needs FX, not unit conversion)
+    Palm Oil:     already USD/MT (CME calendar swap — identity)
 """
 
 import pandas as pd
@@ -64,9 +64,8 @@ CONVERSION_FACTORS = {
     # Lean Hogs: cents/lb → USD/MT
     "Lean Hogs": 2204.62 / 100,
 
-    # Palm Oil (BMD): MYR/MT — flag only, needs FX conversion
-    # Not a simple unit conversion; requires MYR/USD exchange rate
-    "Palm Oil (BMD)": None,
+    # Palm Oil (CME): USD/MT already — identity conversion
+    "Palm Oil (CME)": 1.0,
 }
 
 
@@ -84,8 +83,8 @@ def to_metric_tons(value: float, commodity: str) -> float | None:
     Returns
     -------
     float or None
-        Price in USD/MT, or None if conversion not available (e.g., Palm Oil
-        which needs FX conversion, or unknown commodity).
+        Price in USD/MT, or None if conversion not available
+        (unknown commodity).
     """
     factor = CONVERSION_FACTORS.get(commodity)
     if factor is None:
@@ -145,11 +144,9 @@ def mt_label(commodity: str) -> str:
     Returns
     -------
     str
-        "USD/MT" for most commodities, "MYR/MT" for Palm Oil,
-        or "USD/MT" as default for unknown commodities.
+        "USD/MT" for all commodities (Palm Oil trades natively in USD/MT
+        on CME), including unknown commodities as default.
     """
-    if commodity == "Palm Oil (BMD)":
-        return "MYR/MT"
     return "USD/MT"
 
 
@@ -170,6 +167,6 @@ def native_label(commodity: str) -> str:
         "Coffee": "cents/lb",
         "Live Cattle": "cents/lb",
         "Lean Hogs": "cents/lb",
-        "Palm Oil (BMD)": "MYR/MT",
+        "Palm Oil (CME)": "USD/MT",
     }
     return labels.get(commodity, "")

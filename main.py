@@ -2,7 +2,7 @@
 Mirror Market — main entry point.
 
 Run this script to:
-    1. Fetch commodity prices     (yfinance — always works, includes BMD palm oil)
+    1. Fetch commodity prices     (yfinance — always works, includes CME palm oil)
     2. Fetch USDA crop data       (requires USDA_API_KEY)
     3. Fetch FRED economic data   (requires FRED_API_KEY)
     4. Fetch COT positioning      (CFTC — no key needed)
@@ -156,7 +156,7 @@ def run() -> int:
 
         logger.info("[Cleaning] Processing price data ...")
         for name in price_data:
-            price_data[name] = clean_ohlcv(price_data[name])
+            price_data[name] = clean_ohlcv(price_data[name], label=name)
 
         for name, df in price_data.items():
             save_price_data(name, df)
@@ -314,7 +314,7 @@ def run() -> int:
 
         logger.info("[Cleaning] Processing currency data ...")
         for name in currency_data:
-            currency_data[name] = clean_ohlcv(currency_data[name])
+            currency_data[name] = clean_ohlcv(currency_data[name], label=name)
 
         for pair, df in currency_data.items():
             save_currency_data(pair, df)

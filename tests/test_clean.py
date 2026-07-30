@@ -13,6 +13,8 @@ treated as findings against the cleaner, not as test bugs.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pandas.testing as pdt
@@ -112,6 +114,35 @@ def test_clean_ohlcv_does_not_mutate_input():
     before = df.copy(deep=True)
     clean_ohlcv(df)
     pdt.assert_frame_equal(df, before)
+
+
+def _make_zero_volume_ohlcv() -> pd.DataFrame:
+    """Settlement-marked series: flat OHLC within each day, volume 0."""
+    idx = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"])
+    close = [1128.25, 1127.0, 1127.5]
+    return pd.DataFrame(
+        {
+            "Open": close,
+            "High": close,
+            "Low": close,
+            "Close": close,
+            "Volume": [0, 0, 0],
+        },
+        index=idx,
+    )
+
+
+def test_clean_ohlcv_warns_on_zero_volume_by_default(caplog):
+    with caplog.at_level(logging.WARNING, logger="pipeline.clean"):
+        clean_ohlcv(_make_zero_volume_ohlcv(), label="Soybeans")
+    assert any("zero/negative volume" in r.message for r in caplog.records)
+
+
+def test_clean_ohlcv_palm_oil_cme_exempt_from_zero_volume_warning(caplog):
+    # CPO=F is a settlement-marked calendar swap — zero volume is by design
+    with caplog.at_level(logging.WARNING, logger="pipeline.clean"):
+        clean_ohlcv(_make_zero_volume_ohlcv(), label="Palm Oil (CME)")
+    assert not any("zero/negative volume" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

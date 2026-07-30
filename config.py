@@ -69,7 +69,9 @@ COMMODITY_TICKERS = {
 
     # ── Substitute oils ──
     # Palm oil is the #1 substitute for soy oil — daily tracking shows real-time competition
-    "Palm Oil (BMD)": "FPALM.KL",  # Bursa Malaysia Derivatives — crude palm oil futures
+    # CME USD Malaysian Crude Palm Oil Calendar swap — marked off Bursa FCPO
+    # settlements, natively USD/MT, settlement-marked (volume ≈ 0 by design)
+    "Palm Oil (CME)": "CPO=F",
 }
 
 # How far back to pull historical data (yfinance period strings)

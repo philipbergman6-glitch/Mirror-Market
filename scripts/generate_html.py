@@ -658,7 +658,7 @@ def _build_relative_value(data: dict) -> str:
         if po:
             pwk = ovp.get("palm_oil_weekly_chg")
             pc = "up" if pwk and pwk >= 0 else "down" if pwk else "muted"
-            cards.append(f'<div class="mc"><div class="mc-label">Palm Oil ({_esc(ovp.get("palm_oil_unit", "MYR/MT"))})</div><div class="mc-val">{po:,.2f}</div><div class="mc-delta {pc}">{delta_str(pwk)}</div></div>')
+            cards.append(f'<div class="mc"><div class="mc-label">Palm Oil ({_esc(ovp.get("palm_oil_unit", "USD/MT"))})</div><div class="mc-val">{po:,.2f}</div><div class="mc-delta {pc}">{delta_str(pwk)}</div></div>')
         cards.append('</div>')
         parts.append("\n".join(cards))
 

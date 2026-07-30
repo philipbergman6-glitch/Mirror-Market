@@ -167,7 +167,7 @@ def _populate_full_briefing_fixtures(patched_db):
         index=idx,
     )
 
-    for commodity in ["Soybeans", "Soybean Oil", "Soybean Meal", "Corn", "Wheat", "Palm Oil (BMD)", "Live Cattle", "Coffee"]:
+    for commodity in ["Soybeans", "Soybean Oil", "Soybean Meal", "Corn", "Wheat", "Palm Oil (CME)", "Live Cattle", "Coffee"]:
         store.save_price_data(commodity, ohlcv)
 
     for pair in ["BRL/USD", "CNY/USD", "ARS/USD"]:
