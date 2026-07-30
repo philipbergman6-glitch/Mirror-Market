@@ -146,10 +146,28 @@ def save_price_data(name: str, df: pd.DataFrame):
     _save("prices", df, ["commodity", "Date"], f"prices/{name}")
 
 
+# Series whose FRED id was replaced with one on a different index base.
+# Stored history from the old id must be wiped before the new values land,
+# otherwise the 'economic' table would mix two incompatible bases under one
+# display name. ("Soybean Oil PPI": WPU0612 → PCU31122431122431, 2026-07.)
+_ECONOMIC_SERIES_RESET = {"Soybean Oil PPI"}
+
+
 def save_fred_data(name: str, series: pd.Series):
     """Write FRED Series → 'economic'."""
     if series.empty:
         return
+    if name in _ECONOMIC_SERIES_RESET:
+        with get_connection() as conn:
+            conn.execute("BEGIN")
+            try:
+                conn.execute("DELETE FROM economic WHERE series_name = ?", (name,))
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                logger.error("Failed to reset economic/%s — rolled back", name)
+                raise
+        logger.info("Reset stored history for economic/%s (series id changed)", name)
     df = series.reset_index()
     df.columns = ["Date", "value"]
     df["series_name"] = name

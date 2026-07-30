@@ -255,12 +255,14 @@ def fetch_crush_data(
     year_end: int | None = None,
 ) -> pd.DataFrame:
     """
-    Fetch monthly soybean crush/processing volumes from USDA NASS.
+    Fetch monthly soybean crush volumes from USDA NASS.
 
-    Uses the same API with statisticcat_desc="PROCESSING" to get
-    how many bushels of soybeans were actually crushed.
+    Uses the same API with statisticcat_desc="CRUSHED" (NASS retired the
+    old "PROCESSING" category — it now 400s with "invalid query") to get
+    how many tons of soybeans were actually crushed
+    (short_desc "SOYBEANS - CRUSHED, MEASURED IN TONS").
     """
-    return fetch_usda("SOYBEANS", year_start, year_end, stat_category="PROCESSING")
+    return fetch_usda("SOYBEANS", year_start, year_end, stat_category="CRUSHED")
 
 
 # Crops we extract from the AMS summary table.

@@ -120,7 +120,12 @@ FRED_SERIES = {
 
     # ── Energy/biofuel ──
     "Ethanol PPI":     "WPU06140341",  # Producer Price Index: Ethanol
-    "Soybean Oil PPI": "WPU0612",      # Producer Price Index: Soybean oil
+    # WPU0612 was discontinued by BLS (FRED 400s "series does not exist").
+    # Replaced 2026-07 with the industry PPI for crude soybean oil, degummed
+    # (monthly, history from 1988-05). NOTE: different index base than
+    # WPU0612 — store.save_fred_data wipes old rows for this display name
+    # so stored history never mixes the two bases.
+    "Soybean Oil PPI": "PCU31122431122431",  # PPI Industry: Soybean/Oilseed Processing — Crude Soybean Oil, Degummed
     "Diesel Price":    "GASDESW",       # US diesel retail (biodiesel competition)
 }
 

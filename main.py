@@ -489,10 +489,10 @@ def run() -> int:
         logger.info("[Layer 14] Fetching USDA crush data + export inspections ...")
         total_14 = 0
 
-        # Crush data (same USDA API, stat_category=PROCESSING)
+        # Crush data (same USDA API, stat_category=CRUSHED)
         crush_df = fetch_crush_data()
         if not crush_df.empty:
-            save_usda_data(crush_df, "PROCESSING")
+            save_usda_data(crush_df, "CRUSHED")
             total_14 += len(crush_df)
 
         # Export inspections (AMS text report)
