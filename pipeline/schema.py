@@ -148,6 +148,10 @@ CREATE TABLE IF NOT EXISTS export_sales (
 );
 """
 
+# fetched_date is part of the key: each pipeline run stores that day's full
+# curve, so term-structure history accumulates instead of being overwritten.
+# Readers wanting "the current curve" filter to the latest fetched_date
+# (see pipeline/query.read_forward_curve).
 _CREATE_FORWARD_CURVE = """
 CREATE TABLE IF NOT EXISTS forward_curve (
     commodity       TEXT    NOT NULL,
@@ -156,7 +160,7 @@ CREATE TABLE IF NOT EXISTS forward_curve (
     ticker          TEXT,
     close           REAL,
     fetched_date    TEXT    NOT NULL,
-    PRIMARY KEY (commodity, contract_month)
+    PRIMARY KEY (commodity, contract_month, fetched_date)
 );
 """
 
@@ -358,8 +362,8 @@ UNIQUE_INDEXES = (
     "ON crop_progress (commodity, week_ending, short_desc);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_export_sales_commodity_week_country "
     "ON export_sales (commodity, week_ending, country);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_forward_curve_commodity_contract "
-    "ON forward_curve (commodity, contract_month);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_forward_curve_commodity_contract_date "
+    "ON forward_curve (commodity, contract_month, fetched_date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_wasde_commodity_year_attr_period "
     "ON wasde (commodity, year, attribute, reference_period);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_inspections_commodity_week "

@@ -629,6 +629,12 @@ FRESHNESS_WARNING_DAYS = 7
 STORAGE_DIR = os.path.join(os.path.dirname(__file__), "data", "storage")
 DB_PATH = os.path.join(STORAGE_DIR, "mirror_market.db")
 
+# Git-committed CSV snapshots of snapshot-only tables (AgRural, SAFEX,
+# forward curve, ...). CI runs on an ephemeral DB; these files are the
+# persistence layer — imported at pipeline start, exported at pipeline end,
+# committed back to the repo by the workflow. See pipeline/history.py.
+HISTORY_DIR = os.path.join(os.path.dirname(__file__), "data", "history")
+
 # ---------------------------------------------------------------------------
 # Cloud Database (Turso — hosted SQLite)
 # Set these env vars to use Turso instead of local SQLite.

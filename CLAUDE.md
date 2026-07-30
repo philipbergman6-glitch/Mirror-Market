@@ -39,12 +39,12 @@ python -m analysis.briefing
 
 Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19 work without API keys.
 
-### Optional (Cloud Database)
+### Optional (Cloud Database — dormant)
 
 - `TURSO_DATABASE_URL` — Turso database URL (e.g., `libsql://your-db.turso.io`)
 - `TURSO_AUTH_TOKEN` — Turso authentication token
 
-If not set, uses local SQLite (default). Set both to enable persistent cloud storage via Turso.
+**Decision 2026-07-30: no cloud DB.** CI persistence uses git-committed CSVs instead (see "Git-based history persistence" below). The Turso code path in `pipeline/connection.py` remains as dormant optional code for local use — it requires `pip install libsql` (deliberately not in `requirements.txt`) plus both env vars. Nothing in CI sets them.
 
 ## Architecture
 
@@ -103,9 +103,14 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 
 ### Storage
 
-- Database: `data/storage/mirror_market.db` (SQLite, gitignored) — or Turso cloud when configured
+- Database: `data/storage/mirror_market.db` (SQLite, gitignored)
 - Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `gulf_bids`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
+- `forward_curve` keys on `(commodity, contract_month, fetched_date)` — one full curve per run accumulates term-structure history; `read_forward_curve()` returns only each commodity's latest snapshot.
 - All config lives in `config.py` (tickers, API URLs, region coordinates, thresholds)
+
+### Git-based history persistence (`pipeline/history.py`)
+
+CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal by re-downloading full history, but snapshot-only sources don't: AgRural (1 row/day — the Brazil basis source), SAFEX, forward curve, CONAB survey revisions, inspections (>3 weeks), Gulf bids, CEPEA (>~10 sessions), WASDE (>12 months). These tables round-trip through CSVs in `data/history/` (committed to git): `main.py` calls `import_history()` after `init_database()` (INSERT OR IGNORE — DB rows win over CSVs) and `export_history()` after the layers (atomic per-table writes, PK-sorted for stable diffs; empty tables never overwrite a populated CSV). The deploy workflow commits `data/history/` back to `main` with `[skip ci]`. A failed import aborts the run so a bad seed can never be exported over good history. Cloud DB (Turso/Supabase) was explicitly rejected for this — do not reintroduce it as a CI requirement.
 
 ### Briefing Sections (in order)
 

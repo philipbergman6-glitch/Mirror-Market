@@ -74,6 +74,7 @@ from pipeline.clean import (
     clean_weather,
     clean_worldbank,
 )
+from pipeline.history import HistoryImportError, export_history, import_history
 from pipeline.query import read_prices
 from pipeline.store import (
     init_database,
@@ -194,6 +195,15 @@ def run() -> int:
 
     # ── Initialise database schema ─────────────────────────────────
     init_database()
+
+    # ── Seed snapshot-only history from git-committed CSVs ─────────
+    # Must hard-fail: exporting later from a DB that failed to seed
+    # would overwrite the committed CSVs with today-only data.
+    try:
+        import_history()
+    except HistoryImportError:
+        logger.exception("History import failed — aborting before any export can clobber it")
+        return 1
 
     # ── Layer 1: Commodity Prices ────────────────────────────────
     price_data = {}
@@ -641,6 +651,15 @@ def run() -> int:
     except Exception:
         logger.exception("[Layer 20] Gulf bids failed — see error above")
         _mark_failed("gulf_bids")
+
+    # ── Export snapshot-only history back to git-committed CSVs ──
+    # Failure exits non-zero so the workflow's commit step never runs
+    # against half-written files (writes are atomic per table anyway).
+    try:
+        export_history()
+    except Exception:
+        logger.exception("History export failed — pipeline exiting with status 1")
+        return 1
 
     # ── Update per-commodity freshness tracking ─────────────────
     try:

@@ -18,7 +18,9 @@ on:
       - 'main.py'
 
 permissions:
-  contents: read
+  # write: the pipeline commits data/history/*.csv back to the repo — the
+  # git-based persistence layer for snapshot-only sources (no cloud DB).
+  contents: write
   pages: write
   id-token: write
 
@@ -37,16 +39,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    env:
-      # Persistent cloud DB — without it every scheduled run starts from an
-      # empty SQLite and snapshot-only history (AgRural, SAFEX) never
-      # accumulates. Secrets must be added in repo settings.
-      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      # Fail loudly if Turso is configured but unreachable, instead of
-      # silently falling back to an ephemeral local file. Evaluates to '0'
-      # until the secrets exist, so CI still passes pre-configuration.
-      MIRROR_REQUIRE_TURSO: ${{ secrets.TURSO_DATABASE_URL != '' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,6 +57,23 @@ jobs:
           FAS_API_KEY: ${{ secrets.FAS_API_KEY }}
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
         run: python main.py
+
+      # Snapshot-only sources (AgRural, SAFEX, forward curve, CONAB,
+      # inspections, Gulf bids) have no upstream history — the committed
+      # CSVs under data/history/ are the persistence layer. main.py seeds
+      # the empty runner DB from them at start and re-exports at end.
+      # [skip ci] prevents the data commit from retriggering workflows.
+      - name: Commit history snapshots
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/history
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(data): daily history snapshot [skip ci]"
+            git pull --rebase origin main
+            git push origin main
+          fi
 
       - name: Generate static dashboard
         run: python scripts/generate_html.py

@@ -238,20 +238,32 @@ def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
 
 
 def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
-    """Read forward curve data from SQLite."""
+    """Read the latest forward-curve snapshot per commodity.
+
+    The table accumulates one full curve per fetched_date (history for
+    term-structure analysis); every current consumer wants only the most
+    recent curve, so this filters to each commodity's latest fetched_date.
+    Query the table directly for history.
+    """
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
+    latest_sql = (
+        "SELECT fc.* FROM forward_curve fc "
+        "JOIN (SELECT commodity, MAX(fetched_date) AS max_fd "
+        "      FROM forward_curve GROUP BY commodity) latest "
+        "ON fc.commodity = latest.commodity AND fc.fetched_date = latest.max_fd"
+    )
     with get_connection() as conn:
         try:
             if commodity:
                 df = pd.read_sql(
-                    "SELECT * FROM forward_curve WHERE commodity = ?",
+                    latest_sql + " WHERE fc.commodity = ?",
                     conn,
                     params=(commodity,),
                 )
             else:
-                df = pd.read_sql("SELECT * FROM forward_curve", conn)
+                df = pd.read_sql(latest_sql, conn)
         except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
             logger.warning("Read failed for forward_curve: %s", exc)
             return pd.DataFrame()

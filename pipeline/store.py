@@ -115,6 +115,46 @@ def _migrate_usda_pk(conn) -> None:
         logger.exception("usda PK migration failed — leaving table as-is")
 
 
+def _migrate_forward_curve_pk(conn) -> None:
+    """Rebuild forward_curve with fetched_date in the PK. Idempotent.
+
+    The original (commodity, contract_month) key overwrote the whole curve
+    every run, making term-structure history structurally impossible.
+    SQLite can't alter a PK in place, so detect the old shape and rebuild.
+    The stale 2-column unique index is dropped in both cases — left behind,
+    it would keep collapsing one row per contract on upsert.
+    """
+    try:
+        conn.execute("DROP INDEX IF EXISTS ux_forward_curve_commodity_contract")
+        pk_cols = {r[1] for r in conn.execute("PRAGMA table_info(forward_curve)").fetchall() if r[5]}
+    except Exception:
+        return
+    if "fetched_date" in pk_cols or not pk_cols:
+        return
+    try:
+        conn.execute("ALTER TABLE forward_curve RENAME TO forward_curve_old_pk")
+        conn.execute(
+            """CREATE TABLE forward_curve (
+                   commodity       TEXT    NOT NULL,
+                   contract_month  TEXT    NOT NULL,
+                   label           TEXT,
+                   ticker          TEXT,
+                   close           REAL,
+                   fetched_date    TEXT    NOT NULL,
+                   PRIMARY KEY (commodity, contract_month, fetched_date)
+               )"""
+        )
+        conn.execute(
+            """INSERT OR REPLACE INTO forward_curve
+               SELECT commodity, contract_month, label, ticker, close, fetched_date
+               FROM forward_curve_old_pk"""
+        )
+        conn.execute("DROP TABLE forward_curve_old_pk")
+        logger.info("Migrated forward_curve table PK to include fetched_date")
+    except Exception:
+        logger.exception("forward_curve PK migration failed — leaving table as-is")
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
@@ -122,6 +162,7 @@ def init_database():
         for ddl in ALL_SCHEMAS:
             conn.execute(ddl)
         _migrate_usda_pk(conn)
+        _migrate_forward_curve_pk(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
         for index_sql in UNIQUE_INDEXES:
@@ -375,7 +416,7 @@ def save_forward_curve(commodity: str, df: pd.DataFrame):
     _save(
         "forward_curve",
         df[["commodity", "contract_month", "label", "ticker", "close", "fetched_date"]],
-        ["commodity", "contract_month"],
+        ["commodity", "contract_month", "fetched_date"],
         f"forward_curve/{commodity}",
     )
 
