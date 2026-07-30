@@ -1,25 +1,12 @@
 """
 Mirror Market — main entry point.
 
-Run this script to:
-    1. Fetch commodity prices     (yfinance — always works, includes CME palm oil)
-    2. Fetch USDA crop data       (requires USDA_API_KEY)
-    3. Fetch FRED economic data   (requires FRED_API_KEY)
-    4. Fetch COT positioning      (CFTC — no key needed)
-    5. Fetch weather data         (Open-Meteo — no key needed)
-    6. Fetch PSD global supply/demand (USDA FAS — no key needed)
-    7. Fetch currency pairs       (yfinance — no key needed)
-    8. Fetch World Bank monthly prices (no key needed)
-    9. Fetch DCE Chinese futures  (AKShare — no key needed)
-   10. Fetch USDA export sales    (requires FAS_API_KEY)
-   11. Fetch forward curves       (yfinance — no key needed)
-   12. Fetch WASDE monthly estimates (requires USDA_API_KEY)
-   13. Fetch EIA biofuel/energy   (requires EIA_API_KEY)
-   14. Fetch USDA crush + inspections (requires USDA_API_KEY + AMS report)
-   15. Fetch CONAB Brazil estimates (no key needed)
-   16. Clean everything
-   17. Store it all in a local SQLite database
-   18. Print a verification summary
+Run this script to fetch, clean, and store all 20 data layers:
+    commodity prices, USDA crop data + progress, FRED, COT, weather,
+    PSD, currencies, World Bank, DCE futures, export sales, forward
+    curves, WASDE, EIA, crush + inspections, CONAB, India domestic
+    (disabled), CEPEA via Notícias Agrícolas, SAFEX, AgRural FOB,
+    and AMS Gulf export bids — then print a verification summary.
 
 Usage:
     python main.py
@@ -32,6 +19,9 @@ Key concepts for learning:
 
 import logging
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 from config import LAYER_MIN_KEYS, MAX_FAILED_LAYERS, setup_logging
 from fetchers.agrural import fetch_agrural
@@ -76,6 +66,7 @@ from pipeline.clean import (
 )
 from pipeline.history import HistoryImportError, export_history, import_history
 from pipeline.query import read_prices
+from pipeline.results import FetchResult
 from pipeline.store import (
     init_database,
     save_brazil_estimates,
@@ -173,6 +164,91 @@ def _finalize_layer(layer: str, data: dict) -> bool:
     return True
 
 
+@dataclass(frozen=True)
+class DictLayer:
+    """One fetch → clean → save → finalize pass over a dict-of-frames layer.
+
+    Every DictLayer goes through _finalize_layer, so the LAYER_MIN_KEYS
+    partial-outage floor applies uniformly (previously six layers bypassed
+    it with hand-rolled success checks).
+    """
+
+    key: str                                    # results/freshness key
+    label: str                                  # "Layer 4" — for log prefixes
+    desc: str                                   # human description for logs
+    fetch: Callable[[], dict]
+    save: Callable[[str, Any], None]            # (name, frame) -> None
+    clean: Callable[[str, Any], Any] | None = None  # (name, frame) -> frame
+    # API-key-gated layers: fetch() returns {} when the key isn't set.
+    # Logged as skipped — no freshness row, matching "the layer never ran".
+    skip_msg: str | None = None
+
+
+def _run_dict_layer(layer: DictLayer) -> bool:
+    try:
+        logger.info("[%s] Fetching %s ...", layer.label, layer.desc)
+        data = layer.fetch()
+
+        if not data and layer.skip_msg:
+            logger.info("[%s] %s", layer.label, layer.skip_msg)
+            return False
+
+        if layer.clean is not None and data:
+            logger.info("[Cleaning] Processing %s data ...", layer.key)
+            for name in data:
+                data[name] = layer.clean(name, data[name])
+
+        for name, df in data.items():
+            layer.save(name, df)
+
+        return _finalize_layer(layer.key, data)
+    except Exception:
+        logger.exception("[%s] %s failed — see error above", layer.label, layer.desc)
+        _mark_failed(layer.key)
+        return False
+
+
+def _run_scraper_layer(
+    key: str,
+    label: str,
+    desc: str,
+    fetch: Callable[[], FetchResult],
+    save: Callable[[str, Any], None],
+    clean: Callable[[Any], Any] | None = None,
+    empty_fails: bool = True,
+) -> bool:
+    """One FetchResult-based scraper layer (Layers 17-20).
+
+    empty_fails: a daily quote source that returns zero rows is broken
+    (CEPEA, AgRural, Gulf bids); SAFEX legitimately publishes nothing on
+    JSE holidays, so its empty result records as empty-success instead.
+    """
+    try:
+        logger.info("[%s] Fetching %s ...", label, desc)
+        result = fetch()
+
+        if result.has_rows:
+            for name, df in result.data.items():
+                if clean is not None:
+                    df = clean(df)
+                save(name, df)
+            save_freshness(key, result.total_rows)
+            logger.info("[%s] %s: %d rows saved", label, key, result.total_rows)
+            return True
+
+        if empty_fails or result.status == "failed":
+            logger.error("[%s] %s failed: %s", label, desc, result.error)
+            _mark_failed(key)
+        else:
+            logger.warning("[%s] %s empty: %s", label, desc, result.error)
+            _mark_empty(key)
+        return False
+    except Exception:
+        logger.exception("[%s] %s failed — see error above", label, desc)
+        _mark_failed(key)
+        return False
+
+
 def run() -> int:
     setup_logging()
     _HARD_FAILURES.clear()
@@ -205,303 +281,101 @@ def run() -> int:
         logger.exception("History import failed — aborting before any export can clobber it")
         return 1
 
-    # ── Layer 1: Commodity Prices ────────────────────────────────
-    price_data = {}
-    try:
-        logger.info("[Layer 1] Fetching commodity futures prices ...")
-        price_data = fetch_prices()
-
-        logger.info("[Cleaning] Processing price data ...")
-        for name in price_data:
-            price_data[name] = clean_ohlcv(price_data[name], label=name)
-
-        for name, df in price_data.items():
-            save_price_data(name, df)
-
-        results["prices"] = _finalize_layer("prices", price_data)
-    except Exception:
-        logger.exception("[Layer 1] Prices failed — see error above")
-        _mark_failed("prices")
-
-    # ── Layer 2: USDA Fundamentals ───────────────────────────────
-    usda_data = {}
-    try:
-        logger.info("[Layer 2] Fetching USDA soybean data ...")
-        usda_data = fetch_soybean_overview()
-
-        for stat, df in usda_data.items():
-            save_usda_data(df, stat)
-
-        if any(not df.empty for df in usda_data.values()):
-            results["usda"] = True
-            total_rows = sum(len(df) for df in usda_data.values())
-            save_freshness("usda", total_rows)
-        else:
-            logger.warning("[Layer 2] USDA returned no data (API key missing?)")
-            _mark_empty("usda")
-    except Exception:
-        logger.exception("[Layer 2] USDA failed — see error above")
-        _mark_failed("usda")
-
-    # ── Layer 2b: USDA Crop Progress/Condition ─────────────────────
-    crop_progress_data = {}
-    try:
-        logger.info("[Layer 2b] Fetching USDA crop progress/condition ...")
-        crop_progress_data = fetch_all_crop_progress()
-
-        for crop, df in crop_progress_data.items():
-            save_crop_progress(crop, df)
-
-        if any(not df.empty for df in crop_progress_data.values()):
-            results["crop_progress"] = True
-            total_rows = sum(len(df) for df in crop_progress_data.values())
-            save_freshness("crop_progress", total_rows)
-        else:
-            logger.warning("[Layer 2b] Crop progress returned no data (API key missing?)")
-            _mark_empty("crop_progress")
-    except Exception:
-        logger.exception("[Layer 2b] Crop progress failed — see error above")
-        _mark_failed("crop_progress")
-
-    # ── Layer 3: FRED Economic Context ───────────────────────────
-    fred_data = {}
-    try:
-        logger.info("[Layer 3] Fetching FRED economic indicators ...")
-        fred_data = fetch_all_series()
-
-        logger.info("[Cleaning] Processing FRED data ...")
-        for name in fred_data:
-            fred_data[name] = clean_fred_series(fred_data[name])
-
-        for name, series in fred_data.items():
-            save_fred_data(name, series)
-
-        results["fred"] = _finalize_layer("fred", fred_data)
-    except Exception:
-        logger.exception("[Layer 3] FRED failed — see error above")
-        _mark_failed("fred")
-
-    # ── Layer 4: COT Positioning ─────────────────────────────────
-    cot_data = {}
-    try:
-        logger.info("[Layer 4] Fetching CFTC Commitment of Traders data ...")
-        cot_data = fetch_cot_recent()
-
-        logger.info("[Cleaning] Processing COT data ...")
-        for name in cot_data:
-            cot_data[name] = clean_cot(cot_data[name])
-
-        for name, df in cot_data.items():
-            save_cot_data(name, df)
-
-        results["cot"] = _finalize_layer("cot", cot_data)
-    except Exception:
-        logger.exception("[Layer 4] COT failed — see error above")
-        _mark_failed("cot")
-
-    # ── Layer 5: Weather ─────────────────────────────────────────
-    weather_data = {}
-    try:
-        logger.info("[Layer 5] Fetching weather for growing regions ...")
-        weather_data = fetch_all_regions()
-
-        logger.info("[Cleaning] Processing weather data ...")
-        for name in weather_data:
-            weather_data[name] = clean_weather(weather_data[name])
-
-        for region, df in weather_data.items():
-            save_weather_data(region, df)
-
-        results["weather"] = _finalize_layer("weather", weather_data)
-    except Exception:
-        logger.exception("[Layer 5] Weather failed — see error above")
-        _mark_failed("weather")
-
-    # ── Layer 6: PSD Global Supply/Demand ────────────────────────
-    psd_data = {}
-    try:
-        logger.info("[Layer 6] Fetching USDA FAS PSD global data ...")
-        psd_data = fetch_psd_all()
-
-        logger.info("[Cleaning] Processing PSD data ...")
-        for name in psd_data:
-            psd_data[name] = clean_psd(psd_data[name])
-
-        for name, df in psd_data.items():
-            save_psd_data(name, df)
-
-        results["psd"] = _finalize_layer("psd", psd_data)
-    except Exception:
-        logger.exception("[Layer 6] PSD failed — see error above")
-        _mark_failed("psd")
-
-    # ── Layer 7: Currencies ──────────────────────────────────────
-    currency_data = {}
-    try:
-        logger.info("[Layer 7] Fetching currency pairs ...")
-        currency_data = fetch_currencies()
-
-        logger.info("[Cleaning] Processing currency data ...")
-        for name in currency_data:
-            currency_data[name] = clean_ohlcv(currency_data[name], label=name)
-
-        for pair, df in currency_data.items():
-            save_currency_data(pair, df)
-
-        results["currencies"] = _finalize_layer("currencies", currency_data)
-    except Exception:
-        logger.exception("[Layer 7] Currencies failed — see error above")
-        _mark_failed("currencies")
-
-    # ── Layer 8: World Bank Monthly Prices ───────────────────────
-    wb_data = {}
-    try:
-        logger.info("[Layer 8] Fetching World Bank Pink Sheet prices ...")
-        wb_data = fetch_worldbank_prices()
-
-        logger.info("[Cleaning] Processing World Bank data ...")
-        for name in wb_data:
-            wb_data[name] = clean_worldbank(wb_data[name])
-
-        for name, df in wb_data.items():
-            save_worldbank_data(name, df)
-
-        if any(not df.empty for df in wb_data.values()):
-            results["worldbank"] = True
-            total_rows = sum(len(df) for df in wb_data.values())
-            save_freshness("worldbank", total_rows)
-        else:
-            logger.warning("[Layer 8] World Bank returned no data")
-            _mark_empty("worldbank")
-    except Exception:
-        logger.exception("[Layer 8] World Bank failed — see error above")
-        _mark_failed("worldbank")
-
-    # ── Layer 9: DCE Chinese Futures ──────────────────────────────
-    dce_data = {}
-    try:
-        logger.info("[Layer 9] Fetching DCE futures (AKShare) ...")
-        dce_data = fetch_dce_futures()
-
-        logger.info("[Cleaning] Processing DCE futures data ...")
-        for name in dce_data:
-            dce_data[name] = clean_dce_futures(dce_data[name])
-
-        for name, df in dce_data.items():
-            save_dce_futures_data(name, df)
-
-        results["dce"] = _finalize_layer("dce", dce_data)
-    except Exception:
-        logger.exception("[Layer 9] DCE failed — see error above")
-        _mark_failed("dce")
-
-    # ── Layer 10: USDA Export Sales ─────────────────────────────
-    export_sales_data = {}
-    try:
-        logger.info("[Layer 10] Fetching USDA export sales ...")
-        export_sales_data = fetch_all_export_sales()
-
-        if export_sales_data:
-            logger.info("[Cleaning] Processing export sales data ...")
-            for name in export_sales_data:
-                export_sales_data[name] = clean_export_sales(export_sales_data[name])
-
-            for name, df in export_sales_data.items():
-                save_export_sales(name, df)
-
-            if any(not df.empty for df in export_sales_data.values()):
-                results["export_sales"] = True
-                total_rows = sum(len(df) for df in export_sales_data.values())
-                save_freshness("export_sales", total_rows)
-            else:
-                logger.warning("[Layer 10] Export sales returned no data (FAS_API_KEY missing?)")
-                _mark_empty("export_sales")
-        else:
-            logger.info("[Layer 10] Export sales skipped (FAS_API_KEY not set)")
-    except Exception:
-        logger.exception("[Layer 10] Export sales failed — see error above")
-        _mark_failed("export_sales")
-
-    # ── Layer 11: Forward Curves ────────────────────────────────
-    forward_curve_data = {}
-    try:
-        logger.info("[Layer 11] Fetching forward curves ...")
-        forward_curve_data = fetch_all_forward_curves()
-
-        logger.info("[Cleaning] Processing forward curve data ...")
-        for name in forward_curve_data:
-            forward_curve_data[name] = clean_forward_curve(forward_curve_data[name])
-
-        for name, df in forward_curve_data.items():
-            save_forward_curve(name, df)
-
-        if any(not df.empty for df in forward_curve_data.values()):
-            results["forward_curve"] = True
-            total_rows = sum(len(df) for df in forward_curve_data.values())
-            save_freshness("forward_curve", total_rows)
-        else:
-            logger.warning("[Layer 11] Forward curves returned no data")
-            _mark_empty("forward_curve")
-    except Exception:
-        logger.exception("[Layer 11] Forward curves failed — see error above")
-        _mark_failed("forward_curve")
-
-    # ── Layer 12: WASDE Monthly Estimates ────────────────────────
-    wasde_data = {}
-    try:
-        logger.info("[Layer 12] Fetching WASDE monthly estimates ...")
-        wasde_data = fetch_wasde_estimates()
-
-        if wasde_data:
-            logger.info("[Cleaning] Processing WASDE data ...")
-            for key in wasde_data:
-                wasde_data[key] = clean_wasde(wasde_data[key])
-
-            for key, df in wasde_data.items():
-                save_wasde(key, df)
-
-            if any(not df.empty for df in wasde_data.values()):
-                results["wasde"] = True
-                total_rows = sum(len(df) for df in wasde_data.values())
-                save_freshness("wasde", total_rows)
-            else:
-                logger.warning("[Layer 12] WASDE returned no data — OCE archive may be unreachable")
-                _mark_empty("wasde")
-        else:
-            logger.warning("[Layer 12] WASDE returned no files — OCE archive unreachable?")
-            _mark_empty("wasde")
-    except Exception:
-        logger.exception("[Layer 12] WASDE failed — see error above")
-        _mark_failed("wasde")
-
-    # ── Layer 13: EIA Biofuel/Energy ──────────────────────────────
-    eia_data = {}
-    try:
-        logger.info("[Layer 13] Fetching EIA energy/biofuel data ...")
-        eia_data = fetch_all_eia()
-
-        if eia_data:
-            logger.info("[Cleaning] Processing EIA data ...")
-            for name in eia_data:
-                eia_data[name] = clean_eia(eia_data[name])
-
-            for name, df in eia_data.items():
-                save_eia_data(name, df)
-
-            if any(not df.empty for df in eia_data.values()):
-                results["eia"] = True
-                total_rows = sum(len(df) for df in eia_data.values())
-                save_freshness("eia", total_rows)
-            else:
-                logger.warning("[Layer 13] EIA returned no data")
-                _mark_empty("eia")
-        else:
-            logger.info("[Layer 13] EIA skipped (EIA_API_KEY not set)")
-    except Exception:
-        logger.exception("[Layer 13] EIA failed — see error above")
-        _mark_failed("eia")
+    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
+    # Built inside run() so tests that monkeypatch main.<fetcher> are
+    # picked up — the lambdas resolve module globals at call time.
+    dict_layers = [
+        DictLayer(
+            "prices", "Layer 1", "commodity futures prices",
+            fetch=lambda: fetch_prices(),
+            save=lambda n, d: save_price_data(n, d),
+            clean=lambda n, d: clean_ohlcv(d, label=n),
+        ),
+        DictLayer(
+            "usda", "Layer 2", "USDA soybean data",
+            fetch=lambda: fetch_soybean_overview(),
+            save=lambda n, d: save_usda_data(d, n),
+        ),
+        DictLayer(
+            "crop_progress", "Layer 2b", "USDA crop progress/condition",
+            fetch=lambda: fetch_all_crop_progress(),
+            save=lambda n, d: save_crop_progress(n, d),
+        ),
+        DictLayer(
+            "fred", "Layer 3", "FRED economic indicators",
+            fetch=lambda: fetch_all_series(),
+            save=lambda n, d: save_fred_data(n, d),
+            clean=lambda n, d: clean_fred_series(d),
+        ),
+        DictLayer(
+            "cot", "Layer 4", "CFTC Commitment of Traders data",
+            fetch=lambda: fetch_cot_recent(),
+            save=lambda n, d: save_cot_data(n, d),
+            clean=lambda n, d: clean_cot(d),
+        ),
+        DictLayer(
+            "weather", "Layer 5", "weather for growing regions",
+            fetch=lambda: fetch_all_regions(),
+            save=lambda n, d: save_weather_data(n, d),
+            clean=lambda n, d: clean_weather(d),
+        ),
+        DictLayer(
+            "psd", "Layer 6", "USDA FAS PSD global data",
+            fetch=lambda: fetch_psd_all(),
+            save=lambda n, d: save_psd_data(n, d),
+            clean=lambda n, d: clean_psd(d),
+        ),
+        DictLayer(
+            "currencies", "Layer 7", "currency pairs",
+            fetch=lambda: fetch_currencies(),
+            save=lambda n, d: save_currency_data(n, d),
+            clean=lambda n, d: clean_ohlcv(d, label=n),
+        ),
+        DictLayer(
+            "worldbank", "Layer 8", "World Bank Pink Sheet prices",
+            fetch=lambda: fetch_worldbank_prices(),
+            save=lambda n, d: save_worldbank_data(n, d),
+            clean=lambda n, d: clean_worldbank(d),
+        ),
+        DictLayer(
+            "dce", "Layer 9", "DCE futures (AKShare)",
+            fetch=lambda: fetch_dce_futures(),
+            save=lambda n, d: save_dce_futures_data(n, d),
+            clean=lambda n, d: clean_dce_futures(d),
+        ),
+        DictLayer(
+            "export_sales", "Layer 10", "USDA export sales",
+            fetch=lambda: fetch_all_export_sales(),
+            save=lambda n, d: save_export_sales(n, d),
+            clean=lambda n, d: clean_export_sales(d),
+            skip_msg="Export sales skipped (FAS_API_KEY not set)",
+        ),
+        DictLayer(
+            "forward_curve", "Layer 11", "forward curves",
+            fetch=lambda: fetch_all_forward_curves(),
+            save=lambda n, d: save_forward_curve(n, d),
+            clean=lambda n, d: clean_forward_curve(d),
+        ),
+        DictLayer(
+            "wasde", "Layer 12", "WASDE monthly estimates",
+            fetch=lambda: fetch_wasde_estimates(),
+            save=lambda n, d: save_wasde(n, d),
+            clean=lambda n, d: clean_wasde(d),
+        ),
+        DictLayer(
+            "eia", "Layer 13", "EIA energy/biofuel data",
+            fetch=lambda: fetch_all_eia(),
+            save=lambda n, d: save_eia_data(n, d),
+            clean=lambda n, d: clean_eia(d),
+            skip_msg="EIA skipped (EIA_API_KEY not set)",
+        ),
+    ]
+    for layer in dict_layers:
+        results[layer.key] = _run_dict_layer(layer)
 
     # ── Layer 14: USDA Crush/Processing + Export Inspections ──────
+    # Custom: two sources (QuickStats CRUSHED + AMS text report) sharing
+    # one freshness key, with a per-commodity save split.
     try:
         logger.info("[Layer 14] Fetching USDA crush data + export inspections ...")
         total_14 = 0
@@ -542,6 +416,7 @@ def run() -> int:
         _mark_failed("crush_inspections")
 
     # ── Layer 15: CONAB Brazil Crop Estimates ─────────────────────
+    # Custom: single national DataFrame, not a dict of frames.
     try:
         logger.info("[Layer 15] Fetching CONAB Brazil estimates ...")
         conab_df = fetch_conab_estimates()
@@ -568,89 +443,36 @@ def run() -> int:
     logger.info("[Layer 16] NCDEX disabled — blocked by ncdex.com anti-bot wall")
     _mark_empty("india_domestic")
 
-    # ── Layer 17: CEPEA Brazil Domestic Soy Spot ──────────────────
-    # Re-enabled 2026-07-30 via Notícias Agrícolas, which republishes the
-    # CEPEA/ESALQ indicators server-rendered (cepea.org.br itself is still
-    # behind a Cloudflare Turnstile challenge; fetchers/cepea.py kept on
-    # disk in case the direct source ever reopens).
-    try:
-        logger.info("[Layer 17] Fetching CEPEA indicators via Notícias Agrícolas ...")
-        na_result = fetch_noticias_agricolas()
-
-        if na_result.has_rows:
-            for name, df in na_result.data.items():
-                df = clean_brazil_spot(df)
-                save_brazil_spot(name, df)
-
-            results["cepea"] = True
-            save_freshness("cepea", na_result.total_rows)
-            logger.info("[Layer 17] CEPEA via NA: %d rows saved", na_result.total_rows)
-        else:
-            logger.error("[Layer 17] CEPEA via NA failed: %s", na_result.error)
-            _mark_failed("cepea")
-    except Exception:
-        logger.exception("[Layer 17] CEPEA via NA failed — see error above")
-        _mark_failed("cepea")
-
-    # ── Layer 18: JSE SAFEX South Africa Soy Prices ───────────────
-    try:
-        logger.info("[Layer 18] Fetching JSE SAFEX South Africa soy prices ...")
-        safex_result = fetch_safex()
-
-        if safex_result.has_rows:
-            for name, df in safex_result.data.items():
-                df = clean_safex(df)
-                save_safex(name, df)
-
-            results["safex"] = True
-            save_freshness("safex", safex_result.total_rows)
-            logger.info("[Layer 18] SAFEX: %d rows saved", safex_result.total_rows)
-        elif safex_result.status == "failed":
-            logger.error("[Layer 18] SAFEX failed: %s", safex_result.error)
-            _mark_failed("safex")
-        else:
-            logger.warning("[Layer 18] SAFEX empty: %s", safex_result.error)
-            _mark_empty("safex")
-    except Exception:
-        logger.exception("[Layer 18] SAFEX failed — see error above")
-        _mark_failed("safex")
-
-    # ── Layer 19: AgRural Paranaguá FOB Soy Quote ────────────────
-    try:
-        logger.info("[Layer 19] Fetching AgRural Paranaguá FOB soy quote ...")
-        agrural_result = fetch_agrural()
-
-        if agrural_result.has_rows:
-            for name, df in agrural_result.data.items():
-                df = clean_brazil_spot(df)
-                save_brazil_spot(name, df)
-
-            results["agrural"] = True
-            save_freshness("agrural", agrural_result.total_rows)
-            logger.info("[Layer 19] AgRural: %d rows saved", agrural_result.total_rows)
-        else:
-            logger.error("[Layer 19] AgRural failed: %s", agrural_result.error)
-            _mark_failed("agrural")
-    except Exception:
-        logger.exception("[Layer 19] AgRural failed — see error above")
-        _mark_failed("agrural")
-
-    # ── Layer 20: US Gulf Export Basis Bids (AMS 3147) ────────────
-    try:
-        logger.info("[Layer 20] Fetching AMS Gulf export bids ...")
-        gulf_result = fetch_gulf_bids()
-
-        if gulf_result.has_rows:
-            save_gulf_bids(gulf_result.data["gulf_bids"])
-            results["gulf_bids"] = True
-            save_freshness("gulf_bids", gulf_result.total_rows)
-            logger.info("[Layer 20] Gulf bids: %d rows saved", gulf_result.total_rows)
-        else:
-            logger.error("[Layer 20] Gulf bids failed: %s", gulf_result.error)
-            _mark_failed("gulf_bids")
-    except Exception:
-        logger.exception("[Layer 20] Gulf bids failed — see error above")
-        _mark_failed("gulf_bids")
+    # ── Layers 17-20: FetchResult scraper layers ──────────────────
+    # Layer 17: re-enabled 2026-07-30 via Notícias Agrícolas, which
+    # republishes the CEPEA/ESALQ indicators server-rendered
+    # (cepea.org.br itself is still behind a Cloudflare Turnstile
+    # challenge; fetchers/cepea.py kept on disk in case the direct
+    # source ever reopens).
+    results["cepea"] = _run_scraper_layer(
+        "cepea", "Layer 17", "CEPEA indicators via Notícias Agrícolas",
+        fetch=lambda: fetch_noticias_agricolas(),
+        save=lambda n, d: save_brazil_spot(n, d),
+        clean=lambda d: clean_brazil_spot(d),
+    )
+    results["safex"] = _run_scraper_layer(
+        "safex", "Layer 18", "JSE SAFEX South Africa soy prices",
+        fetch=lambda: fetch_safex(),
+        save=lambda n, d: save_safex(n, d),
+        clean=lambda d: clean_safex(d),
+        empty_fails=False,
+    )
+    results["agrural"] = _run_scraper_layer(
+        "agrural", "Layer 19", "AgRural Paranaguá FOB soy quote",
+        fetch=lambda: fetch_agrural(),
+        save=lambda n, d: save_brazil_spot(n, d),
+        clean=lambda d: clean_brazil_spot(d),
+    )
+    results["gulf_bids"] = _run_scraper_layer(
+        "gulf_bids", "Layer 20", "AMS Gulf export bids",
+        fetch=lambda: fetch_gulf_bids(),
+        save=lambda n, d: save_gulf_bids(d),
+    )
 
     # ── Export snapshot-only history back to git-committed CSVs ──
     # Failure exits non-zero so the workflow's commit step never runs

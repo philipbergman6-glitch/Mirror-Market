@@ -50,6 +50,10 @@ LAYER_MIN_KEYS = {
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 8 commodities
     "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
+    "usda": 2,         # of 3 stats (production, area harvested, yield)
+    "export_sales": 4,  # of 6 commodities
+    "forward_curve": 7,  # of 10 commodities
+    "eia": 2,          # of 3 series
 }
 
 # Systemic-outage backstop: exit non-zero when more than this many active
