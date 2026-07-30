@@ -42,6 +42,7 @@ from fetchers.eia import fetch_all_eia
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
+from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
 from fetchers.usda import (
@@ -556,14 +557,28 @@ def run() -> int:
     _mark_empty("india_domestic")
 
     # ── Layer 17: CEPEA Brazil Domestic Soy Spot ──────────────────
-    # DISABLED 2026-05-12: cepea.esalq.usp.br is fronted by a Cloudflare
-    # Turnstile JavaScript challenge that cannot be solved with header
-    # tweaks (HTTP 403 on every URL). Layer last had real data on
-    # 2026-02-20. Re-enable when an alternate Brazil spot source is wired
-    # up (Infosimples, Playwright, or another index). fetchers/cepea.py
-    # is intentionally kept on disk so re-enabling is a one-line revert.
-    logger.info("[Layer 17] CEPEA disabled — Cloudflare Turnstile JS challenge")
-    _mark_empty("cepea")
+    # Re-enabled 2026-07-30 via Notícias Agrícolas, which republishes the
+    # CEPEA/ESALQ indicators server-rendered (cepea.org.br itself is still
+    # behind a Cloudflare Turnstile challenge; fetchers/cepea.py kept on
+    # disk in case the direct source ever reopens).
+    try:
+        logger.info("[Layer 17] Fetching CEPEA indicators via Notícias Agrícolas ...")
+        na_result = fetch_noticias_agricolas()
+
+        if na_result.has_rows:
+            for name, df in na_result.data.items():
+                df = clean_brazil_spot(df)
+                save_brazil_spot(name, df)
+
+            results["cepea"] = True
+            save_freshness("cepea", na_result.total_rows)
+            logger.info("[Layer 17] CEPEA via NA: %d rows saved", na_result.total_rows)
+        else:
+            logger.error("[Layer 17] CEPEA via NA failed: %s", na_result.error)
+            _mark_failed("cepea")
+    except Exception:
+        logger.exception("[Layer 17] CEPEA via NA failed — see error above")
+        _mark_failed("cepea")
 
     # ── Layer 18: JSE SAFEX South Africa Soy Prices ───────────────
     try:

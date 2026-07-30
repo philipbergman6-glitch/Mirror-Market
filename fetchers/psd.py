@@ -32,6 +32,13 @@ from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
 
+# Dataset spelling → display name used everywhere else in the project.
+# Verified against the 2026 bulk CSVs (191 distinct Country_Name values).
+_PSD_COUNTRY_ALIASES = {
+    "Korea, South": "South Korea",
+    "Cote d'Ivoire": "Ivory Coast",
+}
+
 
 def fetch_psd_commodity_group(group_name: str) -> pd.DataFrame:
     """
@@ -109,10 +116,16 @@ def _filter_psd(df: pd.DataFrame) -> pd.DataFrame:
     df[code_col] = df[code_col].astype(str).str.strip()
     df = df[df[code_col].isin(target_codes)]
 
-    # Filter by country
+    # Filter by country. The PSD dataset spells some countries differently
+    # from our display names ("Korea, South", "Cote d'Ivoire") — filter on
+    # both spellings, then normalise to the display name so downstream
+    # consumers see one consistent label. Without the aliases these
+    # countries were silently dropped (isin simply matched nothing).
     country_col = "Country_Name"
     if country_col in df.columns:
-        df = df[df[country_col].isin(PSD_TARGET_COUNTRIES)]
+        accepted = set(PSD_TARGET_COUNTRIES) | set(_PSD_COUNTRY_ALIASES)
+        df = df[df[country_col].isin(accepted)]
+        df[country_col] = df[country_col].replace(_PSD_COUNTRY_ALIASES)
 
     # Filter by attribute
     attr_col = "Attribute_Description"

@@ -49,7 +49,7 @@ LAYER_MIN_KEYS = {
     "weather": 18,     # of 24 regions
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 8 commodities
-    "dce": 3,          # of 5 contracts
+    "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
 }
 
 # Systemic-outage backstop: exit non-zero when more than this many active
@@ -298,10 +298,16 @@ CURRENCY_TICKERS = {
 
 # ---------------------------------------------------------------------------
 # Layer 8 — World Bank Pink Sheet (monthly Robusta, Palm Oil, etc.)
+# The xlsx deep link contains a GUID that rotates yearly, and stale links
+# keep returning HTTP 200 with frozen data (the 2025 GUID silently served
+# Dec-2025 data through mid-2026). The fetcher therefore resolves the
+# current link from the landing page first; WORLDBANK_PRICES_URL is only
+# the fallback when the landing page is unreachable.
 # ---------------------------------------------------------------------------
+WORLDBANK_CMO_LANDING_URL = "https://www.worldbank.org/en/research/commodity-markets"
 WORLDBANK_PRICES_URL = (
     "https://thedocs.worldbank.org/en/doc/"
-    "18675f1d1639c7a34d463f59263ba0a2-0050012025/related/"
+    "74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/"
     "CMO-Historical-Data-Monthly.xlsx"
 )
 
@@ -315,6 +321,11 @@ DCE_CONTRACTS = {
     "DCE Soybean Oil":  "Y0",   # Soybean Oil continuous
     "DCE Palm Oil":     "P0",   # Palm Oil continuous
     "DCE Corn":         "C0",   # Corn continuous — China feed demand
+    # CZCE rapeseed complex — same Sina feed, different exchange. The only
+    # free *daily* rapeseed benchmark (Matif ECO has no free feed);
+    # substitute-oil signal for the soy oil book.
+    "CZCE Rapeseed Oil":  "OI0",  # Rapeseed Oil continuous
+    "CZCE Rapeseed Meal": "RM0",  # Rapeseed Meal continuous
 }
 
 # ---------------------------------------------------------------------------
@@ -487,6 +498,25 @@ NCDEX_UNIT_MULTIPLIER = {
 # ---------------------------------------------------------------------------
 CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
 CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
+
+# cepea.org.br itself sits behind a Cloudflare Turnstile challenge
+# (2026-05). Notícias Agrícolas republishes the same CEPEA/ESALQ
+# indicators server-rendered — this is the active Layer 17 source.
+# Appending /YYYY-MM-DD to a URL returns that date's page (~10 sessions
+# per page), which is how the backfill script walks the gap.
+# Commodity keys reuse the historical names so stored history continues.
+NOTICIAS_AGRICOLAS_URLS = {
+    # CEPEA/ESALQ Paraná — the classic farm-gate CEPEA soy indicator
+    "Soybean (CEPEA)": (
+        "https://www.noticiasagricolas.com.br/cotacoes/soja/"
+        "indicador-cepea-esalq-soja-parana"
+    ),
+    # ESALQ/B3 Paranaguá — port-side indicator, cross-check for AgRural FOB
+    "Soybean (ESALQ/B3 Paranaguá)": (
+        "https://www.noticiasagricolas.com.br/cotacoes/soja/"
+        "soja-indicador-cepea-esalq-porto-paranagua"
+    ),
+}
 
 # ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)

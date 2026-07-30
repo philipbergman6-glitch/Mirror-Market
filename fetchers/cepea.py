@@ -47,7 +47,7 @@ from bs4 import BeautifulSoup
 
 from config import CEPEA_SOYBEAN_URL, MAX_RETRIES, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
-from pipeline.results import ScraperShapeError
+from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
