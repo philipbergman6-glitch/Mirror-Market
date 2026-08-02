@@ -47,7 +47,7 @@ def fetch_psd_commodity_group(group_name: str) -> pd.DataFrame:
     Parameters
     ----------
     group_name : str
-        Key in PSD_URLS, e.g. "oilseeds" or "coffee".
+        Key in PSD_URLS, e.g. "oilseeds" or "grains".
 
     Returns
     -------
@@ -150,7 +150,7 @@ def _filter_psd(df: pd.DataFrame) -> pd.DataFrame:
 
 def fetch_psd_all() -> dict[str, pd.DataFrame]:
     """
-    Fetch oilseeds + coffee PSD data, filter to target commodities/countries/attributes.
+    Fetch oilseeds + grains + cotton PSD data, filter to target commodities/countries/attributes.
 
     Returns
     -------

@@ -57,7 +57,7 @@ def fetch_usda(
     Parameters
     ----------
     commodity : str
-        e.g. "SOYBEANS", "COFFEE"
+        e.g. "SOYBEANS", "CORN"
     year_start, year_end : int
         Range of crop years to request.
     stat_category : str

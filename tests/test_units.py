@@ -34,7 +34,6 @@ NUMERIC_CONVERSIONS = [
     ("Soybean Oil", 50.0, 50.0 * 2204.62 / 100),
     ("Sugar", 20.0, 20.0 * 2204.62 / 100),
     ("Cotton", 70.0, 70.0 * 2204.62 / 100),
-    ("Coffee", 150.0, 150.0 * 2204.62 / 100),
     ("Live Cattle", 180.0, 180.0 * 2204.62 / 100),
     ("Lean Hogs", 80.0, 80.0 * 2204.62 / 100),
     # USD/short ton / 0.907185 = USD/MT
@@ -57,7 +56,7 @@ def test_to_metric_tons_unknown_commodity_returns_none():
 def test_conversion_factors_table_covers_documented_commodities():
     expected_keys = {
         "Soybeans", "Soybean Oil", "Soybean Meal",
-        "Corn", "Wheat", "Sugar", "Cotton", "Coffee",
+        "Corn", "Wheat", "Sugar", "Cotton",
         "Live Cattle", "Lean Hogs", "Palm Oil (CME)",
     }
     assert expected_keys.issubset(set(CONVERSION_FACTORS.keys()))
@@ -166,7 +165,7 @@ def test_mt_label(commodity, expected):
         ("Soybean Oil", "cents/lb"),
         ("Sugar", "cents/lb"),
         ("Cotton", "cents/lb"),
-        ("Coffee", "cents/lb"),
+
         ("Live Cattle", "cents/lb"),
         ("Lean Hogs", "cents/lb"),
         ("Soybean Meal", "$/short ton"),

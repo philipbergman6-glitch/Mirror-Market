@@ -106,8 +106,6 @@ _PSD_HIGHLIGHTS = {
 
 _CORRELATION_CURRENCY_PAIRS = (
     ("Soybeans", "BRL/USD"),
-    ("Coffee", "COP/USD"),
-    ("Coffee", "BRL/USD"),
 )
 
 _TECH_FIELDS = (

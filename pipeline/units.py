@@ -16,7 +16,7 @@ Conversion factors:
     Soybean Meal: 1 short ton = 0.907185 MT
     Corn:         1 MT = 39.368 bushels
     Wheat:        1 MT = 36.7437 bushels
-    Sugar/Cotton/Coffee/Cattle/Hogs: 1 MT = 2204.62 lbs
+    Sugar/Cotton/Cattle/Hogs: 1 MT = 2204.62 lbs
     Palm Oil:     already USD/MT (CME calendar swap — identity)
 """
 
@@ -54,9 +54,6 @@ CONVERSION_FACTORS = {
 
     # Cotton: cents/lb → USD/MT
     "Cotton": 2204.62 / 100,
-
-    # Coffee: cents/lb → USD/MT
-    "Coffee": 2204.62 / 100,
 
     # Live Cattle: cents/lb → USD/MT
     "Live Cattle": 2204.62 / 100,
@@ -164,7 +161,6 @@ def native_label(commodity: str) -> str:
         "Wheat": "cents/bu",
         "Sugar": "cents/lb",
         "Cotton": "cents/lb",
-        "Coffee": "cents/lb",
         "Live Cattle": "cents/lb",
         "Lean Hogs": "cents/lb",
         "Palm Oil (CME)": "USD/MT",
