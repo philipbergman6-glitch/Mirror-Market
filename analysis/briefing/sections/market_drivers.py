@@ -41,7 +41,7 @@ def format(  # noqa: A001
             if brl_chg < -1:
                 drivers.append(
                     f"Brazil export competitiveness improving: BRL weakened {abs(brl_chg):.1f}% "
-                    f"this week — makes Brazilian soy/coffee cheaper on world markets"
+                    f"this week — makes Brazilian soy cheaper on world markets"
                 )
             elif brl_chg > 1:
                 drivers.append(
@@ -89,7 +89,7 @@ def format(  # noqa: A001
                 active_alerts.append(region)
 
         if active_alerts:
-            for commodity in ["Soybeans", "Coffee"]:
+            for commodity in ["Soybeans"]:
                 if commodity in enriched:
                     weekly_chg = enriched[commodity].get("weekly_pct_change", pd.Series())
                     if not weekly_chg.empty and pd.notna(weekly_chg.iloc[-1]) and weekly_chg.iloc[-1] > 1:

@@ -43,16 +43,16 @@ MAX_RETRIES = 3         # how many times to retry a failed request
 # 1 of 13 currencies is an outage, not a success. Layers not listed here
 # succeed with any non-empty key.
 LAYER_MIN_KEYS = {
-    "prices": 8,       # of 11 tickers
-    "currencies": 10,  # of 13 pairs
+    "prices": 8,       # of 10 tickers
+    "currencies": 8,   # of 10 pairs
     "fred": 8,         # of 10 series
-    "weather": 18,     # of 24 regions
-    "cot": 7,          # of 10 commodities
-    "psd": 5,          # of 8 commodities
+    "weather": 14,     # of 18 regions
+    "cot": 7,          # of 9 commodities
+    "psd": 5,          # of 7 commodities
     "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
-    "forward_curve": 7,  # of 10 commodities
+    "forward_curve": 7,  # of 9 commodities
     "eia": 2,          # of 3 series
 }
 
@@ -64,7 +64,7 @@ RETRY_DELAY = 2         # seconds between retries
 # ---------------------------------------------------------------------------
 # Layer 1 — yfinance ticker symbols (data sourced from CME / ICE / CBOT)
 #
-# Core commodities (soybeans complex + coffee) PLUS competing/rotation
+# Core commodities (soybean complex) PLUS competing/rotation
 # crops and downstream demand. Without corn, wheat, sugar, and livestock
 # the analysis would be misleading — these directly drive soybean acreage
 # decisions and feed demand.
@@ -74,7 +74,6 @@ COMMODITY_TICKERS = {
     "Soybeans":     "ZS=F",   # CME/CBOT — benchmark global soybean price
     "Soybean Oil":  "ZL=F",   # CME/CBOT — cooking oil + biodiesel
     "Soybean Meal": "ZM=F",   # CME/CBOT — animal feed protein
-    "Coffee":       "KC=F",   # ICE — Arabica coffee
 
     # ── Competing/rotation crops ──
     # Corn is THE #1 driver of soybean acreage: when corn is more profitable,
@@ -164,7 +163,6 @@ COT_COMMODITIES = {
     "Soybeans":     "SOYBEANS - CHICAGO BOARD OF TRADE",
     "Soybean Oil":  "SOYBEAN OIL - CHICAGO BOARD OF TRADE",
     "Soybean Meal": "SOYBEAN MEAL - CHICAGO BOARD OF TRADE",
-    "Coffee":       "COFFEE C - ICE FUTURES U.S.",
 
     # ── Competing crops ──
     "Corn":         "CORN - CHICAGO BOARD OF TRADE",
@@ -180,7 +178,7 @@ COT_COMMODITIES = {
 # ---------------------------------------------------------------------------
 # Layer 5 — Weather data via Open-Meteo (free, no API key)
 #
-# Every major growing region for soybeans, coffee, and palm oil worldwide.
+# Every major growing region for soybeans and palm oil worldwide.
 # Missing a region means missing a weather event that could move prices.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -193,19 +191,14 @@ GROWING_REGIONS = {
     # ── South America ──
     "Brazil Mato Grosso":         {"lat": -12.64, "lon": -55.42},   # #1 Brazil soy state
     "Brazil Parana":              {"lat": -24.04, "lon": -51.46},   # #2 Brazil soy state
-    "Brazil Minas Gerais":        {"lat": -19.47, "lon": -46.05},   # Coffee capital of Brazil
-    "Brazil Bahia":               {"lat": -12.97, "lon": -38.51},   # Cacao + coffee
     "Argentina Pampas":           {"lat": -33.95, "lon": -60.33},   # Soy belt
     "Argentina Cordoba":          {"lat": -31.42, "lon": -64.18},   # #2 Argentina soy province
     "Paraguay Chaco":             {"lat": -22.35, "lon": -59.95},   # Expanding soy frontier
-    "Colombia Coffee Region":    {"lat": 4.81,   "lon": -75.68},
 
     # ── Africa ──
-    "Ethiopia Sidama (Coffee)":   {"lat": 6.74,   "lon": 38.46},   # #1 Africa coffee, Arabica origin
     "Ivory Coast (Cocoa)":        {"lat": 6.83,   "lon": -5.29},   # Cross-reference
 
     # ── Asia ──
-    "Vietnam Central Highlands":  {"lat": 14.35,  "lon": 108.00},  # #2 global Robusta
     "Indonesia Riau (Sumatra)":   {"lat": 0.29,   "lon": 101.71},  # #1 palm oil belt
     "Malaysia Sabah (Borneo)":    {"lat": 5.42,   "lon": 116.80},  # #2 palm oil state
     "India Madhya Pradesh":       {"lat": 22.72,  "lon": 75.86},   # India soybean capital
@@ -224,14 +217,13 @@ WEATHER_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum"
 
 # ---------------------------------------------------------------------------
 # Layer 6 — USDA FAS PSD (global supply/demand, bulk CSV, no API key)
-# Covers: soybeans, soybean oil, soybean meal, palm oil, coffee — every country
+# Covers: soybeans, soybean oil, soybean meal, palm oil — every country
 #
 # Added corn and cotton for rotation crop tracking, and grains category
 # for wheat coverage.
 # ---------------------------------------------------------------------------
 PSD_URLS = {
     "oilseeds": "https://apps.fas.usda.gov/psdonline/downloads/psd_oilseeds_csv.zip",
-    "coffee":   "https://apps.fas.usda.gov/psdonline/downloads/psd_coffee_csv.zip",
     "grains":   "https://apps.fas.usda.gov/psdonline/downloads/psd_grains_pulses_csv.zip",
     "cotton":   "https://apps.fas.usda.gov/psdonline/downloads/psd_cotton_csv.zip",
 }
@@ -242,7 +234,6 @@ PSD_TARGET_COMMODITIES = {
     "Soybean Oil":  "4232000",
     "Soybean Meal": "813100",
     "Palm Oil":     "4243000",
-    "Coffee":       "711100",
     # ── Competing crops ──
     "Corn":         "440000",
     "Wheat":        "410000",
@@ -283,25 +274,22 @@ CURRENCY_TICKERS = {
     # ── South America ──
     "BRL/USD": "BRLUSD=X",   # Brazilian Real — THE most important soybean currency
     "ARS/USD": "ARSUSD=X",   # Argentine Peso — #3 soybean exporter
-    "COP/USD": "COPUSD=X",   # Colombian Peso — #3 Arabica coffee producer
     "PYG/USD": "PYGUSD=X",   # Paraguayan Guarani — #4 soybean exporter
 
     # ── Asia ──
     "CNY/USD": "CNYUSD=X",   # Chinese Yuan — #1 soybean importer
     "IDR/USD": "IDRUSD=X",   # Indonesian Rupiah — #1 palm oil producer
     "MYR/USD": "MYRUSD=X",   # Malaysian Ringgit — #2 palm oil producer
-    "VND/USD": "VNDUSD=X",   # Vietnamese Dong — #2 Robusta coffee producer
     "INR/USD": "INRUSD=X",   # Indian Rupee — major soybean/palm oil consumer
     "THB/USD": "THBUSD=X",   # Thai Baht — #3 palm oil producer
 
     # ── Africa ──
-    "ETB/USD": "ETBUSD=X",   # Ethiopian Birr — #1 Africa coffee producer
     "ZAR/USD": "ZARUSD=X",   # South African Rand — emerging soy producer
     "NGN/USD": "NGNUSD=X",   # Nigerian Naira — emerging soy market (may have limited data)
 }
 
 # ---------------------------------------------------------------------------
-# Layer 8 — World Bank Pink Sheet (monthly Robusta, Palm Oil, etc.)
+# Layer 8 — World Bank Pink Sheet (monthly Palm Oil, Rapeseed Oil, etc.)
 # The xlsx deep link contains a GUID that rotates yearly, and stale links
 # keep returning HTTP 200 with frozen data (the 2025 GUID silently served
 # Dec-2025 data through mid-2026). The fetcher therefore resolves the
@@ -388,7 +376,6 @@ FORWARD_CURVE_CONTRACTS = {
     "Soybean Meal": {"root": "ZM", "exchange": "CBT", "months": [1, 3, 5, 7, 8, 9, 10, 12]},
     "Corn":         {"root": "ZC", "exchange": "CBT", "months": [3, 5, 7, 9, 12]},
     "Wheat":        {"root": "ZW", "exchange": "CBT", "months": [3, 5, 7, 9, 12]},
-    "Coffee":       {"root": "KC", "exchange": "NYB", "months": [3, 5, 7, 9, 12]},
     "Sugar":        {"root": "SB", "exchange": "NYB", "months": [3, 5, 7, 10]},
     "Cotton":       {"root": "CT", "exchange": "NYB", "months": [3, 5, 7, 10, 12]},
     "Live Cattle":  {"root": "LE", "exchange": "CME", "months": [2, 4, 6, 8, 10, 12]},

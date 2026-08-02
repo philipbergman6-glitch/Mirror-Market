@@ -82,7 +82,7 @@ def test_generate_briefing_with_data_does_not_crash(patched_db):
         },
         index=idx,
     )
-    for commodity in ["Soybeans", "Soybean Oil", "Soybean Meal", "Corn", "Coffee"]:
+    for commodity in ["Soybeans", "Soybean Oil", "Soybean Meal", "Corn"]:
         store.save_price_data(commodity, ohlcv)
 
     currency = ohlcv.copy()
@@ -167,7 +167,7 @@ def _populate_full_briefing_fixtures(patched_db):
         index=idx,
     )
 
-    for commodity in ["Soybeans", "Soybean Oil", "Soybean Meal", "Corn", "Wheat", "Palm Oil (CME)", "Live Cattle", "Coffee"]:
+    for commodity in ["Soybeans", "Soybean Oil", "Soybean Meal", "Corn", "Wheat", "Palm Oil (CME)", "Live Cattle"]:
         store.save_price_data(commodity, ohlcv)
 
     for pair in ["BRL/USD", "CNY/USD", "ARS/USD"]:

@@ -2,8 +2,8 @@
 Layer 8 — World Bank Pink Sheet monthly commodity prices.
 
 Downloads the CMO Historical Data Monthly xlsx file from the World Bank.
-This gives us monthly prices for Robusta coffee, Palm oil, Soybeans,
-Soybean oil, and Soybean meal — going back to 1960.
+This gives us monthly prices for Palm oil, Soybeans, Soybean oil,
+Soybean meal, and substitute oils — going back to 1960.
 
 Key concepts for learning:
     - pd.read_excel() with openpyxl engine for .xlsx files
@@ -11,7 +11,7 @@ Key concepts for learning:
       has commodity names in the header rows and dates in the first column
     - We parse the header to find column positions for our target commodities
     - Monthly data is sufficient for trend/seasonal analysis (daily isn't
-      available for free for Robusta and Palm Oil)
+      available for free for the substitute-oil benchmarks)
 """
 
 import logging
@@ -35,8 +35,6 @@ logger = logging.getLogger(__name__)
 # used by international crushers and traders.  So this layer already covers
 # the Rotterdam CIF data gap described in the plan.
 _WB_COMMODITY_MAP = {
-    "Coffee, Arabica":  "Coffee Arabica",
-    "Coffee, Robusta":  "Coffee Robusta",
     "Palm oil":         "Palm Oil",
     "Soybeans":         "Soybeans",
     "Soybean oil":      "Soybean Oil",
@@ -221,9 +219,7 @@ def _parse_pink_sheet(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
             df = pd.DataFrame({
                 "Date": dates,
                 "price": prices,
-                # Pink Sheet quotes both coffees in $/kg; the soy complex
-                # and palm oil are $/mt. The old label put Robusta 1000x off.
-                "unit": "$/kg" if commodity_name.startswith("Coffee") else "$/mt",
+                "unit": "$/mt",
             })
             results[commodity_name] = df
             logger.info(
@@ -243,7 +239,7 @@ def fetch_worldbank_prices() -> dict[str, pd.DataFrame]:
     Returns
     -------
     dict
-        {commodity_name: DataFrame} — e.g. {"Robusta Coffee": DataFrame, ...}
+        {commodity_name: DataFrame} — e.g. {"Palm Oil": DataFrame, ...}
         Each DataFrame has columns: Date, price, unit
     """
     raw_bytes = _download_pink_sheet()

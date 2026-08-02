@@ -26,14 +26,14 @@ One page, in the order you'd scan it each morning, every section collapsible:
 
 | # | Source | What it provides |
 |--:|--------|------------------|
-| 1 | Yahoo Finance | Daily prices for 11 commodity futures |
+| 1 | Yahoo Finance | Daily prices for 10 commodity futures |
 | 2 | USDA NASS* | US harvest sizes, yields, weekly crop health ratings |
 | 3 | FRED* | The economic backdrop: dollar strength, inflation, interest rates |
 | 4 | CFTC | What big speculators are betting (published weekly) |
 | 5 | Open-Meteo | Weather in 24 growing regions across 6 continents |
 | 6 | USDA PSD | Global supply and demand, 8 commodities × 27 countries |
-| 7 | Yahoo Finance | 13 currency pairs (a weak Brazilian real makes Brazilian beans cheaper) |
-| 8 | World Bank | Monthly benchmark prices (palm oil, robusta coffee) |
+| 7 | Yahoo Finance | 10 currency pairs (a weak Brazilian real makes Brazilian beans cheaper) |
+| 8 | World Bank | Monthly benchmark prices (palm oil, rapeseed oil) |
 | 9 | AKShare | Chinese futures prices — what the biggest soy buyer is paying |
 | 10 | USDA FAS* | Weekly US export sales and who bought |
 | 11 | Yahoo Finance | Prices for future delivery months |

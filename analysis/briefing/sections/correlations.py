@@ -37,8 +37,6 @@ def format(  # noqa: A001
 
     key_pairs = [
         ("Soybeans", "BRL/USD", "BRL weakening → cheaper Brazil exports → soy pressure"),
-        ("Coffee", "COP/USD", "COP weakening → cheaper Colombia exports"),
-        ("Coffee", "BRL/USD", "BRL weakening → cheaper Brazil exports"),
     ]
 
     currency_corrs = []
