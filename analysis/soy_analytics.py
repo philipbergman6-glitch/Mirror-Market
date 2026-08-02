@@ -284,14 +284,21 @@ def supply_analysis() -> dict:
             subset = wasde_data[wasde_data["commodity"] == commodity]
             attrs = {}
             for attribute in subset["attribute"].unique():
-                attr_rows = subset[subset["attribute"] == attribute].sort_values("reference_period")
+                attr_rows = subset[subset["attribute"] == attribute]
                 if attr_rows.empty:
                     continue
+                # WASDE rows include multiple marketing years per release (e.g. 2024/25
+                # Est. and 2025/26 Proj. in the same April report). Pin to the latest
+                # MY so the MoM revision math compares like with like.
+                latest_my = attr_rows["year"].max()
+                attr_rows = attr_rows[attr_rows["year"] == latest_my]
+                attr_rows = attr_rows.sort_values("reference_period")
                 latest = attr_rows.iloc[-1]
                 entry: dict[str, Any] = {
                     "value": latest.get("value"),
                     "unit": latest.get("unit", ""),
                     "period": latest.get("reference_period", ""),
+                    "marketing_year": latest_my,
                 }
                 if len(attr_rows) >= 2:
                     prev = attr_rows.iloc[-2]
