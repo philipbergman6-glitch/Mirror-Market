@@ -5,7 +5,6 @@ Many commodities have predictable seasonal patterns driven by planting,
 growing, and harvest cycles:
     - Soybeans: US plants in May, harvests Sep-Nov → prices often peak
       in Jun-Jul (weather uncertainty) and dip at harvest
-    - Coffee: Brazil harvests May-Sep → supply pressure
     - These patterns repeat year after year, though individual years vary
 
 Detrending:

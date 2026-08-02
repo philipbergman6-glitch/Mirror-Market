@@ -3,7 +3,6 @@ Layer 5 — Weather data for key growing regions via Open-Meteo.
 
 Weather is one of the biggest price drivers for agricultural commodities:
     - Drought in the US Midwest can cut soybean yields dramatically
-    - Frost in Brazil destroys coffee crops (July 2021 → prices spiked 50%)
     - Excess rain during harvest delays field work and reduces quality
 
 Open-Meteo is free, requires no API key, and covers the whole globe.

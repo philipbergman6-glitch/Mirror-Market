@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 20 source layers (covering 11 commodity futures, 13 currency pairs including ZAR/NGN, 24 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, and AMS CIF Gulf export bids) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 20 source layers (covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 18 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, and AMS CIF Gulf export bids) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
 
 ## Commands
 
@@ -54,15 +54,15 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 
 `main.py` orchestrates the pipeline. Layers 1–13 are driven by a table of `DictLayer` entries run through a shared `_run_dict_layer()` (fetch → clean → save → `_finalize_layer`, which applies the `LAYER_MIN_KEYS` partial-outage floor); Layers 17–20 share a `_run_scraper_layer()` for `FetchResult` sources; Layers 14–16 keep custom blocks. Each layer is independent and wrapped in try/except — if one fails, the rest still run (graceful degradation). After each successful layer, a freshness timestamp is recorded.
 
-1. **Commodity prices** — `fetchers/yfinance.py` (11 futures: soy complex, palm oil CME `CPO=F` (settlement-marked, zero volume by design), corn, wheat, sugar, cotton, cattle, hogs)
+1. **Commodity prices** — `fetchers/yfinance.py` (10 futures: soy complex, palm oil CME `CPO=F` (settlement-marked, zero volume by design), corn, wheat, sugar, cotton, cattle, hogs)
 2. **USDA crop data** — `fetchers/usda.py` (production, yield, area harvested)
    - **2b. Crop progress/condition** — weekly USDA ratings (% good/excellent, % planted/harvested)
 3. **FRED economic data** — `fetchers/fred.py` (dollar index, CPI, Fed funds, Treasury 2Y/10Y/30Y, Ethanol PPI, Soybean Oil PPI, Diesel Price)
-4. **COT positioning** — `fetchers/cot.py` (10 commodities including corn, wheat, sugar, cotton, cattle, hogs)
-5. **Weather** — `fetchers/weather.py` (24 regions: US, Brazil, Argentina, Paraguay, Colombia, Ethiopia, Ivory Coast, Vietnam, Indonesia, Malaysia, India, Thailand, China, South Africa, Nigeria)
-6. **PSD global supply/demand** — `fetchers/psd.py` (8 commodities x 27 countries, oilseeds + grains + coffee + cotton)
-7. **Currencies** — `fetchers/yfinance.py` (13 pairs: BRL, ARS, COP, PYG, CNY, IDR, MYR, VND, INR, THB, ETB, ZAR, NGN)
-8. **World Bank monthly prices** — `fetchers/worldbank.py` (Robusta, Palm Oil, Rapeseed Oil, Sunflower Oil, etc. — current xlsx link resolved from the CMO landing page each run; the GUID deep link rotates yearly and stale links serve frozen data with HTTP 200)
+4. **COT positioning** — `fetchers/cot.py` (9 commodities including corn, wheat, sugar, cotton, cattle, hogs)
+5. **Weather** — `fetchers/weather.py` (18 regions: US, Brazil, Argentina, Paraguay, Ivory Coast, Indonesia, Malaysia, India, Thailand, China, South Africa, Nigeria)
+6. **PSD global supply/demand** — `fetchers/psd.py` (7 commodities x 27 countries, oilseeds + grains + cotton)
+7. **Currencies** — `fetchers/yfinance.py` (10 pairs: BRL, ARS, PYG, CNY, IDR, MYR, INR, THB, ZAR, NGN)
+8. **World Bank monthly prices** — `fetchers/worldbank.py` (Palm Oil, Rapeseed Oil, Sunflower Oil, etc. — current xlsx link resolved from the CMO landing page each run; the GUID deep link rotates yearly and stale links serve frozen data with HTTP 200)
 9. **Chinese futures** — `fetchers/akshare.py` (7 contracts: 5 DCE incl. Corn + CZCE Rapeseed Oil/Meal — the only free daily rapeseed benchmark)
 10. **Export sales** — `fetchers/export_sales.py` (weekly USDA FAS demand data — requires `FAS_API_KEY`)
 11. **Forward curves** — `fetchers/forward_curve.py` (individual contract months via yfinance — contango/backwardation)
@@ -131,9 +131,9 @@ CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal 
 14. Forward Curve (contango/backwardation per commodity)
 15. Biofuel & Energy (EIA — ethanol, biodiesel production, diesel prices)
 16. Brazil Crop Estimates (CONAB vs USDA comparison)
-17. Currencies (13 pairs with trade impact)
-18. COT Positioning (10 commodities)
-19. Weather Alerts (24 regions)
+17. Currencies (10 pairs with trade impact)
+18. COT Positioning (9 commodities)
+19. Weather Alerts (18 regions)
 20. Global Supply — PSD (27 countries)
 21. World Bank Prices
 22. Emerging Markets (South Africa SAFEX + Brazil CEPEA + India NCDEX + Nigeria deep dive)
