@@ -43,3 +43,16 @@ report_date,commodity,location,delivery,sale_type,basis_low,basis_high,futures_m
 2026-07-31,Wheat,Gulf Coast Ports,Oct,Bid,75.0,100.0,12,UNCH,7.325,7.575,7.45,5.97,CIF-B
 2026-07-31,Wheat,Gulf Coast Ports,Sep²,Bid,80.0,90.0,9,UNCH,7.1925,7.2925,7.2425,5.7675,CIF-B
 2026-07-31,Wheat,Gulf Coast Ports,Sep¹,Bid,75.0,90.0,9,UNCH,7.1425,7.2925,7.2175,5.7425,CIF-B
+2026-08-03,Corn,Gulf Coast Ports,Aug²,Bid,107.0,107.0,9,UNCH,5.5625,5.5625,5.5625,4.69,CIF-B
+2026-08-03,Corn,Gulf Coast Ports,Nov,Bid,99.0,99.0,12,UNCH,5.715,5.715,5.715,4.84,CIF-B
+2026-08-03,Corn,Gulf Coast Ports,Oct,Bid,100.0,101.0,12,UNCH,5.725,5.735,5.73,4.835,CIF-B
+2026-08-03,Corn,Gulf Coast Ports,Sep,Bid,115.0,119.0,9,UNCH,5.6425,5.6825,5.6625,,CIF-B
+2026-08-03,Soybeans,Gulf Coast Ports,Current,Bid,120.0,122.0,8,UNCH,12.8875,12.9075,12.8975,10.55,CIF-B
+2026-08-03,Soybeans,Gulf Coast Ports,Nov,Bid,115.0,115.0,11,UNCH,13.0725,13.0725,13.0725,10.65,CIF-B
+2026-08-03,Soybeans,Gulf Coast Ports,Oct,Bid,105.0,110.0,11,UNCH,12.9725,13.0225,12.9975,10.535,CIF-B
+2026-08-03,Soybeans,Gulf Coast Ports,Sep,Bid,100.0,108.0,11,UNCH,12.9225,13.0025,12.9625,10.525,CIF-B
+2026-08-03,Wheat,Gulf Coast Ports,Aug²,Bid,50.0,70.0,9,UNCH,7.01,7.21,7.11,,CIF-B
+2026-08-03,Wheat,Gulf Coast Ports,Nov,Bid,85.0,100.0,12,UNCH,7.5425,7.6925,7.6175,6.07,CIF-B
+2026-08-03,Wheat,Gulf Coast Ports,Oct,Bid,75.0,100.0,12,UNCH,7.4425,7.6925,7.5675,5.97,CIF-B
+2026-08-03,Wheat,Gulf Coast Ports,Sep²,Bid,80.0,90.0,9,UNCH,7.31,7.41,7.36,5.7675,CIF-B
+2026-08-03,Wheat,Gulf Coast Ports,Sep¹,Bid,75.0,90.0,9,UNCH,7.26,7.41,7.335,5.7425,CIF-B
