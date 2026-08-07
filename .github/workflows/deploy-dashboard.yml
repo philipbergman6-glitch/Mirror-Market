@@ -23,6 +23,8 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue
+  issues: write
 
 concurrency:
   group: pages
@@ -57,6 +59,17 @@ jobs:
           FAS_API_KEY: ${{ secrets.FAS_API_KEY }}
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
         run: python main.py
+
+      # Layer failures must be loud, not buried in logs: open/update a
+      # `ci-alert` issue on hard failures, close it on the next green run.
+      # Runs even when the pipeline step failed (crash -> alert too);
+      # continue-on-error so a broken alerter never blocks the deploy.
+      - name: Alert on failed data layers
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_layer_alert.py
 
       # Snapshot-only sources (AgRural, SAFEX, forward curve, CONAB,
       # inspections, Gulf bids) have no upstream history — the committed

@@ -18,10 +18,12 @@ Key concepts for learning:
     - logging replaces print() for professional, filterable output.
 """
 
+import json
 import logging
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from config import LAYER_MIN_KEYS, MAX_FAILED_LAYERS, setup_logging
@@ -148,6 +150,20 @@ def _mark_disabled(layer: str) -> None:
         save_freshness(layer, rows_fetched=0, status="disabled")
     except Exception:
         logger.exception("Could not record disabled freshness row for %s", layer)
+
+
+def _write_pipeline_status(payload: dict) -> None:
+    """Write the run summary JSON next to the DB (data/storage/ — gitignored).
+
+    Resolves STORAGE_DIR at call time so tests that monkeypatch config see
+    their tmp_path. A write failure propagates: better a non-zero exit than
+    a CI alerter reading yesterday's status.
+    """
+    import config as _config
+
+    path = Path(_config.STORAGE_DIR) / "pipeline_status.json"
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    logger.info("Pipeline status written to: %s", path)
 
 
 def _finalize_layer(layer: str, data: dict) -> bool:
@@ -567,11 +583,22 @@ def run() -> int:
         logger.warning("Failed:    %s", ", ".join(failed))
     logger.info("Database saved to: data/storage/mirror_market.db")
 
+    # ── Machine-readable run summary ─────────────────────────────
+    # Consumed by scripts/ci_layer_alert.py in CI: hard failures there
+    # open/update a GitHub issue instead of vanishing into the logs.
+    critical_failures = [name for name in CRITICAL_LAYERS if not results.get(name)]
+    _write_pipeline_status({
+        "succeeded": succeeded,
+        "failed": failed,
+        "disabled": disabled,
+        "hard_failures": sorted(_HARD_FAILURES - DISABLED_LAYERS),
+        "critical_failures": critical_failures,
+    })
+
     # ── Exit code ────────────────────────────────────────────────
     # Non-critical layer failures are logged but do not fail the run.
     # If a critical layer (prices or FRED economic) failed, exit 1 so
     # CI/deploy workflows can react.
-    critical_failures = [name for name in CRITICAL_LAYERS if not results.get(name)]
     if critical_failures:
         logger.error(
             "Critical layer(s) failed: %s — pipeline exiting with status 1",
