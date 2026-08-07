@@ -459,6 +459,8 @@ EIA_SERIES = {
     },
     "Biodiesel Production": {
         # EIA retired the sndm route; monthly S&D now lives under snd
+        # EPOORDB is biodiesel (renewable diesel is the sibling EPOORDO) —
+        # verified against EIA's series page 2026-08
         "route": "petroleum/sum/snd/data",
         "series": "M_EPOORDB_YNP_NUS_MBBLD",
         "frequency": "monthly",
@@ -593,10 +595,12 @@ AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 # JSE agricultural settlement prices in ZAR/MT
 # ---------------------------------------------------------------------------
 SAFEX_STATS_URL = "https://www.grainsa.co.za/pages/industry-reports/safex-feeds"
-SAFEX_COMMODITIES = {
-    "Soybean (SAFEX)":   "FKBS",
-    "Sunflower (SAFEX)": "FKSU",
-}
+# Display names stored by fetchers/safex.py; the JSE contract-code mapping
+# (SOYB/SUNS) lives in the fetcher itself.
+SAFEX_COMMODITIES = (
+    "Soybean (SAFEX)",
+    "Sunflower (SAFEX)",
+)
 
 # ---------------------------------------------------------------------------
 # Layer 19 — AgRural Paranaguá FOB soy quote (free, no API key)

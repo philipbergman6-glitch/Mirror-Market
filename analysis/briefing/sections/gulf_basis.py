@@ -16,9 +16,9 @@ _MAX_DELIVERIES = 3  # Current + two forward slots keeps the section tight
 def _format_row(row: pd.Series) -> str:
     month_abbr = calendar.month_abbr[int(row["futures_month"])]
     basis = (
-        f"+{row['basis_low']:.0f}¢"
+        f"{row['basis_low']:+.0f}¢"
         if row["basis_low"] == row["basis_high"]
-        else f"+{row['basis_low']:.0f}/+{row['basis_high']:.0f}¢"
+        else f"{row['basis_low']:+.0f}/{row['basis_high']:+.0f}¢"
     )
     line = (
         f"  {row['delivery']}: {basis}/bu over {month_abbr} ({row['basis_change']}) | "

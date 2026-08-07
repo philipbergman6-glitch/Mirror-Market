@@ -14,6 +14,7 @@ under the wasde-table PK (commodity, year, attribute, reference_period).
 
 from __future__ import annotations
 
+import calendar
 import io
 import logging
 import re
@@ -37,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 # Marketing-year header pattern, e.g. "2025/26", "2025/26 Proj.", "2024/25 Est."
 _MY_PATTERN = re.compile(r"^\s*(\d{4}/\d{2})\b")
+
+# Second-row MY sub-headers name the prior/current release month ("Mar"/"Apr"
+# in the April file, "Jul"/"Aug" in August, ...) — any month token qualifies.
+_MONTH_TOKENS = {calendar.month_abbr[m] for m in range(1, 13)} | {
+    calendar.month_name[m] for m in range(1, 13)
+}
 
 # Footnote markers appended to attribute labels: "Avg. Farm Price ($/bu)  2/"
 _FOOTNOTE_PATTERN = re.compile(r"\s+\d+/\s*$")
@@ -338,7 +345,7 @@ def _parse_section(
 
         # Skip rows that don't look like data (placeholder "Filler", blank col 0,
         # or a second-row MY sub-header like "Mar"/"Apr").
-        if not col0 or col0 == "Filler" or col0 in ("Mar", "Apr", "March", "April"):
+        if not col0 or col0 == "Filler" or col0 in _MONTH_TOKENS:
             continue
 
         attribute = _clean_label(col0)
