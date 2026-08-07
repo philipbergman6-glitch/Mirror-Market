@@ -30,3 +30,4 @@ data/storage/*.csv
 .gstack/
 .scratch/
 graphify-out/
+.claude/

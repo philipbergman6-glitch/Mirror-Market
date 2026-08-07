@@ -120,6 +120,53 @@ def _soybean_pace_lines(subset: pd.DataFrame, latest_week: pd.Timestamp) -> list
     return lines
 
 
+# Destination-trend view (issue #45/#77): the per-country detail has been
+# stored since Layer 10 landed — these lines surface it.
+_NEW_BUYER_LOOKBACK_WEEKS = 4
+
+
+def _soybean_destination_lines(subset: pd.DataFrame, latest_week: pd.Timestamp) -> list[str]:
+    """China share of soybean commitments + buyers newly active this week."""
+    lines: list[str] = []
+    week_data = subset[subset["week_ending"] == latest_week]
+    if week_data.empty or "country" not in week_data.columns:
+        return lines
+
+    # Same match convention as snapshot.py's china_pct.
+    is_china = week_data["country"].astype(str).str.contains("china", case=False)
+    if "outstanding_sales" in week_data.columns and "accumulated_exports" in week_data.columns:
+        committed = (
+            week_data["outstanding_sales"].fillna(0)
+            + week_data["accumulated_exports"].fillna(0)
+        )
+        total = float(committed.sum())
+        china = float(committed[is_china].sum())
+        if total > 0:
+            lines.append(
+                f"    China share of committed: {china / total * 100:.1f}% "
+                f"({china / 1e6:,.2f} of {total / 1e6:,.2f} MMT)"
+            )
+
+    if "net_sales" in week_data.columns:
+        active = set(
+            week_data[week_data["net_sales"].fillna(0) > 0]["country"].astype(str)
+        )
+        weeks = sorted(subset["week_ending"].dropna().unique())
+        prior_weeks = [w for w in weeks if w < latest_week][-_NEW_BUYER_LOOKBACK_WEEKS:]
+        if prior_weeks:
+            prior = subset[subset["week_ending"].isin(prior_weeks)]
+            prior_active = set(
+                prior[prior["net_sales"].fillna(0) > 0]["country"].astype(str)
+            )
+            new_buyers = sorted(active - prior_active)
+            if new_buyers:
+                lines.append(
+                    f"    New buyers (no purchases in prior {len(prior_weeks)} wks): "
+                    + ", ".join(new_buyers[:6])
+                )
+    return lines
+
+
 def format() -> str:  # noqa: A001
     lines = ["EXPORT SALES (USDA Weekly):"]
     es_data = read_export_sales()
@@ -160,6 +207,10 @@ def format() -> str:  # noqa: A001
                 lines.extend(_soybean_pace_lines(subset, latest_week))
             except Exception as exc:
                 logger.debug("Soybean export pace failed: %s", exc)
+            try:
+                lines.extend(_soybean_destination_lines(subset, latest_week))
+            except Exception as exc:
+                logger.debug("Soybean destination trend failed: %s", exc)
 
     if len(lines) == 1:
         lines.append("  Data available but no sales data found")

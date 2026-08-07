@@ -86,6 +86,7 @@ from pipeline.store import (
     save_freshness,
     save_gulf_bids,
     save_india_domestic,
+    save_inspection_destinations,
     save_inspections,
     save_port_flows,
     save_price_data,
@@ -423,6 +424,12 @@ def run() -> int:
         if flows_df is not None and not flows_df.empty:
             save_port_flows(flows_df)
             total_14 += len(flows_df)
+
+        # Destination-country breakdown (same report)
+        dest_df = insp_result.data.get("destinations")
+        if dest_df is not None and not dest_df.empty:
+            save_inspection_destinations(dest_df)
+            total_14 += len(dest_df)
 
         if total_14 > 0:
             results["crush_inspections"] = True

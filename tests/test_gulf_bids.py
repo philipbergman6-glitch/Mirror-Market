@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from fetchers.gulf_bids import _parse_gulf_bids
-from fetchers.usda import _parse_port_flows
+from fetchers.usda import _parse_destinations, _parse_port_flows
 from pipeline.results import ScraperShapeError
 
 _TODAY = date(2026, 7, 30)
@@ -111,3 +111,54 @@ def test_port_flows_parses_regions_and_subtotals() -> None:
 def test_port_flows_missing_table_raises() -> None:
     with pytest.raises(ScraperShapeError, match="PORT AREA"):
         _parse_port_flows("GRAIN 07/23/2026 07/16/2026 07/09/2026\nSOYBEANS 1 2 3")
+
+
+# Trimmed from the real WA_GR101 report (week ending 2026-07-30).
+_DEST_TEXT = """
+                GRAINS INSPECTED AND/OR WEIGHED FOR EXPORT BY REGION AND COUNTRY OF DESTINATION
+                                     REPORTED IN WEEK ENDING JUL 30, 2026
+                                               -- METRIC TONS --
+
+---------------------------------------------------------------------------------------------------------------
+
+                                    CORN      CORN
+  REGION    COUNTRY       WHEAT    YELLOW     WHITE    SORGHUM  SOYBEANS      TOTALS
+
+
+GULF      COLOMBIA            0    271,599      0          0     7,411       279,010
+          EGYPT               0          0      0          0    56,944        56,944
+            SUBTOTAL          0    271,599      0          0    64,355       335,954
+
+INTERIOR  MEXICO         43,810    259,655      0          0    74,245       377,710
+          UN KINGDOM          0     20,471      0          0         0        20,471
+            SUBTOTAL     43,810    280,126      0          0    74,245       398,181
+
+  TOTAL                  43,810    551,725      0          0   138,600       734,135
+
+
+TOTAL
+SHIPMENTS TO CANADA*
+                              0          0      0          0    11,865        11,865
+"""
+
+
+def test_destinations_parses_countries_and_subtotals() -> None:
+    df = _parse_destinations(_DEST_TEXT)
+    assert (df["week_ending"] == "2026-07-30").all()
+
+    mex_soy = df[(df["country"] == "MEXICO") & (df["commodity"] == "Soybeans")]
+    assert mex_soy["inspections_mt"].iloc[0] == 74_245.0
+    assert mex_soy["region"].iloc[0] == "INTERIOR"
+
+    # Multi-word country names survive the 2+-space field split
+    assert "UN KINGDOM" in set(df["country"])
+
+    # Grand TOTAL and Canada-footnote rows are excluded
+    assert "TOTAL" not in set(df["country"])
+    total_soy = df[(df["country"] == "SUBTOTAL") & (df["commodity"] == "Soybeans")]
+    assert total_soy["inspections_mt"].sum() == 138_600.0
+
+
+def test_destinations_missing_table_raises() -> None:
+    with pytest.raises(ScraperShapeError, match="COUNTRY OF DESTINATION"):
+        _parse_destinations("GRAIN 07/23/2026 07/16/2026 07/09/2026\nSOYBEANS 1 2 3")
