@@ -669,7 +669,7 @@ def relative_value_analysis() -> dict:
     palm = prices.get("Palm Oil (CME)")
     corn = prices.get("Corn")
 
-    result = {}
+    result: dict[str, Any] = {}
 
     # --- Crush spread ---
     if (

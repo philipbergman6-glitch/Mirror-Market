@@ -270,6 +270,7 @@ CREATE TABLE IF NOT EXISTS safex_prices (
     Close       REAL,
     Volume      REAL,
     unit        TEXT,
+    contract    TEXT,                       -- JSE MMMYY code, e.g. 'AUG26'
     PRIMARY KEY (Date, commodity)
 );
 """

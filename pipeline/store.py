@@ -58,6 +58,19 @@ def _migrate_export_sales_unit(conn) -> None:
             logger.warning("Could not add unit column to export_sales: %s", exc)
 
 
+def _migrate_safex_contract(conn) -> None:
+    """Add the contract column to safex_prices if absent. Idempotent."""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(safex_prices)").fetchall()}
+    except Exception:
+        return
+    if cols and "contract" not in cols:
+        try:
+            conn.execute("ALTER TABLE safex_prices ADD COLUMN contract TEXT")
+        except Exception as exc:
+            logger.warning("Could not add contract column to safex_prices: %s", exc)
+
+
 def _migrate_weather_is_forecast(conn) -> None:
     """Add the is_forecast column to weather if absent. Idempotent.
 
@@ -165,6 +178,7 @@ def init_database():
         _migrate_forward_curve_pk(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
+        _migrate_safex_contract(conn)
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -590,7 +604,11 @@ def save_safex(commodity: str, df: pd.DataFrame):
         df["unit"] = df["Unit"].fillna("ZAR/MT").astype(str)
     else:
         df["unit"] = "ZAR/MT"
-    _save("safex_prices", df[["Date", "commodity", "Close", "Volume", "unit"]],
+    if "Contract" in df.columns:
+        df["contract"] = df["Contract"]
+    elif "contract" not in df.columns:
+        df["contract"] = None
+    _save("safex_prices", df[["Date", "commodity", "Close", "Volume", "unit", "contract"]],
           ["Date", "commodity"], f"safex/{commodity}")
 
 

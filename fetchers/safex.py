@@ -21,15 +21,18 @@ Parser strategy:
     extract rows. Mismatched structure raises ScraperShapeError so the
     pipeline records 'failed' instead of silently empty.
 
-    "Nearest contract" = the contract with the highest volume traded today.
+    "Nearest contract" = the contract whose MMMYY code expires soonest
+    (month arithmetic, not page order or volume). The contract label is
+    kept alongside the price so a contract roll is visible downstream.
+    Rows without a parseable trade *date* hard-fail — a frozen page must
+    never be stamped with today's date.
 """
 
 from __future__ import annotations
 
-import contextlib
 import logging
+import re
 from collections.abc import Sequence
-from datetime import date
 
 import pandas as pd
 import requests
@@ -58,6 +61,49 @@ _REQUIRED_COLUMNS: tuple[str, ...] = (
     "lasttradedprice",
     "volume",
 )
+
+_MONTH_CODES = {
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+}
+
+# A trade date must carry an actual calendar date — either ISO
+# (2026-05-11) or day-first (11/05/2026). A bare time like "14:32"
+# must NOT qualify: pandas would silently fill in today's date.
+_ISO_DATE_PATTERN = re.compile(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}")
+_DAYFIRST_DATE_PATTERN = re.compile(r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}")
+
+
+def _contract_sort_key(label: str) -> tuple[int, int] | None:
+    """Parse an MMMYY contract code ('AUG26') into (year, month) for
+    nearest-expiry ordering. Returns None if the label doesn't match."""
+    match = re.fullmatch(r"([A-Z]{3})(\d{2})", label.strip().upper())
+    if not match:
+        return None
+    month = _MONTH_CODES.get(match.group(1))
+    if month is None:
+        return None
+    return 2000 + int(match.group(2)), month
+
+
+def _parse_trade_date(text: str) -> str | None:
+    """Extract an ISO date from a LastTradedTime cell, or None.
+
+    Requires an explicit calendar date in the cell. ISO dates parse
+    year-first; ambiguous numeric dates are read day-first (JSE
+    convention), so 03/07/2026 is July 3rd. dayfirst=True must not be
+    applied to ISO strings — pandas would read 2026-05-11 as Nov 5th.
+    """
+    if not text:
+        return None
+    try:
+        if _ISO_DATE_PATTERN.search(text):
+            return str(pd.to_datetime(text, yearfirst=True).date())
+        if _DAYFIRST_DATE_PATTERN.search(text):
+            return str(pd.to_datetime(text, dayfirst=True).date())
+    except (ValueError, TypeError):
+        return None
+    return None
 
 
 def _fetch_page() -> str:
@@ -164,21 +210,26 @@ def _to_float(val: str) -> float | None:
 def _parse_safex_table(html: str) -> dict[str, pd.DataFrame]:
     """Parse the Grain SA SAFEX HTML page into per-commodity DataFrames.
 
-    For each instrument code in ``_INSTRUMENT_MAP`` we pick the contract
-    with the highest volume — that's the most actively traded (nearest)
-    contract — and emit a single-row DataFrame.
+    For each instrument code in ``_INSTRUMENT_MAP`` we pick the nearest
+    contract — smallest (year, month) from its MMMYY code — and emit a
+    single-row DataFrame carrying the contract label.
 
     Returns
     -------
     dict
-        ``{commodity_name: DataFrame}`` with columns Date, Close, Volume, Unit.
-        Empty dict if none of our tracked instruments appear on the page
-        (that's a normal "no rows for this filter" outcome, not a shape error).
+        ``{commodity_name: DataFrame}`` with columns Date, Close, Volume,
+        Contract, Unit. Empty dict if none of our tracked instruments
+        appear on the page (that's a normal "no rows for this filter"
+        outcome, not a shape error).
 
     Raises
     ------
     ScraperShapeError
-        If the page no longer exposes a recognisable settlement table.
+        If the page no longer exposes a recognisable settlement table,
+        if a tracked row's contract code stops parsing as MMMYY (nearest-
+        contract selection would be meaningless), or if the selected row
+        carries no parseable trade date (a frozen page must not be stored
+        under today's date).
     """
     soup = BeautifulSoup(html, "html.parser")
     header, rows = _find_settlement_table(soup)
@@ -186,44 +237,51 @@ def _parse_safex_table(html: str) -> dict[str, pd.DataFrame]:
     col = {name: header.index(name) for name in _REQUIRED_COLUMNS}
 
     results: dict[str, pd.DataFrame] = {}
-    today_str = str(date.today())
 
     for instrument_code, commodity_name in _INSTRUMENT_MAP.items():
         # Collect all contracts for this instrument with a usable price.
-        candidates: list[tuple[float | None, float, float | None, str]] = []
+        candidates: list[tuple[tuple[int, int], str, float, float | None, str]] = []
         for cells in rows:
             if cells[col["instrument"]].upper() != instrument_code:
                 continue
             price = _to_float(cells[col["lasttradedprice"]])
             if price is None or price <= 0:
                 continue
+            contract = cells[col["contract"]].strip().upper()
+            sort_key = _contract_sort_key(contract)
+            if sort_key is None:
+                raise ScraperShapeError(
+                    f"Grain SA SAFEX: unparseable contract code {contract!r} for "
+                    f"{instrument_code} — cannot order contracts by expiry"
+                )
             volume = _to_float(cells[col["volume"]])
-            traded_at = cells[col["lasttradedtime"]]
-            candidates.append((volume, price, volume, traded_at))
+            candidates.append((sort_key, contract, price, volume, cells[col["lasttradedtime"]]))
 
         if not candidates:
             logger.debug("Grain SA SAFEX: no rows for %s (%s)", commodity_name, instrument_code)
             continue
 
-        # Pick the row with the highest volume; ties broken by first occurrence.
-        # None-volume sorts as -inf so a row with reported volume always wins.
-        candidates.sort(key=lambda t: t[0] if t[0] is not None else float("-inf"), reverse=True)
-        _, close, volume, traded_at = candidates[0]
+        # Nearest expiry = smallest (year, month); ties broken by first occurrence.
+        candidates.sort(key=lambda t: t[0])
+        _, contract, close, volume, traded_at = candidates[0]
 
-        trade_date = today_str
-        if traded_at:
-            with contextlib.suppress(ValueError, TypeError):
-                trade_date = str(pd.to_datetime(traded_at).date())
+        trade_date = _parse_trade_date(traded_at)
+        if trade_date is None:
+            raise ScraperShapeError(
+                f"Grain SA SAFEX: no parseable trade date for {instrument_code} "
+                f"{contract} (LastTradedTime={traded_at!r}) — refusing to stamp today"
+            )
 
         results[commodity_name] = pd.DataFrame([{
             "Date": trade_date,
             "Close": close,
             "Volume": volume,
+            "Contract": contract,
             "Unit": "ZAR/MT",
         }])
         logger.info(
-            "Grain SA SAFEX %s: Close = %.1f ZAR/MT (vol=%s, date=%s)",
-            commodity_name, close, volume, trade_date,
+            "Grain SA SAFEX %s: Close = %.1f ZAR/MT (%s, vol=%s, date=%s)",
+            commodity_name, close, contract, volume, trade_date,
         )
 
     return results
@@ -236,7 +294,7 @@ def fetch_safex() -> FetchResult:
     -------
     FetchResult
         ``ok`` with ``{commodity_name: DataFrame}`` (Date, Close, Volume,
-        Unit) on success; ``failed`` when the page can't be downloaded or
+        Contract, Unit) on success; ``failed`` when the page can't be downloaded or
         no longer matches the expected structure; ``empty`` when the page
         parsed cleanly but carried no rows.
     """
