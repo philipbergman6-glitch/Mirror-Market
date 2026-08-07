@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 20 source layers (covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 18 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, and AMS CIF Gulf export bids) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 21 source layers (covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 18 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, and Argentina MAGyP official FOB) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
 
 ## Commands
 
@@ -37,7 +37,7 @@ python -m analysis.briefing
 - `FAS_API_KEY` — USDA FAS OpenData API key (Layer 10 — export sales)
 - `EIA_API_KEY` — Energy Information Administration API key (Layer 13 — biofuel/energy)
 
-Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20 work without API keys. Layer 16 uses the published data.gov.in sample key by default; set `DATA_GOV_IN_API_KEY` (optional) for a personal key with higher row limits.
+Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21 work without API keys. Layer 16 uses the published data.gov.in sample key by default; set `DATA_GOV_IN_API_KEY` (optional) for a personal key with higher row limits.
 
 ### Optional (Cloud Database — dormant)
 
@@ -76,6 +76,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 18. **South Africa domestic soy** — `fetchers/safex.py` (JSE SAFEX settlement — ZAR/MT, no API key)
 19. **AgRural Paranaguá FOB** — `fetchers/agrural.py` (Brazil port-side soy FOB scraper — BRL/MT, no API key)
 20. **US Gulf export bids** — `fetchers/gulf_bids.py` (AMS report 3147 "Louisiana and Texas Export Bids" daily PDF — CIF NOLA-barge soybean/corn/wheat bids, basis in cents/bu over the named CBOT contract; no API key)
+21. **Argentina official FOB** — `fetchers/magyp_fob.py` (MAGyP "Precios FOB Oficiales" JSON web service — daily official minimum FOB export values in USD/MT for soybean beans/oil/meal, bulk NCM positions, with shipment-window forward curve; no API key. Position→product mapping cross-verified against the labelled datos.gob.ar series — see `MAGYP_FOB_POSITIONS` in config.py. Feeds the cross-origin FOB board with Layers 19/20.)
 
 ### Pipeline Layer
 
@@ -105,13 +106,13 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 ### Storage
 
 - Database: `data/storage/mirror_market.db` (SQLite, gitignored)
-- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `gulf_bids`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
+- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `inspection_destinations`, `gulf_bids`, `argentina_fob`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
 - `forward_curve` keys on `(commodity, contract_month, fetched_date)` — one full curve per run accumulates term-structure history; `read_forward_curve()` returns only each commodity's latest snapshot.
 - All config lives in `config.py` (tickers, API URLs, region coordinates, thresholds)
 
 ### Git-based history persistence (`pipeline/history.py`)
 
-CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal by re-downloading full history, but snapshot-only sources don't: AgRural (1 row/day — the Brazil basis source), SAFEX, forward curve, CONAB survey revisions, inspections (>3 weeks), Gulf bids, CEPEA (>~10 sessions), WASDE (>12 months). These tables round-trip through CSVs in `data/history/` (committed to git): `main.py` calls `import_history()` after `init_database()` (INSERT OR IGNORE — DB rows win over CSVs) and `export_history()` after the layers (atomic per-table writes, PK-sorted for stable diffs; empty tables never overwrite a populated CSV). The deploy workflow commits `data/history/` back to `main` with `[skip ci]`. A failed import aborts the run so a bad seed can never be exported over good history. Cloud DB (Turso/Supabase) was explicitly rejected for this — do not reintroduce it as a CI requirement.
+CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal by re-downloading full history, but snapshot-only sources don't: AgRural (1 row/day — the Brazil basis source), SAFEX, forward curve, CONAB survey revisions, inspections (>3 weeks) incl. port/destination breakdowns, Gulf bids, Argentina FOB (MAGyP serves history but re-fetch depth is unproven), CEPEA (>~10 sessions), WASDE (>12 months). These tables round-trip through CSVs in `data/history/` (committed to git): `main.py` calls `import_history()` after `init_database()` (INSERT OR IGNORE — DB rows win over CSVs) and `export_history()` after the layers (atomic per-table writes, PK-sorted for stable diffs; empty tables never overwrite a populated CSV). The deploy workflow commits `data/history/` back to `main` with `[skip ci]`. A failed import aborts the run so a bad seed can never be exported over good history. Cloud DB (Turso/Supabase) was explicitly rejected for this — do not reintroduce it as a CI requirement.
 
 ### Briefing Sections (in order)
 
@@ -120,6 +121,7 @@ CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal 
 3. Crush Spread
 4. Brazil Basis (Paranaguá FOB vs CBOT, USD/MT — Layer 19 × Layer 1)
 4b. US Gulf Basis (CIF NOLA barge — AMS export bids, Layer 20)
+4c. Cross-Origin FOB Board (US Gulf CIF vs Brazil Paranaguá FOB vs Argentina up-river FOB, USD/MT — Layers 19 × 20 × 21)
 5. Economic Context (FRED — dollar index, CPI, rates, ethanol PPI)
 6. USDA Fundamentals (YoY production/yield)
 7. Crop Conditions (weekly USDA % good/excellent, progress)

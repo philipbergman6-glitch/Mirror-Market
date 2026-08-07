@@ -35,6 +35,7 @@ from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
 from fetchers.gulf_bids import fetch_gulf_bids
+from fetchers.magyp_fob import fetch_magyp_fob
 from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
@@ -74,6 +75,7 @@ from pipeline.results import FetchResult
 from pipeline.store import (
     init_database,
     save_brazil_estimates,
+    save_argentina_fob,
     save_brazil_spot,
     save_cot_data,
     save_crop_progress,
@@ -516,6 +518,13 @@ def run() -> int:
         "gulf_bids", "Layer 20", "AMS Gulf export bids",
         fetch=lambda: fetch_gulf_bids(),
         save=lambda n, d: save_gulf_bids(d),
+    )
+    # Layer 21: walks back over weekends/holidays itself, so an empty
+    # result genuinely means the source is broken → empty_fails stays on.
+    results["magyp_fob"] = _run_scraper_layer(
+        "magyp_fob", "Layer 21", "Argentina MAGyP official FOB prices",
+        fetch=lambda: fetch_magyp_fob(),
+        save=lambda n, d: save_argentina_fob(d),
     )
 
     # ── Export snapshot-only history back to git-committed CSVs ──
