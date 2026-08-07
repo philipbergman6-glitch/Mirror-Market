@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 30
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -96,6 +96,47 @@ jobs:
         with:
           path: docs/
 
+      # Pages deploys fail transiently (API blips, deployment-in-progress
+      # races) — try up to 3 times, pausing between attempts, before the
+      # job fails and the deploy-alert job raises an issue.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before deploy retry 1
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (retry 1)
+        id: deployment-retry1
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before deploy retry 2
+        if: steps.deployment.outcome == 'failure' && steps.deployment-retry1.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (retry 2)
+        id: deployment-retry2
+        if: steps.deployment.outcome == 'failure' && steps.deployment-retry1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+
+  # Deploy failures must be loud, not buried in a red run nobody opens:
+  # scripts/ci_deploy_alert.py keeps a rolling `ci-deploy-alert` issue —
+  # opened when the deploy fails (all retries exhausted) or the CI gate
+  # blocks it, closed by the next green deploy. GitHub emails the issue
+  # to the repo owner, satisfying the alert-on-final-failure requirement.
+  deploy-alert:
+    needs: [check, build-deploy]
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Raise or clear deploy alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_deploy_alert.py "${{ needs.build-deploy.result }}" "${{ needs.check.result }}"
