@@ -32,7 +32,11 @@ from analysis.loaders import load_currencies, load_prices
 from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal, monthly_seasonal
 from analysis.signals import demote_near_roll_signals, detect_all_signals
-from analysis.spreads import compute_brazil_basis, compute_crush_spread
+from analysis.spreads import (
+    compute_brazil_basis,
+    compute_crush_spread,
+    compute_domestic_basis,
+)
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
 from config import (
     CONAB_FARMGATE_SERIES,
@@ -982,6 +986,61 @@ def forward_curve_analysis() -> dict:
 # Analyst 9: Emerging Markets — SA, India, Nigeria deep dive
 # ---------------------------------------------------------------------------
 
+def _latest_aligned_usd(
+    domestic_df: pd.DataFrame | None,
+    fx_df: pd.DataFrame | None,
+    price_col: str = "Close",
+) -> tuple[float, pd.Timestamp] | None:
+    """Latest date-aligned local→USD conversion.
+
+    Inner-joins the domestic price series with the FX series on Date and
+    returns (usd_per_mt, date) for the last common row, or None. Used as
+    the display fallback when the full three-leg basis join (which also
+    needs CBOT) has no common date.
+    """
+    if domestic_df is None or fx_df is None or domestic_df.empty or fx_df.empty:
+        return None
+    dom = domestic_df.copy()
+    if "Date" in dom.columns:
+        dom["Date"] = pd.to_datetime(dom["Date"])
+        dom = dom.set_index("Date")
+    joined = pd.DataFrame({
+        "local": pd.to_numeric(dom[price_col], errors="coerce").dropna(),
+        "fx": pd.to_numeric(fx_df["Close"], errors="coerce").dropna(),
+    }).dropna()
+    joined = joined[joined["fx"] > 0]
+    if joined.empty:
+        return None
+    last = joined.iloc[-1]
+    return float(last["local"] * last["fx"]), joined.index[-1]
+
+
+def _latest_aligned_basis(
+    soybeans_df: pd.DataFrame | None,
+    domestic_df: pd.DataFrame | None,
+    fx_df: pd.DataFrame | None,
+    price_col: str = "Close",
+) -> pd.Series | None:
+    """Last row of the date-aligned domestic-vs-CBOT basis, or None.
+
+    All emerging-markets basis math routes through here (F1): the three
+    legs — CBOT close, domestic price, FX — are inner-joined on Date by
+    `compute_domestic_basis`, the same engine behind the briefing's
+    `compute_brazil_basis`, so the briefing and the EM card can never
+    print different basis numbers for the same day.
+    """
+    if soybeans_df is None or domestic_df is None or fx_df is None:
+        return None
+    if soybeans_df.empty or domestic_df.empty or fx_df.empty:
+        return None
+    basis_df = compute_domestic_basis(
+        soybeans_df, domestic_df, fx_df, price_col=price_col
+    )
+    if basis_df.empty:
+        return None
+    return basis_df.iloc[-1]
+
+
 def emerging_markets_analysis() -> dict:
     """
     Deep dive on emerging soybean markets: South Africa, India, Nigeria.
@@ -1090,32 +1149,35 @@ def emerging_markets_analysis() -> dict:
             india_domestic_entry: dict[str, Any] = {}
             try:
                 inr_df = read_india_domestic(MANDI_SERIES)
-
-                # Get INR/USD rate for USD conversion
-                inr_usd = None
                 inr_rows = currencies.get("INR/USD")
-                if inr_rows is not None and not inr_rows.empty:
-                    inr_usd = float(inr_rows["Close"].iloc[-1])
 
                 if not inr_df.empty:
                     mandi_rows = inr_df.sort_values("Date")
                     latest_close = float(mandi_rows["Close"].iloc[-1])
                     india_domestic_entry["soybean_mandi_inr"] = latest_close
-                    if inr_usd:
-                        india_domestic_entry["soybean_mandi_usd"] = round(
-                            latest_close * inr_usd, 2
-                        )
 
-                    # India bean vs CBOT bean premium (USD/MT)
+                    # India bean vs CBOT bean premium (USD/MT) — mandi,
+                    # INR/USD and CBOT joined on a common date (F1).
                     soy_rows = prices.get("Soybeans", pd.DataFrame())
-                    if not soy_rows.empty and inr_usd:
-                        cbot_usd = to_metric_tons(
-                            float(soy_rows["Close"].iloc[-1]), "Soybeans"
+                    basis_row = _latest_aligned_basis(soy_rows, mandi_rows, inr_rows)
+                    if basis_row is not None:
+                        india_domestic_entry["soybean_mandi_usd"] = round(
+                            float(basis_row["domestic_usd_mt"]), 2
                         )
-                        if cbot_usd is not None:
-                            india_domestic_entry["cbot_bean_usd"] = round(cbot_usd, 2)
-                            india_domestic_entry["bean_premium_usd"] = round(
-                                latest_close * inr_usd - cbot_usd, 2
+                        india_domestic_entry["cbot_bean_usd"] = round(
+                            float(basis_row["cbot_usd_mt"]), 2
+                        )
+                        india_domestic_entry["bean_premium_usd"] = round(
+                            float(basis_row["basis_usd_mt"]), 2
+                        )
+                        india_domestic_entry["basis_date"] = str(
+                            pd.Timestamp(basis_row["Date"]).date()
+                        )
+                    else:
+                        aligned = _latest_aligned_usd(mandi_rows, inr_rows)
+                        if aligned is not None:
+                            india_domestic_entry["soybean_mandi_usd"] = round(
+                                aligned[0], 2
                             )
 
                     weekly = _pct_chg(mandi_rows["Close"], _WEEKLY_SESSIONS)
@@ -1130,15 +1192,11 @@ def emerging_markets_analysis() -> dict:
 
         # --- Brazil CEPEA domestic price + CBOT basis ---
         if country == "Brazil":
-            brazil_domestic_entry = {}
+            brazil_domestic_entry: dict[str, Any] = {}
             try:
                 brl_df = read_brazil_spot()
-
-                # Get BRL/USD rate
-                brl_usd = None
                 brl_rows = currencies.get("BRL/USD")
-                if brl_rows is not None and not brl_rows.empty:
-                    brl_usd = float(brl_rows["Close"].iloc[-1])
+                soy_rows = prices.get("Soybeans", pd.DataFrame())
 
                 if not brl_df.empty:
                     cepea_rows = brl_df[brl_df["commodity"] == "Soybean (CEPEA)"].sort_values("Date")
@@ -1146,8 +1204,35 @@ def emerging_markets_analysis() -> dict:
                         latest_brl = float(cepea_rows["price_brl"].iloc[-1])
                         brazil_domestic_entry["cepea_soy_brl"] = round(latest_brl, 2)
 
-                        if brl_usd:
-                            brazil_domestic_entry["cepea_soy_usd"] = round(latest_brl * brl_usd, 2)
+                        # CEPEA vs CBOT — three legs joined on a common
+                        # date (F1). Same engine as the briefing's BRAZIL
+                        # BASIS section (`compute_brazil_basis` delegates
+                        # to it), so the two pages cannot print different
+                        # basis numbers.
+                        basis_row = _latest_aligned_basis(
+                            soy_rows, cepea_rows, brl_rows, price_col="price_brl"
+                        )
+                        if basis_row is not None:
+                            brazil_domestic_entry["cepea_soy_usd"] = round(
+                                float(basis_row["domestic_usd_mt"]), 2
+                            )
+                            brazil_domestic_entry["cbot_usd"] = round(
+                                float(basis_row["cbot_usd_mt"]), 2
+                            )
+                            brazil_domestic_entry["brazil_cbot_basis_usd"] = round(
+                                float(basis_row["basis_usd_mt"]), 2
+                            )
+                            brazil_domestic_entry["basis_date"] = str(
+                                pd.Timestamp(basis_row["Date"]).date()
+                            )
+                        else:
+                            aligned = _latest_aligned_usd(
+                                cepea_rows, brl_rows, price_col="price_brl"
+                            )
+                            if aligned is not None:
+                                brazil_domestic_entry["cepea_soy_usd"] = round(
+                                    aligned[0], 2
+                                )
 
                         # Weekly % change
                         weekly = _pct_chg(cepea_rows["price_brl"], _WEEKLY_SESSIONS)
@@ -1174,29 +1259,29 @@ def emerging_markets_analysis() -> dict:
                     agrural_rows = brl_df[
                         brl_df["commodity"] == "Soybean (AgRural Paranaguá FOB)"
                     ].sort_values("Date")
-                    if not agrural_rows.empty and brl_usd:
-                        latest_agrural_brl = float(agrural_rows["price_brl"].iloc[-1])
-                        brazil_domestic_entry["agrural_soy_usd"] = round(
-                            latest_agrural_brl * brl_usd, 2
+                    if not agrural_rows.empty:
+                        # AgRural vs CBOT — same date-aligned join (F1).
+                        agrural_row = _latest_aligned_basis(
+                            soy_rows, agrural_rows, brl_rows, price_col="price_brl"
                         )
-
-                # CBOT soybean in USD/MT for basis comparison
-                soy_rows = prices.get("Soybeans", pd.DataFrame())
-                if not soy_rows.empty:
-                    cbot_close = float(soy_rows["Close"].iloc[-1])
-                    cbot_usd = to_metric_tons(cbot_close, "Soybeans")
-                    if cbot_usd is not None:
-                        brazil_domestic_entry["cbot_usd"] = round(cbot_usd, 2)
-                        cepea_usd = brazil_domestic_entry.get("cepea_soy_usd")
-                        if cepea_usd is not None:
-                            brazil_domestic_entry["brazil_cbot_basis_usd"] = round(
-                                cepea_usd - cbot_usd, 2
+                        if agrural_row is not None:
+                            brazil_domestic_entry["agrural_soy_usd"] = round(
+                                float(agrural_row["domestic_usd_mt"]), 2
                             )
-                        agrural_usd = brazil_domestic_entry.get("agrural_soy_usd")
-                        if agrural_usd is not None:
                             brazil_domestic_entry["agrural_cbot_basis_usd"] = round(
-                                agrural_usd - cbot_usd, 2
+                                float(agrural_row["basis_usd_mt"]), 2
                             )
+                            brazil_domestic_entry["agrural_basis_date"] = str(
+                                pd.Timestamp(agrural_row["Date"]).date()
+                            )
+                        else:
+                            aligned = _latest_aligned_usd(
+                                agrural_rows, brl_rows, price_col="price_brl"
+                            )
+                            if aligned is not None:
+                                brazil_domestic_entry["agrural_soy_usd"] = round(
+                                    aligned[0], 2
+                                )
 
             except Exception as exc:
                 logger.warning("Brazil domestic analytics failed: %s", exc)
@@ -1206,15 +1291,11 @@ def emerging_markets_analysis() -> dict:
 
         # --- South Africa SAFEX domestic price + CBOT basis ---
         if country == "South Africa":
-            sa_domestic_entry = {}
+            sa_domestic_entry: dict[str, Any] = {}
             try:
                 safex_df = read_safex()
-
-                # Get ZAR/USD rate
-                zar_usd = None
                 zar_rows = currencies.get("ZAR/USD")
-                if zar_rows is not None and not zar_rows.empty:
-                    zar_usd = float(zar_rows["Close"].iloc[-1])
+                cbot_rows = prices.get("Soybeans", pd.DataFrame())
 
                 if not safex_df.empty:
                     soy_rows = safex_df[safex_df["commodity"] == "Soybean (SAFEX)"].sort_values("Date")
@@ -1223,8 +1304,29 @@ def emerging_markets_analysis() -> dict:
                     if not soy_rows.empty:
                         latest_zar = float(soy_rows["Close"].iloc[-1])
                         sa_domestic_entry["soybean_safex_zar"] = round(latest_zar, 2)
-                        if zar_usd:
-                            sa_domestic_entry["soybean_safex_usd"] = round(latest_zar * zar_usd, 2)
+
+                        # SAFEX vs CBOT — SAFEX, ZAR/USD and CBOT joined
+                        # on a common date (F1).
+                        basis_row = _latest_aligned_basis(cbot_rows, soy_rows, zar_rows)
+                        if basis_row is not None:
+                            sa_domestic_entry["soybean_safex_usd"] = round(
+                                float(basis_row["domestic_usd_mt"]), 2
+                            )
+                            sa_domestic_entry["cbot_usd"] = round(
+                                float(basis_row["cbot_usd_mt"]), 2
+                            )
+                            sa_domestic_entry["safex_cbot_basis_usd"] = round(
+                                float(basis_row["basis_usd_mt"]), 2
+                            )
+                            sa_domestic_entry["basis_date"] = str(
+                                pd.Timestamp(basis_row["Date"]).date()
+                            )
+                        else:
+                            aligned = _latest_aligned_usd(soy_rows, zar_rows)
+                            if aligned is not None:
+                                sa_domestic_entry["soybean_safex_usd"] = round(
+                                    aligned[0], 2
+                                )
 
                         weekly = _pct_chg(soy_rows["Close"], _WEEKLY_SESSIONS)
                         if weekly is not None:
@@ -1234,19 +1336,6 @@ def emerging_markets_analysis() -> dict:
                         sa_domestic_entry["sunflower_safex_zar"] = round(
                             float(sun_rows["Close"].iloc[-1]), 2
                         )
-
-                # CBOT soybean in USD/MT for basis comparison
-                cbot_rows = prices.get("Soybeans", pd.DataFrame())
-                if not cbot_rows.empty:
-                    cbot_close = float(cbot_rows["Close"].iloc[-1])
-                    cbot_usd = to_metric_tons(cbot_close, "Soybeans")
-                    if cbot_usd is not None:
-                        sa_domestic_entry["cbot_usd"] = round(cbot_usd, 2)
-                        safex_usd = sa_domestic_entry.get("soybean_safex_usd")
-                        if safex_usd is not None:
-                            sa_domestic_entry["safex_cbot_basis_usd"] = round(
-                                safex_usd - cbot_usd, 2
-                            )
 
             except Exception as exc:
                 logger.warning("South Africa SAFEX analytics failed: %s", exc)

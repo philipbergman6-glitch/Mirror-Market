@@ -71,6 +71,96 @@ def compute_crush_spread(
     return result
 
 
+def compute_domestic_basis(
+    soybeans_df: pd.DataFrame,
+    domestic_df: pd.DataFrame,
+    fx_df: pd.DataFrame,
+    price_col: str = "Close",
+) -> pd.DataFrame:
+    """
+    Compute a daily domestic-vs-CBOT soybean basis in USD/MT, date-aligned.
+
+    Generic engine behind `compute_brazil_basis`, also used for the SAFEX
+    (ZAR) and India mandi (INR) legs. All three series are inner-joined on
+    Date so the basis never mixes observations from different days:
+
+        cbot_usd_mt     = to_metric_tons(soybeans_close_cents_bu, "Soybeans")
+        domestic_usd_mt = domestic_price_local_mt * fx_usd    # USD per local unit
+        basis_usd_mt    = domestic_usd_mt − cbot_usd_mt
+        basis_pct       = basis_usd_mt / cbot_usd_mt
+
+    Parameters
+    ----------
+    soybeans_df : pd.DataFrame
+        CBOT soybean prices with DatetimeIndex and a 'Close' column in
+        cents/bushel (native CBOT unit).
+    domestic_df : pd.DataFrame
+        Domestic prices in local currency per MT. Accepts either a 'Date'
+        column or a DatetimeIndex; the price is read from `price_col`.
+    fx_df : pd.DataFrame
+        FX rate with DatetimeIndex and a 'Close' column, quoted USD per
+        local-currency unit (yfinance XXXUSD=X convention).
+    price_col : str
+        Name of the price column in `domestic_df` (default 'Close').
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: Date, cbot_usd_mt, domestic_usd_mt, fx_usd, basis_usd_mt,
+        basis_pct. Rows where any input is missing or where fx_usd ≤ 0 are
+        dropped. Empty inputs return an empty DataFrame with the expected
+        columns.
+    """
+    empty_columns = ["Date", "cbot_usd_mt", "domestic_usd_mt", "fx_usd",
+                     "basis_usd_mt", "basis_pct"]
+
+    if soybeans_df.empty or domestic_df.empty or fx_df.empty:
+        return pd.DataFrame(columns=empty_columns)
+
+    domestic = domestic_df.copy()
+    if "Date" in domestic.columns:
+        domestic["Date"] = pd.to_datetime(domestic["Date"])
+        domestic = domestic.set_index("Date")
+    if price_col not in domestic.columns:
+        raise KeyError(f"domestic_df must have a '{price_col}' column (local currency/MT)")
+    domestic_series = pd.to_numeric(domestic[price_col], errors="coerce").dropna()
+
+    soybeans_close = pd.to_numeric(soybeans_df["Close"], errors="coerce").dropna()
+    fx_close = pd.to_numeric(fx_df["Close"], errors="coerce").dropna()
+
+    combined = pd.DataFrame({
+        "soybeans_cents_bu": soybeans_close,
+        "domestic_local_mt": domestic_series,
+        "fx_usd":            fx_close,
+    }).dropna()
+
+    # Drop rows where the FX rate would produce divide-by-zero downstream
+    # (basis_pct denominator) or nonsensical USD values.
+    combined = combined[combined["fx_usd"] > 0]
+    if combined.empty:
+        return pd.DataFrame(columns=empty_columns)
+
+    cbot_usd_mt = combined["soybeans_cents_bu"].apply(
+        lambda v: to_metric_tons(v, "Soybeans")
+    )
+    domestic_usd_mt = combined["domestic_local_mt"] * combined["fx_usd"]
+    basis_usd_mt = domestic_usd_mt - cbot_usd_mt
+    basis_pct = basis_usd_mt / cbot_usd_mt
+
+    result = pd.DataFrame({
+        "cbot_usd_mt":     cbot_usd_mt,
+        "domestic_usd_mt": domestic_usd_mt,
+        "fx_usd":          combined["fx_usd"],
+        "basis_usd_mt":    basis_usd_mt,
+        "basis_pct":       basis_pct,
+    }).reset_index().rename(columns={"index": "Date"})
+
+    if "Date" not in result.columns and result.columns[0] != "Date":
+        result = result.rename(columns={result.columns[0]: "Date"})
+
+    return result[empty_columns]
+
+
 def compute_brazil_basis(
     soybeans_df: pd.DataFrame,
     cepea_df: pd.DataFrame,
@@ -136,41 +226,8 @@ def compute_brazil_basis(
         raise KeyError(
             "cepea_df must have a 'price_brl_mt' or 'price_brl' column (BRL/MT)"
         )
-    cepea_series = pd.to_numeric(cepea[price_col], errors="coerce").dropna()
-
-    soybeans_close = pd.to_numeric(soybeans_df["Close"], errors="coerce").dropna()
-    brl_close = pd.to_numeric(brl_usd_df["Close"], errors="coerce").dropna()
-
-    combined = pd.DataFrame({
-        "soybeans_cents_bu": soybeans_close,
-        "cepea_brl_mt":      cepea_series,
-        "brl_usd":           brl_close,
-    }).dropna()
-
-    # Drop rows where the FX rate would produce divide-by-zero downstream
-    # (basis_pct denominator) or nonsensical USD values.
-    combined = combined[combined["brl_usd"] > 0]
-    if combined.empty:
-        return pd.DataFrame(columns=empty_columns)
-
-    cbot_usd_mt = combined["soybeans_cents_bu"].apply(
-        lambda v: to_metric_tons(v, "Soybeans")
-    )
-    cepea_usd_mt = combined["cepea_brl_mt"] * combined["brl_usd"]
-    basis_usd_mt = cepea_usd_mt - cbot_usd_mt
-    basis_pct = basis_usd_mt / cbot_usd_mt
-
-    result = pd.DataFrame({
-        "cbot_usd_mt":  cbot_usd_mt,
-        "cepea_usd_mt": cepea_usd_mt,
-        "brl_usd":      combined["brl_usd"],
-        "basis_usd_mt": basis_usd_mt,
-        "basis_pct":    basis_pct,
-    }).reset_index().rename(columns={"index": "Date"})
-
-    # Reset_index from a DatetimeIndex named "Date" already labels the column
-    # "Date"; the rename above is a no-op safety net for unnamed indices.
-    if "Date" not in result.columns and result.columns[0] != "Date":
-        result = result.rename(columns={result.columns[0]: "Date"})
+    result = compute_domestic_basis(
+        soybeans_df, cepea, brl_usd_df, price_col=price_col
+    ).rename(columns={"domestic_usd_mt": "cepea_usd_mt", "fx_usd": "brl_usd"})
 
     return result[empty_columns]
