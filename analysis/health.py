@@ -83,9 +83,13 @@ def run_health_check() -> dict:
 
 
 def _check_table_freshness(table: str, key_col: str, date_col: str,
-                           expected_keys: list[str]) -> list[dict]:
+                           expected_keys: list[str],
+                           stale_exempt: frozenset[str] = frozenset()) -> list[dict]:
     """
     Check a table for missing or stale commodities.
+
+    ``stale_exempt`` keys skip the staleness loop only — for series whose
+    normal cadence is slower than the daily threshold (e.g. weekly).
 
     Returns a list of issue dicts.
     """
@@ -123,7 +127,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
 
     # Check for stale data
     for key, (last_date, _count) in found.items():
-        if last_date is None:
+        if last_date is None or key in stale_exempt:
             continue
         try:
             last_dt = pd.to_datetime(last_date).date()
@@ -216,10 +220,16 @@ def _check_flat_prices() -> list[dict]:
 
 
 def _check_india_domestic() -> list[dict]:
-    """NCDEX layer is hard-disabled (anti-bot wall) — expecting its commodities
-    would emit permanent false CRITICALs. Re-add the expectation when an
-    alternate India source is wired in (see main.py Layer 16)."""
-    return []
+    """Check the India mandi bean series for freshness.
+
+    Only the live mandi series is expected — the retired NCDEX rows stay
+    in the table under their own keys and would emit permanent false
+    CRITICALs if listed here.
+    """
+    from config import MANDI_SERIES
+    return _check_table_freshness(
+        "india_domestic_prices", "commodity", "Date", [MANDI_SERIES]
+    )
 
 
 def _check_brazil_spot() -> list[dict]:
@@ -227,15 +237,18 @@ def _check_brazil_spot() -> list[dict]:
 
     Expectations are AgRural Paranaguá FOB plus the CEPEA indicators
     (re-enabled 2026-07-30 via Notícias Agrícolas — see main.py Layer 17);
-    both layers write to brazil_spot_prices.
+    both layers write to brazil_spot_prices. The CONAB farmgate series
+    (Layer 15b) also lives there but is weekly — the daily staleness
+    threshold would flag it constantly, so it is stale-exempt.
     """
-    from config import AGRURAL_COMMODITIES, CEPEA_COMMODITIES
+    from config import AGRURAL_COMMODITIES, CEPEA_COMMODITIES, CONAB_FARMGATE_SERIES
     # TODO Phase 2.1: also flag when Paranaguá FOB (AgRural) vs CEPEA Paraná
     # diverges beyond the historical port-vs-farm wedge band — a structural break
     # there is a stronger trade signal than either source's absolute freshness.
     return _check_table_freshness(
         "brazil_spot_prices", "commodity", "Date",
         AGRURAL_COMMODITIES + CEPEA_COMMODITIES,
+        stale_exempt=frozenset({CONAB_FARMGATE_SERIES}),
     )
 
 

@@ -2,51 +2,41 @@
 
 Pulls structured data from `analysis.soy_analytics.emerging_markets_analysis`
 (lazy import to avoid a cycle — soy_analytics imports loaders that are
-shared with briefing). The India NCDEX sub-section is rendered inline at
+shared with briefing). The India mandi sub-section is rendered inline at
 the bottom of the block.
 """
 
 
 def _format_india_domestic(em_countries: dict) -> str:
-    """Inline India NCDEX domestic prices + crush margin block."""
+    """Inline India mandi domestic bean price + CBOT premium block.
+
+    Bean-only since the 2026-08 Layer 16 rebuild — the Agmarknet mandi
+    source has no meal leg, so the old NCDEX crush margin is gone.
+    """
     india = em_countries.get("India", {})
     dom = india.get("india_domestic", {})
     if not dom:
         return ""
 
-    lines = ["INDIA — NCDEX Domestic Prices:"]
+    lines = ["INDIA — Mandi Domestic Price (Agmarknet, MP median):"]
 
-    soy_inr = dom.get("soybean_ncdex_inr")
-    oil_inr = dom.get("oil_ncdex_inr")
-    meal_inr = dom.get("meal_ncdex_inr")
-
+    soy_inr = dom.get("soybean_mandi_inr")
     if soy_inr:
-        soy_usd = dom.get("soybean_ncdex_usd")
+        soy_usd = dom.get("soybean_mandi_usd")
         usd_str = f" / ${soy_usd:,.1f}/MT" if soy_usd else ""
         lines.append(f"  Soybean: ₹{soy_inr:,.0f}/MT{usd_str}")
-    if oil_inr:
-        lines.append(f"  Soy Oil: ₹{oil_inr:,.0f}/MT")
-    if meal_inr:
-        lines.append(f"  Soy Meal: ₹{meal_inr:,.0f}/MT")
 
-    crush_inr = dom.get("crush_margin_inr")
-    crush_usd = dom.get("crush_margin_usd")
-    cbot_crush = dom.get("cbot_crush_usd")
-    premium = dom.get("crush_premium_usd")
+    cbot_usd = dom.get("cbot_bean_usd")
+    if cbot_usd is not None:
+        lines.append(f"  CBOT Soybean:       ${cbot_usd:,.1f}/MT")
 
-    if crush_inr is not None:
-        lines.append(
-            f"  India Crush Margin: ₹{crush_inr:,.0f}/MT"
-            + (f" (${crush_usd:,.1f}/MT)" if crush_usd else "")
-        )
-    if cbot_crush is not None:
-        lines.append(f"  CBOT Crush:         ${cbot_crush:,.1f}/MT")
+    premium = dom.get("bean_premium_usd")
     if premium is not None:
         direction = "premium" if premium > 0 else "discount"
         note = (
-            "India crushers have edge, may resist imports"
+            "domestic crop tight, import appetite builds"
             if premium > 0
-            else "CBOT-origin meal competitive in ME/Africa"
+            else "domestic beans cheap, import demand fades"
         )
         lines.append(
             f"  India vs CBOT:      ${premium:+,.1f}/MT {direction} — {note}"
@@ -54,7 +44,7 @@ def _format_india_domestic(em_countries: dict) -> str:
 
     weekly = dom.get("weekly_chg_pct")
     if weekly is not None:
-        lines.append(f"  Weekly Chg (NCDEX Soybean): {weekly:+.1f}%")
+        lines.append(f"  Weekly Chg (Mandi Soybean): {weekly:+.1f}%")
 
     return "\n".join(lines)
 
@@ -105,19 +95,16 @@ def format() -> str:  # noqa: A001
 
         dom_india = info.get("india_domestic", {})
         if dom_india:
-            soy_inr = dom_india.get("soybean_ncdex_inr")
-            crush_usd = dom_india.get("crush_margin_usd")
-            premium = dom_india.get("crush_premium_usd")
+            soy_inr = dom_india.get("soybean_mandi_inr")
+            premium = dom_india.get("bean_premium_usd")
             if soy_inr:
-                soy_usd = dom_india.get("soybean_ncdex_usd")
+                soy_usd = dom_india.get("soybean_mandi_usd")
                 lines.append(
-                    f"    NCDEX Soybean: ₹{soy_inr:,.0f}/MT"
+                    f"    Mandi Soybean (MP): ₹{soy_inr:,.0f}/MT"
                     + (f" / ${soy_usd:,.1f}/MT" if soy_usd else "")
                 )
-            if crush_usd is not None:
-                lines.append(f"    India Crush Margin: ${crush_usd:,.1f}/MT")
             if premium is not None:
-                lines.append(f"    vs CBOT Crush: {premium:+.1f} USD/MT")
+                lines.append(f"    vs CBOT Beans: {premium:+.1f} USD/MT")
 
         dom_brazil = info.get("brazil_domestic", {})
         if dom_brazil:
@@ -133,6 +120,13 @@ def format() -> str:  # noqa: A001
                     f"    Brazil-CBOT Basis: ${basis:+.1f}/MT"
                     + (" (premium)" if basis > 0 else " (discount)")
                 )
+            farmgate = dom_brazil.get("conab_farmgate_brl")
+            if farmgate:
+                wedge = dom_brazil.get("cepea_vs_farmgate_pct")
+                wedge_str = (
+                    f" (CEPEA {wedge:+.1f}% vs farmgate)" if wedge is not None else ""
+                )
+                lines.append(f"    CONAB PR Farmgate: R${farmgate:,.2f}/MT{wedge_str}")
             if weekly is not None:
                 lines.append(f"    Weekly Chg: {weekly:+.1f}%")
 

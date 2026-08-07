@@ -42,6 +42,9 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     "brazil_spot_prices": ("Date", "commodity"),
     # Grain SA settlement page carries only the current session.
     "safex_prices": ("Date", "commodity"),
+    # data.gov.in mandi resource is a current-day snapshot — the arrival_date
+    # filter is ignored upstream, so history exists only where we keep it.
+    "india_domestic_prices": ("Date", "commodity"),
     # One full curve per fetched_date — term-structure history.
     "forward_curve": ("fetched_date", "commodity", "contract_month"),
     # WA_GR101 report carries only the trailing three weeks.

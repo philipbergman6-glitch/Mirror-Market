@@ -35,8 +35,10 @@ from analysis.signals import demote_near_roll_signals, detect_all_signals
 from analysis.spreads import compute_brazil_basis, compute_crush_spread
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
 from config import (
+    CONAB_FARMGATE_SERIES,
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
+    MANDI_SERIES,
     WEATHER_DRY_THRESHOLD_MM,
     WEATHER_EXTREME_HEAT_C,
     WEATHER_HEAVY_RAIN_MM,
@@ -1080,11 +1082,14 @@ def emerging_markets_analysis() -> dict:
 
         entry["weather"] = weather_alerts
 
-        # --- India NCDEX domestic prices + crush margin ---
+        # --- India mandi domestic bean price + CBOT bean premium ---
+        # Bean-only since the 2026-08 Layer 16 rebuild: the mandi source
+        # carries no meal and unreliable oil, so the old NCDEX crush margin
+        # and crush premium retired with the exchange (SEBI suspension).
         if country == "India":
             india_domestic_entry: dict[str, Any] = {}
             try:
-                inr_df = read_india_domestic()
+                inr_df = read_india_domestic(MANDI_SERIES)
 
                 # Get INR/USD rate for USD conversion
                 inr_usd = None
@@ -1092,54 +1097,28 @@ def emerging_markets_analysis() -> dict:
                 if inr_rows is not None and not inr_rows.empty:
                     inr_usd = float(inr_rows["Close"].iloc[-1])
 
-                # Latest NCDEX prices for each soy leg
-                for col_name, store_name in [
-                    ("soybean_ncdex_inr", "Soybean (NCDEX)"),
-                    ("oil_ncdex_inr",     "Soybean Oil (NCDEX)"),
-                    ("meal_ncdex_inr",    "Soybean Meal (NCDEX)"),
-                ]:
-                    if not inr_df.empty:
-                        subset = inr_df[inr_df["commodity"] == store_name].sort_values("Date")
-                        if not subset.empty:
-                            latest_close = float(subset["Close"].iloc[-1])
-                            india_domestic_entry[col_name] = latest_close
-                            usd_key = col_name.replace("_inr", "_usd")
-                            if inr_usd:
-                                india_domestic_entry[usd_key] = round(latest_close * inr_usd, 2)
-
-                # India crush margin: oil×11 + meal×2.2 - beans (INR/MT)
-                beans_inr = india_domestic_entry.get("soybean_ncdex_inr")
-                oil_inr   = india_domestic_entry.get("oil_ncdex_inr")
-                meal_inr  = india_domestic_entry.get("meal_ncdex_inr")
-
-                if beans_inr is not None and oil_inr is not None and meal_inr is not None:
-                    crush_inr = (oil_inr * CRUSH_OIL_FACTOR) + (meal_inr * CRUSH_MEAL_FACTOR) - beans_inr
-                    india_domestic_entry["crush_margin_inr"] = round(crush_inr, 2)
-                    if inr_usd:
-                        india_domestic_entry["crush_margin_usd"] = round(crush_inr * inr_usd, 2)
-
-                    # CBOT crush for comparison
-                    beans_df = prices.get("Soybeans", pd.DataFrame())
-                    oil_df = prices.get("Soybean Oil", pd.DataFrame())
-                    meal_df = prices.get("Soybean Meal", pd.DataFrame())
-                    if not beans_df.empty and not oil_df.empty and not meal_df.empty:
-                        crush_df = compute_crush_spread(beans_df, oil_df, meal_df)
-                        if not crush_df.empty:
-                            latest_crush = float(crush_df["crush_spread"].iloc[-1])
-                            # Convert from CBOT units (cents/bu) to USD/MT using soybean factor
-                            crush_usd = to_metric_tons(latest_crush, "Soybeans")
-                            if crush_usd is not None:
-                                india_domestic_entry["cbot_crush_usd"] = round(crush_usd, 2)
-                                crush_margin_usd = india_domestic_entry.get("crush_margin_usd")
-                                if crush_margin_usd is not None:
-                                    india_domestic_entry["crush_premium_usd"] = round(
-                                        crush_margin_usd - crush_usd, 2
-                                    )
-
-                # Weekly % change on NCDEX soybean
                 if not inr_df.empty:
-                    soy_rows = inr_df[inr_df["commodity"] == "Soybean (NCDEX)"].sort_values("Date")
-                    weekly = _pct_chg(soy_rows["Close"], _WEEKLY_SESSIONS)
+                    mandi_rows = inr_df.sort_values("Date")
+                    latest_close = float(mandi_rows["Close"].iloc[-1])
+                    india_domestic_entry["soybean_mandi_inr"] = latest_close
+                    if inr_usd:
+                        india_domestic_entry["soybean_mandi_usd"] = round(
+                            latest_close * inr_usd, 2
+                        )
+
+                    # India bean vs CBOT bean premium (USD/MT)
+                    soy_rows = prices.get("Soybeans", pd.DataFrame())
+                    if not soy_rows.empty and inr_usd:
+                        cbot_usd = to_metric_tons(
+                            float(soy_rows["Close"].iloc[-1]), "Soybeans"
+                        )
+                        if cbot_usd is not None:
+                            india_domestic_entry["cbot_bean_usd"] = round(cbot_usd, 2)
+                            india_domestic_entry["bean_premium_usd"] = round(
+                                latest_close * inr_usd - cbot_usd, 2
+                            )
+
+                    weekly = _pct_chg(mandi_rows["Close"], _WEEKLY_SESSIONS)
                     if weekly is not None:
                         india_domestic_entry["weekly_chg_pct"] = round(weekly, 2)
 
@@ -1174,6 +1153,21 @@ def emerging_markets_analysis() -> dict:
                         weekly = _pct_chg(cepea_rows["price_brl"], _WEEKLY_SESSIONS)
                         if weekly is not None:
                             brazil_domestic_entry["weekly_chg_pct"] = round(weekly, 2)
+
+                    # CONAB weekly PR farmgate — sanity cross-check for the
+                    # CEPEA wholesale indicator; a ~10-14% wholesale premium
+                    # over farmgate is the expected band.
+                    farmgate_rows = brl_df[
+                        brl_df["commodity"] == CONAB_FARMGATE_SERIES
+                    ].sort_values("Date")
+                    if not farmgate_rows.empty:
+                        farmgate_brl = float(farmgate_rows["price_brl"].iloc[-1])
+                        brazil_domestic_entry["conab_farmgate_brl"] = round(farmgate_brl, 2)
+                        cepea_brl = brazil_domestic_entry.get("cepea_soy_brl")
+                        if cepea_brl and farmgate_brl > 0:
+                            brazil_domestic_entry["cepea_vs_farmgate_pct"] = round(
+                                (cepea_brl - farmgate_brl) / farmgate_brl * 100, 1
+                            )
 
                     # AgRural Paranaguá FOB — USD/MT only (raw BRL is not publishable
                     # under AgRural redistribution rules; the derived USD basis is).
