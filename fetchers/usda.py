@@ -40,6 +40,22 @@ from pipeline.results import FetchResult, ScraperShapeError
 logger = logging.getLogger(__name__)
 
 
+def _numeric_values(df: pd.DataFrame, context: str) -> pd.DataFrame:
+    """Coerce the NASS ``Value`` column to numeric, dropping suppression
+    sentinels — "(D)" withheld, "(NA)", "(Z)" — instead of storing them raw."""
+    if "Value" not in df.columns:
+        return df
+    values = pd.to_numeric(
+        df["Value"].astype(str).str.replace(",", "", regex=False), errors="coerce"
+    )
+    n_dropped = int(values.isna().sum())
+    if n_dropped:
+        logger.info(
+            "Dropped %d suppressed/non-numeric Value rows (%s)", n_dropped, context
+        )
+    return df.assign(Value=values).dropna(subset=["Value"])
+
+
 def _current_crop_year_end() -> int:
     """USDA reports forecasts up to the next marketing year — current year + 1."""
     return datetime.now(timezone.utc).year + 1
@@ -116,6 +132,7 @@ def fetch_usda(
             ]
             keep = [c for c in keep if c in df.columns]
             df = df[keep]
+            df = _numeric_values(df, f"{commodity}/{stat_category}")
 
             logger.info("Got %d rows for %s / %s.", len(df), commodity, stat_category)
             return df
@@ -233,6 +250,7 @@ def fetch_crop_progress(
     ]
     keep = [c for c in keep if c in df.columns]
     df = df[keep]
+    df = _numeric_values(df, f"{commodity} crop progress")
 
     logger.info("Total crop progress/condition rows for %s: %d", commodity, len(df))
     return df

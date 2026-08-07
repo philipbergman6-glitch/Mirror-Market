@@ -14,7 +14,7 @@ Conversion factors:
     Soybeans:     1 MT = 36.7437 bushels
     Soybean Oil:  1 MT = 2204.62 lbs
     Soybean Meal: 1 short ton = 0.907185 MT
-    Corn:         1 MT = 39.368 bushels
+    Corn:         1 MT = 39.3683 bushels
     Wheat:        1 MT = 36.7437 bushels
     Sugar/Cotton/Cattle/Hogs: 1 MT = 2204.62 lbs
     Palm Oil:     already USD/MT (CME calendar swap — identity)
@@ -42,8 +42,8 @@ CONVERSION_FACTORS = {
     "Soybean Meal": 1 / 0.907185,
 
     # Corn: cents/bu → USD/MT
-    # cents/bu × (39.368 bu/MT) / 100 = USD/MT
-    "Corn": 39.368 / 100,
+    # cents/bu × (39.3683 bu/MT) / 100 = USD/MT
+    "Corn": 39.3683 / 100,
 
     # Wheat: cents/bu → USD/MT
     # cents/bu × (36.7437 bu/MT) / 100 = USD/MT

@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # data/history/ is CI-owned: the daily deploy workflow snapshots it back to
+  # main. Human branches must never carry CSV edits — a stale local export
+  # merged over CI's fresher snapshot silently loses unrecoverable history.
+  history-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Block manual data/history edits
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- data/history/)
+          if [ -n "$CHANGED" ]; then
+            echo "::error::data/history/ is written only by the daily deploy workflow. Drop these files from the PR (git checkout origin/${{ github.base_ref }} -- data/history/):"
+            echo "$CHANGED"
+            exit 1
+          fi
+
   check:
     runs-on: ubuntu-latest
     steps:

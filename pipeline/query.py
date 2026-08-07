@@ -58,7 +58,7 @@ def _read_table(
     base = sql or f"SELECT * FROM {table}"  # noqa: S608 — table names are literals below
     with get_connection() as conn:
         try:
-            if filter_value:
+            if filter_value is not None:
                 df = pd.read_sql(
                     f"{base} WHERE {where_prefix}{filter_col} = ?",
                     conn,

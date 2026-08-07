@@ -619,7 +619,8 @@ def _build_relative_value(data: dict) -> str:
             # Negative basis (Brazilian discount) is export-competitive — bullish for trade flow.
             val_class = "up" if cur < 0 else "down"
             if avg is not None and pct is not None:
-                delta_label = f"1Y avg ${avg:+,.1f} · {pct:.0f}th pctile"
+                window = "1Y" if n_obs >= 252 else f"{n_obs}-session"
+                delta_label = f"{window} avg ${avg:+,.1f} · {pct:.0f}th pctile"
             else:
                 delta_label = f"history building ({n_obs} obs — stats at 20)"
 
@@ -733,8 +734,8 @@ def _build_risk_monitor(data: dict) -> str:
 
         # WoW changes
         for leg, info in cot.items():
-            wow = info.get("spec_wow")
-            if wow:
+            wow = info.get("spec_net_chg")
+            if wow is not None:
                 wc = "up" if wow >= 0 else "down"
                 parts.append(f'<div style="font-size:13px; padding:2px 0;"><span class="muted">{_esc(leg)}</span> spec WoW: <span class="{wc}">{wow:+,.0f}</span></div>')
         parts.append('<hr class="divider">')
@@ -852,12 +853,17 @@ def _build_seasonal(data: dict) -> str:
 
         # Metrics
         if vs_seasonal:
-            dev = vs_seasonal.get("deviation_pct", 0)
-            dc = "up" if dev > 0 else "down"
             parts.append('<div class="grid grid-3">')
             parts.append(f'<div class="mc"><div class="mc-label">Current ({unit})</div><div class="mc-val">{vs_seasonal["current_price"]:,.1f}</div></div>')
             parts.append(f'<div class="mc"><div class="mc-label">Seasonal Avg</div><div class="mc-val">{vs_seasonal["seasonal_avg"]:,.1f}</div></div>')
-            parts.append(f'<div class="mc"><div class="mc-label">vs Seasonal</div><div class="mc-val {dc}">{dev:+.1f}%</div><div class="mc-delta {dc}">{"Above" if dev > 0 else "Below"}</div></div>')
+            detrended = vs_seasonal.get("detrended_delta_pct")
+            if detrended is not None:
+                dc = "up" if detrended > 0 else "down"
+                parts.append(f'<div class="mc"><div class="mc-label">vs Seasonal (detrended)</div><div class="mc-val {dc}">{detrended:+.1f}%</div><div class="mc-delta {dc}">{"Above" if detrended > 0 else "Below"} typical for month</div></div>')
+            else:
+                dev = vs_seasonal.get("deviation_pct", 0)
+                dc = "up" if dev > 0 else "down"
+                parts.append(f'<div class="mc"><div class="mc-label">vs 15y Avg Level</div><div class="mc-val {dc}">{dev:+.1f}%</div><div class="mc-delta {dc}">trend not removed</div></div>')
             parts.append('</div>')
 
         # Chart

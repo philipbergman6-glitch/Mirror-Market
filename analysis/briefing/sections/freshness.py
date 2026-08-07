@@ -22,6 +22,15 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
 
         for _, row in freshness.iterrows():
             layer = row["layer_name"]
+            # A failed latest attempt means the briefing is showing whatever
+            # the last good fetch left behind — flag it even if that data is
+            # still inside the staleness window (dashboard path already does).
+            status = row.get("status")
+            if isinstance(status, str) and status == "failed":
+                layer_warnings.append(
+                    f"  WARNING: {layer} last fetch FAILED — showing older data"
+                )
+                continue
             # Layers publish on different cadences — weekly COT being 6 days
             # old is by design, not an outage.
             limit_days = FRESHNESS_WARNING_DAYS_BY_LAYER.get(

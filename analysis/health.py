@@ -242,7 +242,7 @@ def _check_brazil_spot() -> list[dict]:
 def _check_safex() -> list[dict]:
     """Check JSE SAFEX South Africa prices for freshness (daily = >2 days stale)."""
     from config import SAFEX_COMMODITIES
-    expected = list(SAFEX_COMMODITIES.keys())
+    expected = list(SAFEX_COMMODITIES)
     return _check_table_freshness("safex_prices", "commodity", "Date", expected)
 
 

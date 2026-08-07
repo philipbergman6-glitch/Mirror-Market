@@ -135,14 +135,20 @@ def _filter_psd(df: pd.DataFrame) -> pd.DataFrame:
     # Build a reverse lookup: code → commodity name
     code_to_name = {v: k for k, v in PSD_TARGET_COMMODITIES.items()}
 
-    # Standardise output columns
+    # Standardise output columns. Units differ per commodity (grains in
+    # 1000 MT, cotton in 1000 480-lb bales) — never guess a missing column.
+    if "Unit_Description" not in df.columns:
+        raise ValueError(
+            "PSD response missing Unit_Description column — refusing to "
+            "assume units (cotton is in bales, not 1000 MT)"
+        )
     result = pd.DataFrame({
         "commodity": df[code_col].map(code_to_name),
         "country":   df[country_col],
         "year":      pd.to_numeric(df["Market_Year"], errors="coerce"),
         "attribute": df[attr_col],
         "value":     pd.to_numeric(df["Value"], errors="coerce"),
-        "unit":      df.get("Unit_Description", "1000 MT"),
+        "unit":      df["Unit_Description"],
     })
 
     return result.dropna(subset=["commodity", "year"])
