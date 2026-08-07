@@ -388,6 +388,7 @@ def _scenario_safex(_: Path) -> None:
             "Date": pd.to_datetime(["2026-01-02"]),
             "Close": [8500.0],
             "Volume": [500.0],
+            "Contract": ["MAR26"],
             "Unit": ["ZAR/MT"],
         }
     )
@@ -395,6 +396,7 @@ def _scenario_safex(_: Path) -> None:
     out = query.read_safex("White Maize")
     assert len(out) == 1
     assert out["Close"].iloc[0] == 8500.0
+    assert out["contract"].iloc[0] == "MAR26"
 
 
 @pytest.mark.parametrize(

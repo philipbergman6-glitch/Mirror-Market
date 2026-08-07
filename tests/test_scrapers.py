@@ -44,17 +44,80 @@ def test_safex_parse_extracts_soybean_and_sunflower() -> None:
     assert set(result.keys()) == {"Soybean (SAFEX)", "Sunflower (SAFEX)"}
     soy = result["Soybean (SAFEX)"]
 
-    assert list(soy.columns) == ["Date", "Close", "Volume", "Unit"]
+    assert list(soy.columns) == ["Date", "Close", "Volume", "Contract", "Unit"]
     assert soy["Unit"].iloc[0] == "ZAR/MT"
     assert soy["Close"].iloc[0] > 0
     assert soy["Date"].iloc[0]  # non-empty
 
 
-def test_safex_parse_picks_highest_volume_contract() -> None:
-    """With ties at 0 volume, the parser must still produce one row per code."""
+def test_safex_parse_picks_nearest_contract_by_month() -> None:
+    """Fixture lists MAY26–DEC27; MAY26 is nearest regardless of volume."""
     result = _parse_safex_table(_load_safex_html())
     soy = result["Soybean (SAFEX)"]
     assert len(soy) == 1
+    assert soy["Contract"].iloc[0] == "MAY26"
+    assert soy["Close"].iloc[0] == 6939.00
+    assert soy["Date"].iloc[0] == "2026-05-11"
+    sun = result["Sunflower (SAFEX)"]
+    assert sun["Contract"].iloc[0] == "MAY26"
+    assert sun["Close"].iloc[0] == 8780.00
+
+
+def _safex_page(rows: str) -> str:
+    return f"""
+    <html><body><table>
+      <tr><th>Instrument</th><th>Contract</th><th>LastTradedTime</th>
+          <th>LastTradedPrice</th><th>Difference</th><th>HighPrice</th>
+          <th>LowPrice</th><th>Volume</th><th>OpenInterest</th></tr>
+      {rows}
+    </table></body></html>
+    """
+
+
+def _safex_row(contract: str, traded: str, price: str, volume: str) -> str:
+    return (
+        f"<tr><td>SOYB</td><td>{contract}</td><td>{traded}</td><td>{price}</td>"
+        f"<td>0.00</td><td>0.00</td><td>0.00</td><td>{volume}</td><td>1.00</td></tr>"
+    )
+
+
+def test_safex_nearest_contract_beats_higher_volume() -> None:
+    """Audit F2 fixture: Jul-31 board must pick AUG26 (8100), not the
+    higher-volume DEC26 (8250)."""
+    html = _safex_page(
+        _safex_row("DEC26", "2026-07-31", "8250.00", "1901")
+        + _safex_row("AUG26", "2026-07-31", "8100.00", "12")
+    )
+    soy = _parse_safex_table(html)["Soybean (SAFEX)"]
+    assert soy["Contract"].iloc[0] == "AUG26"
+    assert soy["Close"].iloc[0] == 8100.00
+
+
+def test_safex_undated_row_hard_fails() -> None:
+    """A time-only LastTradedTime must raise, never stamp today's date."""
+    html = _safex_page(_safex_row("AUG26", "14:32", "8100.00", "12"))
+    with pytest.raises(ScraperShapeError, match="no parseable trade date"):
+        _parse_safex_table(html)
+
+
+def test_safex_blank_date_hard_fails() -> None:
+    html = _safex_page(_safex_row("AUG26", "", "8100.00", "12"))
+    with pytest.raises(ScraperShapeError, match="no parseable trade date"):
+        _parse_safex_table(html)
+
+
+def test_safex_ambiguous_date_parses_dayfirst() -> None:
+    """03/07/2026 is July 3rd (day-first), not March 7th."""
+    html = _safex_page(_safex_row("AUG26", "03/07/2026", "8100.00", "12"))
+    soy = _parse_safex_table(html)["Soybean (SAFEX)"]
+    assert soy["Date"].iloc[0] == "2026-07-03"
+
+
+def test_safex_unparseable_contract_code_hard_fails() -> None:
+    """Nearest-by-month is meaningless if contract codes stop parsing."""
+    html = _safex_page(_safex_row("202608", "2026-07-31", "8100.00", "12"))
+    with pytest.raises(ScraperShapeError, match="unparseable contract code"):
+        _parse_safex_table(html)
 
 
 def test_safex_parse_raises_on_missing_required_column() -> None:
