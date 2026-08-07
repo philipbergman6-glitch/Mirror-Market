@@ -130,6 +130,17 @@ _WEEKLY_SESSIONS = 5
 _MONTHLY_SESSIONS = 21
 
 
+def _asof(ts) -> str | None:
+    """ISO date string for an observation timestamp (F15 as-of), or None.
+
+    Every trader-facing figure carries the date it was observed so a stale
+    print can never masquerade as today's market.
+    """
+    if ts is None or pd.isna(ts):
+        return None
+    return str(pd.Timestamp(ts).date())
+
+
 def _pct_chg(series: pd.Series, sessions: int) -> float | None:
     """% change over the last `sessions` trading sessions, or None if the
     series is too short (or the base value is zero)."""
@@ -180,6 +191,7 @@ def command_center() -> dict:
         leg_info = {
             "name": leg,
             "available": True,
+            "as_of": _asof(df.index[-1]),
             "close": close_mt,
             "close_native": latest["Close"],
             "unit": mt_label(leg),
@@ -230,6 +242,7 @@ def command_center() -> dict:
                 crush_mt = to_metric_tons(latest_cents, "Soybeans")
                 crush_info = {
                     "available": True,
+                    "as_of": _asof(spread.iloc[-1].get("Date")),
                     "value_usd_mt": crush_mt,
                     "value_dollars_bu": latest_cents / 100,
                     "profitable": latest_cents > 0,
@@ -249,6 +262,7 @@ def command_center() -> dict:
     if "BRL/USD" in currencies and not currencies["BRL/USD"].empty:
         brl = currencies["BRL/USD"]
         key_metrics["brl_usd"] = brl["Close"].iloc[-1]
+        key_metrics["brl_usd_date"] = _asof(brl.index[-1])
         brl_weekly = _pct_chg(brl["Close"], _WEEKLY_SESSIONS)
         if brl_weekly is not None:
             key_metrics["brl_weekly_chg"] = brl_weekly
@@ -257,6 +271,7 @@ def command_center() -> dict:
     if "CNY/USD" in currencies and not currencies["CNY/USD"].empty:
         cny = currencies["CNY/USD"]
         key_metrics["cny_usd"] = cny["Close"].iloc[-1]
+        key_metrics["cny_usd_date"] = _asof(cny.index[-1])
 
     # Dollar index
     econ = read_economic()
@@ -264,6 +279,7 @@ def command_center() -> dict:
         dollar = econ[econ["series_name"] == "US Dollar Index"].sort_values("Date")
         if not dollar.empty:
             key_metrics["dollar_index"] = dollar.iloc[-1]["value"]
+            key_metrics["dollar_index_date"] = _asof(dollar.iloc[-1]["Date"])
 
     # Sort signals by severity
     all_signals = demote_near_roll_signals(all_signals)
@@ -428,6 +444,7 @@ def supply_analysis() -> dict:
             if not condition.empty:
                 latest_week = condition["week_ending"].max()
                 latest_cond = condition[condition["week_ending"] == latest_week]
+                crop_summary["condition_week"] = _asof(latest_week)
                 crop_summary["condition"] = []
                 for _, row in latest_cond.iterrows():
                     desc = str(row.get("short_desc", ""))
@@ -440,6 +457,7 @@ def supply_analysis() -> dict:
             if not progress.empty:
                 latest_week = progress["week_ending"].max()
                 latest_prog = progress[progress["week_ending"] == latest_week]
+                crop_summary["progress_week"] = _asof(latest_week)
                 crop_summary["progress"] = []
                 for _, row in latest_prog.iterrows():
                     desc = str(row.get("short_desc", ""))
@@ -666,6 +684,7 @@ def relative_value_analysis() -> dict:
                 last_252 = crush_mt.iloc[-252:] if len(crush_mt) >= 252 else crush_mt
                 result["crush"] = {
                     "series": spread,
+                    "as_of": _asof(spread.iloc[-1].get("Date")),
                     "current_usd_mt": crush_mt.iloc[-1],
                     "current_dollars_bu": spread.iloc[-1]["crush_spread"] / 100,
                     "profitable": spread.iloc[-1]["crush_spread"] > 0,
@@ -709,6 +728,7 @@ def relative_value_analysis() -> dict:
             current = float(basis_series.iloc[-1])
             entry: dict[str, Any] = {
                 "series": basis_df,
+                "as_of": _asof(basis_df["Date"].iloc[-1]),
                 "current_usd_mt": current,
                 "direction": "discount" if current < 0 else "premium",
                 "n_obs": int(len(last_252)),
@@ -753,6 +773,7 @@ def relative_value_analysis() -> dict:
             last_252 = combined["ratio"].iloc[-252:] if len(combined) >= 252 else combined["ratio"]
             result["oil_meal_ratio"] = {
                 "series": combined["ratio"],
+                "as_of": _asof(combined.index[-1]),
                 "current": combined["ratio"].iloc[-1],
                 "avg_60d": combined["ratio"].iloc[-60:].mean() if len(combined) >= 60 else combined["ratio"].mean(),
                 "min_1y": last_252.min(),
@@ -766,8 +787,10 @@ def relative_value_analysis() -> dict:
         result["oil_vs_palm"] = {
             "soy_oil": to_metric_tons(oil_latest, "Soybean Oil"),
             "soy_oil_unit": mt_label("Soybean Oil"),
+            "soy_oil_as_of": _asof(oil.index[-1]),
             "palm_oil": to_metric_tons(palm_latest, "Palm Oil (CME)"),
             "palm_oil_unit": mt_label("Palm Oil (CME)"),
+            "palm_oil_as_of": _asof(palm.index[-1]),
         }
         if len(oil) >= 6 and len(palm) >= 6:
             result["oil_vs_palm"]["soy_oil_weekly_chg"] = (
@@ -788,6 +811,7 @@ def relative_value_analysis() -> dict:
             last_252 = combined["ratio"].iloc[-252:] if len(combined) >= 252 else combined["ratio"]
             result["bean_corn_ratio"] = {
                 "series": combined["ratio"],
+                "as_of": _asof(combined.index[-1]),
                 "current": combined["ratio"].iloc[-1],
                 "avg_1y": last_252.mean(),
                 "min_1y": last_252.min(),
@@ -804,6 +828,9 @@ def relative_value_analysis() -> dict:
         total_product = oil_val + meal_val
         if total_product > 0:
             result["soy_oil_share"] = (oil_val / total_product) * 100
+            result["soy_oil_share_as_of"] = _asof(
+                min(oil.index[-1], meal.index[-1])
+            )
 
     return result
 
@@ -828,7 +855,7 @@ def risk_analysis() -> dict:
         if df.empty:
             continue
         latest = df.iloc[-1]
-        entry = {"close": latest["Close"]}
+        entry = {"close": latest["Close"], "as_of": _asof(df.index[-1])}
         if len(df) >= 6:
             entry["weekly_chg"] = (
                 (df["Close"].iloc[-1] - df["Close"].iloc[-6]) / df["Close"].iloc[-6]
@@ -931,6 +958,7 @@ def seasonal_analysis() -> dict:
             "monthly": monthly,
             "vs_seasonal": vs_seasonal,
             "unit": mt_label(leg),
+            "as_of": _asof(df.index[-1]),
         }
 
     return result
@@ -977,6 +1005,8 @@ def forward_curve_analysis() -> dict:
             "analysis": curve_analysis,
             "calendar_spread": cal_spread,
             "unit": mt_label(leg),
+            "as_of": _asof(subset["fetched_date"].max())
+            if "fetched_date" in subset.columns else None,
         }
 
     return result
@@ -1155,6 +1185,9 @@ def emerging_markets_analysis() -> dict:
                     mandi_rows = inr_df.sort_values("Date")
                     latest_close = float(mandi_rows["Close"].iloc[-1])
                     india_domestic_entry["soybean_mandi_inr"] = latest_close
+                    india_domestic_entry["soybean_mandi_date"] = _asof(
+                        mandi_rows["Date"].iloc[-1]
+                    )
 
                     # India bean vs CBOT bean premium (USD/MT) — mandi,
                     # INR/USD and CBOT joined on a common date (F1).
@@ -1203,6 +1236,9 @@ def emerging_markets_analysis() -> dict:
                     if not cepea_rows.empty:
                         latest_brl = float(cepea_rows["price_brl"].iloc[-1])
                         brazil_domestic_entry["cepea_soy_brl"] = round(latest_brl, 2)
+                        brazil_domestic_entry["cepea_soy_date"] = _asof(
+                            cepea_rows["Date"].iloc[-1]
+                        )
 
                         # CEPEA vs CBOT — three legs joined on a common
                         # date (F1). Same engine as the briefing's BRAZIL
@@ -1248,6 +1284,9 @@ def emerging_markets_analysis() -> dict:
                     if not farmgate_rows.empty:
                         farmgate_brl = float(farmgate_rows["price_brl"].iloc[-1])
                         brazil_domestic_entry["conab_farmgate_brl"] = round(farmgate_brl, 2)
+                        brazil_domestic_entry["conab_farmgate_date"] = _asof(
+                            farmgate_rows["Date"].iloc[-1]
+                        )
                         cepea_brl = brazil_domestic_entry.get("cepea_soy_brl")
                         if cepea_brl and farmgate_brl > 0:
                             brazil_domestic_entry["cepea_vs_farmgate_pct"] = round(
@@ -1304,6 +1343,9 @@ def emerging_markets_analysis() -> dict:
                     if not soy_rows.empty:
                         latest_zar = float(soy_rows["Close"].iloc[-1])
                         sa_domestic_entry["soybean_safex_zar"] = round(latest_zar, 2)
+                        sa_domestic_entry["soybean_safex_date"] = _asof(
+                            soy_rows["Date"].iloc[-1]
+                        )
 
                         # SAFEX vs CBOT — SAFEX, ZAR/USD and CBOT joined
                         # on a common date (F1).
@@ -1335,6 +1377,9 @@ def emerging_markets_analysis() -> dict:
                     if not sun_rows.empty:
                         sa_domestic_entry["sunflower_safex_zar"] = round(
                             float(sun_rows["Close"].iloc[-1]), 2
+                        )
+                        sa_domestic_entry["sunflower_safex_date"] = _asof(
+                            sun_rows["Date"].iloc[-1]
                         )
 
             except Exception as exc:

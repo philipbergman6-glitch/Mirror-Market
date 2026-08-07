@@ -194,6 +194,7 @@ def _build_command_center(data: dict) -> dict | None:
         legs.append({
             "name": name,
             "color": LEG_COLORS.get(name, COLORS["text"]),
+            "as_of": leg_info.get("as_of") or "",
             "price": f"{price:,.2f}" if price else "N/A",
             "daily_chg": delta_str(daily),
             "chg_class": "up" if daily and daily >= 0 else "down" if daily else "muted",
@@ -216,6 +217,7 @@ def _build_command_center(data: dict) -> dict | None:
         "val_class": "up" if crush.get("profitable") else "down" if crush_val else "",
         "delta": "Profitable" if crush.get("profitable") else "Negative" if crush_val else "",
         "delta_class": "up" if crush.get("profitable") else "down",
+        "as_of": crush.get("as_of") or "",
     })
 
     # key_metrics is a flat dict: brl_usd, brl_weekly_chg, dollar_index, cny_usd
@@ -227,6 +229,7 @@ def _build_command_center(data: dict) -> dict | None:
         "val_class": "",
         "delta": delta_str(brl_chg) if brl_chg is not None else "",
         "delta_class": "up" if brl_chg and brl_chg >= 0 else "down" if brl_chg else "muted",
+        "as_of": km.get("brl_usd_date") or "",
     })
 
     dollar_val = km.get("dollar_index")
@@ -236,6 +239,7 @@ def _build_command_center(data: dict) -> dict | None:
         "val_class": "",
         "delta": "",
         "delta_class": "muted",
+        "as_of": km.get("dollar_index_date") or "",
     })
 
     cny_val = km.get("cny_usd")
@@ -245,6 +249,7 @@ def _build_command_center(data: dict) -> dict | None:
         "val_class": "",
         "delta": "",
         "delta_class": "muted",
+        "as_of": km.get("cny_usd_date") or "",
     })
 
     # Signals
@@ -327,7 +332,9 @@ def _build_supply(data: dict) -> dict | None:
                 if rev is not None and rev != 0:
                     direction = "UP" if rev > 0 else "DOWN"
                     rev_str = f' <span class="{"up" if rev > 0 else "down"}">(revised {direction} {abs(rev):,.0f})</span>'
-                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}{rev_str}</div>')
+                period = info.get("period", "")
+                period_str = f' <span style="color:var(--text-dim);">· {_esc(period)}</span>' if period else ""
+                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}{rev_str}{period_str}</div>')
         out["wasde_html"] = "\n".join(lines) if lines else ""
 
     # Stocks-to-use (US balance sheet, from PSD)
@@ -368,7 +375,9 @@ def _build_supply(data: dict) -> dict | None:
                 if pd.isna(val):
                     continue
                 unit = info.get("unit", "")
-                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}</div>')
+                period = info.get("period", "")
+                period_str = f' <span style="color:var(--text-dim);">· {_esc(period)}</span>' if period else ""
+                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}{period_str}</div>')
         # PSD highlights
         psd = data.get("psd_highlights", [])
         if psd:
@@ -383,8 +392,10 @@ def _build_supply(data: dict) -> dict | None:
         cp = conab["conab_production"]
         up = conab.get("usda_production")
         gap = conab.get("gap", 0)
+        crop_year = conab.get("crop_year", "")
+        year_str = f" · {_esc(crop_year)}" if crop_year else ""
         html_parts = ['<div class="grid grid-3">']
-        html_parts.append(f'<div class="mc"><div class="mc-label">CONAB (Brazil)</div><div class="mc-val">{cp:,.0f}</div><div class="mc-delta muted">1000 MT</div></div>')
+        html_parts.append(f'<div class="mc"><div class="mc-label">CONAB (Brazil)</div><div class="mc-val">{cp:,.0f}</div><div class="mc-delta muted">1000 MT{year_str}</div></div>')
         if up:
             html_parts.append(f'<div class="mc"><div class="mc-label">USDA (Brazil)</div><div class="mc-val">{up:,.0f}</div><div class="mc-delta muted">1000 MT</div></div>')
             gc = "up" if gap > 0 else "down"
@@ -396,8 +407,14 @@ def _build_supply(data: dict) -> dict | None:
     crop = data.get("crop_progress", {})
     if crop:
         lines = []
+        cond_week = crop.get("condition_week")
+        if cond_week and crop.get("condition"):
+            lines.append(f'<div class="caption">Condition — week ending {_esc(cond_week)}</div>')
         for item in crop.get("condition", []):
             lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(item["desc"])}: <strong style="color:var(--text)">{item["value"]}%</strong></div>')
+        prog_week = crop.get("progress_week")
+        if prog_week and crop.get("progress"):
+            lines.append(f'<div class="caption">Progress — week ending {_esc(prog_week)}</div>')
         for item in crop.get("progress", []):
             lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(item["desc"])}: <strong style="color:var(--text)">{item["value"]}%</strong></div>')
         out["crop_progress_html"] = "\n".join(lines) if lines else ""
@@ -412,10 +429,15 @@ def _build_demand(data: dict) -> dict | None:
 
     # China buying
     china = data.get("china_buying", {})
+    es_weeks = data.get("export_sales", {})
     if china:
         cards = ['<div class="grid grid-3">']
         for commodity, info in china.items():
-            cards.append(f'<div class="mc"><div class="mc-label">{_esc(commodity)}</div><div class="mc-val">{info["net_sales"]:,.0f}</div><div class="mc-delta muted">MT | {info["pct_of_total"]:.0f}% of total</div></div>')
+            we = es_weeks.get(commodity, {}).get("week_ending")
+            week_str = ""
+            if we is not None:
+                week_str = f' · w/e {we.strftime("%m/%d") if hasattr(we, "strftime") else _esc(we)}'
+            cards.append(f'<div class="mc"><div class="mc-label">{_esc(commodity)}</div><div class="mc-val">{info["net_sales"]:,.0f}</div><div class="mc-delta muted">MT | {info["pct_of_total"]:.0f}% of total{week_str}</div></div>')
         cards.append('</div>')
         out["china_html"] = "\n".join(cards)
 
@@ -441,7 +463,11 @@ def _build_demand(data: dict) -> dict | None:
         for name, info in bio.items():
             chg = info.get("chg_pct")
             dc = "up" if chg and chg >= 0 else "down" if chg else "muted"
-            cards.append(f'<div class="mc"><div class="mc-label">{_esc(name)}</div><div class="mc-val">{info["value"]:,.2f}</div><div class="mc-delta {dc}">{delta_str(chg)}</div></div>')
+            bio_date = info.get("date")
+            date_str = ""
+            if bio_date is not None:
+                date_str = f'<div class="caption">as of {bio_date.strftime("%Y-%m-%d") if hasattr(bio_date, "strftime") else _esc(bio_date)}</div>'
+            cards.append(f'<div class="mc"><div class="mc-label">{_esc(name)}</div><div class="mc-val">{info["value"]:,.2f}</div><div class="mc-delta {dc}">{delta_str(chg)}</div>{date_str}</div>')
         cards.append('</div>')
         out["biofuel_html"] = "\n".join(cards)
 
@@ -500,17 +526,22 @@ def _build_emerging_markets(data: dict) -> str:
         dom_india = info.get("india_domestic", {})
         if dom_india:
             parts.append('<div class="subhdr" style="font-size:14px;">Mandi Domestic Price (Agmarknet, MP median)</div>')
+            mandi_date = dom_india.get("soybean_mandi_date")
+            basis_date = dom_india.get("basis_date")
             cards = ['<div class="grid grid-3">']
             inr = dom_india.get("soybean_mandi_inr")
             if inr:
-                cards.append(f'<div class="mc"><div class="mc-label">Soybean</div><div class="mc-val">\u20B9{inr:,.0f}</div><div class="mc-delta muted">INR/MT</div></div>')
+                d = f" \u00B7 {_esc(mandi_date)}" if mandi_date else ""
+                cards.append(f'<div class="mc"><div class="mc-label">Soybean</div><div class="mc-val">\u20B9{inr:,.0f}</div><div class="mc-delta muted">INR/MT{d}</div></div>')
             usd = dom_india.get("soybean_mandi_usd")
             if usd:
-                cards.append(f'<div class="mc"><div class="mc-label">Soybean (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+                d = f" \u00B7 {_esc(basis_date or mandi_date)}" if (basis_date or mandi_date) else ""
+                cards.append(f'<div class="mc"><div class="mc-label">Soybean (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT{d}</div></div>')
             premium = dom_india.get("bean_premium_usd")
             if premium is not None:
                 pc = "up" if premium > 0 else "down"
-                cards.append(f'<div class="mc"><div class="mc-label">vs CBOT Beans</div><div class="mc-val {pc}">${premium:+,.1f}</div><div class="mc-delta muted">{"premium" if premium > 0 else "discount"}</div></div>')
+                d = f" \u00B7 as of {_esc(basis_date)}" if basis_date else ""
+                cards.append(f'<div class="mc"><div class="mc-label">vs CBOT Beans</div><div class="mc-val {pc}">${premium:+,.1f}</div><div class="mc-delta muted">{"premium" if premium > 0 else "discount"}{d}</div></div>')
             cards.append('</div>')
             parts.append("\n".join(cards))
 
@@ -524,15 +555,20 @@ def _build_emerging_markets(data: dict) -> str:
             # AgRural populates the same dict, and an unconditional header
             # left "CEPEA Farm-Gate Price" hanging over nothing.
             if brl or usd or basis is not None:
+                cepea_date = dom_brazil.get("cepea_soy_date")
+                basis_date = dom_brazil.get("basis_date")
                 parts.append('<div class="subhdr" style="font-size:14px;">CEPEA Farm-Gate Price</div>')
                 cards = ['<div class="grid grid-3">']
                 if brl:
-                    cards.append(f'<div class="mc"><div class="mc-label">CEPEA Soybean</div><div class="mc-val">R${brl:,.2f}</div><div class="mc-delta muted">BRL/MT</div></div>')
+                    d = f" · {_esc(cepea_date)}" if cepea_date else ""
+                    cards.append(f'<div class="mc"><div class="mc-label">CEPEA Soybean</div><div class="mc-val">R${brl:,.2f}</div><div class="mc-delta muted">BRL/MT{d}</div></div>')
                 if usd:
-                    cards.append(f'<div class="mc"><div class="mc-label">CEPEA (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+                    d = f" · {_esc(basis_date or cepea_date)}" if (basis_date or cepea_date) else ""
+                    cards.append(f'<div class="mc"><div class="mc-label">CEPEA (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT{d}</div></div>')
                 if basis is not None:
                     bc = "up" if basis > 0 else "down"
-                    cards.append(f'<div class="mc"><div class="mc-label">Brazil-CBOT Basis</div><div class="mc-val {bc}">${basis:+,.1f}</div><div class="mc-delta muted">{"premium" if basis > 0 else "discount"}</div></div>')
+                    d = f" · as of {_esc(basis_date)}" if basis_date else ""
+                    cards.append(f'<div class="mc"><div class="mc-label">Brazil-CBOT Basis</div><div class="mc-val {bc}">${basis:+,.1f}</div><div class="mc-delta muted">{"premium" if basis > 0 else "discount"}{d}</div></div>')
                 cards.append('</div>')
                 parts.append("\n".join(cards))
 
@@ -541,13 +577,15 @@ def _build_emerging_markets(data: dict) -> str:
             agrural_usd = dom_brazil.get("agrural_soy_usd")
             agrural_basis = dom_brazil.get("agrural_cbot_basis_usd")
             if agrural_usd is not None or agrural_basis is not None:
+                ag_date = dom_brazil.get("agrural_basis_date")
+                ag_d = f" · {_esc(ag_date)}" if ag_date else ""
                 parts.append('<div class="subhdr" style="font-size:14px;">AgRural Paranaguá FOB</div>')
                 ag_cards = ['<div class="grid grid-3">']
                 if agrural_usd is not None:
-                    ag_cards.append(f'<div class="mc"><div class="mc-label">AgRural (USD)</div><div class="mc-val">${agrural_usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+                    ag_cards.append(f'<div class="mc"><div class="mc-label">AgRural (USD)</div><div class="mc-val">${agrural_usd:,.1f}</div><div class="mc-delta muted">USD/MT{ag_d}</div></div>')
                 if agrural_basis is not None:
                     ab_cls = "up" if agrural_basis > 0 else "down"
-                    ag_cards.append(f'<div class="mc"><div class="mc-label">AgRural−CBOT Basis</div><div class="mc-val {ab_cls}">${agrural_basis:+,.1f}</div><div class="mc-delta muted">{"premium" if agrural_basis > 0 else "discount"}</div></div>')
+                    ag_cards.append(f'<div class="mc"><div class="mc-label">AgRural−CBOT Basis</div><div class="mc-val {ab_cls}">${agrural_basis:+,.1f}</div><div class="mc-delta muted">{"premium" if agrural_basis > 0 else "discount"}{" · as of " + _esc(ag_date) if ag_date else ""}</div></div>')
                 ag_cards.append('</div>')
                 parts.append("\n".join(ag_cards))
 
@@ -558,14 +596,19 @@ def _build_emerging_markets(data: dict) -> str:
             zar = dom_sa.get("soybean_safex_zar")
             usd = dom_sa.get("soybean_safex_usd")
             basis = dom_sa.get("safex_cbot_basis_usd")
+            safex_date = dom_sa.get("soybean_safex_date")
+            basis_date = dom_sa.get("basis_date")
             cards = ['<div class="grid grid-3">']
             if zar:
-                cards.append(f'<div class="mc"><div class="mc-label">SAFEX Soybean</div><div class="mc-val">R{zar:,.0f}</div><div class="mc-delta muted">ZAR/MT</div></div>')
+                d = f" · {_esc(safex_date)}" if safex_date else ""
+                cards.append(f'<div class="mc"><div class="mc-label">SAFEX Soybean</div><div class="mc-val">R{zar:,.0f}</div><div class="mc-delta muted">ZAR/MT{d}</div></div>')
             if usd:
-                cards.append(f'<div class="mc"><div class="mc-label">SAFEX (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+                d = f" · {_esc(basis_date or safex_date)}" if (basis_date or safex_date) else ""
+                cards.append(f'<div class="mc"><div class="mc-label">SAFEX (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT{d}</div></div>')
             if basis is not None:
                 bc = "up" if basis > 0 else "down"
-                cards.append(f'<div class="mc"><div class="mc-label">SAFEX-CBOT Basis</div><div class="mc-val {bc}">${basis:+,.1f}</div><div class="mc-delta muted">{"premium" if basis > 0 else "parity"}</div></div>')
+                d = f" · as of {_esc(basis_date)}" if basis_date else ""
+                cards.append(f'<div class="mc"><div class="mc-label">SAFEX-CBOT Basis</div><div class="mc-val {bc}">${basis:+,.1f}</div><div class="mc-delta muted">{"premium" if basis > 0 else "parity"}{d}</div></div>')
             cards.append('</div>')
             parts.append("\n".join(cards))
 
@@ -594,7 +637,9 @@ def _build_relative_value(data: dict) -> str:
             fig = build_crush_spread_chart(spread_df, spread_mt, crush)
             cur = crush.get("current_usd_mt", 0)
             prof = crush.get("profitable", False)
-            parts.append(f'<div class="grid grid-2"><div class="mc"><div class="mc-label">Current (USD/MT)</div><div class="mc-val {"up" if prof else "down"}">${cur:,.1f}</div><div class="mc-delta {"up" if prof else "down"}">{"Profitable" if prof else "Negative"}</div></div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
+            crush_asof = crush.get("as_of")
+            crush_d = f'<div class="caption">as of {_esc(crush_asof)}</div>' if crush_asof else ""
+            parts.append(f'<div class="grid grid-2"><div class="mc"><div class="mc-label">Current (USD/MT)</div><div class="mc-val {"up" if prof else "down"}">${cur:,.1f}</div><div class="mc-delta {"up" if prof else "down"}">{"Profitable" if prof else "Negative"}</div>{crush_d}</div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
         except Exception as e:
             log.warning("  Crush spread chart failed: %s", e)
 
@@ -629,6 +674,9 @@ def _build_relative_value(data: dict) -> str:
                 delta_label = f"{window} avg ${avg:+,.1f} · {pct:.0f}th pctile"
             else:
                 delta_label = f"history building ({n_obs} obs — stats at 20)"
+            primary_asof = primary_stats.get("as_of")
+            if primary_asof:
+                delta_label = f"as of {_esc(primary_asof)} · {delta_label}"
 
             tiles = [
                 f'<div class="mc"><div class="mc-label">{primary_label} (USD/MT)</div>'
@@ -640,10 +688,12 @@ def _build_relative_value(data: dict) -> str:
                 sec_cur = secondary_stats.get("current_usd_mt", 0.0)
                 sec_direction = secondary_stats.get("direction", "")
                 sec_class = "up" if sec_cur < 0 else "down"
+                sec_asof = secondary_stats.get("as_of")
+                sec_d = f'<div class="caption">as of {_esc(sec_asof)}</div>' if sec_asof else ""
                 tiles.append(
                     f'<div class="mc"><div class="mc-label">{secondary_label} (USD/MT)</div>'
                     f'<div class="mc-val {sec_class}">${sec_cur:+,.1f}</div>'
-                    f'<div class="mc-delta {sec_class}">Brazilian {sec_direction}</div></div>'
+                    f'<div class="mc-delta {sec_class}">Brazilian {sec_direction}</div>{sec_d}</div>'
                 )
             wedge = basis.get("wedge_usd_mt")
             if wedge is not None:
@@ -670,12 +720,15 @@ def _build_relative_value(data: dict) -> str:
     if omr and omr.get("series") is not None:
         parts.append('<div class="subhdr">Oil/Meal Ratio</div>')
         fig = build_oil_meal_ratio_chart(omr)
-        parts.append(f'<div class="grid grid-2"><div class="mc"><div class="mc-label">Current</div><div class="mc-val">{omr["current"]:.3f}</div><div class="mc-delta muted">60d avg: {omr["avg_60d"]:.3f}</div></div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
+        omr_d = f'<div class="caption">as of {_esc(omr["as_of"])}</div>' if omr.get("as_of") else ""
+        parts.append(f'<div class="grid grid-2"><div class="mc"><div class="mc-label">Current</div><div class="mc-val">{omr["current"]:.3f}</div><div class="mc-delta muted">60d avg: {omr["avg_60d"]:.3f}</div>{omr_d}</div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
 
     # Soy oil share
     share = data.get("soy_oil_share")
     if share:
-        parts.append(f'<div class="mc" style="margin-bottom:24px;"><div class="mc-label">Soy Oil Share of Crush</div><div class="mc-val">{share:.1f}%</div><div class="caption">Higher = biodiesel demand pulling oil; Lower = feed demand pulling meal</div></div>')
+        share_asof = data.get("soy_oil_share_as_of")
+        share_d = f" · as of {_esc(share_asof)}" if share_asof else ""
+        parts.append(f'<div class="mc" style="margin-bottom:24px;"><div class="mc-label">Soy Oil Share of Crush</div><div class="mc-val">{share:.1f}%</div><div class="caption">Higher = biodiesel demand pulling oil; Lower = feed demand pulling meal{share_d}</div></div>')
 
     # Oil vs Palm
     ovp = data.get("oil_vs_palm")
@@ -687,11 +740,15 @@ def _build_relative_value(data: dict) -> str:
         if so:
             swk = ovp.get("soy_oil_weekly_chg")
             sc = "up" if swk and swk >= 0 else "down" if swk else "muted"
-            cards.append(f'<div class="mc"><div class="mc-label">Soy Oil ({_esc(ovp.get("soy_oil_unit", "USD/MT"))})</div><div class="mc-val">{so:,.2f}</div><div class="mc-delta {sc}">{delta_str(swk)}</div></div>')
+            so_asof = ovp.get("soy_oil_as_of")
+            so_d = f'<div class="caption">as of {_esc(so_asof)}</div>' if so_asof else ""
+            cards.append(f'<div class="mc"><div class="mc-label">Soy Oil ({_esc(ovp.get("soy_oil_unit", "USD/MT"))})</div><div class="mc-val">{so:,.2f}</div><div class="mc-delta {sc}">{delta_str(swk)}</div>{so_d}</div>')
         if po:
             pwk = ovp.get("palm_oil_weekly_chg")
             pc = "up" if pwk and pwk >= 0 else "down" if pwk else "muted"
-            cards.append(f'<div class="mc"><div class="mc-label">Palm Oil ({_esc(ovp.get("palm_oil_unit", "USD/MT"))})</div><div class="mc-val">{po:,.2f}</div><div class="mc-delta {pc}">{delta_str(pwk)}</div></div>')
+            po_asof = ovp.get("palm_oil_as_of")
+            po_d = f'<div class="caption">as of {_esc(po_asof)}</div>' if po_asof else ""
+            cards.append(f'<div class="mc"><div class="mc-label">Palm Oil ({_esc(ovp.get("palm_oil_unit", "USD/MT"))})</div><div class="mc-val">{po:,.2f}</div><div class="mc-delta {pc}">{delta_str(pwk)}</div>{po_d}</div>')
         cards.append('</div>')
         parts.append("\n".join(cards))
 
@@ -701,7 +758,8 @@ def _build_relative_value(data: dict) -> str:
         parts.append('<hr class="divider"><div class="subhdr">Soybean/Corn Ratio (Acreage Signal)</div>')
         fig = build_bean_corn_ratio_chart(bcr)
         label = "Above avg = soybeans expensive vs corn" if bcr["current"] > bcr["avg_1y"] else "Below avg = corn expensive vs soy"
-        parts.append(f'<div class="grid grid-2"><div><div class="mc" style="margin-bottom:16px;"><div class="mc-label">Current</div><div class="mc-val">{bcr["current"]:.2f}</div></div><div class="mc"><div class="mc-label">1Y Average</div><div class="mc-val">{bcr["avg_1y"]:.2f}</div><div class="caption">{label}</div></div></div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
+        bcr_d = f'<div class="caption">as of {_esc(bcr["as_of"])}</div>' if bcr.get("as_of") else ""
+        parts.append(f'<div class="grid grid-2"><div><div class="mc" style="margin-bottom:16px;"><div class="mc-label">Current</div><div class="mc-val">{bcr["current"]:.2f}</div>{bcr_d}</div><div class="mc"><div class="mc-label">1Y Average</div><div class="mc-val">{bcr["avg_1y"]:.2f}</div><div class="caption">{label}</div></div></div><div class="chart-box">{_fig_to_html(fig)}</div></div>')
 
     return "\n".join(parts)
 
@@ -726,7 +784,12 @@ def _build_risk_monitor(data: dict) -> str:
             for pair, info in row:
                 wk = info.get("weekly_chg")
                 wc = "up" if wk and wk >= 0 else "down" if wk else "muted"
-                mo_str = f'<div class="caption">30d: {info["monthly_chg"]:+.1f}%</div>' if info.get("monthly_chg") is not None else ""
+                mo_parts = []
+                if info.get("monthly_chg") is not None:
+                    mo_parts.append(f'30d: {info["monthly_chg"]:+.1f}%')
+                if info.get("as_of"):
+                    mo_parts.append(f'as of {_esc(info["as_of"])}')
+                mo_str = f'<div class="caption">{" · ".join(mo_parts)}</div>' if mo_parts else ""
                 parts.append(f'<div class="mc"><div class="mc-label">{_esc(pair)}</div><div class="mc-val">{info["close"]:.4f}</div><div class="mc-delta {wc}">{delta_str(wk)}</div>{mo_str}</div>')
             parts.append('</div>')
         parts.append('<hr class="divider">')
@@ -743,7 +806,11 @@ def _build_risk_monitor(data: dict) -> str:
             wow = info.get("spec_net_chg")
             if wow is not None:
                 wc = "up" if wow >= 0 else "down"
-                parts.append(f'<div style="font-size:13px; padding:2px 0;"><span class="muted">{_esc(leg)}</span> spec WoW: <span class="{wc}">{wow:+,.0f}</span></div>')
+                cot_date = info.get("date")
+                cot_d = ""
+                if cot_date is not None:
+                    cot_d = f' <span class="muted" style="font-size:12px;">(report {cot_date.strftime("%Y-%m-%d") if hasattr(cot_date, "strftime") else _esc(cot_date)})</span>'
+                parts.append(f'<div style="font-size:13px; padding:2px 0;"><span class="muted">{_esc(leg)}</span> spec WoW: <span class="{wc}">{wow:+,.0f}</span>{cot_d}</div>')
         parts.append('<hr class="divider">')
 
     # Weather
@@ -751,7 +818,11 @@ def _build_risk_monitor(data: dict) -> str:
     if weather:
         parts.append('<div class="subhdr">Weather Alerts</div>')
         for w in weather:
-            parts.append(f'<div class="alert alert-warn">{_esc(w.get("region", ""))}: {_esc(w.get("alert", ""))} — Max {w.get("temp_max", "N/A")}C, Precip {w.get("precip", 0):.0f}mm</div>')
+            w_date = w.get("date")
+            w_d = ""
+            if w_date is not None:
+                w_d = f' ({w_date.strftime("%Y-%m-%d") if hasattr(w_date, "strftime") else _esc(w_date)})'
+            parts.append(f'<div class="alert alert-warn">{_esc(w.get("region", ""))}: {_esc(w.get("alert", ""))} — Max {w.get("temp_max", "N/A")}C, Precip {w.get("precip", 0):.0f}mm{w_d}</div>')
         parts.append('<hr class="divider">')
 
     # Correlations
@@ -808,6 +879,9 @@ def _build_forward_curves(data: dict) -> str:
             continue
 
         parts.append(f'<div class="subhdr">{_esc(leg)}</div>')
+        curve_asof = leg_data.get("as_of")
+        if curve_asof:
+            parts.append(f'<div class="caption">Curve snapshot as of {_esc(curve_asof)}</div>')
 
         # Metrics
         if analysis:
@@ -859,8 +933,10 @@ def _build_seasonal(data: dict) -> str:
 
         # Metrics
         if vs_seasonal:
+            seasonal_asof = leg_data.get("as_of")
+            seasonal_d = f'<div class="caption">as of {_esc(seasonal_asof)}</div>' if seasonal_asof else ""
             parts.append('<div class="grid grid-3">')
-            parts.append(f'<div class="mc"><div class="mc-label">Current ({unit})</div><div class="mc-val">{vs_seasonal["current_price"]:,.1f}</div></div>')
+            parts.append(f'<div class="mc"><div class="mc-label">Current ({unit})</div><div class="mc-val">{vs_seasonal["current_price"]:,.1f}</div>{seasonal_d}</div>')
             parts.append(f'<div class="mc"><div class="mc-label">Seasonal Avg</div><div class="mc-val">{vs_seasonal["seasonal_avg"]:,.1f}</div></div>')
             detrended = vs_seasonal.get("detrended_delta_pct")
             if detrended is not None:

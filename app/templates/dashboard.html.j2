@@ -189,6 +189,7 @@ details .det-content { padding: 0 16px 16px; }
         <span>RSI <span class="num{% if leg.rsi_class %} {{ leg.rsi_class }}{% endif %}">{{ leg.rsi }}</span></span>
         <span class="{{ leg.trend_class }}">{{ leg.trend }}</span>
         <span>Vol {{ leg.volatility }}</span>
+        {% if leg.as_of %}<span>as of {{ leg.as_of }}</span>{% endif %}
       </div>
     </div>
     {% endfor %}
@@ -199,6 +200,7 @@ details .det-content { padding: 0 16px 16px; }
       <div class="mc-label">{{ m.label }}</div>
       <div class="mc-val num {{ m.val_class }}">{{ m.value }}</div>
       <div class="mc-delta {{ m.delta_class }}">{{ m.delta }}</div>
+      {% if m.as_of %}<div class="caption">as of {{ m.as_of }}</div>{% endif %}
     </div>
     {% endfor %}
   </div>
@@ -444,6 +446,28 @@ details .det-content { padding: 0 16px 16px; }
     </table>
     </div>
   </details>
+
+  {% if freshness_items %}
+  <details>
+    <summary>Layer Freshness ({{ masthead.fresh_count }}/{{ masthead.total_layers }} fresh)</summary>
+    <div class="det-content">
+    <table class="dtable">
+      <thead>
+        <tr><th>Layer</th><th>Status</th><th>Last Success</th></tr>
+      </thead>
+      <tbody>
+        {% for item in freshness_items %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td><span class="{% if item.status == 'fresh' %}up{% elif item.status == 'old' %}down{% else %}muted{% endif %}">{{ item.status }}</span></td>
+          <td class="num">{{ item.age }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+  {% endif %}
 
   <details>
     <summary>Analysis Methodology</summary>
