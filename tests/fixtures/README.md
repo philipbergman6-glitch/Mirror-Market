@@ -12,6 +12,8 @@ parsing without hitting the network.
 | `cepea_soybean.html` | CEPEA/ESALQ soybean indicator | synthetic (live returned HTTP 403 anti-bot) |
 | `ncdex_bhavcopy.csv` | NCDEX Bhav Copy | synthetic (live URL templates 404 — see config.py) |
 | `agrural_paranagua.html` | AgRural soja+milho price page | live download 2026-05-11 |
+| `noticias_agricolas_parana.html` | Notícias Agrícolas CEPEA/ESALQ Paraná soy indicator | live download 2026-08-07 |
+| `noticias_agricolas_milho.html` | Notícias Agrícolas ESALQ/B3 corn indicator (corn-redirect fixture — must *fail* the soy parse) | live download 2026-08-07 |
 
 ## Treat fixtures as snapshots
 
