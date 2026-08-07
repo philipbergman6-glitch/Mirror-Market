@@ -547,12 +547,19 @@ MANDI_API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a4
 # Published in the data.gov.in API docs — a public testing credential, not a secret.
 MANDI_SAMPLE_API_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"  # public-sample-key: not a secret
 MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
-MANDI_STATE = "Madhya Pradesh"    # the soy belt (~76 reporting mandis/day)
 MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
-MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any daily MP set
-# Fresh series key — mandi farmgate spot is a different instrument from the
+MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any single-state daily set
+# Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
-MANDI_SERIES = "Soybean (Mandi MP)"
+MANDI_SERIES = "Soybean (Mandi MP)"     # headline: Indore is the crush-industry pricing hub
+MANDI_SERIES_MH = "Soybean (Mandi MH)"  # Maharashtra — #1 producing state since 2025-26
+# One median series per state, fetched from the same resource. SOPA Kharif
+# 2025 estimates: Maharashtra 52.2 vs Madhya Pradesh 43.2 lakh tonnes —
+# MP alone is ~39% of the crop; MP + MH cover ~86% (issue #44 research).
+MANDI_STATES = {
+    "Madhya Pradesh": MANDI_SERIES,
+    "Maharashtra": MANDI_SERIES_MH,
+}
 
 # ---------------------------------------------------------------------------
 # Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
