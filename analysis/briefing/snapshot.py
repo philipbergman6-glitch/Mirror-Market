@@ -58,6 +58,7 @@ from analysis.stocks_to_use import (
 )
 from analysis.zscore import trailing_zscore
 from pipeline.query import (
+    read_argentina_fob,
     read_brazil_estimates,
     read_brazil_spot,
     read_cot,
@@ -68,7 +69,6 @@ from pipeline.query import (
     read_export_sales,
     read_forward_curve,
     read_gulf_bids,
-    read_argentina_fob,
     read_inspection_destinations,
     read_inspections,
     read_port_flows,

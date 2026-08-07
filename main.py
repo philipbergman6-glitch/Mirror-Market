@@ -74,8 +74,8 @@ from pipeline.query import read_prices
 from pipeline.results import FetchResult
 from pipeline.store import (
     init_database,
-    save_brazil_estimates,
     save_argentina_fob,
+    save_brazil_estimates,
     save_brazil_spot,
     save_cot_data,
     save_crop_progress,
