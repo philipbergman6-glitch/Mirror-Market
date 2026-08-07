@@ -162,6 +162,29 @@ def test_exit_one_when_fred_fails(stub_fetchers, monkeypatch):
     assert main.run() == 1
 
 
+def test_run_writes_pipeline_status_file(stub_fetchers, monkeypatch, tmp_path):
+    """The CI alerter reads this file — hard failures must be listed in it."""
+    import json
+
+    main = stub_fetchers
+
+    monkeypatch.setattr(main, "fetch_prices", mock.Mock(return_value=_make_prices_at_floor()))
+    monkeypatch.setattr(main, "fetch_all_series", mock.Mock(return_value=_make_fred_at_floor()))
+    monkeypatch.setattr(main, "fetch_psd_all", mock.Mock(side_effect=RuntimeError("timeout")))
+    monkeypatch.setattr(
+        main, "fetch_agrural",
+        mock.Mock(return_value=FetchResult.failed("page download failed")),
+    )
+
+    main.run()
+
+    status = json.loads((tmp_path / "pipeline_status.json").read_text())
+    assert "psd" in status["hard_failures"]
+    assert "agrural" in status["hard_failures"]
+    assert status["critical_failures"] == []
+    assert "prices" in status["succeeded"]
+
+
 def test_failed_layer_writes_freshness_row(stub_fetchers, monkeypatch):
     """A failed layer leaves a status='failed' row so the dashboard can render it."""
     main = stub_fetchers

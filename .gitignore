@@ -21,6 +21,7 @@ htmlcov/
 # Data files (re-fetchable)
 data/storage/*.db
 data/storage/*.csv
+data/storage/*.json
 
 # Environment / secrets
 .env
