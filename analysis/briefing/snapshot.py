@@ -68,6 +68,7 @@ from pipeline.query import (
     read_export_sales,
     read_forward_curve,
     read_gulf_bids,
+    read_inspection_destinations,
     read_inspections,
     read_port_flows,
     read_psd,
@@ -511,6 +512,31 @@ def _port_flows_block() -> dict[str, dict[str, Any]]:
     return out
 
 
+def _inspection_destinations_block() -> dict[str, dict[str, Any]]:
+    dest = read_inspection_destinations()
+    if dest.empty or "country" not in dest.columns:
+        return {}
+    countries = dest[dest["country"] != "SUBTOTAL"]
+    if countries.empty:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for commodity, subset in countries.groupby("commodity"):
+        weeks = sorted(subset["week_ending"].dropna().unique())
+        if not weeks:
+            continue
+        latest = weeks[-1]
+        rows = subset[subset["week_ending"] == latest]
+        by_country = rows.groupby("country")["inspections_mt"].sum()
+        by_country = by_country[by_country > 0].sort_values(ascending=False)
+        if by_country.empty:
+            continue
+        out[str(commodity)] = {
+            "week_ending": _date_str(latest),
+            "countries_mt": {str(c): _num(v) for c, v in by_country.items()},
+        }
+    return out
+
+
 def _nass_crush_block() -> dict[str, Any] | None:
     crush = latest_crush()
     if not crush:
@@ -855,6 +881,9 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "stocks_to_use": _safe("stocks_to_use", _stocks_to_use_block, {}),
         "export_sales": _safe("export_sales", _export_sales_block, {}),
         "inspections": _safe("inspections", _inspections_block, {}),
+        "inspection_destinations": _safe(
+            "inspection_destinations", _inspection_destinations_block, {}
+        ),
         "port_flows": _safe("port_flows", _port_flows_block, {}),
         "gulf_bids": _safe("gulf_bids", _gulf_bids_block, {}),
         "nass_crush": _safe("nass_crush", _nass_crush_block, None),

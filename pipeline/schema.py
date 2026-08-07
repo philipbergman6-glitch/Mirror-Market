@@ -196,6 +196,17 @@ CREATE TABLE IF NOT EXISTS inspection_port_flows (
 );
 """
 
+_CREATE_INSPECTION_DESTINATIONS = """
+CREATE TABLE IF NOT EXISTS inspection_destinations (
+    week_ending     TEXT NOT NULL,
+    region          TEXT NOT NULL,
+    country         TEXT NOT NULL,
+    commodity       TEXT NOT NULL,
+    inspections_mt  REAL,
+    PRIMARY KEY (week_ending, region, country, commodity)
+);
+"""
+
 _CREATE_GULF_BIDS = """
 CREATE TABLE IF NOT EXISTS gulf_bids (
     report_date   TEXT NOT NULL,
@@ -323,6 +334,7 @@ ALL_SCHEMAS = (
     _CREATE_WASDE,
     _CREATE_INSPECTIONS,
     _CREATE_INSPECTION_PORT_FLOWS,
+    _CREATE_INSPECTION_DESTINATIONS,
     _CREATE_GULF_BIDS,
     _CREATE_EIA_ENERGY,
     _CREATE_BRAZIL_ESTIMATES,

@@ -50,6 +50,7 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # WA_GR101 report carries only the trailing three weeks.
     "inspections": ("commodity", "week_ending"),
     "inspection_port_flows": ("week_ending", "region", "port_area", "commodity"),
+    "inspection_destinations": ("week_ending", "region", "country", "commodity"),
     # CONAB survey values are stamped with the fetch date; prior surveys
     # are unrecoverable from the source file.
     "brazil_estimates": ("source", "commodity", "crop_year", "attribute", "report_date"),
