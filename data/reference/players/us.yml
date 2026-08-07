@@ -1,0 +1,349 @@
+# US soy players — exporters and terminal operators (#89)
+# Seeded from research/2026-08-07-issue-45-origination-intelligence.md (all seeds were UNVERIFIED).
+# Two seed corrections found: EGT is no longer Bunge/Itochu/STX (Itochu sold to Pan Ocean 2020;
+# Agtegra later joined), and "Kalama Export (Marubeni)" is the same entity as Pacificor, not a
+# separate JV. Scale note: NO free per-company US export volume data exists — FGIS inspections
+# aggregate by port/commodity only, the Registered Exporters Directory is a name/address registry,
+# and bill-of-lading rankings (Panjiva etc.) are paid. size_evidence below is therefore
+# capacity/throughput disclosures, never market share.
+
+- name: "Archer Daniels Midland (ADM) — US export operations"
+  aka: ["ADM", "ADM Grain Company"]
+  scope: "us"
+  ownership: "Public (NYSE: ADM). US Gulf elevators wholly owned; 32.2% stake in PNW JV Pacificor (see Pacificor entry)."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Four export elevators on the lower Mississippi in Louisiana — Ama, Destrehan, Reserve, St. Elmo (per ADM's own elevator tariff; berth applications handled at Ama). Destrehan is the largest at 6.4M bu storage, 75,000 bu/hr loading. Reserve described as one of the largest soybean export terminals in the world by volume; reopened Dec 2020 after a 2019 vessel collision. Plus mid-river loading rigs. PNW access via Pacificor (Kalama WA + Portland OR)."
+  destinations: "unverified (no per-company destination disclosure found)"
+  size_evidence: "ADM elevator tariff no. 9 lists the four LA facilities [observed]; Destrehan 6.4M bu / 75,000 bu/hr [observed, secondary]. No company-level export tonnage is published anywhere free."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.bluewatershipping.com/uploads/files/110123%20ADM%20GRAIN%20COMPANY-TARIFF%20NO%209.pdf"
+      accessed: "2026-08-07"
+      supports: "ADM elevator tariff covering Ama, Destrehan, Reserve, St. Elmo LA"
+    - url: "https://www.grainjournal.com/article/219589/adm-reopens-key-u-s-grain-terminal-in-louisiana-after-delays"
+      accessed: "2026-08-07"
+      supports: "Reserve reopening Dec 2020; 'one of the largest soybean export terminals in the world by volume'"
+    - url: "https://investors.adm.com/news/news-details/2014/Marubeni-and-ADM-Bolster-Export-Joint-Venture-in-US-Pacific-Northwest/default.aspx"
+      accessed: "2026-08-07"
+      supports: "ADM stake in Pacificor PNW JV"
+  notes: "Tariff and capacity figures reached via search excerpts and a shipping-agent-hosted tariff PDF; adm.com facility pages not fetched directly. Both ADM and Cargill operate separate elevators in the town of Reserve, LA — do not conflate."
+
+- name: "Bunge Global SA — US export operations"
+  aka: ["Bunge", "BG", "Bunge North America"]
+  scope: "us"
+  ownership: "Public (NYSE: BG). Majority partner in EGT LLC (PNW — see EGT entry). Sold its Mississippi River tributary interior elevator network to Zen-Noh Grain Corp in 2021 (kept its Gulf export terminal)."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Destrehan, LA export terminal on the lower Mississippi (confirmed operational post-Hurricane-Ida 2021); PNW export via EGT Longview. US crush network (per FY2025 proxy: elevators/crush/ports in Brazil, Argentina, US, Canada)."
+  destinations: "unverified"
+  size_evidence: "No free company-level US export tonnage. 2021 sale of 35 operating + 13 idled interior elevators to ZGC for ~$300M documented in DOJ filings [observed]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.justice.gov/archives/opa/pr/justice-department-requires-substantial-divestitures-zen-noh-acquisition-grain-elevators"
+      accessed: "2026-08-07"
+      supports: "2021 sale of Bunge interior elevator network to ZGC; DOJ divestiture conditions"
+    - url: "https://www.sec.gov/Archives/edgar/data/1996862/000199686225000078/bg-20250404.htm"
+      accessed: "2026-08-07"
+      supports: "Bunge elevators/crush/ports in US (FY2025 DEF 14A; observed via search excerpt in issue-45 research)"
+  notes: "Bunge completed its merger with Viterra in July 2025 [inferred — widely reported; not re-verified this session], which may add further US origination assets. Destrehan terminal capacity figure not found free."
+
+- name: "Cargill — US export operations"
+  aka: ["Cargill Inc."]
+  scope: "us"
+  ownership: "Private (Cargill family). 50% of TEMCO LLC (see TEMCO entry); Houston terminal Cargill-owned and contributed to TEMCO scope in 2023."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Two Louisiana export terminals — Westwego (4.7M bu storage, ~450M bu/yr capability; the worst-damaged terminal in Hurricane Ida 2021) and Reserve; combined 120,000 bu/hr. Houston, TX terminal (6M bu storage, loads 140M+ bu/yr on 100–120 vessels; now under TEMCO). PNW via TEMCO Tacoma/Kalama/Portland."
+  destinations: "unverified (Houston/TEMCO PNW oriented to Asia-Pacific per CHS statements)"
+  size_evidence: "Westwego 4.7M bu storage / 450M bu annual handle and 120,000 bu/hr across the two LA terminals [observed, secondary — High Plains Journal]; Houston terminal 250M bu/yr capacity claim in TEMCO expansion coverage [observed, secondary]."
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://hpj.com/2023/12/01/cargill-experts-give-overview-of-grain-markets/"
+      accessed: "2026-08-07"
+      supports: "Westwego/Reserve LA terminals, storage and loading rates"
+    - url: "https://www.cargill.com/2023/chs-inc-and-cargill-expand-temco-operations-texas-gulf"
+      accessed: "2026-08-07"
+      supports: "Cargill-owned Houston export terminal added to TEMCO scope"
+    - url: "https://www.maritimeprofessional.com/news/cargill-loads-texas-after-damages-371182"
+      accessed: "2026-08-07"
+      supports: "Ida damage to a Cargill LA terminal; Houston soybean loading"
+  notes: "Private company — no filings; all capacity figures are trade-press, not Cargill primary. Entry marked inferred for that reason. Cargill's own site pages were not fetched."
+
+- name: "CHS Inc."
+  aka: ["Cenex Harvest States"]
+  scope: "us"
+  ownership: "Farmer-owned cooperative (largest US ag co-op; preferred shares NASDAQ: CHSCP). 50% of TEMCO LLC."
+  roles: [originator, exporter, terminal-operator, crusher]
+  products: [beans, meal, oil]
+  footprint: "Gulf: wholly owned Myrtle Grove, LA export terminal (25 mi south of New Orleans — first terminal on the Mississippi; $105M renovation completed 2024, +30% capacity, handles corn/soybeans/wheat plus soybean meal and DDGS). PNW: Kalama, WA facility subleased into TEMCO. Jan 2026: assumed operations of COFCO International's Cahokia, IL river facility under lease. Logistics network handles >2B bu/yr (all commodities)."
+  destinations: "Asia-Pacific via TEMCO (per CHS); Gulf destinations unverified"
+  size_evidence: "Myrtle Grove +30% capacity, $105M, 850,000 bu shipping-bin storage [observed — CHS newsroom]; TEMCO >400M bu shipped Jun 2022–May 2023 and ~1/3 of PNW grain exports [observed — CHS newsroom]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.chsinc.com/news-and-stories/2025/05/06/myrtle-grove-terminal-upgrades"
+      accessed: "2026-08-07"
+      supports: "Myrtle Grove expansion completion, capacity, commodities"
+    - url: "https://www.chsinc.com/news-and-stories/2023/08/22/temco-grain-export-terminals"
+      accessed: "2026-08-07"
+      supports: "TEMCO volumes and PNW share"
+    - url: "https://www.chsinc.com/news-and-stories/2026/01/08/chs-expands-into-st-louis"
+      accessed: "2026-08-07"
+      supports: "CHS assuming operations of COFCO Cahokia IL facility, Jan 2026"
+  notes: "CHS pages read via search excerpts, not full fetches. The 2B bu logistics figure is all grains, not soy-specific."
+
+- name: "Louis Dreyfus Company — US export operations"
+  aka: ["LDC", "Louis Dreyfus"]
+  scope: "us"
+  ownership: "Private (Louis Dreyfus Holding B.V.; ADQ minority stake). US terminals: Port Allen owned/leased at Port of Greater Baton Rouge; Seattle Pier 86 operated under agreement with the Port of Seattle (operator since March 2000, succeeding Cargill)."
+  roles: [originator, exporter, terminal-operator, crusher]
+  products: [beans, meal, oil]
+  footprint: "Port Allen, LA (Port of Greater Baton Rouge, Mississippi mile 228.5): flagship North American export elevator, 8.9M bu licensed storage, 100,000 bu/hr loading, >5 MMT/yr capability. Seattle, WA Pier 86 (Terminal 86): only Seattle grain elevator, ~4M bu storage, ~5 MMT/yr shipped (2019), mostly corn and soybeans. LDC states the two terminals combined can handle up to 14 MMT/yr."
+  destinations: "Seattle top destinations China, Japan, Korea [observed, secondary]; Gulf unverified"
+  size_evidence: "LDC's own site: 'leading soybean exporter via port terminals in Seattle, Washington and Baton Rouge, Louisiana'; 14 MMT/yr combined terminal capacity [observed — ldc.com]. Port of Seattle: 6.4 MMT record year 2008; ~5 MMT/yr as of 2019 [observed — portseattle.org]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ldc.com/us/en/our-facilities/port-allen-la/"
+      accessed: "2026-08-07"
+      supports: "Port Allen flagship export facility, capacity"
+    - url: "https://www.ldc.com/us/en/who-we-are/business-lines/grains-oilseeds/"
+      accessed: "2026-08-07"
+      supports: "leading soybean exporter via Seattle + Baton Rouge terminals; 14 MMT combined"
+    - url: "https://www.portseattle.org/page/terminal-86-grain-facility"
+      accessed: "2026-08-07"
+      supports: "Pier 86 storage, throughput, LDC as operator, destination markets"
+  notes: "ldc.com claims read via search excerpts (issue-45 research found ldc.com 403s bots on some pages). Seattle throughput figure is 2019-dated."
+
+- name: "Zen-Noh Grain Corporation"
+  aka: ["ZGC", "Zen-Noh"]
+  scope: "us"
+  ownership: "Wholly owned US subsidiary of Zen-Noh (National Federation of Agricultural Cooperative Associations, Japan — a co-op federation). HQ Covington, LA. Affiliate CGB Enterprises is a separate 50/50 Zen-Noh/Itochu JV."
+  roles: [exporter, terminal-operator]
+  products: [beans, meal]
+  footprint: "Convent, LA export elevator (Mississippi mile 164) — expanded 2018 to handle up to 17 MMT/yr; described as the largest port elevator on the Mississippi and fastest export elevator in the world (>150,000 bu/hr simultaneous load/unload). Exports corn, soybeans, sorghum, wheat, by-products. Acquired Bunge's Mississippi tributary elevator network 2021 (~$300M; DOJ required divestiture of 9 elevators to Viserion Grain); acquired elevators leased to CGB subsidiary to operate."
+  destinations: "Japan a core market (parent is the Japanese ag co-op federation) [inferred]; broader destinations unverified"
+  size_evidence: "Convent 17 MMT/yr handling capacity post-2018 expansion; largest Mississippi port elevator [observed — CGB/ZGC announcements via search]. DOJ complaint documents the 2021 Bunge asset acquisition [observed — justice.gov]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.justice.gov/archives/opa/pr/justice-department-requires-substantial-divestitures-zen-noh-acquisition-grain-elevators"
+      accessed: "2026-08-07"
+      supports: "ZGC/Bunge acquisition, DOJ divestitures, ZGC–CGB affiliation"
+    - url: "https://cgb.com/zen-noh-grain-corporation-announces-close-on-acquisition-of-bunge-assets/"
+      accessed: "2026-08-07"
+      supports: "Acquisition close July 2021; elevators operated by CGB subsidiary"
+    - url: "https://www.federalregister.gov/documents/2021/06/08/2021-11916/united-states-v-zen-noh-grain-corporation-et-al-proposed-final-judgment-and-competitive-impact"
+      accessed: "2026-08-07"
+      supports: "Deal structure ~$300M, 35 operating + 13 idled elevators, CGB 50/50 Zen-Noh/Itochu, ~60% of CGB grain sold to ZGC"
+  notes: "zgcusa.com redirects to zennohglobal.com; About page 404'd on fetch — capacity claims rest on CGB/press sources, not a live ZGC page. Japan-destination claim is inferred from ownership, not from shipment data."
+
+- name: "CGB Enterprises (Consolidated Grain and Barge)"
+  aka: ["CGB", "Consolidated Grain and Barge Co."]
+  scope: "us"
+  ownership: "50/50 joint venture of Zen-Noh and Itochu Corporation (per DOJ competitive impact statement)."
+  roles: [originator]
+  products: [beans, meal]
+  footprint: "Large interior river elevator/barge network on the Mississippi system (described by DOJ-era coverage as the nation's fifth-largest grain company); operates the ex-Bunge elevators for ZGC. No export elevator of its own — supplies ZGC Convent."
+  destinations: "n/a (interior originator; exports flow via ZGC)"
+  size_evidence: "DOJ/Federal Register: CGB sells ~60% of the grain it purchases to ZGC [observed]. 'Fifth largest grain company' is trade-press, not primary [inferred]."
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.federalregister.gov/documents/2021/06/08/2021-11916/united-states-v-zen-noh-grain-corporation-et-al-proposed-final-judgment-and-competitive-impact"
+      accessed: "2026-08-07"
+      supports: "CGB ownership (Zen-Noh/Itochu 50/50), ~60% of purchases sold to ZGC"
+    - url: "https://www.dtnpf.com/agriculture/web/ag/news/business-inputs/article/2021/06/02/doj-requires-zen-noh-divest-nine-can"
+      accessed: "2026-08-07"
+      supports: "CGB role in acquisition; competitive overlap with Bunge on interior origination"
+  notes: "Included because Itochu's soy exposure moved here after exiting EGT. Elevator count not verified."
+
+- name: "EGT, LLC"
+  aka: ["Export Grain Terminal", "EGT Longview"]
+  scope: "us"
+  ownership: "JV: Bunge (majority — 63.75% after the 2020 Itochu exit), Pan Ocean America (affiliate of Korea's Harim Group; bought Itochu's 36.25% in 2020), and Agtegra Cooperative (SD farmer co-op; partner by the July 2023 expansion release). SEED CORRECTION: no longer Bunge/Itochu/STX — Itochu sold out 2020; original 2009 partner STX Pan Ocean is today's Pan Ocean."
+  roles: [exporter, terminal-operator]
+  products: [beans, meal]
+  footprint: "Export terminal at Port of Longview, WA (first new US export terminal in 25+ years when built, 2009–2011; >$200M) plus four Montana shuttle elevators (Chester, Kintyre Flats, Sidney, Tunis). Handles wheat, corn, soybeans, soybean meal, DDGs by barge and rail; ~150 vessels/yr, ~9 MMT/yr throughput. Soybean meal storage expansion announced Jul 2023, completion expected Q2 2025."
+  destinations: "Asia [inferred from PNW orientation]; unverified per-country"
+  size_evidence: "~9 MMT/yr throughput, 150 vessels/yr, and the 2023 soymeal expansion from Bunge/EGT press coverage [observed via search excerpts]."
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/14216-pan-ocean-co-acquires-stake-in-export-grain-terminal"
+      accessed: "2026-08-07"
+      supports: "Pan Ocean bought Itochu's 36.25% (2020); Bunge kept 63.75%"
+    - url: "https://www.businesswire.com/news/home/20230710397646/en"
+      accessed: "2026-08-07"
+      supports: "2023 partners listed as Bunge, Pan Ocean America, Agtegra; soymeal storage expansion; capacity"
+    - url: "http://www.egtgrain.com/news/release/bunge-partners-with-two-leading-agribusiness-firms-to-build-export-grain-terminal-in-the-pacific-northwest/"
+      accessed: "2026-08-07"
+      supports: "2009 founding JV Bunge/Itochu/STX Pan Ocean, >$200M build"
+  notes: "Direct fetches of egtgrain.com (conn refused), bunge.com press release (403), world-grain (403), businesswire (timeout) all failed 2026-08-07 — ownership claims rest on search-result excerpts of those pages, hence entry marked inferred. Agtegra's stake %, and when it joined, could not be verified. A confusingly-dated Nov 2021 Bunge page still said 'joint venture between Bunge and ITOCHU'."
+
+- name: "TEMCO, LLC"
+  aka: ["Tacoma Export Marketing Company"]
+  scope: "us"
+  ownership: "50/50 JV of Cargill and CHS (LLC agreement since 2002; amended/restated 2012, 25-year term). SEED VERIFIED."
+  roles: [exporter, terminal-operator]
+  products: [beans, meal]
+  footprint: "Four terminals: Tacoma, WA (Cargill sublease), Kalama, WA (CHS sublease), Portland, OR Irving elevator (Cargill lease), and since 2023 Cargill's Houston, TX terminal. Cargill and CHS committed to route all PNW-tributary feedgrains/wheat/oilseeds exclusively through TEMCO. Handles grains, oilseeds, byproducts."
+  destinations: "Primarily Asia-Pacific (per CHS)"
+  size_evidence: ">400M bu shipped Jun 2022–May 2023; ~1/3 of PNW grain exports; 'largest grain exporter in the Texas Gulf' after Houston addition [observed — CHS newsroom/PR]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.sec.gov/Archives/edgar/data/823277/000129993312000248/htm_44127.htm"
+      accessed: "2026-08-07"
+      supports: "CHS 8-K: 2012 amended LLC agreement, facility subleases, exclusivity, 25-year term"
+    - url: "https://www.chsinc.com/news-and-stories/2023/08/22/temco-grain-export-terminals"
+      accessed: "2026-08-07"
+      supports: "Volumes, PNW share, terminal list"
+    - url: "https://www.prnewswire.com/news-releases/chs-inc-and-cargill-to-expand-temco-operations-to-include-the-texas-gulf-301721361.html"
+      accessed: "2026-08-07"
+      supports: "Houston terminal added 2023"
+  notes: "The SEC 8-K is the strongest primary source in this file. Per-terminal soybean split not published."
+
+- name: "Pacificor, LLC"
+  aka: ["Kalama Export Company LLC", "KEC"]
+  scope: "us"
+  ownership: "SEED CORRECTION: 'Kalama Export (Marubeni)' and 'Pacificor' are the same entity — KEC (formed 1998 by Gavilon/ADM/Agrex) was renamed Pacificor in 2014 when Marubeni contributed its Portland Terminal 5 elevator. 2014 structure: Marubeni 60.6% / ADM 32.2% / Mitsubishi (Agrex) 7.2%, with 50/50 ADM–Marubeni governance. Since 2022 the Marubeni side is held via Kalama Holdco (Columbia Grain International 75% of KHC; KHC 60.6% of Pacificor — Marubeni effective ~46%)."
+  roles: [exporter, terminal-operator]
+  products: [beans]
+  footprint: "Two Columbia River export elevators: Port of Kalama, WA and Portland, OR Terminal 5 (Columbia Export Terminal). Exports grains and oilseeds; PNW region context: ~30% of US grain/oilseed exports, ~50% of US wheat exports (2014 ADM release)."
+  destinations: "Asia [inferred]; unverified per-country"
+  size_evidence: "Ownership percentages from ADM/Marubeni 2014 releases and Marubeni's 2022 Gavilon-restructuring disclosure [observed]. No terminal throughput figures found free."
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.marubeni.com/en/news/2014/release/00040.html"
+      accessed: "2026-08-07"
+      supports: "2014 KEC→Pacificor rename, Portland T5 contribution, stakes"
+    - url: "https://www.marubeni.com/en/news/2022/release/20220126-1E.pdf"
+      accessed: "2026-08-07"
+      supports: "Kalama Holdco equity transfer to Columbia Grain International (2022)"
+    - url: "https://www.croplife.com/management/columbia-grain-international-acquires-eight-grain-facilities-from-gavilon-increases-ownership-in-export-terminal-joint-venture-pacificor/"
+      accessed: "2026-08-07"
+      supports: "CGI to 75% of Kalama Holdco; KHC 60.6% owner of Pacificor"
+  notes: "Post-2022 exact ADM/Mitsubishi percentages not re-confirmed; 2014 figures may have shifted. Soybean share of throughput unknown (Kalama historically wheat/corn-heavy)."
+
+- name: "United Grain Corporation"
+  aka: ["UGC"]
+  scope: "us"
+  ownership: "Subsidiary of Mitsui & Co. (Japan) — Mitsui acquired UGC in 1969 after it was spun out of ADM. SEED VERIFIED (Mitsui's own site; UGC's site does not name its owner)."
+  roles: [originator, exporter, terminal-operator]
+  products: [beans]
+  footprint: "Vancouver, WA export terminal on the Columbia — largest grain elevator on the US West Coast, 220,000 MT storage (expanded from 160,000 in 2012, when it added corn and soybeans to wheat). Ships up to 6 MMT/yr. 20 inland train/truck/barge terminals across OR, MT, ID, ND, SD."
+  destinations: "Asia — Mitsui: 'All of United Grain's output goes to Asia.'"
+  size_evidence: "Mitsui: ~6 MMT/yr handled, '20% share of the Pacific Northwest export market' [observed — mitsui.com, fetched 2026-08-07]. UGC site: up to 6 MMT/yr [observed — fetched]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.mitsui.com/jp/en/innovation/business/grain_feed/index.html"
+      accessed: "2026-08-07"
+      supports: "Mitsui ownership since 1969, 6 MMT/yr, 20% PNW share, all output to Asia, 2012 expansion"
+    - url: "https://unitedgrain.com/about-ugc/"
+      accessed: "2026-08-07"
+      supports: "6 MMT/yr terminal capacity, 20 inland facilities, states served"
+  notes: "Mitsui's 20% PNW share is the owner's marketing claim, undated — treat as indicative. Soybean share of the 6 MMT not published."
+
+- name: "Columbia Grain International"
+  aka: ["CGI"]
+  scope: "us"
+  ownership: "Wholly owned subsidiary of Marubeni Corporation (Japan); Portland, OR HQ. Holds 75% of Kalama Holdco, the 60.6% owner of Pacificor (export legs — see Pacificor entry)."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "Northern-tier US origination network (expanded by eight ex-Gavilon elevators in 2022 when Marubeni sold Gavilon to Viterra but carved these out); exports via the Pacificor terminals (Kalama WA, Portland OR T5)."
+  destinations: "Asia, particularly Japan (Marubeni strategy statement) [observed]"
+  size_evidence: "Marubeni 2022 disclosure of the elevator transfer and JV equity [observed]. No CGI export tonnage published free."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.marubeni.com/en/news/2022/release/20220126-1E.pdf"
+      accessed: "2026-08-07"
+      supports: "CGI wholly owned by Marubeni; 2022 asset/equity transfers; Asia/Japan strategy"
+    - url: "https://www.croplife.com/management/columbia-grain-international-acquires-eight-grain-facilities-from-gavilon-increases-ownership-in-export-terminal-joint-venture-pacificor/"
+      accessed: "2026-08-07"
+      supports: "Eight Gavilon facilities acquired; Kalama Holdco to 75%"
+  notes: "CGI also handles pulses/specialty crops; soy is one line among several."
+
+- name: "Perdue AgriBusiness"
+  aka: ["Perdue Farms — AgriBusiness segment"]
+  scope: "us"
+  ownership: "Private (Perdue Farms, family-owned)."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Chesapeake, VA (Port of Virginia): 'the only deepwater bulk grain terminal on the U.S. East Coast' and 'one of only two soy crush facilities on deep water in the United States' — grain storage + soybean crush + dual-berth terminal, rail/barge/container connected; vessels up to 60,000+ MT. $59.1M expansion announced 2022 for high-protein soymeal/soyoil/hulls. Handles >45% of Virginia's soybean crop."
+  destinations: "unverified ('international destinations' only)"
+  size_evidence: "Perdue's own 25th-anniversary release (Aug 2025): >100 vessels + 16,000 containers loaded per year; exports corn, soybean oil, soybean meal, soy hull pellets [observed — GlobeNewswire release, fetched 2026-08-07]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.globenewswire.com/news-release/2025/08/26/3139578/0/en/Perdue-AgriBusiness-Marks-25-Years-of-Innovation-Partnership-Growth-at-Chesapeake-VA-Facility.html"
+      accessed: "2026-08-07"
+      supports: "East Coast deepwater terminal claim, vessel/container counts, product list, crush"
+    - url: "https://www.virginiabusiness.com/article/perdue-agribusiness-plans-59m-chesapeake-expansion/"
+      accessed: "2026-08-07"
+      supports: "$59.1M expansion (2022) for soymeal/oil/hulls"
+  notes: "A secondary claim that Perdue 'exports 72 million tons of soybeans per year' is not credible (likely a bushels/tons garble) and is deliberately excluded — Perdue's own release exports soy as oil/meal/hulls after crushing, plus containers. No tonnage figures in the primary release."
+
+- name: "Ag Processing Inc (AGP)"
+  aka: ["AGP"]
+  scope: "us"
+  ownership: "Farmer-owned cooperative (owned by local and regional co-ops)."
+  roles: [crusher, exporter, terminal-operator]
+  products: [meal, oil]
+  footprint: "11 Midwest soybean processing plants. Export terminals at Port of Grays Harbor (Aberdeen, WA): Terminal 2 (loading since 2003) plus the new dedicated Terminal 4 opened 2026 — a second AGP berth designed to lift soybean meal export capacity from 3 to 6 MMT/yr; ~60 vessel calls/yr expected at T4; Panamax-capable."
+  destinations: "Asia — Southeast Asia and Asia-Pacific soymeal markets (per Port/AGP statements)"
+  size_evidence: "AGP press release (2022) and Port of Grays Harbor T4 opening coverage (2026): 3→6 MMT/yr soybean meal export capacity [observed]."
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.agp.com/press_release/agp-announces-expansion-of-port-facility/"
+      accessed: "2026-08-07"
+      supports: "Terminal 2 + Terminal 4 expansion, Panamax capability"
+    - url: "https://www.world-grain.com/articles/23063-agp-opens-new-grays-harbor-export-facility"
+      accessed: "2026-08-07"
+      supports: "T4 opening; doubling of soymeal export capability"
+    - url: "https://splash247.com/port-of-grays-harbor-opens-expanded-terminal-4-export-hub/"
+      accessed: "2026-08-07"
+      supports: "~60 vessel calls/yr; Asia soymeal gateway"
+  notes: "Meal/oil only — AGP is the dominant dedicated US soymeal exporter story (renewable-diesel-driven crush growth). Not in the issue-45 seed; added because any US soy player map without AGP misses the PNW meal leg. 6 MMT is capacity, not achieved volume."
+
+- name: "COFCO International — US operations"
+  aka: ["COFCO International Grains USA"]
+  scope: "us"
+  ownership: "Subsidiary of COFCO International (COFCO Corp, Chinese state-owned)."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "No owned US export elevator verified. Cahokia, IL Mississippi River grain-loading facility (bought Growmark's minority stake 2024; operations assumed by CHS under lease Jan 2026). Stated strategy: 'additional opportunities focused on supporting our U.S. Gulf and Pacific Northwest export strategy' — implying export via third-party/leased capacity."
+  destinations: "China [inferred from parent — not verified from shipment data]"
+  size_evidence: "None free. US export volumes undisclosed."
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.dtnpf.com/agriculture/web/ag/news/business-inputs/article/2024/06/20/cofco-growmark-swapping-facilities"
+      accessed: "2026-08-07"
+      supports: "COFCO/Growmark Cahokia transaction; US Gulf/PNW export strategy quote"
+    - url: "https://www.chsinc.com/news-and-stories/2026/01/08/chs-expands-into-st-louis"
+      accessed: "2026-08-07"
+      supports: "CHS assumed Cahokia operations under lease, Jan 2026"
+  notes: "Thin entry by design: COFCO's US footprint is origination-side and in flux; how its US-origin beans reach tide-water (which terminals) could not be verified."
+
+# ── Scale-evidence verdict (research question 3) ─────────────────────────────
+# Best repeatable FREE evidence of relative US exporter scale: NONE at company level.
+# - FGIS Export Grain Inspection reports (fgisonline.ams.usda.gov/exportgrainreport,
+#   annual, updated through 2026) aggregate by port/region and commodity — no company axis.
+# - FGIS Registered Grain Exporters Directory (annual, Jan 1; JS grid, PDF fallback) is a
+#   name/address registry of entities exporting >=15,000 MT/yr — presence proof only, no volumes.
+# - Census/FAS GATS trade data is country x commodity, never company.
+# - Company-level rankings exist only in paid bill-of-lading databases (Panjiva/ImportGenius),
+#   and bulk grain largely evades manifest data anyway.
+# => This file therefore uses disclosed facility capacity/throughput as the scale proxy,
+#    which is honest but NOT market share. (Citations: fgisonline.ams.usda.gov/exportgrainreport;
+#    https://www.ams.usda.gov/content/usda-opens-annual-us-grain-exporter-registration-2026 —
+#    both accessed 2026-08-07.)
