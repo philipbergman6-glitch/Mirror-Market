@@ -37,7 +37,7 @@ python -m analysis.briefing
 - `FAS_API_KEY` — USDA FAS OpenData API key (Layer 10 — export sales)
 - `EIA_API_KEY` — Energy Information Administration API key (Layer 13 — biofuel/energy)
 
-Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19 work without API keys.
+Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20 work without API keys. Layer 16 uses the published data.gov.in sample key by default; set `DATA_GOV_IN_API_KEY` (optional) for a personal key with higher row limits.
 
 ### Optional (Cloud Database — dormant)
 
@@ -70,7 +70,8 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 13. **EIA biofuel/energy** — `fetchers/eia.py` (ethanol production, biodiesel production, diesel prices — requires `EIA_API_KEY`)
 14. **USDA crush + inspections** — `fetchers/usda.py` (monthly soybean crush volumes + weekly AMS export inspections, incl. the WA_GR101 Table C port-area breakdown → `inspection_port_flows`)
 15. **CONAB Brazil estimates** — `fetchers/conab.py` (Brazil's official crop agency — production, area, yield; aggregates 27 UFs to national totals for Soybeans, Corn, Wheat, Cotton lint; coffee is in a separate CONAB file and not tracked here)
-16. **India domestic soy prices** — `fetchers/india_domestic.py` (NCDEX Bhav Copy — INR/MT, no API key) — **DISABLED 2026-05**: `ncdex.com` serves a JS fingerprint anti-bot wall (`__hd_fingerprint` cookie via `/__verify/fp`) on every URL; `main.py` short-circuits this layer via `_mark_empty`. The fetcher's diagnostic logging surfaces the wall in logs. Re-enabling requires an alternate source or a Playwright bypass — not a URL update.
+   - **15b. CONAB weekly farmgate prices** — `fetchers/conab_precos.py` (`PrecosSemanalUF.txt` — Paraná soybean producer price, R$/kg → BRL/MT). Cross-check for the CEPEA Paraná wholesale indicator (a ~10–14% wholesale-over-farmgate spread is the expected band). Own commodity key in `brazil_spot_prices` — never spliced into the CEPEA series.
+16. **India domestic soy prices** — `fetchers/mandi.py` (data.gov.in Mandi Price API — official Agmarknet feed; median `modal_price` across Madhya Pradesh mandis → INR/MT, bean-only). Rebuilt 2026-08 after NCDEX became unusable (SEBI derivatives suspension to ≥2027-03-31 + fingerprint wall on the spot pages; `fetchers/india_domestic.py` kept on disk as a dormant fallback). Uses the published sample key by default; set `DATA_GOV_IN_API_KEY` for a personal key. No meal/oil legs, so the old India crush margin is retired — the cross-market line is India bean vs CBOT bean premium (USD/MT).
 17. **Brazil domestic soy spot** — `fetchers/noticias_agricolas.py` (CEPEA/ESALQ Paraná + ESALQ/B3 Paranaguá indicators republished server-rendered by Notícias Agrícolas — BRL/MT, no API key). Re-enabled 2026-07-30; cepea.org.br itself is still Cloudflare-Turnstile-walled and `fetchers/cepea.py` stays on disk only as a fallback. Historical gap backfill: `scripts/backfill_cepea_gap.py` (one session per `/YYYY-MM-DD` archive page).
 18. **South Africa domestic soy** — `fetchers/safex.py` (JSE SAFEX settlement — ZAR/MT, no API key)
 19. **AgRural Paranaguá FOB** — `fetchers/agrural.py` (Brazil port-side soy FOB scraper — BRL/MT, no API key)
@@ -136,7 +137,7 @@ CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal 
 19. Weather Alerts (18 regions)
 20. Global Supply — PSD (27 countries)
 21. World Bank Prices
-22. Emerging Markets (South Africa SAFEX + Brazil CEPEA + India NCDEX + Nigeria deep dive)
+22. Emerging Markets (South Africa SAFEX + Brazil CEPEA/CONAB farmgate + India mandi bean vs CBOT + Nigeria deep dive)
 23. Correlations (cross-commodity + commodity-vs-currency)
 24. Seasonal Analysis
 25. Market Drivers (BRL + exports, COT + RSI crowding, weather + price premium, dollar impact, corn/soy acreage competition, livestock demand, export sales pace, forward curve structure, palm oil vs soy oil, biofuel pull, CONAB vs USDA divergence)

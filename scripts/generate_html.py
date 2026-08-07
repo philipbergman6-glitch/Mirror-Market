@@ -496,15 +496,21 @@ def _build_emerging_markets(data: dict) -> str:
         elif weather_list:
             parts.append(f'<div class="alert alert-ok">No active weather alerts in {_esc(country_name)}</div>')
 
-        # India domestic
+        # India domestic \u2014 bean-only mandi series since the 2026-08 rebuild
         dom_india = info.get("india_domestic", {})
         if dom_india:
-            parts.append('<div class="subhdr" style="font-size:14px;">NCDEX Domestic Prices</div>')
+            parts.append('<div class="subhdr" style="font-size:14px;">Mandi Domestic Price (Agmarknet, MP median)</div>')
             cards = ['<div class="grid grid-3">']
-            for key, label in [("soybean_ncdex_inr", "Soybean"), ("oil_ncdex_inr", "Soy Oil"), ("meal_ncdex_inr", "Soy Meal")]:
-                v = dom_india.get(key)
-                if v:
-                    cards.append(f'<div class="mc"><div class="mc-label">{label}</div><div class="mc-val">\u20B9{v:,.0f}</div><div class="mc-delta muted">INR/MT</div></div>')
+            inr = dom_india.get("soybean_mandi_inr")
+            if inr:
+                cards.append(f'<div class="mc"><div class="mc-label">Soybean</div><div class="mc-val">\u20B9{inr:,.0f}</div><div class="mc-delta muted">INR/MT</div></div>')
+            usd = dom_india.get("soybean_mandi_usd")
+            if usd:
+                cards.append(f'<div class="mc"><div class="mc-label">Soybean (USD)</div><div class="mc-val">${usd:,.1f}</div><div class="mc-delta muted">USD/MT</div></div>')
+            premium = dom_india.get("bean_premium_usd")
+            if premium is not None:
+                pc = "up" if premium > 0 else "down"
+                cards.append(f'<div class="mc"><div class="mc-label">vs CBOT Beans</div><div class="mc-val {pc}">${premium:+,.1f}</div><div class="mc-delta muted">{"premium" if premium > 0 else "discount"}</div></div>')
             cards.append('</div>')
             parts.append("\n".join(cards))
 

@@ -540,7 +540,11 @@ def save_brazil_estimates(df: pd.DataFrame):
 
 
 def save_india_domestic(commodity: str, df: pd.DataFrame):
-    """Write NCDEX India domestic (INR/MT) → 'india_domestic_prices'."""
+    """Write India domestic soy prices (INR/MT) → 'india_domestic_prices'.
+
+    Serves the mandi (Agmarknet) series since 2026-08; the retired NCDEX
+    rows share the table under their own commodity keys, never spliced.
+    """
     if df.empty:
         return
     df = df.copy()
