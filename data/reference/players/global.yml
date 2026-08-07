@@ -1,0 +1,432 @@
+# Global soy trading houses (ABCD+) — issue #87
+# Schema: see data/reference/players/README.md
+# Research method: SEC EDGAR 10-Ks read directly for ADM/Bunge (curl w/ UA — sec.gov
+# 403s default fetchers); Cargill/LDC/COFCO company sites 403 bots, so claims there
+# rest on fetched secondary pages + search excerpts of the primary URLs (tagged in
+# notes). No market-share estimates anywhere — real ABCD shares are not free (#45).
+
+- name: "Archer-Daniels-Midland Company"
+  aka: ["ADM", "NYSE: ADM"]
+  scope: "global"
+  ownership: "Public — NYSE: ADM (SEC EDGAR CIK 0000007084)"
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Ag Services & Oilseeds segment: global origination, merchandising, storage and
+    oilseed crushing incl. soybeans. Owned processing capacity by region ('000 MT/day,
+    FY2025 10-K Item 2): North America 83, Latin America 33, EMEA 51, APAC 0 owned
+    (+2 leased). AS&O owned storage 15.5M MT (NA 11.9M, LATAM 2.1M, EMEA 1.4M).
+    147 owned warehouses/terminals; owns/leases barges, towboats, railcars and
+    ocean-going vessels supporting "global import, export, and distribution."
+    The 10-K names regions only — individual crush-plant countries and export ports
+    are NOT disclosed in the filing. Holds 22.5% of Wilmar International.
+  destinations: >-
+    unverified — 10-K discloses no sales by destination country; company states it
+    connects "crops and markets in over 180 countries" (reach, not flows).
+  size_evidence: >-
+    FY2025 10-K (filed 2026-02-17): total revenues $80.269B; Ag Services & Oilseeds
+    segment $61.571B (Ag Services $40.363B, Crushing $10.353B, Refined Products
+    $10.855B). Soybeans 17% and soybean meal 11% of total FY2025 revenues. Owned
+    processing capacity 279k MT/day all segments; storage 16.1M MT.
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.sec.gov/Archives/edgar/data/7084/000000708426000011/adm-20251231.htm"
+      accessed: "2026-08-07"
+      supports: >-
+        Ownership/listing; segment scope and products; regional processing/storage
+        capacities; facility counts; segment and commodity revenue shares; Wilmar
+        stake; absence of destination-country disclosure. (FY2025 10-K, read directly.)
+    - url: "https://data.sec.gov/submissions/CIK0000007084.json"
+      accessed: "2026-08-07"
+      supports: "CIK, ticker ADM, NYSE listing, filing index."
+  notes: >-
+    Could NOT verify from the 10-K: individual crush-plant locations, named export
+    terminals, or any destination split — filing discloses regions and capacity
+    aggregates only. Geographic revenue is by selling-subsidiary location (US $31.2B,
+    Switzerland $17.8B, Brazil $3.4B ...), not destination. No origination-volume or
+    market-share figures exist free.
+
+- name: "Bunge Global SA"
+  aka: ["Bunge", "NYSE: BG", "Viterra (merged into Bunge 2025-07-02)", "Bunge Limited (pre-2023 Bermuda entity)"]
+  scope: "global"
+  ownership: >-
+    Public — NYSE: BG (SEC EDGAR CIK 1996862); Swiss-incorporated (Geneva) since the
+    2023-11-01 redomestication, corporate HQ Chesterfield, MO. Former Viterra owners
+    (Glencore, CPPIB, BCI affiliates) received ~65.6M Bunge shares in the 2025 merger.
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    FY2025 10-K (post-Viterra segments): Soybean Processing & Refining segment runs
+    35 oilseed processing plants, 22 refining/packaging facilities, 17 port terminals,
+    70 storage facilities; soybean processing capacity split 47% South America / 25%
+    North America / 15% Asia-Pacific / 13% Europe; segment daily capacity 193,165
+    MT/day; segment storage 11.2M MT. Grain Merchandising & Milling adds 298 storage
+    facilities and 29 port terminals "in key export locations throughout the world"
+    (largely ex-Viterra). Operations in 50+ countries; farmer-financing origination
+    "particularly in Brazil"; Ukraine: 4 crush plants (Mykolaiv, Dnipropetrovsk,
+    Kharkiv, Vinnytsia) + 2 Mykolaiv port terminals; Argentina crush; Spain (Bunge
+    Iberica, 40% sold to Repsol 2025-03-04, still consolidated).
+  destinations: >-
+    unverified — 10-K discloses customer types (feed manufacturers, livestock
+    producers, biofuel companies, other processors), not destination countries;
+    China appears only as demand/tariff risk factor (inferred exposure).
+  size_evidence: >-
+    FY2025 10-K (filed 2026-02-19): soybeans crushed 41.0M MT (2024: 36.8M);
+    soybeans merchandised 20.5M MT; refined oil production 3.6M MT; net sales
+    $70.329B (Soybean Processing & Refining $36.313B). Self-described (company
+    claim, capacity/volume-based): "leading global oilseed processor" and "leading
+    global grain merchandiser." Viterra acquisition (completed 2025-07-02, ~$5.3B
+    stock + ~$1.9B cash for 100%): Viterra = 33% of consolidated assets ex-goodwill
+    and 22% of FY2025 net sales; drove Merchandising net sales $8.5B -> $16.6B and
+    long-lived assets Canada $356M -> $1,869M, Argentina $195M -> $1,414M.
+  confidence: "observed"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.sec.gov/Archives/edgar/data/1996862/000162828026009842/bg-20251231.htm"
+      accessed: "2026-08-07"
+      supports: >-
+        Listing/domicile; post-Viterra segments; facility counts and capacity split;
+        crush/merchandised volumes; net sales; Viterra merger terms and contribution;
+        Ukraine/Argentina/Spain/Brazil footprint; competitor list (ADM, Cargill,
+        Louis Dreyfus, Wilmar, COFCO Intl). (FY2025 10-K, read directly.)
+    - url: "https://www.sec.gov/Archives/edgar/data/1996862/000110465925065405/tm2518720d1_ex99-1.htm"
+      accessed: "2026-08-07"
+      supports: "Viterra merger closing 2025-07-02 (8-K press-release exhibit, read directly)."
+    - url: "https://www.viterra.com/"
+      accessed: "2026-08-07"
+      supports: >-
+        Viterra brand retired — homepage banner "We are now Bunge — As of 2 July,
+        Bunge and Viterra combined to become one company."
+    - url: "https://data.sec.gov/submissions/CIK0001996862.json"
+      accessed: "2026-08-07"
+      supports: "CIK, ticker BG, filing index."
+  notes: >-
+    Viterra gets NO standalone entry: 100% of equity acquired, debt consolidated,
+    brand retired per viterra.com — kept as alias here because pre-2025 Trase/export
+    records still carry the Viterra name. Could NOT verify: destination-country
+    split (not disclosed); full country-by-country plant list (10-K names selected
+    countries only).
+
+- name: "Cargill, Incorporated"
+  aka: ["Cargill"]
+  scope: "global"
+  ownership: >-
+    Private — Cargill-MacMillan family holds ~87-88% (Forbes/AgFunder estimates;
+    exact split not disclosed by the company). No public equity; does not disclose
+    profit in most years.
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    US/Brazil/Argentina/Paraguay origination. Brazil: 29 factories, 75 warehouses,
+    7 port terminals incl. wholly-owned Paranagua, Santarem, Miritituba and Porto
+    Velho transshipment, plus Santos-area JVs with LDC (TES Santos; TEG Guaruja
+    Cargill 60%/LDC 40%); won 35-year Paranagua terminal lease May 2025 ($72.4M
+    bid); Barreiras (BA) soybean crush/refining plant (meal, hull pellets,
+    degummed/refined oil, Liza brand). Paraguay: since 1978 — grain sourcing,
+    processing, storage; own barge-and-tug fleet on the Paraguay-Parana waterway.
+    Argentina: oilseed/grain supply to Southern Cone plus international export
+    (specific Argentine crush-plant inventory could not be verified — cargill.com
+    403s bots).
+  destinations: >-
+    unverified — no company disclosure; China exposure inferred (Cargill Brazil
+    president cited Chinese demand for Brazilian beans competing with its own
+    crush plans, 2025).
+  size_evidence: >-
+    FY2025 (ended 2025-05-31) revenue $154B (press coverage of the annual report;
+    the report PDF itself 403s). Cargill Brazil originated/processed/sold volumes:
+    51M MT (2023), 45M MT (2024 drought), guided back to ~51M MT for 2025; R$8.1B
+    invested in Brazil over 5 years. No global soy-volume or share figure exists free.
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.startribune.com/cargill-fiscal-2025-annual-revenue-down-154-billion-minnetonka-mn-agribusiness/601453847"
+      accessed: "2026-08-07"
+      supports: "FY2025 revenue $154B; restructure to 3 business units. (Search excerpt.)"
+    - url: "https://www.forbes.com/profile/cargill-macmillan-1/"
+      accessed: "2026-08-07"
+      supports: "Family ownership ~88% (estimate). (Search excerpt.)"
+    - url: "https://www.thepigsite.com/news/2025/04/cargill-projects-grain-surge-in-brazil-on-record-soybean-harvest"
+      accessed: "2026-08-07"
+      supports: "Brazil volumes 51/45/~51M MT 2023-2025; China-demand comment. (Search excerpt.)"
+    - url: "https://www.riotimesonline.com/cargill-brazil-2025-profit-340-million-april-2026/"
+      accessed: "2026-08-07"
+      supports: "Brazil asset counts (29 factories, 75 warehouses, 7 port terminals); R$8.1B invested; Paranagua lease. (Search excerpt.)"
+    - url: "https://www.ofimagazine.com/news/cargill-acquires-soyabean-crushing-plant-in-brazil"
+      accessed: "2026-08-07"
+      supports: "Barreiras (BA) soy crush/refining plant and products. (Search excerpt.)"
+    - url: "https://lca.logcluster.org/print-preview-current-section/4754"
+      accessed: "2026-08-07"
+      supports: "Santos-area terminal JVs with LDC (TES/TEG/TEAG); wholly-owned terminals. (Search excerpt; older source.)"
+    - url: "https://www.cargill.com/worldwide/paraguay-en"
+      accessed: "2026-08-07"
+      supports: "Paraguay operations since 1978; waterway barge fleet. (Page 403s; claim from search excerpt of it.)"
+  notes: >-
+    cargill.com and the 2025 annual-report PDF return 403 to bots (Akamai) — all
+    company-page claims are via search excerpts of the primary URLs, hence
+    entry-level confidence inferred. Could NOT verify: Argentine crush-plant list,
+    any destination volumes, global (non-Brazil) origination tonnage, profit.
+    Terminal-JV details rest on older logistics sources — recheck on next refresh.
+
+- name: "Louis Dreyfus Company B.V."
+  aka: ["LDC", "Louis Dreyfus"]
+  scope: "global"
+  ownership: >-
+    Private — controlled by Margarita Louis-Dreyfus via the Akira family trust
+    (reached 96.2% after the Jan-2019 minority buy-out); Abu Dhabi's ADQ later
+    bought a 45% indirect stake (first outside investor). Current ~55% family /
+    ~45% ADQ split is inferred from those two transactions — LDC's governance
+    page could not be fetched (403).
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Latin America: "predominantly exports soybeans from Brazil, Argentina and
+    Paraguay" (LDC sustainable-soy page). Argentina: General Lagos complex —
+    2nd-largest private port in Argentina, >5M MT/yr shipped, 2.5M MT/yr soy
+    crush, 600k MT/yr soy biodiesel plant; Bahia Blanca deep-water terminal with
+    ~$400M new soybean/sunflower crush plant announced; new high-oil-content
+    crush line at Timbues. Brazil: ~11,000 employees, >100 facilities incl. port
+    and waterway terminals; 40% of TEG Guaruja JV with Cargill; sold a Parana
+    crush plant (3,400 t/day) to Frisia co-op. US: Claypool, IN integrated soy
+    crush/biodiesel complex (175,000 bu/day); new crush complex under construction
+    at Upper Sandusky, OH; selected Jun-2025 to reopen Burns Harbor, IN export
+    terminal (operating early 2026).
+  destinations: >-
+    unverified — no disclosed destination split; China flows indicated by trade
+    coverage (Panjiva headline on LDC/Cargill Brazil-to-China bean flows) but no
+    volumes.
+  size_evidence: >-
+    FY2025 results: net sales $53.2B (2024: $50.6B), net income $653M, shipped
+    volumes +10.6% YoY driven primarily by Grains & Oilseeds, capex $2B. Argentina:
+    #4 grains/byproducts exporter 2025 with 12.26M MT declared (DJVE-based press).
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.bairdmaritime.com/shipping/dry-cargo/bulkers/crop-merchant-louis-dreyfus-reports-lower-profits-higher-volumes-for-2025"
+      accessed: "2026-08-07"
+      supports: "FY2025 net sales/income/volumes/capex. (Fetched directly.)"
+    - url: "https://www.ldc.com/press-releases/louis-dreyfus-company-reports-resilient-2025-results/"
+      accessed: "2026-08-07"
+      supports: "FY2025 EBITDA $1,831M / Segment Operating Results $2,256M. (Page 403s; search excerpt.)"
+    - url: "https://www.ldc.com/press-releases/margarita-louis-dreyfus-announces-completion-of-minority-shareholder-buy-out/"
+      accessed: "2026-08-07"
+      supports: "Akira trust 96.2% post-2019 buy-out. (Page 403s; search excerpt.)"
+    - url: "https://gulfnews.com/business/retail/agri-trading-giant-louis-dreyfus-in-potential-stake-sale-talks-with-abu-dhabis-adq-1.1599220807359"
+      accessed: "2026-08-07"
+      supports: "ADQ 45% indirect stake. (Search excerpt.)"
+    - url: "https://www.ldc.com/us/en/our-facilities/claypool-in/"
+      accessed: "2026-08-07"
+      supports: "Claypool IN integrated crush/biodiesel, 175,000 bu/day. (Page 403s; search excerpt.)"
+    - url: "https://www.ldc.com/ar/en/ldc-in-argentina/"
+      accessed: "2026-08-07"
+      supports: "General Lagos port/crush/biodiesel figures. (Page 403s; search excerpt.)"
+    - url: "https://puertobahiablanca.com/novedades/importante-nueva-inversion.html"
+      accessed: "2026-08-07"
+      supports: "Bahia Blanca ~$400M crush investment. (Search excerpt.)"
+    - url: "https://www.portsofindiana.com/2025/06/23/ports-of-indiana-selects-louis-dreyfus-company-to-reopen-international-agriculture-terminal-at-burns-harbor-port/"
+      accessed: "2026-08-07"
+      supports: "Burns Harbor terminal reopening. (Search excerpt.)"
+    - url: "https://www.ldc.com/sustainability/responsible-supply-chain/sustainable-soy/"
+      accessed: "2026-08-07"
+      supports: "Origination: soy exported predominantly from Brazil/Argentina/Paraguay. (Page 403s; search excerpt.)"
+  notes: >-
+    ldc.com is Cloudflare-walled (403 to bots incl. the 2025 integrated-report
+    PDF) — every ldc.com citation is a search excerpt of the primary URL, hence
+    confidence inferred. Could NOT verify: exact current ownership split,
+    destination volumes, Brazil crush capacity total. Annual report PDF requires
+    manual download for a stronger citation.
+
+- name: "COFCO International Ltd"
+  aka: ["COFCO Intl", "CIL", "ex-Noble Agri", "ex-Nidera"]
+  scope: "global"
+  ownership: >-
+    State-owned — "the overseas agriculture business platform for COFCO
+    Corporation, China's largest food and agriculture company" (company site).
+    COFCO Corp's SASAC supervision is common knowledge but was not verified in a
+    fetched primary page this session.
+  roles: [originator, crusher, exporter, terminal-operator, importer]
+  products: [beans, meal, oil]
+  footprint: >-
+    Sources soybeans "primarily from South America, as well as the US and South
+    Africa" (company soybean page). Crush: Rondonopolis, Brazil — ~R$2B expansion
+    underway to double capacity 4,500 -> ~10,000 t/day by early 2028, billed as
+    Brazil's largest soy crush complex; Timbues, Argentina (ex-Noble) — 2.3M MT/yr
+    soy crush, 800k MT storage, biodiesel, on the Parana near Rosario; Standerton,
+    South Africa. Ports: Santos STS11 terminal — 25-year concession won 2022,
+    expanding ~4.5 -> 14.3M MT/yr by 2026, 490k MT static storage, planned as the
+    sole Santos facility for all COFCO Intl cargo.
+  destinations: >-
+    China explicitly (company newsroom: Brazil-to-China deforestation-free soybean
+    trade deliveries), consistent with its mandate as COFCO Corp's overseas arm;
+    China's share of volumes unverified.
+  size_evidence: >-
+    2024: 108.4M MT commodities handled (2023: 121.7M), revenue $38.5B (2023:
+    $50.1B); 12,000 people in 36 countries (company who-we-are page, fetched).
+    No 2025 standalone annual report verified (site 403s bots).
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://uk.cofcointernational.com/who-we-are/"
+      accessed: "2026-08-07"
+      supports: "Overseas platform of COFCO Corp; 12,000 people / 36 countries; 108M MT handled; $38.5B revenue. (Fetched directly — uk. mirror not walled.)"
+    - url: "https://www.cofcointernational.com/products-services/grains-oilseeds/soybean/"
+      accessed: "2026-08-07"
+      supports: "Soy origination South America + US + South Africa; products beans/meal/oil. (Page 403s; search excerpt.)"
+    - url: "https://ukragroconsult.com/en/news/cofco-to-invest-400-mln-in-brazils-largest-soybean-crushing-complex/"
+      accessed: "2026-08-07"
+      supports: "Rondonopolis crush expansion 4,500 -> ~10,000 t/day, ~$400M, by 2028. (Search excerpt.)"
+    - url: "https://www.iadb.org/en/project/AR-L1085"
+      accessed: "2026-08-07"
+      supports: "Timbues, Argentina complex scale (2.3M MT/yr crush). (Search excerpt.)"
+    - url: "https://feedplanetmagazine.com/blog/cofco-expands-at-port-of-santos-boosting-capacity-to-14-mt-3634"
+      accessed: "2026-08-07"
+      supports: "Santos STS11 expansion to 14.3M MT/yr by 2026. (Search excerpt.)"
+    - url: "https://www.cofcointernational.com/newsroom/cofco-international-sells-more-deforestation-and-conversion-free-soybeans-from-brazil-to-china/"
+      accessed: "2026-08-07"
+      supports: "Brazil-to-China soybean flows (title observed; page 403s)."
+  notes: >-
+    cofcointernational.com 403s bots; the uk. mirror served the who-we-are page,
+    which anchors the scale numbers. Could NOT verify: a 2025 annual report,
+    China's share of volumes, SASAC chain in a primary page. 2024 volume/revenue
+    declines vs 2023 are from the company page + press — directionally consistent
+    across sources.
+
+- name: "Amaggi"
+  aka: ["Andre Maggi Group", "Agropecuaria Maggi Ltda", "Amaggi Exportacao e Importacao Ltda"]
+  scope: "global"
+  ownership: "Private — Brazilian family-held (Maggi family); CNPJ 00.315.457/0001-95."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Brazil-anchored: 74 units in 9 Brazilian states; own farm production 1.2M MT/yr;
+    river/port logistics at Itacoatiara and Porto Velho, Guaruja stake, Paranagua
+    terminal acquired 2025. International: offices in Argentina, Netherlands,
+    Switzerland, Singapore (official site); Paraguay office, China representative
+    office and 100% of Denofa (Norway soy processing plant) per search excerpts of
+    company history pages. Argentina+Paraguay origination reportedly <3% of its
+    soy trade — Brazil-dominant.
+  destinations: >-
+    inferred from asset/office network: EU (Denofa Norway, Netherlands office),
+    China (rep office), Asia (Singapore desk); no disclosed destination volumes.
+  size_evidence: >-
+    Company site: "18 million tons of grains and fibers sold per year worldwide";
+    1.2M MT own production. Trase ranks Amaggi among the 6 companies accounting
+    for 57% of Brazilian soy exports (2016 yearbook — dated). Own-crush capacity
+    figures could not be verified from a primary source.
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.amaggi.com.br/en/"
+      accessed: "2026-08-07"
+      supports: "Ownership/CNPJ; 18M MT/yr sold; 1.2M MT own production; international office list. (Fetched directly.)"
+    - url: "https://www.amaggi.com.br/en/our-history/"
+      accessed: "2026-08-07"
+      supports: "Denofa (Norway) acquisition; Paraguay/China offices. (Search excerpt.)"
+    - url: "https://trase.earth/explore/companies/amaggi-exportacao-et-importacao-ltda/brazil/soy/deforestation"
+      accessed: "2026-08-07"
+      supports: "Trase company profile exists (free scale evidence)."
+    - url: "https://medium.com/trase/new-trase-yearbook-highlights-deforestation-linked-to-exports-of-brazilian-soy-c3dddcd13b9"
+      accessed: "2026-08-07"
+      supports: "Amaggi among 6 firms = 57% of Brazil soy exports (2016 data — dated). (Search excerpt.)"
+  notes: >-
+    Verdict: global list, Brazil-dominant flag — 3 origination countries + a
+    European crush asset (Denofa) + Swiss/Dutch/Singapore/China desks make it
+    structurally multinational, but ~97% of its soy is Brazilian-origin.
+    Cross-listed candidate for brazil.yml (#88). Could NOT verify: crush
+    capacities, biodiesel capacity (338k m3/yr is excerpt-only), destination
+    volumes.
+
+- name: "CHS Inc."
+  aka: ["CHS", "Cenex Harvest States", "NASDAQ: CHSCP (preferred)"]
+  scope: "global"
+  ownership: >-
+    US farmer-owned cooperative; SEC registrant (CIK 0000823277, active 10-K
+    filer); NASDAQ-listed preferred shares only — common equity is member-owned.
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Crush is US-only: Minnesota crushing/refining (Fairmont crush +30% expansion;
+    Mankato refinery +$72M/+35% output; historical 10-K ~128M bu/yr oilseed crush,
+    ~2.8M short tons meal, ~1.5B lb edible oil). Export infrastructure: Myrtle
+    Grove, LA Gulf terminal ($105M expansion completed Oct-2024, +30% capacity
+    incl. soybean meal); TEMCO PNW terminals (JV with Cargill); Constanta, Romania
+    Black Sea terminal; Brazil/Argentina — "six warehouses and six ports" incl.
+    Itaqui (TCN stake) and a Necochea project. Offices: Sao Paulo, Geneva,
+    Singapore regional HQs + Bulgaria, Hungary, Romania, Serbia, Spain, Ukraine,
+    Australia, China, South Korea, Taiwan, Canada.
+  destinations: >-
+    Asia-Pacific and EMEA via regional marketing offices; specific country
+    volumes unverified.
+  size_evidence: >-
+    Free SEC 10-Ks (EDGAR CIK 0000823277); FY2024 net income $1.1B; handles
+    ">2 billion bushels of grain annually" (company claim).
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000823277&type=10-K"
+      accessed: "2026-08-07"
+      supports: "SEC registrant status, co-op structure, filing history. (EDGAR atom feed fetched.)"
+    - url: "https://www.chsinc.com/about-us/global-presence"
+      accessed: "2026-08-07"
+      supports: "Global office list; Constanta terminal; Brazil/Argentina warehouses+ports; Itaqui/Necochea. (Fetched directly.)"
+    - url: "https://www.chsinc.com"
+      accessed: "2026-08-07"
+      supports: "Myrtle Grove expansion; MN crush/refinery expansions; FY2024 net income. (Search excerpts of chsinc.com news pages.)"
+  notes: >-
+    Verdict: global list, borderline — crush assets are US-only, but origination
+    and export infrastructure span 3+ continents (US Gulf/PNW + Black Sea +
+    South America port access). If the global list were crush-footprint-defined
+    it would drop to us.yml (#89); kept global on the origination/export
+    definition. TEMCO JV and historical crush-capacity figures are from search
+    excerpts of 10-K/company pages, not read in the current filing — recheck on
+    refresh. Destination volumes unverified.
+
+- name: "Sodrugestvo / Sodru S.A."
+  aka: ["Sodrugestvo Group", "Sodru"]
+  scope: "global"
+  ownership: >-
+    SPLIT in ~2023 into two entities (structure inferred — see notes):
+    (1) Sodrugestvo (sodrugestvo.ru) — private Russian company, reportedly owned
+    by the Lutsenko family; (2) Sodru S.A. (sodru.com) — Luxembourg-based
+    multinational agro-holding, reportedly management-owned.
+  roles: [crusher, exporter, terminal-operator, originator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Sodrugestvo (Russia): self-described "#1 crusher of oilseeds in Russia" —
+    plants in Kaliningrad and Kursk, "largest marine agro-industrial terminal in
+    Russia" (Baltic), exports to 70+ countries, agro-logistics in Siberia/Far
+    East. Sodru S.A. (Luxembourg): offices in Luxembourg, China, Paraguay,
+    Switzerland, Turkey, UAE; protein/oil production + commodity trading — no
+    crush capacities or Brazil detail published on its site. Pre-split Brazil JV
+    "Alianca" (61%, with CAROL co-op; largest soy processor in Sao Paulo state)
+    — current ownership post-split could NOT be verified. Paraguay: leading
+    exporter and largest river port operator (Sarcom) per Chain Reaction
+    Research (pre-split data).
+  destinations: "unverified — Russian entity claims exports to 70+ countries, no breakdown."
+  size_evidence: >-
+    Weak: revenues ">$3.6B by 2023" from a low-quality biographical source only.
+    Best free deep profile is Chain Reaction Research (pre-split). Neither
+    successor publishes accounts.
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sodrugestvo.ru/en/"
+      accessed: "2026-08-07"
+      supports: "Russian entity self-description: #1 RU oilseed crusher, Kaliningrad+Kursk, Baltic terminal, 70+ export countries. (Fetched directly.)"
+    - url: "https://sodru.com"
+      accessed: "2026-08-07"
+      supports: "Sodru S.A. Luxembourg self-description; office list incl. Paraguay/China/Turkey/UAE. (Fetched directly.)"
+    - url: "https://chainreactionresearch.com"
+      accessed: "2026-08-07"
+      supports: "Pre-split Paraguay position (leading exporter, Sarcom river ports); Brazil Alianca JV background. (Search excerpts.)"
+  notes: >-
+    Verdict: does NOT belong on the global list as a single house — the pre-2023
+    "Russia+Luxembourg global group" framing is outdated. Recommended handling:
+    Sodrugestvo -> a future Russia country list; Sodru S.A. -> paraguay.yml (#91)
+    watch-list pending asset verification. Entry retained here once to document
+    the split and avoid double-counting. The split mechanics (Lutsenko buy-back /
+    management buy-out) rest on ONE low-quality source (mabumbe.com excerpt); the
+    split itself is corroborated only by the two official sites' disjoint
+    self-descriptions. Could NOT verify: Alianca (Brazil) current owner, Sodru
+    S.A. asset base, any financials. Ukrainian sanctions on the Lutsenkos
+    reported; no EU/US/UK designations surfaced.
