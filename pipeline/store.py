@@ -193,7 +193,8 @@ def clear_database():
         "prices", "economic", "usda", "cot", "weather", "psd",
         "currencies", "worldbank_prices", "dce_futures", "crop_progress",
         "export_sales", "forward_curve", "wasde", "inspections",
-        "inspection_port_flows", "gulf_bids",
+        "inspection_port_flows", "inspection_destinations", "gulf_bids",
+        "argentina_fob",
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
         "brazil_spot_prices", "safex_prices", "briefings",
@@ -501,6 +502,38 @@ def save_port_flows(df: pd.DataFrame):
         df[["week_ending", "region", "port_area", "commodity", "inspections_mt"]],
         ["week_ending", "region", "port_area", "commodity"],
         "inspection_port_flows",
+    )
+
+
+def save_inspection_destinations(df: pd.DataFrame):
+    """Write AMS destination-country export inspections → 'inspection_destinations'."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "week_ending" in df.columns:
+        df["week_ending"] = _date(df["week_ending"])
+    df = _str_cols(df, "region", "country", "commodity")
+    _save(
+        "inspection_destinations",
+        df[["week_ending", "region", "country", "commodity", "inspections_mt"]],
+        ["week_ending", "region", "country", "commodity"],
+        "inspection_destinations",
+    )
+
+
+def save_argentina_fob(df: pd.DataFrame):
+    """Write MAGyP official Argentina FOB prices → 'argentina_fob'."""
+    if df.empty:
+        return
+    df = df.copy()
+    if "date" in df.columns:
+        df["date"] = _date(df["date"])
+    df = _str_cols(df, "product", "position", "ship_from", "ship_to")
+    _save(
+        "argentina_fob",
+        df[["date", "product", "position", "ship_from", "ship_to", "price_usd_mt"]],
+        ["date", "position", "ship_from"],
+        "argentina_fob",
     )
 
 

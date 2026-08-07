@@ -547,12 +547,19 @@ MANDI_API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a4
 # Published in the data.gov.in API docs — a public testing credential, not a secret.
 MANDI_SAMPLE_API_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"  # public-sample-key: not a secret
 MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
-MANDI_STATE = "Madhya Pradesh"    # the soy belt (~76 reporting mandis/day)
 MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
-MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any daily MP set
-# Fresh series key — mandi farmgate spot is a different instrument from the
+MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any single-state daily set
+# Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
-MANDI_SERIES = "Soybean (Mandi MP)"
+MANDI_SERIES = "Soybean (Mandi MP)"     # headline: Indore is the crush-industry pricing hub
+MANDI_SERIES_MH = "Soybean (Mandi MH)"  # Maharashtra — #1 producing state since 2025-26
+# One median series per state, fetched from the same resource. SOPA Kharif
+# 2025 estimates: Maharashtra 52.2 vs Madhya Pradesh 43.2 lakh tonnes —
+# MP alone is ~39% of the crop; MP + MH cover ~86% (issue #44 research).
+MANDI_STATES = {
+    "Madhya Pradesh": MANDI_SERIES,
+    "Maharashtra": MANDI_SERIES_MH,
+}
 
 # ---------------------------------------------------------------------------
 # Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
@@ -589,6 +596,32 @@ NOTICIAS_AGRICOLAS_URLS = {
 # in 2020-2022 after the MARS migration; this PDF is the live keyless feed.
 # ---------------------------------------------------------------------------
 AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
+
+# ---------------------------------------------------------------------------
+# Layer 21 — Argentina official FOB prices (MAGyP, free JSON, no API key)
+# Daily "Precios FOB Oficiales" web service of the Secretaría de Agricultura
+# (SAGyP/MAGyP): official minimum FOB export values in USD/t, published per
+# NCM tariff position with shipment-window columns. Business days only; the
+# ?Fecha=dd/mm/yyyy parameter also serves historical dates (backfill-capable).
+#
+# Position → product mapping cross-verified 2026-08-07 against the labelled
+# datos.gob.ar series (sspm dataset 358, "precios-fob-oficiales"): values for
+# 2025-01-20 matched exactly (beans granel 412, crude oil granel 1044, meal
+# pellets 322). Bulk ("granel") positions are the benchmark legs; the bagged
+# ("embolsado") sub-positions run ~$20 over and are not stored.
+# ---------------------------------------------------------------------------
+MAGYP_FOB_URL = (
+    "https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios"
+    "/ws/ssma/precios_fob.php"
+)
+MAGYP_FOB_POSITIONS = {
+    "12019000190C": "Soybeans",      # habas de soja, las demás — granel
+    "15071000100Q": "Soybean Oil",   # aceite de soja en bruto — granel
+    "23040010100B": "Soybean Meal",  # pellets de soja
+}
+# Walk back this many calendar days to find the latest published circular
+# (weekends + Argentine holidays publish nothing).
+MAGYP_FOB_LOOKBACK_DAYS = 7
 
 # ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)

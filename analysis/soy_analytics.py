@@ -43,6 +43,7 @@ from config import (
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
     MANDI_SERIES,
+    MANDI_SERIES_MH,
     WEATHER_DRY_THRESHOLD_MM,
     WEATHER_EXTREME_HEAT_C,
     WEATHER_HEAVY_RAIN_MM,
@@ -1216,6 +1217,23 @@ def emerging_markets_analysis() -> dict:
                     weekly = _pct_chg(mandi_rows["Close"], _WEEKLY_SESSIONS)
                     if weekly is not None:
                         india_domestic_entry["weekly_chg_pct"] = round(weekly, 2)
+
+                # Maharashtra — #1 producing state since 2025-26; secondary
+                # series alongside the MP (Indore hub) headline benchmark.
+                mh_df = read_india_domestic(MANDI_SERIES_MH)
+                if not mh_df.empty:
+                    mh_rows = mh_df.sort_values("Date")
+                    india_domestic_entry["soybean_mandi_mh_inr"] = float(
+                        mh_rows["Close"].iloc[-1]
+                    )
+                    india_domestic_entry["soybean_mandi_mh_date"] = _asof(
+                        mh_rows["Date"].iloc[-1]
+                    )
+                    aligned = _latest_aligned_usd(mh_rows, inr_rows)
+                    if aligned is not None:
+                        india_domestic_entry["soybean_mandi_mh_usd"] = round(
+                            aligned[0], 2
+                        )
 
             except Exception as exc:
                 logger.warning("India domestic analytics failed: %s", exc)

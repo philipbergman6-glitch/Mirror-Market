@@ -495,15 +495,114 @@ def _parse_port_flows(text: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# Destination table column order after the country field. TOTALS is
+# deliberately not stored. (No Rye/Flaxseed columns here, unlike Table C.)
+_DEST_COMMODITIES = ("Wheat", "Corn Yellow", "Corn White", "Sorghum", "Soybeans")
+_DEST_TABLE_TITLE = "BY REGION AND COUNTRY OF DESTINATION"
+
+
+def _parse_destinations(text: str) -> pd.DataFrame:
+    """Parse WA_GR101 — grain export inspections by region and destination country.
+
+    The free "who is actually receiving US grain this week" breakdown
+    (METRIC TONS): rows grouped by coast region (LAKES, ATLANTIC, GULF,
+    PACIFIC, INTERIOR) with one row per destination country and a
+    SUBTOTAL row per region (stored with ``country='SUBTOTAL'``, grand
+    TOTAL dropped) — the destination-side sibling of ``_parse_port_flows``.
+
+    Returns columns: ``week_ending``, ``region``, ``country``,
+    ``commodity``, ``inspections_mt``. Raises ScraperShapeError on any
+    structural mismatch.
+    """
+    lines = text.splitlines()
+
+    title_idx = None
+    for i, line in enumerate(lines):
+        if _DEST_TABLE_TITLE in line.upper():
+            title_idx = i
+            break
+    if title_idx is None:
+        raise ScraperShapeError(
+            f"AMS inspections: no '{_DEST_TABLE_TITLE}' table title found"
+        )
+
+    week_ending = None
+    for line in lines[title_idx + 1: title_idx + 4]:
+        m = re.search(r"WEEK ENDING\s+([A-Z]{3}\s+\d{1,2},\s+\d{4})", line.upper())
+        if m:
+            week_ending = datetime.strptime(m.group(1), "%b %d, %Y").date().isoformat()
+            break
+    if week_ending is None:
+        raise ScraperShapeError(
+            "AMS inspections: destination table has no 'WEEK ENDING' date line"
+        )
+
+    header_idx = None
+    for i in range(title_idx + 1, min(title_idx + 12, len(lines))):
+        if "REGION" in lines[i] and "COUNTRY" in lines[i]:
+            header_idx = i
+            break
+    if header_idx is None:
+        raise ScraperShapeError(
+            "AMS inspections: destination table header 'REGION  COUNTRY' not found"
+        )
+
+    rows: list[dict[str, object]] = []
+    region = ""
+    for raw_line in lines[header_idx + 1:]:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("-"):
+            continue
+
+        # Same field convention as the port-area table: runs of 2+ spaces
+        # separate fields, single spaces stay inside a field ("UN KINGDOM",
+        # "COSTA RICA"). Region only appears on its group's first row.
+        fields = re.split(r"\s{2,}", raw_line.rstrip())
+        if len(fields) < 3:
+            continue
+        if fields[0]:
+            region = fields[0]
+        country = fields[1]
+        values = fields[2:]
+        if country == "TOTAL" or region == "TOTAL":
+            break
+
+        if not all(_PORT_NUM_RE.match(v) for v in values):
+            continue
+        if len(values) != len(_DEST_COMMODITIES) + 1:  # +1 for TOTALS
+            raise ScraperShapeError(
+                f"AMS inspections: destination row '{stripped}' has {len(values)} "
+                f"numeric columns, expected {len(_DEST_COMMODITIES) + 1}"
+            )
+
+        for commodity, token in zip(_DEST_COMMODITIES, values, strict=False):
+            rows.append({
+                "week_ending": week_ending,
+                "region": region,
+                "country": country,
+                "commodity": commodity,
+                "inspections_mt": float(token.replace(",", "")),
+            })
+
+    if not rows:
+        raise ScraperShapeError(
+            "AMS inspections: destination table header located but no data rows"
+        )
+    return pd.DataFrame(rows)
+
+
 def fetch_export_inspections() -> FetchResult:
     """Fetch the weekly USDA AMS grain export inspections report.
 
     Returns ``FetchResult.ok`` with two frames:
     ``data['inspections']`` — commodity, week_ending, inspections_mt
-    (national weekly totals) and ``data['port_flows']`` — week_ending,
-    region, port_area, commodity, inspections_mt (Table C breakdown; may
-    be absent if only that table's layout changed). Transport failure or
-    a stale/misshapen main table is ``FetchResult.failed``.
+    (national weekly totals), ``data['port_flows']`` — week_ending,
+    region, port_area, commodity, inspections_mt (Table C breakdown),
+    and ``data['destinations']`` — week_ending, region, country,
+    commodity, inspections_mt (destination-country breakdown). The two
+    supplementary tables may be absent if only their layout changed.
+    Transport failure or a stale/misshapen main table is
+    ``FetchResult.failed``.
     """
     resp = None
     for attempt in range(1, MAX_RETRIES + 1):
@@ -540,10 +639,15 @@ def fetch_export_inspections() -> FetchResult:
     except ScraperShapeError as exc:
         # Port table is supplementary — losing it degrades, not fails.
         logger.error("AMS inspections: port-area table unparseable — %s", exc)
+    try:
+        data["destinations"] = _parse_destinations(resp.text)
+    except ScraperShapeError as exc:
+        # Destination table is supplementary too.
+        logger.error("AMS inspections: destination table unparseable — %s", exc)
 
     logger.info(
-        "Parsed %d inspection rows, %d port-flow rows.",
-        len(df), len(data.get("port_flows", ())),
+        "Parsed %d inspection rows, %d port-flow rows, %d destination rows.",
+        len(df), len(data.get("port_flows", ())), len(data.get("destinations", ())),
     )
     return FetchResult.ok(data)
 

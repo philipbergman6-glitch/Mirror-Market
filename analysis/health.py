@@ -226,9 +226,9 @@ def _check_india_domestic() -> list[dict]:
     in the table under their own keys and would emit permanent false
     CRITICALs if listed here.
     """
-    from config import MANDI_SERIES
+    from config import MANDI_STATES
     return _check_table_freshness(
-        "india_domestic_prices", "commodity", "Date", [MANDI_SERIES]
+        "india_domestic_prices", "commodity", "Date", list(MANDI_STATES.values())
     )
 
 

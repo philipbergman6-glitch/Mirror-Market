@@ -58,6 +58,7 @@ from analysis.stocks_to_use import (
 )
 from analysis.zscore import trailing_zscore
 from pipeline.query import (
+    read_argentina_fob,
     read_brazil_estimates,
     read_brazil_spot,
     read_cot,
@@ -68,6 +69,7 @@ from pipeline.query import (
     read_export_sales,
     read_forward_curve,
     read_gulf_bids,
+    read_inspection_destinations,
     read_inspections,
     read_port_flows,
     read_psd,
@@ -511,6 +513,54 @@ def _port_flows_block() -> dict[str, dict[str, Any]]:
     return out
 
 
+def _inspection_destinations_block() -> dict[str, dict[str, Any]]:
+    dest = read_inspection_destinations()
+    if dest.empty or "country" not in dest.columns:
+        return {}
+    countries = dest[dest["country"] != "SUBTOTAL"]
+    if countries.empty:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for commodity, subset in countries.groupby("commodity"):
+        weeks = sorted(subset["week_ending"].dropna().unique())
+        if not weeks:
+            continue
+        latest = weeks[-1]
+        rows = subset[subset["week_ending"] == latest]
+        by_country = rows.groupby("country")["inspections_mt"].sum()
+        by_country = by_country[by_country > 0].sort_values(ascending=False)
+        if by_country.empty:
+            continue
+        out[str(commodity)] = {
+            "week_ending": _date_str(latest),
+            "countries_mt": {str(c): _num(v) for c, v in by_country.items()},
+        }
+    return out
+
+
+def _argentina_fob_block() -> dict[str, dict[str, Any]]:
+    fob = read_argentina_fob()
+    if fob.empty:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for product, subset in fob.groupby("product"):
+        latest_date = subset["date"].max()
+        rows = subset[subset["date"] == latest_date].sort_values("ship_from")
+        if rows.empty:
+            continue
+        spot = rows.iloc[0]
+        out[str(product)] = {
+            "date": _date_str(latest_date),
+            "spot_usd_mt": _num(spot["price_usd_mt"]),
+            "spot_ship_from": str(spot["ship_from"]),
+            "curve": {
+                str(r["ship_from"]): _num(r["price_usd_mt"])
+                for _, r in rows.iterrows()
+            },
+        }
+    return out
+
+
 def _nass_crush_block() -> dict[str, Any] | None:
     crush = latest_crush()
     if not crush:
@@ -855,6 +905,10 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "stocks_to_use": _safe("stocks_to_use", _stocks_to_use_block, {}),
         "export_sales": _safe("export_sales", _export_sales_block, {}),
         "inspections": _safe("inspections", _inspections_block, {}),
+        "inspection_destinations": _safe(
+            "inspection_destinations", _inspection_destinations_block, {}
+        ),
+        "argentina_fob": _safe("argentina_fob", _argentina_fob_block, {}),
         "port_flows": _safe("port_flows", _port_flows_block, {}),
         "gulf_bids": _safe("gulf_bids", _gulf_bids_block, {}),
         "nass_crush": _safe("nass_crush", _nass_crush_block, None),

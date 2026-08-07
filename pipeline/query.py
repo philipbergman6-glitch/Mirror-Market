@@ -181,6 +181,20 @@ def read_inspections(commodity: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_inspection_destinations(commodity: str | None = None) -> pd.DataFrame:
+    """Read AMS destination-country export inspections from SQLite."""
+    return _read_table(
+        "inspection_destinations", "commodity", commodity, date_cols=("week_ending",)
+    )
+
+
+def read_argentina_fob(product: str | None = None) -> pd.DataFrame:
+    """Read MAGyP official Argentina FOB prices from SQLite."""
+    return _read_table(
+        "argentina_fob", "product", product, date_cols=("date",)
+    )
+
+
 def read_port_flows(commodity: str | None = None) -> pd.DataFrame:
     """Read AMS port-area export inspections from SQLite."""
     return _read_table(

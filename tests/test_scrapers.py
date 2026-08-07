@@ -552,22 +552,23 @@ def test_mandi_collect_paginates_until_total(monkeypatch) -> None:
     ]
     calls: list[int] = []
 
-    def fake_fetch(offset: int) -> dict:
+    def fake_fetch(offset: int, state: str) -> dict:
         calls.append(offset)
         return pages[len(calls) - 1]
 
     monkeypatch.setattr("fetchers.mandi._fetch_page", fake_fetch)
-    records = _mandi_collect()
+    records = _mandi_collect("Madhya Pradesh")
     assert len(records) == 25
     assert calls == [0, 10, 20]
 
 
 def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
     monkeypatch.setattr(
-        "fetchers.mandi._fetch_page", lambda offset: {"message": "invalid key"}
+        "fetchers.mandi._fetch_page",
+        lambda offset, state: {"message": "invalid key"},
     )
     with pytest.raises(ScraperShapeError, match="records"):
-        _mandi_collect()
+        _mandi_collect("Madhya Pradesh")
 
 
 # ── CONAB weekly farmgate prices (Layer 15b) ────────────────────────────────

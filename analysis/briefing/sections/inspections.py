@@ -9,7 +9,12 @@ import logging
 
 import pandas as pd
 
-from pipeline.query import read_export_sales, read_inspections, read_port_flows
+from pipeline.query import (
+    read_export_sales,
+    read_inspection_destinations,
+    read_inspections,
+    read_port_flows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,18 +83,62 @@ def _port_flow_lines() -> list[str]:
     return lines
 
 
+_TOP_DESTINATIONS = 5
+
+
+def _destination_lines() -> list[str]:
+    """Top destination countries per commodity, latest week (tonnage + share)."""
+    dest = read_inspection_destinations()
+    if dest.empty or "country" not in dest.columns:
+        return []
+
+    lines: list[str] = []
+    for commodity in _FLOW_COMMODITIES:
+        subset = dest[
+            (dest["commodity"] == commodity) & (dest["country"] != "SUBTOTAL")
+        ]
+        if subset.empty:
+            continue
+        latest_week = subset["week_ending"].max()
+        week_rows = subset[subset["week_ending"] == latest_week]
+        # A country can appear under several coast regions (e.g. Mexico via
+        # Gulf and Interior) — the destination view sums across them.
+        by_country = (
+            week_rows.groupby("country")["inspections_mt"].sum().sort_values(ascending=False)
+        )
+        by_country = by_country[by_country > 0]
+        total = float(by_country.sum())
+        if by_country.empty or total <= 0:
+            continue
+        parts = [
+            f"{country} {vol:,.0f} MT ({vol / total * 100:.0f}%)"
+            for country, vol in by_country.head(_TOP_DESTINATIONS).items()
+        ]
+        week_str = (
+            latest_week.strftime("%m/%d")
+            if hasattr(latest_week, "strftime")
+            else str(latest_week)
+        )
+        lines.append(f"    {commodity} (w/e {week_str}): {' | '.join(parts)}")
+
+    if lines:
+        lines.insert(0, "  US shipments by destination country (AMS inspections):")
+    return lines
+
+
 def format() -> str:  # noqa: A001
     lines = ["EXPORT INSPECTIONS (USDA Weekly):"]
     insp = read_inspections()
 
     if insp.empty:
-        try:
-            flow_lines = _port_flow_lines()
-        except Exception as exc:
-            logger.debug("Port flow lines failed: %s", exc)
-            flow_lines = []
-        if flow_lines:
-            return "\n".join(["EXPORT INSPECTIONS (USDA Weekly):", *flow_lines])
+        extra_lines = []
+        for helper in (_port_flow_lines, _destination_lines):
+            try:
+                extra_lines.extend(helper())
+            except Exception as exc:
+                logger.debug("%s failed: %s", helper.__name__, exc)
+        if extra_lines:
+            return "\n".join(["EXPORT INSPECTIONS (USDA Weekly):", *extra_lines])
         return "EXPORT INSPECTIONS: No data"
 
     es_data = read_export_sales()
@@ -124,5 +173,10 @@ def format() -> str:  # noqa: A001
         lines.extend(_port_flow_lines())
     except Exception as exc:
         logger.debug("Port flow lines failed: %s", exc)
+
+    try:
+        lines.extend(_destination_lines())
+    except Exception as exc:
+        logger.debug("Destination lines failed: %s", exc)
 
     return "\n".join(lines)
