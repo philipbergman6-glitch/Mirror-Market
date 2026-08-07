@@ -483,14 +483,29 @@ INSPECTIONS_URL = "https://www.ams.usda.gov/mnreports/wa_gr101.txt"
 CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt"
 
 # ---------------------------------------------------------------------------
-# Layer 16 — NCDEX India domestic soy prices (free, no API key)
+# Layer 15b — CONAB weekly producer (farmgate) prices
+# Cross-check series for the CEPEA/ESALQ Paraná indicator (Layer 17).
+# Semicolon-separated, latin-1, comma decimal, R$/kg by UF and week.
+# Stored under its own commodity key — NEVER spliced into the CEPEA series
+# (farmgate vs wholesale; a ~10-14% spread is expected and is the signal).
+# ---------------------------------------------------------------------------
+CONAB_PRECOS_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/PrecosSemanalUF.txt"
+CONAB_FARMGATE_PRODUCT = "SOJA"
+# dsc_nivel_comercializacao is truncated to 20 chars in the file; this prefix
+# selects "producer price received" (farmgate) rows.
+CONAB_FARMGATE_LEVEL_PREFIX = "PREÇO RECEBIDO"
+CONAB_FARMGATE_UF = "PR"          # Paraná — same state as the CEPEA indicator
+CONAB_FARMGATE_SERIES = "Soybean (CONAB PR farmgate)"
+
+# ---------------------------------------------------------------------------
+# Layer 16 (retired source) — NCDEX India domestic soy prices
 # NCDEX Bhav Copy: daily settlement prices in INR/quintal or INR/MT
 #
-# DISABLED 2026-05: ncdex.com serves a JS fingerprint anti-bot wall
-# (__hd_fingerprint cookie issued via POST to /__verify/fp) on every URL,
-# including the homepage. requests.get() returns an HTML error page (HTTP
-# 404 + Content-Type=text/html, 6.5 KB). Templates kept for reference;
-# main.py short-circuits this layer. See README "Layer 16 note".
+# Dormant since 2026-05 (fingerprint anti-bot wall on the spot pages) and
+# superseded 2026-08 by the data.gov.in mandi API below: NCDEX soy
+# derivatives are SEBI-suspended to at least 2027-03-31, so the bhavcopy
+# carries no soy contracts even where it downloads. Constants kept for
+# fetchers/india_domestic.py, the dormant fallback module.
 # ---------------------------------------------------------------------------
 NCDEX_BHAVCOPY_URL_TEMPLATES = [
     "https://www.ncdex.com/bdocuments/bhavcopy/bhavcopy_{date}.csv",
@@ -512,6 +527,30 @@ NCDEX_UNIT_MULTIPLIER = {
     "Soybean Oil (NCDEX)": 100.0,
     "Soybean Meal (NCDEX)": 10.0,  # Rs/quintal → INR/MT, same as beans
 }
+
+# ---------------------------------------------------------------------------
+# Layer 16 (2026-08 rebuild) — India domestic soy spot via data.gov.in
+# Mandi Price API (official Agmarknet feed, Ministry of Agriculture).
+# Bean-only: the resource has no soy meal commodity and its soy-oil rows
+# carry inconsistent units across mandis, so the old NCDEX oil/meal legs
+# (and the India crush margin built on them) are retired until NCDEX
+# derivatives return (SEBI suspension runs to at least 2027-03-31).
+#
+# The published sample key is officially for testing, caps responses at
+# 10 rows/request, and shares a global throttle (occasional 429s) — but
+# ~8 paginated requests/day cover the full Madhya Pradesh soybean set.
+# A personal key via the DATA_GOV_IN_API_KEY env var is a drop-in upgrade.
+# ---------------------------------------------------------------------------
+MANDI_API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
+# Published in the data.gov.in API docs — a public testing credential, not a secret.
+MANDI_SAMPLE_API_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"  # public-sample-key: not a secret
+MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
+MANDI_STATE = "Madhya Pradesh"    # the soy belt (~76 reporting mandis/day)
+MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
+MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any daily MP set
+# Fresh series key — mandi farmgate spot is a different instrument from the
+# retired NCDEX futures series and must never be spliced onto it.
+MANDI_SERIES = "Soybean (Mandi MP)"
 
 # ---------------------------------------------------------------------------
 # Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)

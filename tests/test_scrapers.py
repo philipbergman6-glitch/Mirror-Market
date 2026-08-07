@@ -20,7 +20,10 @@ import pytest
 
 from fetchers.agrural import _parse_agrural_table, fetch_agrural
 from fetchers.cepea import _parse_cepea_tables
+from fetchers.conab_precos import _parse_farmgate, _week_end_date
 from fetchers.india_domestic import _extract_soy_prices
+from fetchers.mandi import _aggregate as _mandi_aggregate
+from fetchers.mandi import _collect_records as _mandi_collect
 from fetchers.safex import _parse_safex_table
 from fetchers.usda import _parse_inspections
 from pipeline.results import ScraperShapeError
@@ -394,3 +397,159 @@ def test_ams_inspections_raises_when_grain_row_has_too_few_numbers() -> None:
     )
     with pytest.raises(ScraperShapeError, match="fewer than 3 numeric columns"):
         _parse_inspections(text, today=_AMS_FIXTURE_TODAY)
+
+
+# ── data.gov.in Mandi Price API (India, Layer 16 rebuild) ───────────────────
+
+def _mandi_record(**overrides) -> dict:
+    rec = {
+        "state": "Madhya Pradesh",
+        "district": "Ujjain",
+        "market": "Nagda",
+        "commodity": "Soyabean",
+        "arrival_date": "02/08/2026",
+        "min_price": "6800",
+        "max_price": "7200",
+        "modal_price": "7000",
+    }
+    rec.update(overrides)
+    return rec
+
+
+def test_mandi_aggregate_takes_median_modal_in_inr_mt() -> None:
+    """Median of modal prices across mandis, converted INR/quintal → INR/MT."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", min_price="6900", max_price="7100"),
+        _mandi_record(market="B", modal_price="7100", min_price="7000", max_price="7300"),
+        _mandi_record(market="C", modal_price="6900", min_price="6500", max_price="7000"),
+    ]
+    df = _mandi_aggregate(records)
+
+    assert len(df) == 1
+    row = df.iloc[0]
+    assert row["Date"] == "2026-08-02"
+    assert row["Close"] == 70_000.0   # median 7000 × 10
+    assert row["Low"] == 65_000.0     # min of min_price × 10
+    assert row["High"] == 73_000.0    # max of max_price × 10
+    assert row["Volume"] == 3.0       # reporting mandis
+    assert row["Unit"] == "INR/MT"
+
+
+def test_mandi_aggregate_groups_by_arrival_date() -> None:
+    records = [
+        _mandi_record(arrival_date="01/08/2026", modal_price="6900"),
+        _mandi_record(arrival_date="02/08/2026", modal_price="7000"),
+    ]
+    df = _mandi_aggregate(records)
+    assert list(df["Date"]) == ["2026-08-01", "2026-08-02"]
+    assert list(df["Close"]) == [69_000.0, 70_000.0]
+
+
+def test_mandi_aggregate_skips_malformed_rows_but_keeps_good_ones() -> None:
+    records = [
+        _mandi_record(modal_price="not-a-number"),
+        _mandi_record(modal_price="0"),
+        _mandi_record(modal_price="7000"),
+    ]
+    df = _mandi_aggregate(records)
+    assert len(df) == 1
+    assert df.iloc[0]["Volume"] == 1.0
+
+
+def test_mandi_aggregate_zero_min_max_falls_back_to_modal() -> None:
+    """Thin-arrival mandis report min/max of "0" — must not drag Low/High to 0."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", min_price="0", max_price="0"),
+        _mandi_record(market="B", modal_price="7100", min_price="6900", max_price="7200"),
+    ]
+    df = _mandi_aggregate(records)
+    assert df.iloc[0]["Low"] == 69_000.0   # min(7000, 6900) × 10 — not 0
+    assert df.iloc[0]["High"] == 72_000.0  # max(7000, 7200) × 10
+
+
+def test_mandi_aggregate_raises_when_no_record_is_parseable() -> None:
+    """All-malformed records mean the API's field names/formats changed."""
+    records = [_mandi_record(arrival_date="2026-08-02")]  # wrong date format
+    with pytest.raises(ScraperShapeError, match="none with parseable"):
+        _mandi_aggregate(records)
+
+
+def test_mandi_aggregate_empty_records_returns_empty_frame() -> None:
+    """Zero records is a normal closed-mandi day, not a shape error."""
+    assert _mandi_aggregate([]).empty
+
+
+def test_mandi_collect_paginates_until_total(monkeypatch) -> None:
+    pages = [
+        {"total": 25, "records": [_mandi_record()] * 10},
+        {"total": 25, "records": [_mandi_record()] * 10},
+        {"total": 25, "records": [_mandi_record()] * 5},
+    ]
+    calls: list[int] = []
+
+    def fake_fetch(offset: int) -> dict:
+        calls.append(offset)
+        return pages[len(calls) - 1]
+
+    monkeypatch.setattr("fetchers.mandi._fetch_page", fake_fetch)
+    records = _mandi_collect()
+    assert len(records) == 25
+    assert calls == [0, 10, 20]
+
+
+def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page", lambda offset: {"message": "invalid key"}
+    )
+    with pytest.raises(ScraperShapeError, match="records"):
+        _mandi_collect()
+
+
+# ── CONAB weekly farmgate prices (Layer 15b) ────────────────────────────────
+
+_CONAB_HEADER = (
+    "produto;classificao_produto;id_produto;uf;regiao;ano;mes;"
+    "data_inicial_final_semana;semana;dsc_nivel_comercializacao;valor_produto_kg"
+)
+
+
+def _conab_text(rows: list[str]) -> str:
+    return "\n".join([_CONAB_HEADER, *rows])
+
+
+def test_conab_farmgate_extracts_pr_soybean_rows_in_brl_mt() -> None:
+    text = _conab_text([
+        "SOJA                 ;EM GRAOS;123;PR        ;SUL;2026;7;"
+        "20-07-2026 - 24-07-2026  ;4;PREÇO RECEBIDO P/ PR;2,05",
+        "SOJA                 ;EM GRAOS;123;MT        ;CENTRO-OESTE;2026;7;"
+        "20-07-2026 - 24-07-2026  ;4;PREÇO RECEBIDO P/ PR;2,10",
+        "SOJA                 ;EM GRAOS;123;PR        ;SUL;2026;7;"
+        "13-07-2026 - 17-07-2026  ;3;PREÇO RECEBIDO P/ PR;2,03",
+        "00-18-18             ;NÃO INFORMADO;10224;PR        ;SUL;2026;7;"
+        "20-07-2026 - 24-07-2026  ;4;PREÇO PAGO PELO PROD;2,27",
+    ])
+    df = _parse_farmgate(text)
+
+    assert list(df["Date"]) == ["2026-07-17", "2026-07-24"]
+    assert list(df["price_brl_mt"]) == [2030.0, 2050.0]  # R$/kg × 1000
+    assert set(df["Unit"]) == {"BRL/MT"}
+
+
+def test_conab_farmgate_raises_on_missing_columns() -> None:
+    with pytest.raises(ScraperShapeError, match="columns"):
+        _parse_farmgate("foo;bar\n1;2")
+
+
+def test_conab_farmgate_raises_when_filter_matches_nothing() -> None:
+    """PR soybeans are always quoted — an empty filter is a vocabulary change."""
+    text = _conab_text([
+        "MILHO                ;EM GRAOS;456;PR        ;SUL;2026;7;"
+        "20-07-2026 - 24-07-2026  ;4;PREÇO RECEBIDO P/ PR;1,20",
+    ])
+    with pytest.raises(ScraperShapeError, match="vocabulary changed"):
+        _parse_farmgate(text)
+
+
+def test_conab_week_end_date_parses_range() -> None:
+    assert _week_end_date("21-07-2025 - 25-07-2025  ") == "2025-07-25"
+    assert _week_end_date("garbage") is None

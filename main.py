@@ -4,9 +4,10 @@ Mirror Market — main entry point.
 Run this script to fetch, clean, and store all 20 data layers:
     commodity prices, USDA crop data + progress, FRED, COT, weather,
     PSD, currencies, World Bank, DCE futures, export sales, forward
-    curves, WASDE, EIA, crush + inspections, CONAB, India domestic
-    (disabled), CEPEA via Notícias Agrícolas, SAFEX, AgRural FOB,
-    and AMS Gulf export bids — then print a verification summary.
+    curves, WASDE, EIA, crush + inspections, CONAB (estimates +
+    weekly farmgate prices), India mandi domestic, CEPEA via Notícias
+    Agrícolas, SAFEX, AgRural FOB, and AMS Gulf export bids — then
+    print a verification summary.
 
 Usage:
     python main.py
@@ -27,12 +28,14 @@ from config import LAYER_MIN_KEYS, MAX_FAILED_LAYERS, setup_logging
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
 from fetchers.conab import fetch_conab_estimates
+from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.cot import fetch_cot_recent
 from fetchers.eia import fetch_all_eia
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
 from fetchers.gulf_bids import fetch_gulf_bids
+from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
@@ -56,6 +59,7 @@ from pipeline.clean import (
     clean_export_sales,
     clean_forward_curve,
     clean_fred_series,
+    clean_india_domestic,
     clean_inspections,
     clean_ohlcv,
     clean_psd,
@@ -81,6 +85,7 @@ from pipeline.store import (
     save_fred_data,
     save_freshness,
     save_gulf_bids,
+    save_india_domestic,
     save_inspections,
     save_port_flows,
     save_price_data,
@@ -101,7 +106,8 @@ CRITICAL_LAYERS = ("prices", "fred")
 
 # Layers deliberately switched off (upstream anti-bot walls) — excluded from
 # the failed-layer count so they don't trip the systemic-outage backstop.
-DISABLED_LAYERS = frozenset({"india_domestic"})
+# Empty since 2026-08: Layer 16 came back on the data.gov.in mandi API.
+DISABLED_LAYERS: frozenset[str] = frozenset()
 
 
 # Layers hard-failed during the current run() — transport/parse/shape
@@ -276,7 +282,8 @@ def run() -> int:
         "psd": False, "currencies": False, "worldbank": False,
         "dce": False, "export_sales": False, "forward_curve": False,
         "wasde": False, "eia": False, "crush_inspections": False,
-        "conab": False,
+        "conab": False, "conab_precos": False,
+        "india_domestic": False,
         "cepea": False, "safex": False,
         "agrural": False, "gulf_bids": False,
     }
@@ -448,15 +455,30 @@ def run() -> int:
         logger.exception("[Layer 15] CONAB failed — see error above")
         _mark_failed("conab")
 
-    # ── Layer 16: NCDEX India Domestic Soy Prices ─────────────────
-    # DISABLED 2026-05: ncdex.com now serves a JavaScript fingerprint
-    # interstitial (__hd_fingerprint cookie via /__verify/fp) on every URL,
-    # including the Bhav Copy endpoints. requests.get() cannot pass it.
-    # Re-enable when a new source is wired up (alternate India spot soy
-    # feed or a headless-browser bypass). The fetcher's diagnostic logging
-    # will confirm the wall is still in place if you run it standalone.
-    logger.info("[Layer 16] NCDEX disabled — blocked by ncdex.com anti-bot wall")
-    _mark_disabled("india_domestic")
+    # ── Layer 15b: CONAB weekly farmgate prices ───────────────────
+    # Paraná producer-price series — cross-checks the CEPEA/ESALQ Paraná
+    # wholesale indicator (Layer 17). Own commodity key; never spliced.
+    results["conab_precos"] = _run_scraper_layer(
+        "conab_precos", "Layer 15b", "CONAB weekly farmgate prices",
+        fetch=lambda: fetch_conab_farmgate(),
+        save=lambda n, d: save_brazil_spot(n, d),
+        clean=lambda d: clean_brazil_spot(d),
+    )
+
+    # ── Layer 16: India Mandi Domestic Soy Prices ─────────────────
+    # Rebuilt 2026-08 on the data.gov.in Mandi Price API (official
+    # Agmarknet feed) after NCDEX became unusable (SEBI derivatives
+    # suspension to ≥2027-03 + fingerprint wall on the spot pages;
+    # fetchers/india_domestic.py kept on disk as a dormant fallback).
+    # Mandis close on Sundays/holidays, so an empty day is a normal
+    # empty-success, not a failure.
+    results["india_domestic"] = _run_scraper_layer(
+        "india_domestic", "Layer 16", "India mandi soy prices (data.gov.in)",
+        fetch=lambda: fetch_mandi_prices(),
+        save=lambda n, d: save_india_domestic(n, d),
+        clean=lambda d: clean_india_domestic(d),
+        empty_fails=False,
+    )
 
     # ── Layers 17-20: FetchResult scraper layers ──────────────────
     # Layer 17: re-enabled 2026-07-30 via Notícias Agrícolas, which
