@@ -68,6 +68,7 @@ from pipeline.query import (
     read_export_sales,
     read_forward_curve,
     read_gulf_bids,
+    read_argentina_fob,
     read_inspection_destinations,
     read_inspections,
     read_port_flows,
@@ -537,6 +538,29 @@ def _inspection_destinations_block() -> dict[str, dict[str, Any]]:
     return out
 
 
+def _argentina_fob_block() -> dict[str, dict[str, Any]]:
+    fob = read_argentina_fob()
+    if fob.empty:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for product, subset in fob.groupby("product"):
+        latest_date = subset["date"].max()
+        rows = subset[subset["date"] == latest_date].sort_values("ship_from")
+        if rows.empty:
+            continue
+        spot = rows.iloc[0]
+        out[str(product)] = {
+            "date": _date_str(latest_date),
+            "spot_usd_mt": _num(spot["price_usd_mt"]),
+            "spot_ship_from": str(spot["ship_from"]),
+            "curve": {
+                str(r["ship_from"]): _num(r["price_usd_mt"])
+                for _, r in rows.iterrows()
+            },
+        }
+    return out
+
+
 def _nass_crush_block() -> dict[str, Any] | None:
     crush = latest_crush()
     if not crush:
@@ -884,6 +908,7 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "inspection_destinations": _safe(
             "inspection_destinations", _inspection_destinations_block, {}
         ),
+        "argentina_fob": _safe("argentina_fob", _argentina_fob_block, {}),
         "port_flows": _safe("port_flows", _port_flows_block, {}),
         "gulf_bids": _safe("gulf_bids", _gulf_bids_block, {}),
         "nass_crush": _safe("nass_crush", _nass_crush_block, None),

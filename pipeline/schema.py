@@ -207,6 +207,18 @@ CREATE TABLE IF NOT EXISTS inspection_destinations (
 );
 """
 
+_CREATE_ARGENTINA_FOB = """
+CREATE TABLE IF NOT EXISTS argentina_fob (
+    date          TEXT NOT NULL,
+    product       TEXT NOT NULL,
+    position      TEXT NOT NULL,
+    ship_from     TEXT NOT NULL,
+    ship_to       TEXT,
+    price_usd_mt  REAL,
+    PRIMARY KEY (date, position, ship_from)
+);
+"""
+
 _CREATE_GULF_BIDS = """
 CREATE TABLE IF NOT EXISTS gulf_bids (
     report_date   TEXT NOT NULL,
@@ -335,6 +347,7 @@ ALL_SCHEMAS = (
     _CREATE_INSPECTIONS,
     _CREATE_INSPECTION_PORT_FLOWS,
     _CREATE_INSPECTION_DESTINATIONS,
+    _CREATE_ARGENTINA_FOB,
     _CREATE_GULF_BIDS,
     _CREATE_EIA_ENERGY,
     _CREATE_BRAZIL_ESTIMATES,

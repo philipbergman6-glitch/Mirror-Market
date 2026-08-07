@@ -598,6 +598,32 @@ NOTICIAS_AGRICOLAS_URLS = {
 AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 
 # ---------------------------------------------------------------------------
+# Layer 21 — Argentina official FOB prices (MAGyP, free JSON, no API key)
+# Daily "Precios FOB Oficiales" web service of the Secretaría de Agricultura
+# (SAGyP/MAGyP): official minimum FOB export values in USD/t, published per
+# NCM tariff position with shipment-window columns. Business days only; the
+# ?Fecha=dd/mm/yyyy parameter also serves historical dates (backfill-capable).
+#
+# Position → product mapping cross-verified 2026-08-07 against the labelled
+# datos.gob.ar series (sspm dataset 358, "precios-fob-oficiales"): values for
+# 2025-01-20 matched exactly (beans granel 412, crude oil granel 1044, meal
+# pellets 322). Bulk ("granel") positions are the benchmark legs; the bagged
+# ("embolsado") sub-positions run ~$20 over and are not stored.
+# ---------------------------------------------------------------------------
+MAGYP_FOB_URL = (
+    "https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios"
+    "/ws/ssma/precios_fob.php"
+)
+MAGYP_FOB_POSITIONS = {
+    "12019000190C": "Soybeans",      # habas de soja, las demás — granel
+    "15071000100Q": "Soybean Oil",   # aceite de soja en bruto — granel
+    "23040010100B": "Soybean Meal",  # pellets de soja
+}
+# Walk back this many calendar days to find the latest published circular
+# (weekends + Argentine holidays publish nothing).
+MAGYP_FOB_LOOKBACK_DAYS = 7
+
+# ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)
 # JSE agricultural settlement prices in ZAR/MT
 # ---------------------------------------------------------------------------
