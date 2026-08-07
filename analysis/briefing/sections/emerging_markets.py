@@ -18,13 +18,19 @@ def _format_india_domestic(em_countries: dict) -> str:
     if not dom:
         return ""
 
-    lines = ["INDIA — Mandi Domestic Price (Agmarknet, MP median):"]
+    lines = ["INDIA — Mandi Domestic Price (Agmarknet, state medians):"]
 
     soy_inr = dom.get("soybean_mandi_inr")
     if soy_inr:
         soy_usd = dom.get("soybean_mandi_usd")
         usd_str = f" / ${soy_usd:,.1f}/MT" if soy_usd else ""
-        lines.append(f"  Soybean: ₹{soy_inr:,.0f}/MT{usd_str}")
+        lines.append(f"  Soybean (MP, Indore hub): ₹{soy_inr:,.0f}/MT{usd_str}")
+
+    mh_inr = dom.get("soybean_mandi_mh_inr")
+    if mh_inr:
+        mh_usd = dom.get("soybean_mandi_mh_usd")
+        usd_str = f" / ${mh_usd:,.1f}/MT" if mh_usd else ""
+        lines.append(f"  Soybean (MH, #1 state):   ₹{mh_inr:,.0f}/MT{usd_str}")
 
     cbot_usd = dom.get("cbot_bean_usd")
     if cbot_usd is not None:

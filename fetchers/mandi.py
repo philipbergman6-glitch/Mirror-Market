@@ -8,18 +8,22 @@ fallback): NCDEX soy derivatives are SEBI-suspended to at least 2027-03-31
 and its spot pages sit behind a fingerprint anti-bot wall.
 
 Why it matters:
-    India is the world's #4 soybean consumer. Madhya Pradesh is the soy
-    belt (Ujjain, Dewas, Ratlam, Indore) — its mandi (APMC auction) prices
-    are the domestic benchmark. When Indian beans are cheap vs CBOT,
-    import appetite fades and Middle East / African meal buyers switch
-    suppliers.
+    India is the world's #4 soybean consumer. Maharashtra (Latur, Vidarbha)
+    is the #1 producing state since 2025-26 (~47% of the crop per SOPA
+    Kharif 2025), with Madhya Pradesh (~39%) second — but Indore/MP remains
+    the crush-industry pricing hub, so the MP series stays the headline
+    benchmark. When Indian beans are cheap vs CBOT, import appetite fades
+    and Middle East / African meal buyers switch suppliers.
 
 Series construction:
-    One row per arrival date — the MEDIAN of ``modal_price`` across all
-    reporting Madhya Pradesh mandis (~76/day), robust to single-mandi
+    One series per configured state (``MANDI_STATES``), one row per
+    arrival date — the MEDIAN of ``modal_price`` across all reporting
+    mandis in that state (~76/day in MP), robust to single-mandi
     outliers. Prices arrive in INR/quintal (100 kg) and are stored as
     INR/MT (×10). High/Low carry the cross-mandi max/min, Volume the
     reporting-mandi count. USD conversion happens at the analysis layer.
+    Series are stored per-state and never pooled — a cross-state median
+    would put a level break on the existing MP history.
 
 Key handling:
     ``DATA_GOV_IN_API_KEY`` is used when set; otherwise the published
@@ -51,8 +55,7 @@ from config import (
     MANDI_MAX_PAGES,
     MANDI_PAGE_LIMIT,
     MANDI_SAMPLE_API_KEY,
-    MANDI_SERIES,
-    MANDI_STATE,
+    MANDI_STATES,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
 )
@@ -68,8 +71,9 @@ def _api_key() -> str:
     return os.environ.get("DATA_GOV_IN_API_KEY") or MANDI_SAMPLE_API_KEY
 
 
-def _fetch_page(offset: int) -> dict:
-    """Fetch one page of the mandi resource. Raises on exhausted retries.
+def _fetch_page(offset: int, state: str) -> dict:
+    """Fetch one page of the mandi resource for one state. Raises on
+    exhausted retries.
 
     429s are expected on the shared-throttle sample key and retried with
     backoff like any transport failure.
@@ -80,7 +84,7 @@ def _fetch_page(offset: int) -> dict:
         "limit": MANDI_PAGE_LIMIT,
         "offset": offset,
         "filters[commodity]": MANDI_COMMODITY,
-        "filters[state]": MANDI_STATE,
+        "filters[state]": state,
     }
     last_error = "no attempts made"
     for attempt in range(1, MAX_RETRIES + 1):
@@ -105,13 +109,13 @@ def _fetch_page(offset: int) -> dict:
     )
 
 
-def _collect_records() -> list[dict]:
-    """Paginate through the filtered resource until ``total`` rows are in hand."""
+def _collect_records(state: str) -> list[dict]:
+    """Paginate through the state-filtered resource until ``total`` rows are in hand."""
     records: list[dict] = []
     total: int | None = None
 
     for page in range(MANDI_MAX_PAGES):
-        payload = _fetch_page(page * MANDI_PAGE_LIMIT)
+        payload = _fetch_page(page * MANDI_PAGE_LIMIT, state)
         if "records" not in payload or "total" not in payload:
             raise ScraperShapeError(
                 "Mandi API: response missing 'records'/'total' — schema changed "
@@ -124,8 +128,8 @@ def _collect_records() -> list[dict]:
             break
     else:
         logger.warning(
-            "Mandi API: stopped at page cap %d with %d/%s records",
-            MANDI_MAX_PAGES, len(records), total,
+            "Mandi API: %s stopped at page cap %d with %d/%s records",
+            state, MANDI_MAX_PAGES, len(records), total,
         )
     return records
 
@@ -189,32 +193,51 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
 
 
 def fetch_mandi_prices() -> FetchResult:
-    """Fetch the MP soybean mandi set and return the aggregated series.
+    """Fetch the soybean mandi set for each configured state.
 
-    Zero matching records is ``empty`` (mandis closed — Sunday/holiday);
-    transport exhaustion or a schema change is ``failed``.
+    Returns one series per state in ``MANDI_STATES``. A schema change
+    (ScraperShapeError) in any state is ``failed`` — the resource is
+    shared, so a shape break in one state means the source changed for
+    all. Transport exhaustion on one state degrades to a partial result
+    if another state succeeded. Zero matching records everywhere is
+    ``empty`` (mandis closed — Sunday/holiday).
     """
-    logger.info(
-        "Fetching %s mandi prices for %s from data.gov.in ...",
-        MANDI_COMMODITY, MANDI_STATE,
-    )
-    try:
-        records = _collect_records()
-        df = _aggregate(records)
-    except ScraperShapeError as exc:
-        logger.error("Mandi API: %s", exc)
-        return FetchResult.failed(str(exc))
-    except requests.RequestException as exc:
-        return FetchResult.failed(str(exc))
+    data: dict[str, pd.DataFrame] = {}
+    errors: list[str] = []
+    for state, series in MANDI_STATES.items():
+        logger.info(
+            "Fetching %s mandi prices for %s from data.gov.in ...",
+            MANDI_COMMODITY, state,
+        )
+        try:
+            records = _collect_records(state)
+            df = _aggregate(records)
+        except ScraperShapeError as exc:
+            logger.error("Mandi API: %s", exc)
+            return FetchResult.failed(str(exc))
+        except requests.RequestException as exc:
+            errors.append(f"{state}: {exc}")
+            continue
 
-    if df.empty:
-        return FetchResult.empty(f"no {MANDI_COMMODITY} rows for {MANDI_STATE} today")
+        if df.empty:
+            logger.info("Mandi API: no %s rows for %s today", MANDI_COMMODITY, state)
+            continue
 
-    logger.info(
-        "Mandi API: %d session row(s), latest ₹%.0f/MT across %d mandis",
-        len(df), df["Close"].iloc[-1], int(df["Volume"].iloc[-1]),
+        logger.info(
+            "Mandi API: %s — %d session row(s), latest ₹%.0f/MT across %d mandis",
+            state, len(df), df["Close"].iloc[-1], int(df["Volume"].iloc[-1]),
+        )
+        data[series] = df
+
+    if data:
+        if errors:
+            logger.warning("Mandi API: partial result — %s", "; ".join(errors))
+        return FetchResult.ok(data)
+    if errors:
+        return FetchResult.failed("; ".join(errors))
+    return FetchResult.empty(
+        f"no {MANDI_COMMODITY} rows for any of {', '.join(MANDI_STATES)} today"
     )
-    return FetchResult.ok({MANDI_SERIES: df})
 
 
 __all__: Sequence[str] = ("_aggregate", "_collect_records", "fetch_mandi_prices")
