@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from bs4 import BeautifulSoup
 
 from fetchers.agrural import _parse_agrural_table, fetch_agrural
 from fetchers.cepea import _parse_cepea_tables
@@ -24,6 +25,7 @@ from fetchers.conab_precos import _parse_farmgate, _week_end_date
 from fetchers.india_domestic import _extract_soy_prices
 from fetchers.mandi import _aggregate as _mandi_aggregate
 from fetchers.mandi import _collect_records as _mandi_collect
+from fetchers.noticias_agricolas import _parse_indicator_page
 from fetchers.safex import _parse_safex_table
 from fetchers.usda import _parse_inspections
 from pipeline.results import ScraperShapeError
@@ -616,3 +618,61 @@ def test_conab_farmgate_raises_when_filter_matches_nothing() -> None:
 def test_conab_week_end_date_parses_range() -> None:
     assert _week_end_date("21-07-2025 - 25-07-2025  ") == "2025-07-25"
     assert _week_end_date("garbage") is None
+
+
+# ── Notícias Agrícolas CEPEA/ESALQ republication (Layer 17) ─────────────────
+
+def _load_noticias_html(name: str = "noticias_agricolas_parana.html") -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_noticias_parse_extracts_sessions_in_brl_mt() -> None:
+    """Live fixture: one row per session, sack price converted to BRL/MT."""
+    df = _parse_indicator_page(_load_noticias_html())
+
+    assert list(df.columns) == ["Date", "price_brl_mt", "Unit"]
+    assert len(df) == 10
+    assert (df["Unit"] == "BRL/MT").all()
+    latest = df.iloc[-1]
+    assert latest["Date"] == "2026-08-06"
+    # 137,50 R$/saca × 1000/60
+    assert latest["price_brl_mt"] == pytest.approx(2291.67, abs=0.01)
+
+
+def test_noticias_corn_redirect_raises() -> None:
+    """The corn ESALQ page carries the same markers and table class —
+    only the 'soja' title anchor stops it (64,84 R$/saca is in-band)."""
+    with pytest.raises(ScraperShapeError, match="another commodity"):
+        _parse_indicator_page(_load_noticias_html("noticias_agricolas_milho.html"))
+
+
+def test_noticias_section_reorder_raises() -> None:
+    """A quote table filed under a non-soja heading must hard-fail, not be
+    positionally swept into the soy series."""
+    corn_soup = BeautifulSoup(
+        _load_noticias_html("noticias_agricolas_milho.html"), "html.parser"
+    )
+    corn_table = str(corn_soup.find("table", class_="cot-fisicas"))
+    html = _load_noticias_html().replace(
+        '<table class="cot-fisicas"',
+        f"<h2>Indicador do Milho Esalq/B3</h2>{corn_table}"
+        '<table class="cot-fisicas"',
+        1,
+    )
+    with pytest.raises(ScraperShapeError, match="reordered"):
+        _parse_indicator_page(html)
+
+
+def test_noticias_unit_switch_raises() -> None:
+    """Same column silently requoted in R$/MT lands outside the
+    60-300 R$/saca band and must raise, not ship a 16x wrong number."""
+    html = _load_noticias_html().replace("137,50", "2.291,67")
+    with pytest.raises(ScraperShapeError, match="plausibility band"):
+        _parse_indicator_page(html)
+
+
+def test_noticias_kg_quote_raises() -> None:
+    """Low-side violation (R$/kg-style ~2,29) must also raise."""
+    html = _load_noticias_html().replace("137,50", "2,29")
+    with pytest.raises(ScraperShapeError, match="plausibility band"):
+        _parse_indicator_page(html)

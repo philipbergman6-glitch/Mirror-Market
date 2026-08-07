@@ -18,7 +18,9 @@ Units: the site quotes BRL per 60 kg sack; we store BRL/MT
 
 Parser strategy: hard-fail with ``ScraperShapeError`` on structural
 mismatch (no ``table.cot-fisicas``, missing CEPEA/ESALQ source marker,
-unparseable dates). Transport failures return ``FetchResult.failed``.
+no "soja" in the page title or a table's nearest heading, prices outside
+the 60-300 R$/saca plausibility band, unparseable dates). Transport
+failures return ``FetchResult.failed``.
 """
 
 from __future__ import annotations
@@ -50,8 +52,19 @@ _TABLE_CLASS = "cot-fisicas"
 # Sanity anchor — the page must attribute the data to CEPEA/ESALQ before
 # we trust any number on it.
 _SOURCE_MARKERS = ("cepea", "esalq")
+# Commodity anchor — the corn ESALQ page carries the same CEPEA/ESALQ
+# markers and cot-fisicas tables, so a redirect there would parse cleanly
+# without a "soja" check on the title/headings.
+_COMMODITY_MARKER = "soja"
+_HEADING_TAGS = ("h1", "h2", "h3", "h4", "caption")
 
 _SACK_KG = 60.0
+# Plausibility band, BRL per 60 kg sack. Soy has traded ~70–180 for a
+# decade; corn sits ~50–90 (why the band alone can't catch a corn
+# redirect) and a silent switch to R$/MT (~2300) or R$/kg (~2.3) lands
+# far outside it.
+_SACK_MIN_BRL = 60.0
+_SACK_MAX_BRL = 300.0
 
 
 def _fetch_page(url: str) -> str:
@@ -91,6 +104,14 @@ def _parse_indicator_page(html: str) -> pd.DataFrame:
             "wrong page or upstream restructure"
         )
 
+    title = soup.find("h1")
+    title_text = title.get_text(" ", strip=True).lower() if title else ""
+    if _COMMODITY_MARKER not in title_text:
+        raise ScraperShapeError(
+            f"Notícias Agrícolas: page title {title_text!r} lacks "
+            f"'{_COMMODITY_MARKER}' — redirected to another commodity?"
+        )
+
     tables = soup.find_all("table", class_=_TABLE_CLASS)
     if not tables:
         raise ScraperShapeError(
@@ -100,6 +121,14 @@ def _parse_indicator_page(html: str) -> pd.DataFrame:
 
     rows: list[dict[str, object]] = []
     for table in tables:
+        heading = table.find_previous(_HEADING_TAGS)
+        heading_text = heading.get_text(" ", strip=True).lower() if heading else ""
+        if _COMMODITY_MARKER not in heading_text:
+            raise ScraperShapeError(
+                f"Notícias Agrícolas: quote table sits under heading "
+                f"{heading_text!r}, not a '{_COMMODITY_MARKER}' section — "
+                "page layout reordered?"
+            )
         for tr in table.find_all("tr"):
             cells = [td.get_text(strip=True) for td in tr.find_all("td")]
             if len(cells) < 2:
@@ -111,6 +140,12 @@ def _parse_indicator_page(html: str) -> pd.DataFrame:
             price_per_sack = _parse_brl_price(cells[1])
             if price_per_sack is None or price_per_sack <= 0:
                 continue
+            if not _SACK_MIN_BRL <= price_per_sack <= _SACK_MAX_BRL:
+                raise ScraperShapeError(
+                    f"Notícias Agrícolas: {price_per_sack} on {parsed_date} "
+                    f"is outside the {_SACK_MIN_BRL:g}-{_SACK_MAX_BRL:g} "
+                    "R$/saca plausibility band — unit change upstream?"
+                )
             rows.append({
                 "Date": parsed_date.isoformat(),
                 "price_brl_mt": round(price_per_sack * 1000.0 / _SACK_KG, 2),
