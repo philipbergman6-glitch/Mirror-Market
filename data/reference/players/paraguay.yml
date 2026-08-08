@@ -1,0 +1,405 @@
+# Paraguay soy players — issue #91
+# Sources hierarchy: CAPPRO (crusher chamber, cappro.org.py) member list [observed];
+# CAPECO (exporter chamber, capeco.org.py) publishes per-company export SHARE rankings
+# monthly [observed for the 2025 full-year article]. Banco Central del Paraguay publishes
+# only aggregate trade values — NO per-company export data was found at BCP or at DNIT
+# customs (DNIT publishes an exporter/withholding-agent registry PDF, names only, no
+# volumes). CAPECO is the only free per-company flow source identified.
+# Transshipment honesty: Paraguayan customs "destinations" are first destinations.
+# 2025: Argentina 80%, Brazil 14%, Russia 4% (CAPECO). The Argentina share is mostly
+# barged down the Paraná–Paraguay waterway to up-river Rosario/San Lorenzo crush plants,
+# processed, and re-exported as Argentine-origin products (incl. to China — Paraguay has
+# no diplomatic ties with Beijing, so origin-change via Argentine crush is the China
+# route, per CAPECO). Uruguay's Nueva Palmira is the other transshipment/top-off hub.
+# Ultimate destinations therefore differ materially from customs first-destinations.
+
+- name: "ADM Paraguay"
+  aka: ["Archer Daniels Midland", "ADM (NYSE: ADM)"]
+  scope: paraguay
+  ownership: "Public — subsidiary of Archer-Daniels-Midland Co. (US, NYSE: ADM). [observed — CAPPRO lists ADM with adm.com]"
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "CAPPRO member crusher [observed]. Regional river logistics via ADM's barge division (~258 barges, 13 tugs on the Paraná–Paraguay waterway, own ports in greater Rosario, Paraguay and Brazil; ADM's logistics director chairs Paraguay's shipowners' chamber) [inferred — secondary press]. Also top-5 in land-route exports to Brazil (8%, 2025) [observed — CAPECO]."
+  destinations: "Via customs, mostly Argentina (up-river crush/re-export) and Brazil — country-level first destinations per CAPECO; ADM-specific destinations not published."
+  size_evidence: "CAPECO 2025 ranking: #3 river exporter of soybeans, 10% share of 6.4 Mt; ~9-10% in 2025/26-season partials [observed — CAPECO Jan-2026 article; 2026 partials via search excerpts of CAPECO reports]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership; members = 95% of PY oils/meal output"
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 exporter ranking (ADM 10%), land-route ranking, destinations"
+    - url: "https://infosoberana.com.ar/barcazas-paraguayas/"
+      accessed: "2026-08-07"
+      supports: "ADM barge fleet ~258 barges/13 tugs; ports on the waterway (secondary press)"
+  notes: "Barge-fleet numbers are from Argentine press, not ADM disclosures — treat as indicative. ADM Paraguay plant locations/capacities not verified from a primary source this session."
+
+- name: "Bunge Paraguay"
+  aka: ["Bunge Global SA (NYSE: BG)", "Viterra Paraguay (absorbed, 2025 merger)"]
+  scope: paraguay
+  ownership: "Public — subsidiary of Bunge Global SA (NYSE: BG). Absorbed Viterra's local business after the Bunge–Viterra merger closed in 2025 [inferred — merger reported closed regionally 2025; Viterra disappears from CAPECO rankings from the 2025/26 season while Bunge jumps to #1]."
+  roles: [originator, crusher, exporter]
+  products: [beans, meal, oil]
+  footprint: "CAPPRO member [observed]. Created 2006; fertilizer distribution, grain origination/storage and oilseed industrialization; ~850,000 t grain handled (company profile, year unstated) [inferred — company page via search]. Co-owner of CAIASA, Villeta — Paraguay's largest crush plant (see CAIASA entry)."
+  destinations: "Via customs, mostly Argentina/Brazil first destinations (country aggregate); company-specific destinations not published."
+  size_evidence: "CAPECO: 7% river share 2025; #1 river exporter in the 2025/26 season (18-20% in Q1/H1-2026 partials — post-Viterra-absorption). Viterra alone was #2 in 2024/25 with 13% [observed — CAPECO Jan-2026 article for 2025; 2026 partials via search excerpts of CAPECO/UGP articles]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership"
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 ranking: Bunge 7%, Viterra 13%"
+    - url: "https://www.ugp.org.py/2026/06/27/exportaciones-de-soja-crecieron-mas-de-40-hasta-mayo-y-fortalecen-el-ingreso-de-divisas/"
+      accessed: "2026-08-07"
+      supports: "2025/26 season: Bunge leads river ranking ~20% (search excerpt)"
+    - url: "https://infonegocios.com.py/nota-principal/dos-gigantes-de-bunge-en-paraguay-y-argentina-caiasa-y-terminal-6-los-mayores-procesadores-de-granos-en-sus-paises"
+      accessed: "2026-08-07"
+      supports: "CAIASA = largest PY processor; Bunge stake; storage expansion to 380,000 t"
+  notes: "The Viterra→Bunge consolidation in Paraguay is inferred from ranking discontinuity plus regional merger-close reports; a Paraguay-specific merger announcement was not fetched. 850 kt handled figure is undated."
+
+- name: "Cargill Agropecuaria S.A.C.I."
+  aka: ["Cargill Paraguay"]
+  scope: paraguay
+  ownership: "Private — subsidiary of Cargill Inc. (US) [observed — CAPPRO lists Cargill with cargill.com.py]."
+  roles: [originator, crusher, exporter]
+  products: [beans, meal, oil]
+  footprint: "CAPPRO member [observed]. Registered/plant at Ruta 7 km 28.5, Minga Guazú, Alto Paraná (the country's oilseed-industry hub) [inferred — business registries via search]. Also #3 in land-route exports (10-12%, 2025-26) [observed — CAPECO]."
+  destinations: "Via customs, mostly Argentina first destination (up-river re-export); company-specific destinations not published."
+  size_evidence: "CAPECO: #1 river exporter 2025 (14% of 6.4 Mt); #2 in 2025/26 partials (16-17%) [observed — CAPECO Jan-2026 article; 2026 partials via search excerpts]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership"
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 #1 river exporter, 14%; land-route 10%"
+    - url: "https://www.guiarural.com.py/tienda/agroindustrias/cargill-agroindustrias-s-c-i/"
+      accessed: "2026-08-07"
+      supports: "Minga Guazú address (directory listing, weak source)"
+  notes: "Cargill's Paraguay port/terminal assets (e.g., river ports) and crush capacity could not be verified from primary sources this session — cargill.com.py not fetched."
+
+- name: "Louis Dreyfus Company Paraguay"
+  aka: ["LDC Paraguay"]
+  scope: paraguay
+  ownership: "Private — Louis Dreyfus Company B.V. (Louis-Dreyfus family holding; ADQ minority stake globally) [inferred — global ownership not re-verified this session]."
+  roles: [originator, crusher, exporter]
+  products: [beans, meal, oil]
+  footprint: "CAPPRO member [observed]. Per LDC's own Paraguay page: ~25 years in-country, >USD 200m invested; operates the Merco crush plant in Caaguazú (>180,000 t/yr oilseeds) and elevators in Curuguaty, Tuna and Pozuelo; co-owner of CAIASA (Villeta) [observed — ldc.com Paraguay pages via search excerpts]."
+  destinations: "Via customs, mostly Argentina/Brazil first destinations; company-specific destinations not published."
+  size_evidence: "LDC page claims 'third largest exporter of soybeans and by-products' (undated claim). CAPECO: 7% river share 2025, 4-6% in 2025/26 partials [observed — CAPECO Jan-2026 article]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ldc.com/py/en/ldc-in-paraguay/"
+      accessed: "2026-08-07"
+      supports: "Merco plant, elevators, 'third largest exporter' claim (via search excerpt; page itself 403s to bots per issue-45 research)"
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 ranking: LDC 7%"
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership"
+  notes: "'Third largest' is LDC marketing copy and inconsistent with CAPECO 2025 shares (LDC #5-7) — prefer CAPECO for rank."
+
+- name: "CAIASA — Complejo Agroindustrial Angostura S.A."
+  aka: ["Caiasa"]
+  scope: paraguay
+  ownership: "Joint venture of LDC Paraguay, Bunge Paraguay and Copagra; inaugurated 2013, ~USD 200m investment [observed — consistent across IPS, ABC Color and infonegocios coverage]."
+  roles: [crusher, exporter]
+  products: [meal, oil]
+  footprint: "Villeta industrial zone, on the Paraguay River south of Asunción — river-berth logistics for barging products down the waterway. Largest crush plant in Paraguay: ~4,000-4,500 t/day (~1.5 Mt/yr per LDC); soybean storage expanded to ~380,000 t (new 180,000 t cell, ~USD 16m, 10th anniversary 2023) [observed — press/LDC pages via search]."
+  destinations: "Meal/oil exported via the waterway; specific destinations not published — Paraguay meal/oil typically ship to regional and overseas buyers via up-river or Nueva Palmira transshipment [inferred]."
+  size_evidence: "Disclosed capacity: 4,500 t/day crush, 1.5 Mt/yr (LDC); largest single processor in the country [observed — LDC location page + press]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ldc.com/zm/location/complejo-agroindustrial-angostura-sociedad-anonima-caiasa/"
+      accessed: "2026-08-07"
+      supports: "JV, 1.5 Mt/yr capacity, largest/most modern PY crush plant"
+    - url: "https://www.ipsnews.net/2016/03/agroindustry-provides-jobs-better-living-standards-in-paraguay/"
+      accessed: "2026-08-07"
+      supports: "Villeta location, 4,500 t/day, LDC-Bunge-Copagra alliance"
+    - url: "https://infonegocios.com.py/nota-principal/dos-gigantes-de-bunge-en-paraguay-y-argentina-caiasa-y-terminal-6-los-mayores-procesadores-de-granos-en-sus-paises"
+      accessed: "2026-08-07"
+      supports: "Storage expansion to 380,000 t; largest PY processor"
+  notes: "JV stake percentages not disclosed in any source found. Export volumes attributed to CAIASA vs its three owners in CAPECO rankings is unclear — products likely marketed by the partners."
+
+- name: "Merco — Mercantil Comercial S.A."
+  aka: ["MERCO"]
+  scope: paraguay
+  ownership: "Owned by Louis Dreyfus Company (one of LDC's first acquisitions in Paraguay) [observed — LDC Paraguay page via search excerpt]."
+  roles: [crusher]
+  products: [meal, oil]
+  footprint: "Crush plant in Caaguazú (interior, not river-side): capacity >180,000 t/yr oilseeds; processed ~154,000 t soy in 2023 (up from ~100,000 t) [observed — LDC page / infonegocios via search]."
+  destinations: "Products marketed through LDC channels; destinations not separately published."
+  size_evidence: "Disclosed capacity >180,000 t/yr [observed — LDC]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ldc.com/py/es/ldc-en-paraguay/"
+      accessed: "2026-08-07"
+      supports: "LDC ownership, Caaguazú plant, capacity and 2023 throughput"
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "Separate CAPPRO membership (listed distinctly from LDC)"
+  notes: "Listed in CAPPRO as a member in its own right despite LDC ownership."
+
+- name: "Copagra — Compañía Paraguaya de Granos S.A."
+  aka: ["COPAGRA"]
+  scope: paraguay
+  ownership: "Paraguayan capital (private); shareholder detail NOT verified — no primary source found this session. Its president (Enrique Ohaco) chaired CAPPRO in 2023 [inferred — press]."
+  roles: [originator, crusher, exporter]
+  products: [beans, meal, oil]
+  footprint: "CAPPRO member [observed]; co-owner of CAIASA (Villeta) with LDC and Bunge [observed — press]."
+  destinations: "Via customs, mostly Argentina first destination; company-specific destinations not published."
+  size_evidence: "CAPECO: 6% river share 2025; 8-10% in 2025/26 partials (#3-4) — the largest locally-owned bean exporter after the multinationals [observed — CAPECO Jan-2026 article + 2026 partials via search excerpts]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 ranking: Copagra 6%"
+    - url: "https://www.ipsnews.net/2016/03/agroindustry-provides-jobs-better-living-standards-in-paraguay/"
+      accessed: "2026-08-07"
+      supports: "CAIASA co-ownership"
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership"
+  notes: "Ownership structure, own-plant capacity and asset list could not be verified — no working corporate website found this session."
+
+- name: "CAHPSA — Corporación de Alimentos e Higiene del Paraguay S.A."
+  aka: ["ContiParaguay", "CAPSA (Compañía Algodonera Paraguaya S.A.)"]
+  scope: paraguay
+  ownership: "Private — Nutrex Paraguay acquired 100% of the shares from Continental Grain Company (US), announced mid-2025; renamed from Compañía Continental del Paraguay (ContiParaguay) to CAHPSA. Lineage: CAPSA (cotton, 1951) → Continental Grain (1978) → Unilever brand interlude → Conti Paraguay → Nutrex/CAHPSA [observed — cahpsa.com.py corporate history + acquisition notices]."
+  roles: [refiner]
+  products: [oil]
+  footprint: "Industrial complex in Capiatá (Central dept.) — consumer edible oils, margarines, fats (brands OK, Mirasol, Reina, etc.). Exited oilseed crushing in 2018 (as ContiParaguay) to focus on consumer products [observed — La Nación 70-years coverage]."
+  destinations: "Primarily domestic consumer market [observed — press]."
+  size_evidence: "No crush/export volume — a downstream consumer-products player; USD 7.4m investment program post-acquisition [observed — press]."
+  confidence: observed
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://cahpsa.com.py/nutrex-paraguay-adquiere-el-100-de-cahpsa/"
+      accessed: "2026-08-07"
+      supports: "Nutrex 100% acquisition from Continental Grain; renaming"
+    - url: "https://cahpsa.com.py/nuestra-historia/"
+      accessed: "2026-08-07"
+      supports: "CAPSA→Continental Grain (1978)→CAHPSA lineage; Capiatá complex"
+    - url: "https://www.lanacion.com.py/negocios_edicion_impresa/2021/11/20/contiparaguay-celebra-70-anos-de-operacion-en-el-mercado-local/"
+      accessed: "2026-08-07"
+      supports: "Exit from oilseed milling in 2018; consumer-brand focus"
+  notes: "Relevant to the soy complex only as an oil refiner/packer buying crude oil domestically — not a bean exporter. CAPPRO's member list changed from ContiParaguay to CAHPSA, reflecting this ownership change (the site briefly showed both variants)."
+
+- name: "BISA S.A."
+  aka: []
+  scope: paraguay
+  ownership: "NOT verified — no primary corporate source found. Appears simply as 'Bisa S.A.' in registries [inferred]."
+  roles: [crusher, exporter]
+  products: [oil, meal]
+  footprint: "Listed at Ramal Piribebuy km 75, Cordillera dept., processing coconut (coco/mbokaja), cotton and sunflower per a CONACYT industry document; Panjiva trade records show HS-15 (fats and oils) exports [inferred — directory/registry sources only]."
+  destinations: "unverified"
+  size_evidence: "None found — the smallest and least-documented CAPPRO member; does not appear in CAPECO soybean-exporter rankings."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership (listed with baseindustriesalinas.com as website)"
+    - url: "https://panjiva.com/Bisa-SA/35643657"
+      accessed: "2026-08-07"
+      supports: "Active exporter under HS-15 (fats/oils)"
+  notes: "Weakest entry in this file. CAPPRO's site links BISA to 'baseindustriesalinas.com' but that expansion could not be confirmed; the CONACYT document places a Bisa S.A. in Cordillera doing coco/cotton/sunflower — possibly the same firm, oriented to non-soy oilseeds. Soy exposure unverified."
+
+- name: "Oleaginosa Raatz S.A."
+  aka: ["Raatz", "Oleaginosa Raatz Hermanos S.R.L. (historic)"]
+  scope: paraguay
+  ownership: "Private family firm — founded 1967 by brothers Lauro and Ricardo Raatz (initially tung processing); S.A. since 2000; still Raatz-family led [observed — raatz.com.py corporate history]."
+  roles: [originator, crusher, exporter]
+  products: [beans, meal, oil]
+  footprint: "Bella Vista, Itapúa (river town on the Paraná). Solvent-extraction soy oil plant, soy meal production and grain storage; processes ~360,000 t/yr of grains and oilseeds (soy, sunflower, canola, tung, sorghum) [observed — raatz.com.py]."
+  destinations: "Exports crude oils, meals and pellets (dedicated export product pages); specific destination countries not published — unverified."
+  size_evidence: "Self-disclosed ~360,000 t/yr processing [observed — company site]."
+  confidence: observed
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://raatz.com.py/nosotros/"
+      accessed: "2026-08-07"
+      supports: "Family ownership/history, Bella Vista location, ~360 kt/yr throughput"
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership"
+  notes: "Mid-size independent crusher; not in CAPECO's top-10 bean-exporter rankings (crush-oriented, not a bean shipper)."
+
+- name: "Pioneros del Chaco S.A."
+  aka: []
+  scope: paraguay
+  ownership: "Founded 2012 by three Chaco Mennonite cooperatives — Chortitzer, Neuland and Fernheim — plus private investors; financing 35% equity / 65% 10-yr local bank debt (~USD 35m via Investor fiduciary structure) [observed — MarketData/press coverage of the 2025 inauguration]."
+  roles: [crusher]
+  products: [meal, oil]
+  footprint: "First soy crush plant in the Paraguayan Chaco, inaugurated Sep-2025 on the Bioceanic Corridor route: 750 t/day (~230-240,000 t/yr), 50,000 t initial storage, >USD 50m investment, 20-ha industrial park [observed — multiple press reports of the inauguration]."
+  destinations: "Meal/oil primarily for regional feed demand and export via the Bioceanic route; actual export destinations unverified (plant operating <1 year)."
+  size_evidence: "Disclosed capacity 750 t/day / ~230,000 t/yr meal-oil-byproducts [observed — press]."
+  confidence: observed
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://marketdata.com.py/empresas_negocios/pioneros-del-chaco-inaugura-planta-aceitera-de-soja-con-acompanamiento-de-investor-y-marca-un-hito-agroindustrial-145537/"
+      accessed: "2026-08-07"
+      supports: "Co-op ownership (Chortitzer/Neuland/Fernheim + investors), financing structure"
+    - url: "https://infonegocios.com.py/default/pioneros-del-chaco-inaugurara-planta-aceitera-con-la-que-reinventara-su-modelo-productivo-con-capacidad-de-230-000-tn-ano"
+      accessed: "2026-08-07"
+      supports: "750 t/day, 230,000 t/yr capacity, 50,000 t storage"
+    - url: "https://cappro.org.py/camara"
+      accessed: "2026-08-07"
+      supports: "CAPPRO membership (newest member)"
+  notes: "This is the Mennonite co-ops' route into the soy complex — the co-ops themselves (Chortitzer, Fernheim, Neuland) are historically dairy/beef/peanut players in the Chaco and do not appear in soybean-exporter rankings; their soy play is this joint crush plant. Chaco soy area >109,000 ha last season."
+
+# --- Significant exporters OUTSIDE CAPPRO (bean-only shippers, co-ops, traders) ---
+
+- name: "COFCO International Paraguay S.A."
+  aka: ["Cofco"]
+  scope: paraguay
+  ownership: "State-backed — subsidiary of COFCO International (China, COFCO Corp. group) [inferred — widely reported; PY-subsidiary filing not fetched]."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "Bean-only shipper (no CAPPRO membership/crush found). Was Paraguay's #1 soybean exporter in early 2019 (16% through April, per CAPECO via Última Hora) [observed — Última Hora article]."
+  destinations: "Ships largely to Argentina up-river for the group's crush/re-export chain (customs first-destination Argentina); ultimate flow tied to China demand via origin change [inferred]."
+  size_evidence: "CAPECO: 8% river share 2025 (#4); 7-8% in 2025/26 partials [observed — CAPECO Jan-2026 article]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ultimahora.com/cofco-es-el-mayor-exportador-n2824464"
+      accessed: "2026-08-07"
+      supports: "2019: COFCO #1 with 16% (CAPECO data); CAPPRO firms = 35% of bean exports then"
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 ranking: Cofco 8%"
+  notes: "Paraguay–China: no diplomatic relations, no direct soybean sales; COFCO's Paraguayan beans reach China only after Argentine processing changes origin (CAPECO explanation)."
+
+- name: "Agrofértil S.A."
+  aka: []
+  scope: paraguay
+  ownership: "Private; reported as tied to Brazilian agribusiness capital, but ownership NOT verified from a primary source this session."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "Input (agrochemical/fertilizer) dealer and grain originator in the eastern production belt; significant on BOTH routes: #1 land-route exporter to Brazil in 2025 (14%) and 6-7% of river exports [observed — CAPECO]."
+  destinations: "Land route: Brazil. River route: Argentina first destination [observed — CAPECO country aggregates]."
+  size_evidence: "CAPECO 2025: 7% river + 14% land-route leader [observed — CAPECO Jan-2026 article]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 rankings: Agrofértil 7% river, 14% land (#1 terrestre)"
+  notes: "Corporate structure and any crush assets unverified — treat as a bean originator/exporter with an input-retail barter model (inferred from its dual input-dealer/exporter role)."
+
+- name: "Francisco Vierci y Cía."
+  aka: ["F. Vierci"]
+  scope: paraguay
+  ownership: "Private Paraguayan trading house; commonly associated with the Vierci family/group, but corporate detail NOT verified from a primary source this session."
+  roles: [exporter]
+  products: [beans]
+  footprint: "Bean shipper appearing consistently in CAPECO's river-export rankings; no crush assets found."
+  destinations: "unverified (customs aggregate: Argentina-dominant)"
+  size_evidence: "CAPECO: 6% river share 2025; 6-8% in 2025/26 partials [observed — CAPECO Jan-2026 article + 2026 partials via search excerpts]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 ranking: Francisco Vierci 6%"
+  notes: "One of only two locally-owned firms (with Copagra) regularly in the top-10 bean rankings. Everything beyond the CAPECO share is unverified."
+
+- name: "Cooperativa Colonias Unidas"
+  aka: ["CCU"]
+  scope: paraguay
+  ownership: "Farmer cooperative (member-owned), based in Obligado, Itapúa — one of Paraguay's largest agricultural co-ops [inferred — co-op status observed in rankings/press; founding/membership detail not verified this session]."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "Origination across Itapúa (a top-3 soy department); ships beans on the river route in its own name [observed — CAPECO rankings]."
+  destinations: "unverified (customs aggregate: Argentina-dominant)"
+  size_evidence: "CAPECO: 5% river share 2025 (#10 band); 2-3% in 2025/26 partials [observed — CAPECO Jan-2026 article]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 ranking: Colonias Unidas 5%"
+  notes: "The largest co-op exporting under its own name. Not a Mennonite colony co-op (Itapúa settler co-op); the Chaco Mennonite co-ops export soy only via Pioneros del Chaco crush (see that entry)."
+
+- name: "LAR (Cooperativa Agroindustrial LAR)"
+  aka: ["Lar Paraguay"]
+  scope: paraguay
+  ownership: "Brazilian agroindustrial cooperative (HQ Medianeira, Paraná, Brazil) operating in Paraguay — Brazilian parentage inferred from name/known regional footprint; the Paraguay subsidiary's structure was NOT verified from a primary source."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "Dominates the LAND route to Brazil: #2 land exporter 2025 (12%), #1 in H1-2026 (17-18%); ~1% of river exports [observed — CAPECO]."
+  destinations: "Brazil (land/truck route — beans absorbed by Brazilian crush) [observed — CAPECO land-route data]."
+  size_evidence: "CAPECO land-route rankings as above [observed]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 land ranking: Lar 12% (#2)"
+    - url: "https://www.ccpb.org.py/2026/06/30/exportaciones-de-soja-crecen-y-fortalecen-el-ingreso-de-divisas/"
+      accessed: "2026-08-07"
+      supports: "H1-2026: LAR #1 land route 18% (search excerpt)"
+  notes: "Land-route exports to Brazil (14% of 2025 destinations) are dominated by Brazilian co-ops LAR and C.Vale plus Agrofértil — a structurally different channel from the river trade."
+
+- name: "C.Vale"
+  aka: ["C. Vale Cooperativa Agroindustrial"]
+  scope: paraguay
+  ownership: "Brazilian agroindustrial cooperative (HQ Palotina, Paraná, Brazil) with Paraguay operations — Brazilian parentage inferred; Paraguay subsidiary detail NOT verified from a primary source."
+  roles: [originator, exporter]
+  products: [beans]
+  footprint: "#2 player on the land route to Brazil (9% 2025; 15-17% 2025/26 partials); ~2% river [observed — CAPECO]."
+  destinations: "Brazil (land route) [observed — CAPECO]."
+  size_evidence: "CAPECO land-route rankings as above [observed]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://capeco.org.py/en/2026/01/14/se-confirma-que-produccion-de-soja-zafra-2024-2025-alcanzo-10-millones-de-toneladas/"
+      accessed: "2026-08-07"
+      supports: "2025 land ranking: C. Vale 9% (#4)"
+  notes: "Same caveat as LAR — presence observed only through CAPECO rankings."
+
+- name: "Sodrugestvo Paraguay"
+  aka: []
+  scope: paraguay
+  ownership: "Subsidiary of Sodrugestvo Group (Russian-founded, Luxembourg-based) [inferred — not verified from a primary source]."
+  roles: [exporter]
+  products: [beans]
+  footprint: "Was a top-5 bean exporter in 2019 (13% share through April, per CAPECO/Última Hora). Absent from the 2025 and 2025/26 CAPECO top-10 rankings — current status in Paraguay UNVERIFIED [observed absence]."
+  destinations: "Historically consistent with the Russia destination line (4% of 2025 exports went to Russia) — link inferred, not verified."
+  size_evidence: "2019: 13% share [observed — Última Hora citing CAPECO]. Nothing current."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ultimahora.com/cofco-es-el-mayor-exportador-n2824464"
+      accessed: "2026-08-07"
+      supports: "2019 ranking: Sodrugestvo 13%"
+  notes: "Included for completeness as a historically significant non-CAPPRO shipper; may have shrunk below top-10 or exited — could not determine. Vicentín (15% in 2019) similarly vanished from rankings after its 2019-20 Argentine insolvency; not given its own entry."
+
+- name: "Somax"
+  aka: ["Somax Agro (unconfirmed full name)"]
+  scope: paraguay
+  ownership: "NOT verified."
+  roles: [exporter]
+  products: [beans]
+  footprint: "Appears in CAPECO's 2025/26 LAND-route top-5 (8%) — border/truck bean shipper [observed — CAPECO partials via search excerpts]."
+  destinations: "Brazil (land route) [inferred from route]."
+  size_evidence: "8% of land-route exports, H1-2026 [observed — search excerpt of CAPECO reporting]."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.ccpb.org.py/2026/06/30/exportaciones-de-soja-crecen-y-fortalecen-el-ingreso-de-divisas/"
+      accessed: "2026-08-07"
+      supports: "H1-2026 land ranking includes Somax 8%"
+  notes: "Thinnest entry after BISA — nothing verified beyond the ranking mention."
