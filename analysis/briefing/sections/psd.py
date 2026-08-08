@@ -53,6 +53,10 @@ def format() -> str:  # noqa: A001
         ("Soybeans", "China", "Imports"),
         ("Soybeans", "United States", "Production"),
         ("Palm Oil", "Indonesia", "Production"),
+        # Cross-oilseed: Canada is the #1 canola (rapeseed) origin — its
+        # balance sheet moves the vegoil complex soy oil competes in.
+        ("Rapeseed", "Canada", "Production"),
+        ("Rapeseed", "Canada", "Exports"),
     ]
 
     for commodity, country, attribute in highlights:
