@@ -1,4 +1,5 @@
-# Africa soy players — South Africa + Nigeria (#109)
+# Africa soy players — South Africa + Nigeria (#109) + East Africa: Ethiopia,
+# Uganda, Kenya (#135, research/2026-08-08-issue-135-east-africa-players.md)
 # SA: self-sufficient crusher market trading around SAFEX (JSE), surplus meal/oil
 # exported to SACU/SADC neighbours. Nigeria: import-substitution story — poultry
 # feed demand pulling domestic crush; FX-constrained imports; no verified federal
@@ -474,3 +475,619 @@
 # manufacturers; no free evidence of any KAM soybean crushing operation.
 # Likely conflation with Olam Agri's 2026 Ilorin crush plant. Recorded here
 # rather than fabricating an entry.
+
+# ===========================================================================
+# East Africa — Ethiopia / Uganda / Kenya (#135, research date 2026-08-08)
+# Market shape: Ethiopia is a genuine bean + meal EXPORTER (India historically
+# dominant; Pakistan/Kenya/UAE rising; China opened for Ethiopian soybean meal
+# Jul 2025 via GACC protocol). Uganda is a small producer but regional net
+# exporter — beans and (bigger by value) soybean meal into Kenya. Kenya is the
+# structural BUYER: ~100k t/yr meal imports, no large-scale domestic crush
+# (Competition Authority of Kenya 2024 inquiry, verbatim), sourced from
+# Zambia/Malawi/Uganda/Tanzania because the GE-import regime blocks
+# US/LatAm-origin meal (Court of Appeal conservatory order Mar 2025 restored
+# the block after the 2022 lift; USDA FAS FAIRS 2026 says the ban is enforced).
+# Trade mechanics: no functioning futures market anywhere in the block. ECX
+# lists soybean spot contracts (thin liquidity, Wednesdays only); Uganda's
+# exchange is being reconstituted (UNCE, not yet operational); Kenya buys
+# through regional crusher-traders (ETG, Mount Meru) and direct imports.
+
+- name: Alema Koudijs Feed PLC
+  aka: [AKF, Alema Farms + De Heus JV]
+  scope: africa
+  side: buyer
+  website: "https://www.alemakoudijs.com"
+  ownership: >-
+    JV of Alema Farms PLC (Ethiopia, est. 1993, founders Alemayehu
+    Amdemariam & Lemma Asfaw) and De Heus Animal Nutrition BV (Netherlands,
+    private/family-owned). Plant established 2010. JV stake split not
+    published free (gap).
+  roles: [feed-miller, meal-buyer]
+  products: [beans, meal]
+  footprint: >-
+    Compound-feed mill at Bishoftu/Debre Zeit (12 t/hr) — company-described
+    as the largest feed producer in Ethiopia; reached 100,000 MT annual
+    sales in Nov 2024 (company statement). Buys ~14,000 t/yr of soy
+    products (soy cake, defatted soya, raw soybeans) per IFC disclosure;
+    2024 IFC loan of up to US$10m proposed for mill expansion/storage.
+  destinations: >-
+    Ethiopian domestic feed market (poultry/dairy); demand-side anchor, not
+    a shipper.
+  destinations_structured:
+    - {code: ET, products: [meal], note: "domestic feed market — buys ~14,000 t/yr soy products (IFC disclosure); feed sold domestically"}
+  size_evidence: >-
+    12 t/hr mill + "largest feed producing company in Ethiopia" (company);
+    ~14,000 t/yr soy intake and up to US$10m expansion loan (IFC project
+    disclosure 43214 — primary); 100,000 MT annual sales (company news,
+    Nov 2024).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.alemakoudijs.com/about-us"
+      accessed: "2026-08-08"
+      supports: "JV structure (Alema Farms + De Heus), 2010 est., 12 t/hr, largest-in-Ethiopia claim"
+    - url: "https://disclosures.ifc.org/project-detail/ESRS/43214/alema-koudijs-fd"
+      accessed: "2026-08-08"
+      supports: "~14,000 t/yr soy by-product intake; proposed IFC loan up to US$10m (2024)"
+    - url: "https://www.2scale.org/en/past-partnerships/dairy-alema-koudijs-feed-factory-ethiopia-en"
+      accessed: "2026-08-08"
+      supports: "Independent confirmation of JV and Bishoftu plant"
+  notes: >-
+    Ticket-adjacent correction: "Health Care Food Manufacturing" is a
+    separate company (Samanu/54 Capital) — not Alema. Soy intake figure is
+    the IFC's, capacity claims are the company's own. Demand-side anchor of
+    the Ethiopian feed story, analogous to Premier Feed Mills in Nigeria.
+
+- name: Rich Land Biochemical Production PLC
+  aka: [Richland, Rich Land Bure]
+  scope: africa
+  side: seller
+  website: "https://richlandbc.com"
+  ownership: >-
+    Not disclosed on the company site — ownership is a gap. Branding and
+    export orientation suggest possible foreign (Chinese) investment, but
+    that is unverified inference; treat as unknown.
+  roles: [crusher, exporter]
+  products: [beans, meal, oil]
+  footprint: >-
+    Soybean/maize processing complex in Bure Integrated Agro-Industrial
+    Park, Amhara (21 ha; first plant), with projected output of 96,000 t/yr
+    soybean meal, 22.5m litres edible oil and 62,000 t/yr animal feed
+    (company-stated, "projected"); second, maize-focused plant at Bahir Dar
+    (52 ha). States it produces and exports soybean meal internationally.
+  destinations: >-
+    Company states international soybean-meal exports; named destination
+    countries not published (gap). Domestic edible oil/feed sales inferred.
+  destinations_structured:
+    - {code: ET, products: [oil, meal], note: "domestic edible oil + animal feed sales (inferred from product slate)"}
+    - {code: GLOBAL, products: [meal], note: "company states it 'produces and exports soybean meal internationally' — destinations unnamed, volumes unverified"}
+  size_evidence: >-
+    96,000 t/yr projected soybean-meal capacity (company site — single
+    source, no independent confirmation found free; flagged as projected,
+    not audited).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://richlandbc.com/"
+      accessed: "2026-08-08"
+      supports: "Bure IAIP plant, 21 ha, projected 96,000 t/yr soybean meal + 22.5m L oil + 62,000 t feed; international meal exports"
+    - url: "https://www.unido.org/news/ethiopia-prime-minister-abiy-ahmed-inaugurates-bure-integrated-agro-industrial-park-amhara-state"
+      accessed: "2026-08-08"
+      supports: "Bure IAIP inaugurated Feb 2021, >$169m, edible oil/maize/soybean focus (park context)"
+  notes: >-
+    The largest disclosed soy-crush figure in Ethiopia, but it is a
+    company-projected number from a single source — do not treat as
+    operating capacity. Ownership unknown. A natural candidate for the
+    Jul-2025 China meal channel (inferred only — the MoA/GACC-registered
+    plant list was not found free).
+
+- name: MSA Trading PLC
+  aka: [MSA Exporting]
+  scope: africa
+  side: seller
+  website: "https://msaexportingplc.com"
+  ownership: >-
+    Private Ethiopian exporter, est. 2006, HQ Addis Ababa; beneficial
+    owners not published free (gap).
+  roles: [exporter, originator]
+  products: [beans, meal]
+  footprint: >-
+    Export house with a processing/cleaning facility at Kombolcha (South
+    Wollo, Amhara, 1,900 m2); primarily exports soya seed and soybean
+    meal. Volza shipment data ranks it the #1 Ethiopian soya-meal supplier
+    by shipment count.
+  destinations: >-
+    Company states top export markets are India, Russia and the United
+    States; Mar 2025–Feb 2026 export turnover US$46.56m (company/shipment
+    data — not audited).
+  destinations_structured:
+    - {code: IN, products: [beans, meal], note: "company-stated top market; India is Ethiopia's historical #1 bean destination (60% of 2022 export value per peer-reviewed trade study)"}
+    - {code: RU, products: [beans, meal], note: "company-stated top market — unverified split"}
+    - {code: US, products: [beans, meal], note: "company-stated top market — unverified split"}
+  size_evidence: >-
+    US$46.56m export turnover Mar 2025–Feb 2026 (Trademo/Volza shipment
+    aggregation + company site — shipment-data derived, not audited
+    accounts); #1 Ethiopian soya-meal exporter by shipment count (Volza).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://msaexportingplc.com/"
+      accessed: "2026-08-08"
+      supports: "Est. 2006, Kombolcha facility, soya/seed/meal export focus, top markets India/Russia/US"
+    - url: "https://www.volza.com/company-profile/msa-trading-plc-65423816/"
+      accessed: "2026-08-08"
+      supports: "#1 Ethiopian soya-meal supplier by shipment count; turnover figure"
+    - url: "https://onlinelibrary.wiley.com/doi/10.1155/2024/9979892"
+      accessed: "2026-08-08"
+      supports: "Ethiopia bean-export destination structure: India 60% of 2022 value, US 12%, UAE 5.2%"
+  notes: >-
+    Shipment-count rankings (Volza) overweight small frequent shippers —
+    treat the #1 rank as indicative, not tonnage-proven. The practical
+    Ethiopian origin counterparty for a foreign meal/bean buyer alongside
+    Richland.
+
+- name: PhiBela Industrial PLC (Belayneh Kindie Group)
+  aka: [Phibela, BKG, Belayneh Kindie Import Export]
+  scope: africa
+  side: both
+  website: "https://bkgethiopia.com"
+  ownership: >-
+    Belayneh Kindie Group — private Ethiopian conglomerate (founder
+    Belayneh Kindie); PhiBela is its edible-oil arm, sister company
+    Belayneh Kindie Import Export handles trading.
+  roles: [refiner, importer, exporter]
+  products: [beans, oil]
+  footprint: >-
+    Edible-oil refinery at Bure, Amhara (30 ha, 4.5bn Birr) with
+    1.5m litres/day capacity — described at commissioning as the largest
+    edible-oil factory in Ethiopia, potentially covering ~60% of national
+    demand. Sources soybeans locally and imports crude soybean/palm oil
+    through neighbouring countries' ports. Group export arm lists soybeans
+    among its export commodities.
+  destinations: >-
+    Ethiopian domestic edible-oil market; group bean-export destinations
+    and volumes not published (gap).
+  destinations_structured:
+    - {code: ET, products: [oil], note: "domestic edible-oil market — 1.5m L/day nameplate; not fully operational per 2025 reporting (FX-constrained)"}
+  size_evidence: >-
+    1.5m litres/day refinery, 4.5bn Birr investment (Addis Fortune + Food
+    Business Africa — 2 independent); 2025 Reporter Ethiopia: still not
+    fully operational, five largest refiners requested US$930m forex, NBE
+    approved US$50.3m.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://addisfortune.news/five-billion-birr-edible-oil-plant-goes-operational"
+      accessed: "2026-08-08"
+      supports: "Bure refinery scale (1.5m L/day, 4.5bn Birr, largest in country)"
+    - url: "https://www.foodbusinessafrica.com/ethiopia-opens-mega-edible-oil-processing-factory-worth-us113-7m-to-meet-domestic-demand/"
+      accessed: "2026-08-08"
+      supports: "Independent confirmation of plant scale/cost"
+    - url: "https://www.thereporterethiopia.com/22305/"
+      accessed: "2026-08-08"
+      supports: "2025: Phibela still not fully operational; refiner forex squeeze ($930m requested, $50.3m approved)"
+    - url: "https://www.belaynehkindie.com/index.php/export/soybeans"
+      accessed: "2026-08-08"
+      supports: "Group export arm lists soybeans as an export commodity (page indexed; volumes unpublished)"
+  notes: >-
+    Structurally important but FX-impaired: the refinery runs well below
+    nameplate. Its soy role is two-sided — local bean sourcing plus crude
+    soy oil IMPORTS — which makes it the Ethiopian demand-side counterpart
+    to the exporters. Bean-export leg is listed but unquantified.
+
+- name: Ethiopia Commodity Exchange
+  aka: [ECX]
+  scope: africa
+  side: seller
+  website: "https://www.ecx.com.et"
+  ownership: >-
+    Ethiopian state-established exchange (est. 2008), Addis Ababa.
+  roles: [exchange-operator, aggregator, warehouse-operator]
+  products: [beans]
+  footprint: >-
+    National spot exchange with warehouse network; lists soybean contracts
+    by grade/origin (ticker symbols e.g. SBAS2/SBAS3 Assosa, SBGJ2 Gojjam;
+    Birr/quintal). USDA FAS (2020 oilseeds GAIN) described soybeans as
+    "actively traded on the ECX trading floor", India-driven. Grains trade
+    Wednesdays only; two sampled 2025 daily trade sheets contained no
+    soybean rows — liquidity is thin/intermittent.
+  destinations: >-
+    Domestic auction venue feeding Ethiopian exporters/processors; ECX
+    itself does not ship.
+  destinations_structured:
+    - {code: ET, products: [beans], note: "domestic spot auction feeding exporters/processors; thin, intermittent soybean liquidity (2025 sample sheets had zero soy rows)"}
+  size_evidence: >-
+    Qualitative only — no current soybean volume disclosure found free
+    (gap); listing evidenced by ticker symbols and USDA FAS 2020
+    description.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://commodity.com/trading/exchanges/ethiopia/"
+      accessed: "2026-08-08"
+      supports: "ECX soybean tickers by grade/origin (SBAS2/SBAS3/SBGJ2, Birr/quintal)"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Ethiopia+Oilseeds+Report+Annual_Addis+Ababa_Ethiopia_01-16-2020"
+      accessed: "2026-08-08"
+      supports: "USDA FAS: soybeans actively traded on ECX floor, India-driven demand (2020 — dated)"
+    - url: "https://www.2merkato.com/news/capital-market-and-commodity-exchange/"
+      accessed: "2026-08-08"
+      supports: "Sampled ECX daily trade sheets (Mar 2025): no soybean rows — thin liquidity"
+  notes: >-
+    The market-access analogue of AFEX for Ethiopia: the official venue a
+    foreign buyer's local agent would clear through, but soy liquidity is
+    thin and the site was unreachable from outside (possible geo/IP
+    restriction) — see X6 price-source flags in the research doc. The
+    FAS "actively traded" quote is from 2020; 2025 sampling suggests
+    activity has faded.
+
+- name: Mukwano Group (AK Oils & Fats)
+  aka: [AK Oils and Fats (U) Ltd, Mukwano Industries]
+  scope: africa
+  side: seller
+  website: "https://www.mukwano.com"
+  ownership: >-
+    Mukwano Industries (U) Ltd — private Ugandan group (Karmani family);
+    AK Oils & Fats is the Lira oilseed arm.
+  roles: [crusher, refiner, originator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Oilseed complex at Lira, northern Uganda: grain storage, oilseed
+    crushing and a solvent-extraction plant for sunflower and soya meal;
+    consumer brands include 100% Ugandan-sourced, fortified Mukwano
+    soybean oil. Outgrower network of 90,000+ smallholders across 30+
+    districts (Lango, West Nile, Bunyoro, Eastern). Crush capacity not
+    published (gap).
+  destinations: >-
+    Ugandan domestic edible-oil and feed markets. Uganda exported
+    US$18.9m of soybean meal/oil-cake to Kenya in 2023 (UN Comtrade) —
+    the Lira crushers (Mukwano, Mount Meru) are the plausible source, but
+    the company-level split is not published (inferred).
+  destinations_structured:
+    - {code: UG, products: [oil, meal], note: "domestic edible-oil brands + meal into feed market"}
+    - {code: KE, products: [meal], note: "inferred — Uganda→Kenya oil-cake flow was US$18.9m in 2023 (UN Comtrade, country-level); company split unpublished"}
+  size_evidence: >-
+    Solvent-extraction plant + 90,000-farmer outgrower network
+    (company-stated); named offtaker in Heifer International's Uganda
+    oilseed project. No tonnage disclosure found free (gap).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.mukwano.com/agriculture-2/"
+      accessed: "2026-08-08"
+      supports: "Lira complex (storage, crushing, SEP for sunflower/soya meal); 90,000+ outgrowers"
+    - url: "https://www.mukwano.com/project/mukwano-soybean-oil/"
+      accessed: "2026-08-08"
+      supports: "100% Ugandan-sourced fortified soybean oil brand"
+    - url: "https://tradingeconomics.com/uganda/exports/kenya/soybean-oilcake-solid-residue-ground"
+      accessed: "2026-08-08"
+      supports: "Uganda→Kenya soybean oil-cake exports US$18.9m (2023, UN Comtrade — country-level)"
+    - url: "https://www.heifer.org/blog/heifer-uganda-and-young-oilseed-farmers-improve-income-food-security.html"
+      accessed: "2026-08-08"
+      supports: "Mukwano named among soybean/oilseed offtakers in Heifer Uganda project"
+  notes: >-
+    One of the two anchor crushers of the Ugandan soy complex (with Mount
+    Meru, both in Lira). No published crush capacity — honest gap. The
+    meal-to-Kenya attribution is a country-level trade flow, not a
+    company disclosure.
+
+- name: Mount Meru Millers Uganda
+  aka: [Mount Meru Group Lira]
+  scope: africa
+  side: seller
+  website: "https://www.mountmerugroup.com"
+  ownership: >-
+    Mount Meru Group — private pan-African group (Indian-origin family
+    business) with edible-oil operations in Tanzania, Rwanda, Uganda and
+    Zambia.
+  roles: [crusher, refiner, originator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Edible-oil mill in Lira Industrial Area buying sunflower and soybeans
+    directly from farmers/suppliers — one of the two large oilseed
+    processors in Lira alongside Mukwano. Only stale scale datapoint:
+    ~10 t beans/day intake and 9,500 L/day oil (2017 press — dated;
+    current capacity is a gap). Group-level context: the Competition
+    Authority of Kenya's 2024 inquiry tables Mount Meru regional crush at
+    Malawi 150,000 t/yr and Zambia 128,000 t/yr plus Uganda/Tanzania
+    operations; the group's dedicated soy crusher (Mount Meru Soyco) is
+    in RWANDA, not Uganda.
+  destinations: >-
+    Ugandan domestic edible-oil/feed markets; regional group flows into
+    Kenya are documented at group level (CAK 2024) but Uganda-plant
+    exports are unverified.
+  destinations_structured:
+    - {code: UG, products: [oil, meal], note: "domestic edible oil + meal; Uganda-plant export split unverified"}
+    - {code: AFRICA, products: [meal, oil], note: "group-level (not Uganda-plant) regional flows — CAK 2024 names Mount Meru among the regional crusher-traders supplying Kenya"}
+  size_evidence: >-
+    Uganda plant: 2017 figure only (10 t/day beans — stale). Group: CAK
+    2024 inquiry crush-capacity table (Malawi 150k, Zambia 128k t/yr) —
+    observed in the CAK PDF.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.mountmerugroup.com/service-details/mount-meru-soyco"
+      accessed: "2026-08-08"
+      supports: "Group's dedicated soy crusher (Soyco) is in Rwanda — soybean oil, soy meal; est. 2012"
+    - url: "https://cak.go.ke/arch/sites/default/files/ANIMAL%20FEED%20MARKET%20INQUIRY%20REPORT,%202024.pdf"
+      accessed: "2026-08-08"
+      supports: "CAK 2024: Mount Meru regional crush capacities (Malawi 150k, Zambia 128k t/yr) + role in Kenyan supply"
+    - url: "https://wire.farmradio.fm/farmer-stories/uganda-soybean-growing-changes-farmers-lives/"
+      accessed: "2026-08-08"
+      supports: "Lira factory buys soybeans direct from farmers; 2017 scale datapoint (10 t/day, 9,500 L/day)"
+  notes: >-
+    Uganda-plant capacity is the main gap (only a 2017 figure exists
+    free). Group is arguably the most import-relevant East African
+    oilseed network — its Zambia/Malawi plants are among the CAK-named
+    price-setters for Kenyan meal.
+
+- name: Biyinzika Poultry International
+  aka: [Biyinzika]
+  scope: africa
+  side: buyer
+  website: "https://www.biyinzika.co.ug"
+  ownership: >-
+    Private Ugandan poultry integrator, founded 1990; past private-equity
+    backing reported, current shareholding not verified free (gap).
+  roles: [feed-miller, meal-buyer, crusher]
+  products: [beans, meal]
+  footprint: >-
+    Automated feed mill near Kampala using solvent-extracted soybean meal,
+    and processes soybeans IN-HOUSE into low-fat (expelled) and full-fat
+    (extruded) soya cake — i.e. a small integrated crusher, not just a
+    meal buyer. ~1,000 employees; vertically integrated breeder/broiler
+    operations.
+  destinations: >-
+    Ugandan domestic poultry feed (own integration + external sales).
+  destinations_structured:
+    - {code: UG, products: [meal], note: "domestic poultry feed — meal consumed as feed input (structural buyer + in-house processor)"}
+  size_evidence: >-
+    Qualitative (company facility pages, ~1,000 employees per PitchBook).
+    No soy tonnage published (gap).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.biyinzika.co.ug/our-facilities/feed-mill/"
+      accessed: "2026-08-08"
+      supports: "Feed mill uses solvent-extracted SBM; in-house expelled/extruded soya cake processing"
+    - url: "https://pitchbook.com/profiles/company/153138-88"
+      accessed: "2026-08-08"
+      supports: "Founded 1990, ~1,000 employees, private ownership"
+  notes: >-
+    Demand-side anchor of Ugandan soy alongside Ugachick (Ugachick's soy
+    volumes are wholly inferred, so only Biyinzika gets an entry). The
+    in-house extrusion line is what distinguishes it from a pure feed
+    miller.
+
+- name: Export Trading Group
+  aka: [ETG, Export Trading Company]
+  scope: africa
+  tier: 1
+  side: both
+  website: "https://www.etgworld.com"
+  ownership: >-
+    Private — founded in Kenya 1967; shareholders include the founding
+    Patel family trusts, Pembani Remgro Infrastructure Fund and Mitsui &
+    Co. (minority) per Kenyan business-press reporting; exact stakes not
+    published free (gap).
+  roles: [trader, originator, crusher, importer, exporter]
+  products: [beans, meal, oil]
+  footprint: >-
+    Pan-African agri-trading network (~5m t commodities/yr group-wide,
+    press figure) headquartered operationally across Nairobi/Dar es
+    Salaam/Dubai. Soy complex: markets itself as a trader of at least
+    500,000 t of non-GM soybeans across sub-Saharan Africa (quoted in the
+    Competition Authority of Kenya's 2024 feed inquiry); ETG/Parrogate
+    crush capacity of 100,000 t/yr in Malawi and 240,000 t/yr in Zambia
+    (CAK inquiry table) — the plants behind much of Kenya's meal supply.
+  destinations: >-
+    Sub-Saharan Africa broadly; for the soy complex specifically, Zambia/
+    Malawi-origin meal into Kenya and regional feed markets (CAK names
+    ETG among the regional suppliers that "can set the terms" of trade).
+  destinations_structured:
+    - {code: AFRICA, products: [beans, meal], note: ">=500,000 t/yr non-GM soybeans traded across sub-Saharan Africa (ETG self-description quoted by CAK 2024)"}
+    - {code: KE, products: [meal], note: "Zambia/Malawi-origin meal into Kenya — CAK 2024 names ETG among dominant regional suppliers; company-level Kenya volumes unpublished (inferred)"}
+  size_evidence: >-
+    CAK 2024 inquiry (official, PDF): ETG >=500k t non-GM soy trading
+    claim + Malawi 100k / Zambia 240k t/yr crush capacities; ~5m t/yr
+    group commodity volume (Daily Nation).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://cak.go.ke/arch/sites/default/files/ANIMAL%20FEED%20MARKET%20INQUIRY%20REPORT,%202024.pdf"
+      accessed: "2026-08-08"
+      supports: "ETG >=500k t non-GM soybean trading; ETG/Parrogate crush Malawi 100k + Zambia 240k t/yr; regional suppliers' pricing power"
+    - url: "https://nation.africa/kenya/business/agricultural-trader-etg-raises-sh8bn-for-exports-172058"
+      accessed: "2026-08-08"
+      supports: "Founded Kenya 1967; Patel family + Pembani Remgro + Mitsui shareholders; ~5m t/yr commodities"
+    - url: "https://www.etgworld.com/"
+      accessed: "2026-08-08"
+      supports: "Pan-African agri-trading footprint (corporate self-description)"
+  notes: >-
+    Tier-1: the closest thing East/Southern Africa has to a regional soy
+    ABCD — the non-GM corridor (Zambia/Malawi/Uganda -> Kenya) largely
+    clears through ETG-class crusher-traders, per the Kenyan competition
+    authority. Kenya-specific volumes and current shareholding are gaps.
+
+- name: De Heus Kenya
+  aka: [Royal De Heus Athi River]
+  scope: africa
+  side: buyer
+  website: "https://www.deheus.com"
+  ownership: >-
+    Wholly owned by Royal De Heus (Netherlands, private/family-owned) —
+    greenfield entry, NOT an acquisition of Unga's feed business (that
+    lead is false; see notes).
+  roles: [feed-miller, meal-buyer]
+  products: [meal]
+  footprint: >-
+    KSh3bn (~US$23m) greenfield compound-feed mill at Athi River (opened
+    2025): 200,000 t/yr capacity, expandable to 260,000 t/yr — described
+    as among the largest feed mills in East Africa; ~250 direct jobs;
+    plans to source maize and soybeans from Kenyan farmers.
+  destinations: >-
+    Kenyan domestic feed market (poultry/dairy/aqua) — structural meal
+    buyer, not a shipper.
+  destinations_structured:
+    - {code: KE, products: [meal], note: "domestic feed market — 200,000 t/yr mill (expandable 260k); meal consumed as feed input"}
+  size_evidence: >-
+    200,000 t/yr capacity, KSh3bn investment (De Heus corporate news +
+    Feed Strategy — 2 independent).
+  confidence: observed
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.deheus.com/articles/news/de-heus-kenya-opens-landmark-feed-mill-in-athi-river-boosting-agricultural-sector-and-regional-growth"
+      accessed: "2026-08-08"
+      supports: "Athi River mill: KSh3bn, 200k t/yr expandable 260k, among largest in East Africa"
+    - url: "https://www.feedstrategy.com/animal-feed-manufacturing/animal-feed-manufacturers/news/15816763/de-heus-kenya-completes-construction-of-new-animal-feed-mill"
+      accessed: "2026-08-08"
+      supports: "Independent confirmation of construction/scale"
+  notes: >-
+    Cross-listing: De Heus Vietnam has its own entry in
+    asia_importers.yml; neither carries tier-1 (the operating group is
+    dispersed). Negative finding recorded: De Heus did NOT buy Unga's
+    feed business — the Kenyan entry was greenfield. Its meal demand must
+    clear the non-GM constraint, i.e. regional (Zambia/Malawi/Uganda/
+    Tanzania) origins.
+
+- name: Unga Group Plc
+  aka: [Unga Farm Care (EA), Fugo Feeds, Tunga Nutrition Kenya]
+  scope: africa
+  side: buyer
+  website: "https://www.ungagroup.com"
+  ownership: >-
+    NSE-listed (est. 1908). Seaboard Corporation (US, NYSE-listed) holds
+    35% of Unga Holdings directly plus 18.47% of Unga Group Plc — ~47%
+    effective interest in Unga Holdings (Seaboard Overseas corporate
+    page). Fish-feed leg is a 50/50 JV with Nutreco (Tunga Nutrition,
+    Kenya + Uganda; Skretting and Fugo brands).
+  roles: [feed-miller, meal-buyer]
+  products: [meal]
+  footprint: >-
+    Flour and animal-feed group; feed via Unga Farm Care (EA) Ltd (Fugo
+    brand). FY2025 (yr to 30 Jun 2025): revenue KSh26.1bn, PAT KSh222m
+    (turnaround from a KSh670m loss). Tunga Nutrition operates a
+    5,000 t/yr extruded fish-feed plant in Nairobi and is converting the
+    ex-Unga Millers Uganda plant in Kampala to feed concentrates.
+  destinations: >-
+    Kenyan (and via Tunga, Ugandan) domestic feed markets — structural
+    meal buyer.
+  destinations_structured:
+    - {code: KE, products: [meal], note: "domestic feed (Fugo) — meal consumed as feed input"}
+    - {code: UG, products: [meal], note: "Tunga Nutrition JV converting ex-Unga Kampala plant to feed/concentrates (Nutreco 50/50)"}
+  size_evidence: >-
+    Listed accounts: FY2025 revenue KSh26.1bn (africanfinancials); ~47%
+    Seaboard effective interest (Seaboard Overseas page); 5,000 t/yr fish
+    feed plant (Seaboard/Nutreco releases).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://seaboardoverseas.com/location/unga-holdings-limited/"
+      accessed: "2026-08-08"
+      supports: "Seaboard 35% of Unga Holdings + 18.47% of Unga Group Plc (~47% effective)"
+    - url: "https://www.nutreco.com/en/news/nutreco-closes-deal-with-unga-group-to-meet-growing-demand-for-high-quality-protein-in-east-africa/"
+      accessed: "2026-08-08"
+      supports: "Tunga Nutrition 50/50 JV (Kenya + Uganda)"
+    - url: "https://africanfinancials.com/company/ke-unga/"
+      accessed: "2026-08-08"
+      supports: "FY2025 revenue KSh26.1bn, PAT KSh222m turnaround"
+  notes: >-
+    The listed, Seaboard-linked incumbent of Kenyan feed — the same
+    Seaboard that holds 30% of RussellStone Protein (SA entry above),
+    making Seaboard the quiet US thread through African feed. Soy-specific
+    tonnage not disclosed (gap).
+
+- name: Bidco Africa
+  aka: [Bidco, SoyaGold, Bidco Uganda Ltd (BUL) affiliate]
+  scope: africa
+  side: buyer
+  website: "https://www.bidcoafrica.com"
+  ownership: >-
+    Private Kenyan group (Shah family, exec chairman Vimal Shah), HQ
+    Thika. Affiliate Bidco Uganda Ltd is a JV with Wilmar International.
+  roles: [refiner, feed-miller, originator, importer]
+  products: [beans, meal, oil]
+  footprint: >-
+    Kenya's largest edible-oil maker (products incl. SoyaGold soybean
+    oil) with an animal-feeds line (Noto); contracts ~30,000 East African
+    farmers for soybean/sunflower supply. No evidence of large-scale
+    soybean solvent crushing in Kenya — the Competition Authority of
+    Kenya states there are no large-scale soy processors in the country;
+    Bidco's soy oil is refined from imported/regional crude. Affiliate
+    BUL (Jinja, Uganda) crushes oilseeds (75,000 t/yr line) but is
+    primarily a palm player.
+  destinations: >-
+    Kenyan domestic edible-oil and feed markets.
+  destinations_structured:
+    - {code: KE, products: [oil, meal], note: "domestic edible-oil (SoyaGold) + feed markets; refining/blending, not large-scale crush"}
+  size_evidence: >-
+    Largest Kenyan edible-oil maker (trade-press share estimates ~40%+ —
+    secondary); ~30,000 contracted farmers (company); CAK 2024 confirms
+    no large-scale Kenyan soy crush (bounding its role).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.bidcoafrica.com/inclusive-agribusiness/"
+      accessed: "2026-08-08"
+      supports: "~30,000 contracted EA farmers for soybean/sunflower"
+    - url: "https://cak.go.ke/arch/sites/default/files/ANIMAL%20FEED%20MARKET%20INQUIRY%20REPORT,%202024.pdf"
+      accessed: "2026-08-08"
+      supports: "No large-scale soy processors in Kenya; BUL (Uganda) partially Wilmar-owned, oilseed crusher"
+    - url: "https://www.tuko.co.ke/business-economy/457399-list-cooking-oil-companies-kenya-brands-they-manufacture-their-owners/"
+      accessed: "2026-08-08"
+      supports: "Bidco largest Kenyan cooking-oil maker (secondary source, share estimate)"
+  notes: >-
+    Included as the consumer-facing soy-oil demand anchor; honest bound:
+    it is a refiner/blender in Kenya, not a crusher. Kapa, Pwani and
+    Menengai were checked and rejected — palm refiners with no soy-crush
+    evidence (negative finding, research doc s.4).
+
+# ---------------------------------------------------------------------------
+# East Africa country-level context (not player entries):
+#
+# Ethiopia (accessed 2026-08-08):
+# - NO soybean export ban: the edible-oil association requested one in 2023;
+#   the State Minister for Industry called it "not feasible" (Milling MEA).
+#   Cereal-grain export bans do not list soy. Negative finding, moderately
+#   confident.
+# - China opened for Ethiopian soybean MEAL 2025-07-03 (GACC phytosanitary
+#   protocol; MoA-approved + GACC-registered plants only; volumes expected
+#   small per JCI). People's Daily + GACC lists + USDA Beijing CH2026-0032.
+# - Bean destinations: India 60% of 2022 export value (Wiley study);
+#   2024-25 shipment data shifts toward Pakistan/Kenya/UAE; ~29,400 t beans
+#   to China in 2024.
+#
+# Uganda (accessed 2026-08-08):
+# - Net exporter: beans to Kenya ($4.26m) + Rwanda ($2.04m) in 2024 (OEC);
+#   meal/oil-cake to Kenya $18.9m in 2023 (UN Comtrade) — the meal flow is
+#   ~4x the bean flow by value; Lira crush (Mukwano/Mount Meru) feeds Kenya.
+# - National Oilseeds Project (NOSP): ~$160m GoU/IFAD program 2021-2028,
+#   soybean among 4 target oilseeds; Nov-2025 IFAD supervision: 48,853
+#   households reached (40% of target), "moderately satisfactory".
+# - Exchange status: old UCE defunct; warehouse-receipt authority merged
+#   into the Trade Ministry; successor UNCE (80% private / 20% govt) not
+#   yet operational (inferred from official phrasing).
+# - Aponye (U) Ltd — grain trader with a soy retail line — is financially
+#   distressed post-2023 (UGX 38bn debt, bailout ordered 2025); recorded
+#   here rather than entered as a healthy incumbent.
+#
+# Kenya (accessed 2026-08-08):
+# - Meal imports ~100k t/yr (USDA PSD via IndexMundi; 2022: 47k -> 2023-24:
+#   100k). Origins: Zambia >70% of 2021-22 meal imports (CAK); beans 2024:
+#   Tanzania 79%, Uganda 11% (IndexBox). Feed industry: formal commercial
+#   ~600k t/yr (CAK) vs 2.5m t/yr incl. informal (AKEFEMA) — different
+#   scopes. Soy = ~25% of feed volume but 44% of value (CAK).
+# - GMO whipsaw: 2022 Cabinet lift -> 2023 High Court upheld -> 2025-03-07
+#   Court of Appeal conservatory order BLOCKS GE imports pending appeal;
+#   USDA FAS FAIRS 2026 says the ban is being enforced. Practical effect:
+#   no US/LatAm meal — the non-GM corridor (Zambia/Malawi/Uganda/Tanzania,
+#   cleared largely through ETG/Mount Meru-class traders) sets Kenyan
+#   feed-input pricing. Final appeal ruling: gap.
+# - EAC/COMESA preferences make regional sourcing effectively duty-free;
+#   recurring ad-hoc duty waivers on feed inputs (2021, 2022, 2023, 2025).
+#
+# Tanzania (stretch, no entries — see research doc s.3): bean exporter
+# (2023: $92.7m, China/India/Pakistan-led) but meal importer (~135k t/yr
+# feed-sector need, Zambia-led — USDA FAS TZ2025-0003); crush mostly
+# sunflower (Mount Meru); Silverlands Tanzania = integrated poultry/feed
+# anchor (72k t/yr feed). Kenya-flow inconsistency (OEC 2023 $282k vs
+# IndexBox 2024 79%-of-imports) flagged unresolved in the research doc.
