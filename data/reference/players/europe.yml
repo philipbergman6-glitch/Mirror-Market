@@ -1,0 +1,465 @@
+# Europe (EU + UK + Norway) import crushers, refiners and meal importers — issue #106
+# Context: the EU imports roughly ~13 MMT beans + ~16 MMT meal/yr (issue framing, not
+# independently re-verified here). EUDR application date is now 2026-12-30 for large
+# operators (Regulation (EU) 2025/2650 — second delay), so "recent activity" below is
+# dominated by EUDR positioning. All entries as_of 2026-08-08.
+
+- name: "ADM (Europe oilseeds)"
+  aka: ["Archer Daniels Midland", "ADM Europoort B.V.", "ADM Spyck GmbH", "ADM Hamburg AG"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.adm.com"
+  ownership: "Public (NYSE: ADM) — European plants are wholly owned subsidiaries"
+  roles: ["importer", "crusher", "refiner", "terminal-operator"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    Europoort (Rotterdam, NL): bulk terminal + soybean/rapeseed crush + refinery +
+    soy protein concentrate plant, >325 staff on site (observed). Hamburg (DE):
+    described by trade press as Europe's largest oilseeds crushing and refinery
+    complex, processing rapeseed and soybeans (observed). Spyck (DE, near Dutch
+    border): switch-crush plant that added non-GMO soybean capability in 2017
+    alongside rape/sunflower (observed). Straubing (DE): non-GMO soy crush; Mainz
+    (DE): oilseeds crush + biodiesel (observed).
+  destinations: "EU feed compounders (meal), EU food/biodiesel (oil), SPC to plant-protein and aqua markets"
+  size_evidence: >-
+    No public per-plant tonnage. Best free evidence: ADM press/trade coverage of the
+    multi-plant network (Europoort, Hamburg, Spyck, Straubing, Mainz) and the 2020
+    Europoort SPC expansion; headcount >325 at Europoort alone.
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.industryabout.com/country-territories-3/1649-netherlands/vegetable-oil-industry/24115-adm-europoort-soybean-processing-plant"
+      accessed: "2026-08-08"
+      supports: "Europoort site: soybean processing plant, active since 1986, ADM-owned"
+    - url: "https://www.world-grain.com/articles/8449-adm-expands-soy-crush-capabilities-in-germany"
+      accessed: "2026-08-08"
+      supports: "Hamburg = Europe's largest oilseeds crush/refinery complex; Spyck + Mainz crush plants; Spyck soy switch capacity 2017"
+    - url: "https://www.adm.com/en-us/news/news-releases/adm-opens-soy-processing-capabilities-at-oilseeds-plant-in-spyck-germany/"
+      accessed: "2026-08-08"
+      supports: "Spyck non-GMO soybean crush start; European soy crush network strategy"
+    - url: "https://www.world-grain.com/articles/13259-adm-expands-production-of-non-gmo-soy-protein"
+      accessed: "2026-08-08"
+      supports: "2020 Europoort non-GMO soy protein concentrate expansion"
+    - url: "https://news.mongabay.com/2025/11/soy-giants-quietly-prepare-for-eu-deforestation-law-impacts-still-uncertain/"
+      accessed: "2026-08-08"
+      supports: "EUDR positioning: ADM declined to comment to Mongabay (Nov 2025); NGO/trade view is majors are operationally prepared"
+  notes: >-
+    Per-plant crush capacities are not published free — tonnage gap acknowledged.
+    Origin mix at Europoort: soybeans shipped from South America (observed in Dutch
+    site materials); precise Brazil/US split unverified. EUDR: ADM made no public
+    readiness statement as of Nov 2025 (observed non-response in Mongabay survey) —
+    weakest public EUDR posture among the four majors covered here.
+
+- name: "Bunge (Europe oilseeds)"
+  aka: ["Bunge Global SA", "Bunge Iberica S.A.U.", "Bunge Loders Croklaan", "Viterra (merged 2025)"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.bunge.com"
+  ownership: "Public (NYSE: BG); completed US$8.2bn merger with Viterra 2025-07-02"
+  roles: ["importer", "crusher", "refiner", "terminal-operator"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    Amsterdam (NL): soybean/rapeseed crush + soybean oil refinery + part of bulk
+    port terminal, acquired from Cargill 2016 together with Brest (FR) crush —
+    combined ~2 MMT/yr capacity at acquisition (observed). Iberia: three soybean
+    processing plants in the ports of Barcelona and Cartagena plus Bilbao biodiesel
+    (observed, Bunge Iberica site); Barcelona crush modernized from 2,550 to 3,200
+    t/day (observed, IDOM engineering reference). Distributes through La Coruña,
+    Barcelona, Bilbao, Cartagena and Lisbon ports (observed). Italy: Ravenna-area
+    soybean facility upgraded (trade press).
+  destinations: "EU feed (meal) and food/biodiesel (oil); low-carbon meal flow to ForFarmers NL (~100 KMT)"
+  size_evidence: >-
+    ~2 MMT/yr combined Amsterdam+Brest crush at 2016 acquisition (Cargill/Bunge
+    releases); Barcelona 3,200 t/day post-modernization (IDOM). Post-Viterra Bunge
+    is the largest global crusher; EC-mandated divestment of Viterra's Hungary and
+    Poland oilseed businesses to LDC closed Sep 2025.
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.bunge.com/Press-Releases/Expanding-Our-Crush-Footprint-in-Europe"
+      accessed: "2026-08-08"
+      supports: "Amsterdam + Brest acquisition from Cargill; ~2 MMT/yr combined capacity"
+    - url: "https://www.bungeiberica.com/bungeKC/Home.action?operation=HomeWhereES"
+      accessed: "2026-08-08"
+      supports: "Iberian footprint: Barcelona/Cartagena soy plants, Bilbao biodiesel, La Coruña + Lisbon distribution ports"
+    - url: "https://www.idom.com/en/project/soya-processing-plants-for-bunge/"
+      accessed: "2026-08-08"
+      supports: "Barcelona crush capacity 2,550 -> 3,200 t/day modernization"
+    - url: "https://www.ldc.com/press-releases/louis-dreyfus-company-announces-the-successful-acquisition-of-grains-oilseeds-activities-in-hungary-and-poland/"
+      accessed: "2026-08-08"
+      supports: "Viterra merger completed 2025-07-02; EC-required divestment of Viterra Hungary/Poland oilseeds to LDC"
+    - url: "https://www.nasdaq.com/articles/bunge-forfarmers-partner-develop-low-carbon-soybean-meal-flow"
+      accessed: "2026-08-08"
+      supports: "~100 KMT low-carbon, deforestation-free soybean meal supply agreement with ForFarmers"
+    - url: "https://www.agtechnavigator.com/Article/2024/06/26/bunge-announces-progress-in-its-non-deforestation-pledge/"
+      accessed: "2026-08-08"
+      supports: "EUDR/deforestation positioning; Mighty Earth criticism that Bunge's 2024 cut-off lags EUDR's 2020 legal cut-off"
+  notes: >-
+    Issue #106 listed "Brens" — could not verify a Bunge crush plant at Brens
+    (A Coruña); Bunge Iberica lists La Coruña only as a distribution port, so the
+    crush claim is treated as unverified. Lisbon: Bunge's Portugal presence runs
+    through the Tagol/Sovena history (JV with Nutrinveste, 1999) — current ownership
+    share unverified free. Origin mix Brazil-vs-US not published per plant. EUDR:
+    criticized for a 2024 internal DCF cut-off vs the regulation's 2020 cut-off
+    (observed); company states compliance intent.
+
+- name: "Cargill (Europe oilseeds)"
+  aka: ["Cargill plc (UK)", "Cargill S.L.U. (former Spain crush)"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.cargill.com"
+  ownership: "Private (Cargill family)"
+  roles: ["importer", "crusher", "refiner"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    Liverpool (Seaforth, UK): soybean crush + oil refinery + bulk handling —
+    acquired from Continental Grain 1986 at 2,000 t/day crush (observed, historical).
+    Divested: Amsterdam + Brest crush sold to Bunge 2016; Barcelona crush sold to
+    Elian Barcelona (Viserion) 2023/24. Liverpool is Cargill's remaining dedicated
+    Western Europe soybean crush noted in its own 2016 release.
+  destinations: "UK feed and food customers (meal/oil); integrated with Cargill's UK poultry/feed businesses"
+  size_evidence: >-
+    Liverpool 2,000 t/day at 1986 acquisition (SoyInfo Center history) — current
+    capacity not published free. Cargill's 2016 release confirms Barcelona and
+    Liverpool were retained as integrated regional plants (Barcelona since sold).
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.cargill.com/news/releases/2016/NA31964470.jsp"
+      accessed: "2026-08-08"
+      supports: "2016 sale of Amsterdam + Brest to Bunge; retention of Barcelona and Liverpool crush"
+    - url: "https://www.soyinfocenter.com/books/231"
+      accessed: "2026-08-08"
+      supports: "Liverpool (Seaforth) mill history: built by Continental 1975-77, bought 1986, 2,000 t/day crush + refinery"
+    - url: "https://www.businesswire.com/news/home/20231010494530/en/Pinnacle-Backed-Viserion-Elian-Barcelona-to-Acquire-Soya-Crush-Plant-from-Cargill"
+      accessed: "2026-08-08"
+      supports: "Barcelona crush divestment to Elian Barcelona (Viserion), announced Oct 2023"
+    - url: "https://www.cargill.com/food-beverage/emea/news/almost-ready-for-eudr-inside-our-compliance-preparations"
+      accessed: "2026-08-08"
+      supports: "EUDR readiness: two-phase compliance program since early 2023; states ability to deliver compliant product"
+    - url: "https://news.mongabay.com/2025/11/soy-giants-quietly-prepare-for-eu-deforestation-law-impacts-still-uncertain/"
+      accessed: "2026-08-08"
+      supports: "Cargill EUDR pilot/'dry run' shipment Brazil->Europe; most publicly forthcoming of the majors"
+  notes: >-
+    Current Liverpool crush capacity is a gap — only the 1986 figure is free.
+    Cargill is the most publicly documented major on EUDR (dedicated supplier
+    portal + pilot shipments, observed); an Anthropocene FII note (2025) still
+    flags residual Brazil-sourcing compliance risk (observed, third-party).
+    UK post-Brexit runs its own UK Forest Risk Commodities regime, not EUDR —
+    Liverpool's regulatory exposure differs from the EU plants (inferred).
+
+- name: "Louis Dreyfus Company (Europe meal & oilseeds)"
+  aka: ["LDC"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.ldc.com"
+  ownership: "Private — Louis-Dreyfus family holding (Akira Louis-Dreyfus majority); ADQ (Abu Dhabi) 45% indirect stake"
+  roles: ["importer", "trader", "crusher", "distributor"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    Primarily a meal importer/distributor in Western Europe (France flows
+    documented via the Earthworm ZDC program). Sep 2025: acquired ex-Viterra
+    businesses divested from the Bunge merger — Foktő (HU) multi-seed crush/refining
+    plant (sunflower/rapeseed/soybeans) and Bodaczów (PL) multi-seed crush/refining
+    plant, plus four Polish storage sites (~170 KMT) and a Gdansk origination team
+    (observed).
+  destinations: "French and Central European feed compounders (imported meal distribution named as deal rationale)"
+  size_evidence: >-
+    Earthworm/LDC program: ZDC-verified Brazilian soybean meal into France equal to
+    30% of LDC's French imports (2023-24, observed). Hungary/Poland plants are
+    multi-seed; soy share of their crush not disclosed.
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://earthworm.org/news-stories/tackling-imported-deforestation-earthworm-and-louis-dreyfus-company-mobilize-to-import-brazilian-soybean-meal-verified-according-to-the-zero-deforestation-or-conversion-methodology"
+      accessed: "2026-08-08"
+      supports: "Brazilian soybean meal imports into France; ZDC verification = 30% of LDC French imports; DCF commitment by end-2025"
+    - url: "https://www.ldc.com/press-releases/louis-dreyfus-company-announces-the-successful-acquisition-of-grains-oilseeds-activities-in-hungary-and-poland/"
+      accessed: "2026-08-08"
+      supports: "Foktő + Bodaczów plants acquired Sep 2025; 'distribution of imported meals in the region' as strategic rationale"
+  notes: >-
+    LDC has no dedicated Western-European soybean crush plant found in free sources —
+    its Europe soy role is bean/meal trading plus the new Central European multi-seed
+    plants (soy is a minority seed there; Bodaczów is ~15% of Poland's rapeseed
+    crush). Ownership percentages are widely reported but not re-verified from
+    primary filings here (inferred). France meal volume in absolute MT: gap.
+
+- name: "Cefetra Group"
+  aka: ["Cefetra B.V.", "ex-BayWa subsidiary"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.cefetra.com"
+  ownership: >-
+    Private — sold by BayWa AG to a group of European investors for EUR 125m,
+    completed Feb 2026 (after an earlier 2025 deal with First Dutch/Peter Goedvolk
+    collapsed on financing)
+  roles: ["importer", "trader", "distributor"]
+  products: ["beans", "meal"]
+  footprint: >-
+    Rotterdam-headquartered raw-materials supplier to feed/food/energy industries;
+    17 companies, >35 locations in Europe and beyond, incl. Cefetra Italia. Ships
+    large volumes of soymeal, sunflower meal and soybean hulls from South America
+    to Europe (observed).
+  destinations: "UK, NL, DE, IT and wider European feed compounders"
+  size_evidence: >-
+    EUR 125m sale price + removal from BayWa consolidation cutting >EUR 600m of
+    bank liabilities (observed, BayWa releases) — indicates balance-sheet scale;
+    tonnage of annual meal imports not published free.
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.baywa.com/en/pressinformation/100625_baywa_verkauf-cefetra"
+      accessed: "2026-08-08"
+      supports: "First Dutch sale agreement June 2025 (later failed)"
+    - url: "https://agritradenews.co.uk/news/2026/01/19/baywa-agrees-cefetra-sale-to-european-investors/"
+      accessed: "2026-08-08"
+      supports: "Failed First Dutch deal; new EUR 125m agreement with European investors, Q1 2026 close"
+    - url: "https://www.demolenaar.nl/en/people-and-company/Baywa-AG-completes-sale-of-Cefetra-Group/60680/"
+      accessed: "2026-08-08"
+      supports: "Sale completion Feb 2026; group structure (17 companies, >35 locations); SA soymeal shipments to Europe"
+  notes: >-
+    Ticket asked to verify status post-BayWa crisis: resolved — ownership
+    transferred away from BayWa in Feb 2026; the new "European investors" have not
+    been individually named in the free sources found (gap). Cefetra is the
+    clearest pure meal-importer (no crush) among the large players here. Historic
+    role as buying agent for Dutch/UK feed co-ops inferred from its feed-sector
+    customer base, not directly observed.
+
+- name: "Cereal Docks"
+  aka: ["Cereal Docks S.p.A.", "Gruppo Cereal Docks"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.cerealdocks.it"
+  ownership: "Private — Fanin family (founders)"
+  roles: ["importer", "crusher", "originator"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    Two soybean crush plants: Porto Marghera (Venice) — largest site, GM-capable,
+    acquired from Bunge in 2011, supplied by US/Canada/Brazil/Paraguay beans; and
+    Camisano Vicentino (Vicenza) — full-cycle non-GMO soy/rape/sunflower crush
+    (Donau Soja / ProTerra / Europe Soya certified). Group: 6 production sites,
+    4 logistics hubs, Black Sea offices (Timisoara, Ruse).
+  destinations: "Italian feed/food; non-GMO meal to southern Germany, Switzerland, Austria, France"
+  size_evidence: >-
+    >5,000 t/day soy crush across the two plants, ~60% imported / 40% domestic
+    non-GMO beans (observed, Non-GMO Report directory profile); group processes
+    >3 MMT/yr of cereals+oilseeds (observed, company site). RTRS-certified crush
+    at Marghera (2019).
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.cerealdocks.it/en/the-group/about-us"
+      accessed: "2026-08-08"
+      supports: "Group structure, >3 MMT/yr processed, sites list"
+    - url: "https://non-gmoreport.com/directory-of-organic-non-gmo-and-regenerative-supplies/cereal-docks-group/"
+      accessed: "2026-08-08"
+      supports: ">5,000 t/day soy crush over two plants; 60/40 import/domestic split; Marghera ex-Bunge 2011; multi-origin supply"
+    - url: "https://www.feednavigator.com/Article/2019/11/14/Italian-soy-crushing-plant-gets-RTRS-certification/"
+      accessed: "2026-08-08"
+      supports: "RTRS certification of the soy crush plant (2019)"
+  notes: >-
+    Largest Italian-owned soy crusher; the 5,000 t/day figure comes from a
+    directory profile rather than a primary filing — treat as approximate. No
+    public EUDR statement found in this pass (gap); its Danube/non-GMO certified
+    chains (Donau Soja, Europe Soya) are structurally low-EUDR-risk (inferred).
+
+- name: "Denofa"
+  aka: ["Denofa AS", "De-No-Fa"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.denofa.no"
+  ownership: "Private — 100% owned by Amaggi (Brazil)"
+  roles: ["importer", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    Single non-GMO soybean crush plant at Fredrikstad, Norway (Øra industrial
+    area), with its own 510 m ISPS deep-water quay. Products: soymeal, soy oil,
+    lecithin.
+  destinations: "Meal to Norwegian/Swedish/Finnish feed (incl. salmon aqua chain); oil and lecithin to European food/feed"
+  size_evidence: >-
+    ~450,000 t/yr of soybeans imported — 60-80% Brazil (Amaggi IP non-GMO chain
+    via Itacoatiara/Madeira), 20-40% Canada/US; ~NOK 2bn turnover, ~75 employees
+    (all observed, company site).
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.denofa.no/en/about-us/"
+      accessed: "2026-08-08"
+      supports: "Amaggi 100% ownership; ~450 kt/yr bean imports; origin split; turnover; employees"
+    - url: "https://www.denofa.no/en/soy/traceability/"
+      accessed: "2026-08-08"
+      supports: "IP non-GMO supply chain from Mato Grosso via Porto Velho/Itacoatiara; Norway's non-GMO import requirement"
+  notes: >-
+    Norway is not in the EU — EUDR applies to Denofa only via its EU-destined oil/
+    lecithin sales and EEA dynamics (inferred); Norway separately mandates non-GMO
+    imports (observed). The clearest fully-documented origin mix of any player in
+    this file. Sole crusher covering the Norway scope of #106.
+
+- name: "Elian Barcelona (Viserion)"
+  aka: ["Elian Barcelona S.L.", "Viserion Oilseed Processing", "ex-Cargill Barcelona crush"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://elianbarcelona.com"
+  ownership: >-
+    Private — subsidiary of Viserion International Holdco (Boulder, CO), backed by
+    a fund managed by Pinnacle Asset Management (New York)
+  roles: ["importer", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: >-
+    One soybean crush plant at Moll Alvarez de la Campa, Port of Barcelona —
+    acquired from Cargill (announced 2023-10-11, expected close Q1 2024 pending
+    Barcelona Port Authority approval). Plans to expand into concentrated and
+    textured soy protein ingredients.
+  destinations: "Catalan, Spanish and European feed and food ingredient sectors (observed, deal release)"
+  size_evidence: >-
+    No public crush capacity figure found for this specific plant. Scale evidence
+    limited to its description as 'an important infrastructural element' of the
+    Catalan feed supply and full staff retention at acquisition.
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.businesswire.com/news/home/20231010494530/en/Pinnacle-Backed-Viserion-Elian-Barcelona-to-Acquire-Soya-Crush-Plant-from-Cargill"
+      accessed: "2026-08-08"
+      supports: "Acquisition terms, ownership chain, plant location, protein expansion plans"
+    - url: "https://elianbarcelona.com/ElianWeb/webHistory.jsp?lang=en"
+      accessed: "2026-08-08"
+      supports: "Plant now branded 'Elian - A Viserion Company' (deal apparently completed)"
+  notes: >-
+    Confidence inferred: deal completion was 'expected Q1 2024' and the Elian-branded
+    website implies it closed, but no explicit completion press release was found.
+    Capacity and origin mix: gaps. Note this is a DIFFERENT Barcelona plant from
+    Bunge Iberica's — Barcelona port hosts two independent soy crushers.
+
+- name: "Royal Agrifirm Group"
+  aka: ["Agrifirm"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.agrifirm.com"
+  ownership: "Cooperative — owned by >10,000 Dutch farmers and horticulturalists"
+  roles: ["importer", "feed-compounder"]
+  products: ["meal"]
+  footprint: >-
+    Dutch feed cooperative (one of the top-3 Dutch compounders with ForFarmers and
+    De Heus, together >half the Dutch compound feed market). Buys imported soybean
+    meal for compound feed; no own crush. Acquired Hamlet Protein (specialty
+    soy-based young-animal proteins) — completed 2026-05-01.
+  destinations: "Own feed mills / member farmers (NL and international subsidiaries)"
+  size_evidence: >-
+    No free tonnage of soymeal purchases. Market position evidence: Greenpeace NL
+    supply-chain analysis names Agrifirm among the three compounders holding >50%
+    of the Dutch feed market.
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.greenpeace.org/static/planet4-netherlands-stateless/2020/10/0f796bbd-dutch-soy-supply-chain-201012-defdef.pdf"
+      accessed: "2026-08-08"
+      supports: "Top-3 Dutch compounder position (ForFarmers, De Heus, Agrifirm >50% of Dutch market)"
+    - url: "https://www.agrifirm.com/press-media/sustainable-soy-northwest-europe/"
+      accessed: "2026-08-08"
+      supports: "RTRS involvement; Dutch sustainable/local soy initiatives (Green Deal Soy)"
+    - url: "https://www.agrifirm.com/"
+      accessed: "2026-08-08"
+      supports: "Cooperative ownership; Hamlet Protein acquisition completed 2026-05-01"
+  notes: >-
+    Buys meal (imported, largely SA-origin) rather than beans — answers RQ2: feed
+    co-ops import/purchase meal, they do not crush. Whether it buys CIF directly
+    or via traders like Cefetra is not observable free (gap). RTRS certificate
+    approach rather than fully segregated physical DCF flows (observed for the
+    sector, inferred for Agrifirm specifically).
+
+- name: "ForFarmers"
+  aka: ["ForFarmers N.V."]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.forfarmersgroup.eu"
+  ownership: "Public (Euronext Amsterdam: FFARM); cooperative FromFarmers holds a controlling interest"
+  roles: ["importer", "feed-compounder"]
+  products: ["meal"]
+  footprint: >-
+    Feed compounder in NL, DE, BE, PL and UK. No own crush; buys soybean meal.
+    Signed a supply agreement with Bunge for ~100 KMT/yr of low-carbon,
+    deforestation-free-standard soybean meal starting with the Netherlands, with
+    blockchain traceability and verified carbon footprints (observed).
+  destinations: "Own feed mills in NL/DE/BE/PL/UK"
+  size_evidence: >-
+    ~100 KMT Bunge meal supply agreement is the only free hard volume; ForFarmers
+    is one of the top-3 Dutch compounders (>half the market combined). Also buys
+    Area-Mass-Balance soy certificates from Brazilian farmers verified by
+    satellite against 20 years of land-use change.
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.nasdaq.com/articles/bunge-forfarmers-partner-develop-low-carbon-soybean-meal-flow"
+      accessed: "2026-08-08"
+      supports: "~100 KMT low-carbon soybean meal supply agreement with Bunge"
+    - url: "https://www.forfarmersgroup.eu/en/news/forfarmers-helps-farmers-reduce-their-carbon-footprint-through-responsible-sourcing-of-soy"
+      accessed: "2026-08-08"
+      supports: "Area Mass Balance soy certificates from satellite-verified Brazilian farms"
+    - url: "https://www.greenpeace.org/static/planet4-netherlands-stateless/2020/10/0f796bbd-dutch-soy-supply-chain-201012-defdef.pdf"
+      accessed: "2026-08-08"
+      supports: "Top-3 Dutch compounder market position"
+  notes: >-
+    Total group soymeal usage tonnage not free (gap) — the 100 KMT Bunge flow is a
+    portion, not the whole book. The Bunge deal is the most concrete example in
+    this file of EUDR-era meal procurement restructuring (traceable, verified
+    flows contracted ahead of the 2026-12-30 EUDR application date — inferred link,
+    the release frames it as deforestation-free/low-carbon rather than EUDR per se).
+
+- name: "Royal De Heus"
+  aka: ["De Heus Animal Nutrition"]
+  scope: "europe"
+  side: "buyer"
+  website: "https://www.deheus.com"
+  ownership: "Private — De Heus family"
+  roles: ["importer", "feed-compounder"]
+  products: ["meal"]
+  footprint: >-
+    Dutch family-owned feed compounder; one of the top-3 Dutch compounders
+    (with ForFarmers and Agrifirm, together >half the Dutch compound feed market).
+    No own soy crush found. Large international footprint (Asia, Africa, LatAm)
+    outside this file's scope.
+  destinations: "Own feed mills, NL and international"
+  size_evidence: >-
+    Only free evidence is the Greenpeace top-3 Dutch market position; no soymeal
+    purchase tonnage or direct-import share published.
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.greenpeace.org/static/planet4-netherlands-stateless/2020/10/0f796bbd-dutch-soy-supply-chain-201012-defdef.pdf"
+      accessed: "2026-08-08"
+      supports: "Top-3 Dutch compounder position and soy-chain role"
+  notes: >-
+    Thinnest entry in this file — included because the Dutch top-3 compounders are
+    collectively the demand anchor for NL meal imports (RQ2). Whether De Heus
+    imports meal directly or buys via traders: unverified (gap). EUDR positioning:
+    not researched in this pass (gap).
+
+- name: "Vandemoortele"
+  aka: ["Vandemoortele N.V."]
+  scope: "europe"
+  side: "buyer"
+  website: "https://vandemoortele.com"
+  ownership: "Private — Vandemoortele family (Ghent, Belgium)"
+  roles: []
+  products: []
+  footprint: >-
+    NOT a current soy player — listed in issue #106 as a candidate but disqualified
+    by research: Vandemoortele sold its upstream oil activities (crushing and
+    refining) in 1997 and its Alpro soy-foods business in 2009; today it is a
+    frozen-bakery and margarines/culinary-oils group (~EUR 1.9bn turnover, 2023).
+    Historically it pioneered Belgian soy crushing at Izegem from 1934.
+  destinations: "n/a"
+  size_evidence: "n/a — retained deliberately as a negative result to prevent re-research"
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://vandemoortele.com/en/our-history"
+      accessed: "2026-08-08"
+      supports: "1997 divestment of oil crushing/refining; current bakery + margarines/oils focus"
+    - url: "https://www.soyinfocenter.com/books/186"
+      accessed: "2026-08-08"
+      supports: "Historical Izegem soy crushing from 1934; 1997 exit; Alpro sale 2009"
+  notes: >-
+    Negative-result entry: exclude from any dashboard rendering of active players.
+    Belgian soy crushing today is small-scale (e.g. Group Vandamme) and was not
+    deep-dived here (gap).
