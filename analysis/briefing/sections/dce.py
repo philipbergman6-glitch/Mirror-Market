@@ -5,10 +5,15 @@ CBOT quotes cents/bu (beans), cents/lb (oil), or $/short ton (meal) —
 printing the raw closes side by side is not a comparison in any currency.
 """
 
+import logging
+
 import pandas as pd
 
+from analysis.spreads import compute_dce_crush_margin
 from pipeline.query import read_dce_futures
 from pipeline.units import to_metric_tons
+
+logger = logging.getLogger(__name__)
 
 
 def format(  # noqa: A001
@@ -65,4 +70,36 @@ def format(  # noqa: A001
             f"(as of {dce_date.date() if hasattr(dce_date, 'date') else dce_date})"
         )
 
+    try:
+        lines.extend(_board_crush_lines(dce_data, cny_usd))
+    except Exception as exc:
+        logger.debug("DCE board crush failed: %s", exc)
+
     return "\n".join(lines)
+
+
+def _board_crush_lines(dce_data: pd.DataFrame, cny_usd: float | None) -> list[str]:
+    """China board crush margin from the A0/M0/Y0 continuous series.
+
+    Continuous-series caveat: the three legs need not roll the underlying
+    contract on the same day, so near-roll prints may embed roll gaps —
+    hence the explicit tag on the line (same humility as Layer 1 signals).
+    """
+    crush = compute_dce_crush_margin(dce_data)
+    if crush.empty:
+        return []
+    latest = crush.iloc[-1]
+    value_cny = latest["crush_cny_mt"]
+
+    if cny_usd is not None:
+        parts = [f"CNY {value_cny:+,.0f}/MT ({value_cny * cny_usd:+,.0f} USD/MT)"]
+    else:
+        parts = [f"CNY {value_cny:+,.0f}/MT"]
+    parts.append(f"oil share {latest['oil_value_share'] * 100:.0f}%")
+
+    date = latest["Date"]
+    date_str = date.date() if hasattr(date, "date") else date
+    return [
+        f"  DCE board crush: {' | '.join(parts)} "
+        f"(as of {date_str}; continuous main-contract legs — roll gaps possible)"
+    ]

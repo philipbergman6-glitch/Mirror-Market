@@ -18,6 +18,21 @@ import pandas as pd
 from config import CRUSH_MEAL_FACTOR, CRUSH_OIL_FACTOR
 from pipeline.units import to_metric_tons
 
+# Metric-native crush yields, derived from the same 60-lb-bushel mass
+# balance behind the CBOT board-crush factors: ~11 lb oil + ~44 lb meal
+# per bushel. CRUSH_OIL_FACTOR is the oil pounds directly; CRUSH_MEAL_FACTOR
+# is in cents/bu terms ($/short ton × 44/2000 × 100), so the meal pounds are
+# recovered as factor × 20. Kept derived so a yield-assumption change in
+# config.py propagates here automatically.
+_BUSHEL_LBS = 60.0
+CRUSH_OIL_YIELD_MT = CRUSH_OIL_FACTOR / _BUSHEL_LBS               # ≈0.183 MT oil/MT beans
+CRUSH_MEAL_YIELD_MT = (CRUSH_MEAL_FACTOR * 20.0) / _BUSHEL_LBS    # ≈0.733 MT meal/MT beans
+
+# DCE continuous main-contract series names as stored in `dce_futures`.
+_DCE_BEAN = "DCE Soybean"
+_DCE_OIL = "DCE Soybean Oil"
+_DCE_MEAL = "DCE Soybean Meal"
+
 
 def compute_crush_spread(
     soybeans_df: pd.DataFrame,
@@ -68,6 +83,69 @@ def compute_crush_spread(
     result = combined.reset_index()
     result.columns = ["Date", "soybeans_close", "oil_close", "meal_close", "crush_spread", "oil_value_share"]
 
+    return result
+
+
+def compute_dce_crush_margin(dce_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute the China board crush from DCE continuous main-contract closes.
+
+    Metric-native mirror of the CBOT board crush — all three legs quote
+    CNY/MT, so the mass-balance yields apply directly (no unit gymnastics):
+
+        crush_cny_mt = (oil × ~0.183) + (meal × ~0.733) − beans
+
+    Caveat (same near-roll humility as Layer 1): A0/M0/Y0 are continuous
+    main-contract series and akshare switches the underlying contract
+    silently. Unlike the CBOT crush — where all three legs share CME roll
+    timing and the artifact largely cancels — the DCE legs need not roll on
+    the same day, so prints near contract rolls may embed roll gaps.
+
+    Parameters
+    ----------
+    dce_df : pd.DataFrame
+        Long-format DCE data as returned by `read_dce_futures()`, with
+        'commodity', 'Date' and 'Close' columns containing the
+        'DCE Soybean', 'DCE Soybean Oil' and 'DCE Soybean Meal' series
+        (CNY/MT).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: Date, bean_close_cny, oil_close_cny, meal_close_cny,
+        crush_cny_mt, oil_value_share. Dates are inner-joined across the
+        three legs; empty input or a missing leg returns an empty DataFrame
+        with the expected columns.
+    """
+    empty_columns = ["Date", "bean_close_cny", "oil_close_cny", "meal_close_cny",
+                     "crush_cny_mt", "oil_value_share"]
+
+    if dce_df.empty:
+        return pd.DataFrame(columns=empty_columns)
+
+    required_cols = {"commodity", "Date", "Close"}
+    missing = required_cols - set(dce_df.columns)
+    if missing:
+        raise KeyError(f"dce_df is missing required columns: {sorted(missing)}")
+
+    pivot = dce_df.pivot_table(
+        index="Date", columns="commodity", values="Close", aggfunc="last"
+    )
+    if not {_DCE_BEAN, _DCE_OIL, _DCE_MEAL}.issubset(pivot.columns):
+        return pd.DataFrame(columns=empty_columns)
+
+    combined = pivot[[_DCE_BEAN, _DCE_OIL, _DCE_MEAL]].dropna()
+    combined.columns = ["bean_close_cny", "oil_close_cny", "meal_close_cny"]
+    if combined.empty:
+        return pd.DataFrame(columns=empty_columns)
+
+    oil_value = combined["oil_close_cny"] * CRUSH_OIL_YIELD_MT
+    meal_value = combined["meal_close_cny"] * CRUSH_MEAL_YIELD_MT
+    combined["crush_cny_mt"] = oil_value + meal_value - combined["bean_close_cny"]
+    combined["oil_value_share"] = oil_value / (oil_value + meal_value)
+
+    result = combined.reset_index()
+    result.columns = pd.Index(empty_columns)
     return result
 
 
