@@ -88,6 +88,9 @@ def _validate_destinations(dests: object) -> list[str]:
     if not isinstance(dests, list):
         return ["destinations_structured must be a list"]
     errors: list[str] = []
+    codes = [d.get("code") for d in dests if isinstance(d, dict)]
+    for dup in sorted({c for c in codes if codes.count(c) > 1 and isinstance(c, str)}):
+        errors.append(f"destinations_structured has duplicate code {dup!r} — merge the rows")
     for i, d in enumerate(dests):
         what = f"destinations_structured[{i}]"
         if not isinstance(d, dict):
@@ -101,8 +104,16 @@ def _validate_destinations(dests: object) -> list[str]:
                 f"{sorted(REGION_CODES)}"
             )
         products = d.get("products")
-        if not isinstance(products, list) or not products or not set(products) <= SOY_PRODUCTS:
-            errors.append(f"{what}.products must be a non-empty subset of {sorted(SOY_PRODUCTS)}, got {products!r}")
+        if (
+            not isinstance(products, list)
+            or not products
+            or not set(products) <= SOY_PRODUCTS
+            or len(set(products)) != len(products)
+        ):
+            errors.append(
+                f"{what}.products must be a non-empty, duplicate-free subset of "
+                f"{sorted(SOY_PRODUCTS)}, got {products!r}"
+            )
         if "note" in d and not isinstance(d["note"], str):
             errors.append(f"{what}.note must be a string")
     return errors
@@ -159,7 +170,8 @@ def _validate_activity(activity: object) -> list[str]:
 def validate_entry(entry: dict) -> list[str]:
     """Return all Phase 2 schema violations for one player entry."""
     errors: list[str] = []
-    if "tier" in entry and entry["tier"] != 1:
+    # isinstance(bool) guard: YAML `tier: true` would otherwise pass (True == 1)
+    if "tier" in entry and (isinstance(entry["tier"], bool) or entry["tier"] != 1):
         errors.append(f"tier must be the integer 1 (absent = tier 2), got {entry['tier']!r}")
     if "destinations_structured" in entry:
         errors += _validate_destinations(entry["destinations_structured"])
@@ -176,6 +188,9 @@ def validate_players(players_dir: Path = PLAYERS_DIR) -> list[str]:
     # Cross-listing the same company under two scopes is deliberate (e.g. CHS:
     # global house view + US assets) — only a duplicate (name, scope) pair fails.
     seen: dict[tuple[str, str], str] = {}
+    stray = sorted(p.name for p in players_dir.glob("*.yaml"))
+    if stray:
+        errors.append(f"mis-extensioned file(s) {stray} — players files must use .yml")
     for path in sorted(players_dir.glob("*.yml")):
         try:
             entries = yaml.safe_load(path.read_text(encoding="utf-8"))

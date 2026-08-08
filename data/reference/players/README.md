@@ -42,8 +42,9 @@ Each file is a YAML list of player entries:
                       # Gates curated-activity coverage (#111 decision 8).
   destinations: ""    # principal destination markets, or "unverified"
   destinations_structured:  # optional: queryable form of `destinations` (#122). Derived
-                      # from the entry's own prose only — omit when destinations are
-                      # unverified; never fabricate.
+                      # from the entry's own prose only — omit when purely unverified;
+                      # hedged inferences stated in the prose are allowed with the
+                      # hedge carried into `note`. Never fabricate.
     - code: ""        # ISO-3166 alpha-2 (uppercase), or region enum where sources
                       # don't name countries: EU | MENA | SE-ASIA | ASIA | LATAM |
                       # AFRICA | GLOBAL (see scripts/validate_players.py)
@@ -77,8 +78,11 @@ Each file is a YAML list of player entries:
 Schema is enforced at build time by `scripts/validate_players.py` (hard-fails on
 unknown codes/regions, bad enums, malformed dates, activity without citations).
 Cross-listing one company under two scopes (e.g. CHS in global.yml + us.yml) is
-allowed; a duplicate name within the same scope fails. When a company is
-cross-listed, put its `tier: 1` flag on the global.yml entry only.
+allowed; a duplicate name within the same scope fails. When one corporate group
+appears in several files — cross-listed, or a parent plus its named asset (e.g.
+Mitsui & Co. and United Grain) — put `tier: 1` on ONE entry only: the one that
+best represents the operating group (usually global.yml; for Sodrugestvo the
+post-split regional entry, since the global entry documents a defunct structure).
 
 ## Rules
 

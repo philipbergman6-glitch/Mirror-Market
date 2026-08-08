@@ -130,7 +130,7 @@
 - name: "Zen-Noh Grain Corporation"
   aka: ["ZGC", "Zen-Noh"]
   scope: "us"
-  tier: 1
+  # tier flag lives on the parent "Zen-Noh (JA Zen-Noh)" entry in asia_importers.yml
   ownership: "Wholly owned US subsidiary of Zen-Noh (National Federation of Agricultural Cooperative Associations, Japan — a co-op federation). HQ Covington, LA. Affiliate CGB Enterprises is a separate 50/50 Zen-Noh/Itochu JV."
   roles: [exporter, terminal-operator]
   products: [beans, meal]
@@ -252,7 +252,7 @@
 - name: "United Grain Corporation"
   aka: ["UGC"]
   scope: "us"
-  tier: 1
+  # tier flag lives on the parent "Mitsui & Co. (United Grain Corporation)" entry in asia_importers.yml
   ownership: "Subsidiary of Mitsui & Co. (Japan) — Mitsui acquired UGC in 1969 after it was spun out of ADM. SEED VERIFIED (Mitsui's own site; UGC's site does not name its owner)."
   roles: [originator, exporter, terminal-operator]
   products: [beans]

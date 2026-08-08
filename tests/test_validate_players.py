@@ -81,6 +81,29 @@ def test_bad_destination_fails(tmp_path, dest):
 def test_tier_must_be_one(tmp_path):
     assert errors_for(tmp_path, {**VALID_ENTRY, "tier": 2})
     assert errors_for(tmp_path, {**VALID_ENTRY, "tier": "1"})
+    assert errors_for(tmp_path, {**VALID_ENTRY, "tier": True})  # YAML `tier: true`; True == 1
+
+
+def test_duplicate_destination_code_fails(tmp_path):
+    entry = {
+        **VALID_ENTRY,
+        "destinations_structured": [
+            {"code": "CN", "products": ["beans"]},
+            {"code": "CN", "products": ["meal"]},
+        ],
+    }
+    assert errors_for(tmp_path, entry)
+
+
+def test_duplicate_products_in_destination_fail(tmp_path):
+    entry = {**VALID_ENTRY, "destinations_structured": [{"code": "CN", "products": ["beans", "beans"]}]}
+    assert errors_for(tmp_path, entry)
+
+
+def test_stray_yaml_extension_fails(tmp_path):
+    (tmp_path / "test.yml").write_text(yaml.safe_dump([{"name": "A Co"}]), encoding="utf-8")
+    (tmp_path / "oops.yaml").write_text(yaml.safe_dump([{"name": "B Co"}]), encoding="utf-8")
+    assert validate_players(tmp_path)
 
 
 @pytest.mark.parametrize(

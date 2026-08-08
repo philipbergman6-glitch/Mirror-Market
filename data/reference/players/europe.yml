@@ -22,8 +22,7 @@
     (DE): oilseeds crush + biodiesel (observed).
   destinations: "EU feed compounders (meal), EU food/biodiesel (oil), SPC to plant-protein and aqua markets"
   destinations_structured:
-    - {code: EU, products: [meal], note: "feed compounders"}
-    - {code: EU, products: [oil], note: "food/biodiesel"}
+    - {code: EU, products: [meal, oil], note: "meal to feed compounders; oil to food/biodiesel"}
   size_evidence: >-
     No public per-plant tonnage. Best free evidence: ADM press/trade coverage of the
     multi-plant network (Europoort, Hamburg, Spyck, Straubing, Mainz) and the 2020
@@ -72,8 +71,7 @@
     soybean facility upgraded (trade press).
   destinations: "EU feed (meal) and food/biodiesel (oil); low-carbon meal flow to ForFarmers NL (~100 KMT)"
   destinations_structured:
-    - {code: EU, products: [meal], note: "feed"}
-    - {code: EU, products: [oil], note: "food/biodiesel"}
+    - {code: EU, products: [meal, oil], note: "meal to feed; oil to food/biodiesel"}
     - {code: NL, products: [meal], note: "~100 KMT low-carbon flow to ForFarmers"}
   size_evidence: >-
     ~2 MMT/yr combined Amsterdam+Brest crush at 2016 acquisition (Cargill/Bunge
