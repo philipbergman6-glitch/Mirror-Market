@@ -9,6 +9,7 @@
 - name: "Marubeni Corporation"
   aka: ["8002.T", "Columbia Grain International (CGI)", "Marubeni Grãos Brasil"]
   scope: "asia_importers"
+  country: JP
   tier: 1
   side: "both"
   website: "https://www.marubeni.com"
@@ -53,6 +54,7 @@
 - name: "Mitsui & Co. (United Grain Corporation)"
   aka: ["8031.T", "UGC"]
   scope: "asia_importers"
+  country: JP
   tier: 1
   side: "both"
   website: "https://unitedgrain.com"
@@ -91,6 +93,7 @@
 - name: "ITOCHU Corporation"
   aka: ["8001.T", "CGB Enterprises (JV with Zen-Noh)"]
   scope: "asia_importers"
+  country: JP
   side: "both"
   website: "https://www.itochu.co.jp/en/business/food/index.html"
   ownership: "Public sogo shosha (TSE 8001); co-owns CGB Enterprises with Zen-Noh (exact split unconfirmed); holds stake in Fuji Oil Holdings"
@@ -127,6 +130,7 @@
 - name: "Mitsubishi Corporation (Agrex)"
   aka: ["8058.T", "Agrex Inc.", "Agrex do Brasil"]
   scope: "asia_importers"
+  country: JP
   side: "both"
   website: "https://www.agrexinc.com"
   ownership: "Agrex Inc. (Kansas HQ) wholly owned by Mitsubishi Corporation (public sogo shosha, TSE 8058); Agrex do Brasil full subsidiary since 2019"
@@ -158,6 +162,7 @@
 - name: "Zen-Noh (JA Zen-Noh)"
   aka: ["National Federation of Agricultural Cooperative Associations", "Zen-Noh Grain Corporation (ZGC)", "Zen-Noh Global", "CGB Enterprises"]
   scope: "asia_importers"
+  country: JP
   tier: 1
   side: "both"
   website: "https://www.zennohglobal.com"
@@ -197,6 +202,7 @@
 - name: "Fuji Oil Holdings"
   aka: ["2607.T", "Fuji Oil International (FII)"]
   scope: "asia_importers"
+  country: JP
   side: "buyer"
   website: "https://www.fujioilholdings.com"
   ownership: "Public (TSE 2607), ITOCHU-affiliated; FII North America JV with ITOCHU (2021) integrating raw-material supply chains"
@@ -223,6 +229,7 @@
 - name: "NOFI (Nonghyup Feed Inc.)"
   aka: ["NH Feed", "Nonghyup Feed"]
   scope: "asia_importers"
+  country: KR
   tier: 1
   side: "buyer"
   ownership: "Cooperative — part of the Nonghyup (NACF) agribusiness federation"
@@ -257,6 +264,7 @@
 - name: "MFG (Major Feedmill Group)"
   aka: []
   scope: "asia_importers"
+  country: KR
   side: "buyer"
   ownership: "Consortium of private Korean feed millers (member list / legal structure not verified — gap)"
   roles: [tender-buyer, feed-miller, importer]
@@ -287,6 +295,7 @@
 - name: "CJ CheilJedang"
   aka: ["097950.KS", "CJ Group"]
   scope: "asia_importers"
+  country: KR
   side: "buyer"
   website: "https://www.cj.co.kr"
   ownership: "Public (KRX 097950), CJ Group"
@@ -323,6 +332,7 @@
 - name: "aT (Korea Agro-Fisheries & Food Trade Corporation)"
   aka: ["Korea Agro-Fisheries Trade Corp"]
   scope: "asia_importers"
+  country: KR
   side: "buyer"
   website: "https://www.at.or.kr"
   ownership: "State trading corporation"
@@ -352,6 +362,7 @@
 - name: "TTET Union Corporation"
   aka: ["大統益", "TWSE 1232"]
   scope: "asia_importers"
+  country: TW
   side: "buyer"
   website: "https://www.ttet.com.tw/index.php?lang=en"
   ownership: "Public (TWSE 1232, listed 1996); led by Uni-President Enterprises (~38.5%) with Great Wall Enterprise and Taihua Oil as co-investors"
@@ -391,6 +402,7 @@
 - name: "Central Union Oil Corporation"
   aka: ["中聯油脂", "CUOC"]
   scope: "asia_importers"
+  country: TW
   side: "buyer"
   website: "http://www.cuoc.com.tw/en/company/?aid=21"
   ownership: "Private JV founded 1995 by Fwusow Industry, Formosa Oilseed Processing, and Taisun Enterprise"
@@ -420,6 +432,7 @@
 - name: "BSPA (Breakfast Soybean Procurement Association) — historical"
   aka: ["Taiwan BSPA"]
   scope: "asia_importers"
+  country: TW
   side: "buyer"
   ownership: "Joint buying association of Taiwan's soyfood/breakfast (soymilk, tofu) sector, with regional branches (e.g. Kaohsiung)"
   roles: [tender-buyer, importer]
@@ -451,6 +464,7 @@
 - name: "Vietnam Agribusiness Limited (VAL)"
   aka: ["Bunge Vietnam", "Phu My crush plant"]
   scope: "asia_importers"
+  country: VN
   side: "buyer"
   ownership: "JV — Bunge Global 45%, Wilmar International ~45% (inferred as residual), Quang Dung 10%; Bunge retained 45% and Quang Dung its 10% in the 2018 restructuring"
   roles: [crusher, importer]
@@ -486,6 +500,7 @@
 - name: "Quang Dung Group"
   aka: []
   scope: "asia_importers"
+  country: VN
   side: "buyer"
   ownership: "Private Vietnamese group; holds 10% of VAL; per World Grain (dated) majority owner of GreenFeed — current stake unverified"
   roles: [importer, distributor]
@@ -509,6 +524,7 @@
 - name: "C.P. Vietnam Corporation"
   aka: ["CP Vietnam"]
   scope: "asia_importers"
+  country: VN
   side: "buyer"
   website: "https://www.cp.com.vn"
   ownership: "Subsidiary of Thailand's Charoen Pokphand group (via CPF/CP Pokphand)"
@@ -534,6 +550,7 @@
 - name: "De Heus Vietnam"
   aka: ["ANCO", "Proconco"]
   scope: "asia_importers"
+  country: VN
   side: "buyer"
   website: "https://www.deheus.com"
   ownership: "Royal De Heus (Netherlands, private/family-owned); acquired Masan's MNS Feed business Nov 2021 (100% ANCO + 75.2% Proconco)"
@@ -558,6 +575,7 @@
 - name: "GreenFeed Vietnam"
   aka: []
   scope: "asia_importers"
+  country: VN
   side: "buyer"
   website: "https://www.greenfeed.com.vn/en/about-us/"
   ownership: "Private; founded 2003; World Grain (dated) reported majority ownership by Quang Dung — current stake unverified (gap)"
@@ -582,6 +600,7 @@
 - name: "PT FKS Multi Agro Tbk"
   aka: ["IDX FISH", "FKS Group", "FKS Food and Agri (SG parent)"]
   scope: "asia_importers"
+  country: ID
   side: "buyer"
   website: "https://www.fksgroup.com/business-unit/fks-multi-agro/"
   ownership: "IDX-listed since 2002 (FISH); family-founded FKS Group majority control; Singapore parent FKS Food and Agri"
@@ -626,6 +645,7 @@
 - name: "PT Charoen Pokphand Indonesia Tbk"
   aka: ["IDX CPIN"]
   scope: "asia_importers"
+  country: ID
   side: "buyer"
   website: "https://www.cp.co.id"
   ownership: "Public (IDX CPIN); controlled by Thailand's CP Group"
@@ -655,6 +675,7 @@
 - name: "PT Japfa Comfeed Indonesia Tbk"
   aka: ["IDX JPFA", "Japfa Ltd"]
   scope: "asia_importers"
+  country: ID
   side: "buyer"
   website: "https://www.japfacomfeed.co.id"
   ownership: "Public (IDX JPFA); Japfa Ltd parentage"
@@ -681,6 +702,7 @@
 - name: "Thai Vegetable Oil PCL (TVO)"
   aka: ["SET TVO", "ANGOON (oil brand)", "Prodigy PCL (subsidiary)"]
   scope: "asia_importers"
+  country: TH
   side: "both"
   website: "https://www.tvothai.com/en/"
   ownership: "Public, SET-listed; market cap ~THB 24.0bn per SET factsheet"
@@ -719,6 +741,7 @@
 - name: "Charoen Pokphand Foods PCL / Bangkok Produce Merchandising"
   aka: ["SET CPF", "BKP", "CP Group"]
   scope: "asia_importers"
+  country: TH
   tier: 1
   side: "buyer"
   website: "https://www.bkp.co.th"
@@ -761,6 +784,7 @@
 - name: "Betagro PCL"
   aka: ["SET BTG"]
   scope: "asia_importers"
+  country: TH
   side: "buyer"
   website: "https://www.betagro.com/en/home"
   ownership: "Public since Nov 2022 (SET BTG); Taepaisitphongse family control widely reported but not verified in retrieved sources (inferred)"

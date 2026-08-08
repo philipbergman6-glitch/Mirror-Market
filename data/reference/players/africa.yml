@@ -19,6 +19,7 @@
 - name: RussellStone Protein
   aka: [RussellStone Group, RSP]
   scope: africa
+  country: ZA
   side: seller
   website: "https://russellstone.co.za"
   ownership: >-
@@ -70,6 +71,7 @@
 - name: VKB Group (Free State Oil)
   aka: [VKB Agriculture, Free State Oil Villiers]
   scope: africa
+  country: ZA
   side: seller
   website: "https://www.vkb.co.za"
   ownership: >-
@@ -109,6 +111,7 @@
 - name: Nedan Oils & Proteins
   aka: [Nedan, Nedan Oil Mills, ex-Philafrica Foods division]
   scope: africa
+  country: ZA
   tier: 1
   side: seller
   website: "https://nedanoils.co.za"
@@ -154,6 +157,7 @@
 - name: Wilmar SA (Wilmar Continental)
   aka: [Wilmar Continental Edible Oils & Fats, Wilmar Processing SA]
   scope: africa
+  country: ZA
   side: both
   website: "https://www.wilmar-international.com"
   ownership: >-
@@ -197,6 +201,7 @@
 - name: Southern Oil (SOILL)
   aka: [Southern Oil (Pty) Ltd, ex-Vida Oils]
   scope: africa
+  country: ZA
   side: seller
   website: "https://soill.co.za"
   ownership: >-
@@ -233,6 +238,7 @@
 - name: Olam Agri Nigeria
   aka: [Olam Agri, Crown Flour Mill legacy, distinct from ofi]
   scope: africa
+  country: NG
   tier: 1
   side: buyer
   website: "https://www.olamagri.com"
@@ -281,6 +287,7 @@
 - name: Grand Cereals Limited
   aka: [GCL, Grand Cereals and Oil Mills]
   scope: africa
+  country: NG
   side: buyer
   website: "https://www.grandcereals.com"
   ownership: >-
@@ -317,6 +324,7 @@
 - name: WACOT / West African Soy Industries (TGI Group)
   aka: [WASIL, Golden Terra, Tropical General Investments]
   scope: africa
+  country: NG
   side: both
   website: "https://wacot.ng"
   ownership: >-
@@ -362,6 +370,7 @@
 - name: AFEX Commodities Exchange
   aka: [AFEX Nigeria, Africa Exchange Holdings]
   scope: africa
+  country: NG
   side: seller
   website: "https://www.afex.africa"
   ownership: >-
@@ -410,6 +419,7 @@
 - name: Premier Feed Mills (Flour Mills of Nigeria)
   aka: [TOPFEEDS, FMN feed division]
   scope: africa
+  country: NG
   side: buyer
   website: "https://premierfeedsltd.com"
   ownership: >-

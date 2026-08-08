@@ -19,6 +19,7 @@
 - name: "Viterra (Bunge Canada)"
   aka: ["Viterra", "Bunge", "ex-Glencore Agriculture"]
   scope: "secondary_origins"
+  country: CA
   side: "seller"
   website: "https://www.viterra.ca"
   ownership: "Subsidiary of Bunge Global SA (NYSE: BG) since the US$8.2bn Bunge-Viterra merger, approved by Canada 2025-01-14 with six-elevator divestiture + $520M investment conditions"
@@ -46,6 +47,7 @@
 - name: "Richardson International"
   aka: ["Richardson Pioneer"]
   scope: "secondary_origins"
+  country: CA
   side: "seller"
   website: "https://www.richardson.ca"
   ownership: "Private — controlled by Winnipeg's Richardson family (James Richardson & Sons)"
@@ -65,6 +67,7 @@
 - name: "Parrish & Heimbecker"
   aka: ["P&H"]
   scope: "secondary_origins"
+  country: CA
   side: "seller"
   website: "https://www.parrishandheimbecker.com"
   ownership: "Private Canadian family-owned company (est. 1909)"
@@ -84,6 +87,7 @@
 - name: "G3 Canada"
   aka: ["G3 Global Holdings", "ex-Canadian Wheat Board assets"]
   scope: "secondary_origins"
+  country: CA
   side: "seller"
   website: "https://www.g3.ca"
   ownership: "G3 Global Holdings: 75% SALIC (Saudi Agricultural and Livestock Investment Company), 25% Bunge — post-merger, Canada imposed binding controls so Bunge cannot influence G3 pricing/investment"
@@ -103,6 +107,7 @@
 - name: "Sevita International"
   aka: ["Sevita"]
   scope: "secondary_origins"
+  country: CA
   side: "seller"
   website: "https://sevita.com"
   ownership: "Private Canadian company (seed development + IP export integrated)"
@@ -137,6 +142,7 @@
 - name: "Kernel Holding"
   aka: ["Kernel", "WSE: KER (delisted 2024)"]
   scope: "secondary_origins"
+  country: UA
   tier: 1
   side: "seller"
   website: "https://www.kernel.ua"
@@ -163,6 +169,7 @@
 - name: "Nibulon"
   aka: ["NIBULON"]
   scope: "secondary_origins"
+  country: UA
   side: "seller"
   website: "https://www.nibulon.com"
   ownership: "Private Ukrainian company (Vadaturskyi family; founder Oleksiy Vadaturskyi killed in a 2022 missile strike on Mykolaiv)"
@@ -190,6 +197,7 @@
 - name: "ADM Trading Ukraine"
   aka: ["ADM Ukraine"]
   scope: "secondary_origins"
+  country: UA
   side: "seller"
   website: "https://www.adm.com"
   ownership: "Subsidiary of Archer Daniels Midland (NYSE: ADM)"
@@ -211,6 +219,7 @@
 - name: "Sodrugestvo Group"
   aka: ["Содружество", "Sodruzhestvo"]
   scope: "secondary_origins"
+  country: RU
   tier: 1
   side: "seller"
   website: "https://www.sodrugestvo.com"
@@ -245,6 +254,7 @@
 - name: "EFKO Group"
   aka: ["ЭФКО"]
   scope: "secondary_origins"
+  country: RU
   side: "seller"
   website: "https://www.efko.ru"
   ownership: "Private Russian agro-industrial group"
@@ -272,6 +282,7 @@
 - name: "Blago Group"
   aka: ["Blago Company", "ГК Благо"]
   scope: "secondary_origins"
+  country: RU
   side: "seller"
   website: "https://blagogroup.ru"
   ownership: "Private Russian vegetable-oils group"
@@ -293,6 +304,7 @@
 - name: "Cargill Uruguay"
   aka: ["Cargill", "ex-Crop Uruguay JV origins"]
   scope: "secondary_origins"
+  country: UY
   side: "seller"
   website: "https://www.cargill.com"
   ownership: "Subsidiary of Cargill Inc. (private, US)"
@@ -320,6 +332,7 @@
 - name: "Louis Dreyfus Company Uruguay"
   aka: ["LDC"]
   scope: "secondary_origins"
+  country: UY
   side: "seller"
   website: "https://www.ldc.com"
   ownership: "Subsidiary of Louis Dreyfus Company (Louis-Dreyfus family holding + ADQ minority)"
@@ -341,6 +354,7 @@
 - name: "ADM Uruguay"
   aka: ["Archer Daniels Midland Uruguay"]
   scope: "secondary_origins"
+  country: UY
   side: "seller"
   website: "https://www.adm.com"
   ownership: "Subsidiary of Archer Daniels Midland (NYSE: ADM)"
@@ -363,6 +377,7 @@
 - name: "Barraca Erro"
   aka: []
   scope: "secondary_origins"
+  country: UY
   side: "seller"
   website: "https://www.barracaerro.com.uy"
   ownership: "Private Uruguayan family company"
@@ -384,6 +399,7 @@
 - name: "Gravetal Bolivia"
   aka: []
   scope: "secondary_origins"
+  country: BO
   side: "seller"
   website: "https://www.gravetal.com.bo"
   ownership: "Private (Bolivian S.A.; historically Colombian/Venezuelan capital — current cap table not verified free)"
@@ -410,6 +426,7 @@
 - name: "Industrias de Aceite S.A. (Fino)"
   aka: ["IASA", "Fino", "part of Alicorp group"]
   scope: "secondary_origins"
+  country: BO
   side: "seller"
   website: "https://www.fino.com.bo"
   ownership: "Subsidiary of Alicorp (Peru, BVL-listed) — acquisition of Fino (and ADM-SAO's Bolivian assets) is prior public record, not re-verified free in 2026"
@@ -434,6 +451,7 @@
 - name: "Industrias Oleaginosas S.A. (IOL)"
   aka: ["IOL", "Rico (brand)"]
   scope: "secondary_origins"
+  country: BO
   side: "seller"
   website: ""
   ownership: "Private Bolivian S.A."

@@ -10,6 +10,7 @@ from scripts.validate_players import PLAYERS_DIR, validate_players
 VALID_ENTRY = {
     "name": "Test Trading Co",
     "scope": "global",
+    "country": "GLOBAL",
     "side": "seller",
     "roles": ["exporter"],
     "products": ["beans", "meal"],
@@ -57,7 +58,18 @@ def test_valid_entry_passes(tmp_path):
 
 def test_minimal_entry_passes(tmp_path):
     # destinations_structured / tier / contacts / activity are all optional
-    assert errors_for(tmp_path, {"name": "Minimal Co"}) == []
+    assert errors_for(tmp_path, {"name": "Minimal Co", "country": "BR"}) == []
+
+
+def test_missing_country_fails(tmp_path):
+    # country drives players.html grouping + origin filter (#123) — required
+    assert errors_for(tmp_path, {"name": "No Country Co"})
+
+
+@pytest.mark.parametrize("country", ["XX", "br", "Brazil", "EU", "MENA", 1, None])
+def test_bad_country_fails(tmp_path, country):
+    # region enums other than GLOBAL are destination vocabulary, not a home country
+    assert errors_for(tmp_path, {**VALID_ENTRY, "country": country})
 
 
 @pytest.mark.parametrize(
@@ -147,6 +159,7 @@ def test_unquoted_yaml_dates_accepted(tmp_path):
     # YAML parses bare 2026-08-08 to datetime.date — must not be rejected
     raw = """
 - name: Bare Date Co
+  country: BR
   activity:
     - date: 2026-07-02
       category: trade
@@ -174,8 +187,12 @@ def test_duplicate_name_same_scope_fails(tmp_path):
 
 def test_cross_listing_under_different_scopes_passes(tmp_path):
     # e.g. CHS Inc.: global house view in global.yml + US assets in us.yml
-    (tmp_path / "a.yml").write_text(yaml.safe_dump([{"name": "Dup Co", "scope": "global"}]), encoding="utf-8")
-    (tmp_path / "b.yml").write_text(yaml.safe_dump([{"name": "Dup Co", "scope": "us"}]), encoding="utf-8")
+    (tmp_path / "a.yml").write_text(
+        yaml.safe_dump([{"name": "Dup Co", "scope": "global", "country": "GLOBAL"}]), encoding="utf-8"
+    )
+    (tmp_path / "b.yml").write_text(
+        yaml.safe_dump([{"name": "Dup Co", "scope": "us", "country": "US"}]), encoding="utf-8"
+    )
     assert validate_players(tmp_path) == []
 
 

@@ -74,6 +74,12 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_agrural": FetchResult.empty(),
         "fetch_noticias_agricolas": FetchResult.empty(),
         "fetch_gulf_bids": FetchResult.empty(),
+        # #127: these three were added to main.py after the fixture was written
+        # and were NOT stubbed — the "no network" docstring lied, and the live
+        # data.gov.in call (mandi) can hang the whole suite for 25+ minutes.
+        "fetch_conab_farmgate": FetchResult.empty(),
+        "fetch_mandi_prices": FetchResult.empty(),
+        "fetch_magyp_fob": FetchResult.empty(),
     }
     for name, retval in patches.items():
         monkeypatch.setattr(main, name, mock.Mock(return_value=retval))

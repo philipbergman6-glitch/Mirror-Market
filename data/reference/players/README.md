@@ -32,6 +32,11 @@ Each file is a YAML list of player entries:
   scope: ""           # file the entry lives in: global | brazil | us | argentina |
                       # paraguay | india | china | asia_importers | europe | mena |
                       # secondary_origins | africa | latam_importers
+  country: ""         # REQUIRED (#123): home country of the operations this entry
+                      # describes — ISO-3166 alpha-2 uppercase, or GLOBAL for the
+                      # international trading houses in global.yml. Drives the
+                      # players.html country grouping and origin filter. Quote "NO"
+                      # (Norway) — bare NO is a YAML boolean.
   side: ""            # seller | buyer | both — international soy-complex trade role
   website: ""         # optional: corporate site (public contact surface for #111)
   ownership: ""       # public/private/co-op/state + parent(s), JV partners with stakes if known
