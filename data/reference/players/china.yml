@@ -20,6 +20,7 @@
 - name: "COFCO Group (domestic oils & oilseeds arm)"
   aka: ["中粮集团", "COFCO Oils & Oilseeds", "COFCO Fortune", "ex-Chinatex (absorbed SOE)"]
   scope: "china"
+  tier: 1
   side: "buyer"
   website: "https://www.cofco.com"
   ownership: "State-owned (central SASAC). Distinct from COFCO International (Geneva trading arm, covered in global.yml); this entry is the domestic import/crush/refining business."
@@ -27,6 +28,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "China's #1 crusher: ~30 crushing facilities nationwide, ~20% of national crush capacity (2021 baseline; observed in Dim Sums/industry analysis). Absorbed SOE crusher Chinatex in the post-2008 state consolidation campaign."
   destinations: "Domestic China (meal to feed sector, oil to retail/food service)"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output — meal to feed sector, oil to retail/food service"}
   size_evidence: "~30 crushing plants and ~20% capacity share per Dim Sums (USDA-affiliated analyst blog) citing end-2021 industry data; top crusher status reaffirmed in July 2025 analysis (observed)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -45,6 +48,7 @@
 - name: "Sinograin (China Grain Reserves Group)"
   aka: ["中储粮", "China Grain Reserves Corporation", "CSGC"]
   scope: "china"
+  tier: 1
   side: "buyer"
   website: "https://www.sinograin.com.cn"
   ownership: "State-owned (central SASAC) — manager of China's national strategic grain and oilseed reserves."
@@ -52,6 +56,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Vast subsidized warehouse and tank network holding national reserves, plus ~9% of national crush capacity (2021 baseline). Rotates reserve stocks via periodic auctions."
   destinations: "Domestic China (state reserves; auctioned beans flow to domestic crushers)"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "state reserves; auctioned beans flow to domestic crushers; crush secondary to reserve mandate"}
   size_evidence: "~9% crush capacity share (Dim Sums, end-2021 data). 2025-26 reserve activity observed: ~2 MMT of US beans booked in one December 2025 week; 10 more US cargoes (~600k t) in Jan 2026; Jan 2026 auction cleared all 1.1 MMT offered at avg 3,811 yuan/t; 504k t offered 2026-07-31 (largest since January)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -70,6 +76,7 @@
 - name: "Yihai Kerry Arawana Holdings"
   aka: ["益海嘉里", "YKA", "SZSE:300999", "Arawana / 金龙鱼 brand", "Wilmar China"]
   scope: "china"
+  tier: 1
   side: "buyer"
   website: "https://www.yihaikerry.net"
   ownership: "Foreign-controlled: subsidiary of Singapore-listed Wilmar International (listed on Shenzhen ChiNext as 300999 since 2020; Wilmar retains control — one profile states 99.99% pre-IPO; post-IPO stake ~90%, inferred)."
@@ -77,6 +84,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "~62 production bases across China spanning oilseed crushing, edible-oil refining, specialty fats and feed ingredients; largest foreign-invested crusher (~11-16% of national capacity per year/source). First crush plant: Shenzhen Nantian (1994)."
   destinations: "Domestic China (Arawana/金龙鱼 is the leading retail edible-oil brand)"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output; Arawana/金龙鱼 leading retail edible-oil brand"}
   size_evidence: "Listed-company filings exist (SZSE 300999): FY2023 revenue CNY 251.5bn. 62 production bases per company profile. Capacity share 11% (2021, Dim Sums) to 16% (2020 figure) — range, not a single verified number."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -95,6 +104,7 @@
 - name: "Jiusan Oils & Grains Industries Group"
   aka: ["九三粮油", "Jiusan Group", "Beidahuang Jiusan"]
   scope: "china"
+  tier: 1
   side: "buyer"
   website: "https://en.93.com.cn"
   ownership: "State-owned: wholly-owned subsidiary of Beidahuang Group (Heilongjiang provincial state farm system)."
@@ -102,6 +112,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "HQ Harbin; 13 production subsidiaries across Heilongjiang (Jiusan, Bei'an, Baoquanling), Jilin Changchun, Liaoning Tieling, Dalian, Tianjin, Nanjing, Guangdong Nansha, Guangxi; trading companies in Hong Kong and Chicago. Crushes both domestic non-GMO and imported beans."
   destinations: "Domestic China"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output — edible oil and protein feed"}
   size_evidence: "Company-stated: 13.5 MMT/yr soybean processing capacity, 2.47 MMT edible oil, 10.8 MMT protein feed, CNY 45bn sales, >USD 4bn import/export trade (en.93.com.cn — self-reported, undated). Analyst-observed: ~9% of national crush capacity (2021, Dim Sums)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -117,6 +129,7 @@
 - name: "Sanhe Hopefull Grain & Oil Group"
   aka: ["汇福粮油", "Hopefull"]
   scope: "china"
+  tier: 1
   side: "buyer"
   website: "http://www.hope-full.com.cn"
   ownership: "Private (founded 1999, Sanhe, Hebei; legal representative Shi Kerong; registered capital CNY 830m). One of China's largest private agri companies."
@@ -124,6 +137,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Three processing bases: Yanjiao (Hebei), Taizhou (Jiangsu), Panjin (Liaoning); total processing capacity ~10 MMT/yr."
   destinations: "Domestic China"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output"}
   size_evidence: "~10 MMT/yr total processing capacity across three bases; ~9 MMT beans crushed in a single year (Baidu encyclopedia + company site — self-/secondary-reported). Reuters-sourced reporting also cites Hopefull among top crushers claiming ~10 MMT annual capacity."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -145,6 +160,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Crushing lines since 2009 in Boxing (Shandong), Qingdao Port, Beihai (Guangxi) and Zhanjiang (Guangdong); new 6,000 t/day line at Dongjiakou Port (Qingdao) — claimed largest single crush line in China."
   destinations: "Domestic China"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output"}
   size_evidence: "~10 MMT/yr grain & oil processing capacity after the Dongjiakou line, claimed rank #3 in China (equipment-supplier Myande case study + Reuters-sourced reporting citing Bohi among top crushers with ~10 MMT claimed capacity)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -166,6 +183,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "One of China's largest municipal state grain corporations; part of the 2008 'going out' cohort (with Beidahuang, Chinatex, COFCO) investing in overseas soybean farms, processing and logistics — notably a soybean growing/processing project in Bahia, Brazil."
   destinations: "Domestic China (inland southwest market)"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output — inland southwest market (capacity unverified, inferred)"}
   size_evidence: "No free, current disclosed crush capacity found. Named by USDA ERS as one of the SOEs whose expansion propelled China's import growth; Bahia project documented by EJAtlas."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -187,6 +206,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Boxing County, Shandong — ~3 MMT/yr soybean processing plus 600k t corn; licensed for grain import/export; 2019 Shandong Province Import Top-100 enterprise."
   destinations: "Domestic China (Shandong feed/food belt)"
+  destinations_structured:
+    - {code: CN, products: [meal, oil], note: "domestic crush output — Shandong feed/food belt"}
   size_evidence: "~3 MMT/yr soybean processing (Baidu encyclopedia — secondary source; no filing free)."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -225,6 +246,8 @@
   products: ["beans", "meal"]
   footprint: "Bulk agri supply-chain operator (not a crusher): procures import cargoes and provides financing/logistics/distribution to domestic processors. Agri arm self-reports >22 MMT total 2025 business volume, ~CNY 50bn revenue."
   destinations: "Domestic China (feed mills and crushers as customers)"
+  destinations_structured:
+    - {code: CN, products: [beans, meal], note: "supply-chain intermediary — distributes import cargoes to domestic feed mills and crushers"}
   size_evidence: "2025: >$5.2bn in supply contracts signed with seven global agribusinesses incl. Cargill and Louis Dreyfus, spanning soybeans, corn and cotton (incl. a $2.5bn LDC deal); >22 MMT agri business volume (self-reported)."
   confidence: "observed"
   as_of: "2026-08-08"

@@ -41,6 +41,9 @@
     ~36% of Bunge's global processing capacity is in South America. Ex-Gavilon/Viterra
     interior origination network now folded in.
   destinations: "China-dominant (Brazil beans overall: China 57.95% of soy-complex FOB value Jan–Jun 2026, ABIOVE); EU for meal/non-GMO"
+  destinations_structured:
+    - {code: CN, products: [beans], note: "dominant; China 57.95% of Brazil soy-complex FOB value Jan–Jun 2026 (ABIOVE, market-wide figure)"}
+    - {code: EU, products: [meal], note: "meal/non-GMO"}
   size_evidence: >-
     Bunge press release: merger 'will increase its already leading position as a soybean
     and corn exporter in South America, as Viterra ranks among the largest exporters of
@@ -82,6 +85,9 @@
     barge terminal doubling Madeira capacity 3->6 Mt/yr (2025); Barreiras (BA) crush
     bought out 2025.
   destinations: "China-dominant; global meal/oil markets"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "dominant; product split unstated"}
+    - {code: GLOBAL, products: [meal, oil]}
   size_evidence: >-
     ~51 Mt originated/processed/traded in Brazil 2023, 45 Mt 2024, ~49+ Mt expected 2025
     (Forbes Agro100 via riotimesonline); Trase-based reporting: Cargill/Bunge/ADM = 35.6%
@@ -120,6 +126,10 @@
     in all of Brazil's major agricultural ports per same release. ADM meal loaded in the
     record 90kt Paranaguá corridor shipment (Paraná govt, 2024-era).
   destinations: "China (beans); EU and global (meal); unverified split"
+  destinations_structured:
+    - {code: CN, products: [beans], note: "unverified split"}
+    - {code: EU, products: [meal], note: "unverified split"}
+    - {code: GLOBAL, products: [meal], note: "unverified split"}
   size_evidence: >-
     ADM release (2012): 'Brazil's largest soybean meal exporter, second largest exporter
     of soybeans'. Trase 2022 and Mighty Earth list ADM among Brazil's largest soy
@@ -150,6 +160,10 @@
     terminal auction July 2025 in partnership with ALZ (>R$1bn project); Pederneiras SP
     intermodal terminal (Aug 2025) feeding TEG/TES.
   destinations: "China, EU, Asia; unverified split"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "unverified split"}
+    - {code: EU, products: [beans, meal, oil], note: "unverified split"}
+    - {code: ASIA, products: [beans, meal, oil], note: "unverified split"}
   size_evidence: >-
     Trase 2016: LDC among six largest traders = 57% of Brazil soy exports; Mighty Earth
     lists LDC among Brazil's 7 largest soy exporters by volume. No company-disclosed
@@ -181,6 +195,8 @@
     crush expansion >$400M, 4,500 -> ~10,000 t/day, rail-linked to Santos; 20 Mato Grosso
     silos, >7,000 farmer suppliers; ~65% of grains/oilseeds assets in South America.
   destinations: "Predominantly China (parent mandate; inferred)"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "predominant; inferred from parent mandate, not a disclosed split"}
   size_evidence: >-
     Company disclosure of STS11 capacity build-out and Rondonópolis crush scale; Trase
     2022 ranks COFCO among top-3 deforestation-exposed (i.e. largest) Brazil soy
@@ -202,6 +218,7 @@
 - name: "Amaggi Exportação e Importação Ltda."
   aka: ["Amaggi", "Grupo André Maggi"]
   scope: "brazil"
+  # tier flag lives on the cross-listed global.yml entry (README: flag global only)
   ownership: "Private, 100% Brazilian — André Maggi family"
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -212,6 +229,11 @@
     terminals (5 maritime, 3 river) incl. Unitapajós JV with Bunge (Miritituba ETC 5 Mt/yr
     + Barcarena/Itupanema), TGG Guarujá, TEGRAM Itaqui via ALZ Grãos.
   destinations: "China, EU, Asia; Norway crush feed (non-GMO); unverified split"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "unverified split"}
+    - {code: EU, products: [beans, meal, oil], note: "unverified split"}
+    - {code: ASIA, products: [beans, meal, oil], note: "unverified split"}
+    - {code: "NO", products: [beans], note: "crush feed (non-GMO)"}
   size_evidence: >-
     Revenue R$44.87bn; ~19–20 Mt grains/fibers traded globally (Forbes Agro100/Amaggi
     pages); ranked among Brazil's five largest grain exporters (O Livre headline, page
@@ -245,6 +267,8 @@
     2025, phase-3 expansion 15 -> 23.5 Mt/yr approved); won Paranaguá PAR25 auction with
     LDC (July 2025, >R$1bn).
   destinations: "unverified (Asia-oriented via Zen-Noh inferred)"
+  destinations_structured:
+    - {code: ASIA, products: [beans, meal], note: "inferred via Zen-Noh; unverified"}
   size_evidence: >-
     Mighty Earth counts ALZ among the seven largest soy exporters by volume in Brazil
     (2025 scorecard, lowest deforestation score 17); TEGRAM 2025 throughput 13.5 Mt
@@ -266,6 +290,7 @@
 - name: "Coamo Agroindustrial Cooperativa"
   aka: ["Coamo"]
   scope: "brazil"
+  tier: 1
   ownership: "Co-op (farmer-owned, Campo Mourão PR) — NOT an ABIOVE member"
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -296,6 +321,7 @@
 - name: "Cotriguaçu Cooperativa Central"
   aka: ["Cotriguaçu (C.Vale + Lar + Copacol + Coopavel)"]
   scope: "brazil"
+  tier: 1
   ownership: "Central co-op jointly owned by C.Vale, Lar, Copacol and Coopavel (west-Paraná co-ops) — NOT ABIOVE members"
   roles: [exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -324,6 +350,7 @@
 - name: "3tentos Agroindustrial S.A."
   aka: ["3 Tentos", "TTEN3 (B3)"]
   scope: "brazil"
+  tier: 1
   ownership: "Public (B3: TTEN3; Dumoncel family control)"
   roles: [crusher, exporter, originator]
   products: [meal, oil, beans]
@@ -331,6 +358,10 @@
     RS-based crusher expanding into MT; ~80% of its soymeal exported; testing Arco Norte
     via Miritituba/Santarém; R$400M Arco Norte logistics JV with Caramuru.
   destinations: "SE Asia, Europe, North Africa (meal)"
+  destinations_structured:
+    - {code: SE-ASIA, products: [meal]}
+    - {code: EU, products: [meal]}
+    - {code: MENA, products: [meal], note: "North Africa"}
   size_evidence: >-
     #5 Brazilian soymeal exporter by May 2025 (452 kt YTD, ahead of COFCO, behind the
     ABCDs) per theagribiz.
@@ -345,6 +376,7 @@
 - name: "Caramuru Alimentos S.A."
   aka: ["Caramuru"]
   scope: "brazil"
+  tier: 1
   ownership: "Private, Brazilian family-owned — NOT an ABIOVE member (ANEC-affiliated per Soy Moratorium signatory list)"
   roles: [crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -353,6 +385,9 @@
     Santos Terminal XXXIX (JV with Bunge/Zen-Noh side, R$600M); Arco Norte logistics JV
     with 3tentos (R$400M).
   destinations: "unverified (non-GMO meal/oil to EU/Asia historically)"
+  destinations_structured:
+    - {code: EU, products: [meal, oil], note: "non-GMO, historical; unverified"}
+    - {code: ASIA, products: [meal, oil], note: "non-GMO, historical; unverified"}
   size_evidence: >-
     Terminal XXXIX co-ownership (world-grain); ANEC-affiliation on the Soy Moratorium
     signatory list; historically cited top-6 exporter alongside Amaggi — current rank
@@ -382,6 +417,9 @@
     (+BRL700M investment); exports flow via sister companies Agrex Inc. (US), Agrex Asia
     (Singapore), Agrex Beijing.
   destinations: "China, Asia (via Mitsubishi network)"
+  destinations_structured:
+    - {code: CN, products: [beans, meal], note: "via Mitsubishi network"}
+    - {code: ASIA, products: [beans, meal], note: "via Mitsubishi network"}
   size_evidence: "Mitsubishi project page describes the Brazil procurement hub role; no tonnage disclosed free."
   confidence: "observed"
   as_of: "2026-08-07"
@@ -402,6 +440,8 @@
   products: [beans]
   footprint: "Origination + export terminal access at Itaqui (São Luís) via TCN ownership stake; exports soybeans/corn/wheat globally per CHS global-presence page."
   destinations: "unverified"
+  destinations_structured:
+    - {code: GLOBAL, products: [beans], note: "'exports soybeans globally' per CHS global-presence page; destinations otherwise unverified"}
   size_evidence: "CHS corporate disclosure of South America export role; no Brazil tonnage disclosed free."
   confidence: "observed"
   as_of: "2026-08-07"
@@ -419,6 +459,8 @@
   products: [beans]
   footprint: "Operates TCN, one of the four TEGRAM terminals at Itaqui (consortium 2025: 13.5 Mt grains, 11.7 Mt soy); MATOPIBA origination network."
   destinations: "Asia (Toyota Tsusho network; inferred)"
+  destinations_structured:
+    - {code: ASIA, products: [beans], note: "inferred via Toyota Tsusho network"}
   size_evidence: "Trase insight page: NovaAgri was 'seventh for soy exports' in 2022; TEGRAM 2025 consortium throughput."
   confidence: "inferred"
   as_of: "2026-08-07"
@@ -439,6 +481,10 @@
   products: [meal, oil]
   footprint: "Araguari MG plant; largest global soy protein concentrate (SPC) producer/exporter; non-GMO focused."
   destinations: "Global SPC markets (aquafeed: Europe, Asia); unverified split"
+  destinations_structured:
+    - {code: GLOBAL, products: [meal], note: "SPC; unverified split"}
+    - {code: EU, products: [meal], note: "aquafeed SPC; unverified split"}
+    - {code: ASIA, products: [meal], note: "aquafeed SPC; unverified split"}
   size_evidence: "World-grain/KED Global coverage of the cancelled Bunge deal describes it as the world's largest SPC exporter."
   confidence: "observed"
   as_of: "2026-08-07"
@@ -476,6 +522,8 @@
   products: [beans]
   footprint: "MT origination (~2.5 Mt/yr soy+corn handled, 700 kt storage at acquisition); feeds Chinese-linked export flows."
   destinations: "China (stated aim of the 2016 acquisition; current flows unverified)"
+  destinations_structured:
+    - {code: CN, products: [beans], note: "stated aim of 2016 acquisition; current flows unverified"}
   size_evidence: "Acquisition-era disclosures (2016): ~2.5 Mt/yr handled. No recent (2025–26) direct-export volumes surfaced."
   confidence: "inferred"
   as_of: "2026-08-07"

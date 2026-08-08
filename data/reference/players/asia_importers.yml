@@ -9,6 +9,7 @@
 - name: "Marubeni Corporation"
   aka: ["8002.T", "Columbia Grain International (CGI)", "Marubeni Grãos Brasil"]
   scope: "asia_importers"
+  tier: 1
   side: "both"
   website: "https://www.marubeni.com"
   ownership: "Public sogo shosha (TSE 8002); Columbia Grain International remains a wholly owned Marubeni subsidiary"
@@ -20,6 +21,9 @@
     Gavilon northern elevators + Kalama Holdco stake when the Gavilon grain business went
     to Viterra (closed 2022-10). Marubeni Grãos Brasil originates soy/corn for Asia.
   destinations: "Japan (feed/crush) plus third-country Asian sales from US/Brazil origination"
+  destinations_structured:
+    - {code: JP, products: [beans, meal], note: "domestic feed/crush"}
+    - {code: ASIA, products: [beans, meal], note: "third-country sales from US/Brazil origination"}
   size_evidence: >-
     Marubeni's own grain-business page claims 40-50% of Japan wheat imports and ~60% of
     corn (observed); no soybean-specific share published (gap). Gavilon grain sale to
@@ -49,6 +53,7 @@
 - name: "Mitsui & Co. (United Grain Corporation)"
   aka: ["8031.T", "UGC"]
   scope: "asia_importers"
+  tier: 1
   side: "both"
   website: "https://unitedgrain.com"
   ownership: "United Grain Corp wholly owned by Mitsui & Co. (public sogo shosha, TSE 8031) since 1969"
@@ -59,6 +64,10 @@
     up to ~6 MMT/yr throughput, ~120 vessels/yr); 18 country elevators in OR/MT/ND/SD.
     Historically wheat; expanded to corn + soybeans after terminal upgrade.
   destinations: "Japan and wider Asia; active seller into Korean feed tenders"
+  destinations_structured:
+    - {code: JP, products: [beans, meal]}
+    - {code: ASIA, products: [beans, meal], note: "wider Asia"}
+    - {code: KR, products: [meal], note: "active seller into Korean feed tenders; cited 2026 NOFI deals are corn"}
   size_evidence: >-
     Terminal capacity/throughput from unitedgrain.com and Mitsui USA pages (observed). NOFI
     bought ~67k t corn from Mitsui Apr 2026 at $263.58/t c&f, and a 68k t consignment via
@@ -93,6 +102,9 @@
     ND + Indiana capacity combined "matches the total soybean oil production of Japan",
     positioned to supply Japan/Asia plus SAF feedstock.
   destinations: "Japan and Asia"
+  destinations_structured:
+    - {code: JP, products: [beans, meal, oil]}
+    - {code: ASIA, products: [beans, meal, oil]}
   size_evidence: >-
     ITOCHU project page on CGB crush capacity (observed); no ITOCHU soybean import volume
     breakdown for Japan published (gap).
@@ -125,6 +137,9 @@
     stakes at Kalama/Portland alongside ADM/CGI/Viterra. Agrex do Brasil origination with
     announced +BRL700M investment plan.
   destinations: "Japan (notably food-grade IP/non-GMO beans for tofu/natto) and Asia"
+  destinations_structured:
+    - {code: JP, products: [beans, meal], note: "food-grade IP/non-GMO beans for tofu/natto"}
+    - {code: ASIA, products: [beans, meal]}
   size_evidence: >-
     Agrex self-describes as a leading IP non-GMO soybean supplier (observed, company site);
     USDA FAS reports the US ships ~140k MT natto-type beans to Japan and food beans must be
@@ -143,6 +158,7 @@
 - name: "Zen-Noh (JA Zen-Noh)"
   aka: ["National Federation of Agricultural Cooperative Associations", "Zen-Noh Grain Corporation (ZGC)", "Zen-Noh Global", "CGB Enterprises"]
   scope: "asia_importers"
+  tier: 1
   side: "both"
   website: "https://www.zennohglobal.com"
   ownership: "Japanese agricultural cooperative; ZGC (Convent, LA) wholly owned; CGB Enterprises JV with ITOCHU (exact split unconfirmed); reorganized under Zen-Noh Global (Geneva HQ) May 2025"
@@ -154,6 +170,9 @@
     elevators acquired 2022. Imports feed ingredients for Zen-Noh's Japanese compound-feed
     business supplying member farmers.
   destinations: "Japan (captive co-op feed chain) plus third-country export sales"
+  destinations_structured:
+    - {code: JP, products: [beans, meal], note: "captive co-op compound-feed chain"}
+    - {code: GLOBAL, products: [beans, meal], note: "third-country export sales; regions unnamed"}
   size_evidence: >-
     ZGC ~18 MMT/yr grain handled — figure appeared in aggregator text, treat as
     approximate until confirmed on a primary page (observed-in-snippet). Bunge elevator
@@ -185,6 +204,8 @@
   products: [beans, oil]
   footprint: "Japan food-use soy — soy protein ingredients, soymilk, oils & fats; Responsible Soy sourcing policy since 2021"
   destinations: "Japan (food manufacturing)"
+  destinations_structured:
+    - {code: JP, products: [beans, oil], note: "food manufacturing"}
   size_evidence: "None free — bean import tonnage not disclosed (gap)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -202,12 +223,15 @@
 - name: "NOFI (Nonghyup Feed Inc.)"
   aka: ["NH Feed", "Nonghyup Feed"]
   scope: "asia_importers"
+  tier: 1
   side: "buyer"
   ownership: "Cooperative — part of the Nonghyup (NACF) agribusiness federation"
   roles: [feed-miller, tender-buyer, importer]
   products: [meal]
   footprint: "South Korea feed mills (locations not verified from primary source — gap); Asia's most active feed-grain/soymeal tender buyer"
   destinations: "South Korea (domestic feed)"
+  destinations_structured:
+    - {code: KR, products: [meal], note: "domestic feed"}
   size_evidence: >-
     Recurring 40-60k t soymeal consignments documented in Reuters-syndicated tender
     reports through 2025-26 (observed); no primary annual-volume disclosure found (gap).
@@ -239,6 +263,8 @@
   products: [meal]
   footprint: "South Korea; tender-based soymeal purchaser alongside NOFI"
   destinations: "South Korea (domestic feed)"
+  destinations_structured:
+    - {code: KR, products: [meal], note: "domestic feed"}
   size_evidence: >-
     Bought ~120k t soymeal in a Jun 30 2025 auction, Cofco believed seller, US/S.Am/China
     optional-origin; tendered up to 60k t Aug 2025; also private deals without tender
@@ -272,6 +298,8 @@
     US-origin share of crushing beans ~43%. Retains CJ Selecta (Brazil crusher, world's
     largest soy protein concentrate producer) after the Bunge sale was terminated Apr 2025.
   destinations: "South Korea (domestic crush/food)"
+  destinations_structured:
+    - {code: KR, products: [beans, meal, oil], note: "domestic crush/food"}
   size_evidence: "GAIN KS2025-0009 crush structure (observed); CJ Selecta ~KRW 714bn revenue per KED Global (observed)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -302,6 +330,8 @@
   products: [beans]
   footprint: "Controls the bulk of Korea's non-GMO food-grade soybean imports under its autonomous WTO TRQ, distributing to end-users with a mark-up that supports domestic production"
   destinations: "South Korea (food-grade soy — tofu etc.)"
+  destinations_structured:
+    - {code: KR, products: [beans], note: "food-grade non-GMO under aT TRQ, distributed to end-users"}
   size_evidence: >-
     Example tender — ~45k t non-GMO food-quality soybeans, worldwide origin, 20k t
     containers + 25k t bulk, offer deadline Mar 12 2026 (observed via ADM Investor
@@ -333,6 +363,8 @@
     capacity 9,000 MT/day / ~3 MMT/yr at ~65% utilization per USDA GAIN). Toll-crushes for
     its major shareholders; supplies meal to Great Wall's feed operations.
   destinations: "Taiwan (domestic meal/oil)"
+  destinations_structured:
+    - {code: TW, products: [meal, oil], note: "domestic; toll-crush for shareholders, meal to Great Wall feed operations"}
   size_evidence: "GAIN TW2024-0016 crusher structure (observed); ~1.5 MMT/yr capacity per stockanalysis.com profile (observed)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -366,6 +398,8 @@
   products: [beans, meal, oil]
   footprint: "Taichung Port crush plant — Taiwan's other large crusher; supplies crude oil and meal back to its three shareholders for refining/packing"
   destinations: "Taiwan (domestic)"
+  destinations_structured:
+    - {code: TW, products: [meal, oil], note: "crude oil + meal back to its three shareholder companies"}
   size_evidence: "Named as one of the two large plants in USDA GAIN TW2024-0016 (observed); standalone capacity figure not found (gap)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -392,6 +426,8 @@
   products: [beans]
   footprint: "Taiwan; ran periodic tenders for ~46-60k t US-origin soybean cargoes, premium quoted in US cents/bu over CBOT, awarded to international houses (Louis Dreyfus, Mitsui)"
   destinations: "Taiwan (food-use soy)"
+  destinations_structured:
+    - {code: TW, products: [beans], note: "food-use soy; historical — tenders verified 2003-2006 only"}
   size_evidence: "Documented tenders 2003-2006 only: 56k t from Louis Dreyfus (Oct 2003), 46k t from Mitsui at +182.75 c/bu (Oct 2006), up-to-60k t tender (Dec 2004)"
   confidence: "observed"
   as_of: "2026-08-08"
@@ -425,6 +461,8 @@
     feed demand. Vietnam has four crush facilities (one north, three south) per USDA GAIN
     VM2025-0011; two southern plants started early 2025, a third line added mid-2025.
   destinations: "Vietnam (domestic meal/oil)"
+  destinations_structured:
+    - {code: VN, products: [meal, oil], note: "domestic — ~2 MMT meal/yr ≈ ~30% of Vietnam feed demand"}
   size_evidence: >-
     GAIN VM2025-0011 — bean imports 2.5 MMT MY2024/25 → 2.8 MMT MY2025/26, crush 1.7 →
     2.1 MMT (observed); Line 2 capacity per World Grain/Aquafeed — observed in search
@@ -454,6 +492,8 @@
   products: [meal]
   footprint: "Vietnam's major soybean-meal importer-distributor; national SBM imports ~6 MMT MY2024/25 — Argentina ~69%, US 14%, Brazil 13% (GAIN)"
   destinations: "Vietnam (feed mills)"
+  destinations_structured:
+    - {code: VN, products: [meal], note: "importer-distributor to feed mills"}
   size_evidence: "No company-level volume disclosure found (gap); role per World Grain coverage (observed, dated)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -476,6 +516,8 @@
   products: [meal]
   footprint: "Vietnam's largest feed producer; fully integrated feed-farm-food. Mill count/capacity unverified (site down at access time)"
   destinations: "Vietnam (own integration)"
+  destinations_structured:
+    - {code: VN, products: [meal], note: "own feed-farm-food integration"}
   size_evidence: "None free at Vietnam level (gap) — 'largest feed producer' status widely documented at group level but not re-verified from a primary page this pass"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -499,6 +541,8 @@
   products: [meal]
   footprint: "13 feed mills + 1 premix plant, ~4 MMT capacity acquired from Masan — largest animal-nutrition company in Vietnam's independent feed market (De Heus's own claim)"
   destinations: "Vietnam (independent feed market)"
+  destinations_structured:
+    - {code: VN, products: [meal], note: "independent feed market"}
   size_evidence: "De Heus press release on the Masan acquisition (observed); total post-deal Vietnam capacity beyond the acquired 4 MMT unverified (gap)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -521,6 +565,9 @@
   products: [meal]
   footprint: "Integrated '3F Plus' feed-farm-food (+aqua) across Vietnam, Laos, Cambodia, Myanmar (company site); mill count/capacity not published (gap)"
   destinations: "Vietnam and Indochina (own integration)"
+  destinations_structured:
+    - {code: VN, products: [meal], note: "own integration"}
+    - {code: SE-ASIA, products: [meal], note: "Indochina — Laos/Cambodia/Myanmar integration"}
   size_evidence: "None free (gap)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -548,6 +595,8 @@
     Krakatau Bandar Samudera. Meal origins per company site: Argentina, USA, Brazil,
     Paraguay, India, China.
   destinations: "Indonesia (food-soy processors + feed mills)"
+  destinations_structured:
+    - {code: ID, products: [beans, meal], note: "food-grade beans to tempeh/tofu cottage industry; meal to feed mills"}
   size_evidence: >-
     Market cap ~$836M, TTM revenue ~$1.18B (Sep 2025, PitchBook — observed); $234M
     syndicated refinancing/expansion loans 2025 (Jakarta Globe — observed). Historic
@@ -584,6 +633,8 @@
   products: [meal]
   footprint: "Top of Indonesia's ~20+ MMT/yr compound feed industry (4th-largest globally, poultry ~65-70%); national meal imports ~6.2 MMT MY2024/25, Brazil ~80% share since 2022/23, US ~3%"
   destinations: "Indonesia (own feed integration)"
+  destinations_structured:
+    - {code: ID, products: [meal], note: "own feed integration"}
   size_evidence: "No per-company soymeal import tonnage free (gap); market-research summaries put direct producer-to-feedmill contracts at est. 50-60% of protein-meal volume across the top 5-10 groups (estimate, softer source)"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -611,6 +662,8 @@
   products: [meal]
   footprint: "#2 Indonesian feed integrator; documented chartering partial/full Handymax parcels ex-US Gulf for corn gluten meal — i.e. books bulk cargoes directly, not only via traders (observed for CGM; inferred for soymeal)"
   destinations: "Indonesia (own feed integration)"
+  destinations_structured:
+    - {code: ID, products: [meal], note: "own feed integration"}
   size_evidence: "No per-company soymeal tonnage free (gap); earnings turnaround 2025-Q1 2026 noted in analyst coverage"
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -640,6 +693,9 @@
     TH2025-0009. ~90% of beans from Brazil and the US; ~93% of oil sold domestically;
     ANGOON is the #1 retail soybean-oil brand (NielsenIQ 2025).
   destinations: "Thailand (domestic meal/oil); regional meal exports under quota"
+  destinations_structured:
+    - {code: TH, products: [meal, oil], note: "domestic — ~93% of oil sold domestically"}
+    - {code: SE-ASIA, products: [meal], note: "regional meal exports under quota; region inferred"}
   size_evidence: >-
     Q1 2026 revenue THB 7.73bn (+13% YoY), net income THB 709m (+33%) — Form 56-1 One
     Report 2025 (observed); largest 2025 meal-export quota allocation, 201,949.748 t of
@@ -663,6 +719,7 @@
 - name: "Charoen Pokphand Foods PCL / Bangkok Produce Merchandising"
   aka: ["SET CPF", "BKP", "CP Group"]
   scope: "asia_importers"
+  tier: 1
   side: "buyer"
   website: "https://www.bkp.co.th"
   ownership: "BKP is CPF's feed-ingredient trading/procurement subsidiary; CPF controlled by CP Group (Chearavanont family — control widely reported, inferred)"
@@ -674,6 +731,9 @@
     2024 pilot of 185k t deforestation-free blockchain-traced soymeal Brazil→Thailand plus
     180k t follow-on; also works with LDC on Brazil soy traceability.
   destinations: "Thailand + CP's SE Asia feed network"
+  destinations_structured:
+    - {code: TH, products: [meal, beans], note: "CPF feed mills"}
+    - {code: SE-ASIA, products: [meal, beans], note: "CP's SE Asia feed network"}
   size_evidence: >-
     Bunge press releases on the traceability partnership and Sep 2025 MOU (observed);
     TradeScope estimates ~$265M 2025 soymeal import value, ranked #1 Thai buyer (estimate,
@@ -711,6 +771,9 @@
     mill >600 kt/yr capacity; Nong Bun Mak (2023) and Chachoengsao (ramped Q3 2024) mills;
     first Lao PDR mill (>THB 650M). Thai feed demand ~21.8 MMT 2025 (from 21.1 MMT 2024).
   destinations: "Thailand (own integration)"
+  destinations_structured:
+    - {code: TH, products: [meal], note: "own integration"}
+    - {code: SE-ASIA, products: [meal], note: "first Lao PDR feed mill; inferred"}
   size_evidence: "Mill investments per market-research summaries (observed, secondary); own import volumes not disclosed (gap)"
   confidence: "inferred"
   as_of: "2026-08-08"

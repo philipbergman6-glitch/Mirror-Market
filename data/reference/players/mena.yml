@@ -16,6 +16,8 @@
   products: ["oil"]
   footprint: "Cairo; buys for Egypt's subsidized food program via international tenders; edible-oil storage concentrated at Alexandria port (Ministry of Supply announced doubling storage 75k->150k t, target 2026)."
   destinations: "Egypt domestic ration-card/food-subsidy system"
+  destinations_structured:
+    - {code: EG, products: [oil], note: "domestic ration-card/food-subsidy system"}
   size_evidence: "Recurring international vegetable-oil tenders of ~30-40k t per round (e.g. sought 30k t soybean oil + 10k t sunflower oil for arrival Jan 1-15 2025; bought 35,250 t vegetable oil in another round). Egypt imports >90% of its ~2.4-2.6 MMT/yr edible-oil consumption, of which soybean oil ~0.4 MMT."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -44,6 +46,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Crush plant at Borg Al-Arab (Alexandria area), Egypt; merchandising office in Switzerland."
   destinations: "Egypt domestic feed (poultry/livestock/aqua) and food manufacturing; meal/oil sold domestically"
+  destinations_structured:
+    - {code: EG, products: [meal, oil], note: "domestic crush output — feed and food manufacturing"}
   size_evidence: "Company/press: one of Egypt's largest soy processing facilities, ~6,000 t/day crush capacity. USDA FAS (2017 GAIN): SOYVEN + Alex Seeds together >80% of Egypt's crush volume."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -62,12 +66,15 @@
 - name: "Alex Seeds Company"
   aka: ["Alexandria Seeds"]
   scope: "mena"
+  tier: 1
   side: "buyer"
   ownership: "Private (Egyptian)"
   roles: ["importer", "crusher", "refiner"]
   products: ["beans", "meal", "oil"]
   footprint: "Crushing + soy-oil bottling facility, Alexandria area, Egypt."
   destinations: "Egypt domestic feed and edible-oil markets"
+  destinations_structured:
+    - {code: EG, products: [meal, oil], note: "domestic crush/refining output"}
   size_evidence: "USDA FAS GAIN (2017): crush facility expanded to ~5,000 t/day; SOYVEN + Alex Seeds together >80% of Egypt crush volume."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -87,6 +94,8 @@
   products: ["beans", "meal"]
   footprint: "Vertically integrated poultry complex on 27,000 acres at Bahareya Oasis (breeders, broilers, hatcheries) + five main factories incl. National Company for Maize Products (11 lines processing maize, soybeans, starch, glucose); own soy/maize farming in Al-Oweinat and Farafra."
   destinations: "Egypt domestic poultry/feed"
+  destinations_structured:
+    - {code: EG, products: [beans, meal], note: "consumed in own poultry/feed integration"}
   size_evidence: "Announced US$150M three-year investment plan (>$50M invested 2025, another $50M planned 2026); targets ~60,000 t/yr poultry meat. Also a major grain/oilseed importer per Egyptian press."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -108,6 +117,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Oilseed crushing plant at Lüleburgaz (Kırklareli, Thrace — near Marmara import ports); edible-oil business via Ana Gıda acquisition (corn, sunflower, olive oils)."
   destinations: "Turkey domestic feed and edible-oil markets"
+  destinations_structured:
+    - {code: TR, products: [meal, oil], note: "domestic crush/refining output"}
   size_evidence: "Turkish edible-oil sector report (c. 2015): Bunge Lüleburgaz crush capacity ~390,000 t/yr — largest disclosed multinational crush asset in Turkey. Ana Gıda held >30% Turkish retail edible-oil share at acquisition (2017)."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -133,6 +144,11 @@
   products: ["beans", "meal", "oil"]
   footprint: "Turkey processing/storage facilities; supplies feed and oilseeds from Turkey/Black Sea to Middle East and Africa via transit trade or after processing; soy crush plant at Umm Qasr port, Iraq (operational 2024, IFC-led financing up to $112.5M)."
   destinations: "Middle East (incl. Iraq), Africa, Turkey domestic"
+  destinations_structured:
+    - {code: TR, products: [beans, meal, oil], note: "domestic market"}
+    - {code: IQ, products: [meal, oil], note: "Umm Qasr crush plant output (operational 2024), inferred"}
+    - {code: MENA, products: [beans, meal], note: "feed/oilseed supply from Turkey and Black Sea"}
+    - {code: AFRICA, products: [beans, meal], note: "feed/oilseed supply via transit trade or after processing"}
   size_evidence: "IFC-led loan of up to $112.5M for Umm Qasr soy crush + corn storage investment (company disclosure); multi-decade regional agri supply-chain operator."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -154,6 +170,8 @@
   products: ["meal", "beans"]
   footprint: "Turkey — fish, poultry and farm-animal feed; aquaculture production and fish processing; poultry production/processing (Lezita brand)."
   destinations: "Turkey domestic; some regional export of poultry/aqua products"
+  destinations_structured:
+    - {code: TR, products: [meal, beans], note: "consumed in own feed/poultry/aqua operations; exports are poultry/aqua products, not soy"}
   size_evidence: "Ranked among Turkey's largest food companies (USDA FAS Turkey food-processing reporting). No free current feed-volume disclosure found."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -173,6 +191,8 @@
   products: ["meal", "beans"]
   footprint: "Bandırma (Marmara), Turkey — integrated poultry with own feed mills."
   destinations: "Turkey domestic + Gulf export of poultry"
+  destinations_structured:
+    - {code: TR, products: [meal, beans], note: "consumed in own feed mills/poultry integration; Gulf exports are poultry, not soy"}
   size_evidence: "One of Turkey's largest poultry integrators (acquired by BRF/QIA 2017 for scale reasons); no free current soy-procurement volume disclosure."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -191,6 +211,8 @@
   products: ["meal"]
   footprint: "Tehran; imports feed via international tenders through Iranian ports (Bandar Imam Khomeini etc.)."
   destinations: "Iran domestic livestock/poultry feed"
+  destinations_structured:
+    - {code: IR, products: [meal], note: "domestic livestock/poultry feed"}
   size_evidence: "Reuters-sourced trade press 2025: repeated international tenders for up to 120,000 t soymeal per round (plus corn/barley), multiple rounds May-Nov 2025; one tender believed ~200,000 t soymeal bought, sourced Argentina/Brazil; Nov 2025 tender for Jan-Feb 2026 shipment, Brazil or Argentina origin."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -215,6 +237,8 @@
   products: ["meal"]
   footprint: "Algiers; international tenders; feed distribution to Algerian livestock/poultry sector."
   destinations: "Algeria domestic feed"
+  destinations_structured:
+    - {code: DZ, products: [meal], note: "domestic feed distribution"}
   size_evidence: "Recurring 2025 tenders: soymeal in 25,000-35,000 t clips alongside 240,000 t corn + 35,000 t barley rounds (Jan/Feb 2025 and 'numerous tenders in recent weeks' per trade press); corn legs restricted to Argentina/Brazil origin."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -237,6 +261,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Béjaïa port complex, Algeria — edible-oil refining incumbent; soybean crush plant expected online per USDA FAS (Algeria had 4 crush plants operating + 2 under construction as of Jan 2025)."
   destinations: "Algeria domestic"
+  destinations_structured:
+    - {code: DZ, products: [meal, oil], note: "domestic refining/crush output; soy crush line startup unverified"}
   size_evidence: "USDA FAS Algiers 2025 Grain & Feed Annual: Algeria crush build-out (1st plant Dec 2019, 2nd Aug 2021, four operating Jan 2025, two building) with 'industrial giant Cevital' expected to bring its soybean crush plant online."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -255,6 +281,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Tunisia's first and dominant soybean crush plant (built 2009); ~2,000+ t/day max capacity; commonly associated with the Bizerte port area."
   destinations: "Tunisia domestic feed and oil"
+  destinations_structured:
+    - {code: TN, products: [meal, oil], note: "domestic crush output — 86% of Tunisian soymeal market in 2015"}
   size_evidence: "USDA FAS / trade press: ~600,000 t/yr beans crushed by 2019 (~60% US-origin); captured 86% of Tunisian soymeal market in 2015; 2,000 t/day capacity +200 t/day expansion (2017). Tunisia MY 2026/27 bean imports expected 595,000 t (FAS Tunis) — essentially the Carthage Grains program."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -279,6 +307,8 @@
   products: ["meal", "beans"]
   footprint: "Morocco — two feed mills (~1.2 million t/yr feed, ~80% poultry), two hatcheries, processing plant incl. Morocco's largest slaughterhouse (6,000 birds/hr)."
   destinations: "Morocco domestic"
+  destinations_structured:
+    - {code: MA, products: [meal, beans], note: "consumed in own feed mills/poultry integration"}
   size_evidence: "WATTPoultry/S&P Global interview: 1.2 MMT/yr feed output, described as the largest feed operation in North Africa; buys corn/soy on the spot market from Argentina, Brazil, US."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -303,6 +333,8 @@
   products: ["meal"]
   footprint: "Morocco — integrated poultry and feed; among the majors alongside Koutoubia, Alf Sahel, Dar El Fellous, Matinales."
   destinations: "Morocco domestic; Japanese-style processed chicken export venture with Mitsui"
+  destinations_structured:
+    - {code: MA, products: [meal], note: "consumed in own feed/poultry integration; chicken exports are not soy"}
   size_evidence: "Named among major companies in Morocco's poultry market (Mordor market report); no free feed-volume disclosure found."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -315,6 +347,7 @@
 - name: "ARASCO"
   aka: ["Arabian Agricultural Services Company"]
   scope: "mena"
+  tier: 1
   side: "buyer"
   website: "https://www.arasco.com/"
   ownership: "Private CJSC (Saudi Arabia)"
@@ -322,6 +355,8 @@
   products: ["meal"]
   footprint: "Saudi Arabia — feed milling, corn refining, poultry, logistics and bulk port handling; supplies corn, soybean meal, soy pellets/cubes to farms across the Kingdom."
   destinations: "Saudi domestic feed"
+  destinations_structured:
+    - {code: SA, products: [meal], note: "supplies soybean meal/pellets/cubes to farms across the Kingdom"}
   size_evidence: "Described as one of the largest animal-feed producers in the Middle East, ~4 million t of feed in Saudi Arabia (Zawya profile). Saudi soymeal imports ~937k t (2023) trending toward ~1.0 MMT by 2028 (market data); USDA notes Saudi feed depends heavily on corn + soymeal."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -337,6 +372,7 @@
 - name: "Al Ghurair Foods / Al Ghurair Resources"
   aka: ["Al Ghurair Investment", "Edible Oil Company LLC (EOCD, acquired 100% 2021)", "Al Ghurair Commodities"]
   scope: "mena"
+  tier: 1
   side: "buyer"
   website: "https://agcl.ae/grains-oil-seeds/"
   ownership: "Private — Al Ghurair family group (Dubai, UAE); EOCD acquired from Dubai Investments Industries"
@@ -344,6 +380,9 @@
   products: ["beans", "meal", "oil"]
   footprint: "Dubai (Jebel Ali area), UAE — EOCD multi-seed crush plant: up to 2,200 t/day soybeans, 1,300 t/day canola, 1,000 t/day sunflower; one of the leading multi-seed crush plants in the Middle East. Al Ghurair had joint-managed EOCD since 2011 before the 2021 buyout."
   destinations: "UAE/GCC feed and edible-oil markets; re-export hub position"
+  destinations_structured:
+    - {code: AE, products: [meal, oil], note: "domestic feed and edible-oil markets"}
+    - {code: MENA, products: [meal, oil], note: "GCC markets via re-export hub position, inferred"}
   size_evidence: "Acquisition press (2021): plant capacity figures above; deal framed around UAE food-security agenda."
   confidence: "observed"
   as_of: "2026-08-08"

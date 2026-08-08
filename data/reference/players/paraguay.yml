@@ -21,6 +21,9 @@
   products: [beans, meal, oil]
   footprint: "CAPPRO member crusher [observed]. Regional river logistics via ADM's barge division (~258 barges, 13 tugs on the Paraná–Paraguay waterway, own ports in greater Rosario, Paraguay and Brazil; ADM's logistics director chairs Paraguay's shipowners' chamber) [inferred — secondary press]. Also top-5 in land-route exports to Brazil (8%, 2025) [observed — CAPECO]."
   destinations: "Via customs, mostly Argentina (up-river crush/re-export) and Brazil — country-level first destinations per CAPECO; ADM-specific destinations not published."
+  destinations_structured:
+    - {code: AR, products: [beans], note: "customs first destination, country-level aggregate — up-river crush/re-export; company-specific flows not published"}
+    - {code: BR, products: [beans], note: "customs first destination, country-level aggregate; also top-5 land-route exporter to Brazil (8%, 2025)"}
   size_evidence: "CAPECO 2025 ranking: #3 river exporter of soybeans, 10% share of 6.4 Mt; ~9-10% in 2025/26-season partials [observed — CAPECO Jan-2026 article; 2026 partials via search excerpts of CAPECO reports]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -44,6 +47,9 @@
   products: [beans, meal, oil]
   footprint: "CAPPRO member [observed]. Created 2006; fertilizer distribution, grain origination/storage and oilseed industrialization; ~850,000 t grain handled (company profile, year unstated) [inferred — company page via search]. Co-owner of CAIASA, Villeta — Paraguay's largest crush plant (see CAIASA entry)."
   destinations: "Via customs, mostly Argentina/Brazil first destinations (country aggregate); company-specific destinations not published."
+  destinations_structured:
+    - {code: AR, products: [beans], note: "customs first destination, country-level aggregate; company-specific flows not published"}
+    - {code: BR, products: [beans], note: "customs first destination, country-level aggregate; company-specific flows not published"}
   size_evidence: "CAPECO: 7% river share 2025; #1 river exporter in the 2025/26 season (18-20% in Q1/H1-2026 partials — post-Viterra-absorption). Viterra alone was #2 in 2024/25 with 13% [observed — CAPECO Jan-2026 article for 2025; 2026 partials via search excerpts of CAPECO/UGP articles]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -70,6 +76,8 @@
   products: [beans, meal, oil]
   footprint: "CAPPRO member [observed]. Registered/plant at Ruta 7 km 28.5, Minga Guazú, Alto Paraná (the country's oilseed-industry hub) [inferred — business registries via search]. Also #3 in land-route exports (10-12%, 2025-26) [observed — CAPECO]."
   destinations: "Via customs, mostly Argentina first destination (up-river re-export); company-specific destinations not published."
+  destinations_structured:
+    - {code: AR, products: [beans], note: "customs first destination, country-level aggregate — up-river re-export; company-specific flows not published"}
   size_evidence: "CAPECO: #1 river exporter 2025 (14% of 6.4 Mt); #2 in 2025/26 partials (16-17%) [observed — CAPECO Jan-2026 article; 2026 partials via search excerpts]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -93,6 +101,9 @@
   products: [beans, meal, oil]
   footprint: "CAPPRO member [observed]. Per LDC's own Paraguay page: ~25 years in-country, >USD 200m invested; operates the Merco crush plant in Caaguazú (>180,000 t/yr oilseeds) and elevators in Curuguaty, Tuna and Pozuelo; co-owner of CAIASA (Villeta) [observed — ldc.com Paraguay pages via search excerpts]."
   destinations: "Via customs, mostly Argentina/Brazil first destinations; company-specific destinations not published."
+  destinations_structured:
+    - {code: AR, products: [beans], note: "customs first destination, country-level aggregate; company-specific flows not published"}
+    - {code: BR, products: [beans], note: "customs first destination, country-level aggregate; company-specific flows not published"}
   size_evidence: "LDC page claims 'third largest exporter of soybeans and by-products' (undated claim). CAPECO: 7% river share 2025, 4-6% in 2025/26 partials [observed — CAPECO Jan-2026 article]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -154,11 +165,14 @@
 - name: "Copagra — Compañía Paraguaya de Granos S.A."
   aka: ["COPAGRA"]
   scope: paraguay
+  tier: 1
   ownership: "Paraguayan capital (private); shareholder detail NOT verified — no primary source found this session. Its president (Enrique Ohaco) chaired CAPPRO in 2023 [inferred — press]."
   roles: [originator, crusher, exporter]
   products: [beans, meal, oil]
   footprint: "CAPPRO member [observed]; co-owner of CAIASA (Villeta) with LDC and Bunge [observed — press]."
   destinations: "Via customs, mostly Argentina first destination; company-specific destinations not published."
+  destinations_structured:
+    - {code: AR, products: [beans], note: "customs first destination, country-level aggregate; company-specific flows not published"}
   size_evidence: "CAPECO: 6% river share 2025; 8-10% in 2025/26 partials (#3-4) — the largest locally-owned bean exporter after the multinationals [observed — CAPECO Jan-2026 article + 2026 partials via search excerpts]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -182,6 +196,8 @@
   products: [oil]
   footprint: "Industrial complex in Capiatá (Central dept.) — consumer edible oils, margarines, fats (brands OK, Mirasol, Reina, etc.). Exited oilseed crushing in 2018 (as ContiParaguay) to focus on consumer products [observed — La Nación 70-years coverage]."
   destinations: "Primarily domestic consumer market [observed — press]."
+  destinations_structured:
+    - {code: PY, products: [oil], note: "domestic consumer market — not an exporter"}
   size_evidence: "No crush/export volume — a downstream consumer-products player; USD 7.4m investment program post-acquisition [observed — press]."
   confidence: observed
   as_of: "2026-08-07"
@@ -270,6 +286,9 @@
   products: [beans]
   footprint: "Bean-only shipper (no CAPPRO membership/crush found). Was Paraguay's #1 soybean exporter in early 2019 (16% through April, per CAPECO via Última Hora) [observed — Última Hora article]."
   destinations: "Ships largely to Argentina up-river for the group's crush/re-export chain (customs first-destination Argentina); ultimate flow tied to China demand via origin change [inferred]."
+  destinations_structured:
+    - {code: AR, products: [beans], note: "customs first destination — up-river crush/re-export chain"}
+    - {code: CN, products: [beans], note: "inferred ultimate demand via Argentine-origin change; no direct PY–China sales (no diplomatic ties)"}
   size_evidence: "CAPECO: 8% river share 2025 (#4); 7-8% in 2025/26 partials [observed — CAPECO Jan-2026 article]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -285,11 +304,15 @@
 - name: "Agrofértil S.A."
   aka: []
   scope: paraguay
+  tier: 1
   ownership: "Private; reported as tied to Brazilian agribusiness capital, but ownership NOT verified from a primary source this session."
   roles: [originator, exporter]
   products: [beans]
   footprint: "Input (agrochemical/fertilizer) dealer and grain originator in the eastern production belt; significant on BOTH routes: #1 land-route exporter to Brazil in 2025 (14%) and 6-7% of river exports [observed — CAPECO]."
   destinations: "Land route: Brazil. River route: Argentina first destination [observed — CAPECO country aggregates]."
+  destinations_structured:
+    - {code: BR, products: [beans], note: "land route — #1 land-route exporter 2025 (14%)"}
+    - {code: AR, products: [beans], note: "river route, customs first destination — CAPECO country aggregate"}
   size_evidence: "CAPECO 2025: 7% river + 14% land-route leader [observed — CAPECO Jan-2026 article]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -307,6 +330,8 @@
   products: [beans]
   footprint: "Bean shipper appearing consistently in CAPECO's river-export rankings; no crush assets found."
   destinations: "unverified (customs aggregate: Argentina-dominant)"
+  destinations_structured:
+    - {code: AR, products: [beans], note: "unverified — country-level customs aggregate only, not company-specific"}
   size_evidence: "CAPECO: 6% river share 2025; 6-8% in 2025/26 partials [observed — CAPECO Jan-2026 article + 2026 partials via search excerpts]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -324,6 +349,8 @@
   products: [beans]
   footprint: "Origination across Itapúa (a top-3 soy department); ships beans on the river route in its own name [observed — CAPECO rankings]."
   destinations: "unverified (customs aggregate: Argentina-dominant)"
+  destinations_structured:
+    - {code: AR, products: [beans], note: "unverified — country-level customs aggregate only, not company-specific"}
   size_evidence: "CAPECO: 5% river share 2025 (#10 band); 2-3% in 2025/26 partials [observed — CAPECO Jan-2026 article]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -341,6 +368,8 @@
   products: [beans]
   footprint: "Dominates the LAND route to Brazil: #2 land exporter 2025 (12%), #1 in H1-2026 (17-18%); ~1% of river exports [observed — CAPECO]."
   destinations: "Brazil (land/truck route — beans absorbed by Brazilian crush) [observed — CAPECO land-route data]."
+  destinations_structured:
+    - {code: BR, products: [beans], note: "land/truck route — beans absorbed by Brazilian crush"}
   size_evidence: "CAPECO land-route rankings as above [observed]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -361,6 +390,8 @@
   products: [beans]
   footprint: "#2 player on the land route to Brazil (9% 2025; 15-17% 2025/26 partials); ~2% river [observed — CAPECO]."
   destinations: "Brazil (land route) [observed — CAPECO]."
+  destinations_structured:
+    - {code: BR, products: [beans], note: "land route — CAPECO"}
   size_evidence: "CAPECO land-route rankings as above [observed]."
   confidence: inferred
   as_of: "2026-08-07"
@@ -378,6 +409,8 @@
   products: [beans]
   footprint: "Was a top-5 bean exporter in 2019 (13% share through April, per CAPECO/Última Hora). Absent from the 2025 and 2025/26 CAPECO top-10 rankings — current status in Paraguay UNVERIFIED [observed absence]."
   destinations: "Historically consistent with the Russia destination line (4% of 2025 exports went to Russia) — link inferred, not verified."
+  destinations_structured:
+    - {code: RU, products: [beans], note: "inferred, not verified — Russia took 4% of Paraguay's 2025 exports; company link historical"}
   size_evidence: "2019: 13% share [observed — Última Hora citing CAPECO]. Nothing current."
   confidence: inferred
   as_of: "2026-08-07"
@@ -395,6 +428,8 @@
   products: [beans]
   footprint: "Appears in CAPECO's 2025/26 LAND-route top-5 (8%) — border/truck bean shipper [observed — CAPECO partials via search excerpts]."
   destinations: "Brazil (land route) [inferred from route]."
+  destinations_structured:
+    - {code: BR, products: [beans], note: "inferred from land route"}
   size_evidence: "8% of land-route exports, H1-2026 [observed — search excerpt of CAPECO reporting]."
   confidence: inferred
   as_of: "2026-08-07"

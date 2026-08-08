@@ -38,6 +38,8 @@
     Tribunal record. Group also runs grain trading/asset management arms.
   destinations: >-
     Primarily domestic SA feed market; regional export share unverified.
+  destinations_structured:
+    - {code: ZA, products: [meal, oil], note: "primarily domestic SA feed market (meal to poultry/pig feed); regional export share unverified"}
   size_evidence: >-
     ~250,000 t/yr crush capacity at commissioning (Farmer's Weekly, 2013-era
     figure); Seaboard 30% stake disclosure. No current audited capacity found
@@ -85,6 +87,8 @@
     received soft loans/tax breaks to build crush capacity.
   destinations: >-
     Domestic SA feed/edible-oil market; direct regional exports unverified.
+  destinations_structured:
+    - {code: ZA, products: [meal, oil], note: "domestic feed/edible-oil market; direct regional exports unverified"}
   size_evidence: >-
     ~186,000 t/yr crush capacity (Farmer's Weekly, 2013-era). No current
     disclosed figure found free.
@@ -105,6 +109,7 @@
 - name: Nedan Oils & Proteins
   aka: [Nedan, Nedan Oil Mills, ex-Philafrica Foods division]
   scope: africa
+  tier: 1
   side: seller
   website: "https://nedanoils.co.za"
   ownership: >-
@@ -123,6 +128,8 @@
     Promax (soya oilcake).
   destinations: >-
     Domestic SA feed and food markets; export share unverified.
+  destinations_structured:
+    - {code: ZA, products: [meal, oil], note: "domestic feed and food markets; export share unverified"}
   size_evidence: >-
     ~326,000 t/yr post-expansion capacity (Farmer's Weekly, 2013-era); 100%
     sale advisory record (Verdant Capital, 2021). No current capacity
@@ -165,6 +172,8 @@
   destinations: >-
     Domestic SA; Wilmar's regional network makes cross-border flows likely
     but SA-specific export volumes unverified.
+  destinations_structured:
+    - {code: ZA, products: [meal, oil], note: "domestic SA; regional cross-border flows likely via Wilmar network but SA-specific export volumes unverified (inferred)"}
   size_evidence: >-
     ~192,000 t/yr Randfontein soy crush (Farmer's Weekly, 2013-era); R1.27bn
     Richards Bay refinery Phase 1 (Engineering News/dtic, 2024).
@@ -224,6 +233,7 @@
 - name: Olam Agri Nigeria
   aka: [Olam Agri, Crown Flour Mill legacy, distinct from ofi]
   scope: africa
+  tier: 1
   side: buyer
   website: "https://www.olamagri.com"
   ownership: >-
@@ -244,6 +254,8 @@
   destinations: >-
     Nigerian domestic feed (poultry, aqua) and edible-oil markets;
     import-substitution play, not an exporter.
+  destinations_structured:
+    - {code: NG, products: [meal, oil], note: "domestic feed (poultry, aqua) and edible-oil markets; import-substitution play, not an exporter"}
   size_evidence: >-
     350,000 t/yr crush capacity + US$50m investment (company announcement via
     Milling MEA, Apr 2026); Kaduna feed-mill storage >100,000 t (Olam Group
@@ -283,6 +295,8 @@
     beans into oil for food and meal into own feed brands.
   destinations: >-
     Nigerian domestic feed and edible-oil markets.
+  destinations_structured:
+    - {code: NG, products: [meal, oil], note: "domestic feed (Vital Feeds) and edible-oil (Grand Oil) markets"}
   size_evidence: >-
     None found free — no published soybean crush capacity figure (gap;
     stated honestly). Scale evidence is qualitative: UAC subsidiary, multi-site
@@ -321,6 +335,9 @@
   destinations: >-
     Primarily Nigerian domestic; TGI states meal demand "domestically and
     internationally" — export flows plausible but unquantified (inferred).
+  destinations_structured:
+    - {code: NG, products: [meal, oil], note: "primarily domestic (Golden Terra soya oil, high-protein meal)"}
+    - {code: GLOBAL, products: [meal], note: "TGI states meal demand 'domestically and internationally' — export flows plausible but unquantified (inferred)"}
   size_evidence: >-
     225,000 t oilseed complex + 270,000 t refinery (TGI corporate site —
     company-stated); N25bn CP issuance under N100bn programme (Nairametrics,
@@ -363,6 +380,9 @@
     Links Nigerian producers to domestic processors (FMN, Olam, WACOT, ETG,
     Starlink) and foreign processors (Cargill, JB Cocoa, Valency) for
     soybean, cocoa, sesame, ginger, cashew.
+  destinations_structured:
+    - {code: NG, products: [beans], note: "links producers to domestic processors (FMN, Olam, WACOT, ETG, Starlink)"}
+    - {code: GLOBAL, products: [beans], note: "also links to foreign processors (Cargill, JB Cocoa, Valency); volumes cross-commodity, not soy-specific"}
   size_evidence: >-
     200+ warehouses, >314,000 t traded volume across three countries
     (Farmers Review Africa / AFEX); first WR-backed CP in Africa (Guardian
@@ -402,6 +422,8 @@
     soybean meal from domestic crushers and AFEX-aggregated beans.
   destinations: >-
     Nigerian domestic poultry and aquaculture feed markets.
+  destinations_structured:
+    - {code: NG, products: [meal], note: "domestic poultry and aquaculture feed markets (meal consumed as finished-feed input; structural buyer, not shipper)"}
   size_evidence: >-
     Qualitative only (company-stated market position). No tonnage found free.
   confidence: inferred
