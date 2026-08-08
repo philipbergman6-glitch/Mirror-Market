@@ -336,3 +336,114 @@ def test_stocks_to_use_section_includes_meal_and_oil(patched_db: Path) -> None:
     assert "Soybean Meal: 0.8% (MY 2026)" in text
     assert "Soybean Oil: 6.2% (MY 2026)" in text
     assert signals == []  # single year -> no tight-supply detection
+
+
+# ---------------------------------------------------------------------------
+# Inspections China share (X2 #132)
+# ---------------------------------------------------------------------------
+
+
+def _seed_inspection_destinations(db: Path, rows: list[tuple]) -> None:
+    conn = sqlite3.connect(str(db))
+    conn.executemany(
+        "INSERT INTO inspection_destinations (week_ending, region, country,"
+        " commodity, inspections_mt) VALUES (?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_inspections_china_share_with_trend(patched_db: Path) -> None:
+    _seed_inspection_destinations(patched_db, [
+        # prior week: China 200k of 1.0M = 20%
+        ("2026-07-17", "GULF", "CHINA T", "Soybeans", 200_000.0),
+        ("2026-07-17", "GULF", "MEXICO", "Soybeans", 800_000.0),
+        # latest week: China 480k of 1.2M = 40% (split across coast regions)
+        ("2026-07-24", "GULF", "CHINA T", "Soybeans", 300_000.0),
+        ("2026-07-24", "PACIFIC", "CHINA T", "Soybeans", 180_000.0),
+        ("2026-07-24", "GULF", "MEXICO", "Soybeans", 720_000.0),
+        # SUBTOTAL rows must not double-count
+        ("2026-07-24", "GULF", "SUBTOTAL", "Soybeans", 1_020_000.0),
+        # other commodities must not leak in
+        ("2026-07-24", "GULF", "CHINA T", "Corn Yellow", 999_999.0),
+    ])
+
+    text = inspections.format()
+
+    assert (
+        "China share of soybean shipments (w/e 07/24): "
+        "40.0% (0.48 of 1.20 MMT)" in text
+    )
+    assert "2-wk trend: 20% -> 40%" in text
+
+
+def test_inspections_china_share_absent_without_destination_rows(patched_db: Path) -> None:
+    assert "China share" not in inspections.format()
+
+
+def test_inspections_china_share_zero_when_china_absent(patched_db: Path) -> None:
+    _seed_inspection_destinations(patched_db, [
+        ("2026-07-24", "GULF", "MEXICO", "Soybeans", 800_000.0),
+    ])
+    text = inspections.format()
+    assert "China share of soybean shipments (w/e 07/24): 0.0%" in text
+
+
+# ---------------------------------------------------------------------------
+# DCE board crush (X2 #132)
+# ---------------------------------------------------------------------------
+
+
+def _seed_dce(db: Path, rows: list[tuple]) -> None:
+    conn = sqlite3.connect(str(db))
+    conn.executemany(
+        "INSERT INTO dce_futures (commodity, Date, Close) VALUES (?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+
+_DCE_ROWS = [
+    ("DCE Soybean", "2026-08-06", 4000.0),
+    ("DCE Soybean Oil", "2026-08-06", 8000.0),
+    ("DCE Soybean Meal", "2026-08-06", 3000.0),
+]
+
+
+def test_dce_section_board_crush_line(patched_db: Path) -> None:
+    import pandas as pd
+
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, _DCE_ROWS)
+    cny = pd.DataFrame(
+        {"Close": [0.14]}, index=pd.to_datetime(["2026-08-06"])
+    )
+
+    text = dce.format({}, {"CNY/USD": cny})
+
+    # crush = 8000*(11/60) + 3000*(44/60) - 4000 = -333 CNY/MT; -333*0.14 = -47 USD/MT
+    assert "DCE board crush: CNY -333/MT (-47 USD/MT) | oil share 40%" in text
+    assert "continuous main-contract legs — roll gaps possible" in text
+
+
+def test_dce_section_board_crush_degrades_without_fx(patched_db: Path) -> None:
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, _DCE_ROWS)
+
+    text = dce.format({}, None)
+
+    assert "DCE board crush: CNY -333/MT | oil share 40%" in text
+    crush_line = next(line for line in text.splitlines() if "DCE board crush" in line)
+    assert "USD/MT" not in crush_line
+
+
+def test_dce_section_no_crush_line_with_missing_leg(patched_db: Path) -> None:
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, _DCE_ROWS[:2])  # no meal leg
+
+    assert "DCE board crush" not in dce.format({}, None)

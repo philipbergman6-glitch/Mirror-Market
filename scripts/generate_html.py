@@ -253,6 +253,21 @@ def _build_command_center(data: dict) -> dict | None:
         "as_of": km.get("cny_usd_date") or "",
     })
 
+    # DCE board crush (China story) — CNY/MT, USD/MT beneath when available.
+    dce_crush = km.get("dce_crush_cny_mt")
+    dce_crush_usd = km.get("dce_crush_usd_mt")
+    key_metrics.append({
+        "label": "DCE Board Crush",
+        "value": f"CNY {dce_crush:+,.0f}" if dce_crush is not None else "N/A",
+        "val_class": (
+            "up" if dce_crush is not None and dce_crush > 0
+            else "down" if dce_crush is not None else ""
+        ),
+        "delta": f"${dce_crush_usd:+,.0f}/MT" if dce_crush_usd is not None else "",
+        "delta_class": "muted",
+        "as_of": km.get("dce_crush_date") or "",
+    })
+
     # Signals
     signals = []
     for sig in data.get("signals", []):

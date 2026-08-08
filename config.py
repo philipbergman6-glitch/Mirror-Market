@@ -205,6 +205,7 @@ GROWING_REGIONS = {
     "India Maharashtra":          {"lat": 19.75,  "lon": 75.71},   # #2 India soybean state
     "Thailand Surat Thani":       {"lat": 9.14,   "lon": 99.33},   # #3 global palm oil
     "China Heilongjiang":         {"lat": 47.36,  "lon": 127.76},  # China domestic soybean belt
+    "China Jilin":                {"lat": 43.87,  "lon": 125.32},  # China corn belt (hog/feed demand)
 
     # ── Emerging Markets (soy deep dive) ──
     "South Africa Free State":    {"lat": -29.12, "lon": 26.21},   # SA #1 soy province

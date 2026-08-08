@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 21 source layers (covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 18 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, and Argentina MAGyP official FOB) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It pulls data from 21 source layers (covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 19 weather regions including SA/Nigeria, 27 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, and Argentina MAGyP official FOB) into a SQLite database (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The analysis engine includes an emerging markets deep dive (South Africa, India, Nigeria). A static HTML dashboard (deployed via GitHub Pages) provides 9 pages of visual analysis.
 
 ## Commands
 
@@ -59,7 +59,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
    - **2b. Crop progress/condition** — weekly USDA ratings (% good/excellent, % planted/harvested)
 3. **FRED economic data** — `fetchers/fred.py` (dollar index, CPI, Fed funds, Treasury 2Y/10Y/30Y, Ethanol PPI, Soybean Oil PPI, Diesel Price)
 4. **COT positioning** — `fetchers/cot.py` (9 commodities including corn, wheat, sugar, cotton, cattle, hogs)
-5. **Weather** — `fetchers/weather.py` (18 regions: US, Brazil, Argentina, Paraguay, Ivory Coast, Indonesia, Malaysia, India, Thailand, China, South Africa, Nigeria)
+5. **Weather** — `fetchers/weather.py` (19 regions: US, Brazil, Argentina, Paraguay, Ivory Coast, Indonesia, Malaysia, India, Thailand, China, South Africa, Nigeria)
 6. **PSD global supply/demand** — `fetchers/psd.py` (7 commodities x 27 countries, oilseeds + grains + cotton)
 7. **Currencies** — `fetchers/yfinance.py` (10 pairs: BRL, ARS, PYG, CNY, IDR, MYR, INR, THB, ZAR, NGN)
 8. **World Bank monthly prices** — `fetchers/worldbank.py` (Palm Oil, Rapeseed Oil, Sunflower Oil, etc. — current xlsx link resolved from the CMO landing page each run; the GUID deep link rotates yearly and stale links serve frozen data with HTTP 200)
@@ -136,7 +136,7 @@ CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal 
 16. Brazil Crop Estimates (CONAB vs USDA comparison)
 17. Currencies (10 pairs with trade impact)
 18. COT Positioning (9 commodities)
-19. Weather Alerts (18 regions)
+19. Weather Alerts (19 regions)
 20. Global Supply — PSD (27 countries)
 21. World Bank Prices
 22. Emerging Markets (South Africa SAFEX + Brazil CEPEA/CONAB farmgate + India mandi bean vs CBOT + Nigeria deep dive)
