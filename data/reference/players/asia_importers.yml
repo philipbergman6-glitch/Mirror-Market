@@ -1,0 +1,724 @@
+# East & Southeast Asia soy-complex importers — Japan / Korea / Taiwan / Vietnam / Indonesia / Thailand
+# Ticket #105. Research date 2026-08-08. Schema: data/reference/players/README.md
+# Note: Reuters tender reporting reached via Reuters-syndicating aggregators (Business
+# Recorder, MarineLink, MarketScreener etc.) — originals paywalled; details are trader
+# assessments ("European traders said"), not buyer-confirmed.
+
+# ---------------------------------------------------------------- JAPAN
+
+- name: "Marubeni Corporation"
+  aka: ["8002.T", "Columbia Grain International (CGI)", "Marubeni Grãos Brasil"]
+  scope: "asia_importers"
+  side: "both"
+  website: "https://www.marubeni.com"
+  ownership: "Public sogo shosha (TSE 8002); Columbia Grain International remains a wholly owned Marubeni subsidiary"
+  roles: [importer, trader, originator, terminal-operator]
+  products: [beans, meal]
+  footprint: >-
+    Columbia Grain International (Portland OR HQ; country elevators MT/ND/MN/ID/WA; PNW
+    export via ~46% Pacificor stake covering Portland + Kalama terminals). Took 8 former
+    Gavilon northern elevators + Kalama Holdco stake when the Gavilon grain business went
+    to Viterra (closed 2022-10). Marubeni Grãos Brasil originates soy/corn for Asia.
+  destinations: "Japan (feed/crush) plus third-country Asian sales from US/Brazil origination"
+  size_evidence: >-
+    Marubeni's own grain-business page claims 40-50% of Japan wheat imports and ~60% of
+    corn (observed); no soybean-specific share published (gap). Gavilon grain sale to
+    Viterra at $1.125B (observed, Reuters via Nasdaq).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.marubeni.com/en/brand_media/scope/grain/"
+      accessed: "2026-08-08"
+      supports: "grain-business scale claims; CGI role (observed)"
+    - url: "https://www.marubeni.com/en/news/2022/release/20220126-1E.pdf"
+      accessed: "2026-08-08"
+      supports: "Gavilon split — grain to Viterra, northern elevators + Kalama stake to Columbia Grain (observed)"
+    - url: "https://columbiagrain.com/leadership-team/"
+      accessed: "2026-08-08"
+      supports: "CGI still Marubeni-owned (observed)"
+    - url: "https://www.eastwashingtonian.com/story/2025/04/24/news/columbia-grain-international-and-pomeroy-grain-growers-announce-sale-of-central-ferry-terminal/5492.html"
+      accessed: "2026-08-08"
+      supports: "Only the Central Ferry terminal was sold (to Pomeroy Grain Growers, closed ~2025-05) — CGI itself not sold (observed)"
+  notes: >-
+    Correction to ticket premise: Columbia Grain was NOT sold — still wholly Marubeni-owned;
+    only the Central Ferry terminal asset was divested in 2025. A PitchBook page claiming ADM
+    bought CGI in 2014 contradicts all primary sources — disregarded. Seller access: direct
+    desks (Tokyo grain dept / CGI Portland merchandising) — inferred, no tender mechanism.
+    No published Marubeni soybean-specific volumes to Japan (gap).
+
+- name: "Mitsui & Co. (United Grain Corporation)"
+  aka: ["8031.T", "UGC"]
+  scope: "asia_importers"
+  side: "both"
+  website: "https://unitedgrain.com"
+  ownership: "United Grain Corp wholly owned by Mitsui & Co. (public sogo shosha, TSE 8031) since 1969"
+  roles: [importer, trader, terminal-operator, originator]
+  products: [beans, meal]
+  footprint: >-
+    Vancouver WA Export Terminal — largest storage on the US West Coast (220k MT / 8M bu,
+    up to ~6 MMT/yr throughput, ~120 vessels/yr); 18 country elevators in OR/MT/ND/SD.
+    Historically wheat; expanded to corn + soybeans after terminal upgrade.
+  destinations: "Japan and wider Asia; active seller into Korean feed tenders"
+  size_evidence: >-
+    Terminal capacity/throughput from unitedgrain.com and Mitsui USA pages (observed). NOFI
+    bought ~67k t corn from Mitsui Apr 2026 at $263.58/t c&f, and a 68k t consignment via
+    May 2026 tender at $269.94/t c&f (observed, Reuters via aggregators).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://unitedgrain.com/about-ugc/vancouver-export-terminal/"
+      accessed: "2026-08-08"
+      supports: "terminal scale, commodity mix (observed)"
+    - url: "https://www.mitsui.com/jp/en/innovation/business/grain_feed/index.html"
+      accessed: "2026-08-08"
+      supports: "UGC ownership history (observed)"
+    - url: "https://www.brecorder.com/news/40418246/south-koreas-nofi-buys-about-67000-tons-of-corn"
+      accessed: "2026-08-08"
+      supports: "2026 activity as seller into NOFI tenders (observed via Reuters syndication)"
+  notes: >-
+    No 2025-26 UGC soybean-specific export volumes found (gap). Seller access: direct desk
+    (UGC Vancouver / Mitsui Tokyo) — inferred.
+
+- name: "ITOCHU Corporation"
+  aka: ["8001.T", "CGB Enterprises (JV with Zen-Noh)"]
+  scope: "asia_importers"
+  side: "both"
+  website: "https://www.itochu.co.jp/en/business/food/index.html"
+  ownership: "Public sogo shosha (TSE 8001); co-owns CGB Enterprises with Zen-Noh (exact split unconfirmed); holds stake in Fuji Oil Holdings"
+  roles: [importer, trader, originator, crusher]
+  products: [beans, meal, oil]
+  footprint: >-
+    Procures soybeans/corn/wheat/veg oil globally for Japan and Asia. CGB soybean crush —
+    new North Dakota oil extraction/refining plant operating since H2 2024; ITOCHU says
+    ND + Indiana capacity combined "matches the total soybean oil production of Japan",
+    positioned to supply Japan/Asia plus SAF feedstock.
+  destinations: "Japan and Asia"
+  size_evidence: >-
+    ITOCHU project page on CGB crush capacity (observed); no ITOCHU soybean import volume
+    breakdown for Japan published (gap).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.itochu.co.jp/en/business/food/project/09.html"
+      accessed: "2026-08-08"
+      supports: "CGB North Dakota crush plant, capacity comparison, Japan/Asia supply intent (observed)"
+    - url: "https://cgb.com/history/"
+      accessed: "2026-08-08"
+      supports: "CGB jointly owned by Zen-Noh + ITOCHU since late 1980s (observed)"
+  notes: >-
+    Seller access: direct desks (ITOCHU Tokyo food company; CGB for US-side supply) —
+    inferred. Japanese crushers (J-Oil Mills, Showa Sangyo, Nisshin Oillio; J-Oil + Showa
+    Sangyo formed the 'Oilseed Processing Partners Japan' JV) historically have beans booked
+    by sogo shosha on their behalf — standard structure but no current primary citation
+    naming trader-to-crusher pairings (inferred).
+
+- name: "Mitsubishi Corporation (Agrex)"
+  aka: ["8058.T", "Agrex Inc.", "Agrex do Brasil"]
+  scope: "asia_importers"
+  side: "both"
+  website: "https://www.agrexinc.com"
+  ownership: "Agrex Inc. (Kansas HQ) wholly owned by Mitsubishi Corporation (public sogo shosha, TSE 8058); Agrex do Brasil full subsidiary since 2019"
+  roles: [importer, trader, originator, terminal-operator]
+  products: [beans, meal]
+  footprint: >-
+    Agrex US — leading identity-preserved non-GMO soybean supplier; JV export terminal
+    stakes at Kalama/Portland alongside ADM/CGI/Viterra. Agrex do Brasil origination with
+    announced +BRL700M investment plan.
+  destinations: "Japan (notably food-grade IP/non-GMO beans for tofu/natto) and Asia"
+  size_evidence: >-
+    Agrex self-describes as a leading IP non-GMO soybean supplier (observed, company site);
+    USDA FAS reports the US ships ~140k MT natto-type beans to Japan and food beans must be
+    non-GE (observed) — Agrex's individual share unpublished (gap).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.agrexinc.com/fccp-about-21348"
+      accessed: "2026-08-08"
+      supports: "Agrex ownership, IP non-GMO role, terminal stakes (observed)"
+    - url: "https://www.fas.usda.gov/data/japan-utilization-food-grade-soybeans-japan"
+      accessed: "2026-08-08"
+      supports: "Japan food-grade soybean market structure — non-GE requirement, natto volumes (observed)"
+  notes: "Seller access: direct desk. No Agrex-specific volume data free (gap)."
+
+- name: "Zen-Noh (JA Zen-Noh)"
+  aka: ["National Federation of Agricultural Cooperative Associations", "Zen-Noh Grain Corporation (ZGC)", "Zen-Noh Global", "CGB Enterprises"]
+  scope: "asia_importers"
+  side: "both"
+  website: "https://www.zennohglobal.com"
+  ownership: "Japanese agricultural cooperative; ZGC (Convent, LA) wholly owned; CGB Enterprises JV with ITOCHU (exact split unconfirmed); reorganized under Zen-Noh Global (Geneva HQ) May 2025"
+  roles: [importer, feed-miller, exporter, terminal-operator, originator]
+  products: [beans, meal]
+  footprint: >-
+    Convent LA export elevator (Mississippi mile 164, >150k bu/hr loading); CGB 100+
+    elevators + inland barge logistics, incl. 35 former Bunge Mississippi-tributary
+    elevators acquired 2022. Imports feed ingredients for Zen-Noh's Japanese compound-feed
+    business supplying member farmers.
+  destinations: "Japan (captive co-op feed chain) plus third-country export sales"
+  size_evidence: >-
+    ZGC ~18 MMT/yr grain handled — figure appeared in aggregator text, treat as
+    approximate until confirmed on a primary page (observed-in-snippet). Bunge elevator
+    acquisition per CGB press release (observed).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://zgcusa.com/about-us/"
+      accessed: "2026-08-08"
+      supports: "Convent terminal scale claims (observed)"
+    - url: "https://cgb.com/zen-noh-grain-corporation-announces-close-on-acquisition-of-bunge-assets/"
+      accessed: "2026-08-08"
+      supports: "2022 Bunge elevator acquisition (observed)"
+    - url: "https://www.zennohglobal.com/zen-noh-global-grain"
+      accessed: "2026-08-08"
+      supports: "2025 Zen-Noh Global reorg; Dec 2025 GrainsConnect Canada sale to Parrish & Heimbecker (observed)"
+  notes: >-
+    Largely self-supplying via the captive ZGC/CGB chain; third-party sellers would deal
+    with CGB origination or the ZGC desk (inferred). Soybean-vs-corn split at Convent not
+    published; Japanese compound-feed import volumes unverified (gaps).
+
+- name: "Fuji Oil Holdings"
+  aka: ["2607.T", "Fuji Oil International (FII)"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.fujioilholdings.com"
+  ownership: "Public (TSE 2607), ITOCHU-affiliated; FII North America JV with ITOCHU (2021) integrating raw-material supply chains"
+  roles: [processor, importer]
+  products: [beans, oil]
+  footprint: "Japan food-use soy — soy protein ingredients, soymilk, oils & fats; Responsible Soy sourcing policy since 2021"
+  destinations: "Japan (food manufacturing)"
+  size_evidence: "None free — bean import tonnage not disclosed (gap)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.fujioil.co.jp/en/about/business/soy/index.html"
+      accessed: "2026-08-08"
+      supports: "soy ingredients business scope (observed)"
+    - url: "https://www.itochu.co.jp/en/news/press/2021/211209.html"
+      accessed: "2026-08-08"
+      supports: "FII JV with ITOCHU (observed)"
+  notes: "Who books Fuji Oil's bean cargoes could not be verified (gap); ITOCHU channel inferred from affiliation."
+
+# ---------------------------------------------------------------- SOUTH KOREA
+
+- name: "NOFI (Nonghyup Feed Inc.)"
+  aka: ["NH Feed", "Nonghyup Feed"]
+  scope: "asia_importers"
+  side: "buyer"
+  ownership: "Cooperative — part of the Nonghyup (NACF) agribusiness federation"
+  roles: [feed-miller, tender-buyer, importer]
+  products: [meal]
+  footprint: "South Korea feed mills (locations not verified from primary source — gap); Asia's most active feed-grain/soymeal tender buyer"
+  destinations: "South Korea (domestic feed)"
+  size_evidence: >-
+    Recurring 40-60k t soymeal consignments documented in Reuters-syndicated tender
+    reports through 2025-26 (observed); no primary annual-volume disclosure found (gap).
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.brecorder.com/news/40370271/south-koreas-nofi-tenders-for-up-to-60000-metric-tons-soymeal"
+      accessed: "2026-08-08"
+      supports: "Jun 2025 tender up to 60k t soymeal, optional-origin, c&f, arrival ~Oct 31 (observed via Reuters syndication)"
+    - url: "https://www.marinelink.com/blogs/blog/south-koreas-nofi-purchased-about-60000-tonnes-of-soymeal-from-103395"
+      accessed: "2026-08-08"
+      supports: "Sep 2025 private deal ~60k t soymeal $338.50/t c&f, Cofco seller (observed via syndication)"
+    - url: "https://www.marinelink.com/blogs/blog/south-koreas-nofi-purchased-about-60000-tonnes-of-soymeal-from-104745"
+      accessed: "2026-08-08"
+      supports: "May 2026 private deal ~60k t soymeal $412.15/t c&f, Posco believed seller (observed via syndication)"
+  notes: >-
+    How to sell: international tenders (typically up to 60k t soymeal, consignments 40-60k t,
+    optional-origin S.America/US/China, c&f with specified arrival window) PLUS frequent
+    private deals without tender. Named counterparty sellers in 2025-26 reports include
+    Cofco, Posco International, Mitsui, Cargill, CHS, Dreyfus. All details are trader
+    assessments via Reuters syndication, not buyer-confirmed.
+
+- name: "MFG (Major Feedmill Group)"
+  aka: []
+  scope: "asia_importers"
+  side: "buyer"
+  ownership: "Consortium of private Korean feed millers (member list / legal structure not verified — gap)"
+  roles: [tender-buyer, feed-miller, importer]
+  products: [meal]
+  footprint: "South Korea; tender-based soymeal purchaser alongside NOFI"
+  destinations: "South Korea (domestic feed)"
+  size_evidence: >-
+    Bought ~120k t soymeal in a Jun 30 2025 auction, Cofco believed seller, US/S.Am/China
+    optional-origin; tendered up to 60k t Aug 2025; also private deals without tender
+    (observed via Reuters syndication).
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.marinelink.com/blogs/blog/south-koreas-mfg-purchases-about-120000-t-of-soymeal-according-102970"
+      accessed: "2026-08-08"
+      supports: "Jun 2025 ~120k t soymeal purchase (observed via syndication)"
+    - url: "https://www.marketscreener.com/news/south-korea-s-mfg-tenders-to-buy-60-000-tons-soymeal-ce7c50dfdb88f223"
+      accessed: "2026-08-08"
+      supports: "Aug 2025 tender up to 60k t soymeal (observed via syndication)"
+  notes: >-
+    Korea Feed Association (KFA — Incheon/Busan branch tenders) is a parallel buyer group
+    but 2025-26 activity found was corn-only (e.g. Oct 2025 ~131k t corn to CHS and Olam);
+    no recent KFA soymeal tender found. A further group, FLC (Feed Leaders Committee),
+    exists but was not researched in depth (gap).
+
+- name: "CJ CheilJedang"
+  aka: ["097950.KS", "CJ Group"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.cj.co.kr"
+  ownership: "Public (KRX 097950), CJ Group"
+  roles: [crusher, importer, processor]
+  products: [beans, meal, oil]
+  footprint: >-
+    One of Korea's only two soybean crushers (with Sajo Daerim) per USDA GAIN KS2025-0009;
+    Korean crush running 15-20% below ~1.1 MMT/yr capacity (2026/27 forecast ~800k MT);
+    US-origin share of crushing beans ~43%. Retains CJ Selecta (Brazil crusher, world's
+    largest soy protein concentrate producer) after the Bunge sale was terminated Apr 2025.
+  destinations: "South Korea (domestic crush/food)"
+  size_evidence: "GAIN KS2025-0009 crush structure (observed); CJ Selecta ~KRW 714bn revenue per KED Global (observed)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://kr.usembassy.gov/wp-content/uploads/sites/67/2025/03/Oilseeds-and-Products-Annual_Seoul_Korea-Republic-of_KS2025-0009.pdf"
+      accessed: "2026-08-08"
+      supports: "Korea's two crushers = CJ CheilJedang + Sajo Daerim; crush utilization; US bean share (observed)"
+    - url: "https://www.kedglobal.com/mergers-acquisitions/newsView/ked202510010006"
+      accessed: "2026-08-08"
+      supports: "CJ Feed&Care sale to Royal De Heus ~KRW 1.2tn (~$854.5M) announced Oct 2025 (observed)"
+    - url: "https://www.kedglobal.com/mergers-acquisitions/newsView/ked202504290006"
+      accessed: "2026-08-08"
+      supports: "CJ Selecta sale to Bunge terminated Apr 2025 (observed)"
+  notes: >-
+    Sold CJ Feed&Care (Asia's largest feed/livestock unit, Vietnam/Indonesia-heavy) to
+    Royal De Heus (announced Oct 2025) — that feed demand migrates to De Heus ownership.
+    Bean booking channel (via international trading houses) inferred — no primary citation.
+    Sajo Daerim Corp (Sajo Group) is the other Korean crusher; its plant capacity/location
+    unverified (gap). 'Sajo Dongaone' is the milling/feed sister company, not the crusher.
+
+- name: "aT (Korea Agro-Fisheries & Food Trade Corporation)"
+  aka: ["Korea Agro-Fisheries Trade Corp"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.at.or.kr"
+  ownership: "State trading corporation"
+  roles: [state-buyer, tender-buyer, importer]
+  products: [beans]
+  footprint: "Controls the bulk of Korea's non-GMO food-grade soybean imports under its autonomous WTO TRQ, distributing to end-users with a mark-up that supports domestic production"
+  destinations: "South Korea (food-grade soy — tofu etc.)"
+  size_evidence: >-
+    Example tender — ~45k t non-GMO food-quality soybeans, worldwide origin, 20k t
+    containers + 25k t bulk, offer deadline Mar 12 2026 (observed via ADM Investor
+    Services Global Ag News). Annual TRQ tonnage not extracted from GAIN tables (gap).
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.admis.com/global-ag-news-for-march-10-2026/"
+      accessed: "2026-08-08"
+      supports: "Mar 2026 food-grade non-GMO soybean tender details (observed)"
+    - url: "https://kr.usembassy.gov/wp-content/uploads/sites/67/2025/03/Oilseeds-and-Products-Annual_Seoul_Korea-Republic-of_KS2025-0009.pdf"
+      accessed: "2026-08-08"
+      supports: "aT TRQ role in food-soybean imports (observed)"
+  notes: "How to sell: formal public tenders via aT electronic bidding. Annual TRQ volume unverified (gap)."
+
+# ---------------------------------------------------------------- TAIWAN
+
+- name: "TTET Union Corporation"
+  aka: ["大統益", "TWSE 1232"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.ttet.com.tw/index.php?lang=en"
+  ownership: "Public (TWSE 1232, listed 1996); led by Uni-President Enterprises (~38.5%) with Great Wall Enterprise and Taihua Oil as co-investors"
+  roles: [crusher, importer]
+  products: [beans, meal, oil]
+  footprint: >-
+    Tainan crush plant, ~1.5 MMT/yr soybean capacity — one of Taiwan's two large crushers
+    (with Central Union; Everlight and Tai-Sugar are the two small plants; combined island
+    capacity 9,000 MT/day / ~3 MMT/yr at ~65% utilization per USDA GAIN). Toll-crushes for
+    its major shareholders; supplies meal to Great Wall's feed operations.
+  destinations: "Taiwan (domestic meal/oil)"
+  size_evidence: "GAIN TW2024-0016 crusher structure (observed); ~1.5 MMT/yr capacity per stockanalysis.com profile (observed)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Taipei_Taiwan_TW2024-0016.pdf"
+      accessed: "2026-08-08"
+      supports: "Taiwan crush consolidation into Central Union + TTET (large) and Everlight + Tai-Sugar (small); import structure (observed)"
+    - url: "https://stockanalysis.com/quote/tpe/1232/company/"
+      accessed: "2026-08-08"
+      supports: "capacity, product range, listing (observed)"
+    - url: "https://www.taipeitimes.com/News/biz/archives/2013/04/18/2003559981"
+      accessed: "2026-08-08"
+      supports: "Uni-President stake (observed, dated 2013)"
+  notes: >-
+    How to sell: private negotiated bulk purchases from international trading houses — no
+    public tenders; Taiwan's government joint procurement was abolished in 1988. Great Wall
+    Enterprise buys through its TTET stake rather than importing beans independently
+    (inferred from toll-crush structure). US-origin bean share swings ~44-59% vs Brazil on
+    competitiveness (GAIN). Sell-side channel for US programs: Taiwan Vegetable Oil
+    Manufacturers Association (TVOMA) — 2025 biennial Goodwill Mission signed non-binding
+    LOIs incl. US$3.44-4.2B of US soybeans 2026-2029 with the Indiana Soybean Alliance
+    (observed — Focus Taiwan, Hoosier Ag Today).
+
+- name: "Central Union Oil Corporation"
+  aka: ["中聯油脂", "CUOC"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "http://www.cuoc.com.tw/en/company/?aid=21"
+  ownership: "Private JV founded 1995 by Fwusow Industry, Formosa Oilseed Processing, and Taisun Enterprise"
+  roles: [crusher, importer]
+  products: [beans, meal, oil]
+  footprint: "Taichung Port crush plant — Taiwan's other large crusher; supplies crude oil and meal back to its three shareholders for refining/packing"
+  destinations: "Taiwan (domestic)"
+  size_evidence: "Named as one of the two large plants in USDA GAIN TW2024-0016 (observed); standalone capacity figure not found (gap)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Taipei_Taiwan_TW2024-0016.pdf"
+      accessed: "2026-08-08"
+      supports: "one of Taiwan's two large crushers (observed)"
+    - url: "https://focustaiwan.tw/society/202607070018"
+      accessed: "2026-08-08"
+      supports: "2026 contamination fine NT$165.2M (observed)"
+  notes: >-
+    Risk flag: center of Taiwan's 2026 tainted-cooking-oil scandal — fined NT$165.2M for
+    late reporting of benzo[a]pyrene contamination in soybean oil; ~1,300 MT tainted oil
+    reached the supply chain via Taisun/Fwusow/Formosa; ~NT$6B class action organizing;
+    chairman under prosecution (observed — Focus Taiwan, Taipei Times 2026-07). Purchasing
+    channel private/direct, same as TTET (inferred).
+
+- name: "BSPA (Breakfast Soybean Procurement Association) — historical"
+  aka: ["Taiwan BSPA"]
+  scope: "asia_importers"
+  side: "buyer"
+  ownership: "Joint buying association of Taiwan's soyfood/breakfast (soymilk, tofu) sector, with regional branches (e.g. Kaohsiung)"
+  roles: [tender-buyer, importer]
+  products: [beans]
+  footprint: "Taiwan; ran periodic tenders for ~46-60k t US-origin soybean cargoes, premium quoted in US cents/bu over CBOT, awarded to international houses (Louis Dreyfus, Mitsui)"
+  destinations: "Taiwan (food-use soy)"
+  size_evidence: "Documented tenders 2003-2006 only: 56k t from Louis Dreyfus (Oct 2003), 46k t from Mitsui at +182.75 c/bu (Oct 2006), up-to-60k t tender (Dec 2004)"
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.usmef.org/news-statistics/member-news-archive/asia-pacific-taiwan-bspa-buys-56000t-us-soy-from-louis-dreyfustaipei-oc-5819/"
+      accessed: "2026-08-08"
+      supports: "Oct 2003 BSPA Kaohsiung 56k t purchase from LDC (observed, archived Reuters)"
+    - url: "https://m.efeedlink.com/contents/10-26-2006/2d68f27b-ba5a-420f-b40b-82fc9b0bf900-a181.html"
+      accessed: "2026-08-08"
+      supports: "Oct 2006 Kaohsiung branch 46k t from Mitsui at +182.75 c/bu (observed)"
+  notes: >-
+    IMPORTANT: no BSPA tender could be verified after 2006 across targeted searches, and
+    USDA GAIN's 2024 Taiwan annual never mentions BSPA — treat as historical unless a
+    2024-26 Reuters hit surfaces. No MFIG-style public tender exists for soybeans/soymeal
+    today (MFIG's recurring ~65k t tenders are corn-only); crushers buy privately, and per
+    GAIN some feed millers without crush plants import full-fat beans directly. Taiwan meal
+    imports are small (~70k MT, containerized — no bulk meal port logistics).
+
+# ---------------------------------------------------------------- VIETNAM
+
+- name: "Vietnam Agribusiness Limited (VAL)"
+  aka: ["Bunge Vietnam", "Phu My crush plant"]
+  scope: "asia_importers"
+  side: "buyer"
+  ownership: "JV — Bunge Global 45%, Wilmar International ~45% (inferred as residual), Quang Dung 10%; Bunge retained 45% and Quang Dung its 10% in the 2018 restructuring"
+  roles: [crusher, importer]
+  products: [beans, meal, oil]
+  footprint: >-
+    Phu My 1 Industrial Park (Ba Ria-Vung Tau); Line 1 since 2011; Line 2 (~$100M)
+    inaugurated to 7,800 t/day total ≈ 2.6 MMT beans/yr, ~2 MMT meal/yr ≈ ~30% of Vietnam
+    feed demand. Vietnam has four crush facilities (one north, three south) per USDA GAIN
+    VM2025-0011; two southern plants started early 2025, a third line added mid-2025.
+  destinations: "Vietnam (domestic meal/oil)"
+  size_evidence: >-
+    GAIN VM2025-0011 — bean imports 2.5 MMT MY2024/25 → 2.8 MMT MY2025/26, crush 1.7 →
+    2.1 MMT (observed); Line 2 capacity per World Grain/Aquafeed — observed in search
+    snippets only, article pages 403-blocked.
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Hanoi_Vietnam_VM2025-0011.pdf"
+      accessed: "2026-08-08"
+      supports: "Vietnam crush structure, import volumes, origin shares — Brazil 48.4% / US 41.4% of CY2024 beans (observed)"
+    - url: "https://www.world-grain.com/articles/22219-vietnam-agribusiness-inaugurates-soybean-crush-line"
+      accessed: "2026-08-08"
+      supports: "Line 2 inauguration and capacity (observed in snippet; page 403 on direct fetch)"
+  notes: >-
+    Effectively closed to third-party sellers — Bunge/Wilmar self-supply beans through their
+    own desks (inferred). Exact 45/45/10 split partially inferred (Wilmar share as
+    residual). The unnamed northern crusher adding a line may be Dabaco's complex but GAIN
+    names no crushers — unverified; Dabaco (HoSE DBC) left out as standalone entry for lack
+    of verifiable sourcing (site 404, search budget exhausted).
+
+- name: "Quang Dung Group"
+  aka: []
+  scope: "asia_importers"
+  side: "buyer"
+  ownership: "Private Vietnamese group; holds 10% of VAL; per World Grain (dated) majority owner of GreenFeed — current stake unverified"
+  roles: [importer, distributor]
+  products: [meal]
+  footprint: "Vietnam's major soybean-meal importer-distributor; national SBM imports ~6 MMT MY2024/25 — Argentina ~69%, US 14%, Brazil 13% (GAIN)"
+  destinations: "Vietnam (feed mills)"
+  size_evidence: "No company-level volume disclosure found (gap); role per World Grain coverage (observed, dated)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.world-grain.com/articles/15166-feed-demand-to-boost-vietnams-soybean-crush"
+      accessed: "2026-08-08"
+      supports: "Quang Dung as major SBM importer-distributor with VAL stake and GreenFeed link (observed, dated article)"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Hanoi_Vietnam_VM2025-0011.pdf"
+      accessed: "2026-08-08"
+      supports: "national SBM import volume and origin shares (observed)"
+  notes: "Seller access: direct negotiated cargoes, Argentine meal dominant (inferred from national origin data). Website/current corporate detail unverified (gap)."
+
+- name: "C.P. Vietnam Corporation"
+  aka: ["CP Vietnam"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.cp.com.vn"
+  ownership: "Subsidiary of Thailand's Charoen Pokphand group (via CPF/CP Pokphand)"
+  roles: [feed-miller, integrator, importer]
+  products: [meal]
+  footprint: "Vietnam's largest feed producer; fully integrated feed-farm-food. Mill count/capacity unverified (site down at access time)"
+  destinations: "Vietnam (own integration)"
+  size_evidence: "None free at Vietnam level (gap) — 'largest feed producer' status widely documented at group level but not re-verified from a primary page this pass"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Hanoi_Vietnam_VM2025-0011.pdf"
+      accessed: "2026-08-08"
+      supports: "Vietnam feed demand ~27.5-28.5 MMT and SBM share of rations 15-35% — the demand pool CP leads (observed)"
+  notes: >-
+    Seller access: direct procurement offices — CP runs centralized regional purchasing;
+    Thai parent's soy procurement runs through Bangkok Produce Merchandising (see Thailand
+    CPF entry), but whether CP Vietnam buys through BKP or a local desk is unverified
+    (gap). No 2025-26 CP-Vietnam-specific soy purchase reports found (gap).
+
+- name: "De Heus Vietnam"
+  aka: ["ANCO", "Proconco"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.deheus.com"
+  ownership: "Royal De Heus (Netherlands, private/family-owned); acquired Masan's MNS Feed business Nov 2021 (100% ANCO + 75.2% Proconco)"
+  roles: [feed-miller, importer]
+  products: [meal]
+  footprint: "13 feed mills + 1 premix plant, ~4 MMT capacity acquired from Masan — largest animal-nutrition company in Vietnam's independent feed market (De Heus's own claim)"
+  destinations: "Vietnam (independent feed market)"
+  size_evidence: "De Heus press release on the Masan acquisition (observed); total post-deal Vietnam capacity beyond the acquired 4 MMT unverified (gap)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.deheus.com/articles/news/de-heus-strengthens-strategic-position-in-vietnam-by-acquiring-masans-feed-business"
+      accessed: "2026-08-08"
+      supports: "Masan feed acquisition scope and market-position claim (observed, primary)"
+    - url: "https://www.kedglobal.com/mergers-acquisitions/newsView/ked202510010006"
+      accessed: "2026-08-08"
+      supports: "De Heus also acquiring CJ Feed&Care (Vietnam/Indonesia-heavy), announced Oct 2025 (observed)"
+  notes: "Seller access: direct/central procurement; imported SBM origins inferred from national data (Argentina-led). CJ Feed&Care deal further concentrates Vietnam/Indonesia feed demand under De Heus."
+
+- name: "GreenFeed Vietnam"
+  aka: []
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.greenfeed.com.vn/en/about-us/"
+  ownership: "Private; founded 2003; World Grain (dated) reported majority ownership by Quang Dung — current stake unverified (gap)"
+  roles: [feed-miller, integrator, importer]
+  products: [meal]
+  footprint: "Integrated '3F Plus' feed-farm-food (+aqua) across Vietnam, Laos, Cambodia, Myanmar (company site); mill count/capacity not published (gap)"
+  destinations: "Vietnam and Indochina (own integration)"
+  size_evidence: "None free (gap)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.greenfeed.com.vn/en/about-us/"
+      accessed: "2026-08-08"
+      supports: "footprint and integration model (observed, primary)"
+  notes: "Meal-buying channel unverified; possibly linked to Quang Dung's import-distribution (inferred)."
+
+# ---------------------------------------------------------------- INDONESIA
+
+- name: "PT FKS Multi Agro Tbk"
+  aka: ["IDX FISH", "FKS Group", "FKS Food and Agri (SG parent)"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.fksgroup.com/business-unit/fks-multi-agro/"
+  ownership: "IDX-listed since 2002 (FISH); family-founded FKS Group majority control; Singapore parent FKS Food and Agri"
+  roles: [importer, distributor, terminal-operator]
+  products: [beans, meal]
+  footprint: >-
+    Indonesia's leading soybean and soybean-meal distributor (USSEC's description) —
+    food-grade beans for the tempeh/tofu cottage industry (which consumes ~90% of bean
+    supply; US-origin = 86% of 2024/25 bean imports). Cigading Port grain terminal
+    (Cilegon, Banten) via FKS Logistics; Sentral Grain Terminal 2 (270k t warehouse) with
+    Krakatau Bandar Samudera. Meal origins per company site: Argentina, USA, Brazil,
+    Paraguay, India, China.
+  destinations: "Indonesia (food-soy processors + feed mills)"
+  size_evidence: >-
+    Market cap ~$836M, TTM revenue ~$1.18B (Sep 2025, PitchBook — observed); $234M
+    syndicated refinancing/expansion loans 2025 (Jakarta Globe — observed). Historic
+    ~46% bean / ~30% meal shares are 2015 figures — dated; current shares unverified (gap).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://jakartaglobe.id/business/fks-multi-agro-secures-234m-syndicated-loans-for-refinancing-expansion"
+      accessed: "2026-08-08"
+      supports: "2025 syndicated loans; parent structure (observed)"
+    - url: "https://ussec.org/news/2025-successes-mous-strengthened-global-partnerships/"
+      accessed: "2026-08-08"
+      supports: "Sept 2025 FKS-USSEC MOU (observed)"
+    - url: "https://www.fas.usda.gov/data/gain-report/2026/04/Oilseeds%20and%20Products%20Annual_Jakarta_Indonesia_ID2026-0013.pdf"
+      accessed: "2026-08-08"
+      supports: "Indonesia bean import volumes/US share, tempeh-tofu dominance (observed via search extracts — direct PDF fetch 403'd)"
+  notes: >-
+    Seller access: direct trading desk (integrated procurement/shipment/logistics); USSEC
+    relationship channel. Context: July 2025 US-Indonesia trade deal committed $4.5B US ag
+    purchases incl. >=3.5 MMT/yr US soybeans + 3.8 MMT/yr US soymeal for 5 years (Argus,
+    USTR — observed); traders skeptical of the meal figure (2025 US meal shipments only
+    ~216k t). Whether FKS signed the specific US-ABC volume MOUs is unconfirmed (gap).
+    Wilmar International: no evidence found of soybean crush or a leading soymeal-import
+    role in Indonesia — its footprint there is palm-dominated; excluded as an entry
+    (observed absence, consistent with GAIN showing negligible domestic bean crush).
+
+- name: "PT Charoen Pokphand Indonesia Tbk"
+  aka: ["IDX CPIN"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.cp.co.id"
+  ownership: "Public (IDX CPIN); controlled by Thailand's CP Group"
+  roles: [feed-miller, integrator, importer]
+  products: [meal]
+  footprint: "Top of Indonesia's ~20+ MMT/yr compound feed industry (4th-largest globally, poultry ~65-70%); national meal imports ~6.2 MMT MY2024/25, Brazil ~80% share since 2022/23, US ~3%"
+  destinations: "Indonesia (own feed integration)"
+  size_evidence: "No per-company soymeal import tonnage free (gap); market-research summaries put direct producer-to-feedmill contracts at est. 50-60% of protein-meal volume across the top 5-10 groups (estimate, softer source)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.spglobal.com/commodity-insights/en/news-research/latest-news/agriculture/081225-biofuel-driven-crush-expansion-boosts-soybean-meal-trade-as-indonesia-imports-surge-fas"
+      accessed: "2026-08-08"
+      supports: "Indonesia meal import volume and Brazil ~80% origin share, citing FAS (observed)"
+    - url: "https://research.rhbtradesmart.com/files_preview?hash=25cdeb50-e1e3-4e8c-b79b-cebf7a9f3a89"
+      accessed: "2026-08-08"
+      supports: "MBG free-meals program budget ramp lifting CPIN feed demand (observed, analyst note)"
+  notes: >-
+    2025-26 driver: MBG free-meals program (~24,000 kitchens / ~65M people by Feb 2026)
+    lifting poultry-feed and meal demand. Whether CPIN's meal buying routes through CP
+    Group's Bangkok Produce Merchandising or a local desk is unverified (gap). Annual/
+    semi-annual contracts benchmarked to soymeal indices per market-research summaries
+    (estimate-grade sourcing).
+
+- name: "PT Japfa Comfeed Indonesia Tbk"
+  aka: ["IDX JPFA", "Japfa Ltd"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.japfacomfeed.co.id"
+  ownership: "Public (IDX JPFA); Japfa Ltd parentage"
+  roles: [feed-miller, integrator, importer]
+  products: [meal]
+  footprint: "#2 Indonesian feed integrator; documented chartering partial/full Handymax parcels ex-US Gulf for corn gluten meal — i.e. books bulk cargoes directly, not only via traders (observed for CGM; inferred for soymeal)"
+  destinations: "Indonesia (own feed integration)"
+  size_evidence: "No per-company soymeal tonnage free (gap); earnings turnaround 2025-Q1 2026 noted in analyst coverage"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.chemtradeasia.com.eg/en/market-insights/corn-gluten-meal-shipping-bulk-vessel-routes-from-the-us-to-asia"
+      accessed: "2026-08-08"
+      supports: "Japfa chartering bulk parcels ex-US Gulf (observed for CGM)"
+    - url: "https://www.spglobal.com/commodity-insights/en/news-research/latest-news/agriculture/081225-biofuel-driven-crush-expansion-boosts-soybean-meal-trade-as-indonesia-imports-surge-fas"
+      accessed: "2026-08-08"
+      supports: "national meal import context (observed)"
+  notes: "Malindo Feedmill (IDX MAIN), Leong Hup Indonesia and Gold Coin round out the top import-demand groups — not separately researched (gap)."
+
+# ---------------------------------------------------------------- THAILAND
+
+- name: "Thai Vegetable Oil PCL (TVO)"
+  aka: ["SET TVO", "ANGOON (oil brand)", "Prodigy PCL (subsidiary)"]
+  scope: "asia_importers"
+  side: "both"
+  website: "https://www.tvothai.com/en/"
+  ownership: "Public, SET-listed; market cap ~THB 24.0bn per SET factsheet"
+  roles: [crusher, importer, exporter]
+  products: [beans, meal, oil]
+  footprint: >-
+    Thailand's largest crusher — 6,000 t/day bean capacity, roughly half the national
+    ~12,500 t/day across four active crushers (TVO, Thanakorn Vegetable Oil Products,
+    Porn Amnuay Sup, Industrial Enterprise Co.) running 60-70% utilization per USDA GAIN
+    TH2025-0009. ~90% of beans from Brazil and the US; ~93% of oil sold domestically;
+    ANGOON is the #1 retail soybean-oil brand (NielsenIQ 2025).
+  destinations: "Thailand (domestic meal/oil); regional meal exports under quota"
+  size_evidence: >-
+    Q1 2026 revenue THB 7.73bn (+13% YoY), net income THB 709m (+33%) — Form 56-1 One
+    Report 2025 (observed); largest 2025 meal-export quota allocation, 201,949.748 t of
+    the national 409,227 t (GAIN TH2025-0009 — observed via search extracts, PDF 403'd).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.tvothai.com/themes/tvothai/downloads/annual-report/20260406-180837-tvo-2568-one-en-compress-t.pdf"
+      accessed: "2026-08-08"
+      supports: "financials, capacity, brand claims (observed)"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Bangkok_Thailand_TH2025-0009.pdf"
+      accessed: "2026-08-08"
+      supports: "Thai crusher structure, bean imports 3.4-3.8 MMT, duty-free window, meal-export quota (observed via search extracts — direct PDF fetch 403'd)"
+  notes: >-
+    Seller access: direct procurement desk buying bulk Panamax/Handymax bean cargoes
+    (inferred from scale); channel mix vs trade houses undocumented. Thailand allowed
+    unlimited duty-free WTO bean imports 2023-2025 (Cabinet 2022-11-29); post-2025
+    renewal unconfirmed (gap). FY2025 bean purchase tonnage in the 56-1 report but not
+    extracted (gap).
+
+- name: "Charoen Pokphand Foods PCL / Bangkok Produce Merchandising"
+  aka: ["SET CPF", "BKP", "CP Group"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.bkp.co.th"
+  ownership: "BKP is CPF's feed-ingredient trading/procurement subsidiary; CPF controlled by CP Group (Chearavanont family — control widely reported, inferred)"
+  roles: [importer, feed-miller, integrator]
+  products: [meal, beans]
+  footprint: >-
+    Procures corn, soybean meal, soybeans, palm oil, cassava for CPF's feed mills in
+    Thailand and SE Asia. Brazil-dominated meal with a documented Bunge-Brazil supply line —
+    2024 pilot of 185k t deforestation-free blockchain-traced soymeal Brazil→Thailand plus
+    180k t follow-on; also works with LDC on Brazil soy traceability.
+  destinations: "Thailand + CP's SE Asia feed network"
+  size_evidence: >-
+    Bunge press releases on the traceability partnership and Sep 2025 MOU (observed);
+    TradeScope estimates ~$265M 2025 soymeal import value, ranked #1 Thai buyer (estimate,
+    softer source — flag).
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://bunge.com/Press-Releases/Bunge-and-Bangkok-Produce-Merchandising-Expand-Partnership-for-Blockchain-Traced"
+      accessed: "2026-08-08"
+      supports: "Sep 2025 Bunge-BKP MOU — procurement, logistics, blockchain traceability (observed, primary)"
+    - url: "https://www.businesswire.com/news/home/20240610926347/en/Bunge-and-CP-Foods-Pioneer-Greater-Transparency-in-Shipments-of-Deforestation-Free-Soybeans-Using-Blockchain-Technology"
+      accessed: "2026-08-08"
+      supports: "2024 185k t deforestation-free soymeal pilot (observed)"
+    - url: "https://www.feedstrategy.com/sustainability-in-feed-production/article/15663663/cpf-welcomes-thai-governments-move-on-soy-imports-feed-strategy"
+      accessed: "2026-08-08"
+      supports: "Thai meal-import regime — 2% in-quota tariff for 11 authorized importers, 1-yr permits 2026-2028; CPF response (observed)"
+  notes: >-
+    Seller access: via BKP's trading desk; strategic supply MOUs with majors —
+    deforestation-free credentials effectively a requirement (CPF targeted 100% DCF by
+    2025). Thai meal imports restricted to 11 authorized in-quota importers at 2% (119%
+    out-of-quota) — the 11 are not itemized in any retrieved source; BKP's inclusion
+    inferred. 'CP Intertrade' is CP's rice-trading unit, not the soy arm — soy runs
+    through BKP (inference from role descriptions; flagged).
+
+- name: "Betagro PCL"
+  aka: ["SET BTG"]
+  scope: "asia_importers"
+  side: "buyer"
+  website: "https://www.betagro.com/en/home"
+  ownership: "Public since Nov 2022 (SET BTG); Taepaisitphongse family control widely reported but not verified in retrieved sources (inferred)"
+  roles: [feed-miller, integrator, importer]
+  products: [meal]
+  footprint: >-
+    #2 Thai feed/livestock integrator; buys corn, soymeal, fishmeal for feed mills — new
+    mill >600 kt/yr capacity; Nong Bun Mak (2023) and Chachoengsao (ramped Q3 2024) mills;
+    first Lao PDR mill (>THB 650M). Thai feed demand ~21.8 MMT 2025 (from 21.1 MMT 2024).
+  destinations: "Thailand (own integration)"
+  size_evidence: "Mill investments per market-research summaries (observed, secondary); own import volumes not disclosed (gap)"
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.mordorintelligence.com/industry-reports/thailand-compound-feed-market/companies"
+      accessed: "2026-08-08"
+      supports: "Betagro position and mill expansion (observed, secondary source)"
+  notes: >-
+    Whether Betagro holds one of Thailand's 11 meal-import permits is unverified (gap).
+    Collective sell-side channel: Thai Feed Mill Association signed an MOU with USSEC for
+    sustainable soy/soymeal supply (observed via search extracts).
