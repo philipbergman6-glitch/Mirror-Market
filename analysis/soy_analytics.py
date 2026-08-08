@@ -658,6 +658,9 @@ def relative_value_analysis() -> dict:
             only one source is available).
         oil_meal_ratio: soy oil / soy meal price ratio (tracks protein vs oil demand)
         oil_vs_palm: soybean oil vs palm oil comparison
+        oil_vs_rapeseed: CBOT soy oil vs CZCE rapeseed oil, both USD/MT
+            (CZCE leg is CNY/MT converted at CNY/USD spot — ICE canola
+            RS=F is dead on yfinance, so CZCE is the daily rapeseed leg)
         bean_corn_ratio: soybean/corn ratio (acreage competition signal)
         soy_oil_share: soy oil as % of total crush value
     """
@@ -800,6 +803,48 @@ def relative_value_analysis() -> dict:
             result["oil_vs_palm"]["palm_oil_weekly_chg"] = (
                 (palm["Close"].iloc[-1] - palm["Close"].iloc[-6]) / palm["Close"].iloc[-6]
             ) * 100
+
+    # --- Soy oil vs CZCE rapeseed oil (cross-oilseed, USD/MT) ---
+    # ICE canola (RS=F) has no usable yfinance feed, so the daily rapeseed
+    # leg is the CZCE Rapeseed Oil continuous (CNY/MT) at CNY/USD spot.
+    cny_usd = currencies.get("CNY/USD")
+    if (
+        oil is not None and not oil.empty
+        and cny_usd is not None and not cny_usd.empty
+    ):
+        rapeseed = pd.DataFrame()
+        try:
+            rapeseed = read_dce_futures("CZCE Rapeseed Oil")
+        except Exception:
+            logger.warning("CZCE rapeseed oil read failed", exc_info=True)
+        rate = cny_usd["Close"].iloc[-1]
+        if not rapeseed.empty and pd.notna(rate) and rate > 0:
+            rapeseed = rapeseed.sort_values("Date")
+            rapeseed_cny = float(rapeseed["Close"].iloc[-1])
+            rapeseed_usd = rapeseed_cny * float(rate)
+            soy_oil_usd = to_metric_tons(oil["Close"].iloc[-1], "Soybean Oil")
+            entry = {
+                "soy_oil": soy_oil_usd,
+                "soy_oil_as_of": _asof(oil.index[-1]),
+                "rapeseed_oil": rapeseed_usd,
+                "rapeseed_oil_cny": rapeseed_cny,
+                "rapeseed_oil_as_of": _asof(rapeseed["Date"].iloc[-1]),
+                "cny_usd": float(rate),
+                "spread_usd_mt": (
+                    rapeseed_usd - soy_oil_usd
+                    if soy_oil_usd is not None else None
+                ),
+            }
+            if len(oil) >= 6:
+                entry["soy_oil_weekly_chg"] = (
+                    (oil["Close"].iloc[-1] - oil["Close"].iloc[-6]) / oil["Close"].iloc[-6]
+                ) * 100
+            if len(rapeseed) >= 6:
+                entry["rapeseed_oil_weekly_chg"] = (
+                    (rapeseed["Close"].iloc[-1] - rapeseed["Close"].iloc[-6])
+                    / rapeseed["Close"].iloc[-6]
+                ) * 100
+            result["oil_vs_rapeseed"] = entry
 
     # --- Bean/Corn ratio ---
     if beans is not None and corn is not None and not beans.empty and not corn.empty:

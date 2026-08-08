@@ -17,6 +17,7 @@ from config import (
 from pipeline.query import (
     read_brazil_estimates,
     read_cot,
+    read_dce_futures,
     read_economic,
     read_eia_data,
     read_export_sales,
@@ -24,6 +25,7 @@ from pipeline.query import (
     read_psd,
     read_weather,
 )
+from pipeline.units import to_metric_tons
 
 
 def format(  # noqa: A001
@@ -191,6 +193,55 @@ def format(  # noqa: A001
                     drivers.append(
                         f"Soybean oil outperforming palm oil ({oil_chg:+.1f}% vs {palm_chg:+.1f}%): "
                         f"soy oil premium building — demand may shift to palm"
+                    )
+
+    # Cross-oilseed: CBOT soy oil vs CZCE rapeseed oil (USD/MT). ICE canola
+    # (RS=F) is dead on yfinance, so CZCE is the daily rapeseed leg —
+    # CNY/MT converted at CNY/USD spot.
+    if "Soybean Oil" in enriched and not enriched["Soybean Oil"].empty:
+        cny_usd = None
+        if currency_data:
+            cny_df = currency_data.get("CNY/USD")
+            if cny_df is not None and not cny_df.empty:
+                rate = cny_df["Close"].iloc[-1]
+                if pd.notna(rate) and rate > 0:
+                    cny_usd = float(rate)
+
+        rapeseed = read_dce_futures("CZCE Rapeseed Oil")
+        oil_weekly = enriched["Soybean Oil"].get("weekly_pct_change", pd.Series())
+        if (
+            cny_usd is not None
+            and len(rapeseed) >= 6
+            and not oil_weekly.empty
+            and pd.notna(oil_weekly.iloc[-1])
+        ):
+            rapeseed = rapeseed.sort_values("Date")
+            rape_chg = (
+                (rapeseed["Close"].iloc[-1] - rapeseed["Close"].iloc[-6])
+                / rapeseed["Close"].iloc[-6]
+            ) * 100
+            oil_chg = oil_weekly.iloc[-1]
+            if pd.notna(rape_chg):
+                rape_usd = float(rapeseed["Close"].iloc[-1]) * cny_usd
+                soy_oil_usd = to_metric_tons(
+                    enriched["Soybean Oil"]["Close"].iloc[-1], "Soybean Oil"
+                )
+                spread_txt = ""
+                if soy_oil_usd is not None:
+                    spread_txt = (
+                        f" (CZCE {rape_usd:,.0f} vs CBOT {soy_oil_usd:,.0f} USD/MT)"
+                    )
+                if rape_chg - oil_chg > 3:
+                    drivers.append(
+                        f"CZCE rapeseed oil outperforming soybean oil "
+                        f"({rape_chg:+.1f}% vs {oil_chg:+.1f}%){spread_txt}: "
+                        f"rapeseed premium widening — may shift demand toward soy oil"
+                    )
+                elif oil_chg - rape_chg > 3:
+                    drivers.append(
+                        f"Soybean oil outperforming CZCE rapeseed oil "
+                        f"({oil_chg:+.1f}% vs {rape_chg:+.1f}%){spread_txt}: "
+                        f"soy oil premium building — demand may shift to rapeseed oil"
                     )
 
     eia_data_local = read_eia_data()

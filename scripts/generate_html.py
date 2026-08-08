@@ -760,6 +760,42 @@ def _build_relative_value(data: dict) -> str:
         cards.append('</div>')
         parts.append("\n".join(cards))
 
+    # Oil vs CZCE Rapeseed Oil (cross-oilseed — ICE canola has no free daily feed)
+    ovr = data.get("oil_vs_rapeseed")
+    if ovr:
+        parts.append('<hr class="divider"><div class="subhdr">Soy Oil vs CZCE Rapeseed Oil</div>')
+        cards = ['<div class="grid grid-2">']
+        so = ovr.get("soy_oil")
+        ro = ovr.get("rapeseed_oil")
+        if so:
+            swk = ovr.get("soy_oil_weekly_chg")
+            sc = "up" if swk and swk >= 0 else "down" if swk else "muted"
+            so_asof = ovr.get("soy_oil_as_of")
+            so_d = f'<div class="caption">as of {_esc(so_asof)}</div>' if so_asof else ""
+            cards.append(f'<div class="mc"><div class="mc-label">Soy Oil (USD/MT)</div><div class="mc-val">{so:,.2f}</div><div class="mc-delta {sc}">{delta_str(swk)}</div>{so_d}</div>')
+        if ro:
+            rwk = ovr.get("rapeseed_oil_weekly_chg")
+            rc = "up" if rwk and rwk >= 0 else "down" if rwk else "muted"
+            ro_caption_parts = []
+            ro_cny = ovr.get("rapeseed_oil_cny")
+            if ro_cny:
+                ro_caption_parts.append(f"CNY {ro_cny:,.0f}/MT")
+            ro_asof = ovr.get("rapeseed_oil_as_of")
+            if ro_asof:
+                ro_caption_parts.append(f"as of {_esc(ro_asof)}")
+            ro_d = f'<div class="caption">{" · ".join(ro_caption_parts)}</div>' if ro_caption_parts else ""
+            cards.append(f'<div class="mc"><div class="mc-label">CZCE Rapeseed Oil (USD/MT)</div><div class="mc-val">{ro:,.2f}</div><div class="mc-delta {rc}">{delta_str(rwk)}</div>{ro_d}</div>')
+        cards.append('</div>')
+        parts.append("\n".join(cards))
+        spread = ovr.get("spread_usd_mt")
+        if spread is not None:
+            sp_class = "up" if spread > 0 else "down"
+            parts.append(
+                f'<div class="mc" style="margin-bottom:24px;"><div class="mc-label">Rapeseed − Soy Oil Spread</div>'
+                f'<div class="mc-val {sp_class}">${spread:+,.1f}</div>'
+                f'<div class="caption">CZCE rapeseed oil premium over CBOT soy oil, USD/MT — ICE canola (RS=F) has no free daily feed, CZCE is the rapeseed leg</div></div>'
+            )
+
     # Bean/Corn ratio
     bcr = data.get("bean_corn_ratio")
     if bcr and bcr.get("series") is not None:

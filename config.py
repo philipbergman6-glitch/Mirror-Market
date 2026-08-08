@@ -47,8 +47,8 @@ LAYER_MIN_KEYS = {
     "currencies": 8,   # of 10 pairs
     "fred": 8,         # of 10 series
     "weather": 14,     # of 18 regions
-    "cot": 7,          # of 9 commodities
-    "psd": 5,          # of 7 commodities
+    "cot": 7,          # of 10 commodities
+    "psd": 5,          # of 10 commodities
     "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
@@ -93,6 +93,13 @@ COMMODITY_TICKERS = {
     # CME USD Malaysian Crude Palm Oil Calendar swap — marked off Bursa FCPO
     # settlements, natively USD/MT, settlement-marked (volume ≈ 0 by design)
     "Palm Oil (CME)": "CPO=F",
+
+    # ICE canola (RS=F) — verified DEAD on yfinance 2026-08-08 (X1 go/no-go):
+    # zero rows on every period (1mo/6mo/2y/max) and individual contract
+    # tickers (RSF26.NYB etc.) 404. The daily rapeseed benchmark is CZCE
+    # Rapeseed Oil (Layer 9, CNY/MT). Revisit if Yahoo restores ICE
+    # Canada coverage — a CAD/USD pair + pipeline/units.py leg would then
+    # be needed (canola quotes CAD/MT).
 }
 
 # How far back to pull historical data (yfinance period strings)
@@ -173,6 +180,11 @@ COT_COMMODITIES = {
     # ── Livestock ──
     "Live Cattle":  "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE",
     "Lean Hogs":    "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE",
+
+    # ── Cross-oilseed ──
+    # ICE canola positioning — the price feed itself has no free daily
+    # source (RS=F dead on yfinance), but CFTC still publishes the COT.
+    "Canola":       "CANOLA - ICE FUTURES U.S.",
 }
 
 # ---------------------------------------------------------------------------
@@ -238,6 +250,14 @@ PSD_TARGET_COMMODITIES = {
     "Corn":         "440000",
     "Wheat":        "410000",
     "Cotton":       "2631000",
+    # ── Cross-oilseed (rapeseed complex — Canada is the #1 canola origin) ──
+    # Codes verified against the 2026 oilseeds bulk CSV. pandas reads
+    # Commodity_Code as int, so leading zeros are stripped — Rapeseed Meal
+    # is 0813600 ("Meal, Rapeseed") in the raw file, "813600" after read
+    # (same convention as Soybean Meal 0813100 → "813100").
+    "Rapeseed":      "2226000",
+    "Rapeseed Oil":  "4239100",
+    "Rapeseed Meal": "813600",
 }
 
 # Every country that materially affects our tracked commodities
@@ -245,6 +265,7 @@ PSD_TARGET_COUNTRIES = [
     # ── Americas ──
     "United States", "Brazil", "Argentina", "Paraguay",
     "Uruguay", "Bolivia", "Colombia", "Mexico",
+    "Canada",  # #1 canola (rapeseed) origin
     # ── Asia ──
     "China", "India", "Indonesia", "Malaysia",
     "Thailand", "Vietnam", "Japan", "South Korea",
