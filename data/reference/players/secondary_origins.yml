@@ -1,0 +1,409 @@
+# Secondary soy origins — Canada, Ukraine, Russia, Uruguay, Bolivia (#108)
+# Sell-side players outside the big four origins (US/BR/AR/PY).
+# Origin-level context (all observed unless noted):
+# - Canada: 2025-26 exports forecast ~5.4 MMT vs 5y avg 4.33 MMT (AAFC May 2025);
+#   2025 production 7.13 MMT (StatCan). Distinct food-grade/IP niche to Japan.
+# - Ukraine: MY2024/25 record ~4.0-4.2 MMT bean exports; MY2025/26 fell to 2.7 MMT
+#   after a 10% soybean export duty (Sep 2025) pushed volume into domestic crush
+#   (~2.9 MMT, +51% vs 5y avg). Top buyers 2024/25: Turkey, Egypt, Netherlands.
+# - Russia: bean exports 1.04 MMT in H1 2026 (+230% y/y, China ~620 kt); meal
+#   exports emerging (230 kt Q1 2026). Tariff quotas on bean exports from
+#   Primorsky/Amur/Kaliningrad from 2026-01-01; 20% bean export duty favours meal.
+# - Uruguay: 2025-26 exports ~2.1 MMT, 2026-27 projected 2.8 MMT; China >80% of
+#   shipments; ~70% ships via Nueva Palmira, ~30% via Montevideo (USDA FAS).
+# - Bolivia: meal-led exporter — 2024 output 1.7 MMT solvent meal; ~80% of meal
+#   exported; six crushers control ~85% of byproduct output (ABI, Jun 2025).
+
+# ---------------------------------------------------------------- Canada
+
+- name: "Viterra (Bunge Canada)"
+  aka: ["Viterra", "Bunge", "ex-Glencore Agriculture"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.viterra.ca"
+  ownership: "Subsidiary of Bunge Global SA (NYSE: BG) since the US$8.2bn Bunge-Viterra merger, approved by Canada 2025-01-14 with six-elevator divestiture + $520M investment conditions"
+  roles: ["originator", "exporter", "terminal-operator", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Largest Canadian grain-handling network post-merger; port terminals incl. Cascadia and Pacific (Vancouver), Prince Rupert Grain (stake), two Thunder Bay facilities, and Montreal — the eastern terminals serve Ontario/Quebec soybeans."
+  destinations: "Ships grains/oilseeds to customers in ~70 countries (Bunge/Viterra statement); soy-specific destination split not published — unverified"
+  size_evidence: "Merger scale (US$8.2bn) and six-port network are observed in merger coverage and Viterra's own port page; company-level soybean export tonnage is not publicly broken out."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.realagriculture.com/2025/01/canadian-government-grants-approval-of-bunges-acquisition-of-viterra/"
+      accessed: "2026-08-08"
+      supports: "Canadian approval Jan 2025, conditions (observed)"
+    - url: "https://www.viterra.ca/en/What-We-Do/Port-Terminals"
+      accessed: "2026-08-08"
+      supports: "Port terminal footprint (observed)"
+    - url: "https://www.nfu.ca/bunge-viterra-merger-has-drastic-implications-for-cdn-farmers/"
+      accessed: "2026-08-08"
+      supports: "Merger scale and market-concentration context (observed)"
+  notes: "Bunge's stated merger rationale includes expanding soybean/canola oil for biofuels (observed). Soybean share of its Canadian export book is inferred from eastern terminal geography, not disclosed. Bunge also bought North West Terminal (SK) in 2025."
+
+- name: "Richardson International"
+  aka: ["Richardson Pioneer"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.richardson.ca"
+  ownership: "Private — controlled by Winnipeg's Richardson family (James Richardson & Sons)"
+  roles: ["originator", "exporter", "terminal-operator", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Country elevator network across Canada plus port capacity; grew via facilities divested in the 2012 Glencore-Viterra deal. Oilseed crush is canola-led; soybeans handled through the eastern elevator/export chain."
+  destinations: "unverified"
+  size_evidence: "Named in merger coverage as one of Canada's remaining major handlers alongside P&H and Cargill, and a candidate buyer for Bunge's divested elevators; no free soybean-specific tonnage found."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.theglobeandmail.com/business/article-farmers-slam-ottawa-for-approving-bunge-purchase-of-grain-handler/"
+      accessed: "2026-08-08"
+      supports: "Family ownership; 2012 Viterra-divestiture purchases; major-handler status (observed)"
+  notes: "Soybean role inferred from its position as a top-tier Canadian handler; Richardson does not publish commodity-level export volumes."
+
+- name: "Parrish & Heimbecker"
+  aka: ["P&H"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.parrishandheimbecker.com"
+  ownership: "Private Canadian family-owned company (est. 1909)"
+  roles: ["originator", "exporter", "terminal-operator"]
+  products: ["beans"]
+  footprint: "Country elevators across Canada with Great Lakes port positions (incl. Hamilton, ON) serving the Ontario soybean belt."
+  destinations: "unverified"
+  size_evidence: "Named in 2025 merger coverage as part of the remaining competitive tier (with Richardson and Cargill); no soy-specific volume disclosure found."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.theglobeandmail.com/business/article-farmers-slam-ottawa-for-approving-bunge-purchase-of-grain-handler/"
+      accessed: "2026-08-08"
+      supports: "Listed among remaining major Canadian handlers (observed)"
+  notes: "Hamilton terminal role in soybean exports is inferred from geography (Ontario is Canada's largest soybean province); P&H publishes no commodity-level export data."
+
+- name: "G3 Canada"
+  aka: ["G3 Global Holdings", "ex-Canadian Wheat Board assets"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.g3.ca"
+  ownership: "G3 Global Holdings: 75% SALIC (Saudi Agricultural and Livestock Investment Company), 25% Bunge — post-merger, Canada imposed binding controls so Bunge cannot influence G3 pricing/investment"
+  roles: ["originator", "exporter", "terminal-operator"]
+  products: ["beans"]
+  footprint: "19 grain elevators in Western Canada plus one in Quebec; port terminals at Thunder Bay and Hamilton (ON), Quebec City and Trois-Rivières (QC), and Vancouver."
+  destinations: "unverified"
+  size_evidence: "Facility count and ownership structure observed in Grain Journal / merger coverage; competes with Viterra for soybeans among other crops."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.grainjournal.com/article/992770/bunge-viterra-merger-creates-uncertainty-for-g3-canada"
+      accessed: "2026-08-08"
+      supports: "Ownership split, elevator/terminal footprint, soybean competition (observed)"
+  notes: "Soybean tonnage not disclosed; scale evidence is facility-based only."
+
+- name: "Sevita International"
+  aka: ["Sevita"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://sevita.com"
+  ownership: "Private Canadian company (seed development + IP export integrated)"
+  roles: ["originator", "exporter", "seed-developer"]
+  products: ["beans"]
+  footprint: "Contracts directly with farmers across Canada (Ontario/Quebec/Maritimes core) via identity-preserved, closed-loop food-grade programs; own variety development including Japan-specific natto varieties."
+  destinations: "Japan, South Korea, Western Europe, Taiwan, mainland China, Southeast Asia (company statement)"
+  size_evidence: "No tonnage disclosed. Evidence of niche leadership: dedicated Japan-market variety development (incl. a natto variety named by a large Japanese natto maker) and listing in Soy Canada's food-grade exporter directory."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://farmtario.com/crops/new-soy-variety-from-sevita-targets-japans-high-tech-food-grade-soybean-market/"
+      accessed: "2026-08-08"
+      supports: "Japan food-grade focus, natto variety development (observed)"
+    - url: "https://soybeans.sevita.com/about-sevita"
+      accessed: "2026-08-08"
+      supports: "Destination markets, IP closed-loop model (observed)"
+    - url: "https://soycanada.ca/food-grade-soybeans/database/exporters/"
+      accessed: "2026-08-08"
+      supports: "Membership in Canadian food-grade exporter cohort (observed)"
+  notes: "Flagship of the Canada→Japan food-grade/IP niche — a premium, variety-specific trade (tofu/natto/miso) distinct from bulk GM beans. Other directory exporters: SG Ceresco, Snobelen Farms, The Andersons. Japan is Canada's largest food-grade market (Manitoba Pulse & Soybean Growers). Company-level tonnage unavailable — the whole IP niche is small relative to Canada's ~5 MMT bulk program (share not freely quantified)."
+
+# ---------------------------------------------------------------- Ukraine
+
+- name: "Kernel Holding"
+  aka: ["Kernel", "WSE: KER (delisted 2024)"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.kernel.ua"
+  ownership: "Controlled by Andriy Verevskyi (Namsen Ltd) after 2023-24 buyout/delisting from the Warsaw Stock Exchange"
+  roles: ["originator", "crusher", "exporter", "terminal-operator"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Ukraine's largest oilseed processor and grain exporter; own Black Sea transshipment terminals (Chornomorsk); acquired an edible-oils transshipment terminal to expand port capacity."
+  destinations: "EU and Turkey lead Ukraine's soy flows; Kernel-specific soy split unverified"
+  size_evidence: "Largest Ukrainian grain exporter MY2024/25: 5.4 MMT of grain, 12% share (+2pp y/y) — all-grains figure, not soy-specific (UkrAgroConsult)."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://ukragroconsult.com/en/news/kernel-retained-its-leading-position-among-ukrainian-grain-exporters/"
+      accessed: "2026-08-08"
+      supports: "No.1 exporter rank, 5.4 MMT / 12% share MY2024/25 (observed)"
+    - url: "https://www.world-grain.com/articles/18039-kernel-acquires-edible-oils-transshipment-terminal"
+      accessed: "2026-08-08"
+      supports: "Oils terminal acquisition, port capacity (observed)"
+  notes: "Ownership detail (Verevskyi/delisting) is from prior public record, tagged inferred here. Soybean-specific export tonnage not published; Kernel's soy exposure increasingly runs through crush (meal/oil) after the Sep 2025 10% bean export duty. War logistics: operates under Ukraine's own Black Sea corridor; 2026 reports of price cuts and vessel hesitancy during strike waves come partly via Russian-affiliated outlets — treat with caution."
+
+- name: "Nibulon"
+  aka: ["NIBULON"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.nibulon.com"
+  ownership: "Private Ukrainian company (Vadaturskyi family; founder Oleksiy Vadaturskyi killed in a 2022 missile strike on Mykolaiv)"
+  roles: ["originator", "exporter", "terminal-operator", "river-logistics"]
+  products: ["beans"]
+  footprint: "Historic Dnipro/Southern Buh river-barge network + Mykolaiv terminal, largely lost to the war: >68% of assets occupied or blocked. Rebuilt flows via Danube ports with Constanța (Romania) as the main hub."
+  destinations: "unverified (pre-war soy went to Middle East/Asia incl. Israel, Sri Lanka per historic rankings — dated)"
+  size_evidence: "~5.1% of Ukrainian grain exports MY2024/25 (rank #5) despite asset losses; pre-war record 5.64 MMT (2021), targeting return to ~15% share (UkrAgroConsult / Odessa Journal)."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://ukragroconsult.com/en/news/kernel-retained-its-leading-position-among-ukrainian-grain-exporters/"
+      accessed: "2026-08-08"
+      supports: "5.1% share, #5 rank, 68% assets occupied/blocked (observed)"
+    - url: "https://odessa-journal.com/nibulon-is-expanding-its-team-of-international-traders"
+      accessed: "2026-08-08"
+      supports: "Danube/Constanța pivot, international expansion (observed)"
+  notes: "Share figures are all-grain, not soy-specific. Founder's death and Mykolaiv blockade are widely documented; the 68% asset figure is the company's own claim relayed by UkrAgroConsult. 2026 reports of halted purchasing at two terminals during strike escalation surfaced via a Russian-affiliated outlet — unconfirmed independently."
+
+- name: "ADM Trading Ukraine"
+  aka: ["ADM Ukraine"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.adm.com"
+  ownership: "Subsidiary of Archer Daniels Midland (NYSE: ADM)"
+  roles: ["originator", "exporter"]
+  products: ["beans"]
+  footprint: "Ukrainian origination arm of ADM; historically exported via Black Sea ports."
+  destinations: "unverified"
+  size_evidence: "Historic (2018) Latifundist exporter ranking: soybeans were ~23% of ADM Trading Ukraine's export book — dated evidence; no current soy-specific ranking freely available."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://latifundist.com/en/rating/top-10-eksporterov-soi-iz-ukrainy-2018"
+      accessed: "2026-08-08"
+      supports: "Top-10 soy exporter status and export mix — 2018 data, dated (observed-but-stale)"
+  notes: "GAP: no free post-2022 company-level soy export ranking for Ukraine was found (Latifundist's last indexed soy exporter ranking is 2018, which also listed Bunge, Glencore, Agroprosperis, Prometey). Cargill Ukraine (part-owner of the Neptune terminal at Pivdennyi) is similarly active but soy-specific evidence was not found free — omitted as its own entry for that reason."
+
+# ---------------------------------------------------------------- Russia
+
+- name: "Sodrugestvo Group"
+  aka: ["Содружество", "Sodruzhestvo"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.sodrugestvo.com"
+  ownership: "Private (Lutsenko family-founded, Luxembourg-headquartered international group)"
+  roles: ["crusher", "exporter", "terminal-operator", "importer"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Largest soybean crusher in Russia/CIS — Kaliningrad complex crushes up to 7,000 t/day of soybeans (+1,100 t/day rapeseed) with own deepwater terminal. Building Far East Agroterminal crush plant at Belogorsk (Amur), ~1 MMT/yr bean intake, planned 2026 launch, output contracted to China."
+  destinations: "Meal: first far-abroad export contract — 25,000 t to Turkey (Jan 2026), Russian-origin only; analysts see North Africa/Israel next. Far East plant: China. Historically Kaliningrad crushed imported South American beans for the domestic/CIS market."
+  size_evidence: "7,000 t/day bean crush (USSEC); 25 kt Turkey meal contract (All About Feed); Belogorsk ~1 MMT/yr agreement with Heilongjiang counterparty (Interfax)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://ussec.org/news/ussec-technical-support-top-russian-soy-crusher/"
+      accessed: "2026-08-08"
+      supports: "Largest Russia/CIS crusher, 7,000 t/day capacity (observed)"
+    - url: "https://www.allaboutfeed.net/market/market-trends/russia-enters-soybean-meal-export-market/"
+      accessed: "2026-08-08"
+      supports: "First far-abroad meal export: 25 kt to Turkey, Jan 2026 (observed)"
+    - url: "https://interfax.com/newsroom/top-stories/116937/"
+      accessed: "2026-08-08"
+      supports: "Belogorsk plant, ~1 MMT/yr, China export agreement (observed)"
+    - url: "https://interfax.com/newsroom/top-stories/115222/"
+      accessed: "2026-08-08"
+      supports: "South American bean imports at historic low; rail shipments of domestic beans to Kaliningrad up 3.5x Jul-Oct (observed)"
+  notes: "Sanctions/logistics honesty: no broad Western sanctions on the group itself found in these sources — do not overstate. Structural shift documented: Kaliningrad pivoting from imported SA beans to domestic Russian beans railed in (3.5x increase), enabled by record 2025 harvest; Russia's 20% bean export duty + 2026 tariff quotas (Primorsky/Amur/Kaliningrad) steer flows toward meal export. Ownership detail is from prior public record (inferred tag on that claim only)."
+
+- name: "EFKO Group"
+  aka: ["ЭФКО"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.efko.ru"
+  ownership: "Private Russian agro-industrial group"
+  roles: ["crusher", "refiner", "exporter", "terminal-operator"]
+  products: ["oil", "meal"]
+  footprint: "Major Russian oils & fats producer (sunflower-led, expanding in processed soy per market coverage); export terminal at Taman (Black Sea), 1.5 MMT/yr handling capacity."
+  destinations: "unverified for soy specifically; Russian veg-oil exports flow heavily to China, India, Algeria, Turkey"
+  size_evidence: "Taman terminal 1.5 MMT/yr capacity (UkrAgroConsult); named alongside Rusagro as expanding in the processed-soy segment (Bonafide market overview)."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://ukragroconsult.com/en/news/russias-sunflower-oil-exports-could-fall-by-40-after-port-attacks/"
+      accessed: "2026-08-08"
+      supports: "Taman terminal capacity; suspension after drone attacks (observed)"
+    - url: "https://www.bonafideresearch.com/product/6504291525/russia-soybean-market"
+      accessed: "2026-08-08"
+      supports: "EFKO expanding in processed soy segment (observed claim, secondary source)"
+  notes: "War logistics (documented): Ukrainian drone attacks on Azov-Black Sea port infrastructure forced EFKO's Taman terminal to suspend operations pending damage assessment; analysts doubt large volumes can re-route via the Far East. Soy-specific volumes not published — EFKO's core is sunflower; treat its soy role as emerging."
+
+- name: "Blago Group"
+  aka: ["Blago Company", "ГК Благо"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://blagogroup.ru"
+  ownership: "Private Russian vegetable-oils group"
+  roles: ["crusher", "refiner", "exporter"]
+  products: ["oil"]
+  footprint: "Multi-plant Russian vegetable-oil processor (sunflower-led)."
+  destinations: "unverified"
+  size_evidence: "GAP: no free primary-source evidence of a soy-specific role was found — 2026 searches on Russian soy exports returned nothing attributable to Blago."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.apk-inform.com/en/news/1554284"
+      accessed: "2026-08-08"
+      supports: "Context only: Russian soybean-meal export demand strengthening (Blago not named)"
+  notes: "Included because the ticket names it, but honesty requires flagging: no observed soy-complex claims. Russia's soy export story in the free record centres on Sodrugestvo, Far East bean flows to China (1.04 MMT H1 2026, +230% y/y, ~620 kt to China), and meal to Uzbekistan/Belarus/Turkey. Remove or upgrade this entry if primary evidence surfaces."
+
+# ---------------------------------------------------------------- Uruguay
+
+- name: "Cargill Uruguay"
+  aka: ["Cargill", "ex-Crop Uruguay JV origins"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.cargill.com"
+  ownership: "Subsidiary of Cargill Inc. (private, US)"
+  roles: ["originator", "exporter", "terminal-operator"]
+  products: ["beans"]
+  footprint: "Nine offices across Uruguay; elevator network handling ~1.2 MMT of soybeans and wheat; exports via Nueva Palmira and Montevideo."
+  destinations: "China dominates Uruguayan beans (~80% of shipments)"
+  size_evidence: "Cargill's own claim: largest agricultural exporter in Uruguay; elevator handling ~1.2 MMT soy+wheat with a 99.95% deforestation-free supply pledge (Mordor overview)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.cargill.com/history-story/en/URUGUAYAN-SOY.jsp"
+      accessed: "2026-08-08"
+      supports: "Largest ag exporter claim, nine offices (observed, self-reported)"
+    - url: "https://www.mordorintelligence.com/industry-reports/agriculture-in-uruguay"
+      accessed: "2026-08-08"
+      supports: "1.2 MMT elevator handling, top-rank among traders (observed, secondary source)"
+    - url: "https://www.fas.usda.gov/data/uruguay-oilseeds-and-products-annual-5"
+      accessed: "2026-08-08"
+      supports: "Nueva Palmira ~70% / Montevideo ~30% export split; China ~80% of destinations (observed)"
+  notes: "'Largest exporter' is Cargill's own claim on a corporate history page — no independent official ranking found free. Uruguay is almost entirely a bean exporter (crush only ~150 kt/yr)."
+
+- name: "Louis Dreyfus Company Uruguay"
+  aka: ["LDC"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.ldc.com"
+  ownership: "Subsidiary of Louis Dreyfus Company (Louis-Dreyfus family holding + ADQ minority)"
+  roles: ["originator", "exporter", "storage-operator"]
+  products: ["beans"]
+  footprint: "Storage/origination anchored on Nueva Palmira: Dec 2024 acquisition of a grain/oilseed facility 2.5 km from the port (38,000 t steel silos + 12,000 t silo bags), with 2025 upgrade investment."
+  destinations: "China-dominated Uruguayan flow; LDC-specific split unverified"
+  size_evidence: "Facility acquisition detail (World Grain / OFI Magazine); no LDC-specific Uruguay export tonnage published."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.world-grain.com/articles/20787-ldc-acquires-grain-storage-facility-in-uruguay"
+      accessed: "2026-08-08"
+      supports: "Nueva Palmira-adjacent acquisition, capacity figures (observed)"
+  notes: "ADQ minority stake in LDC parent is prior public record (inferred tag on that claim)."
+
+- name: "ADM Uruguay"
+  aka: ["Archer Daniels Midland Uruguay"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.adm.com"
+  ownership: "Subsidiary of Archer Daniels Midland (NYSE: ADM)"
+  roles: ["originator", "exporter", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Origination plus an oilseed crush plant — notable because Uruguay's total crush is tiny (~150 kt/yr)."
+  destinations: "Meal and oil sold to China and Europe (Mordor overview); bean flow China-dominated"
+  size_evidence: "Ranked second among Uruguay traders in Mordor's industry analysis; no tonnage disclosed."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.mordorintelligence.com/industry-reports/agriculture-in-uruguay"
+      accessed: "2026-08-08"
+      supports: "#2 rank, crush plant, China/Europe meal-oil sales (observed, secondary source)"
+  notes: "Secondary-source ranking only; COFCO International also holds a prominent share via storage expansion (same source), and mid-tier locals Copagran and Barraca Erro retain farmer loyalty via input finance — none publish soy export volumes. No official Uruguay XXI company-level ranking found free."
+
+- name: "Barraca Erro"
+  aka: []
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.barracaerro.com.uy"
+  ownership: "Private Uruguayan family company"
+  roles: ["originator", "exporter", "input-supplier"]
+  products: ["beans"]
+  footprint: "Mid-tier Uruguayan merchant pairing grain origination with input finance and agronomy for family farms; exports through the Nueva Palmira / Montevideo corridor."
+  destinations: "unverified"
+  size_evidence: "GAP: characterised as a mid-tier merchant in industry analysis; no export rank or tonnage found free."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.mordorintelligence.com/industry-reports/agriculture-in-uruguay"
+      accessed: "2026-08-08"
+      supports: "Mid-tier merchant role, input-finance model (observed, secondary source)"
+  notes: "Included as the leading local (non-ABCD) Uruguayan name; scale unquantified."
+
+# ---------------------------------------------------------------- Bolivia
+
+- name: "Gravetal Bolivia"
+  aka: []
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.gravetal.com.bo"
+  ownership: "Private (Bolivian S.A.; historically Colombian/Venezuelan capital — current cap table not verified free)"
+  roles: ["crusher", "exporter"]
+  products: ["meal", "oil", "beans"]
+  footprint: "Crush plant at Puerto Quijarro on the Bolivia-Brazil border, shipping via the adjacent Puerto Aguirre private river port onto the Paraguay-Paraná waterway."
+  destinations: "unverified free — Andean Community (Colombia/Peru/Ecuador) is the sector's traditional meal market (inferred)"
+  size_evidence: "Named among the main companies in Bolivia's oilseed market by PCR's sector rating (with Fino, IOL, Nutrioil, Prolega); company-level tonnage not free."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://informes.ratingspcr.com/Files/notas/bolivia/1720030180/sectorial_oleaginosas_bolivia_pcr_final[99].pdf"
+      accessed: "2026-08-08"
+      supports: "Main-company status, securities-market financing (observed)"
+    - url: "https://abi.bo/index.php/economia2/65750-seis-industrias-oleaginosas-en-bolivia-controlan-casi-el-85-de-la-produccion-de-subproductos-de-soya"
+      accessed: "2026-08-08"
+      supports: "Six crushers ~85% of byproduct output; 80% of meal exported (observed)"
+  notes: "Puerto Quijarro/Puerto Aguirre logistics are prior public record (inferred — 2026 searches returned no fresh confirmation). Bolivia context: 2025 production 3.29 MMT (+63% y/y), 99% in Santa Cruz; >$1bn soy-complex exports in 2025; but diesel shortages and the wider economic crisis are documented output risks (ANAPO via UkrAgroConsult)."
+
+- name: "Industrias de Aceite S.A. (Fino)"
+  aka: ["IASA", "Fino", "part of Alicorp group"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: "https://www.fino.com.bo"
+  ownership: "Subsidiary of Alicorp (Peru, BVL-listed) — acquisition of Fino (and ADM-SAO's Bolivian assets) is prior public record, not re-verified free in 2026"
+  roles: ["crusher", "refiner", "exporter"]
+  products: ["meal", "oil"]
+  footprint: "Santa Cruz-based crushing and refining; one of the historic big-three crushers (older USDA data put ADM-SAO ~35%, Fino ~25%, Rico ~25% of crush — dated)."
+  destinations: "unverified free — Andean Community traditional (inferred)"
+  size_evidence: "Listed by PCR and CANIOB among the dominant six that control ~85% of byproduct output; historic USDA share figures are dated (pre-2015)."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://informes.ratingspcr.com/Files/notas/bolivia/1720030180/sectorial_oleaginosas_bolivia_pcr_final[99].pdf"
+      accessed: "2026-08-08"
+      supports: "Main-company status (observed)"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/report/downloadreportbyfilename?filename=Bolivian+Soybean+Update_Lima_Bolivia_4-13-2015.pdf"
+      accessed: "2026-08-08"
+      supports: "Historic crush shares — dated 2015 (observed-but-stale)"
+  notes: "ADM exited Bolivia (ADM-SAO absorbed into other players per USDA note); Alicorp ownership claim inferred from prior record. Current company-level shares not free."
+
+- name: "Industrias Oleaginosas S.A. (IOL)"
+  aka: ["IOL", "Rico (brand)"]
+  scope: "secondary_origins"
+  side: "seller"
+  website: ""
+  ownership: "Private Bolivian S.A."
+  roles: ["crusher", "refiner", "exporter"]
+  products: ["meal", "oil"]
+  footprint: "Santa Cruz crushing/refining; historic 'Rico' oil brand with ~25% crush share in dated USDA data."
+  destinations: "unverified"
+  size_evidence: "Listed by PCR and CANIOB among the main crushers; historic USDA share dated (pre-2015). No current tonnage free."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://informes.ratingspcr.com/Files/notas/bolivia/1720030180/sectorial_oleaginosas_bolivia_pcr_final[99].pdf"
+      accessed: "2026-08-08"
+      supports: "Main-company status, CANIOB membership context (observed)"
+  notes: "Other members of Bolivia's dominant-six cohort worth tracking: Nutrioil and Prolega (both securities-market financed, per PCR). Bolivia is meal-led: 2024 output 1.7 MMT solvent meal vs 459 kt crude oil; 80% of meal exported (ABI)."
