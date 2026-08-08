@@ -1,0 +1,238 @@
+# China soy players — importers / crushers / state buyers (ticket #104)
+# Schema: data/reference/players/README.md. All accessed dates 2026-08-08.
+#
+# Market-structure context (verified 2026-08-08):
+# - China imported a record ~111.8 MMT of soybeans in 2025 (+6.5% YoY); Brazil
+#   supplied ~73.6% (Reuters via marketscreener; farmpolicynews.illinois.edu).
+# - Who books cargoes: a two-track system. State-owned COFCO and Sinograin book
+#   the US cargoes (policy commitments + strategic reserves — customs data show
+#   Beijing-registered state firms were the ONLY buyers of the 8.38 MMT of US
+#   beans imported in early 2026), while private crushers and the multinationals
+#   (Cargill, Bunge, LDC, Wilmar/Yihai Kerry — see global.yml) book Brazilian
+#   cargoes directly, preferring higher-protein Brazilian beans (czapp.com;
+#   S&P Global 2026-02). There is no import state-tender monopoly like Egypt's
+#   GASC; large crushers import directly, and state supply-chain groups
+#   (Xiamen C&D) act as financing intermediaries for smaller processors.
+# - Top-10 crushers hold ~80-85% of crush volume; national crush capacity
+#   ~140-200 MMT (estimates vary) vs ~95-108 MMT actually crushed — heavy
+#   overcapacity, 55-70% utilization (dimsums.blogspot.com; USDA FAS).
+
+- name: "COFCO Group (domestic oils & oilseeds arm)"
+  aka: ["中粮集团", "COFCO Oils & Oilseeds", "COFCO Fortune", "ex-Chinatex (absorbed SOE)"]
+  scope: "china"
+  side: "buyer"
+  website: "https://www.cofco.com"
+  ownership: "State-owned (central SASAC). Distinct from COFCO International (Geneva trading arm, covered in global.yml); this entry is the domestic import/crush/refining business."
+  roles: ["importer", "crusher", "refiner", "distributor", "state-policy buyer"]
+  products: ["beans", "meal", "oil"]
+  footprint: "China's #1 crusher: ~30 crushing facilities nationwide, ~20% of national crush capacity (2021 baseline; observed in Dim Sums/industry analysis). Absorbed SOE crusher Chinatex in the post-2008 state consolidation campaign."
+  destinations: "Domestic China (meal to feed sector, oil to retail/food service)"
+  size_evidence: "~30 crushing plants and ~20% capacity share per Dim Sums (USDA-affiliated analyst blog) citing end-2021 industry data; top crusher status reaffirmed in July 2025 analysis (observed)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "http://dimsums.blogspot.com/2025/07/symbolic-soybean-meal-moves-ahead-of.html"
+      accessed: "2026-08-08"
+      supports: "Top crusher with 30 crushing facilities; SOE dominance of top-10 crushers (~85% of production)"
+    - url: "http://dimsums.blogspot.com/2024/12/chinas-relentless-soybean-crushing.html"
+      accessed: "2026-08-08"
+      supports: "~20% capacity share; 2008 campaign bankrolling COFCO/Jiusan to absorb Chinatex, Noble Agri and private crushers"
+    - url: "https://www.czapp.com/analyst-insights/chinese-state-buyers-take-us-soybeans-private-traders-turn-to-brazil/"
+      accessed: "2026-08-08"
+      supports: "COFCO (with Sinograin) executes state US-soybean purchase commitments; booked first US cargoes ahead of Oct-2025 Trump-Xi summit (~180k t)"
+  notes: "2025-26 pattern: COFCO booked China's first US cargoes in months just before the Oct 2025 summit, then shared execution of the ~12 MMT US purchase pledge with Sinograin; tariff-shielded vs private buyers. Precise current plant count/capacity is not published free by COFCO — the 30-plant/20% figures are analyst-observed, not a company filing."
+
+- name: "Sinograin (China Grain Reserves Group)"
+  aka: ["中储粮", "China Grain Reserves Corporation", "CSGC"]
+  scope: "china"
+  side: "buyer"
+  website: "https://www.sinograin.com.cn"
+  ownership: "State-owned (central SASAC) — manager of China's national strategic grain and oilseed reserves."
+  roles: ["state-reserve buyer", "importer", "crusher", "storage/auction operator"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Vast subsidized warehouse and tank network holding national reserves, plus ~9% of national crush capacity (2021 baseline). Rotates reserve stocks via periodic auctions."
+  destinations: "Domestic China (state reserves; auctioned beans flow to domestic crushers)"
+  size_evidence: "~9% crush capacity share (Dim Sums, end-2021 data). 2025-26 reserve activity observed: ~2 MMT of US beans booked in one December 2025 week; 10 more US cargoes (~600k t) in Jan 2026; Jan 2026 auction cleared all 1.1 MMT offered at avg 3,811 yuan/t; 504k t offered 2026-07-31 (largest since January)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "http://dimsums.blogspot.com/2024/12/chinas-relentless-soybean-crushing.html"
+      accessed: "2026-08-08"
+      supports: "~9% crush capacity share; reserve warehouse network"
+    - url: "https://www.czapp.com/analyst-insights/chinese-state-buyers-take-us-soybeans-private-traders-turn-to-brazil/"
+      accessed: "2026-08-08"
+      supports: "State buyers (Sinograin/COFCO) take US beans for reserves while private traders buy Brazil; Dec-2025 auctions to clear space for US beans"
+    - url: "https://farmpolicynews.illinois.edu/2026/01/china-turning-to-brazil-soybeans-after-meeting-us-purchase-pledge/"
+      accessed: "2026-08-08"
+      supports: "Jan-2026 purchases of 10 US cargoes (~600k t); pledge fulfilment arithmetic; auction clearance"
+  notes: "THE swing buyer for US-origin beans: Sinograin prefers US beans for reserve storage (lower moisture) and is tariff-shielded, so US-China trade politics show up first in its bookings and auctions. Its auction calendar (e.g., 504k t of 2022-2025 imported beans offered 2026-07-31) is a live signal of reserve rotation ahead of new US buying. Crush is secondary to its reserve mandate."
+
+- name: "Yihai Kerry Arawana Holdings"
+  aka: ["益海嘉里", "YKA", "SZSE:300999", "Arawana / 金龙鱼 brand", "Wilmar China"]
+  scope: "china"
+  side: "buyer"
+  website: "https://www.yihaikerry.net"
+  ownership: "Foreign-controlled: subsidiary of Singapore-listed Wilmar International (listed on Shenzhen ChiNext as 300999 since 2020; Wilmar retains control — one profile states 99.99% pre-IPO; post-IPO stake ~90%, inferred)."
+  roles: ["importer", "crusher", "refiner", "consumer-brands processor"]
+  products: ["beans", "meal", "oil"]
+  footprint: "~62 production bases across China spanning oilseed crushing, edible-oil refining, specialty fats and feed ingredients; largest foreign-invested crusher (~11-16% of national capacity per year/source). First crush plant: Shenzhen Nantian (1994)."
+  destinations: "Domestic China (Arawana/金龙鱼 is the leading retail edible-oil brand)"
+  size_evidence: "Listed-company filings exist (SZSE 300999): FY2023 revenue CNY 251.5bn. 62 production bases per company profile. Capacity share 11% (2021, Dim Sums) to 16% (2020 figure) — range, not a single verified number."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://en.wikipedia.org/wiki/Yihai_Kerry"
+      accessed: "2026-08-08"
+      supports: "Wilmar ownership, SZSE 300999 listing, corporate history (ADM/Wilmar JV 2001, Kerry merger 2006), FY2023 financials"
+    - url: "https://www.yihaikerry.net/en/GroupIntroduce/introduce.aspx"
+      accessed: "2026-08-08"
+      supports: "62 production bases; business lines"
+    - url: "http://dimsums.blogspot.com/2024/12/chinas-relentless-soybean-crushing.html"
+      accessed: "2026-08-08"
+      supports: "Wilmar largest multinational crusher, ~11% capacity (2021); #2 crusher after COFCO"
+  notes: "As a foreign-invested private crusher it buys mainly Brazilian beans commercially and was NOT among the state buyers executing the 2025-26 US purchase pledge (customs showed only Beijing-registered SOEs importing US beans in early 2026). Exact post-IPO Wilmar stake and current soy-specific crush capacity not verified free — 'inferred' reflects those two claims; the rest is observed."
+
+- name: "Jiusan Oils & Grains Industries Group"
+  aka: ["九三粮油", "Jiusan Group", "Beidahuang Jiusan"]
+  scope: "china"
+  side: "buyer"
+  website: "https://en.93.com.cn"
+  ownership: "State-owned: wholly-owned subsidiary of Beidahuang Group (Heilongjiang provincial state farm system)."
+  roles: ["importer", "crusher", "originator (domestic non-GMO beans)", "trader"]
+  products: ["beans", "meal", "oil"]
+  footprint: "HQ Harbin; 13 production subsidiaries across Heilongjiang (Jiusan, Bei'an, Baoquanling), Jilin Changchun, Liaoning Tieling, Dalian, Tianjin, Nanjing, Guangdong Nansha, Guangxi; trading companies in Hong Kong and Chicago. Crushes both domestic non-GMO and imported beans."
+  destinations: "Domestic China"
+  size_evidence: "Company-stated: 13.5 MMT/yr soybean processing capacity, 2.47 MMT edible oil, 10.8 MMT protein feed, CNY 45bn sales, >USD 4bn import/export trade (en.93.com.cn — self-reported, undated). Analyst-observed: ~9% of national crush capacity (2021, Dim Sums)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://en.93.com.cn/About.html"
+      accessed: "2026-08-08"
+      supports: "Beidahuang ownership; 13.5 MMT capacity; subsidiary list; HK/Chicago trading arms (self-reported)"
+    - url: "http://dimsums.blogspot.com/2024/12/chinas-relentless-soybean-crushing.html"
+      accessed: "2026-08-08"
+      supports: "~9% capacity share; beneficiary of 2008 state consolidation campaign; crushes imported beans"
+  notes: "Self-reported 13.5 MMT capacity is not independently audited (an older Baidu entry says 10 MMT). Chicago trading office implies some direct US origination capability, but 2025-26 US bookings were reported under COFCO/Sinograin, not Jiusan. US vs Brazil origin mix not published."
+
+- name: "Sanhe Hopefull Grain & Oil Group"
+  aka: ["汇福粮油", "Hopefull"]
+  scope: "china"
+  side: "buyer"
+  website: "http://www.hope-full.com.cn"
+  ownership: "Private (founded 1999, Sanhe, Hebei; legal representative Shi Kerong; registered capital CNY 830m). One of China's largest private agri companies."
+  roles: ["importer", "crusher", "refiner"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Three processing bases: Yanjiao (Hebei), Taizhou (Jiangsu), Panjin (Liaoning); total processing capacity ~10 MMT/yr."
+  destinations: "Domestic China"
+  size_evidence: "~10 MMT/yr total processing capacity across three bases; ~9 MMT beans crushed in a single year (Baidu encyclopedia + company site — self-/secondary-reported). Reuters-sourced reporting also cites Hopefull among top crushers claiming ~10 MMT annual capacity."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://baike.baidu.com/en/item/Sanhe%20Hopefull%20Grain&Oil%20Group%20Co.,Ltd./51927"
+      accessed: "2026-08-08"
+      supports: "Private ownership, founding, registered capital, three bases, capacity milestones"
+    - url: "https://www.czapp.com/analyst-insights/chinese-state-buyers-take-us-soybeans-private-traders-turn-to-brazil/"
+      accessed: "2026-08-08"
+      supports: "Hopefull among top crushers with ~10 MMT claimed capacity; private crushers sourcing Brazilian beans"
+  notes: "Historically a large direct buyer of US beans (hosted US soybean grower delegations), but as a private, tariff-exposed crusher its 2025-26 commercial buying was Brazil-weighted like the rest of the private sector. Capacity figures are company-claimed, not audited."
+
+- name: "Shandong Bohi Industry"
+  aka: ["渤海实业", "Bohi", "Qingdao Bohi Dongjiakou Grain and Oil"]
+  scope: "china"
+  side: "buyer"
+  ownership: "Private — controlled by Shandong Bohai Industry Group."
+  roles: ["importer", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Crushing lines since 2009 in Boxing (Shandong), Qingdao Port, Beihai (Guangxi) and Zhanjiang (Guangdong); new 6,000 t/day line at Dongjiakou Port (Qingdao) — claimed largest single crush line in China."
+  destinations: "Domestic China"
+  size_evidence: "~10 MMT/yr grain & oil processing capacity after the Dongjiakou line, claimed rank #3 in China (equipment-supplier Myande case study + Reuters-sourced reporting citing Bohi among top crushers with ~10 MMT claimed capacity)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.myandegroup.com/blog/bohi-6000tpd-soybean-crush-plant-putting-into-operation"
+      accessed: "2026-08-08"
+      supports: "Plant locations, 6,000 t/d Dongjiakou line, 10 MMT total capacity, Bohai Industry Group control"
+    - url: "https://www.czapp.com/analyst-insights/chinese-state-buyers-take-us-soybeans-private-traders-turn-to-brazil/"
+      accessed: "2026-08-08"
+      supports: "Bohi among top private crushers (~10 MMT claimed); private sector buying Brazilian"
+  notes: "Bohi was historically one of the biggest single importers of US beans; in the 2018 and 2025 tariff rounds it, like all private crushers, pivoted to Brazil. Capacity evidence comes from its equipment supplier and press, not a filing — no audited number free. Corporate website not verified, so omitted."
+
+- name: "Chongqing Grain Group"
+  aka: ["重庆粮食集团"]
+  scope: "china"
+  side: "buyer"
+  ownership: "State-owned (Chongqing municipal government)."
+  roles: ["importer", "crusher", "overseas investor (Brazil)"]
+  products: ["beans", "meal", "oil"]
+  footprint: "One of China's largest municipal state grain corporations; part of the 2008 'going out' cohort (with Beidahuang, Chinatex, COFCO) investing in overseas soybean farms, processing and logistics — notably a soybean growing/processing project in Bahia, Brazil."
+  destinations: "Domestic China (inland southwest market)"
+  size_evidence: "No free, current disclosed crush capacity found. Named by USDA ERS as one of the SOEs whose expansion propelled China's import growth; Bahia project documented by EJAtlas."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.ers.usda.gov/sites/default/files/_laserfiche/outlooks/93390/OCS-19F-01.pdf"
+      accessed: "2026-08-08"
+      supports: "Chongqing Grain Group among SOEs investing in overseas soybean farms/processing/logistics under the going-out strategy"
+    - url: "https://ejatlas.org/conflict/chongquing-soybean-growing-and-manufacturing-in-bahia-brazil"
+      accessed: "2026-08-08"
+      supports: "Bahia, Brazil soybean growing/manufacturing project"
+  notes: "Could NOT verify current crush capacity, plant list, or 2025-26 import activity from free sources; the Bahia project has been widely reported as stalled/troubled. Retained because the ticket names it, but treat as a second-tier player pending better evidence."
+
+- name: "Shandong Xiangchi Grain and Oil"
+  aka: ["山东香驰粮油", "Xiangchi Cereals & Oils", "ex-Boxing County Vegetable Oil Plant"]
+  scope: "china"
+  side: "buyer"
+  ownership: "Private (restructured as a holding company 2011; registered capital CNY 100m; HQ Boxing County, Binzhou, Shandong)."
+  roles: ["importer", "crusher", "corn processor"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Boxing County, Shandong — ~3 MMT/yr soybean processing plus 600k t corn; licensed for grain import/export; 2019 Shandong Province Import Top-100 enterprise."
+  destinations: "Domestic China (Shandong feed/food belt)"
+  size_evidence: "~3 MMT/yr soybean processing (Baidu encyclopedia — secondary source; no filing free)."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://baike.baidu.com/en/item/Shandong%20Xiangchi%20Grain%20and%20Oil%20Co.,%20Ltd./106966"
+      accessed: "2026-08-08"
+      supports: "History, ownership, ~3 MMT soybean capacity, import licensing, Shandong Import Top-100"
+  notes: "Representative of the Shandong private-crusher cluster (Rizhao/Binzhou/Qingdao hub) that dominates commercial Brazilian-origin buying. Shandong crushers ran negative margins (~-190 yuan/t at Rizhao) through H2 2025 on record port stocks — a demand-side warning even as import volumes set records. Individual cargo activity not attributable free."
+
+- name: "Sinochem Holdings (agriculture arm)"
+  aka: ["中国中化", "Sinochem", "Syngenta Group (subsidiary)"]
+  scope: "china"
+  side: "buyer"
+  website: "https://www.sinochem.com"
+  ownership: "State-owned (central SASAC); owns Syngenta Group."
+  roles: ["agri-inputs owner", "grain trader (reducing)"]
+  products: ["beans"]
+  footprint: "No verified soybean crushing footprint. Its Syngenta unit strategically reduced lower-margin grain trading in 2025 (-$1bn sales effect) and transferred Sinofert to Sinochem Holdings effective Jan 2026."
+  destinations: "unverified"
+  size_evidence: "None found for soy specifically. Syngenta FY2025: $28.4bn group sales; grain-trading reduction disclosed in results."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.syngentagroup.com/newsroom/2026/syngenta-group-reports-2025-full-year-results"
+      accessed: "2026-08-08"
+      supports: "Sinochem ownership of Syngenta; 2025 strategic reduction of grain trading; Sinofert transfer"
+  notes: "Ticket candidate, but I could NOT verify any material soybean import or crush role from free sources — searches surfaced only Syngenta (inputs) and an explicit pullback from grain trading. Include for completeness; treat as NOT a significant soy-complex player unless new evidence emerges."
+
+- name: "Xiamen C&D (agricultural products arm)"
+  aka: ["厦门建发", "C&D Inc", "CND Agricultural Products Group"]
+  scope: "china"
+  side: "buyer"
+  website: "https://www.cndagri.com"
+  ownership: "State-owned (Xiamen municipal); parent Xiamen C&D Corp ranked #98 on 2025 Fortune Global 500."
+  roles: ["importer", "supply-chain intermediary", "distributor", "supply-chain financier"]
+  products: ["beans", "meal"]
+  footprint: "Bulk agri supply-chain operator (not a crusher): procures import cargoes and provides financing/logistics/distribution to domestic processors. Agri arm self-reports >22 MMT total 2025 business volume, ~CNY 50bn revenue."
+  destinations: "Domestic China (feed mills and crushers as customers)"
+  size_evidence: "2025: >$5.2bn in supply contracts signed with seven global agribusinesses incl. Cargill and Louis Dreyfus, spanning soybeans, corn and cotton (incl. a $2.5bn LDC deal); >22 MMT agri business volume (self-reported)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.agbull.com/chinas-xiamen-cd-strikes-5-2-billion-in-global-agricultural-supply-deals/"
+      accessed: "2026-08-08"
+      supports: "$5.2bn 2025 deals with Cargill/LDC et al. covering soybeans"
+    - url: "https://www.cndagri.com/company"
+      accessed: "2026-08-08"
+      supports: "State ownership, Fortune 500 rank, agri arm volume/revenue (self-reported)"
+  notes: "Answers the 'intermediaries' part of the booking question: C&D (and peers Xiamen Xiangyu, Xiamen ITG, Wuchan Zhongda) intermediate and finance import flows for smaller crushers/feed mills rather than crushing. Soybean share of the $5.2bn deals not broken out; whether the Cargill contract includes soybeans was explicitly unclear in reporting. Xiamen Xiangyu omitted as its own entry — free customs data showed mostly coal/sulfur, soy role unverified."
