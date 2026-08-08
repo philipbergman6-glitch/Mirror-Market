@@ -1,0 +1,454 @@
+# Africa soy players — South Africa + Nigeria (#109)
+# SA: self-sufficient crusher market trading around SAFEX (JSE), surplus meal/oil
+# exported to SACU/SADC neighbours. Nigeria: import-substitution story — poultry
+# feed demand pulling domestic crush; FX-constrained imports; no verified federal
+# soybean export ban (see per-entry notes).
+#
+# Market-access mechanics (cited in entries below):
+# - South Africa: physical trade prices against JSE Commodity Derivatives (SAFEX
+#   legacy) soybean futures — ZAR/ton, physically settled via transferable
+#   electronic silo receipts at registered silos; EFP facility for off-exchange
+#   deals; "no limits apply to individuals, foreigners or corporate entities" per
+#   JSE, but access is through an authorised JSE member/broker with margin posted.
+# - Nigeria: no functioning national futures market for soy. Aggregation runs
+#   through AFEX's warehouse-receipt spot platform and direct offtake contracts
+#   with crushers/feed millers; import legs are negotiated direct (crude oil
+#   cargoes), historically constrained by CBN FX restrictions (2015–Oct 2023) and
+#   naira scarcity rather than formal tenders.
+
+- name: RussellStone Protein
+  aka: [RussellStone Group, RSP]
+  scope: africa
+  side: seller
+  website: "https://russellstone.co.za"
+  ownership: >-
+    Private South African group (RussellStone Group, Pretoria). Seaboard
+    Corporation (US, NYSE-listed) acquired 30% of RussellStone Protein in late
+    2014 (observed — Seaboard corporate timeline). A 2021 proposed acquisition
+    of RSP by DH Brothers/Willowton was prohibited by the SA Competition
+    Commission (observed). RussellStone Group's own legacy page lists the soya
+    crushing plant as "Sold in 2021" — current shareholding after that sale
+    could not be verified free (gap).
+  roles: [crusher, originator, trader]
+  products: [beans, meal, oil]
+  footprint: >-
+    Soybean crushing plant at Bronkhorstspruit, Gauteng (commissioned 2013,
+    ~250,000 t/yr per Farmer's Weekly at commissioning — dated figure). Crushes
+    soybeans only; meal into SA animal feed (poultry/pigs) per Competition
+    Tribunal record. Group also runs grain trading/asset management arms.
+  destinations: >-
+    Primarily domestic SA feed market; regional export share unverified.
+  size_evidence: >-
+    ~250,000 t/yr crush capacity at commissioning (Farmer's Weekly, 2013-era
+    figure); Seaboard 30% stake disclosure. No current audited capacity found
+    free.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.seaboardcorp.com/timeline/2014-seaboard-overseas-trading-group-sotg/"
+      accessed: "2026-08-08"
+      supports: "Seaboard 30% stake in RussellStone Protein (2014)"
+    - url: "https://www.farmersweekly.co.za/crops/field-crops/soya-bean-processing-plants/"
+      accessed: "2026-08-08"
+      supports: "Bronkhorstspruit plant, ~250,000 t/yr capacity, 2013 commissioning"
+    - url: "http://www.compcom.co.za/wp-content/uploads/2021/04/Commission-prohibits-acquisition-of-RussellStone-Protein.pdf"
+      accessed: "2026-08-08"
+      supports: "2021 prohibited Willowton acquisition; RSP crushes soybeans only, meal to poultry/pig feed"
+    - url: "https://russellstone.co.za/rs_legacy/"
+      accessed: "2026-08-08"
+      supports: "Group legacy page lists soya crushing plant as sold in 2021"
+  notes: >-
+    Capacity figure is from the 2013 commissioning press cycle — treat as
+    dated. Post-2021 ownership is the main gap: the group's own site says the
+    crush plant was sold in 2021, but the buyer was not identified in free
+    sources (the Willowton deal was blocked, so the eventual acquirer is
+    unknown here). Trades around SAFEX like all SA crushers (inferred from
+    market structure, not a company statement).
+
+- name: VKB Group (Free State Oil)
+  aka: [VKB Agriculture, Free State Oil Villiers]
+  scope: africa
+  side: seller
+  website: "https://www.vkb.co.za"
+  ownership: >-
+    VKB is a former farmer co-operative turned unlisted agribusiness group
+    owned largely by its farmer shareholders (Free State based). Free State
+    Oil at Villiers is its oilseed crushing arm (observed in industry press;
+    exact corporate structure of the crushing entity not verified free).
+  roles: [originator, crusher, silo-operator]
+  products: [beans, meal, oil]
+  footprint: >-
+    Soybean crushing plant at Villiers, Free State (~186,000 t/yr per Farmer's
+    Weekly, 2013-era figure — dated). VKB also operates grain silos and
+    origination across the eastern Free State/Limpopo, i.e. it originates
+    beans as well as crushing them. Grain SA records VKB among companies that
+    received soft loans/tax breaks to build crush capacity.
+  destinations: >-
+    Domestic SA feed/edible-oil market; direct regional exports unverified.
+  size_evidence: >-
+    ~186,000 t/yr crush capacity (Farmer's Weekly, 2013-era). No current
+    disclosed figure found free.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.farmersweekly.co.za/crops/field-crops/soya-bean-processing-plants/"
+      accessed: "2026-08-08"
+      supports: "Villiers plant, ~186,000 t/yr capacity"
+    - url: "https://www.grainsa.co.za/a-look-at-the-developments-of-soybean-crushing-plants"
+      accessed: "2026-08-08"
+      supports: "VKB among firms granted incentives to build SA crush plants (Villiers)"
+  notes: >-
+    Capacity is a 2013-era press figure; VKB has expanded broadly since and a
+    current number was not found free. Farmer-owned structure makes it a
+    natural SAFEX hedger on both origination and crush legs (inferred).
+
+- name: Nedan Oils & Proteins
+  aka: [Nedan, Nedan Oil Mills, ex-Philafrica Foods division]
+  scope: africa
+  side: seller
+  website: "https://nedanoils.co.za"
+  ownership: >-
+    Private. Formerly a division of Philafrica Foods (AFGRI Group Holdings,
+    itself owned by Helios Fairfax Partners); AFGRI/Philafrica sold 100% of
+    Nedan effective 31 Aug 2021 to a newly registered, majority
+    BBBEE-owned company, Nedan Oils & Proteins (observed — Verdant Capital
+    deal record + SANHA listing). Ultimate beneficial owners not named in
+    free sources (gap).
+  roles: [crusher, refiner]
+  products: [beans, meal, oil]
+  footprint: >-
+    Solvent-extraction soybean crush, extrusion and packing at Mokopane
+    (Potgietersrus), Limpopo. Capacity expanded to ~326,000 t/yr per Farmer's
+    Weekly (2013-era figure — dated). Brands: Nedan, Marathon, Soya Ya Ka,
+    Promax (soya oilcake).
+  destinations: >-
+    Domestic SA feed and food markets; export share unverified.
+  size_evidence: >-
+    ~326,000 t/yr post-expansion capacity (Farmer's Weekly, 2013-era); 100%
+    sale advisory record (Verdant Capital, 2021). No current capacity
+    disclosure found free.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.farmersweekly.co.za/crops/field-crops/soya-bean-processing-plants/"
+      accessed: "2026-08-08"
+      supports: "Mokopane plant capacity expansion to ~326,000 t/yr"
+    - url: "https://verdant-cap.com/track_record/verdant-capital-sole-advisor-for-the-sale-of-100-of-nedan/"
+      accessed: "2026-08-08"
+      supports: "AFGRI/Philafrica sold 100% of Nedan (2021) to majority-BBBEE acquirer; brand names"
+    - url: "https://nedanoils.co.za/"
+      accessed: "2026-08-08"
+      supports: "Current operations: solvent extraction, extrusion, packing at Mokopane"
+  notes: >-
+    Capacity figure is dated (2013 press cycle). Post-2021 beneficial
+    ownership not published free. One of the ticket's named candidates,
+    confirmed as an operating crusher.
+
+- name: Wilmar SA (Wilmar Continental)
+  aka: [Wilmar Continental Edible Oils & Fats, Wilmar Processing SA]
+  scope: africa
+  side: both
+  website: "https://www.wilmar-international.com"
+  ownership: >-
+    Joint venture between Wilmar International Ltd (Singapore-listed) and
+    Continental Oil Mills (Pty) Ltd (SA private) — observed in company
+    profile listings; JV stake split not published free (gap).
+  roles: [crusher, refiner, importer]
+  products: [beans, meal, oil]
+  footprint: >-
+    Soybean crush at Randfontein, Gauteng (~192,000 t/yr per Farmer's Weekly,
+    2013-era figure — dated); sunflower crush at Viljoenskroon. Separate
+    Wilmar Processing SA edible-oils refinery in the Richards Bay IDZ
+    (Phase 1 operational 2024, R1.27bn) — a natural import point for crude
+    vegetable oils. Randfontein trade routes via Port of Durban per dtic
+    documentation.
+  destinations: >-
+    Domestic SA; Wilmar's regional network makes cross-border flows likely
+    but SA-specific export volumes unverified.
+  size_evidence: >-
+    ~192,000 t/yr Randfontein soy crush (Farmer's Weekly, 2013-era); R1.27bn
+    Richards Bay refinery Phase 1 (Engineering News/dtic, 2024).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.africa2trust.com/B2BAfrica/south-africa/agri-business/animal-feeds/wilmar-sa-randfontein-za/Profile/AboutUs/1/8/56834/3/"
+      accessed: "2026-08-08"
+      supports: "JV between Wilmar International and Continental Oil Mills; soy crush Randfontein, sunflower Viljoenskroon"
+    - url: "https://www.farmersweekly.co.za/crops/field-crops/soya-bean-processing-plants/"
+      accessed: "2026-08-08"
+      supports: "Randfontein soy crush capacity ~192,000 t/yr"
+    - url: "https://www.engineeringnews.co.za/article/wilmar-edible-oils-refinery-in-richards-bay-idz-celebrates-phase-1-operationalisation-2024-05-16"
+      accessed: "2026-08-08"
+      supports: "Richards Bay IDZ refinery Phase 1 operational, R1.27bn"
+  notes: >-
+    The one SA crusher with a global trading-house parent — the most direct
+    counterparty for a foreign trader (Wilmar book-to-book). Crush capacity
+    figure dated; JV split unpublished.
+
+- name: Southern Oil (SOILL)
+  aka: [Southern Oil (Pty) Ltd, ex-Vida Oils]
+  scope: africa
+  side: seller
+  website: "https://soill.co.za"
+  ownership: >-
+    Private, unlisted (PitchBook: privately held, formerly PE-backed;
+    formerly Vida Oils). Rooted in Western Cape canola grower supply base.
+  roles: [crusher, refiner]
+  products: []
+  footprint: >-
+    Swellendam, Western Cape. Africa's largest CANOLA crusher — procures
+    essentially all SA-grown canola; brands B-well, African Gold. No free
+    evidence found of soybean crushing at scale.
+  destinations: >-
+    Domestic SA edible oil and feed (canola oilcake) markets.
+  size_evidence: >-
+    Qualitative only: "largest canola crushing operation on the African
+    continent" (company/industry profiles). No soy-complex tonnage exists to
+    cite.
+  confidence: observed
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://southafrica.co.za/southern-oil.html"
+      accessed: "2026-08-08"
+      supports: "Swellendam canola refinery history, procures all SA canola, largest canola crusher in Africa"
+    - url: "https://pitchbook.com/profiles/company/57429-73"
+      accessed: "2026-08-08"
+      supports: "Private ownership; formerly Vida Oils"
+  notes: >-
+    Included because the ticket named it as a candidate, but the honest
+    finding is negative for the soy complex: SOILL is a canola house, and no
+    free source shows meaningful soybean crush. Relevant to Mirror Market
+    only as a substitute-oilseed (canola/rapeseed) player. products left
+    empty deliberately.
+
+- name: Olam Agri Nigeria
+  aka: [Olam Agri, Crown Flour Mill legacy, distinct from ofi]
+  scope: africa
+  side: buyer
+  website: "https://www.olamagri.com"
+  ownership: >-
+    Subsidiary of Olam Agri Holdings (Olam Group, Singapore-listed; SALIC of
+    Saudi Arabia took majority control of Olam Agri in 2025 per Olam Group
+    disclosures — parent-level detail, tagged inferred here as not re-verified
+    in this pass). Note: ofi (Olam Food Ingredients) is a separate Olam arm —
+    the Nigerian soy/feed business sits under Olam Agri.
+  roles: [crusher, feed-miller, originator, importer]
+  products: [beans, meal, oil]
+  footprint: >-
+    Opened a US$50m soybean crushing plant + feed mill at Ilorin, Kwara State
+    (April 2026) with 350,000 t/yr capacity — described by the company as the
+    largest in sub-Saharan Africa. Existing integrated feed mill, hatchery and
+    breeder farms in Kaduna with >100,000 t in-house storage, procuring most
+    corn/soybeans locally. Sources beans from a claimed >300,000 smallholder
+    network; launched Mama's Pride refined soya oil.
+  destinations: >-
+    Nigerian domestic feed (poultry, aqua) and edible-oil markets;
+    import-substitution play, not an exporter.
+  size_evidence: >-
+    350,000 t/yr crush capacity + US$50m investment (company announcement via
+    Milling MEA, Apr 2026); Kaduna feed-mill storage >100,000 t (Olam Group
+    press releases).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://millingmea.com/olam-agri-opens-us50m-soybean-crushing-plant-feed-mill-in-kwara-state-nigeria/"
+      accessed: "2026-08-08"
+      supports: "US$50m, 350,000 t/yr Kwara crush plant opened 2026; largest in sub-Saharan Africa claim; Mama's Pride oil"
+    - url: "https://www.olamgroup.com/news/all-news/press-release/nigeria-largest-feed-mill-poultry-breeding-hatchery-kaduna.html"
+      accessed: "2026-08-08"
+      supports: "Kaduna integrated feed mill/hatchery; local corn+soy procurement; >100,000 t storage"
+    - url: "https://www.olamagri.com/locations/nigeria"
+      accessed: "2026-08-08"
+      supports: "Leading animal-feed supplier position in Nigeria; smallholder sourcing claims"
+  notes: >-
+    Capacity and smallholder numbers are company-stated, not independently
+    audited — treat as promotional until USDA/FAS or filings corroborate.
+    The 2026 Kwara plant is the single biggest change to Nigerian crush
+    capacity on record.
+
+- name: Grand Cereals Limited
+  aka: [GCL, Grand Cereals and Oil Mills]
+  scope: africa
+  side: buyer
+  website: "https://www.grandcereals.com"
+  ownership: >-
+    Subsidiary of UAC of Nigeria Plc (NGX-listed conglomerate; UAC acquired a
+    major shareholding in 1997). Exact current UAC stake not verified free.
+  roles: [crusher, feed-miller, refiner]
+  products: [beans, meal, oil]
+  footprint: >-
+    Head office and main factory at Jos, Plateau State (16-acre site, Bukuru);
+    additional factories in Onitsha and Kano. Produces Grand Oil (soybean and
+    groundnut vegetable oil), Vital Feeds (poultry/fish feed) — i.e. crushes
+    beans into oil for food and meal into own feed brands.
+  destinations: >-
+    Nigerian domestic feed and edible-oil markets.
+  size_evidence: >-
+    None found free — no published soybean crush capacity figure (gap;
+    stated honestly). Scale evidence is qualitative: UAC subsidiary, multi-site
+    operations, leading feed brand (Vital Feeds).
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.uacnplc.com/portfolio/animal-feeds-other-edibles/"
+      accessed: "2026-08-08"
+      supports: "UAC subsidiary; cereals, edible oils, poultry and fish feed portfolio"
+    - url: "https://www.africaoutlookmag.com/company-profiles/1316-grand-cereals"
+      accessed: "2026-08-08"
+      supports: "Jos site history, 1997 UAC acquisition, Onitsha/Kano factories, brands"
+  notes: >-
+    No tonnage disclosure exists free — do not attach numbers. UAC also owns
+    Livestock Feeds Plc (listed), a meal buyer rather than crusher.
+
+- name: WACOT / West African Soy Industries (TGI Group)
+  aka: [WASIL, Golden Terra, Tropical General Investments]
+  scope: africa
+  side: both
+  website: "https://wacot.ng"
+  ownership: >-
+    WACOT Ltd (est. 1996) and West African Soy Industries Ltd (WASIL) are
+    members of TGI Group, a private international investment/holding company
+    (Nigeria, Ghana, Benin, Morocco, UAE, South Africa, China). TGI Foods SPV
+    Plc raises naira commercial paper (up to N100bn programme) for the food
+    businesses.
+  roles: [crusher, refiner, originator, exporter]
+  products: [beans, meal, oil]
+  footprint: >-
+    WASIL operates a 225,000 t oilseed complex and 270,000 t refinery
+    (TGI-stated), producing Golden Terra soya oil and high-protein soybean
+    meal; procures beans from Katsina, Oyo, Kwara and Benue States. WACOT Ltd
+    also crushes cottonseed/shea alongside soybeans.
+  destinations: >-
+    Primarily Nigerian domestic; TGI states meal demand "domestically and
+    internationally" — export flows plausible but unquantified (inferred).
+  size_evidence: >-
+    225,000 t oilseed complex + 270,000 t refinery (TGI corporate site —
+    company-stated); N25bn CP issuance under N100bn programme (Nairametrics,
+    2024) evidences funding scale.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.clicktgi.net/companies/"
+      accessed: "2026-08-08"
+      supports: "WASIL 225,000 t oilseed complex, 270,000 t refinery, Golden Terra, sourcing states"
+    - url: "https://wacot.ng/"
+      accessed: "2026-08-08"
+      supports: "WACOT Ltd 1996 est., TGI membership, soybean/cottonseed/shea crushing"
+    - url: "https://nairametrics.com/2024/08/29/tgi-foods-spv-plc-launches-up-to-n25-billion-series-1-series-2-commercial-papers-under-n100-billion-programme/"
+      accessed: "2026-08-08"
+      supports: "TGI Foods SPV commercial-paper programme (funding scale)"
+  notes: >-
+    Capacity numbers are TGI's own — no independent audit found. An earlier
+    profile cites 200,000 t crush / ~70,000 t refinery, so figures have
+    moved; range flagged rather than reconciled.
+
+- name: AFEX Commodities Exchange
+  aka: [AFEX Nigeria, Africa Exchange Holdings]
+  scope: africa
+  side: seller
+  website: "https://www.afex.africa"
+  ownership: >-
+    Private; founded under Africa Exchange Holdings by Tony Elumelu, Nicolas
+    Berggruen and Jendayi Frazer. First private-sector-led commodity exchange
+    in Nigeria.
+  roles: [aggregator, exchange-operator, warehouse-operator, financier]
+  products: [beans]
+  footprint: >-
+    Warehouse-receipt spot platform: grew from 45 warehouses / 22,000 t
+    volume in 2018 to 200+ warehouses across Nigeria, Kenya and Uganda with
+    >314,000 t traded volume (all commodities, not soy-specific). Issued
+    Africa's first warehouse-receipt-backed commercial paper (> $50m raised
+    for agri-SMEs).
+  destinations: >-
+    Links Nigerian producers to domestic processors (FMN, Olam, WACOT, ETG,
+    Starlink) and foreign processors (Cargill, JB Cocoa, Valency) for
+    soybean, cocoa, sesame, ginger, cashew.
+  size_evidence: >-
+    200+ warehouses, >314,000 t traded volume across three countries
+    (Farmers Review Africa / AFEX); first WR-backed CP in Africa (Guardian
+    Nigeria, Businessday).
+  confidence: observed
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://farmersreviewafrica.com/unleashing-african-farmers-agro-processors-economic-potential-through-financial-technical-support/"
+      accessed: "2026-08-08"
+      supports: "Warehouse growth 45->200+, 314,000 t volume, buyer network incl. Cargill/Olam/WACOT for soybean"
+    - url: "https://guardian.ng/business-services/agro-care/afex-announces-first-warehouse-receipt-backed-commercial-paper-in-africa/"
+      accessed: "2026-08-08"
+      supports: "First warehouse-receipt-backed commercial paper in Africa, >$50m raised"
+    - url: "https://afmorg.net/afexafex-commodities-exchange-ltd/"
+      accessed: "2026-08-08"
+      supports: "Founding (Elumelu/Berggruen/Frazer), first private-sector-led exchange in Nigeria, 2014 WRS"
+  notes: >-
+    This is the practical entry point for a foreign trader wanting Nigerian
+    origin beans: buy via AFEX-listed warehouse receipts or contract offtake
+    through its network — there is no functioning soy futures market in
+    Nigeria (NCX, the state exchange, is moribund; not verified this pass so
+    stated as context only). Volume figures are cross-commodity, not
+    soy-specific.
+
+- name: Premier Feed Mills (Flour Mills of Nigeria)
+  aka: [TOPFEEDS, FMN feed division]
+  scope: africa
+  side: buyer
+  website: "https://premierfeedsltd.com"
+  ownership: >-
+    Subsidiary of Flour Mills of Nigeria Plc (NGX-listed food/agri group).
+  roles: [feed-miller, meal-buyer]
+  products: [meal]
+  footprint: >-
+    Self-described leading animal-feed brand in Nigeria and largest aqua-feed
+    producer in sub-Saharan Africa (TOPFEEDS brand) — a structural buyer of
+    soybean meal from domestic crushers and AFEX-aggregated beans.
+  destinations: >-
+    Nigerian domestic poultry and aquaculture feed markets.
+  size_evidence: >-
+    Qualitative only (company-stated market position). No tonnage found free.
+  confidence: inferred
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://premierfeedsltd.com/"
+      accessed: "2026-08-08"
+      supports: "FMN subsidiary; leading feed brand; largest aqua-feed producer in sub-Saharan Africa claim"
+  notes: >-
+    Included as the demand-side anchor of the Nigerian import-substitution
+    story: poultry/aqua feed demand is what pulls the crush build-out
+    (Olam, WASIL, GCL). Not a crusher itself as far as free sources show.
+
+# ---------------------------------------------------------------------------
+# Country-level context (not player entries — kept as comments per schema):
+#
+# South Africa regional flows (observed, USDA FAS/Grain SA/Freight News,
+# accessed 2026-08-08):
+# - 2025/26 soybean crop revised up to a record ~3.0m t (CEC via Freight News);
+#   USDA FAS Oilseeds Annual 2026 forecasts record production, crush and
+#   exports, with surplus meal "increasingly exported to regional markets" and
+#   soybean exports >300,000 t in 2025/26.
+# - Historic destination pattern: soy product exports went almost entirely to
+#   African neighbours — Botswana, Mozambique, Namibia, Lesotho, Angola; soy
+#   OIL mainly Zimbabwe (~61%) and Zambia (~36%) (USDA FAS via Grain SA).
+# - Zambia is the emerging regional competitor (surplus ~80,000 t meal in
+#   2025/26 per Ecofin Agency).
+#
+# Nigeria policy honesty (accessed 2026-08-08):
+# - No verified federal soybean export ban was found. The record shows: (a) the
+#   old Export (Prohibition) Act bans maize, rice, "beans" (cowpeas), cassava,
+#   yam — soybeans NOT on the statutory list (USDA FAS NI2024-0007); (b) 2021
+#   Poultry Association of Nigeria CALLS for a soybean/maize export ban
+#   (ThisDay/allAfrica) — pressure, not law; (c) maize appears on the FG's 2026
+#   export-prohibited list (Legit.ng) — soybeans again not confirmed on it.
+#   Reports of a 2021-22 maize/soya export ban belong to GHANA, not Nigeria —
+#   a common conflation. Ticket's "soybean export ban history" is therefore
+#   recorded as recurring ban pressure + adjacent grain bans, not an enacted
+#   soy ban. If a gazetted soybean ban exists, it was not found free.
+# - FX constraint history: CBN's 2015 41-item FX restriction (incl. vegetable
+#   oil) pushed oil importers to the parallel market until lifted Oct 2023
+#   (ThisDay/CBN); refined vegetable oil in retail packs remains import-
+#   prohibited while crude oil for industrial refining is allowed — the
+#   protection that underpins WASIL/Olam refinery economics.
+#
+# Ticket candidate NOT entered: "KAM" — the only KAM entities found in
+# Kwara/Ilorin (KAM Industries, KAM Steel, kamholding.net) are steel
+# manufacturers; no free evidence of any KAM soybean crushing operation.
+# Likely conflation with Olam Agri's 2026 Ilorin crush plant. Recorded here
+# rather than fabricating an entry.
