@@ -9,6 +9,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/generate_html.py'
+      - 'scripts/generate_players.py'
+      - 'scripts/validate_players.py'
+      - 'data/reference/players/**'
       - 'app/templates/**'
       - 'app/charts.py'
       - 'analysis/**'

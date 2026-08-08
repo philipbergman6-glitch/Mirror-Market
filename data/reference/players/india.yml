@@ -16,6 +16,7 @@
 - name: "Patanjali Foods Ltd."
   aka: ["Ruchi Soya Industries (renamed 2022)", "NSE: PATANJALI"]
   scope: "india"
+  country: IN
   tier: 1
   ownership: "Public (NSE/BSE listed); Patanjali Ayurved group promoted (acquired Ruchi Soya via IBC 2019)"
   roles: [crusher, refiner, importer]
@@ -42,6 +43,7 @@
 - name: "AWL Agri Business Ltd."
   aka: ["Adani Wilmar Ltd. (renamed 2025-26)", "NSE: AWL", "Fortune brand"]
   scope: "india"
+  country: IN
   tier: 1
   ownership: "Public (listed); Wilmar International-linked JV heritage (Adani exited/reduced stake — post-rename shareholding not verified this session)"
   roles: [importer, refiner, crusher]
@@ -68,6 +70,7 @@
 - name: "ADM Agro Industries India Pvt. Ltd."
   aka: ["ADM India", "ADM Agro Industries Latur & Vizag Pvt. Ltd.", "ex-Tinna Oils assets"]
   scope: "india"
+  country: IN
   ownership: "Private; wholly owned by Archer Daniels Midland (US, NYSE: ADM)"
   roles: [crusher, refiner, exporter, originator]
   products: [beans, meal, oil]
@@ -91,6 +94,7 @@
 - name: "Bunge India Pvt. Ltd."
   aka: ["Dalda", "Gagan", "Bunge Global SA subsidiary"]
   scope: "india"
+  country: IN
   ownership: "Private; wholly owned by Bunge Global SA (NYSE: BG)"
   roles: [importer, refiner]
   products: [oil]
@@ -113,6 +117,7 @@
 - name: "Cargill India Pvt. Ltd."
   aka: ["Gemini (oil brand)", "NatureFresh"]
   scope: "india"
+  country: IN
   ownership: "Private; wholly owned by Cargill Inc. (US, private)"
   roles: [importer, refiner]
   products: [oil]
@@ -135,6 +140,7 @@
 - name: "Emami Agrotech Ltd."
   aka: ["Emami Healthy & Tasty", "Himani Best Choice"]
   scope: "india"
+  country: IN
   tier: 1
   ownership: "Private; Emami Group"
   roles: [importer, refiner]
@@ -158,6 +164,7 @@
 - name: "Gemini Edibles & Fats India Ltd."
   aka: ["GEF India", "Freedom (brand)", "ex-Ruchi Soya JV arm"]
   scope: "india"
+  country: IN
   ownership: "Subsidiary of Golden Agri-Resources (Singapore-listed palm major; acquired 75% in 2014)"
   roles: [importer, refiner]
   products: [oil]
@@ -180,6 +187,7 @@
 - name: "Gokul Agro Resources Ltd."
   aka: ["NSE: GOKULAGRO", "Vitalife", "Mahek", "sister: Gokul Refoils & Solvent Ltd. (separate listco)"]
   scope: "india"
+  country: IN
   ownership: "Public (NSE/BSE listed); promoter family also controls Gokul Refoils & Solvent Ltd. (demerged 2014-15)"
   roles: [importer, refiner, crusher, exporter]
   products: [oil, meal, beans]
@@ -206,6 +214,7 @@
 - name: "Vippy Industries Ltd."
   aka: ["Vippy Soya", "BSE: 507864"]
   scope: "india"
+  country: IN
   ownership: "Public (BSE listed); promoter family (Mutha)"
   roles: [crusher, refiner, exporter]
   products: [beans, meal, oil]
@@ -231,6 +240,7 @@
 - name: "Prestige Group (Prestige Feed Mills Ltd. + Prestige Agro-Tech Ltd.)"
   aka: ["Prestige India, Dewas"]
   scope: "india"
+  country: IN
   ownership: "Private group (Jhalani family, Dewas); multiple operating companies"
   roles: [crusher, refiner, exporter]
   products: [beans, meal, oil]
@@ -259,6 +269,7 @@
 - name: "Maharashtra Solvent Extraction Pvt. Ltd."
   aka: []
   scope: "india"
+  country: IN
   ownership: "Private"
   roles: [crusher, exporter]
   products: [meal, oil]
@@ -281,6 +292,7 @@
 - name: "Betul Oil Ltd."
   aka: ["Betul Oils & Flours Ltd. (SOPA listing name)"]
   scope: "india"
+  country: IN
   ownership: "Private/unlisted per own site; a 'Betul Oil' scrip appears on small-cap trackers — listing status unverified"
   roles: [crusher, refiner, exporter]
   products: [beans, meal, oil]
@@ -312,6 +324,7 @@
 - name: "Abis Export (I) Pvt. Ltd."
   aka: ["ABIS Exports (India) Pvt. Ltd.", "IB Group", "Indian Broiler Group", "Drools (pet food)"]
   scope: "india"
+  country: IN
   ownership: "Private; IB Group (Bahadur Ali family), Rajnandgaon, Chhattisgarh"
   roles: [crusher, refiner]
   products: [beans, meal, oil]
@@ -337,6 +350,7 @@
 - name: "BCL Industries Ltd."
   aka: ["BCL Industries & Infrastructures Ltd. (SOPA listing name)", "NSE: BCLIND", "Homecook brand"]
   scope: "india"
+  country: IN
   ownership: "Public (NSE/BSE listed); Mittal family promoted, Bathinda, Punjab"
   roles: [crusher, refiner]
   products: [beans, meal, oil]
@@ -362,6 +376,7 @@
 - name: "ITC Ltd. — Agri Business Division"
   aka: ["ITC ABD", "NSE: ITC"]
   scope: "india"
+  country: IN
   ownership: "Public (listed conglomerate); Agri Business is a segment, not a subsidiary"
   roles: [originator, exporter]
   products: [beans, meal]
@@ -382,6 +397,7 @@
 - name: "K.S. Oils Ltd."
   aka: ["Kalash", "Double Sher", "acquirer: Soy-Sar Edible Pvt. Ltd. (Sherisha Technologies SPV)"]
   scope: "india"
+  country: IN
   ownership: "Sold as going concern out of IBC liquidation to Sherisha Technologies/Soy-Sar Edible (NCLT Indore order 2025-02-03); previously listed, shares suspended"
   roles: [crusher, refiner]
   products: [beans, meal, oil]

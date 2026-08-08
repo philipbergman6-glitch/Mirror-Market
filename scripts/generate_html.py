@@ -253,6 +253,21 @@ def _build_command_center(data: dict) -> dict | None:
         "as_of": km.get("cny_usd_date") or "",
     })
 
+    # DCE board crush (China story) — CNY/MT, USD/MT beneath when available.
+    dce_crush = km.get("dce_crush_cny_mt")
+    dce_crush_usd = km.get("dce_crush_usd_mt")
+    key_metrics.append({
+        "label": "DCE Board Crush",
+        "value": f"CNY {dce_crush:+,.0f}" if dce_crush is not None else "N/A",
+        "val_class": (
+            "up" if dce_crush is not None and dce_crush > 0
+            else "down" if dce_crush is not None else ""
+        ),
+        "delta": f"${dce_crush_usd:+,.0f}/MT" if dce_crush_usd is not None else "",
+        "delta_class": "muted",
+        "as_of": km.get("dce_crush_date") or "",
+    })
+
     # Signals
     signals = []
     for sig in data.get("signals", []):
@@ -1114,6 +1129,13 @@ def generate():
 
     size_kb = OUTPUT_FILE.stat().st_size / 1024
     log.info("Generated %s (%.0f KB)", OUTPUT_FILE, size_kb)
+
+    # Players page (issue #123) — same deploy, own template. Validation above
+    # already gates the knowledge base, so a failure here is a build bug and
+    # must fail the run, not silently ship a dashboard without the page.
+    log.info("Generating players page...")
+    from scripts.generate_players import generate_players_page
+    generate_players_page()
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@
 - name: "COFCO Group (domestic oils & oilseeds arm)"
   aka: ["中粮集团", "COFCO Oils & Oilseeds", "COFCO Fortune", "ex-Chinatex (absorbed SOE)"]
   scope: "china"
+  country: CN
   tier: 1
   side: "buyer"
   website: "https://www.cofco.com"
@@ -48,6 +49,7 @@
 - name: "Sinograin (China Grain Reserves Group)"
   aka: ["中储粮", "China Grain Reserves Corporation", "CSGC"]
   scope: "china"
+  country: CN
   tier: 1
   side: "buyer"
   website: "https://www.sinograin.com.cn"
@@ -76,6 +78,7 @@
 - name: "Yihai Kerry Arawana Holdings"
   aka: ["益海嘉里", "YKA", "SZSE:300999", "Arawana / 金龙鱼 brand", "Wilmar China"]
   scope: "china"
+  country: CN
   tier: 1
   side: "buyer"
   website: "https://www.yihaikerry.net"
@@ -104,6 +107,7 @@
 - name: "Jiusan Oils & Grains Industries Group"
   aka: ["九三粮油", "Jiusan Group", "Beidahuang Jiusan"]
   scope: "china"
+  country: CN
   tier: 1
   side: "buyer"
   website: "https://en.93.com.cn"
@@ -129,6 +133,7 @@
 - name: "Sanhe Hopefull Grain & Oil Group"
   aka: ["汇福粮油", "Hopefull"]
   scope: "china"
+  country: CN
   tier: 1
   side: "buyer"
   website: "http://www.hope-full.com.cn"
@@ -154,6 +159,7 @@
 - name: "Shandong Bohi Industry"
   aka: ["渤海实业", "Bohi", "Qingdao Bohi Dongjiakou Grain and Oil"]
   scope: "china"
+  country: CN
   side: "buyer"
   ownership: "Private — controlled by Shandong Bohai Industry Group."
   roles: ["importer", "crusher"]
@@ -177,6 +183,7 @@
 - name: "Chongqing Grain Group"
   aka: ["重庆粮食集团"]
   scope: "china"
+  country: CN
   side: "buyer"
   ownership: "State-owned (Chongqing municipal government)."
   roles: ["importer", "crusher", "overseas investor (Brazil)"]
@@ -200,6 +207,7 @@
 - name: "Shandong Xiangchi Grain and Oil"
   aka: ["山东香驰粮油", "Xiangchi Cereals & Oils", "ex-Boxing County Vegetable Oil Plant"]
   scope: "china"
+  country: CN
   side: "buyer"
   ownership: "Private (restructured as a holding company 2011; registered capital CNY 100m; HQ Boxing County, Binzhou, Shandong)."
   roles: ["importer", "crusher", "corn processor"]
@@ -220,6 +228,7 @@
 - name: "Sinochem Holdings (agriculture arm)"
   aka: ["中国中化", "Sinochem", "Syngenta Group (subsidiary)"]
   scope: "china"
+  country: CN
   side: "buyer"
   website: "https://www.sinochem.com"
   ownership: "State-owned (central SASAC); owns Syngenta Group."
@@ -239,6 +248,7 @@
 - name: "Xiamen C&D (agricultural products arm)"
   aka: ["厦门建发", "C&D Inc", "CND Agricultural Products Group"]
   scope: "china"
+  country: CN
   side: "buyer"
   website: "https://www.cndagri.com"
   ownership: "State-owned (Xiamen municipal); parent Xiamen C&D Corp ranked #98 on 2025 Fortune Global 500."

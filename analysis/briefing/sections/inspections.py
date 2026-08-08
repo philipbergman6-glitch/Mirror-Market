@@ -126,13 +126,57 @@ def _destination_lines() -> list[str]:
     return lines
 
 
+# China share of shipped soybeans + trend — mirrors the export-sales
+# China-share line (`export_sales._soybean_destination_lines`) so the
+# committed (ESR) vs actually-shipped (inspections) loop closes. The top-5
+# destination line above only shows China when it makes the weekly top 5.
+_CHINA_TREND_WEEKS = 4
+
+
+def _china_share_lines() -> list[str]:
+    """China share of soybean shipments, latest week + 4-week trend."""
+    dest = read_inspection_destinations()
+    if dest.empty or "country" not in dest.columns:
+        return []
+    subset = dest[(dest["commodity"] == "Soybeans") & (dest["country"] != "SUBTOTAL")]
+    if subset.empty:
+        return []
+
+    weeks = sorted(subset["week_ending"].dropna().unique())[-_CHINA_TREND_WEEKS:]
+    shares: list[tuple[pd.Timestamp, float, float, float]] = []
+    for week in weeks:
+        rows = subset[subset["week_ending"] == week]
+        total = rows["inspections_mt"].sum(skipna=True)
+        if pd.isna(total) or total <= 0:
+            continue
+        # Same match convention as the export-sales China-share line.
+        is_china = rows["country"].astype(str).str.contains("china", case=False)
+        china = rows.loc[is_china, "inspections_mt"].sum(skipna=True)
+        china = 0.0 if pd.isna(china) else float(china)
+        shares.append(
+            (pd.Timestamp(week), china / float(total) * 100, china, float(total))
+        )
+    if not shares:
+        return []
+
+    latest_week, pct, china_mt, total_mt = shares[-1]
+    line = (
+        f"  China share of soybean shipments (w/e {latest_week.strftime('%m/%d')}): "
+        f"{pct:.1f}% ({china_mt / 1e6:,.2f} of {total_mt / 1e6:,.2f} MMT)"
+    )
+    if len(shares) >= 2:
+        trend = " -> ".join(f"{p:.0f}%" for _, p, _, _ in shares)
+        line += f" | {len(shares)}-wk trend: {trend}"
+    return [line]
+
+
 def format() -> str:  # noqa: A001
     lines = ["EXPORT INSPECTIONS (USDA Weekly):"]
     insp = read_inspections()
 
     if insp.empty:
         extra_lines = []
-        for helper in (_port_flow_lines, _destination_lines):
+        for helper in (_port_flow_lines, _destination_lines, _china_share_lines):
             try:
                 extra_lines.extend(helper())
             except Exception as exc:
@@ -178,5 +222,10 @@ def format() -> str:  # noqa: A001
         lines.extend(_destination_lines())
     except Exception as exc:
         logger.debug("Destination lines failed: %s", exc)
+
+    try:
+        lines.extend(_china_share_lines())
+    except Exception as exc:
+        logger.debug("China share lines failed: %s", exc)
 
     return "\n".join(lines)
