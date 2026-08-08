@@ -1,0 +1,357 @@
+# MENA soy-complex players — Egypt / Turkey / Iran / North Africa / Gulf (#107)
+# Schema: data/reference/players/README.md. as_of 2026-08-08.
+# Egypt is a top-5 world bean importer (USDA FAS: 5.2 MMT forecast MY 2026/27, ~70% US-origin
+# recently; domestic production <2% of demand). Turkey heading to record 4.4 MMT bean imports
+# MY 2026/27. Iran buys meal via state tenders under sanctions-constrained payment channels.
+# North Africa: Algeria state tenders (ONAB) + new crush; Tunisia one dominant crusher;
+# Morocco private feed millers buying meal (largest MENA market for US soybean meal).
+# Gulf: Saudi feed integrators buy meal; UAE hosts a large multi-seed crush plant.
+
+- name: "General Authority for Supply Commodities (GASC)"
+  aka: ["GASC", "Egypt state buyer"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "State — Egyptian Ministry of Supply and Internal Trade agency"
+  roles: ["importer", "state-tender-buyer"]
+  products: ["oil"]
+  footprint: "Cairo; buys for Egypt's subsidized food program via international tenders; edible-oil storage concentrated at Alexandria port (Ministry of Supply announced doubling storage 75k->150k t, target 2026)."
+  destinations: "Egypt domestic ration-card/food-subsidy system"
+  size_evidence: "Recurring international vegetable-oil tenders of ~30-40k t per round (e.g. sought 30k t soybean oil + 10k t sunflower oil for arrival Jan 1-15 2025; bought 35,250 t vegetable oil in another round). Egypt imports >90% of its ~2.4-2.6 MMT/yr edible-oil consumption, of which soybean oil ~0.4 MMT."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.zawya.com/mena/en/story/Egypts_GASC_says_seeking_vegetable_oils_in_tender_for_arrival_December_20__January_10-TR20211031nS8N2QT038X2/"
+      accessed: "2026-08-08"
+      supports: "GASC runs international vegetable-oils tenders (state tender mechanism)"
+    - url: "https://www.arabfinance.com/en/News/newdetails/13459"
+      accessed: "2026-08-08"
+      supports: "Tender purchase of 35,250 t vegetable oil"
+    - url: "https://www.tridge.com/news/at-the-tender-in-egypt-the-purchase-price-of-hltmqb"
+      accessed: "2026-08-08"
+      supports: "Soybean oil vs sunflower oil pricing behavior at GASC tenders; GASC often skips soy oil when sunflower is cheaper"
+    - url: "https://www.marknteladvisors.com/research-library/egypt-vegetable-oil-market.html"
+      accessed: "2026-08-08"
+      supports: ">90% import reliance; ~0.4 MMT soybean oil in the import mix"
+  notes: "Trader-relevant: GASC buys OIL only (soy complex leg) — beans/meal are private-sector business in Egypt. In several 2024/25 tenders GASC sought soybean oil but bought only sunflower when soy offers were uncompetitive; some tenders financed by ITFC (International Islamic Trade and Finance Corp) with immediate-payment terms. 2025-dated tender-by-tender results were thin in free sources — pattern cited from 2024/early-2025 reporting. GASC's soy-oil share is structurally smaller than sunflower/palm."
+
+- name: "SoyVen"
+  aka: ["ADM-Cargill Egypt JV", "National Vegetable Oil Company SAE (plant operator context)"]
+  scope: "mena"
+  side: "buyer"
+  website: "https://soyven.com/"
+  ownership: "Private JV — Archer Daniels Midland (ADM) + Cargill"
+  roles: ["importer", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Crush plant at Borg Al-Arab (Alexandria area), Egypt; merchandising office in Switzerland."
+  destinations: "Egypt domestic feed (poultry/livestock/aqua) and food manufacturing; meal/oil sold domestically"
+  size_evidence: "Company/press: one of Egypt's largest soy processing facilities, ~6,000 t/day crush capacity. USDA FAS (2017 GAIN): SOYVEN + Alex Seeds together >80% of Egypt's crush volume."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://soyven.com/"
+      accessed: "2026-08-08"
+      supports: "ADM+Cargill JV; Borg Al-Arab plant; crushing beans into hi-pro meal and crude oil; Swiss merchandising office"
+    - url: "https://www.world-grain.com/articles/21288-egypts-soybean-imports-on-rise"
+      accessed: "2026-08-08"
+      supports: "Egypt bean import scale (4.2 MMT MY 2025/26 forecast, ~70% US-origin) that feeds the crush sector"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/report/downloadreportbyfilename?filename=Oilseeds+and+Products+Annual_Cairo_Egypt_3-30-2017.pdf"
+      accessed: "2026-08-08"
+      supports: "SOYVEN + Alex Seeds >80% of Egyptian crush volume (2017 GAIN)"
+  notes: "The dominant bean-import channel in Egypt: private crushers (SoyVen, Alex Seeds) import beans directly — no state tender for beans. ADM/Cargill parentage means origination runs through the parents' books. The >80% two-firm share figure is from the 2017 GAIN report; current share not free-verifiable, though the 2026 GAIN confirms crush-led import growth (meal production revised up to 3.95 MMT MY 2025/26)."
+
+- name: "Alex Seeds Company"
+  aka: ["Alexandria Seeds"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "Private (Egyptian)"
+  roles: ["importer", "crusher", "refiner"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Crushing + soy-oil bottling facility, Alexandria area, Egypt."
+  destinations: "Egypt domestic feed and edible-oil markets"
+  size_evidence: "USDA FAS GAIN (2017): crush facility expanded to ~5,000 t/day; SOYVEN + Alex Seeds together >80% of Egypt crush volume."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/report/downloadreportbyfilename?filename=Oilseeds+and+Products+Annual_Cairo_Egypt_3-30-2017.pdf"
+      accessed: "2026-08-08"
+      supports: "5,000 t/day capacity after expansion; duopoly share with SOYVEN"
+  notes: "Scale evidence is 2017-dated (best free source); no recent free filing found confirming current capacity or ownership detail. Included because USDA named it one of the two firms dominating Egyptian crush."
+
+- name: "Cairo 3A"
+  aka: ["Cairo 3A Poultry", "Cairo Three A", "Pyramids Poultry (absorbed 2019)"]
+  scope: "mena"
+  side: "buyer"
+  website: "https://www.cairo3apoultry.com/"
+  ownership: "Private (Egyptian group)"
+  roles: ["importer", "feed-miller", "poultry-integrator", "processor"]
+  products: ["beans", "meal"]
+  footprint: "Vertically integrated poultry complex on 27,000 acres at Bahareya Oasis (breeders, broilers, hatcheries) + five main factories incl. National Company for Maize Products (11 lines processing maize, soybeans, starch, glucose); own soy/maize farming in Al-Oweinat and Farafra."
+  destinations: "Egypt domestic poultry/feed"
+  size_evidence: "Announced US$150M three-year investment plan (>$50M invested 2025, another $50M planned 2026); targets ~60,000 t/yr poultry meat. Also a major grain/oilseed importer per Egyptian press."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.dailynewsegypt.com/2025/11/09/cairo-3a-to-invest-150m-over-three-years-to-boost-production-capacity/"
+      accessed: "2026-08-08"
+      supports: "$150M investment plan; factory footprint; own soy/maize cultivation to cut import dependence"
+    - url: "https://www.cairo3apoultry.com/about.html"
+      accessed: "2026-08-08"
+      supports: "Vertical integration, Bahareya Oasis complex, Pyramids Poultry merger 2019"
+  notes: "Ticket named 'Cairo 3A' as a candidate — confirmed as a top private Egyptian agri importer/poultry integrator. Its soybean processing is inside the maize-products subsidiary; exact bean import volumes not free-published. Confidence observed for structure, no volume claims made."
+
+- name: "Bunge Türkiye"
+  aka: ["Bunge Gıda", "Ana Gıda (acquired 2017)"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "Public parent — Bunge Global SA subsidiary"
+  roles: ["importer", "crusher", "refiner"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Oilseed crushing plant at Lüleburgaz (Kırklareli, Thrace — near Marmara import ports); edible-oil business via Ana Gıda acquisition (corn, sunflower, olive oils)."
+  destinations: "Turkey domestic feed and edible-oil markets"
+  size_evidence: "Turkish edible-oil sector report (c. 2015): Bunge Lüleburgaz crush capacity ~390,000 t/yr — largest disclosed multinational crush asset in Turkey. Ana Gıda held >30% Turkish retail edible-oil share at acquisition (2017)."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.researchgate.net/publication/284184746_TURKEY%27S_EDIBLE_OIL_SECTOR_REPORT"
+      accessed: "2026-08-08"
+      supports: "Bunge Lüleburgaz ~390k t/yr; Cargill Balıkesir ~270k t/yr crush capacities (dated)"
+    - url: "https://www.foodbusinessnews.net/articles/9522-bunge-integrates-turkish-edible-oil-operation"
+      accessed: "2026-08-08"
+      supports: "Bunge integrated Ana Gıda Turkish edible-oil operation (2017)"
+    - url: "https://www.world-grain.com/articles/22509-record-soybean-imports-expected-in-turkey"
+      accessed: "2026-08-08"
+      supports: "Turkey record bean imports 4.4 MMT forecast MY 2026/27; poultry/aqua demand; Brazil top supplier >40%, plus Ukraine and US"
+  notes: "Capacity figures are from a ~2015 sector report — could not free-verify current Bunge (or Cargill) crush operations in Turkey as of 2026; tagged inferred for that reason. Confirmed market context: Turkey bean imports doubling over a decade, record US exports to Türkiye FY2025 ($411M, +188% YoY per USDA FAS). Turkey buys beans mostly Brazil/Ukraine/US; business is private (crushers + feed mills), no state soy tender."
+
+- name: "Tiryaki Agro"
+  aka: ["Tiryaki Agro Gıda San. ve Tic. A.Ş."]
+  scope: "mena"
+  side: "both"
+  website: "https://tiryaki.com.tr/en/"
+  ownership: "Private (Turkish family-founded, 1965)"
+  roles: ["originator", "trader", "crusher", "importer", "exporter"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Turkey processing/storage facilities; supplies feed and oilseeds from Turkey/Black Sea to Middle East and Africa via transit trade or after processing; soy crush plant at Umm Qasr port, Iraq (operational 2024, IFC-led financing up to $112.5M)."
+  destinations: "Middle East (incl. Iraq), Africa, Turkey domestic"
+  size_evidence: "IFC-led loan of up to $112.5M for Umm Qasr soy crush + corn storage investment (company disclosure); multi-decade regional agri supply-chain operator."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://tiryaki.com.tr/en/grains-feed-and-oilseeds/"
+      accessed: "2026-08-08"
+      supports: "Feed/oilseed supply from Turkey and Black Sea to Middle East and Africa; processing in Turkish facilities"
+    - url: "https://tiryaki.com.tr/en/our-story/"
+      accessed: "2026-08-08"
+      supports: "Founded 1965; Umm Qasr Iraq soy crush start-up 2024; IFC financing up to $112.5M"
+  notes: "The main Turkish-owned trader bridging Black Sea origin and MENA soy demand; its newest crush asset is in Iraq, not Turkey. Volume figures not free-published."
+
+- name: "Abalıoğlu Holding (Lezita)"
+  aka: ["Abalıoğlu Yem Soya ve Tekstil", "Lezita"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "Private (Turkish family holding)"
+  roles: ["feed-miller", "poultry-integrator", "aqua-feed"]
+  products: ["meal", "beans"]
+  footprint: "Turkey — fish, poultry and farm-animal feed; aquaculture production and fish processing; poultry production/processing (Lezita brand)."
+  destinations: "Turkey domestic; some regional export of poultry/aqua products"
+  size_evidence: "Ranked among Turkey's largest food companies (USDA FAS Turkey food-processing reporting). No free current feed-volume disclosure found."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/report/downloadreportbyfilename?filename=Food+Processing+Ingredients_Ankara_Turkey_4-25-2018.pdf"
+      accessed: "2026-08-08"
+      supports: "Abalıoğlu among largest Turkish food companies; feed/aqua/poultry scope"
+  notes: "Included as representative large private Turkish feed/poultry soy buyer; 2025/26-specific procurement evidence not found free — tagged inferred. Turkey's poultry+aquaculture industries are the primary bean/meal users (USDA FAS)."
+
+- name: "Banvit (BRF Türkiye)"
+  aka: ["Banvit Bandırma Vitaminli Yem", "TBQ Foods JV (BRF + Qatar Investment Authority)"]
+  scope: "mena"
+  side: "buyer"
+  website: "https://www.banvit.com/"
+  ownership: "Majority BRF S.A. via TBQ Foods JV with Qatar Investment Authority"
+  roles: ["feed-miller", "poultry-integrator"]
+  products: ["meal", "beans"]
+  footprint: "Bandırma (Marmara), Turkey — integrated poultry with own feed mills."
+  destinations: "Turkey domestic + Gulf export of poultry"
+  size_evidence: "One of Turkey's largest poultry integrators (acquired by BRF/QIA 2017 for scale reasons); no free current soy-procurement volume disclosure."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.fas.usda.gov/data/expanding-opportunities-us-agricultural-exports-turkiye-and-regional-markets"
+      accessed: "2026-08-08"
+      supports: "Turkey feed/poultry demand pull for US soy; record FY2025 US soybean exports to Türkiye"
+  notes: "Ownership (BRF/QIA JV) is from pre-2026 public record and widely reported; not re-verified in a 2026 filing — inferred. Listed as a representative integrator; procurement is via private purchases/imported meal and domestic crush, not tenders."
+
+- name: "SLAL (State Livestock Affairs Logistics)"
+  aka: ["Iran state feed importer", "Government Trading Corporation affiliate for livestock inputs"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "State — Iranian government (Ministry of Agriculture Jihad sphere)"
+  roles: ["importer", "state-tender-buyer"]
+  products: ["meal"]
+  footprint: "Tehran; imports feed via international tenders through Iranian ports (Bandar Imam Khomeini etc.)."
+  destinations: "Iran domestic livestock/poultry feed"
+  size_evidence: "Reuters-sourced trade press 2025: repeated international tenders for up to 120,000 t soymeal per round (plus corn/barley), multiple rounds May-Nov 2025; one tender believed ~200,000 t soymeal bought, sourced Argentina/Brazil; Nov 2025 tender for Jan-Feb 2026 shipment, Brazil or Argentina origin."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.marketscreener.com/news/iran-s-slal-tenders-for-120-000-tons-each-corn-and-soymeal-traders-say-ce7d5cd8d080f321"
+      accessed: "2026-08-08"
+      supports: "SLAL 120k t soymeal tender rounds, 2025"
+    - url: "https://www.hellenicshippingnews.com/irans-slal-said-to-have-bought-about-200000-t-soymeal-in-tender-traders/"
+      accessed: "2026-08-08"
+      supports: "~200k t soymeal bought in one tender; Argentina/Brazil origin; split across three suppliers"
+    - url: "https://ukragroconsult.com/en/news/iran-announces-tender-for-purchase-of-feed-raw-materials/"
+      accessed: "2026-08-08"
+      supports: "Tender mechanics and recurring feed-raw-material rounds"
+  notes: "SANCTIONS CAVEAT (stated per ticket): food/feed is not itself sanctioned, but Western sanctions on Iran's financial sector make payment complex and irregular; traders reported payment problems deterring tender participation, and Iran offering payment routed via a bank in Iraq and one in Turkey (Reuters via trade press, 2025). Several 2025 tenders reportedly closed with no purchase. Traders also observe private Iranian buyers are often more active than state agencies in feed grains. This entry documents publicly reported market structure only. All tender figures are trader-sourced ('traders said') — Reuters convention, not official Iranian confirmation."
+
+- name: "ONAB (Office National des Aliments du Bétail)"
+  aka: ["Algerian National Office for Livestock Feed"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "State — Algeria"
+  roles: ["importer", "state-tender-buyer", "feed-miller"]
+  products: ["meal"]
+  footprint: "Algiers; international tenders; feed distribution to Algerian livestock/poultry sector."
+  destinations: "Algeria domestic feed"
+  size_evidence: "Recurring 2025 tenders: soymeal in 25,000-35,000 t clips alongside 240,000 t corn + 35,000 t barley rounds (Jan/Feb 2025 and 'numerous tenders in recent weeks' per trade press); corn legs restricted to Argentina/Brazil origin."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.agricensus.com/Article/Algeria-s-ONAB-tenders-corn-meal-for-Jan-shipment-32599.html"
+      accessed: "2026-08-08"
+      supports: "ONAB corn + meal tender for January shipment"
+    - url: "https://www.marinelink.com/blogs/blog/algeria-offers-to-purchase-240000-t-of-corn-barley-and-soybean-102328"
+      accessed: "2026-08-08"
+      supports: "240k t corn + 35k t barley + 35k t soymeal tender round, Feb 2025 close"
+  notes: "Algeria's soymeal demand is increasingly met by new domestic crush (see Cevital entry): first crush plant Dec 2019, four operating + two under construction as of Jan 2025 (USDA FAS Algiers Grain & Feed Annual 2025). ONAB origin restrictions (Argentina/Brazil only on corn legs) are trader-relevant; soymeal origin terms vary by tender."
+
+- name: "Cevital"
+  aka: ["Cevital SPA", "Cevital Agro-Industrie"]
+  scope: "mena"
+  side: "buyer"
+  website: "https://www.cevital.com/"
+  ownership: "Private — Rebrab family, Algeria's largest private conglomerate"
+  roles: ["importer", "crusher", "refiner"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Béjaïa port complex, Algeria — edible-oil refining incumbent; soybean crush plant expected online per USDA FAS (Algeria had 4 crush plants operating + 2 under construction as of Jan 2025)."
+  destinations: "Algeria domestic"
+  size_evidence: "USDA FAS Algiers 2025 Grain & Feed Annual: Algeria crush build-out (1st plant Dec 2019, 2nd Aug 2021, four operating Jan 2025, two building) with 'industrial giant Cevital' expected to bring its soybean crush plant online."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Grain+and+Feed+Annual_Algiers_Algeria_AG2025-0002"
+      accessed: "2026-08-08"
+      supports: "Algeria crush plant count/timeline; Cevital soybean crush plant expected online; record 5 MMT corn imports 2024/25 driven by poultry"
+  notes: "Whether Cevital's soy crush line was running by mid-2026 not free-verified — the Jan 2025 GAIN says 'expected.' Cevital's edible-oil refining dominance in Algeria is long-standing public record. Names of the other three operating Algerian crushers not identified in free sources — gap."
+
+- name: "Carthage Grains"
+  aka: []
+  scope: "mena"
+  side: "buyer"
+  ownership: "Private (Tunisian)"
+  roles: ["importer", "crusher"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Tunisia's first and dominant soybean crush plant (built 2009); ~2,000+ t/day max capacity; commonly associated with the Bizerte port area."
+  destinations: "Tunisia domestic feed and oil"
+  size_evidence: "USDA FAS / trade press: ~600,000 t/yr beans crushed by 2019 (~60% US-origin); captured 86% of Tunisian soymeal market in 2015; 2,000 t/day capacity +200 t/day expansion (2017). Tunisia MY 2026/27 bean imports expected 595,000 t (FAS Tunis) — essentially the Carthage Grains program."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.world-grain.com/articles/7806-soybean-crushing-expansion-in-tunisia-increasing-imports"
+      accessed: "2026-08-08"
+      supports: "Capacity expansion; crush growth 550k->590k t 2016-17/2017-18"
+    - url: "https://ussoy.org/tunisian-crusher-cites-u-s-soy-logistics-quality-advantages/"
+      accessed: "2026-08-08"
+      supports: "~600k t/yr crush by 2019, 60% US-origin"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Oilseeds+and+Products+Annual_Tunis_Tunisia_TS2025-0003.pdf"
+      accessed: "2026-08-08"
+      supports: "Tunisia bean imports 580k t MY2025/26 -> 595k t MY2026/27; feed-demand driver"
+  notes: "Single-crusher market: bean imports into Tunisia ≈ Carthage Grains purchases. Market-share and capacity figures are 2015-2019 vintage (best free evidence); current utilization not free-verified. Tunisia levies 2.5% duty on soymeal imports, none on most feed grains."
+
+- name: "Alf Sahel"
+  aka: ["Alf Sahel s.a.r.l."]
+  scope: "mena"
+  side: "buyer"
+  ownership: "Private — Mohemmane family (Morocco)"
+  roles: ["importer", "feed-miller", "poultry-integrator"]
+  products: ["meal", "beans"]
+  footprint: "Morocco — two feed mills (~1.2 million t/yr feed, ~80% poultry), two hatcheries, processing plant incl. Morocco's largest slaughterhouse (6,000 birds/hr)."
+  destinations: "Morocco domestic"
+  size_evidence: "WATTPoultry/S&P Global interview: 1.2 MMT/yr feed output, described as the largest feed operation in North Africa; buys corn/soy on the spot market from Argentina, Brazil, US."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.wattagnet.com/top-poultry-companies/company/alf-sahel-sarl"
+      accessed: "2026-08-08"
+      supports: "Ownership, integration, mill/slaughter capacity"
+    - url: "https://www.spglobal.com/commodity-insights/en/news-research/latest-news/agriculture/102424-interview-moroccos-alf-sahel-adapts-to-spot-grain-purchases-animal-feed-diversifications"
+      accessed: "2026-08-08"
+      supports: "Spot (not forward) purchasing strategy; Argentina/Brazil/US origins"
+    - url: "https://ussec.org/news/ussec-holds-poultry-roundtable-for-maghrebs-feed-industry-in-morocco/"
+      accessed: "2026-08-08"
+      supports: "Maghreb is the largest MENA market for US Soy; Morocco imported >300k t US soybean meal in a year; USSEC technical work with Alf Sahel"
+  notes: "Morocco buys mostly MEAL (plus beans/hulls/oil) — no large domestic soy crush found in free sources; US traditionally supplies a large share of meal. Trader-relevant: Alf Sahel shifted from forward to spot purchasing (S&P interview). Moroccan feed sector strained by port disruption mid-2026 (Food & Agribusiness, Jun 2026)."
+
+- name: "Zalar Holding"
+  aka: ["Zalagh Holding"]
+  scope: "mena"
+  side: "buyer"
+  ownership: "Private (Moroccan group; Mitsui partnership on processed-chicken exports)"
+  roles: ["feed-miller", "poultry-integrator"]
+  products: ["meal"]
+  footprint: "Morocco — integrated poultry and feed; among the majors alongside Koutoubia, Alf Sahel, Dar El Fellous, Matinales."
+  destinations: "Morocco domestic; Japanese-style processed chicken export venture with Mitsui"
+  size_evidence: "Named among major companies in Morocco's poultry market (Mordor market report); no free feed-volume disclosure found."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.mordorintelligence.com/industry-reports/morocco-poultry-market"
+      accessed: "2026-08-08"
+      supports: "Major-player listing; Mitsui partnership; poultry = 55% of Moroccan protein consumption"
+  notes: "Included as second Moroccan meal buyer; scale evidence is a market-report player listing only — inferred. Ticket asked for 'feed millers' plural for Morocco; Alf Sahel entry carries the observed evidence."
+
+- name: "ARASCO"
+  aka: ["Arabian Agricultural Services Company"]
+  scope: "mena"
+  side: "buyer"
+  website: "https://www.arasco.com/"
+  ownership: "Private CJSC (Saudi Arabia)"
+  roles: ["importer", "feed-miller", "logistics", "bulk-handler"]
+  products: ["meal"]
+  footprint: "Saudi Arabia — feed milling, corn refining, poultry, logistics and bulk port handling; supplies corn, soybean meal, soy pellets/cubes to farms across the Kingdom."
+  destinations: "Saudi domestic feed"
+  size_evidence: "Described as one of the largest animal-feed producers in the Middle East, ~4 million t of feed in Saudi Arabia (Zawya profile). Saudi soymeal imports ~937k t (2023) trending toward ~1.0 MMT by 2028 (market data); USDA notes Saudi feed depends heavily on corn + soymeal."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.zawya.com/company/4296742008/arasco"
+      accessed: "2026-08-08"
+      supports: "Business-unit structure; feed scale; soymeal/corn raw-material supply role"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Grain+and+Feed+Annual_Riyadh_Saudi+Arabia_SA2025-0003.pdf"
+      accessed: "2026-08-08"
+      supports: "Saudi feed market dependence on imported corn and soybean meal"
+  notes: "Saudi buys MEAL, not beans-for-crush (no significant domestic soy crush found in free sources). Other named Saudi feed buyers: Almarai, National Feed Company (Feedco), Cargill, Zad Holding (market-report listing — not separately verified). ARASCO's own soymeal import volume not free-published."
+
+- name: "Al Ghurair Foods / Al Ghurair Resources"
+  aka: ["Al Ghurair Investment", "Edible Oil Company LLC (EOCD, acquired 100% 2021)", "Al Ghurair Commodities"]
+  scope: "mena"
+  side: "buyer"
+  website: "https://agcl.ae/grains-oil-seeds/"
+  ownership: "Private — Al Ghurair family group (Dubai, UAE); EOCD acquired from Dubai Investments Industries"
+  roles: ["importer", "crusher", "refiner", "trader"]
+  products: ["beans", "meal", "oil"]
+  footprint: "Dubai (Jebel Ali area), UAE — EOCD multi-seed crush plant: up to 2,200 t/day soybeans, 1,300 t/day canola, 1,000 t/day sunflower; one of the leading multi-seed crush plants in the Middle East. Al Ghurair had joint-managed EOCD since 2011 before the 2021 buyout."
+  destinations: "UAE/GCC feed and edible-oil markets; re-export hub position"
+  size_evidence: "Acquisition press (2021): plant capacity figures above; deal framed around UAE food-security agenda."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.zawya.com/en/press-release/al-ghurair-investment-announces-acquisition-of-dubai-based-edible-oil-company-d1h0f234"
+      accessed: "2026-08-08"
+      supports: "100% EOCD acquisition; crush capacities by seed; 2011 joint-management history"
+    - url: "https://www.world-grain.com/articles/15479-al-ghurair-to-acquire-edible-oil-company"
+      accessed: "2026-08-08"
+      supports: "Acquisition and Middle East crush-plant ranking"
+  notes: "Capacity/ownership evidence is 2021-dated (acquisition coverage); no 2025/26 operational disclosure found free. UAE role is part domestic, part GCC re-export — bean origination mix not free-published."
