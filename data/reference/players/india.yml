@@ -1,0 +1,369 @@
+# India soy players — importers / crushers / refiners (issue #92)
+# Research date 2026-08-07. Sources: SOPA solvent-extraction-plant directory
+# (all 14 pages fetched directly 2026-08-07 — capacity figures below labelled
+# "SOPA directory" are observed from those pages; directory vintage is NOT
+# dated by SOPA and includes at least one company that went through
+# insolvency (K.S. Oils), so treat SOPA TPD figures as indicative, not current),
+# company sites/filings via search, and 2026 trade press.
+#
+# Market context (2026-08-07): India imports soy OIL heavily (~55-60% of all
+# edible-oil consumption is imported) but soybean BEANS barely cross the
+# border (GM restrictions); 2025-26 soymeal exports collapsed (~0.9 MMT
+# expected vs 2.02 MMT prior year; Bangladesh offtake -46%; May/Jun contract
+# washouts) and India approved additional ports for bulk soymeal IMPORTS —
+# so "meal exporter" tags below describe structural role, not current flow.
+
+- name: "Patanjali Foods Ltd."
+  aka: ["Ruchi Soya Industries (renamed 2022)", "NSE: PATANJALI"]
+  scope: "india"
+  ownership: "Public (NSE/BSE listed); Patanjali Ayurved group promoted (acquired Ruchi Soya via IBC 2019)"
+  roles: [crusher, refiner, importer]
+  products: [beans, meal, oil]
+  footprint: "22 manufacturing units; inland crush plants across the soy/mustard belt (Ruchi legacy incl. MP); port-based refineries with direct port-to-plant pipelines at two sites"
+  destinations: "Primarily domestic (Fortune-scale branded oils under Ruchi Gold/Nutrela etc.); export role unverified"
+  size_evidence: "~11,000 TPD seed crushing + ~11,000 TPD refining across 22 units (company-derived figures in HDFC Securities initiating coverage and company materials); crushing capacity expanded 3.72->6.72 MTPA per company disclosures"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://images.assettype.com/bloombergquint/2022-09/314bef1e-4a7a-43d2-9f19-e44873f2d2b8/HDFC_Securities_Retail_Research_Initiating_Coverage___Patanjali_Foods_Ltd_.pdf"
+      accessed: "2026-08-07"
+      supports: "22 units, ~11,000 TPD crush + refining, packaging capacity [inferred — broker note citing company data; seen via search excerpt]"
+    - url: "https://www.patanjalifoods.com/manufacturing-facilities/"
+      accessed: "2026-08-07"
+      supports: "plant network; port refineries running on imported crude oil with pipeline links [observed via search excerpt]"
+    - url: "https://www.patanjalifoods.com/annual-reports/"
+      accessed: "2026-08-07"
+      supports: "FY25 income Rs 34,289 cr; edible-oil segment EBITDA > Rs 1,000 cr"
+  notes: "The ~11,000 TPD crush figure is company/broker-sourced, not re-verified against a 2026 filing line item. Largest domestic crush+refine complex in India by disclosed capacity. NOT in the SOPA directory pages fetched (Ruchi/Patanjali absent) — SOPA membership status unverified. Imports crude edible oil by sea for the port refineries (observed in company facility description); bean imports: none claimed."
+
+- name: "AWL Agri Business Ltd."
+  aka: ["Adani Wilmar Ltd. (renamed 2025-26)", "NSE: AWL", "Fortune brand"]
+  scope: "india"
+  ownership: "Public (listed); Wilmar International-linked JV heritage (Adani exited/reduced stake — post-rename shareholding not verified this session)"
+  roles: [importer, refiner, crusher]
+  products: [oil, meal, beans]
+  footprint: "Port-based refining led by Mundra (Gujarat); SOPA directory lists a Rajasthan solvent plant (450 TPD crush / 2,000 TPD refining). Pan-India packaged-oil distribution (Fortune)"
+  destinations: "Domestic branded market (claims market leader in soybean oil via Fortune/King's)"
+  size_evidence: "SOPA directory: 450 TPD crush / 2,000 TPD refining (Rajasthan unit only). Jul-2026: imported India's largest-ever single edible-oil parcel — 66,800 MT degummed soybean oil ex-San Lorenzo (Argentina) into Mundra. Q1 FY27 call: refining at 60-61% utilisation"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "450 TPD crush / 2,000 TPD refining, Rajasthan (listed as Adani Wilmar Ltd.) [observed]"
+    - url: "https://www.foodinfotech.com/awl-agri-business-imports-indias-largest-single-parcel-of-edible-oil/"
+      accessed: "2026-08-07"
+      supports: "66,800 MT DSBO single parcel, San Lorenzo -> Mundra, Jul 2026 [inferred — trade press]"
+    - url: "https://finance.yahoo.com/markets/stocks/articles/awl-agri-business-ltd-bom-010451282.html"
+      accessed: "2026-08-07"
+      supports: "refining 60-61% utilisation; soybean oil 30-35% of portfolio (Q1 FY27 call)"
+  notes: "Archetype of the import-house profile: crush is marginal (450 TPD in SOPA) vs refining scale; soy exposure is imported crude soy oil (Argentina/Brazil) refined at port. Company-wide refining capacity number not verified this session — only the SOPA Rajasthan unit and the utilisation quote. Post-Adani-exit ownership structure not verified."
+
+- name: "ADM Agro Industries India Pvt. Ltd."
+  aka: ["ADM India", "ADM Agro Industries Latur & Vizag Pvt. Ltd.", "ex-Tinna Oils assets"]
+  scope: "india"
+  ownership: "Private; wholly owned by Archer Daniels Midland (US, NYSE: ADM)"
+  roles: [crusher, refiner, exporter, originator]
+  products: [beans, meal, oil]
+  footprint: "SOPA directory: Karnataka 800 TPD crush / 150 TPD refining. Via acquisitions: Latur (Maharashtra) + Dharwad (Karnataka) plants and Vizag port warehouse (ex-Tinna Oils), Kota + Akola (ex-Geepee Agri), Nagpur soy assets (ex-Madhur Agro). HQ Gurgaon"
+  destinations: "Domestic packaged oils + soymeal export markets (per ADM's own acquisition releases)"
+  size_evidence: "SOPA directory 800 TPD (Karnataka entry); ADM press release on India oilseeds expansion describes crushing/refining/packaging at Akola and Nagpur serving domestic oil + export meal markets"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "ADM Agro Industries India Pvt. Ltd., Karnataka, 800 TPD crush / 150 TPD refining [observed]"
+    - url: "https://www.adm.com/en-us/news/news-releases/2011/9/adm-expands-oilseeds-processing-capacity-in-india/"
+      accessed: "2026-08-07"
+      supports: "Geepee (Kota, Akola), Tinna (Latur, Dharwad, Vizag), Madhur Agro (Nagpur) acquisitions; export meal orientation [observed via search excerpt — 2011 release, current plant status unverified]"
+  notes: "The only ABCD firm with verified own-name bean CRUSHING in India (SOPA-listed). Note the SOPA directory separately still lists 'Tinna Oils & Chemicals Ltd.' (Maharashtra, 800 TPD) and 'Madhur Agro Proteins Ltd.' (500 TPD) — legacy names of assets ADM acquired, i.e. the directory double-counts/predates the transfers. Current total ADM India crush capacity: not disclosed anywhere free that I found."
+
+- name: "Bunge India Pvt. Ltd."
+  aka: ["Dalda", "Gagan", "Bunge Global SA subsidiary"]
+  scope: "india"
+  ownership: "Private; wholly owned by Bunge Global SA (NYSE: BG)"
+  roles: [importer, refiner]
+  products: [oil]
+  footprint: "Refineries/packing at Kandla (Gujarat, port, crude soy + palm), Rajpura (Punjab), Krishnapatnam (AP, port, import-focused), Tiruchirappalli; contract units incl. AVI Agri Business (Ujjain, MP) and Budge Budge Refineries (Kolkata). HQ Mumbai"
+  destinations: "Domestic (Dalda/Gagan brands; B2B fats)"
+  size_evidence: "Company locations page names the four owned plants and their import/refining roles; listed among India's top edible-oil importers in trade-data summaries. No crush or refining TPD disclosed on the India site"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://bunge.com/India/Locations"
+      accessed: "2026-08-07"
+      supports: "Kandla/Rajpura/Krishnapatnam/Trichy plants; Kandla refines crude soybean oil near Deendayal Port [observed via search excerpt]"
+    - url: "https://bunge.com/India/Manufacturing-and-Packing-Units"
+      accessed: "2026-08-07"
+      supports: "third-party units incl. AVI Agri Business Ltd., Ujjain [observed via search excerpt]"
+  notes: "Honest classification: in India Bunge is an oil IMPORTER-REFINER, not a bean crusher — no Bunge-owned solvent plant appears in the SOPA directory. Its MP crush exposure runs through contract partner AVI Agri Business (separately SOPA-listed at 1,400 TPD crush / 300 TPD refining). No capacity numbers disclosed."
+
+- name: "Cargill India Pvt. Ltd."
+  aka: ["Gemini (oil brand)", "NatureFresh"]
+  scope: "india"
+  ownership: "Private; wholly owned by Cargill Inc. (US, private)"
+  roles: [importer, refiner]
+  products: [oil]
+  footprint: "Edible-oil refining and packaged brands (Gemini, NatureFresh); port-linked crude-oil imports"
+  destinations: "Domestic branded/B2B edible oil"
+  size_evidence: "TradeInt analysis of India customs data Q1 2026: Cargill India held 3.64% of India's edible-oil import value. No India crush/refining capacity disclosure found"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://tradeint.com/insights/india-edible-oil-imports/"
+      accessed: "2026-08-07"
+      supports: "3.64% share of Q1 2026 edible-oil imports [inferred — commercial trade-data summary, not primary customs]"
+    - url: "https://www.imarcgroup.com/blog/indian-edible-oil-manufacturing-companies"
+      accessed: "2026-08-07"
+      supports: "Gemini/NatureFresh soybean-oil brands under Cargill India"
+  notes: "Like Bunge: importer-refiner in India, NOT a soybean crusher — no Cargill entry in the SOPA solvent-plant directory. Plant list and capacities could not be verified free this session; the ticket's 'Bunge/Cargill India' framing should not imply origination/crush in India."
+
+- name: "Emami Agrotech Ltd."
+  aka: ["Emami Healthy & Tasty", "Himani Best Choice"]
+  scope: "india"
+  ownership: "Private; Emami Group"
+  roles: [importer, refiner]
+  products: [oil]
+  footprint: "Port refineries at Haldia (WB — company claims India's highest-capacity edible-oil plant, 5,600 TPD), Krishnapatnam (AP), Kandla (Gujarat, 3,200 TPD), plus Jaipur; ~12,000 TPD total edible-oil capacity (company figure). Also biodiesel (~300,000 MT capacity claim)"
+  destinations: "Domestic edible oil; biodiesel exported to Europe/SE Asia (company claim)"
+  size_evidence: "Company/press: ~12,000 TPD edible-oil capacity across four units; TradeInt Q1 2026: 4.96% of India edible-oil import value — the largest single company share in that dataset"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.emamiagrotech.in/about-us/manufacturing-unit.aspx"
+      accessed: "2026-08-07"
+      supports: "Haldia 5,600 TPD; four units ~12,000 TPD; Kandla 3,200 TPD [observed via search excerpt of company pages]"
+    - url: "https://tradeint.com/insights/india-edible-oil-imports/"
+      accessed: "2026-08-07"
+      supports: "4.96% share of Q1 2026 edible-oil imports [inferred — commercial trade-data summary]"
+  notes: "Pure import-refine house on the soy-oil side (refines imported crude palm/soy/sunflower); no soybean crushing found — not in SOPA directory. Soy-specific share of its refining mix not disclosed."
+
+- name: "Gemini Edibles & Fats India Ltd."
+  aka: ["GEF India", "Freedom (brand)", "ex-Ruchi Soya JV arm"]
+  scope: "india"
+  ownership: "Subsidiary of Golden Agri-Resources (Singapore-listed palm major; acquired 75% in 2014)"
+  roles: [importer, refiner]
+  products: [oil]
+  footprint: "Three port-based refineries on the east coast — two at Kakinada + one at Krishnapatnam (AP) — 2,450 TPD total refining (company figure); packing at Cuttack and Hyderabad; HQ Hyderabad"
+  destinations: "Domestic (Freedom brand — #1 sunflower oil by volume per NielsenIQ claim); bulk refined palm/sun/rice-bran/soybean oils B2B"
+  size_evidence: "2,450 TPD refining across three east-coast port plants (company/profile pages); Fortune India 500 #181 (2021)"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.gefindia.com/aboutus.html"
+      accessed: "2026-08-07"
+      supports: "three port refineries, 2,450 TPD, Kakinada x2 + Krishnapatnam [observed via search excerpt]"
+    - url: "https://businessindia.co/magazine/corporate-report/gemini-edibles-route-to-consolidation"
+      accessed: "2026-08-07"
+      supports: "GAR 75% acquisition 2014; Krishnapatnam 800 TPD build; Kakinada acquisition"
+  notes: "Sunflower/palm-led importer-refiner; soybean oil is a secondary bulk line. Included because it is a top-tier edible-oil import house with soy-oil capability, not a soy specialist. Not a crusher. Distinct from Cargill's 'Gemini' oil brand (name collision)."
+
+- name: "Gokul Agro Resources Ltd."
+  aka: ["NSE: GOKULAGRO", "Vitalife", "Mahek", "sister: Gokul Refoils & Solvent Ltd. (separate listco)"]
+  scope: "india"
+  ownership: "Public (NSE/BSE listed); promoter family also controls Gokul Refoils & Solvent Ltd. (demerged 2014-15)"
+  roles: [importer, refiner, crusher, exporter]
+  products: [oil, meal, beans]
+  footprint: "Primary complex at Gandhidham (Gujarat, 20 km from Kandla port) incl. 60,000 MT liquid terminal at Kandla; refineries also Haldia (WB), Krishnapatnam (AP), Mangalore (acquired Jan-2025, 100 TPD). SOPA directory: Gokul Agro 1,000 TPD soy crush (Gujarat); sister Gokul Refoils 1,500 TPD crush / 1,500 TPD refining"
+  destinations: "Domestic + exports to 40+ countries (company claim, largely non-soy castor/oils)"
+  size_evidence: "SOPA directory 1,000 TPD crush [observed]; company: >1 MMTPA total oil capacity, refining ~5,650 TPD post-Mangalore; FY25 sales Rs 19,550 cr (CRISIL); May-2026 Rs 430 cr refining capex approved"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "Gokul Agro Resources 1,000 TPD crush; Gokul Refoils & Solvent 1,500/1,500 TPD [observed]"
+    - url: "https://www.gokulagro.com/wp-content/uploads/2024/08/Gokul-Agro-Resources-Ltd-AR-2023-24.pdf"
+      accessed: "2026-08-07"
+      supports: "3,400 TPD refining (FY24) at Gandhidham/Haldia/Krishnapatnam"
+    - url: "https://www.crisil.com/mnt/winshare/Ratings/RatingList/RatingDocs/GokulAgroResourcesLimited_August%2001_%202025_RR_373979.html"
+      accessed: "2026-08-07"
+      supports: "FY25 sales Rs 19,550 cr, +41% YoY"
+  notes: "Kandla-port import-refine + domestic crush hybrid. Soy-specific split of the 5,650 TPD refining not disclosed (multi-oil incl. palm/mustard/castor). Sister company Gokul Refoils holds the larger SOPA soy crush listing — kept in this entry to avoid double counting; treat the two as one promoter group, two balance sheets."
+
+- name: "Vippy Industries Ltd."
+  aka: ["Vippy Soya", "BSE: 507864"]
+  scope: "india"
+  ownership: "Public (BSE listed); promoter family (Mutha)"
+  roles: [crusher, refiner, exporter]
+  products: [beans, meal, oil]
+  footprint: "Dewas (MP), 20-acre campus near Indore; SOPA directory: 1,375 TPD crush / 200 TPD refining; company site claims combined 1,800 MT/day across plants incl. a HiPro EOU division"
+  destinations: "Value-added soy + meal exports to 30-41 countries (company claims); ~9% of India soymeal export shipments in a Mar-23/Feb-24 Volza sample"
+  size_evidence: "SOPA directory 1,375 TPD [observed]; company site 1,800 MT/day combined; Volza shipment data: 3rd-largest India soymeal exporter, ~9% of shipments (142 shipments, 2023-24 window)"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "Vippy Industries, MP, 1,375 TPD crush / 200 TPD refining [observed]"
+    - url: "https://www.vippysoya.com/"
+      accessed: "2026-08-07"
+      supports: "est. 1973; combined 1,800 MT/day; Two Star Export House; 41 export countries [observed via search excerpt]"
+    - url: "https://www.volza.com/p/soybean-meal/manufacturers/manufacturers-in-india/"
+      accessed: "2026-08-07"
+      supports: "~9% of India soybean-meal export shipments, rank #3 [inferred — commercial shipment-count data, not tonnage]"
+  notes: "Core meal-export player for the #44 angle (non-GMO food-grade + feed meal). SOPA 1,375 vs company 1,800 TPD discrepancy unresolved (SOPA may cover one plant). Volza share is by shipment COUNT, not tonnage."
+
+- name: "Prestige Group (Prestige Feed Mills Ltd. + Prestige Agro-Tech Ltd.)"
+  aka: ["Prestige India, Dewas"]
+  scope: "india"
+  ownership: "Private group (Jhalani family, Dewas); multiple operating companies"
+  roles: [crusher, refiner, exporter]
+  products: [beans, meal, oil]
+  footprint: "Dewas (MP) industrial hub near Indore; SOPA directory lists two entries: Prestige Agro-Tech 1,200 TPD crush and Prestige Feed Mills 700 TPD crush / 150 TPD refining (~1,900 TPD group)"
+  destinations: "Exports to 40+ countries across Asia, Africa, Europe, Middle East (company claim); historically the top India soymeal exporter"
+  size_evidence: "SOPA directory 1,200 + 700 TPD [observed]; company claims ~1 million t/yr aggregate processing; Volza: Prestige Feed Mills = largest India soymeal exporter, ~28% of shipments (441 shipments, 2023-24 window)"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "Prestige Agro-Tech 1,200 TPD; Prestige Feed Mills 700/150 TPD, both MP [observed]"
+    - url: "https://www.prestigeindia.com/export.html"
+      accessed: "2026-08-07"
+      supports: "40+ export countries; ~1 MMTPA aggregate processing; Dewas base [observed via search excerpt]"
+    - url: "https://www.volza.com/p/soybean-meal/manufacturers/manufacturers-in-india/"
+      accessed: "2026-08-07"
+      supports: "#1 India soymeal exporter by shipments, ~28% share [inferred — shipment-count basis]"
+  notes: "Together with Vippy and Maharashtra Solvent Extraction, accounted for ~60% of India soymeal export shipments in the Volza 2023-24 sample. Private — no filings; capacity beyond SOPA + own site unverifiable."
+
+- name: "Maharashtra Solvent Extraction Pvt. Ltd."
+  aka: []
+  scope: "india"
+  ownership: "Private"
+  roles: [crusher, exporter]
+  products: [meal, oil]
+  footprint: "Maharashtra (Latur belt). SOPA directory has TWO similarly named members: 'Maharashtra Solvent Extraction (P) Ltd.' 250 TPD and 'Maharashtra Oil Extractions Pvt. Ltd.' 750 TPD / 250 TPD refining — which legal entity matches the exporter records is unresolved"
+  destinations: "Bulk soymeal export markets (Volza); specific countries unverified"
+  size_evidence: "Volza: top-3 India soymeal exporter (with Prestige and Vippy, jointly ~60% of shipments Mar-23/Feb-24). SOPA capacity attribution ambiguous (250 vs 750 TPD — see footprint)"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.volza.com/p/soybean-meal/manufacturers/manufacturers-in-india/"
+      accessed: "2026-08-07"
+      supports: "top-3 soymeal exporter status [inferred — shipment-count data]"
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "both similarly-named SOPA entries and their TPD figures [observed]"
+  notes: "Included ONLY for the meal-export angle; thinnest entry here. Name-collision between two SOPA members could not be resolved free — do not cite a capacity for this exporter until the entity is confirmed."
+
+- name: "Betul Oil Ltd."
+  aka: ["Betul Oils & Flours Ltd. (SOPA listing name)"]
+  scope: "india"
+  ownership: "Private/unlisted per own site; a 'Betul Oil' scrip appears on small-cap trackers — listing status unverified"
+  roles: [crusher, refiner, exporter]
+  products: [beans, meal, oil]
+  footprint: "Three solvent units: Betul + Satna (MP), Solapur (Maharashtra); 370 TPD refining (company); own warehousing ~14,000 MT + truck fleet. SOPA directory: 400 TPD crush / 100 TPD refining (single-entry)"
+  destinations: "Soymeal direct/indirect to Indonesia, Malaysia, Thailand, Vietnam, Korea, Japan, China + SAARC; lecithin and specialty fats to EU/Japan (all company claims)"
+  size_evidence: "SOPA directory 400 TPD [observed]; company site: integrated processor, 370 TPD refining, >1,000 poultry farms served domestically"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "Betul Oils & Flours Ltd., MP, 400 TPD crush / 100 TPD refining [observed]"
+    - url: "https://www.betuloil.com/business/"
+      accessed: "2026-08-07"
+      supports: "meal export destinations (FE Asia, SAARC), domestic feed supply, refining 370 TPD [observed via search excerpt]"
+  notes: "Did not appear in top-exporter shipment rankings — a mid-size crusher-exporter, smaller than its marketing suggests. Total current group crush TPD across the three units not published; SOPA figure likely one unit."
+
+- name: "Abis Export (I) Pvt. Ltd."
+  aka: ["ABIS Exports (India) Pvt. Ltd.", "IB Group", "Indian Broiler Group", "Drools (pet food)"]
+  scope: "india"
+  ownership: "Private; IB Group (Bahadur Ali family), Rajnandgaon, Chhattisgarh"
+  roles: [crusher, refiner]
+  products: [beans, meal, oil]
+  footprint: "Rajnandgaon (Chhattisgarh) solvent + refinery; SOPA directory: 500 TPD crush / 100 TPD refining. Feed-integrated: ~7,000 MT/day livestock feed (2023 brochure), 26-state presence"
+  destinations: "Overwhelmingly captive/domestic — meal feeds the group's own poultry/aqua/pet-feed chain"
+  size_evidence: "SOPA directory 500 TPD [observed]; CARE Ratings: 3.60 lakh MTPA soybean crushing + 1.50 lakh MTPA refinery; SOPA award 'Highest Soybean Crusher in India' at the 2023 International Soy Conclave; FY2025-26 group turnover ~Rs 13,000 cr (profile claim)"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "Abis Export, Chhattisgarh, 500 TPD crush / 100 TPD refining [observed]"
+    - url: "https://www.careratings.com/upload/CompanyFiles/PR/ABIS%20Exports%20(I)%20Private%20Limited-10-06-2017.pdf"
+      accessed: "2026-08-07"
+      supports: "3.6 lakh MTPA crush, 1.5 lakh MTPA refining [observed via search excerpt — 2017 vintage]"
+    - url: "https://www.ibgroup.co.in/about-us"
+      accessed: "2026-08-07"
+      supports: "group scale, feed integration, SOPA 2023 'Highest Soybean Crusher' award"
+  notes: "Despite the name, primarily a DOMESTIC feed integrator — largest bean crusher by throughput per SOPA's 2023 award, but meal is consumed in-group, not a major export or import player. CARE capacity figures are 2017-dated; the 3.6 lakh MTPA (~1,100+ TPD effective) vs SOPA's 500 TPD suggests SOPA lists one unit."
+
+- name: "BCL Industries Ltd."
+  aka: ["BCL Industries & Infrastructures Ltd. (SOPA listing name)", "NSE: BCLIND", "Homecook brand"]
+  scope: "india"
+  ownership: "Public (NSE/BSE listed); Mittal family promoted, Bathinda, Punjab"
+  roles: [crusher, refiner]
+  products: [beans, meal, oil]
+  footprint: "Bathinda (Punjab) integrated rice + edible-oil complex, 1,020 TPD processing (company); SOPA directory: 300 TPD soy crush / 100 TPD refining. Distillery/ethanol now the dominant segment (550 KLPD)"
+  destinations: "Domestic"
+  size_evidence: "SOPA directory 300 TPD [observed]; company: 1,020 TPD integrated edible-oil/rice complex; Q4 FY25 commentary: edible-oil business PHASE-OUT in progress, refinery clearing inventory, pivot to ethanol/maize"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "BCL Industries & Infrastructures, Punjab, 300 TPD / 100 TPD [observed]"
+    - url: "https://www.bcl.ind.in/business-edible-oil"
+      accessed: "2026-08-07"
+      supports: "1,020 TPD integrated complex, Bathinda [observed via search excerpt]"
+    - url: "https://hdfcsky.com/news/bcl-industries-march-quarter-profit-up-by-16-4-percent"
+      accessed: "2026-08-07"
+      supports: "FY25: edible-oil phase-out in progress; ethanol 550 KLPD focus [inferred — earnings coverage]"
+  notes: "Named in the ticket, but as of FY25 the company is EXITING edible oil for ethanol — treat as a declining/legacy soy player, not a current top-15 by active crush. Soy-specific vs mustard/rice split of the 1,020 TPD never disclosed."
+
+- name: "ITC Ltd. — Agri Business Division"
+  aka: ["ITC ABD", "NSE: ITC"]
+  scope: "india"
+  ownership: "Public (listed conglomerate); Agri Business is a segment, not a subsidiary"
+  roles: [originator, exporter]
+  products: [beans, meal]
+  footprint: "Pan-India origination network (>3.5 MMT annual agri throughput across 22 states, FY25 annual report); no owned soy crushing plant found in SOPA directory"
+  destinations: "unverified"
+  size_evidence: "FY25 segment revenue Rs 19,753 cr (+25% YoY); 3.5 MMT throughput — but figures span all agri commodities (wheat, rice, spices, coffee, leaf tobacco), not soy-specific"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://itcportal.com/content/dam/itc-corporate/pdfs/report-and-accounts/ITC-Report-and-Accounts-2025.pdf"
+      accessed: "2026-08-07"
+      supports: "agri segment scale FY25 [inferred — via press coverage of the report; oilmeal-specific lines not read]"
+    - url: "https://www.business-standard.com/companies/news/itc-to-scale-up-value-added-agri-products-portfolio-annual-report-125070800544_1.html"
+      accessed: "2026-08-07"
+      supports: "FY25 agri revenue Rs 19,753 cr, 3.5 MMT, 22 states"
+  notes: "Weakest inclusion, kept only because the ticket named it. ITC historically self-describes as a leading agri/oilmeal exporter, but I could NOT verify current soymeal export volumes or any soy origination specifics this session — the searched coverage highlights spices/coffee/marine, not soy. Role is trader/originator, not crusher/refiner/importer. Consider dropping if it stays unverifiable."
+
+- name: "K.S. Oils Ltd."
+  aka: ["Kalash", "Double Sher", "acquirer: Soy-Sar Edible Pvt. Ltd. (Sherisha Technologies SPV)"]
+  scope: "india"
+  ownership: "Sold as going concern out of IBC liquidation to Sherisha Technologies/Soy-Sar Edible (NCLT Indore order 2025-02-03); previously listed, shares suspended"
+  roles: [crusher, refiner]
+  products: [beans, meal, oil]
+  footprint: "Madhya Pradesh (Morena base; historically mustard-led multi-oil). SOPA directory: 4,200 TPD crush / 450 TPD refining — the largest crush figure in the entire directory"
+  destinations: "Domestic (historically)"
+  size_evidence: "SOPA directory 4,200 TPD [observed] — but the company spent 2017-2025 in CIRP/liquidation, so installed != operating capacity"
+  confidence: "inferred"
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://sopa.org/solvent-extraction-plant/"
+      accessed: "2026-08-07"
+      supports: "K.S. Oils, MP, 4,200 TPD / 450 TPD [observed]"
+    - url: "https://ibclaw.in/corporate-debtor-2/ks-oils-ltd/"
+      accessed: "2026-08-07"
+      supports: "CIRP 2017, NCLAT liquidation order Mar-2021, going-concern sale"
+    - url: "https://marketsetup.in/posts/result-analysis/ksoils/fy25/q1/ksoils-fy25-q1/"
+      accessed: "2026-08-07"
+      supports: "Feb-2025 NCLT reliefs to Soy-Sar Edible; revival attempt under new owners"
+  notes: "Included as the load-bearing caveat for the whole file: the SOPA directory's biggest capacity number belongs to a company that was in liquidation for years — proof the directory is not current-vintage. Operational status of the 4,200 TPD under Soy-Sar as of 2026: unknown. Also historically mustard-dominant; soy share of capacity unverified."
+
+# --- Directory context (not individual entries) ---
+# Other large SOPA-directory crush listings (all observed 2026-08-07,
+# same staleness caveat): Laxmi Solvex (MP) 1,800 TPD; Gujar Agro Farms
+# (Gujarat/Maharashtra) 1,500 TPD; AVI Agri Business (MP, Bunge contract
+# unit) 1,400 TPD; Kriti Nutrients (MP, listed) 1,200 TPD; M.P. State
+# Coop. Oilseed Growers Federation 1,200 TPD; Goyal Proteins (Rajasthan)
+# 1,100 TPD; Agro Solvent Products (MP), Sanwaria Agro Oils (MP — went
+# through NCLT ~2020, status unverified), Skylark Proteins (MP), Suguna
+# Foods (Maharashtra, poultry-captive) all 1,000 TPD. None verified
+# beyond the directory; promote to full entries only after per-company checks.
