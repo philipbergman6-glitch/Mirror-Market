@@ -288,7 +288,9 @@ def psd_numbers(psd_df: pd.DataFrame, iso: str) -> list[dict]:
         if match.empty:
             continue
         value = float(match["value"].iloc[0])
-        if value <= 0:
+        # `not value > 0` also catches NaN (NULL value column) — a NaN row
+        # would otherwise render "nan MMT" (fabrication, spec decision #13)
+        if not value > 0:
             continue
         scored.append((value, {
             "label": label,
@@ -306,7 +308,7 @@ def export_sales_trend(es_df: pd.DataFrame, iso: str) -> dict | None:
     if not pattern or es_df is None or es_df.empty:
         return None
     df = es_df[es_df["commodity"] == "Soybeans"] if "commodity" in es_df.columns else es_df
-    df = df[df["country"].str.upper().str.contains(pattern, regex=False)]
+    df = df[df["country"].str.upper().str.contains(pattern, regex=False, na=False)]
     if df.empty:
         return None
     df = df.assign(week=pd.to_datetime(df["week_ending"]))
@@ -375,11 +377,19 @@ def build_country_contexts(codes: list[str]) -> dict[str, list[dict]]:
     weather_cache: dict[str, pd.DataFrame] = {}
     try:
         from pipeline.query import read_export_sales, read_psd, read_weather
+    except Exception as e:
+        log.warning("players context: DB unavailable (%s)", e)
+        return contexts
+    # each source degrades independently — a dead export_sales table must not
+    # take the PSD numbers down with it
+    try:
         psd_df = read_psd("Soybeans")
+    except Exception as e:
+        log.warning("players context: PSD read failed (%s)", e)
+    try:
         es_df = read_export_sales("Soybeans")
     except Exception as e:
-        log.warning("players context: DB reads unavailable (%s)", e)
-        return contexts
+        log.warning("players context: export sales read failed (%s)", e)
 
     for code in codes:
         items: list[dict] = []

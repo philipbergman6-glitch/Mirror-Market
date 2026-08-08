@@ -189,11 +189,12 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
   {% endif %}
 
   {% for c in g.cards %}
+  {# facet tokens are |-joined: role values contain spaces ("grain trader (reducing)") #}
   <details class="player-card"
-    data-roles="{{ c.roles|join(' ') }}"
-    data-products="{{ c.products|join(' ') }}"
+    data-roles="{{ c.roles|join('|') }}"
+    data-products="{{ c.products|join('|') }}"
     data-country="{{ c.country }}"
-    data-dest="{{ c.dest_codes|join(' ') }}"
+    data-dest="{{ c.dest_codes|join('|') }}"
     data-tier="{{ c.tier }}">
     <summary>
       <span class="pc-name">{{ c.name }}</span>
@@ -292,7 +293,7 @@ const sections = Array.from(document.querySelectorAll('.country'));
 const shownCount = document.getElementById('shown-count');
 const noResults = document.getElementById('no-results');
 
-function tokens(card, attr) { return (card.dataset[attr] || '').split(' ').filter(Boolean); }
+function tokens(card, attr) { return (card.dataset[attr] || '').split('|').filter(Boolean); }
 
 function applyFilters() {
   const want = {

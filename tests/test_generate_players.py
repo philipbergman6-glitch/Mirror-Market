@@ -160,6 +160,17 @@ def test_psd_numbers_latest_year_nonzero_top_two():
     assert "2026" in items[0]["note"]
 
 
+def test_psd_numbers_nan_value_omitted():
+    # NULL value column must not render "nan MMT" (spec: never fabricate)
+    df = pd.DataFrame([
+        {"country": "Brazil", "year": 2026, "attribute": "Exports", "value": float("nan"), "unit": "(1000 MT)"},
+        {"country": "Brazil", "year": 2026, "attribute": "Production", "value": 186000, "unit": "(1000 MT)"},
+    ])
+    items = psd_numbers(df, "BR")
+    assert len(items) == 1
+    assert items[0]["label"] == "Soybean production"
+
+
 def test_psd_numbers_unknown_country_empty():
     df = pd.DataFrame([{"country": "Brazil", "year": 2026, "attribute": "Exports",
                         "value": 105000, "unit": "(1000 MT)"}])
@@ -248,3 +259,6 @@ def test_render_smoke_real_dataset():
     assert html.count("player-card") >= 193
     # spec decision #13: DB empty → context blocks omitted, never fabricated
     assert 'class="ctx-item' not in html
+    # facet tokens are |-joined so multi-word roles ("grain trader (reducing)")
+    # survive the client-side split — space-joining broke the role filter
+    assert 'data-roles="originator|' in html
