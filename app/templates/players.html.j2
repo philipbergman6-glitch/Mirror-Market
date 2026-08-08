@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mirror Market — Players · Global Counterparty Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #FAFAF7;
+  --card: #FFFFFF;
+  --rule: #D8DCD8;
+  --rule-heavy: #191C1A;
+  --ink: #191C1A;
+  --green: #2D6A4F;
+  --green-light: #2D6A4F;
+  --text: #191C1A;
+  --text-muted: #5D6660;
+  --text-dim: #9BA39E;
+  --bullish: #1F7A3D;
+  --bearish: #C23B2E;
+  --warning: #A8730A;
+  --info: #2F5D8F;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: 'Archivo', sans-serif;
+  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-muted); }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
+
+/* ---- masthead ---- */
+.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
+.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
+.masthead h1 em { font-style: normal; color: var(--green); }
+.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
+.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ---- filter bar ---- */
+.filter-bar { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 12px; padding: 10px 0; align-items: center; flex-wrap: wrap; }
+.filter-bar a.back { text-decoration: none; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.filter-bar a.back:hover { color: var(--ink); }
+.filter-bar a.back .no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 4px; }
+.filter-bar select, .filter-bar input[type="search"] {
+  font-family: var(--font); font-size: 12px; color: var(--ink);
+  background: var(--card); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 8px;
+}
+.filter-bar input[type="search"] { width: 180px; }
+.filter-bar select:focus, .filter-bar input:focus { outline: 1px solid var(--green); }
+.filter-count { margin-left: auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.filter-count b { font-family: var(--mono); color: var(--ink); font-weight: 500; }
+
+/* ---- groups ---- */
+section.pgroup { padding: 26px 0; border-bottom: 1px solid var(--rule); }
+.sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+.sec-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+.sec-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.sec-head .why { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+.sec-head .gcount { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+
+.pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+
+/* ---- player card ---- */
+.pcard { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; }
+.pcard .phead { display: flex; align-items: baseline; gap: 8px; }
+.pcard .pname { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; line-height: 1.25; }
+.pill { font-family: var(--display); font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; flex-shrink: 0; }
+.pill-t1 { background: var(--green); color: #fff; }
+.pill-side { background: #E4E8E4; color: var(--text-muted); }
+.pcard .proles { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.pcard .pchips { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border: 1px solid var(--rule); border-radius: 3px; color: var(--text-muted); }
+.chip-prod { color: var(--green); border-color: var(--green); }
+.pcard details { margin-top: 10px; border-top: 1px dotted var(--rule); }
+.pcard details summary { list-style: none; cursor: pointer; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 8px 0 0; }
+.pcard details summary::before { content: "\25B6"; font-size: 9px; margin-right: 6px; display: inline-block; transition: transform 0.15s; }
+.pcard details[open] summary::before { transform: rotate(90deg); }
+.pcard details summary:hover { color: var(--ink); }
+.pfield { margin-top: 8px; font-size: 12px; }
+.pfield .lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); display: block; }
+.pcard .pfoot { margin-top: 10px; font-size: 11px; color: var(--text-dim); display: flex; gap: 12px; flex-wrap: wrap; }
+.pcard .pfoot a { color: var(--green); text-decoration: none; }
+.pcard .pfoot a:hover { text-decoration: underline; }
+
+.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
+.footer a { color: var(--green); text-decoration: none; font-weight: 500; }
+.footer a:hover { text-decoration: underline; }
+
+@media (max-width: 960px) { .pgrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) {
+  .page { padding: 20px 16px 48px; }
+  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .mast-meta { margin-left: 0; text-align: left; }
+  .pgrid { grid-template-columns: 1fr; }
+  .filter-count { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <h1>Mirror<br><em>Market</em></h1>
+  <div class="mast-meta">
+    <div class="day">Players — Global Counterparty Map</div>
+    <div>{{ stats.total }} players · {{ stats.tier1 }} tier-1 majors · {{ stats.groups }} scopes · generated {{ generated_at }}</div>
+    <div>Sellers, buyers and both sides of the physical soy complex</div>
+  </div>
+</header>
+
+<nav class="filter-bar">
+  <a class="back" href="index.html"><span class="no">&larr;</span>Daily read</a>
+  <input type="search" id="f-search" placeholder="Search name, footprint&hellip;" aria-label="Search players">
+  <select id="f-side" aria-label="Filter by side">
+    <option value="all">Side: all</option>
+    <option value="seller">Sellers</option>
+    <option value="buyer">Buyers</option>
+    <option value="both">Both sides</option>
+  </select>
+  <select id="f-product" aria-label="Filter by product">
+    <option value="all">Product: all</option>
+    <option value="beans">Beans</option>
+    <option value="meal">Meal</option>
+    <option value="oil">Oil</option>
+  </select>
+  <select id="f-dest" aria-label="Filter by destination">
+    <option value="all">Destination: all</option>
+    {% for d in dest_options %}
+    <option value="{{ d.code }}">{{ d.label }}</option>
+    {% endfor %}
+  </select>
+  <select id="f-tier" aria-label="Filter by tier">
+    <option value="all">Tier: all</option>
+    <option value="1">Tier 1 only</option>
+  </select>
+  <span class="filter-count">Showing <b id="f-count">{{ stats.total }}</b> of {{ stats.total }}</span>
+</nav>
+
+{% for g in groups %}
+<section class="pgroup" id="{{ g.scope }}">
+  <div class="sec-head">
+    <span class="sec-no">{{ "%02d"|format(loop.index) }}</span>
+    <h2>{{ g.title }}</h2>
+    <span class="gcount"><span class="gcount-n">{{ g.players|length }}</span> shown</span>
+    <span class="why">{{ g.why }}</span>
+  </div>
+  <div class="pgrid">
+    {% for p in g.players %}
+    <div class="pcard" data-side="{{ p.side }}" data-tier="{{ p.tier }}" data-products="{{ p.products_attr }}" data-dest="{{ p.dest_attr }}" data-search="{{ p.search_attr }}">
+      <div class="phead">
+        <span class="pname">{{ p.name }}</span>
+        {% if p.tier == "1" %}<span class="pill pill-t1">T1</span>{% endif %}
+        <span class="pill pill-side">{{ p.side }}</span>
+      </div>
+      <div class="proles">{{ p.roles }}</div>
+      <div class="pchips">
+        {% for pr in p.products %}<span class="chip chip-prod">{{ pr }}</span>{% endfor %}
+        {% for d in p.dest_codes %}<span class="chip">&rarr; {{ d }}</span>{% endfor %}
+      </div>
+      <details>
+        <summary>Profile</summary>
+        {% if p.ownership %}<div class="pfield"><span class="lbl">Ownership</span>{{ p.ownership }}</div>{% endif %}
+        {% if p.footprint %}<div class="pfield"><span class="lbl">Footprint</span>{{ p.footprint }}</div>{% endif %}
+        {% if p.destinations %}<div class="pfield"><span class="lbl">Destinations</span>{{ p.destinations }}</div>{% endif %}
+        {% if p.size_evidence %}<div class="pfield"><span class="lbl">Scale evidence</span>{{ p.size_evidence }}</div>{% endif %}
+        {% if p.notes %}<div class="pfield"><span class="lbl">Notes</span>{{ p.notes }}</div>{% endif %}
+      </details>
+      <div class="pfoot">
+        {% if p.website %}<a href="{{ p.website }}" target="_blank" rel="noopener">website</a>{% endif %}
+        <span>{{ p.confidence }}</span>
+        <span class="num">as of {{ p.as_of }}</span>
+        <span>{{ p.n_citations }} citation{{ "s" if p.n_citations != 1 }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+
+<div class="footer">
+  Static reference data on physical soy-complex players — company-level only, never named individuals.
+  Every entry is dated (<span class="num">as_of</span>) and cited; confidence is <em>observed</em> (seen in a primary source) or <em>inferred</em>.
+  Destination chips use ISO&nbsp;3166 country codes plus region blocs (EU, MENA, SE-ASIA, LATAM, &hellip;).
+  <br><br>
+  <a href="index.html">&larr; Back to the daily read</a> &nbsp;·&nbsp;
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank">View source on GitHub</a>
+</div>
+
+</div>
+
+<script>
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.pcard'));
+  var groups = Array.prototype.slice.call(document.querySelectorAll('.pgroup'));
+  var search = document.getElementById('f-search');
+  var selSide = document.getElementById('f-side');
+  var selProd = document.getElementById('f-product');
+  var selDest = document.getElementById('f-dest');
+  var selTier = document.getElementById('f-tier');
+  var countEl = document.getElementById('f-count');
+
+  function apply() {
+    var q = search.value.trim().toLowerCase();
+    var side = selSide.value, prod = selProd.value, dest = selDest.value, tier = selTier.value;
+    var shown = 0;
+    cards.forEach(function (c) {
+      var d = c.dataset;
+      var ok = true;
+      if (side !== 'all' && d.side !== side && d.side !== 'both') ok = false;
+      if (prod !== 'all' && d.products.split(' ').indexOf(prod) === -1) ok = false;
+      if (dest !== 'all' && d.dest.split(' ').indexOf(dest) === -1) ok = false;
+      if (tier === '1' && d.tier !== '1') ok = false;
+      if (ok && q && d.search.indexOf(q) === -1) ok = false;
+      c.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    });
+    groups.forEach(function (g) {
+      var vis = g.querySelectorAll('.pcard:not([style*="none"])').length;
+      g.style.display = vis ? '' : 'none';
+      g.querySelector('.gcount-n').textContent = vis;
+    });
+    countEl.textContent = shown;
+  }
+
+  [selSide, selProd, selDest, selTier].forEach(function (el) { el.addEventListener('change', apply); });
+  search.addEventListener('input', apply);
+})();
+</script>
+</body>
+</html>

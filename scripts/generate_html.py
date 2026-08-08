@@ -35,13 +35,14 @@ from app.charts import (  # noqa: E402  (must follow sys.path.insert above)
     build_technical_chart,
     delta_str,
 )
-from scripts.validate_players import validate_players  # noqa: E402
+from scripts.validate_players import PLAYERS_DIR, validate_players  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 OUTPUT_DIR = PROJECT_ROOT / "docs"
 OUTPUT_FILE = OUTPUT_DIR / "index.html"
+PLAYERS_FILE = OUTPUT_DIR / "players.html"
 TEMPLATE_DIR = PROJECT_ROOT / "app" / "templates"
 
 # Numbered sections for the index nav (scan order)
@@ -998,10 +999,47 @@ def _build_health_html(health: dict) -> str:
 # ---------------------------------------------------------------------------
 # Main generation
 # ---------------------------------------------------------------------------
-def generate():
-    """Generate the static HTML dashboard."""
-    log.info("Starting HTML generation...")
+# ---------------------------------------------------------------------------
+# Players page (T2, issue #123 — spec: research/2026-08-08-issue-111-players-phase2-spec.md)
+# ---------------------------------------------------------------------------
 
+# Scope render order: sell side (origins) first, then buy side (destinations).
+PLAYER_GROUPS = [
+    ("global", "Global Trading Houses", "sell &amp; buy side — the ABCD+ internationals"),
+    ("brazil", "Brazil", "sell side — #1 exporter"),
+    ("us", "United States", "sell side — #2 exporter"),
+    ("argentina", "Argentina", "sell side — meal &amp; oil powerhouse"),
+    ("paraguay", "Paraguay", "sell side — up-river origination"),
+    ("secondary_origins", "Secondary Origins", "sell side — Canada · Ukraine · Russia · Uruguay · Bolivia"),
+    ("china", "China", "buy side — the demand center"),
+    ("india", "India", "buy side — importers · crushers · refiners"),
+    ("asia_importers", "East &amp; Southeast Asia", "buy side — JP · KR · TW · VN · ID · TH"),
+    ("europe", "Europe", "buy side — EU/UK/Norway import crushers"),
+    ("mena", "MENA", "buy side — Egypt · Turkey · Iran · North Africa"),
+    ("africa", "Africa", "buy side — South Africa · Nigeria"),
+    ("latam_importers", "Mexico &amp; Latin America", "buy side — Mexico · Andean · Central America"),
+]
+
+# Display names for destination filter options; codes without an entry show as-is.
+_DEST_NAMES = {
+    "EU": "EU bloc", "MENA": "MENA bloc", "SE-ASIA": "SE Asia bloc", "ASIA": "Asia bloc",
+    "LATAM": "LatAm bloc", "AFRICA": "Africa bloc", "GLOBAL": "Global",
+    "AE": "UAE", "AR": "Argentina", "BD": "Bangladesh", "BO": "Bolivia", "BR": "Brazil",
+    "CA": "Canada", "CL": "Chile", "CN": "China", "CO": "Colombia", "CR": "Costa Rica",
+    "CU": "Cuba", "DE": "Germany", "DK": "Denmark", "DO": "Dominican Rep.", "DZ": "Algeria",
+    "EC": "Ecuador", "EG": "Egypt", "ES": "Spain", "FR": "France", "GB": "UK",
+    "GT": "Guatemala", "HK": "Hong Kong", "ID": "Indonesia", "IL": "Israel", "IN": "India",
+    "IR": "Iran", "IT": "Italy", "JP": "Japan", "KE": "Kenya", "KR": "South Korea",
+    "LK": "Sri Lanka", "MA": "Morocco", "MX": "Mexico", "MY": "Malaysia", "NG": "Nigeria",
+    "NL": "Netherlands", "NO": "Norway", "NP": "Nepal", "PA": "Panama", "PE": "Peru",
+    "PH": "Philippines", "PK": "Pakistan", "PL": "Poland", "PT": "Portugal", "PY": "Paraguay",
+    "RU": "Russia", "SA": "Saudi Arabia", "SG": "Singapore", "TH": "Thailand", "TN": "Tunisia",
+    "TR": "Turkey", "TW": "Taiwan", "UA": "Ukraine", "US": "United States", "UY": "Uruguay",
+    "VE": "Venezuela", "VN": "Vietnam", "ZA": "South Africa",
+}
+
+
+def _validate_players_or_die() -> None:
     # Hard-fail on players knowledge-base schema violations (issue #122) —
     # a bad country code must break the build, not ship as a dead filter.
     player_errors = validate_players()
@@ -1009,6 +1047,99 @@ def generate():
         for err in player_errors:
             log.error("players: %s", err)
         raise SystemExit(f"players validation failed with {len(player_errors)} violation(s)")
+
+
+def _build_players_context(now: datetime) -> dict:
+    """Load data/reference/players/*.yml into the players.html template context."""
+    import yaml
+
+    groups = []
+    total = tier1 = 0
+    all_dest_codes: set[str] = set()
+
+    for scope, title, why in PLAYER_GROUPS:
+        entries = yaml.safe_load((PLAYERS_DIR / f"{scope}.yml").read_text(encoding="utf-8")) or []
+        players = []
+        for e in entries:
+            products = [str(p) for p in (e.get("products") or [])]
+            dest_codes = [str(d.get("code", "")) for d in (e.get("destinations_structured") or [])]
+            dest_codes = [c for c in dest_codes if c]
+            all_dest_codes.update(dest_codes)
+            tier = str(e.get("tier") or "")
+            if tier == "1":
+                tier1 += 1
+            search_blob = " ".join(
+                str(x)
+                for x in [
+                    e.get("name"),
+                    " ".join(e.get("aka") or []),
+                    e.get("ownership"),
+                    e.get("footprint"),
+                    e.get("destinations"),
+                    " ".join(e.get("roles") or []),
+                ]
+                if x
+            ).lower()
+            players.append(
+                {
+                    "name": _esc(e.get("name")),
+                    "side": _esc(e.get("side") or ""),
+                    "tier": tier,
+                    "roles": _esc(" · ".join(e.get("roles") or [])),
+                    "products": [_esc(p) for p in products],
+                    "products_attr": _esc(" ".join(products)),
+                    "dest_codes": [_esc(c) for c in dest_codes],
+                    "dest_attr": _esc(" ".join(dest_codes)),
+                    "search_attr": _esc(search_blob),
+                    "ownership": _esc(e.get("ownership")),
+                    "footprint": _esc(e.get("footprint")),
+                    "destinations": _esc(e.get("destinations")),
+                    "size_evidence": _esc(e.get("size_evidence")),
+                    "notes": _esc(e.get("notes")),
+                    "website": _esc(e.get("website")),
+                    "confidence": _esc(e.get("confidence") or ""),
+                    "as_of": _esc(e.get("as_of") or ""),
+                    "n_citations": len(e.get("citations") or []),
+                }
+            )
+        total += len(players)
+        groups.append({"scope": scope, "title": title, "why": why, "players": players})
+
+    countries = sorted(c for c in all_dest_codes if len(c) == 2)
+    dest_options = [
+        {"code": c, "label": f"{c} — {_DEST_NAMES[c]}" if c in _DEST_NAMES else c}
+        for c in [*sorted(all_dest_codes - set(countries)), *countries]
+    ]
+
+    return {
+        "generated_at": now.strftime("%Y-%m-%d %H:%M UTC"),
+        "groups": groups,
+        "stats": {"total": total, "tier1": tier1, "groups": len(groups)},
+        "dest_options": dest_options,
+    }
+
+
+def generate_players_page() -> None:
+    """Render docs/players.html from the players knowledge base (no DB needed)."""
+    _validate_players_or_die()
+    context = _build_players_context(datetime.now(timezone.utc))
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    html_output = env.get_template("players.html.j2").render(**context)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    PLAYERS_FILE.write_text(html_output, encoding="utf-8")
+    log.info(
+        "Generated %s (%.0f KB, %d players)",
+        PLAYERS_FILE,
+        PLAYERS_FILE.stat().st_size / 1024,
+        context["stats"]["total"],
+    )
+
+
+def generate():
+    """Generate the static HTML dashboard."""
+    log.info("Starting HTML generation...")
+
+    generate_players_page()
 
     # Load analysts
     from analysis.briefing import generate_briefing
@@ -1081,4 +1212,7 @@ def generate():
 
 
 if __name__ == "__main__":
-    generate()
+    if "--players-only" in sys.argv:
+        generate_players_page()
+    else:
+        generate()
