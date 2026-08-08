@@ -437,7 +437,10 @@ def _build_demand(data: dict) -> dict | None:
             week_str = ""
             if we is not None:
                 week_str = f' · w/e {we.strftime("%m/%d") if hasattr(we, "strftime") else _esc(we)}'
-            cards.append(f'<div class="mc"><div class="mc-label">{_esc(commodity)}</div><div class="mc-val">{info["net_sales"]:,.0f}</div><div class="mc-delta muted">MT | {info["pct_of_total"]:.0f}% of total{week_str}</div></div>')
+            if info["net_sales"] == 0:
+                cards.append(f'<div class="mc"><div class="mc-label">{_esc(commodity)}</div><div class="mc-val">—</div><div class="mc-delta muted">no net Chinese purchases{week_str}</div></div>')
+            else:
+                cards.append(f'<div class="mc"><div class="mc-label">{_esc(commodity)}</div><div class="mc-val">{info["net_sales"]:,.0f}</div><div class="mc-delta muted">MT | {info["pct_of_total"]:.0f}% of total{week_str}</div></div>')
         cards.append('</div>')
         out["china_html"] = "\n".join(cards)
 
@@ -524,6 +527,10 @@ def _build_emerging_markets(data: dict) -> str:
 
         # India domestic \u2014 bean-only mandi series since the 2026-08 rebuild
         dom_india = info.get("india_domestic", {})
+        if country_name == "India" and not dom_india:
+            # An empty card reads as a bug; say what the feed is and that
+            # it is pending rather than silently omitting the series.
+            parts.append('<div class="alert alert-warn">Mandi domestic price (Agmarknet via data.gov.in): awaiting session data \u2014 feed throttled or mandis closed</div>')
         if dom_india:
             parts.append('<div class="subhdr" style="font-size:14px;">Mandi Domestic Price (Agmarknet, MP median)</div>')
             mandi_date = dom_india.get("soybean_mandi_date")

@@ -32,3 +32,6 @@ data/storage/*.json
 .scratch/
 graphify-out/
 .claude/
+
+# Local pitch materials (public repo — never commit)
+pitch/
