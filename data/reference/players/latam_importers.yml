@@ -1,0 +1,376 @@
+# Latin America importers — Mexico + Andean/Central America (#110)
+# Schema: data/reference/players/README.md. as_of 2026-08-08.
+# Context (USDA FAS MX2026-0020, accessed 2026-08-08): Mexico soybean imports
+# ~6.7 MMT forecast MY2026/27, ~96% of consumption, virtually all US-origin;
+# installed crush capacity ~11.5 MMT CY2026 at ~60% utilization. Crush capacity
+# concentration (earlier FAS reporting via AgFlow): Ragasa ~40%, Agydsa-Patrona
+# ~22%, Proteinas y Oleicos ~13%, Cargill ~11%, ADM ~6% (~92% in five firms).
+# Logistics: ~55-60% of whole beans and nearly 100% of meal/oil enter by rail
+# (100-car shuttle trains, CPKC ex-KCS); US supplies ~94% of bean, ~90% of meal,
+# ~65% of oil imports (United Soybean Board).
+
+- name: "Ragasa Industrias"
+  aka: ["RAGASA", "Raúl García y Compañía (origin)"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.ragasa.com.mx"
+  ownership: "Private Mexican family company, Monterrey (founded 1917 as Raúl García y Compañía; name from founder Raúl García) [observed]"
+  roles: [importer, crusher, refiner]
+  products: [beans, meal, oil]
+  footprint: "Monterrey, Nuevo León — described by USSEC as the largest crusher of US soybeans in Mexico; second crushing plant completed 2017 lifted capacity to ~2 MMT beans/yr [observed]. ~40% of Mexican crush capacity per earlier USDA FAS reporting [observed]."
+  destinations: "Domestic Mexico — bottled/branded soy oil plus meal and pelleted hulls to Mexican swine, poultry, layer and dairy feeders [observed]"
+  size_evidence: "USSEC: 'RAGASA processes one million metric tons (MT) of soybeans per year and with its new crushing plant... will process two million MT of beans annually'; post-expansion the company expected ~2,000 railcars/month of US beans (Todays Farmer, supply manager Francisco Belden)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://ussec.org/news/ussec-technical-assistance-ragasa/"
+      accessed: "2026-08-08"
+      supports: "largest US-soy crusher in Mexico; 1→2 MMT capacity; meal + pelleted hulls to domestic feeders"
+    - url: "https://www.agflow.com/agricultural-markets-news/mexico-oilseeds-only-ragasa-plans-to-expand-and-modernize-in-2023-2024/"
+      accessed: "2026-08-08"
+      supports: "~40% share of Mexican crush capacity; only crusher expanding/modernizing MY2023/24 (USDA FAS-sourced)"
+    - url: "https://todaysfarmermagazine.com/mag/1346-all-aboard-the-grain-train"
+      accessed: "2026-08-08"
+      supports: "~2,000 railcars/month; direct sourcing from US country elevators incl. CMAS Marshall, Missouri for food-grade oil"
+    - url: "https://www.ragasa.com.mx/en/"
+      accessed: "2026-08-08"
+      supports: "corporate identity, 1917 founding, oil refining/bottling"
+  notes: "Buys US beans direct at US origin (e.g. MFA/CMAS Marshall MO shuttle loader) rather than solely via ABCD intermediaries — the rail shuttle system makes elevator-direct programs practical [observed for the CMAS case, inferred as general practice]. Exact current ownership stakes not publicly disclosed."
+
+- name: "Agydsa (Aceites, Grasas y Derivados)"
+  aka: ["AGYDSA", "La Patrona", "Agydsa-Patrona", "GOSA", "MOSA", "SOBA"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.agydsa.net"
+  ownership: "Private Mexican group, Guadalajara (founded 1941; merged with Aceitera Nueva Galicia 1965). Shareholder detail not publicly disclosed [observed for history; ownership detail is a gap]"
+  roles: [importer, crusher, refiner]
+  products: [beans, meal, oil]
+  footprint: "Group of AGYDSA (Guadalajara — full refining/bottling), PATRONA (Córdoba, Veracruz — crush + refining), GOSA (El Salto, Jalisco — crush-only), plus MOSA and SOBA; group crushes ~1.4 MMT oilseeds/yr across soy, canola, safflower, sunflower, sesame, coconut [observed]. ~22% of Mexican soy crush capacity as 'Agydsa-Patrona' per USDA FAS-sourced reporting [observed]."
+  destinations: "Domestic Mexico — oil to central/western/northern (AGYDSA) and Gulf/south/southeast (PATRONA) regions [observed]"
+  size_evidence: "Company history page: group units 'crush 1,400,000 tonnes of oilseeds annually'. FAS-sourced capacity share ~22% (second largest)."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://agydsa.net/index.php?Itemid=22&id=1&option=com_content&view=article"
+      accessed: "2026-08-08"
+      supports: "founding 1941, group structure AGYDSA/PATRONA/GOSA/MOSA/SOBA, 1.4 MMT/yr oilseed crush, plant locations"
+    - url: "https://www.agflow.com/agricultural-markets-news/mexico-oilseeds-only-ragasa-plans-to-expand-and-modernize-in-2023-2024/"
+      accessed: "2026-08-08"
+      supports: "Agydsa-Patrona ~22% of Mexican crush capacity"
+  notes: "The ticket's 'Aceites' candidate resolves here — Aceites, Grasas y Derivados S.A. de C.V. AAK México (the Swedish AAK group) is a specialty fats/lipids processor, not a soy-complex bean importer/crusher, and is deliberately excluded. 1.4 MMT figure is multi-oilseed, not soy-only; soy-only crush volume unverified. Bean sourcing split rail vs Veracruz vessel unverified (Córdoba plant location suggests Gulf vessel/rail mix — inferred)."
+
+- name: "Proteínas y Oléicos"
+  aka: ["Proteinas y Oleicos S.A. de C.V.", "PYOSA (informal; not verified)"]
+  scope: "latam_importers"
+  side: "buyer"
+  ownership: "Private Mexican company, Guadalajara area. Ownership detail not publicly disclosed [gap]"
+  roles: [importer, crusher]
+  products: [beans, meal, oil]
+  footprint: "~13% of Mexican soy crush capacity (third largest) per USDA FAS-sourced reporting [observed]. Plant location detail not verified free [gap]."
+  destinations: "Domestic Mexico feed/oil market [inferred]"
+  size_evidence: "FAS-sourced capacity share ~13%. No free disclosed tonnage found."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.agflow.com/agricultural-markets-news/mexico-oilseeds-only-ragasa-plans-to-expand-and-modernize-in-2023-2024/"
+      accessed: "2026-08-08"
+      supports: "~13% of Mexican crush capacity"
+    - url: "https://www.chsinc.com/news-and-stories/2026/03/26/mexico-top-export-us-agriculture-production"
+      accessed: "2026-08-08"
+      supports: "long-standing CHS soybean customer (CHS helped it 'refine its marketing, buying and operating strategies'; relationship dates back over a decade)"
+  notes: "Trader-relevant: documented as a key CHS soybean customer — i.e. buys US beans through the US co-op channel rather than (only) ABCD houses [observed for the CHS relationship; volume split unverified]. Plant location, capacity in MT, and current ownership could not be verified from free sources."
+
+- name: "Cargill (Mexico / Central America / Chile aqua)"
+  aka: ["Cargill de México", "Cargill Proteína Latinoamérica", "EWOS Chile", "Cargill Aqua Nutrition"]
+  scope: "latam_importers"
+  side: "both"
+  website: "https://www.cargill.com"
+  ownership: "Private — Cargill Inc. (US, Cargill-MacMillan family) [observed]"
+  roles: [importer, crusher, feed-miller, originator]
+  products: [beans, meal, oil]
+  footprint: "Mexico: ~11% of soy crush capacity per USDA FAS-sourced reporting [observed]. Central America: integrated poultry + feed in Honduras, Guatemala, Nicaragua, Costa Rica (and Colombia) under local brands [observed]. Chile: EWOS/Cargill Aqua Nutrition salmon feed (acquired EWOS Oct 2015), one of the four major salmon-feed suppliers [observed]."
+  destinations: "Own downstream feed/poultry/aqua operations plus third-party Mexican feed and oil buyers [inferred]"
+  size_evidence: "FAS-sourced Mexico crush share ~11%; USDA FAS Chile Salmon Overview names Cargill among the four dominant salmon-feed sellers."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.agflow.com/agricultural-markets-news/mexico-oilseeds-only-ragasa-plans-to-expand-and-modernize-in-2023-2024/"
+      accessed: "2026-08-08"
+      supports: "Cargill ~11% of Mexican crush capacity"
+    - url: "https://www.cargill.com/meat-poultry/central-america-meats"
+      accessed: "2026-08-08"
+      supports: "Cargill poultry/feed operations in Honduras, Guatemala, Nicaragua, Costa Rica, Colombia"
+    - url: "https://www.seafoodsource.com/news/supply-trade/biomar-skreting-salmofood-accused-of-fixing-price-of-aquafood-in-chile-based-off-cargill-whistleblower-complaint"
+      accessed: "2026-08-08"
+      supports: "EWOS Chile acquired by Cargill Oct 2015; FNE cartel case context (EWOS exempted as whistleblower)"
+  notes: "The intra-firm case: an ABCD originating US/SA soy for its own LatAm crush, feed and aqua businesses — the region's clearest 'via-ABCD' flow. Mexican plant locations and CA soybean-meal import tonnages not verified free."
+
+- name: "ADM (Mexico)"
+  aka: ["Archer Daniels Midland de México"]
+  scope: "latam_importers"
+  side: "both"
+  website: "https://www.adm.com"
+  ownership: "Public — Archer-Daniels-Midland Co. (NYSE: ADM) [observed]"
+  roles: [importer, crusher, originator]
+  products: [beans, meal, oil]
+  footprint: "~6% of Mexican soy crush capacity per USDA FAS-sourced reporting [observed]. Plant detail not verified free [gap]."
+  destinations: "Domestic Mexico feed/oil market [inferred]"
+  size_evidence: "FAS-sourced capacity share ~6% — fifth of the five firms holding ~92% of capacity."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.agflow.com/agricultural-markets-news/mexico-oilseeds-only-ragasa-plans-to-expand-and-modernize-in-2023-2024/"
+      accessed: "2026-08-08"
+      supports: "ADM ~6% of Mexican crush capacity; five firms ~92% concentration"
+  notes: "Included mainly to complete the FAS concentration table; ADM's global profile lives in global.yml (#87). Mexican plant sites/tonnage unverified from free sources."
+
+- name: "Industrias Bachoco"
+  aka: ["Bachoco", "OK Foods (US subsidiary)"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.bachoco.com.mx"
+  ownership: "Robinson Bours family-controlled; founded 1952; listed on the Mexican Stock Exchange (formerly also NYSE — US delisting completed after the family's tender) [observed]"
+  roles: [importer, feed-miller]
+  products: [meal, beans]
+  footprint: "Mexico's largest poultry integrator (~25,000 employees, MX$93.9bn revenue 2023) — vertically integrated 'preparing feed, breeding and growing chickens', plus swine; US subsidiary OK Foods (Arkansas) [observed]"
+  destinations: "Own feed mills — internal consumption for poultry/swine [observed]"
+  size_evidence: "Revenue MX$93.90bn (2023). Specific feed-mill count and soybean-meal purchase tonnage not disclosed free."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://en.wikipedia.org/wiki/Industrias_Bachoco"
+      accessed: "2026-08-08"
+      supports: "ownership, 1952 founding, scale, feed integration, OK Foods"
+  notes: "Largest single Mexican demand sink for soybean meal/beans via feed [inferred from its poultry scale — direct purchase data not public]. Whether it buys US meal direct, US beans for toll-crush, or domestic meal from Ragasa/Agydsa/Cargill is NOT verified — a real gap for trader targeting. Meal/oil enter Mexico nearly 100% by rail (USB), so its inbound logistics are rail-dominated [inferred]."
+
+- name: "Grupo Trimex"
+  aka: ["Grupo Trimex del Sureste", "Molinera La Espiga"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://gtrimex.mx"
+  ownership: "Private, 100% Mexican (est. 1995); key principal at the Coatzacoalcos unit José Luis Hernaíz Vigil per D&B [observed]"
+  roles: [importer, crusher]
+  products: [beans, oil, meal]
+  footprint: "Primarily Mexico's largest wheat flour miller (~$1.1bn revenue, 20 mills after buying seven Bunge Mexico mills in 2022). Oilseed leg: Grupo Trimex del Sureste plant inside the ASIPONA port precinct at Coatzacoalcos, Veracruz, listed in SADER/gob.mx's industrial import directory with soybeans among authorized import products [observed]."
+  destinations: "Domestic Mexico [inferred]"
+  size_evidence: "gob.mx industrialization import directory lists the Coatzacoalcos plant for soy; no soy crush tonnage disclosed free."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.gob.mx/cms/uploads/attachment/file/1070777/DIRECTORIO_INDUSTRIALIZACION__22.05.26.pdf"
+      accessed: "2026-08-08"
+      supports: "Coatzacoalcos plant authorized to import soya for industrial processing; port-precinct address"
+    - url: "https://www.world-grain.com/articles/17469-grupo-trimex-completes-purchase-of-bunge-mexico-mills"
+      accessed: "2026-08-08"
+      supports: "largest Mexican flour miller; Bunge Mexico wheat-mill acquisition 2022"
+    - url: "https://www.chsinc.com/news-and-stories/2026/03/26/mexico-top-export-us-agriculture-production"
+      accessed: "2026-08-08"
+      supports: "buys 20-25% of Mexico's US wheat imports through CHS — evidence of direct co-op-channel procurement culture"
+  notes: "Marginal soy player vs the big five crushers — in-port Coatzacoalcos location implies vessel receiving [inferred]. Soy volumes unknown. Documented CHS direct-purchase relationship is for wheat, not soy."
+
+- name: "Grupo Bios (Contegral + Finca)"
+  aka: ["Contegral", "Alimentos Finca", "Compas (ports)"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://grupobios.co"
+  ownership: "Private Colombian group (Medellín); holds Contegral and Finca feed brands, poultry brands Friko/Pimpollo/Superpollo Paisa, PIC Colombia swine genetics, and port operations with Compas [observed]"
+  roles: [importer, feed-miller, terminal-operator]
+  products: [meal, beans]
+  footprint: "Colombia — feed mills (Contegral, Finca) integrated to own poultry/egg/swine; port access via Compas at Buenaventura, Tolú, Aguadulce [observed]"
+  destinations: "Own Colombian feed/poultry operations [observed]"
+  size_evidence: "Sector context: Colombia imported 2.04 MMT of US soybean meal in MY2024/25 (3rd-largest US meal buyer, Illinois Soybean Assoc.); feed industry used 2.043 MMT meal + 595 kt beans in 2025, US share 98.9% of macro-ingredients (pig333/ANDI-sourced). Grupo Bios was #1 Colombian feed group in 2022, #2 in 2024 (La Nota rankings). Company-level import tonnage not disclosed."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://lanota.com/index.php/CONFIDENCIAS/ranking-2024-sector-alimentacion-animal-de-colombia.html"
+      accessed: "2026-08-08"
+      supports: "feed-sector ranking: Grupo Bios (Contegral, Alimentos Finca, Cedillanos) vs Italcol vs Solla"
+    - url: "https://www.ilsoy.org/marketing-year-analysis-2024-2025/"
+      accessed: "2026-08-08"
+      supports: "Colombia 2.04 MMT US soybean meal imports MY2024/25, 3rd-largest US meal market"
+    - url: "https://www.pig333.com/latest_swine_news/colombia-pig-sector-accounts-for-26-5-of-feed-production-in-2025_22420/"
+      accessed: "2026-08-08"
+      supports: "2025 Colombian feed macro-ingredients: 2,043 kt SBM, 595 kt beans, US 98.9% share; poultry 56.1% of feed demand"
+    - url: "https://www.larepublica.co/empresas/grupo-bios-italcol-y-contegral-empresas-que-mas-vendieron-del-agro-durante-2023-3902017"
+      accessed: "2026-08-08"
+      supports: "Grupo Bios/Contegral among top Colombian agro companies by 2023 revenue"
+  notes: "Trader-relevant: owning Pacific/Caribbean port capacity (Compas) makes direct vessel imports practical rather than buying delivered from ABCDs [inferred — counterparty structure not public]. Contegral hosted USSEC/USB delegations, signalling direct US-origin engagement [observed via Grupo Bios/USSEC coverage in search results; primary link not captured — treat as weaker]."
+
+- name: "Italcol"
+  aka: ["Italcol S.A.", "Italcol de Occidente"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.italcol.com"
+  ownership: "Private Colombian company [observed]"
+  roles: [importer, feed-miller]
+  products: [meal, beans]
+  footprint: "Colombia (with Italcol de Occidente) — became the #1 feed group in 2024, overtaking Grupo Bios (La Nota ranking); revenues COP 3.6 trillion with 96.78% profit growth in 2023 (La República) [observed]"
+  destinations: "Colombian poultry/swine/pet-food feed market [observed]"
+  size_evidence: "La Nota 2024/2025 sector rankings (#1); La República 2023 revenue COP 3.6tn. Company-level SBM import tonnage not disclosed free."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://lanota.com/index.php/CONFIDENCIAS/ranking-2024-sector-alimentacion-animal-de-colombia.html"
+      accessed: "2026-08-08"
+      supports: "Italcol #1 Colombian feed group 2024"
+    - url: "https://www.larepublica.co/empresas/grupo-bios-italcol-y-contegral-empresas-que-mas-vendieron-del-agro-durante-2023-3902017"
+      accessed: "2026-08-08"
+      supports: "2023 revenue COP 3.6tn, profit growth"
+  notes: "Procurement channel (direct vessel vs delivered from ABCD/US exporters) not verified. Colombia macro context under Grupo Bios entry applies (US ~99% origin share of feed macro-ingredients 2025)."
+
+- name: "Solla"
+  aka: ["Solla S.A.", "Agrinal Colombia"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.solla.com"
+  ownership: "Private Colombian company (Medellín) [observed]"
+  roles: [importer, feed-miller]
+  products: [meal, beans]
+  footprint: "Colombia — with Agrinal, the #3 feed group in 2024 rankings behind Italcol and Grupo Bios [observed]"
+  destinations: "Colombian poultry/swine/aqua/pet feed market [observed]"
+  size_evidence: "La Nota 2024 sector ranking (#3 with Agrinal Colombia). No company-level import tonnage free."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://lanota.com/index.php/CONFIDENCIAS/ranking-2024-sector-alimentacion-animal-de-colombia.html"
+      accessed: "2026-08-08"
+      supports: "Solla + Agrinal #3 Colombian feed group 2024"
+  notes: "Procurement channel unverified. Fourth/fifth-ranked Albateq and Cipa exist but are omitted as materially smaller (same ranking source)."
+
+- name: "Alicorp / Vitapro"
+  aka: ["Vitapro S.A.", "Nicovita", "Salmofood", "Grupo Romero"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.alicorp.com.pe"
+  ownership: "Alicorp S.A.A. — public, Lima (BVL: ALICORC1), controlled by Grupo Romero; Vitapro is its aquafeed arm operating in Peru, Ecuador and Chile [observed]"
+  roles: [importer, crusher, feed-miller]
+  products: [meal, beans, oil]
+  footprint: "Peru: consumer goods + B2B + oilseed crushing + aquafeed (Alicorp's four core businesses); Vitapro shrimp-feed mill in Trujillo (Peru's first BAP-certified feed mill). Ecuador: new ~$80m aquafeed plant opened late 2024. Chile: Salmofood salmon feed — one of the four major suppliers [observed]"
+  destinations: "Andean/Chilean aqua and feed markets — Nicovita (shrimp) and Salmofood (salmon) brands [observed]"
+  size_evidence: "Aquafeed.com: Alicorp animal-nutrition division renamed Vitapro across Peru/Ecuador/Chile; IntraFish/Feedinfo: $80m Ecuador plant late 2024; USDA FAS Chile Salmon Overview: four major salmon-feed sellers incl. Salmofood. Soy-complex purchase tonnage not disclosed."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.aquafeed.com/products/suppliers-news/alicorp-animal-nutrition-division-renamed-vitapro/"
+      accessed: "2026-08-08"
+      supports: "Vitapro = Alicorp (Grupo Romero) animal nutrition, Peru/Ecuador/Chile"
+    - url: "https://www.globalseafood.org/blog/vitapro-is-perus-first-bap-certified-feed-mill/"
+      accessed: "2026-08-08"
+      supports: "Trujillo shrimp-feed mill, BAP certification"
+    - url: "https://www.emergingexchange.com/news/alicorp-a-mass-consumer-company-leader-in-the-peruvian-market"
+      accessed: "2026-08-08"
+      supports: "Alicorp four core businesses incl. oilseed crushing and aquafeed"
+    - url: "https://www.intrafish.com/feed/how-one-feed-company-is-helping-power-ecuadors-rapid-shrimp-expansion/2-1-2013741"
+      accessed: "2026-08-08"
+      supports: "Vitapro ~$80m Ecuador feed plant opened late 2024"
+  notes: "The single best aqua-feed soy angle in the Andes: shrimp (Ecuador/Peru, Nicovita) + salmon (Chile, Salmofood) feed both lean on SBM/soy protein concentrate as fishmeal substitutes. Vitapro Chile (Salmofood) is a respondent in the FNE salmon-feed collusion case (2003-2015 conduct; ~USD 79m sanctions sought as of Jul 2025 — SeafoodSource). Soy purchase channel (direct vs ABCD) unverified. Peru imports ~1.3 MMT SBM/yr with zero domestic soy production (USDA FAS 2021 — dated; newer free figure not found)."
+
+- name: "San Fernando"
+  aka: ["San Fernando S.A."]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.san-fernando.com.pe"
+  ownership: "Private Peruvian company (Ikeda family) [inferred — family control widely reported but not verified in a primary source this pass]"
+  roles: [importer, feed-miller]
+  products: [meal]
+  footprint: "Peru's leading poultry integrator with own feed mills [inferred]. Sector context: Peruvian poultry produces ~65m birds/month requiring ~3.5 MMT feed/yr; corn + SBM = 49% of broiler production cost; Peru grows no soybeans (USDA FAS) [observed at sector level]."
+  destinations: "Own Peruvian feed/poultry operations [inferred]"
+  size_evidence: "None free at company level — only the FAS sector totals above. Gap."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Commodity+Prices+Hit+Peruvian+Livestock+Industry_Lima_Peru_03-05-2021.pdf"
+      accessed: "2026-08-08"
+      supports: "Peru poultry-sector feed demand ~3.5 MMT, full SBM import dependence, corn+SBM cost share"
+  notes: "Included on sector logic: the largest poultry producer in a country with zero soy output is necessarily a top meal importer/buyer — but no free primary source names San Fernando's import volumes or procurement channel. Honest gap; upgrade if a Peru GAIN report or Veritrade data names buyers."
+
+- name: "Skretting (Nutreco) — Ecuador/Chile"
+  aka: ["Skretting Ecuador", "Gisis S.A. (historic Ecuador name)", "Comercializadora Nutreco Chile"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.skretting.com"
+  ownership: "Nutreco (Netherlands), owned by SHV Holdings [observed]"
+  roles: [importer, feed-miller]
+  products: [meal]
+  footprint: "Ecuador: among the largest shrimp-feed producers; building a ~USD 65m plant in Durán with ~470 kt/yr end-state feed capacity. Chile: one of four major salmon-feed suppliers [observed]"
+  destinations: "Ecuadorian shrimp and Chilean salmon farmers [observed]"
+  size_evidence: "Skretting corporate announcement: Durán plant USD 65m, 470,000 t/yr; USDA FAS Chile Salmon Overview lists Skretting among the four dominant feed sellers; Ecuador shrimp-feed market ~1,676 kt (2024, IMARC) with soybean meal the largest ingredient share."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://www.skretting.com/en/news-and-stories/new-feed-plant-to-support-shrimp-farming-growth/"
+      accessed: "2026-08-08"
+      supports: "Durán Ecuador plant, USD 65m, 470 kt/yr capacity"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Salmon+Overview_Santiago_Chile_CI2022-0008.pdf"
+      accessed: "2026-08-08"
+      supports: "four major Chilean salmon-feed companies: Skretting, BioMar, Cargill, Salmofood"
+    - url: "https://www.imarcgroup.com/ecuador-shrimp-feed-market"
+      accessed: "2026-08-08"
+      supports: "Ecuador shrimp-feed market 1,675.8 kt in 2024; SBM largest ingredient share"
+  notes: "Skretting Chile is a respondent in the FNE collusion case (see Alicorp/Vitapro notes). Soy procurement channel unverified — large multinational feed groups typically buy SA-origin meal via trading houses [inferred, no citation]. Ecuador shrimp exports hit USD 7.5bn over 2015-2025 (Hatch Blue), the demand engine behind all Ecuadorian entries."
+
+- name: "BioMar — Chile/Ecuador"
+  aka: ["BioMar Chile", "BioMar Ecuador (ex-Alimentsa)"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.biomar.com"
+  ownership: "BioMar Group — Schouw & Co. (Denmark, listed CPH: SCHO) [observed]"
+  roles: [importer, feed-miller]
+  products: [meal]
+  footprint: "Chile: one of four major salmon-feed suppliers. Ecuador: shrimp feed; acquired the remaining 30% of BioMar Ecuador (2025) [observed]"
+  destinations: "Chilean salmon and Ecuadorian shrimp farmers [observed]"
+  size_evidence: "USDA FAS Chile Salmon Overview (four major suppliers); BioMar 2025 results noting full ownership of BioMar Ecuador. Soy tonnage not disclosed."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Salmon+Overview_Santiago_Chile_CI2022-0008.pdf"
+      accessed: "2026-08-08"
+      supports: "BioMar among four major Chilean salmon-feed companies"
+    - url: "https://www.seafoodsource.com/news/business-finance/chilean-prosecutor-s-office-insists-on-usd-79-million-sanctions-against-biomar-skretting-salmofood-for-collusion"
+      accessed: "2026-08-08"
+      supports: "FNE seeking ~USD 79m sanctions vs BioMar/Skretting/Salmofood (Jul 2025 status); BioMar Ecuador 30% buyout"
+  notes: "Salmon feed has substituted most fishmeal with vegetable proteins incl. soy since the 1990s (FAS Salmon Overview) — the Chilean soy-meal/SPC import demand behind Layers' soy complex. Company-level soy volumes and procurement channel unverified."
+
+- name: "Agrosuper"
+  aka: ["AquaChile", "Super Pollo", "Agrosuper S.A."]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.agrosuper.cl"
+  ownership: "Private — Vial family (Gonzalo Vial founder), Chile [inferred — widely reported, not verified in a primary source this pass]"
+  roles: [importer, feed-miller]
+  products: [meal]
+  footprint: "Chile's largest protein producer: integrated poultry/pork feed mills plus salmon via AquaChile [inferred; AquaChile ownership observed in sector press]"
+  destinations: "Own Chilean feed operations [inferred]"
+  size_evidence: "None free at company level for soy purchases. Gap."
+  confidence: "inferred"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Salmon+Overview_Santiago_Chile_CI2022-0008.pdf"
+      accessed: "2026-08-08"
+      supports: "Chilean salmon-sector feed structure (context; Agrosuper/AquaChile is the largest Chilean salmon producer buying from the four feed majors)"
+  notes: "Dual soy exposure: buys salmon feed from the four majors for AquaChile AND runs its own poultry/pork feed mills consuming imported meal (Chile imports most of its SBM, largely Argentine/Paraguayan origin [inferred — origin split not verified]). No free company-level purchase data; honest gap."
+
+- name: "CMI (Corporación Multi Inversiones)"
+  aka: ["CMI Alimentos", "Aliansa (feed brand)", "Pollo Campero"]
+  scope: "latam_importers"
+  side: "buyer"
+  website: "https://www.somoscmi.com"
+  ownership: "Private family group (Gutiérrez and Bosch families), Guatemala City; ~54,000 employees (2025) [observed]"
+  roles: [importer, feed-miller]
+  products: [meal, beans]
+  footprint: "Central America's dominant integrator: wheat/corn milling, poultry and pork processing, animal feed under the Aliansa brand, with production in Guatemala, El Salvador, Honduras and Costa Rica; Pollo Campero restaurants [observed]"
+  destinations: "Own CA feed/poultry/pork operations [observed]"
+  size_evidence: "Wikipedia/company profile (54,000 employees, multi-country footprint). Context: Guatemala is the largest CA market for US ag ($1.9bn in 2025, +15%), and Honduras sources the vast majority of its SBM from the US (USB See For Yourself 2025). Company-level soy tonnage not disclosed free."
+  confidence: "observed"
+  as_of: "2026-08-08"
+  citations:
+    - url: "https://en.wikipedia.org/wiki/Corporaci%C3%B3n_Multi_Inversiones"
+      accessed: "2026-08-08"
+      supports: "ownership (Gutiérrez/Bosch), HQ, segments, employee count"
+    - url: "https://apps.fas.usda.gov/newgainapi/api/Report/DownloadReportByFileName?fileName=Food+Processing+Ingredients+Annual_Guatemala+City_Guatemala_GT2025-0002.pdf"
+      accessed: "2026-08-08"
+      supports: "CMI and Cargill/Perry as Guatemala's major processors; feed manufacturers as large importers of US grains"
+    - url: "https://unitedsoybean.org/see-for-yourself-2025/"
+      accessed: "2026-08-08"
+      supports: "Honduras sources vast majority of SBM from US; Guatemala #1 CA market for US ag ($1.9bn, 2025)"
+  notes: "With Cargill CA (see Cargill entry) forms the duopoly of CA poultry-feed soy demand. Import logistics (Pacific vs Caribbean ports, direct vs trader-delivered) unverified. CA volumes are small individually but US-origin share is near-total — freight-captive to US Gulf [inferred]."
