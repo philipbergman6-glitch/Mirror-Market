@@ -3,12 +3,24 @@
 Static reference data on physical soy-complex players (map #86; rendered by #74).
 One YAML file per scope so parallel research tickets never conflict:
 
+Sell-side (origins):
+
 - `global.yml` — international trading houses (ABCD+) — #87
 - `brazil.yml` — #88
 - `us.yml` — #89
 - `argentina.yml` — #90
 - `paraguay.yml` — #91
-- `india.yml` — #92
+- `secondary_origins.yml` — Canada, Ukraine/Russia, Uruguay, Bolivia — #108
+
+Buy-side (destinations) and mixed:
+
+- `india.yml` — importers/crushers/refiners — #92
+- `china.yml` — importers/crushers/state buyers — #104
+- `asia_importers.yml` — JP/KR/TW/VN/ID/TH — #105
+- `europe.yml` — EU/UK/Norway import crushers — #106
+- `mena.yml` — Egypt/Turkey/Iran/North Africa — #107
+- `africa.yml` — South Africa + Nigeria — #109
+- `latam_importers.yml` — Mexico + Andean/Central America — #110
 
 ## Schema
 
@@ -17,7 +29,11 @@ Each file is a YAML list of player entries:
 ```yaml
 - name: ""            # canonical company name
   aka: []             # optional: former names, tickers, JV shorthand
-  scope: ""           # global | brazil | us | argentina | paraguay | india
+  scope: ""           # file the entry lives in: global | brazil | us | argentina |
+                      # paraguay | india | china | asia_importers | europe | mena |
+                      # secondary_origins | africa | latam_importers
+  side: ""            # seller | buyer | both — international soy-complex trade role
+  website: ""         # optional: corporate site (public contact surface for #111)
   ownership: ""       # public/private/co-op/state + parent(s), JV partners with stakes if known
   roles: []           # e.g. originator, crusher, refiner, exporter, importer, terminal-operator
   products: []        # beans, meal, oil (soy complex only)
