@@ -54,6 +54,7 @@ from config import (
     MANDI_COMMODITY,
     MANDI_MAX_PAGES,
     MANDI_PAGE_LIMIT,
+    MANDI_PAGE_LIMIT_PERSONAL,
     MANDI_SAMPLE_API_KEY,
     MANDI_STATES,
     MAX_RETRIES,
@@ -71,6 +72,14 @@ def _api_key() -> str:
     return os.environ.get("DATA_GOV_IN_API_KEY") or MANDI_SAMPLE_API_KEY
 
 
+def _page_limit() -> int:
+    """Sample key is hard-capped at 10 rows/page; a personal key supports
+    larger pages, cutting request count (and 429 exposure) ~10×."""
+    if os.environ.get("DATA_GOV_IN_API_KEY"):
+        return MANDI_PAGE_LIMIT_PERSONAL
+    return MANDI_PAGE_LIMIT
+
+
 def _fetch_page(offset: int, state: str) -> dict:
     """Fetch one page of the mandi resource for one state. Raises on
     exhausted retries.
@@ -81,7 +90,7 @@ def _fetch_page(offset: int, state: str) -> dict:
     params: dict[str, str | int] = {
         "api-key": _api_key(),
         "format": "json",
-        "limit": MANDI_PAGE_LIMIT,
+        "limit": _page_limit(),
         "offset": offset,
         "filters[commodity]": MANDI_COMMODITY,
         "filters[state]": state,
@@ -115,7 +124,7 @@ def _collect_records(state: str) -> list[dict]:
     total: int | None = None
 
     for page in range(MANDI_MAX_PAGES):
-        payload = _fetch_page(page * MANDI_PAGE_LIMIT, state)
+        payload = _fetch_page(page * _page_limit(), state)
         if "records" not in payload or "total" not in payload:
             raise ScraperShapeError(
                 "Mandi API: response missing 'records'/'total' — schema changed "

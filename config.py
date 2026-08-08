@@ -548,6 +548,7 @@ MANDI_API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a4
 MANDI_SAMPLE_API_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"  # public-sample-key: not a secret
 MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
 MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
+MANDI_PAGE_LIMIT_PERSONAL = 100   # personal keys allow bigger pages → fewer throttle hits
 MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any single-state daily set
 # Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
