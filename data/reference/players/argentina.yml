@@ -1,0 +1,322 @@
+# Argentina soy-complex players — issue #90
+# Research date 2026-08-07. Schema: data/reference/players/README.md
+#
+# DJVE attribution answer (research question 2), established honestly:
+#   - The DAILY public DJVE feed is AGGREGATE ONLY. MAGyP's "Compras y DJVE de
+#     Granos" statistics page publishes weekly/daily volumes by product (wheat,
+#     corn, soybeans, sunflower...) split only into "Compras Sector Exportador"
+#     vs "Compras de la Industria" — no company field. [observed 2026-08-07:
+#     https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios/areas/granos/_archivos/000058_Estad%C3%ADsticas/000020_Compras%20y%20DJVE%20de%20Granos.php]
+#   - Company-level DJVE attribution DOES exist, but only at low frequency:
+#     (a) MAGyP publishes an annual "Ranking Exportaciones por Exportador de
+#         Granos y Subproductos" (files Ranking_Exportaciones_Actual + yearly
+#         2016-2023) on its exportaciones page [observed 2026-08-07 — link list
+#         seen; file contents not opened this session];
+#     (b) BCR (Bolsa de Comercio de Rosario) publishes company rankings built
+#         from DJVE records: full-season (e.g. 2023/24), calendar-year and
+#         semester cuts [observed via BCR/press 2026-08-07].
+#   - Per-declaration company detail (who registered which DJVE on which day)
+#     is NOT published anywhere free that this research could find. The daily
+#     company-resolution complement is vessel lineups (NABSA PDF names the
+#     charterer per vessel) — flow, not sales.
+#   - datos.magyp.gob.ar dataset search for "DJVE" returned no results
+#     [observed 2026-08-07].
+#
+# Ranking anchor used below ("BCR 2023/24 ranking", DJVE-based, total
+# 89.82 Mt all grains+products): Viterra 13.55 Mt, Cargill 11.37, COFCO 10.35,
+# Bunge 8.72, AGD 8.65, LDC 8.57, ADM 8.04, ACA 5.65, Molinos Agro 5.15,
+# CHS 1.37. H1-2026 (post Bunge-Viterra integration): Bunge 11.6 Mt, Cargill
+# 8.1, COFCO 6.4. [observed via World Grain / ArgenPorts-BCR press, 2026-08-07]
+#
+# Capacity anchor: BCR survey — Gran Rosario ~80% of national crush capacity;
+# 20 plants ~165,700-165,800 t/day in the hub, national active ~207,800 t/day.
+# Per-plant figures cited below are from BCR's survey reporting (2021 survey —
+# the latest per-plant table found free; no 2025 refresh located).
+
+- name: "Bunge Argentina"
+  aka: ["Bunge Global SA (parent)", "Viterra Argentina (absorbed 2026)", "Oleaginosa Moreno Hnos. (legacy Viterra/Glencore)"]
+  scope: argentina
+  ownership: "Subsidiary of Bunge Global SA (NYSE: BG, public). Bunge-Viterra merger completed globally 2025-07-02; Argentine integration completed and export registration unified under Bunge Argentina ~Feb 2026. JV stakes: ~66.7% of Renova (Timbúes) via ex-Viterra; 50% of Terminal 6 with AGD (stake split not primary-verified)."
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Largest combined up-river footprint post-merger: Renova Timbúes (majority; ~32-33,000 t/d, country's biggest crush plant), Terminal 6 Puerto General San Martín JV with AGD (~20,000 t/d + export berths), legacy Bunge plants Ramallo and Tancacha, plus ex-Viterra (Oleaginosa Moreno) assets incl. Bahía Blanca-area capacity. Also toll-crush (fazón) usage of Nueva Vicentin's Ricardone plant and marketing agreement covering Renova soy."
+  destinations: "unverified (company-level destination splits not published free)"
+  size_evidence: "BCR DJVE-based rankings: Viterra 13.55 Mt was #1 and Bunge 8.72 Mt #4 in 2023/24; combined entity #1 in H1-2026 with 11.6 Mt declared — largest single-company semester in at least 5 years (BCR). Renova capacity ~32-33,000 t/d and T6 ~20,000 t/d per BCR survey reporting."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 BCR DJVE ranking volumes (Viterra 13.55 Mt #1, Bunge 8.72 Mt)"
+    - url: "https://argenports.com/nota/bunge-lidera-el-ranking-de-agroexportadoras-en-el-primer-semestre-y-desplaza-a-cargill-tras-la-integracion-con-viterra/"
+      accessed: "2026-08-07"
+      supports: "H1-2026 BCR ranking: Bunge #1 with 11.6 Mt after Viterra integration"
+    - url: "https://www.lanacion.com.ar/economia/campo/nacio-un-gigante-del-agro-bunge-cerro-la-fusion-con-viterra-en-la-argentina-y-se-conocio-el-ceo-nid04022026/"
+      accessed: "2026-08-07"
+      supports: "Argentine merger closing early 2026 (via search excerpt)"
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "Renova ~33,000 t/d largest plant; T6 (Bunge+AGD) 20,000 t/d; hub capacity figures"
+  notes: "Stake percentages in T6 not verified from a primary source this session (commonly reported as 50/50 with AGD — inferred). Argentina's CNDC reportedly closed its review without divestiture remedies (merger divestitures were in Canada) — inferred from press, no CNDC resolution text fetched. Ex-Viterra Bahía Blanca asset detail not itemized from a primary source."
+
+- name: "Cargill S.A.C.I."
+  aka: ["Cargill Argentina"]
+  scope: argentina
+  ownership: "Private (Cargill Inc., US family-owned). Commercial/financial partner of Grupo Grassi in Nueva Vicentin (export marketing + fazón use of San Lorenzo plant) — partnership, not equity, per press."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Crush at Villa Gobernador Gálvez (~13,000 t/d soybeans, BCR survey) and Quebracho/Puerto General San Martín; Bahía Blanca facilities also cited by BCR. Adds toll-crush capacity at Nueva Vicentin San Lorenzo under 2026 fazón agreements with annual offtake of part of the processed soy."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE rankings: #2 in 2023/24 with 11.37 Mt; #1 calendar-2024 with 9.5 Mt; #2 in H1-2026 with 8.1 Mt (also H1-2026 corn leader, 4.8 Mt)."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: Cargill 11.37 Mt #2"
+    - url: "https://argenports.com/nota/cargill-viterra-y-bunge-el-podio-2024-de-las-exportaciones-de-granos-y-subproductos/"
+      accessed: "2026-08-07"
+      supports: "Calendar-2024 #1 with ~9.5 Mt"
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "Villa Gobernador Gálvez ~13,000 t/d capacity"
+    - url: "https://sl24.com.ar/vicentin-asegura-trabajo-para-todos-sus-complejos-industriales-con-nuevos-contratos-de-fazones/"
+      accessed: "2026-08-07"
+      supports: "2026 fazón contracts incl. Cargill at Vicentin San Lorenzo (via search excerpt)"
+  notes: "Private company — no filings; capacity figures rest on BCR survey reporting (2021 survey vintage). Exact scope of the Grassi-Cargill-Bunge Vicentin arrangement is from press descriptions, not a published contract."
+
+- name: "COFCO International Argentina"
+  aka: ["ex-Noble Agri", "ex-Nidera"]
+  scope: argentina
+  ownership: "Subsidiary of COFCO International (Chinese state-owned COFCO Corp group). Argentine assets assembled from the Noble Agri and Nidera acquisitions (mid-2010s)."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Timbúes complex (ex-Noble): crush ~2.3 Mt/year per COFCO's own newsroom, own berths on the Coronda/Paraná (Km 462), up to 60% self-generated power. Separate port terminal at Puerto General San Martín (Km 450.8). Ex-Nidera legacy incl. Saforcada plant (reactivated 2,000 t/24h per BCR decade review) and a Puerto General San Martín plant."
+  destinations: "unverified (China pull inferred from state parentage, not from published company-level flow data)"
+  size_evidence: "BCR DJVE rankings: #3 in 2023/24 with 10.35 Mt; #3 calendar-2024 (8.6 Mt); #3 H1-2026 (6.4 Mt, incl. 3.8 Mt corn). Timbúes crush capacity 2.3 Mt/yr (company statement)."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.cofcointernational.com/newsroom/inside-cofco-international-s-timbues-complex-a-hub-of-agri-industrial-efficiency-in-argentina/"
+      accessed: "2026-08-07"
+      supports: "Timbúes complex 2.3 Mt/yr crush capacity, self-generation (via search excerpt; site 403s to direct bot fetch)"
+    - url: "https://www.argentina.gob.ar/puertos-vias-navegables-y-marina-mercante/informaci%C3%B3n-portuaria/cofco-timbues"
+      accessed: "2026-08-07"
+      supports: "Official port record: Timbúes terminal location, berth/draft specs"
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: COFCO 10.35 Mt #3"
+    - url: "https://www.bcr.com.ar/es/mercados/investigacion-y-desarrollo/bcr-weekly-news/news-informativo-semanal/last-decades-changes"
+      accessed: "2026-08-07"
+      supports: "COFCO acquired Noble and Nidera assets; Saforcada reactivation 2,000 t/24h"
+  notes: "cofcointernational.com blocks bots (403, per issue-45 research) — capacity claim observed only via search excerpt of the company newsroom page. Destination attribution to China is an inference; no free per-company destination data exists."
+
+- name: "Louis Dreyfus Company Argentina"
+  aka: ["LDC", "Dreyfus"]
+  scope: argentina
+  ownership: "Private (Louis Dreyfus Company B.V., Louis-Dreyfus family holding; ADQ Abu Dhabi minority at group level — group-level stake not re-verified this session). Was part of the losing Molinos Agro-LDC consortium in the Vicentin cramdown; withdrew May 2026. Holds 2026 fazón contracts at Nueva Vicentin plants per intervenors."
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "General Lagos crush plant south of Rosario (~12,000 t/d oilseed, BCR survey); Timbúes port terminal (listed alongside Renova/COFCO/AGD/ACA berths in San Lorenzo-zone port reports). Added a high-oil seeds processing line in Argentina (World Grain, 2026) — plant location behind paywall, not verified."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE rankings: #6 in 2023/24 with 8.57 Mt; top-5 calendar-2024; wheat podium (with Bunge, Cargill) H1-2026. General Lagos ~12,000 t/d per BCR."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: LDC 8.57 Mt"
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "General Lagos ~12,000 t/d"
+    - url: "https://www.infobae.com/economia/2026/05/20/vicentin-molinos-agro-y-dreyfus-se-bajaron-de-la-carrera-por-quedarse-con-la-gigante-agroexportadora/"
+      accessed: "2026-08-07"
+      supports: "Molinos Agro + LDC withdrew competing Vicentin proposal, May 2026 (via search excerpt)"
+    - url: "https://www.world-grain.com/articles/22346-ldc-adds-high-oil-seeds-processing-line-in-argentina"
+      accessed: "2026-08-07"
+      supports: "New high-oil seeds line in Argentina 2026 (article 403'd; claim from search snippet — capacity ~7,000 t/d usual + 3,000 t/d flex per snippet, location unconfirmed)"
+  notes: "The 7,000+3,000 t/d figures from the World Grain snippet could not be tied to a named plant (article behind 403); BCR's 12,000 t/d General Lagos figure is the anchored capacity claim. ADQ group-level minority stake is memory, not verified this session."
+
+- name: "Aceitera General Deheza"
+  aka: ["AGD"]
+  scope: argentina
+  ownership: "Private, Argentine (Urquía family). 50% JV partner in Terminal 6 with Bunge (split commonly reported 50/50 — not primary-verified)."
+  roles: [originator, crusher, refiner, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "Flagship inland crush complex at General Deheza, Córdoba (BCR decade review: +11,000 t/d added there 2007-2017); Terminal 6 Puerto General San Martín JV with Bunge (~20,000 t/d crush + export berths, North 164 m / South 146 m); AGD Timbúes berth listed in San Lorenzo-zone port reports. Own broad-gauge rail logistics commonly cited but not verified this session."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE rankings: #5 in 2023/24 with 8.65 Mt; #6 calendar-2024 (first domestic firm in the list); sunflower podium H1-2026. In 2021 AGD was #2 soybean meal exporter with 3.96 Mt (BCR via press)."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: AGD 8.65 Mt #5"
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "Terminal 6 (Bunge+AGD) 20,000 t/d"
+    - url: "https://www.bcr.com.ar/es/mercados/investigacion-y-desarrollo/bcr-weekly-news/news-informativo-semanal/last-decades-changes"
+      accessed: "2026-08-07"
+      supports: "AGD added 11,000 t/d at General Deheza (2007-2017 decade review)"
+    - url: "https://argenports.com/nota/con-la-fusion-entre-bunge-y-viterra-nace-un-gigante-mundial-con-impacto-en-los-puertos-argentinos"
+      accessed: "2026-08-07"
+      supports: "T6 berth specs, Bunge participation alongside AGD (via search excerpt)"
+  notes: "AGD is peanut-heavy outside the soy complex (out of scope). Total company crush capacity and exact T6 equity split not verified from primary sources; agd.com.ar not fetched this session."
+
+- name: "Molinos Agro S.A."
+  aka: ["MOLA (BYMA ticker)", "ex-Molinos Río de la Plata agro arm"]
+  scope: argentina
+  ownership: "Public (listed BYMA: MOLA), controlled by the Perez Companc family group. Spun off from Molinos Río de la Plata (2016 — legacy detail, inferred from Wikipedia-level sources). No Renova stake (original founding partner via Molinos Río exited; frequent-error flag). Lost the Vicentin cramdown bid with LDC; withdrew May 2026. Announced 2025 JV with ACA: ~US$500M, up to 15,000 t/d new crush plant at Timbúes."
+  roles: [originator, crusher, exporter, terminal-operator]
+  products: [beans, meal, oil]
+  footprint: "San Lorenzo crush complex, Muelle San Benito (~20,000 t/d theoretical, BCR survey — among the largest single-site plants in the country). New Timbúes JV plant with ACA announced 2025 (construction status not verified). Holds 2026 fazón contracts at Nueva Vicentin plants."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE rankings: #9 in 2023/24 with 5.15 Mt; top-10 calendar-2024. 2021: #3 soybean meal exporter, 3.87 Mt (BCR via press). San Lorenzo ~20,000 t/d per BCR survey."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "Molinos Agro San Lorenzo ~20,000 t/d"
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: Molinos Agro 5.15 Mt"
+    - url: "https://www.infocampo.com.ar/la-industria-de-la-soja-suma-otra-mega-inversion-en-argentina-us-500-millones-en-timbues/"
+      accessed: "2026-08-07"
+      supports: "Molinos Agro + ACA US$500M Timbúes JV, up to 15,000 t/d (announcement)"
+    - url: "https://www.infobae.com/economia/2026/05/20/vicentin-molinos-agro-y-dreyfus-se-bajaron-de-la-carrera-por-quedarse-con-la-gigante-agroexportadora/"
+      accessed: "2026-08-07"
+      supports: "Withdrawal from Vicentin contest, May 2026"
+  notes: "CNV/BYMA filings exist (public company) and would be the strongest capacity primary — not fetched this session. Timbúes JV is an announcement; completion timeline unverified."
+
+- name: "Asociación de Cooperativas Argentinas"
+  aka: ["ACA"]
+  scope: argentina
+  ownership: "Co-operative (federation of Argentine farm co-ops — the largest farmer-owned originator). JV with Molinos Agro for the announced Timbúes crush plant (2025, ~US$500M, up to 15,000 t/d)."
+  roles: [originator, exporter, terminal-operator, crusher]
+  products: [beans, meal, oil]
+  footprint: "ACA Timbúes berth listed in San Lorenzo-zone port lineup reports; co-op country elevator network across the Pampas (network detail not itemized from a primary source this session); port terminal at Quequén commonly cited but not verified this session. Crushing role becomes material only when the Timbúes JV plant is built."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE rankings: #8 in 2023/24 with 5.65 Mt; #7 calendar-2024; national sorghum export leader 2023/24 (0.32 Mt)."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: ACA 5.65 Mt; sorghum leadership"
+    - url: "https://www.infocampo.com.ar/la-industria-de-la-soja-suma-otra-mega-inversion-en-argentina-us-500-millones-en-timbues/"
+      accessed: "2026-08-07"
+      supports: "ACA + Molinos Agro Timbúes crush JV announcement"
+    - url: "https://www.nabsa.com.ar/ports/san-lorenzo.html"
+      accessed: "2026-08-07"
+      supports: "ACA Timbúes berth appears in San Lorenzo-zone terminal listings (via search excerpt)"
+  notes: "Today ACA is primarily an originator/exporter of beans and grains, not a crusher; the JV changes that if built. acacoop.com.ar not fetched; elevator-network scale unverified."
+
+- name: "ADM Agro SRL"
+  aka: ["ADM Argentina", "ex-Toepfer"]
+  scope: argentina
+  ownership: "Subsidiary of Archer-Daniels-Midland (NYSE: ADM, public). Argentine arm built partly on the legacy Alfred C. Toepfer network (ADM took full control of Toepfer 2014 — legacy detail, inferred)."
+  roles: [originator, exporter]
+  products: [beans, meal, oil]
+  footprint: "Primarily an origination/export business in Argentina; corn-led. No owned Argentine soy crush plant could be verified in this research (BCR hub plant lists do not show an ADM crush plant). Port/terminal access arrangements not verified."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE rankings: #7 in 2023/24 with 8.04 Mt (incl. corn export leadership that season, 6.97 Mt); #3 corn H1-2026 with 3.6 Mt."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: ADM 8.04 Mt; corn leader 6.97 Mt"
+    - url: "https://argenports.com/nota/bunge-lidera-el-ranking-de-agroexportadoras-en-el-primer-semestre-y-desplaza-a-cargill-tras-la-integracion-con-viterra/"
+      accessed: "2026-08-07"
+      supports: "H1-2026 corn: ADM Agro 3.6 Mt"
+  notes: "Soy-complex role in Argentina appears to be bean/product export trading rather than crushing — inferred from absence in BCR plant capacity lists, not from an ADM statement. ADM 10-K properties section would settle it (not read this session)."
+
+- name: "CHS Argentina"
+  aka: ["CHS Inc. (parent)"]
+  scope: argentina
+  ownership: "Subsidiary of CHS Inc., US farmer-owned co-operative (public preferred stock)."
+  roles: [originator, exporter]
+  products: [beans, meal]
+  footprint: "Origination/export presence; no owned crush plant verified. A CHS terminal project in the Timbúes/up-river zone has been reported over the years but was NOT verified in this session — treat footprint as unverified beyond the export registry."
+  destinations: "unverified"
+  size_evidence: "BCR DJVE ranking 2023/24: #10 with 1.37 Mt; top-10 calendar-2024."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.world-grain.com/articles/21411-viterra-ranks-as-argentinas-top-ag-exporter"
+      accessed: "2026-08-07"
+      supports: "2023/24 ranking: CHS 1.37 Mt #10"
+  notes: "Weakest-documented entry: single ranking citation. Products list assumes bean/meal trading; oil not confirmed. CHS 10-K would be the free primary to check."
+
+- name: "Nueva Vicentin Argentina"
+  aka: ["Vicentin S.A.I.C. (pre-cramdown)", "Grupo Grassi (controller)"]
+  scope: argentina
+  ownership: "Controlled by Grassi S.A. (Rosario brokerage, Grassi family) after winning Argentina's first-ever concursal cramdown: court (Judge Lorenzini, Reconquista) approved Grassi's proposal Dec 2025 over a Molinos Agro-LDC consortium; share transfer effected; board Mariano Grassi (pres), Leandro Salvatierra (VP), Hugo A. Grassi. Rivals formally withdrew May 2026 — control now definitive. First creditor payments (US$1.3bn defaulted debt, 664 creditors in the first tranche) executed Jan 2026; BCRA credit standing regularized Jun 2026. Retains 33.3% of Renova (Bunge ~66.7%)."
+  roles: [crusher, exporter, terminal-operator, originator]
+  products: [beans, meal, oil]
+  footprint: "San Lorenzo crush complex (soy; 10,000 t/d and 6,000 t/d lines restarted Feb-Mar 2026 per press), Ricardone plant (sunflower + soy), Avellaneda complex (north Santa Fe; incl. bioethanol under fazón with Bioenergías Agropecuarias), 33.3% of Renova Timbúes. Capacity in 2026 largely committed to toll-crush (fazón) contracts: Cargill at San Lorenzo (full-year 2026, with offtake of part of the soy), Bunge+Cargill at Ricardone, plus contracts with LDC, Molinos Agro, Grassi and Unión Agrícola de Avellaneda."
+  destinations: "unverified (2026 exports run through partners' channels while own export authorization normalizes, per press)"
+  size_evidence: "Pre-default Vicentin was a top-3 Argentine agro-exporter (context, inferred). Current scale evidence is operational: all industrial units back in operation from early 2026 under fazón; no post-restructuring DJVE ranking entry yet observed."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://batimes.com.ar/news/economy/grassi-clears-hurdle-to-take-over-distressed-soy-giant.phtml"
+      accessed: "2026-08-07"
+      supports: "Court approval of Grassi cramdown over LDC-led objections; US$1.3bn debt; first-ever Argentine cramdown of this kind"
+    - url: "https://vialibre.ar/provinciales/el-grupo-grassi-realizo-los-primeros-pagos-acordados-en-el-cramdown-homologado-para-vicentin-s-a-i-c/"
+      accessed: "2026-08-07"
+      supports: "First cramdown payments Jan 2026; Nueva Vicentin Argentina name; board composition"
+    - url: "https://www.infobae.com/economia/2026/05/20/vicentin-molinos-agro-y-dreyfus-se-bajaron-de-la-carrera-por-quedarse-con-la-gigante-agroexportadora/"
+      accessed: "2026-08-07"
+      supports: "Molinos Agro + LDC withdrew; transfer to Grassi definitive"
+    - url: "https://sl24.com.ar/vicentin-asegura-trabajo-para-todos-sus-complejos-industriales-con-nuevos-contratos-de-fazones/"
+      accessed: "2026-08-07"
+      supports: "2026 fazón contracts across San Lorenzo/Ricardone/Avellaneda with Bunge, Dreyfus, Molinos Agro, Grassi, UAA"
+    - url: "https://bichosdecampo.com/a-partir-de-este-mes-todas-las-unidades-de-nueva-vicentin-argentina-estaran-en-funcionamiento-comienza-a-ingresar-la-soja-comprendida-en-los-acuerdos-del-cram-down/"
+      accessed: "2026-08-07"
+      supports: "All units operating 2026; San Lorenzo 10,000 t/d + 6,000 t/d line restarts"
+  notes: "Most claims trace to Argentine business press (Cronista, La Nación, Bichos de Campo, BATimes) via search excerpts — court documents not read. The Grassi-Cargill-Bunge arrangement is described in press as a joint integrated operation (not asset sale, not pure fazón at Renova); exact terms unpublished. Watch item: whether Nueva Vicentin re-enters DJVE rankings under its own name."
+
+- name: "Renova S.A."
+  aka: ["Renova Timbúes", "T6-adjacent JV (distinct from Terminal 6)"]
+  scope: argentina
+  ownership: "JV: ~66.7% Bunge (inherited via Viterra, which had taken 16% from Vicentin in the debt workout on top of its prior majority path from Oleaginosa Moreno/Glencore) / 33.3% Nueva Vicentin (Grassi). Founded 2007 by Vicentin + Oleaginosa Moreno (Glencore); Molinos Río de la Plata was an early partner but exited (no current Molinos Agro stake)."
+  roles: [crusher, refiner, terminal-operator]
+  products: [meal, oil, beans]
+  footprint: "Timbúes, Santa Fe — the largest oilseed crush plant in the country and among the largest globally: ~32,000-33,000 t/d soybeans (BCR survey ~33,000; press ~32,500), built 2012, expanded 2019; own port berths loading meal, oil and corn; can process imported Paraguayan/Brazilian beans."
+  destinations: "unverified"
+  size_evidence: "BCR: highest-capacity plant in Argentina (~33,000 t/d). Press: 32,500 t/d. Truck arrivals routinely lead the hub (SL24 daily truck reports)."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "Largest plant, ~33,000 t/d, JV history (Oleaginosa Moreno + Vicentin)"
+    - url: "https://www.viterra.com/Media/News/Glencore-Agriculture-becomes-majority-owner-of-Renova"
+      accessed: "2026-08-07"
+      supports: "Glencore Agri (later Viterra) became majority owner of Renova (company statement; page found via search, not fetched)"
+    - url: "https://argenports.com/nota/con-la-fusion-entre-bunge-y-viterra-nace-un-gigante-mundial-con-impacto-en-los-puertos-argentinos"
+      accessed: "2026-08-07"
+      supports: "Post-merger Bunge control of Renova; 32,000 t/d figure (via search excerpt)"
+  notes: "WHO MARKETS (research question 3): Renova is a processing JV — per 2025-26 press on the Grassi/Bunge/Cargill arrangement, the soy processed at Renova moves under an agreement with Bunge, i.e. the majority shareholder's trading arm markets the product; Vicentin's minority share historically gave it product offtake rights, current mechanics unpublished. This is press-inferred, not from JV documents. Exact 66.7/33.3 split is consistently reported but no registry filing was read."
+
+- name: "Terminal 6 S.A."
+  aka: ["T6", "T6 Industrial"]
+  scope: argentina
+  ownership: "JV between Bunge Argentina and AGD (commonly reported 50/50; split not primary-verified). Operating since the 1980s (legacy detail, inferred)."
+  roles: [crusher, terminal-operator, exporter]
+  products: [beans, meal, oil]
+  footprint: "Puerto General San Martín, Santa Fe: crush ~20,000 t/d (BCR survey) plus one of the largest private export port complexes on the Paraná — North Berth 164 m, South Berth 146 m, ocean-going vessels."
+  destinations: "unverified"
+  size_evidence: "BCR survey: 20,000 t/d crush capacity (tied for #2 plant nationally with Molinos Agro San Lorenzo)."
+  confidence: inferred
+  as_of: "2026-08-07"
+  citations:
+    - url: "https://www.bcr.com.ar/es/mercados/mercado-de-granos/news/rosario-hub-concentrates-80-countrys-oilseed-crush-capacity"
+      accessed: "2026-08-07"
+      supports: "T6 Puerto General San Martín, Bunge+AGD, 20,000 t/d"
+    - url: "https://argenports.com/nota/con-la-fusion-entre-bunge-y-viterra-nace-un-gigante-mundial-con-impacto-en-los-puertos-argentinos"
+      accessed: "2026-08-07"
+      supports: "Berth specifications; Bunge participation alongside AGD"
+  notes: "WHO MARKETS (research question 3): product from T6 is marketed by the parents (Bunge and AGD both appear in DJVE rankings in their own names; Terminal 6 itself does not appear in the exporter rankings observed) — inferred from ranking composition, not from JV documents. T6 also elevates third-party grain (terminal-operator role)."
