@@ -8,6 +8,7 @@
 - name: "Archer-Daniels-Midland Company"
   aka: ["ADM", "NYSE: ADM"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: "Public — NYSE: ADM (SEC EDGAR CIK 0000007084)"
   roles: [originator, crusher, refiner, exporter, terminal-operator]
@@ -53,6 +54,7 @@
 - name: "Bunge Global SA"
   aka: ["Bunge", "NYSE: BG", "Viterra (merged into Bunge 2025-07-02)", "Bunge Limited (pre-2023 Bermuda entity)"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: >-
     Public — NYSE: BG (SEC EDGAR CIK 1996862); Swiss-incorporated (Geneva) since the
@@ -117,6 +119,7 @@
 - name: "Cargill, Incorporated"
   aka: ["Cargill"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: >-
     Private — Cargill-MacMillan family holds ~87-88% (Forbes/AgFunder estimates;
@@ -180,6 +183,7 @@
 - name: "Louis Dreyfus Company B.V."
   aka: ["LDC", "Louis Dreyfus"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: >-
     Private — controlled by Margarita Louis-Dreyfus via the Akira family trust
@@ -251,6 +255,7 @@
 - name: "COFCO International Ltd"
   aka: ["COFCO Intl", "CIL", "ex-Noble Agri", "ex-Nidera"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: >-
     State-owned — "the overseas agriculture business platform for COFCO
@@ -309,6 +314,7 @@
 - name: "Amaggi"
   aka: ["Andre Maggi Group", "Agropecuaria Maggi Ltda", "Amaggi Exportacao e Importacao Ltda"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: "Private — Brazilian family-held (Maggi family); CNPJ 00.315.457/0001-95."
   roles: [originator, crusher, exporter, terminal-operator]
@@ -359,6 +365,7 @@
 - name: "CHS Inc."
   aka: ["CHS", "Cenex Harvest States", "NASDAQ: CHSCP (preferred)"]
   scope: "global"
+  country: GLOBAL
   tier: 1
   ownership: >-
     US farmer-owned cooperative; SEC registrant (CIK 0000823277, active 10-K
@@ -408,6 +415,7 @@
 - name: "Sodrugestvo / Sodru S.A."
   aka: ["Sodrugestvo Group", "Sodru"]
   scope: "global"
+  country: GLOBAL
   ownership: >-
     SPLIT in ~2023 into two entities (structure inferred — see notes):
     (1) Sodrugestvo (sodrugestvo.ru) — private Russian company, reportedly owned

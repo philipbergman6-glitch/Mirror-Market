@@ -10,6 +10,7 @@
 - name: "Archer Daniels Midland (ADM) — US export operations"
   aka: ["ADM", "ADM Grain Company"]
   scope: "us"
+  country: US
   ownership: "Public (NYSE: ADM). US Gulf elevators wholly owned; 32.2% stake in PNW JV Pacificor (see Pacificor entry)."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -33,6 +34,7 @@
 - name: "Bunge Global SA — US export operations"
   aka: ["Bunge", "BG", "Bunge North America"]
   scope: "us"
+  country: US
   ownership: "Public (NYSE: BG). Majority partner in EGT LLC (PNW — see EGT entry). Sold its Mississippi River tributary interior elevator network to Zen-Noh Grain Corp in 2021 (kept its Gulf export terminal)."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -53,6 +55,7 @@
 - name: "Cargill — US export operations"
   aka: ["Cargill Inc."]
   scope: "us"
+  country: US
   ownership: "Private (Cargill family). 50% of TEMCO LLC (see TEMCO entry); Houston terminal Cargill-owned and contributed to TEMCO scope in 2023."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -78,6 +81,7 @@
 - name: "CHS Inc."
   aka: ["Cenex Harvest States"]
   scope: "us"
+  country: US
   ownership: "Farmer-owned cooperative (largest US ag co-op; preferred shares NASDAQ: CHSCP). 50% of TEMCO LLC."
   roles: [originator, exporter, terminal-operator, crusher]
   products: [beans, meal, oil]
@@ -103,6 +107,7 @@
 - name: "Louis Dreyfus Company — US export operations"
   aka: ["LDC", "Louis Dreyfus"]
   scope: "us"
+  country: US
   ownership: "Private (Louis Dreyfus Holding B.V.; ADQ minority stake). US terminals: Port Allen owned/leased at Port of Greater Baton Rouge; Seattle Pier 86 operated under agreement with the Port of Seattle (operator since March 2000, succeeding Cargill)."
   roles: [originator, exporter, terminal-operator, crusher]
   products: [beans, meal, oil]
@@ -130,6 +135,7 @@
 - name: "Zen-Noh Grain Corporation"
   aka: ["ZGC", "Zen-Noh"]
   scope: "us"
+  country: US
   # tier flag lives on the parent "Zen-Noh (JA Zen-Noh)" entry in asia_importers.yml
   ownership: "Wholly owned US subsidiary of Zen-Noh (National Federation of Agricultural Cooperative Associations, Japan — a co-op federation). HQ Covington, LA. Affiliate CGB Enterprises is a separate 50/50 Zen-Noh/Itochu JV."
   roles: [exporter, terminal-operator]
@@ -156,6 +162,7 @@
 - name: "CGB Enterprises (Consolidated Grain and Barge)"
   aka: ["CGB", "Consolidated Grain and Barge Co."]
   scope: "us"
+  country: US
   ownership: "50/50 joint venture of Zen-Noh and Itochu Corporation (per DOJ competitive impact statement)."
   roles: [originator]
   products: [beans, meal]
@@ -176,6 +183,7 @@
 - name: "EGT, LLC"
   aka: ["Export Grain Terminal", "EGT Longview"]
   scope: "us"
+  country: US
   ownership: "JV: Bunge (majority — 63.75% after the 2020 Itochu exit), Pan Ocean America (affiliate of Korea's Harim Group; bought Itochu's 36.25% in 2020), and Agtegra Cooperative (SD farmer co-op; partner by the July 2023 expansion release). SEED CORRECTION: no longer Bunge/Itochu/STX — Itochu sold out 2020; original 2009 partner STX Pan Ocean is today's Pan Ocean."
   roles: [exporter, terminal-operator]
   products: [beans, meal]
@@ -201,6 +209,7 @@
 - name: "TEMCO, LLC"
   aka: ["Tacoma Export Marketing Company"]
   scope: "us"
+  country: US
   tier: 1
   ownership: "50/50 JV of Cargill and CHS (LLC agreement since 2002; amended/restated 2012, 25-year term). SEED VERIFIED."
   roles: [exporter, terminal-operator]
@@ -227,6 +236,7 @@
 - name: "Pacificor, LLC"
   aka: ["Kalama Export Company LLC", "KEC"]
   scope: "us"
+  country: US
   ownership: "SEED CORRECTION: 'Kalama Export (Marubeni)' and 'Pacificor' are the same entity — KEC (formed 1998 by Gavilon/ADM/Agrex) was renamed Pacificor in 2014 when Marubeni contributed its Portland Terminal 5 elevator. 2014 structure: Marubeni 60.6% / ADM 32.2% / Mitsubishi (Agrex) 7.2%, with 50/50 ADM–Marubeni governance. Since 2022 the Marubeni side is held via Kalama Holdco (Columbia Grain International 75% of KHC; KHC 60.6% of Pacificor — Marubeni effective ~46%)."
   roles: [exporter, terminal-operator]
   products: [beans]
@@ -252,6 +262,7 @@
 - name: "United Grain Corporation"
   aka: ["UGC"]
   scope: "us"
+  country: US
   # tier flag lives on the parent "Mitsui & Co. (United Grain Corporation)" entry in asia_importers.yml
   ownership: "Subsidiary of Mitsui & Co. (Japan) — Mitsui acquired UGC in 1969 after it was spun out of ADM. SEED VERIFIED (Mitsui's own site; UGC's site does not name its owner)."
   roles: [originator, exporter, terminal-operator]
@@ -275,6 +286,7 @@
 - name: "Columbia Grain International"
   aka: ["CGI"]
   scope: "us"
+  country: US
   ownership: "Wholly owned subsidiary of Marubeni Corporation (Japan); Portland, OR HQ. Holds 75% of Kalama Holdco, the 60.6% owner of Pacificor (export legs — see Pacificor entry)."
   roles: [originator, exporter]
   products: [beans]
@@ -298,6 +310,7 @@
 - name: "Perdue AgriBusiness"
   aka: ["Perdue Farms — AgriBusiness segment"]
   scope: "us"
+  country: US
   ownership: "Private (Perdue Farms, family-owned)."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -318,6 +331,7 @@
 - name: "Ag Processing Inc (AGP)"
   aka: ["AGP"]
   scope: "us"
+  country: US
   tier: 1
   ownership: "Farmer-owned cooperative (owned by local and regional co-ops)."
   roles: [crusher, exporter, terminal-operator]
@@ -345,6 +359,7 @@
 - name: "COFCO International — US operations"
   aka: ["COFCO International Grains USA"]
   scope: "us"
+  country: US
   ownership: "Subsidiary of COFCO International (COFCO Corp, Chinese state-owned)."
   roles: [originator, exporter]
   products: [beans]

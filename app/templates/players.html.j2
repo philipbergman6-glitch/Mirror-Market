@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mirror Market — Players · Global Counterparty Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #FAFAF7;
+  --card: #FFFFFF;
+  --rule: #D8DCD8;
+  --rule-heavy: #191C1A;
+  --ink: #191C1A;
+  --green: #2D6A4F;
+  --green-light: #2D6A4F;
+  --text: #191C1A;
+  --text-muted: #5D6660;
+  --text-dim: #9BA39E;
+  --bullish: #1F7A3D;
+  --bearish: #C23B2E;
+  --warning: #A8730A;
+  --info: #2F5D8F;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: 'Archivo', sans-serif;
+  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-muted); }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
+
+/* ---- masthead ---- */
+.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
+.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
+.masthead h1 em { font-style: normal; color: var(--green); }
+.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
+.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.mast-meta a { color: var(--green); text-decoration: none; font-weight: 500; }
+.mast-meta a:hover { text-decoration: underline; }
+
+/* ---- filter bar ---- */
+.filter-bar { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); padding: 12px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.filter-bar label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px; }
+.filter-bar select { font-family: var(--font); font-size: 13px; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 3px; padding: 5px 8px; min-width: 130px; }
+.filter-count { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+.filter-count b { font-family: var(--mono); color: var(--ink); }
+.filter-reset { font-size: 12px; color: var(--green); background: none; border: none; cursor: pointer; font-family: var(--font); font-weight: 500; padding: 0; }
+.filter-reset:hover { text-decoration: underline; }
+
+/* ---- country groups ---- */
+.country { padding: 24px 0; border-bottom: 1px solid var(--rule); }
+.country:last-of-type { border-bottom: none; }
+.country-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.country-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.country-head .count { font-family: var(--mono); font-size: 12px; color: var(--green); }
+.country-head .t1note { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+
+/* context strip — 2-4 always-on numbers from the DB; calm is information */
+.ctx { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 14px; }
+.ctx-item { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; font-size: 12px; }
+.ctx-item .ctx-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.ctx-item .ctx-val { font-family: var(--mono); font-size: 14px; font-weight: 500; margin-top: 1px; }
+.ctx-item .ctx-note { color: var(--text-dim); font-size: 11px; margin-top: 1px; }
+.ctx-item.warn { border-left: 3px solid var(--warning); background: rgba(168,115,10,0.08); }
+.ctx-item.warn .ctx-val { color: var(--warning); }
+.ctx-item.alert { border-left: 3px solid var(--bearish); background: rgba(194,59,46,0.07); }
+.ctx-item.alert .ctx-val { color: var(--bearish); }
+
+/* ---- player cards ---- */
+.player-card { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; margin-bottom: 10px; }
+.player-card summary { padding: 12px 16px; cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.player-card summary::-webkit-details-marker { display: none; }
+.player-card summary::before { content: "\25B6"; font-size: 9px; color: var(--text-dim); transition: transform 0.15s; align-self: center; }
+.player-card[open] summary::before { transform: rotate(90deg); }
+.pc-name { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+.pc-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+.pill { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+.pill-t1 { background: var(--green); color: #fff; }
+.pill-side { background: transparent; border: 1px solid var(--rule); }
+.stale { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E8C983; color: #4A3608; }
+.pc-dests { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+.pc-body { padding: 2px 16px 16px; border-top: 1px dotted var(--rule); }
+.pc-row { padding: 7px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; }
+.pc-row:last-child { border-bottom: none; }
+.pc-row .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 2px; }
+.pc-row .v { color: var(--ink); }
+.pc-row .v.muted { color: var(--text-muted); }
+.dest-line { padding: 2px 0; font-size: 13px; color: var(--text-muted); }
+.dest-line b { color: var(--ink); font-weight: 600; }
+.dest-line .code { font-family: var(--mono); font-size: 11px; color: var(--green); }
+.act-item { padding: 6px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; }
+.act-item:last-child { border-bottom: none; }
+.act-item .act-date { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 8px; }
+.act-item .act-cat { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-right: 8px; }
+.act-item .act-detail { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.cite-link { color: var(--green); text-decoration: none; font-size: 12px; }
+.cite-link:hover { text-decoration: underline; }
+.pc-foot { font-size: 11px; color: var(--text-dim); padding-top: 8px; }
+
+.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
+.footer a { color: var(--green); text-decoration: none; font-weight: 500; }
+.footer a:hover { text-decoration: underline; }
+
+.no-results { padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 13px; display: none; }
+
+@media (max-width: 768px) {
+  .page { padding: 20px 16px 48px; }
+  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .mast-meta { margin-left: 0; text-align: left; }
+  .filter-bar select { min-width: 110px; }
+  .pc-dests { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <h1>Mirror<br><em>Players</em></h1>
+  <div class="mast-meta">
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }} · <span class="num">{{ total_players }}</span> players · <span class="num">{{ tier1_players }}</span> tier-1</div>
+    <div><a href="index.html">&larr; Back to the daily read</a></div>
+  </div>
+</header>
+
+<div class="filter-bar" id="filter-bar">
+  <label>Role
+    <select id="f-role">
+      <option value="">All</option>
+      {% for r in filters.roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Product
+    <select id="f-product">
+      <option value="">All</option>
+      {% for p in filters.products %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Origin
+    <select id="f-origin">
+      <option value="">All</option>
+      {% for o in filters.origins %}<option value="{{ o.code }}">{{ o.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Destination
+    <select id="f-dest">
+      <option value="">All</option>
+      {% for d in filters.destinations %}<option value="{{ d.code }}">{{ d.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Tier
+    <select id="f-tier">
+      <option value="">All</option>
+      <option value="1">Tier 1 (majors)</option>
+      <option value="2">Tier 2</option>
+    </select>
+  </label>
+  <button class="filter-reset" id="f-reset" type="button">Reset</button>
+  <span class="filter-count"><b id="shown-count">{{ total_players }}</b> of <b>{{ total_players }}</b> shown</span>
+</div>
+
+<div class="players-grid">
+{% for g in groups %}
+<section class="country" id="{{ g.anchor }}" data-country="{{ g.code }}">
+  <div class="country-head">
+    <h2>{{ g.name }}</h2>
+    <span class="count">{{ g.cards|length }}</span>
+    {% if g.tier1_count %}<span class="t1note">{{ g.tier1_count }} tier-1</span>{% endif %}
+  </div>
+
+  {% if contexts.get(g.code) %}
+  <div class="ctx">
+    {% for item in contexts[g.code] %}
+    <div class="ctx-item{% if item.cls %} {{ item.cls }}{% endif %}">
+      <div class="ctx-label">{{ item.label }}</div>
+      <div class="ctx-val">{{ item.value }}</div>
+      {% if item.note %}<div class="ctx-note">{{ item.note }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% for c in g.cards %}
+  <details class="player-card"
+    data-roles="{{ c.roles|join(' ') }}"
+    data-products="{{ c.products|join(' ') }}"
+    data-country="{{ c.country }}"
+    data-dest="{{ c.dest_codes|join(' ') }}"
+    data-tier="{{ c.tier }}">
+    <summary>
+      <span class="pc-name">{{ c.name }}</span>
+      <span class="pc-tags">
+        {% if c.tier == 1 %}<span class="pill pill-t1">Tier 1</span>{% endif %}
+        {% if c.side %}<span class="pill pill-side">{{ c.side }}</span>{% endif %}
+        {% for r in c.roles %}<span class="pill">{{ r }}</span>{% endfor %}
+        {% if c.activity_stale %}<span class="stale" title="newest activity item is older than 2 quarters">activity stale</span>{% endif %}
+        {% if c.contacts_stale %}<span class="stale" title="contacts last verified more than 12 months ago">contacts stale</span>{% endif %}
+      </span>
+      {% if c.dest_codes %}<span class="pc-dests">&rarr; {{ c.dest_codes|join(' · ') }}</span>{% endif %}
+    </summary>
+    <div class="pc-body">
+      {% if c.aka %}<div class="pc-row"><div class="k">Also known as</div><div class="v muted">{{ c.aka }}</div></div>{% endif %}
+      {% if c.ownership %}<div class="pc-row"><div class="k">Ownership</div><div class="v">{{ c.ownership }}</div></div>{% endif %}
+      {% if c.footprint %}<div class="pc-row"><div class="k">Footprint</div><div class="v">{{ c.footprint }}</div></div>{% endif %}
+
+      {% if c.destinations %}
+      <div class="pc-row"><div class="k">Destinations</div>
+        {% for d in c.destinations %}
+        <div class="dest-line"><span class="code">{{ d.code }}</span> <b>{{ d.name }}</b> — {{ d.products|join(', ') }}{% if d.note %} <span class="muted">· {{ d.note }}</span>{% endif %}</div>
+        {% endfor %}
+      </div>
+      {% elif c.destinations_prose %}
+      <div class="pc-row"><div class="k">Destinations</div><div class="v muted">{{ c.destinations_prose }}</div></div>
+      {% endif %}
+
+      {% if c.contacts %}
+      <div class="pc-row"><div class="k">Contact{% if c.contacts_stale %} <span class="stale">stale</span>{% endif %}</div>
+        <div class="v">
+          {% if c.contacts.website %}<a class="cite-link" href="{{ c.contacts.website }}" target="_blank" rel="noopener">website</a> {% endif %}
+          {% if c.contacts.contact_url %}<a class="cite-link" href="{{ c.contacts.contact_url }}" target="_blank" rel="noopener">commercial contact</a>{% endif %}
+          {% if c.contacts.offices %}<span class="muted"> · offices: {{ c.contacts.offices|join(', ') }}</span>{% endif %}
+        </div>
+        {% for desk in c.contacts.trade_desks %}
+        <div class="dest-line"><b>{{ desk.label }}</b>{% if desk.office %} <span class="muted">· {{ desk.office }}</span>{% endif %}{% if desk.email %} <span class="muted">· {{ desk.email }}</span>{% endif %}{% if desk.phone %} <span class="muted">· {{ desk.phone }}</span>{% endif %}</div>
+        {% endfor %}
+        {% if c.contacts.accessed %}<div class="pc-foot">verified {{ c.contacts.accessed }}</div>{% endif %}
+      </div>
+      {% elif c.website %}
+      <div class="pc-row"><div class="k">Contact</div><div class="v"><a class="cite-link" href="{{ c.website }}" target="_blank" rel="noopener">website</a></div></div>
+      {% endif %}
+
+      {% if c.activity %}
+      <div class="pc-row"><div class="k">Recent activity{% if c.activity_stale %} <span class="stale">stale</span>{% endif %}</div>
+        {% for a in c.activity %}
+        <div class="act-item">
+          <span class="act-date">{{ a.date }}</span><span class="act-cat">{{ a.category }}</span>
+          {% if a.url %}<a class="cite-link" href="{{ a.url }}" target="_blank" rel="noopener">{{ a.headline }}</a>{% else %}{{ a.headline }}{% endif %}
+          {% if a.detail %}<div class="act-detail">{{ a.detail }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if c.size_evidence %}<div class="pc-row"><div class="k">Size evidence</div><div class="v muted">{{ c.size_evidence }}</div></div>{% endif %}
+      {% if c.notes %}<div class="pc-row"><div class="k">Notes</div><div class="v muted">{{ c.notes }}</div></div>{% endif %}
+      {% if c.citations %}
+      <div class="pc-row"><div class="k">Sources</div>
+        <div class="v">{% for cit in c.citations %}<a class="cite-link" href="{{ cit.url }}" target="_blank" rel="noopener" {% if cit.supports %}title="{{ cit.supports }}"{% endif %}>[{{ loop.index }}]</a> {% endfor %}</div>
+      </div>
+      {% endif %}
+      <div class="pc-foot">as of {{ c.as_of }}{% if c.confidence %} · confidence: {{ c.confidence }}{% endif %}</div>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+{% endfor %}
+</div>
+
+<div class="no-results" id="no-results">No players match the current filters.</div>
+
+<div class="footer">
+  Static reference data researched from free public sources — company filings, association pages, trade press. Not a live feed;
+  every entry carries its own "as of" date. Country context numbers are built daily from the Mirror Market pipeline (USDA PSD,
+  FAS export sales, Open-Meteo). Not financial advice.
+  <br><br>
+  <a href="index.html">&larr; Daily read</a> ·
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
+</div>
+
+</div>
+
+<script>
+// Client-side filtering: AND across facets; a card matches a facet when its
+// space-separated token list contains the selected value.
+const selects = {
+  role:    document.getElementById('f-role'),
+  product: document.getElementById('f-product'),
+  origin:  document.getElementById('f-origin'),
+  dest:    document.getElementById('f-dest'),
+  tier:    document.getElementById('f-tier'),
+};
+const cards = Array.from(document.querySelectorAll('.player-card'));
+const sections = Array.from(document.querySelectorAll('.country'));
+const shownCount = document.getElementById('shown-count');
+const noResults = document.getElementById('no-results');
+
+function tokens(card, attr) { return (card.dataset[attr] || '').split(' ').filter(Boolean); }
+
+function applyFilters() {
+  const want = {
+    role: selects.role.value, product: selects.product.value,
+    origin: selects.origin.value, dest: selects.dest.value, tier: selects.tier.value,
+  };
+  let shown = 0;
+  cards.forEach(card => {
+    const ok =
+      (!want.role    || tokens(card, 'roles').includes(want.role)) &&
+      (!want.product || tokens(card, 'products').includes(want.product)) &&
+      (!want.origin  || card.dataset.country === want.origin) &&
+      (!want.dest    || tokens(card, 'dest').includes(want.dest)) &&
+      (!want.tier    || card.dataset.tier === want.tier);
+    card.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+  sections.forEach(sec => {
+    const any = Array.from(sec.querySelectorAll('.player-card')).some(c => c.style.display !== 'none');
+    sec.style.display = any ? '' : 'none';
+  });
+  shownCount.textContent = shown;
+  noResults.style.display = shown === 0 ? 'block' : 'none';
+}
+
+Object.values(selects).forEach(s => s.addEventListener('change', applyFilters));
+document.getElementById('f-reset').addEventListener('click', () => {
+  Object.values(selects).forEach(s => { s.value = ''; });
+  applyFilters();
+});
+</script>
+</body>
+</html>

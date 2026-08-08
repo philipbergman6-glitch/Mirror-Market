@@ -12,6 +12,7 @@
 - name: "Ragasa Industrias"
   aka: ["RAGASA", "Raúl García y Compañía (origin)"]
   scope: "latam_importers"
+  country: MX
   tier: 1
   side: "buyer"
   website: "https://www.ragasa.com.mx"
@@ -43,6 +44,7 @@
 - name: "Agydsa (Aceites, Grasas y Derivados)"
   aka: ["AGYDSA", "La Patrona", "Agydsa-Patrona", "GOSA", "MOSA", "SOBA"]
   scope: "latam_importers"
+  country: MX
   tier: 1
   side: "buyer"
   website: "https://www.agydsa.net"
@@ -68,6 +70,7 @@
 - name: "Proteínas y Oléicos"
   aka: ["Proteinas y Oleicos S.A. de C.V.", "PYOSA (informal; not verified)"]
   scope: "latam_importers"
+  country: MX
   side: "buyer"
   ownership: "Private Mexican company, Guadalajara area. Ownership detail not publicly disclosed [gap]"
   roles: [importer, crusher]
@@ -91,6 +94,7 @@
 - name: "Cargill (Mexico / Central America / Chile aqua)"
   aka: ["Cargill de México", "Cargill Proteína Latinoamérica", "EWOS Chile", "Cargill Aqua Nutrition"]
   scope: "latam_importers"
+  country: MX
   side: "both"
   website: "https://www.cargill.com"
   ownership: "Private — Cargill Inc. (US, Cargill-MacMillan family) [observed]"
@@ -124,6 +128,7 @@
 - name: "ADM (Mexico)"
   aka: ["Archer Daniels Midland de México"]
   scope: "latam_importers"
+  country: MX
   side: "both"
   website: "https://www.adm.com"
   ownership: "Public — Archer-Daniels-Midland Co. (NYSE: ADM) [observed]"
@@ -145,6 +150,7 @@
 - name: "Industrias Bachoco"
   aka: ["Bachoco", "OK Foods (US subsidiary)"]
   scope: "latam_importers"
+  country: MX
   tier: 1
   side: "buyer"
   website: "https://www.bachoco.com.mx"
@@ -167,6 +173,7 @@
 - name: "Grupo Trimex"
   aka: ["Grupo Trimex del Sureste", "Molinera La Espiga"]
   scope: "latam_importers"
+  country: MX
   side: "buyer"
   website: "https://gtrimex.mx"
   ownership: "Private, 100% Mexican (est. 1995); key principal at the Coatzacoalcos unit José Luis Hernaíz Vigil per D&B [observed]"
@@ -194,6 +201,7 @@
 - name: "Grupo Bios (Contegral + Finca)"
   aka: ["Contegral", "Alimentos Finca", "Compas (ports)"]
   scope: "latam_importers"
+  country: CO
   side: "buyer"
   website: "https://grupobios.co"
   ownership: "Private Colombian group (Medellín); holds Contegral and Finca feed brands, poultry brands Friko/Pimpollo/Superpollo Paisa, PIC Colombia swine genetics, and port operations with Compas [observed]"
@@ -224,6 +232,7 @@
 - name: "Italcol"
   aka: ["Italcol S.A.", "Italcol de Occidente"]
   scope: "latam_importers"
+  country: CO
   side: "buyer"
   website: "https://www.italcol.com"
   ownership: "Private Colombian company [observed]"
@@ -248,6 +257,7 @@
 - name: "Solla"
   aka: ["Solla S.A.", "Agrinal Colombia"]
   scope: "latam_importers"
+  country: CO
   side: "buyer"
   website: "https://www.solla.com"
   ownership: "Private Colombian company (Medellín) [observed]"
@@ -269,6 +279,7 @@
 - name: "Alicorp / Vitapro"
   aka: ["Vitapro S.A.", "Nicovita", "Salmofood", "Grupo Romero"]
   scope: "latam_importers"
+  country: PE
   side: "buyer"
   website: "https://www.alicorp.com.pe"
   ownership: "Alicorp S.A.A. — public, Lima (BVL: ALICORC1), controlled by Grupo Romero; Vitapro is its aquafeed arm operating in Peru, Ecuador and Chile [observed]"
@@ -301,6 +312,7 @@
 - name: "San Fernando"
   aka: ["San Fernando S.A."]
   scope: "latam_importers"
+  country: PE
   side: "buyer"
   website: "https://www.san-fernando.com.pe"
   ownership: "Private Peruvian company (Ikeda family) [inferred — family control widely reported but not verified in a primary source this pass]"
@@ -322,6 +334,7 @@
 - name: "Skretting (Nutreco) — Ecuador/Chile"
   aka: ["Skretting Ecuador", "Gisis S.A. (historic Ecuador name)", "Comercializadora Nutreco Chile"]
   scope: "latam_importers"
+  country: EC
   side: "buyer"
   website: "https://www.skretting.com"
   ownership: "Nutreco (Netherlands), owned by SHV Holdings [observed]"
@@ -350,6 +363,7 @@
 - name: "BioMar — Chile/Ecuador"
   aka: ["BioMar Chile", "BioMar Ecuador (ex-Alimentsa)"]
   scope: "latam_importers"
+  country: CL
   side: "buyer"
   website: "https://www.biomar.com"
   ownership: "BioMar Group — Schouw & Co. (Denmark, listed CPH: SCHO) [observed]"
@@ -375,6 +389,7 @@
 - name: "Agrosuper"
   aka: ["AquaChile", "Super Pollo", "Agrosuper S.A."]
   scope: "latam_importers"
+  country: CL
   side: "buyer"
   website: "https://www.agrosuper.cl"
   ownership: "Private — Vial family (Gonzalo Vial founder), Chile [inferred — widely reported, not verified in a primary source this pass]"
@@ -396,6 +411,7 @@
 - name: "CMI (Corporación Multi Inversiones)"
   aka: ["CMI Alimentos", "Aliansa (feed brand)", "Pollo Campero"]
   scope: "latam_importers"
+  country: GT
   side: "buyer"
   website: "https://www.somoscmi.com"
   ownership: "Private family group (Gutiérrez and Bosch families), Guatemala City; ~54,000 employees (2025) [observed]"

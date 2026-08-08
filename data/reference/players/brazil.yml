@@ -30,6 +30,7 @@
 - name: "Bunge Global SA (incl. Viterra)"
   aka: ["Bunge", "BG (NYSE)", "Viterra", "ex-Glencore Agriculture", "ex-Gavilon grain"]
   scope: "brazil"
+  country: BR
   ownership: "Public (NYSE: BG); Glencore holds ~16.4% post-Viterra merger (closed 2025-07-02, $8.2bn)"
   roles: [originator, crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -75,6 +76,7 @@
 - name: "Cargill Agrícola S.A."
   aka: ["Cargill"]
   scope: "brazil"
+  country: BR
   ownership: "Private (Cargill Inc., US, Cargill/MacMillan family-owned)"
   roles: [originator, crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -117,6 +119,7 @@
 - name: "ADM do Brasil Ltda."
   aka: ["ADM", "Archer Daniels Midland"]
   scope: "brazil"
+  country: BR
   ownership: "Public (NYSE: ADM, US; SEC CIK 0000007084)"
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -151,6 +154,7 @@
 - name: "Louis Dreyfus Company Brasil"
   aka: ["LDC", "Louis Dreyfus"]
   scope: "brazil"
+  country: BR
   ownership: "Private (Louis-Dreyfus family holding; ADQ Abu Dhabi ~45% stake — stake not re-verified this session)"
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -185,6 +189,7 @@
 - name: "COFCO International Brasil S.A."
   aka: ["COFCO Intl", "ex-Nidera/Noble Agri"]
   scope: "brazil"
+  country: BR
   ownership: "Chinese state-owned (COFCO Corporation)"
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -218,6 +223,7 @@
 - name: "Amaggi Exportação e Importação Ltda."
   aka: ["Amaggi", "Grupo André Maggi"]
   scope: "brazil"
+  country: BR
   # tier flag lives on the cross-listed global.yml entry (README: flag global only)
   ownership: "Private, 100% Brazilian — André Maggi family"
   roles: [originator, crusher, exporter, terminal-operator]
@@ -258,6 +264,7 @@
 - name: "ALZ Grãos"
   aka: ["Amaggi Louis Dreyfus Zen-Noh Terminais Portuários S.A.", "ALZ"]
   scope: "brazil"
+  country: BR
   ownership: "JV: Amaggi + Louis Dreyfus Company + Zen-Noh Grain (Japan co-op); equity split not publicly disclosed"
   roles: [originator, exporter, terminal-operator]
   products: [beans, meal]
@@ -290,6 +297,7 @@
 - name: "Coamo Agroindustrial Cooperativa"
   aka: ["Coamo"]
   scope: "brazil"
+  country: BR
   tier: 1
   ownership: "Co-op (farmer-owned, Campo Mourão PR) — NOT an ABIOVE member"
   roles: [originator, crusher, exporter, terminal-operator]
@@ -321,6 +329,7 @@
 - name: "Cotriguaçu Cooperativa Central"
   aka: ["Cotriguaçu (C.Vale + Lar + Copacol + Coopavel)"]
   scope: "brazil"
+  country: BR
   tier: 1
   ownership: "Central co-op jointly owned by C.Vale, Lar, Copacol and Coopavel (west-Paraná co-ops) — NOT ABIOVE members"
   roles: [exporter, terminal-operator]
@@ -350,6 +359,7 @@
 - name: "3tentos Agroindustrial S.A."
   aka: ["3 Tentos", "TTEN3 (B3)"]
   scope: "brazil"
+  country: BR
   tier: 1
   ownership: "Public (B3: TTEN3; Dumoncel family control)"
   roles: [crusher, exporter, originator]
@@ -376,6 +386,7 @@
 - name: "Caramuru Alimentos S.A."
   aka: ["Caramuru"]
   scope: "brazil"
+  country: BR
   tier: 1
   ownership: "Private, Brazilian family-owned — NOT an ABIOVE member (ANEC-affiliated per Soy Moratorium signatory list)"
   roles: [crusher, refiner, exporter, terminal-operator]
@@ -409,6 +420,7 @@
 - name: "Agrex do Brasil S.A."
   aka: ["Agrex", "Mitsubishi Corporation Brazil grain arm"]
   scope: "brazil"
+  country: BR
   ownership: "Mitsubishi Corporation (Japan) subsidiary"
   roles: [originator, crusher, exporter]
   products: [beans, meal]
@@ -435,6 +447,7 @@
 - name: "CHS Agronegócio – Indústria e Comércio Ltda."
   aka: ["CHS"]
   scope: "brazil"
+  country: BR
   ownership: "CHS Inc. (US farmer co-op, NASDAQ: CHSCP preferred)"
   roles: [originator, exporter, terminal-operator]
   products: [beans]
@@ -454,6 +467,7 @@
 - name: "NovaAgri Infra-Estrutura de Armazenagem e Escoamento Agrícola"
   aka: ["NovaAgri", "TCN — Terminal Corredor Norte", "Toyota Tsusho"]
   scope: "brazil"
+  country: BR
   ownership: "Toyota Tsusho (Japan) — NOT an ABIOVE member"
   roles: [originator, exporter, terminal-operator]
   products: [beans]
@@ -476,6 +490,7 @@
 - name: "CJ Selecta S.A."
   aka: ["CJ Selecta", "CJ CheilJedang Brazil"]
   scope: "brazil"
+  country: BR
   ownership: "CJ CheilJedang (South Korea) — 2023 sale to Bunge cancelled 2025-04-25 (CJ terminated)"
   roles: [crusher, refiner, exporter]
   products: [meal, oil]
@@ -497,6 +512,7 @@
 - name: "Olfar S.A. Alimento e Energia"
   aka: ["Olfar"]
   scope: "brazil"
+  country: BR
   ownership: "Private, Brazilian (Erechim RS)"
   roles: [crusher, refiner, exporter]
   products: [meal, oil]
@@ -517,6 +533,7 @@
 - name: "Fiagril Ltda."
   aka: ["Fiagril"]
   scope: "brazil"
+  country: BR
   ownership: "57% Hunan Dakang / Shanghai Pengxin (China) since 2016; Lucas do Rio Verde MT"
   roles: [originator]
   products: [beans]

@@ -10,6 +10,7 @@
 - name: "General Authority for Supply Commodities (GASC)"
   aka: ["GASC", "Egypt state buyer"]
   scope: "mena"
+  country: EG
   side: "buyer"
   ownership: "State — Egyptian Ministry of Supply and Internal Trade agency"
   roles: ["importer", "state-tender-buyer"]
@@ -39,6 +40,7 @@
 - name: "SoyVen"
   aka: ["ADM-Cargill Egypt JV", "National Vegetable Oil Company SAE (plant operator context)"]
   scope: "mena"
+  country: EG
   side: "buyer"
   website: "https://soyven.com/"
   ownership: "Private JV — Archer Daniels Midland (ADM) + Cargill"
@@ -66,6 +68,7 @@
 - name: "Alex Seeds Company"
   aka: ["Alexandria Seeds"]
   scope: "mena"
+  country: EG
   tier: 1
   side: "buyer"
   ownership: "Private (Egyptian)"
@@ -87,6 +90,7 @@
 - name: "Cairo 3A"
   aka: ["Cairo 3A Poultry", "Cairo Three A", "Pyramids Poultry (absorbed 2019)"]
   scope: "mena"
+  country: EG
   side: "buyer"
   website: "https://www.cairo3apoultry.com/"
   ownership: "Private (Egyptian group)"
@@ -111,6 +115,7 @@
 - name: "Bunge Türkiye"
   aka: ["Bunge Gıda", "Ana Gıda (acquired 2017)"]
   scope: "mena"
+  country: TR
   side: "buyer"
   ownership: "Public parent — Bunge Global SA subsidiary"
   roles: ["importer", "crusher", "refiner"]
@@ -137,6 +142,7 @@
 - name: "Tiryaki Agro"
   aka: ["Tiryaki Agro Gıda San. ve Tic. A.Ş."]
   scope: "mena"
+  country: TR
   side: "both"
   website: "https://tiryaki.com.tr/en/"
   ownership: "Private (Turkish family-founded, 1965)"
@@ -164,6 +170,7 @@
 - name: "Abalıoğlu Holding (Lezita)"
   aka: ["Abalıoğlu Yem Soya ve Tekstil", "Lezita"]
   scope: "mena"
+  country: TR
   side: "buyer"
   ownership: "Private (Turkish family holding)"
   roles: ["feed-miller", "poultry-integrator", "aqua-feed"]
@@ -184,6 +191,7 @@
 - name: "Banvit (BRF Türkiye)"
   aka: ["Banvit Bandırma Vitaminli Yem", "TBQ Foods JV (BRF + Qatar Investment Authority)"]
   scope: "mena"
+  country: TR
   side: "buyer"
   website: "https://www.banvit.com/"
   ownership: "Majority BRF S.A. via TBQ Foods JV with Qatar Investment Authority"
@@ -205,6 +213,7 @@
 - name: "SLAL (State Livestock Affairs Logistics)"
   aka: ["Iran state feed importer", "Government Trading Corporation affiliate for livestock inputs"]
   scope: "mena"
+  country: IR
   side: "buyer"
   ownership: "State — Iranian government (Ministry of Agriculture Jihad sphere)"
   roles: ["importer", "state-tender-buyer"]
@@ -231,6 +240,7 @@
 - name: "ONAB (Office National des Aliments du Bétail)"
   aka: ["Algerian National Office for Livestock Feed"]
   scope: "mena"
+  country: DZ
   side: "buyer"
   ownership: "State — Algeria"
   roles: ["importer", "state-tender-buyer", "feed-miller"]
@@ -254,6 +264,7 @@
 - name: "Cevital"
   aka: ["Cevital SPA", "Cevital Agro-Industrie"]
   scope: "mena"
+  country: DZ
   side: "buyer"
   website: "https://www.cevital.com/"
   ownership: "Private — Rebrab family, Algeria's largest private conglomerate"
@@ -275,6 +286,7 @@
 - name: "Carthage Grains"
   aka: []
   scope: "mena"
+  country: TN
   side: "buyer"
   ownership: "Private (Tunisian)"
   roles: ["importer", "crusher"]
@@ -301,6 +313,7 @@
 - name: "Alf Sahel"
   aka: ["Alf Sahel s.a.r.l."]
   scope: "mena"
+  country: MA
   side: "buyer"
   ownership: "Private — Mohemmane family (Morocco)"
   roles: ["importer", "feed-miller", "poultry-integrator"]
@@ -327,6 +340,7 @@
 - name: "Zalar Holding"
   aka: ["Zalagh Holding"]
   scope: "mena"
+  country: MA
   side: "buyer"
   ownership: "Private (Moroccan group; Mitsui partnership on processed-chicken exports)"
   roles: ["feed-miller", "poultry-integrator"]
@@ -347,6 +361,7 @@
 - name: "ARASCO"
   aka: ["Arabian Agricultural Services Company"]
   scope: "mena"
+  country: SA
   tier: 1
   side: "buyer"
   website: "https://www.arasco.com/"
@@ -372,6 +387,7 @@
 - name: "Al Ghurair Foods / Al Ghurair Resources"
   aka: ["Al Ghurair Investment", "Edible Oil Company LLC (EOCD, acquired 100% 2021)", "Al Ghurair Commodities"]
   scope: "mena"
+  country: AE
   tier: 1
   side: "buyer"
   website: "https://agcl.ae/grains-oil-seeds/"

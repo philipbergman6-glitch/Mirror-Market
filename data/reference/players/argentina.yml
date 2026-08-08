@@ -36,6 +36,7 @@
 - name: "Bunge Argentina"
   aka: ["Bunge Global SA (parent)", "Viterra Argentina (absorbed 2026)", "Oleaginosa Moreno Hnos. (legacy Viterra/Glencore)"]
   scope: argentina
+  country: AR
   ownership: "Subsidiary of Bunge Global SA (NYSE: BG, public). Bunge-Viterra merger completed globally 2025-07-02; Argentine integration completed and export registration unified under Bunge Argentina ~Feb 2026. JV stakes: ~66.7% of Renova (Timbúes) via ex-Viterra; 50% of Terminal 6 with AGD (stake split not primary-verified)."
   roles: [originator, crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -62,6 +63,7 @@
 - name: "Cargill S.A.C.I."
   aka: ["Cargill Argentina"]
   scope: argentina
+  country: AR
   ownership: "Private (Cargill Inc., US family-owned). Commercial/financial partner of Grupo Grassi in Nueva Vicentin (export marketing + fazón use of San Lorenzo plant) — partnership, not equity, per press."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -88,6 +90,7 @@
 - name: "COFCO International Argentina"
   aka: ["ex-Noble Agri", "ex-Nidera"]
   scope: argentina
+  country: AR
   ownership: "Subsidiary of COFCO International (Chinese state-owned COFCO Corp group). Argentine assets assembled from the Noble Agri and Nidera acquisitions (mid-2010s)."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -116,6 +119,7 @@
 - name: "Louis Dreyfus Company Argentina"
   aka: ["LDC", "Dreyfus"]
   scope: argentina
+  country: AR
   ownership: "Private (Louis Dreyfus Company B.V., Louis-Dreyfus family holding; ADQ Abu Dhabi minority at group level — group-level stake not re-verified this session). Was part of the losing Molinos Agro-LDC consortium in the Vicentin cramdown; withdrew May 2026. Holds 2026 fazón contracts at Nueva Vicentin plants per intervenors."
   roles: [originator, crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -142,6 +146,7 @@
 - name: "Aceitera General Deheza"
   aka: ["AGD"]
   scope: argentina
+  country: AR
   tier: 1
   ownership: "Private, Argentine (Urquía family). 50% JV partner in Terminal 6 with Bunge (split commonly reported 50/50 — not primary-verified)."
   roles: [originator, crusher, refiner, exporter, terminal-operator]
@@ -169,6 +174,7 @@
 - name: "Molinos Agro S.A."
   aka: ["MOLA (BYMA ticker)", "ex-Molinos Río de la Plata agro arm"]
   scope: argentina
+  country: AR
   tier: 1
   ownership: "Public (listed BYMA: MOLA), controlled by the Perez Companc family group. Spun off from Molinos Río de la Plata (2016 — legacy detail, inferred from Wikipedia-level sources). No Renova stake (original founding partner via Molinos Río exited; frequent-error flag). Lost the Vicentin cramdown bid with LDC; withdrew May 2026. Announced 2025 JV with ACA: ~US$500M, up to 15,000 t/d new crush plant at Timbúes."
   roles: [originator, crusher, exporter, terminal-operator]
@@ -196,6 +202,7 @@
 - name: "Asociación de Cooperativas Argentinas"
   aka: ["ACA"]
   scope: argentina
+  country: AR
   tier: 1
   ownership: "Co-operative (federation of Argentine farm co-ops — the largest farmer-owned originator). JV with Molinos Agro for the announced Timbúes crush plant (2025, ~US$500M, up to 15,000 t/d)."
   roles: [originator, exporter, terminal-operator, crusher]
@@ -220,6 +227,7 @@
 - name: "ADM Agro SRL"
   aka: ["ADM Argentina", "ex-Toepfer"]
   scope: argentina
+  country: AR
   ownership: "Subsidiary of Archer-Daniels-Midland (NYSE: ADM, public). Argentine arm built partly on the legacy Alfred C. Toepfer network (ADM took full control of Toepfer 2014 — legacy detail, inferred)."
   roles: [originator, exporter]
   products: [beans, meal, oil]
@@ -240,6 +248,7 @@
 - name: "CHS Argentina"
   aka: ["CHS Inc. (parent)"]
   scope: argentina
+  country: AR
   ownership: "Subsidiary of CHS Inc., US farmer-owned co-operative (public preferred stock)."
   roles: [originator, exporter]
   products: [beans, meal]
@@ -257,6 +266,7 @@
 - name: "Nueva Vicentin Argentina"
   aka: ["Vicentin S.A.I.C. (pre-cramdown)", "Grupo Grassi (controller)"]
   scope: argentina
+  country: AR
   tier: 1
   ownership: "Controlled by Grassi S.A. (Rosario brokerage, Grassi family) after winning Argentina's first-ever concursal cramdown: court (Judge Lorenzini, Reconquista) approved Grassi's proposal Dec 2025 over a Molinos Agro-LDC consortium; share transfer effected; board Mariano Grassi (pres), Leandro Salvatierra (VP), Hugo A. Grassi. Rivals formally withdrew May 2026 — control now definitive. First creditor payments (US$1.3bn defaulted debt, 664 creditors in the first tranche) executed Jan 2026; BCRA credit standing regularized Jun 2026. Retains 33.3% of Renova (Bunge ~66.7%)."
   roles: [crusher, exporter, terminal-operator, originator]
@@ -287,6 +297,7 @@
 - name: "Renova S.A."
   aka: ["Renova Timbúes", "T6-adjacent JV (distinct from Terminal 6)"]
   scope: argentina
+  country: AR
   ownership: "JV: ~66.7% Bunge (inherited via Viterra, which had taken 16% from Vicentin in the debt workout on top of its prior majority path from Oleaginosa Moreno/Glencore) / 33.3% Nueva Vicentin (Grassi). Founded 2007 by Vicentin + Oleaginosa Moreno (Glencore); Molinos Río de la Plata was an early partner but exited (no current Molinos Agro stake)."
   roles: [crusher, refiner, terminal-operator]
   products: [meal, oil, beans]
@@ -310,6 +321,7 @@
 - name: "Terminal 6 S.A."
   aka: ["T6", "T6 Industrial"]
   scope: argentina
+  country: AR
   ownership: "JV between Bunge Argentina and AGD (commonly reported 50/50; split not primary-verified). Operating since the 1980s (legacy detail, inferred)."
   roles: [crusher, terminal-operator, exporter]
   products: [beans, meal, oil]

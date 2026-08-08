@@ -56,6 +56,10 @@ ZA ZM ZW
 ISO_ALPHA2 = frozenset(_ISO_TABLE.split())
 
 DESTINATION_CODES = ISO_ALPHA2 | REGION_CODES
+# Home country for players.html grouping + origin filter (#123). GLOBAL is for
+# the international trading houses in global.yml; other region enums are
+# destination vocabulary, not a home country.
+PLAYER_COUNTRY_CODES = ISO_ALPHA2 | {"GLOBAL"}
 SOY_PRODUCTS = frozenset({"beans", "meal", "oil"})
 ACTIVITY_CATEGORIES = frozenset({"ma", "capacity", "trade", "policy", "distress"})
 
@@ -170,6 +174,11 @@ def _validate_activity(activity: object) -> list[str]:
 def validate_entry(entry: dict) -> list[str]:
     """Return all Phase 2 schema violations for one player entry."""
     errors: list[str] = []
+    if entry.get("country") not in PLAYER_COUNTRY_CODES:
+        errors.append(
+            f"country {entry.get('country')!r} is required — ISO-3166 alpha-2 (uppercase) "
+            f"or GLOBAL for the global trading houses (drives players.html grouping, #123)"
+        )
     # isinstance(bool) guard: YAML `tier: true` would otherwise pass (True == 1)
     if "tier" in entry and (isinstance(entry["tier"], bool) or entry["tier"] != 1):
         errors.append(f"tier must be the integer 1 (absent = tier 2), got {entry['tier']!r}")

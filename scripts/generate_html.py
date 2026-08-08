@@ -1079,6 +1079,13 @@ def generate():
     size_kb = OUTPUT_FILE.stat().st_size / 1024
     log.info("Generated %s (%.0f KB)", OUTPUT_FILE, size_kb)
 
+    # Players page (issue #123) — same deploy, own template. Validation above
+    # already gates the knowledge base, so a failure here is a build bug and
+    # must fail the run, not silently ship a dashboard without the page.
+    log.info("Generating players page...")
+    from scripts.generate_players import generate_players_page
+    generate_players_page()
+
 
 if __name__ == "__main__":
     generate()

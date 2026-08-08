@@ -16,6 +16,7 @@
 - name: "ADM Paraguay"
   aka: ["Archer Daniels Midland", "ADM (NYSE: ADM)"]
   scope: paraguay
+  country: PY
   ownership: "Public — subsidiary of Archer-Daniels-Midland Co. (US, NYSE: ADM). [observed — CAPPRO lists ADM with adm.com]"
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -42,6 +43,7 @@
 - name: "Bunge Paraguay"
   aka: ["Bunge Global SA (NYSE: BG)", "Viterra Paraguay (absorbed, 2025 merger)"]
   scope: paraguay
+  country: PY
   ownership: "Public — subsidiary of Bunge Global SA (NYSE: BG). Absorbed Viterra's local business after the Bunge–Viterra merger closed in 2025 [inferred — merger reported closed regionally 2025; Viterra disappears from CAPECO rankings from the 2025/26 season while Bunge jumps to #1]."
   roles: [originator, crusher, exporter]
   products: [beans, meal, oil]
@@ -71,6 +73,7 @@
 - name: "Cargill Agropecuaria S.A.C.I."
   aka: ["Cargill Paraguay"]
   scope: paraguay
+  country: PY
   ownership: "Private — subsidiary of Cargill Inc. (US) [observed — CAPPRO lists Cargill with cargill.com.py]."
   roles: [originator, crusher, exporter]
   products: [beans, meal, oil]
@@ -96,6 +99,7 @@
 - name: "Louis Dreyfus Company Paraguay"
   aka: ["LDC Paraguay"]
   scope: paraguay
+  country: PY
   ownership: "Private — Louis Dreyfus Company B.V. (Louis-Dreyfus family holding; ADQ minority stake globally) [inferred — global ownership not re-verified this session]."
   roles: [originator, crusher, exporter]
   products: [beans, meal, oil]
@@ -122,6 +126,7 @@
 - name: "CAIASA — Complejo Agroindustrial Angostura S.A."
   aka: ["Caiasa"]
   scope: paraguay
+  country: PY
   ownership: "Joint venture of LDC Paraguay, Bunge Paraguay and Copagra; inaugurated 2013, ~USD 200m investment [observed — consistent across IPS, ABC Color and infonegocios coverage]."
   roles: [crusher, exporter]
   products: [meal, oil]
@@ -145,6 +150,7 @@
 - name: "Merco — Mercantil Comercial S.A."
   aka: ["MERCO"]
   scope: paraguay
+  country: PY
   ownership: "Owned by Louis Dreyfus Company (one of LDC's first acquisitions in Paraguay) [observed — LDC Paraguay page via search excerpt]."
   roles: [crusher]
   products: [meal, oil]
@@ -165,6 +171,7 @@
 - name: "Copagra — Compañía Paraguaya de Granos S.A."
   aka: ["COPAGRA"]
   scope: paraguay
+  country: PY
   tier: 1
   ownership: "Paraguayan capital (private); shareholder detail NOT verified — no primary source found this session. Its president (Enrique Ohaco) chaired CAPPRO in 2023 [inferred — press]."
   roles: [originator, crusher, exporter]
@@ -191,6 +198,7 @@
 - name: "CAHPSA — Corporación de Alimentos e Higiene del Paraguay S.A."
   aka: ["ContiParaguay", "CAPSA (Compañía Algodonera Paraguaya S.A.)"]
   scope: paraguay
+  country: PY
   ownership: "Private — Nutrex Paraguay acquired 100% of the shares from Continental Grain Company (US), announced mid-2025; renamed from Compañía Continental del Paraguay (ContiParaguay) to CAHPSA. Lineage: CAPSA (cotton, 1951) → Continental Grain (1978) → Unilever brand interlude → Conti Paraguay → Nutrex/CAHPSA [observed — cahpsa.com.py corporate history + acquisition notices]."
   roles: [refiner]
   products: [oil]
@@ -216,6 +224,7 @@
 - name: "BISA S.A."
   aka: []
   scope: paraguay
+  country: PY
   ownership: "NOT verified — no primary corporate source found. Appears simply as 'Bisa S.A.' in registries [inferred]."
   roles: [crusher, exporter]
   products: [oil, meal]
@@ -236,6 +245,7 @@
 - name: "Oleaginosa Raatz S.A."
   aka: ["Raatz", "Oleaginosa Raatz Hermanos S.R.L. (historic)"]
   scope: paraguay
+  country: PY
   ownership: "Private family firm — founded 1967 by brothers Lauro and Ricardo Raatz (initially tung processing); S.A. since 2000; still Raatz-family led [observed — raatz.com.py corporate history]."
   roles: [originator, crusher, exporter]
   products: [beans, meal, oil]
@@ -256,6 +266,7 @@
 - name: "Pioneros del Chaco S.A."
   aka: []
   scope: paraguay
+  country: PY
   ownership: "Founded 2012 by three Chaco Mennonite cooperatives — Chortitzer, Neuland and Fernheim — plus private investors; financing 35% equity / 65% 10-yr local bank debt (~USD 35m via Investor fiduciary structure) [observed — MarketData/press coverage of the 2025 inauguration]."
   roles: [crusher]
   products: [meal, oil]
@@ -281,6 +292,7 @@
 - name: "COFCO International Paraguay S.A."
   aka: ["Cofco"]
   scope: paraguay
+  country: PY
   ownership: "State-backed — subsidiary of COFCO International (China, COFCO Corp. group) [inferred — widely reported; PY-subsidiary filing not fetched]."
   roles: [originator, exporter]
   products: [beans]
@@ -304,6 +316,7 @@
 - name: "Agrofértil S.A."
   aka: []
   scope: paraguay
+  country: PY
   tier: 1
   ownership: "Private; reported as tied to Brazilian agribusiness capital, but ownership NOT verified from a primary source this session."
   roles: [originator, exporter]
@@ -325,6 +338,7 @@
 - name: "Francisco Vierci y Cía."
   aka: ["F. Vierci"]
   scope: paraguay
+  country: PY
   ownership: "Private Paraguayan trading house; commonly associated with the Vierci family/group, but corporate detail NOT verified from a primary source this session."
   roles: [exporter]
   products: [beans]
@@ -344,6 +358,7 @@
 - name: "Cooperativa Colonias Unidas"
   aka: ["CCU"]
   scope: paraguay
+  country: PY
   ownership: "Farmer cooperative (member-owned), based in Obligado, Itapúa — one of Paraguay's largest agricultural co-ops [inferred — co-op status observed in rankings/press; founding/membership detail not verified this session]."
   roles: [originator, exporter]
   products: [beans]
@@ -363,6 +378,7 @@
 - name: "LAR (Cooperativa Agroindustrial LAR)"
   aka: ["Lar Paraguay"]
   scope: paraguay
+  country: PY
   ownership: "Brazilian agroindustrial cooperative (HQ Medianeira, Paraná, Brazil) operating in Paraguay — Brazilian parentage inferred from name/known regional footprint; the Paraguay subsidiary's structure was NOT verified from a primary source."
   roles: [originator, exporter]
   products: [beans]
@@ -385,6 +401,7 @@
 - name: "C.Vale"
   aka: ["C. Vale Cooperativa Agroindustrial"]
   scope: paraguay
+  country: PY
   ownership: "Brazilian agroindustrial cooperative (HQ Palotina, Paraná, Brazil) with Paraguay operations — Brazilian parentage inferred; Paraguay subsidiary detail NOT verified from a primary source."
   roles: [originator, exporter]
   products: [beans]
@@ -404,6 +421,7 @@
 - name: "Sodrugestvo Paraguay"
   aka: []
   scope: paraguay
+  country: PY
   ownership: "Subsidiary of Sodrugestvo Group (Russian-founded, Luxembourg-based) [inferred — not verified from a primary source]."
   roles: [exporter]
   products: [beans]
@@ -423,6 +441,7 @@
 - name: "Somax"
   aka: ["Somax Agro (unconfirmed full name)"]
   scope: paraguay
+  country: PY
   ownership: "NOT verified."
   roles: [exporter]
   products: [beans]
