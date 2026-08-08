@@ -21,6 +21,9 @@
     alongside rape/sunflower (observed). Straubing (DE): non-GMO soy crush; Mainz
     (DE): oilseeds crush + biodiesel (observed).
   destinations: "EU feed compounders (meal), EU food/biodiesel (oil), SPC to plant-protein and aqua markets"
+  destinations_structured:
+    - {code: EU, products: [meal], note: "feed compounders"}
+    - {code: EU, products: [oil], note: "food/biodiesel"}
   size_evidence: >-
     No public per-plant tonnage. Best free evidence: ADM press/trade coverage of the
     multi-plant network (Europoort, Hamburg, Spyck, Straubing, Mainz) and the 2020
@@ -68,6 +71,10 @@
     Barcelona, Bilbao, Cartagena and Lisbon ports (observed). Italy: Ravenna-area
     soybean facility upgraded (trade press).
   destinations: "EU feed (meal) and food/biodiesel (oil); low-carbon meal flow to ForFarmers NL (~100 KMT)"
+  destinations_structured:
+    - {code: EU, products: [meal], note: "feed"}
+    - {code: EU, products: [oil], note: "food/biodiesel"}
+    - {code: NL, products: [meal], note: "~100 KMT low-carbon flow to ForFarmers"}
   size_evidence: >-
     ~2 MMT/yr combined Amsterdam+Brest crush at 2016 acquisition (Cargill/Bunge
     releases); Barcelona 3,200 t/day post-modernization (IDOM). Post-Viterra Bunge
@@ -118,6 +125,8 @@
     Elian Barcelona (Viserion) 2023/24. Liverpool is Cargill's remaining dedicated
     Western Europe soybean crush noted in its own 2016 release.
   destinations: "UK feed and food customers (meal/oil); integrated with Cargill's UK poultry/feed businesses"
+  destinations_structured:
+    - {code: GB, products: [meal, oil], note: "integrated with own UK poultry/feed businesses"}
   size_evidence: >-
     Liverpool 2,000 t/day at 1986 acquisition (SoyInfo Center history) — current
     capacity not published free. Cargill's 2016 release confirms Barcelona and
@@ -164,6 +173,9 @@
     plant, plus four Polish storage sites (~170 KMT) and a Gdansk origination team
     (observed).
   destinations: "French and Central European feed compounders (imported meal distribution named as deal rationale)"
+  destinations_structured:
+    - {code: FR, products: [meal], note: "imported Brazilian meal distribution"}
+    - {code: EU, products: [meal], note: "Central European feed compounders"}
   size_evidence: >-
     Earthworm/LDC program: ZDC-verified Brazilian soybean meal into France equal to
     30% of LDC's French imports (2023-24, observed). Hungary/Poland plants are
@@ -187,6 +199,7 @@
 - name: "Cefetra Group"
   aka: ["Cefetra B.V.", "ex-BayWa subsidiary"]
   scope: "europe"
+  tier: 1
   side: "buyer"
   website: "https://www.cefetra.com"
   ownership: >-
@@ -201,6 +214,12 @@
     large volumes of soymeal, sunflower meal and soybean hulls from South America
     to Europe (observed).
   destinations: "UK, NL, DE, IT and wider European feed compounders"
+  destinations_structured:
+    - {code: GB, products: [beans, meal], note: "feed compounders"}
+    - {code: NL, products: [beans, meal], note: "feed compounders"}
+    - {code: DE, products: [beans, meal], note: "feed compounders"}
+    - {code: IT, products: [beans, meal], note: "feed compounders; Cefetra Italia"}
+    - {code: EU, products: [beans, meal], note: "wider European feed compounders"}
   size_evidence: >-
     EUR 125m sale price + removal from BayWa consolidation cutting >EUR 600m of
     bank liabilities (observed, BayWa releases) — indicates balance-sheet scale;
@@ -228,6 +247,7 @@
 - name: "Cereal Docks"
   aka: ["Cereal Docks S.p.A.", "Gruppo Cereal Docks"]
   scope: "europe"
+  tier: 1
   side: "buyer"
   website: "https://www.cerealdocks.it"
   ownership: "Private — Fanin family (founders)"
@@ -240,6 +260,12 @@
     (Donau Soja / ProTerra / Europe Soya certified). Group: 6 production sites,
     4 logistics hubs, Black Sea offices (Timisoara, Ruse).
   destinations: "Italian feed/food; non-GMO meal to southern Germany, Switzerland, Austria, France"
+  destinations_structured:
+    - {code: IT, products: [meal, oil], note: "domestic feed/food"}
+    - {code: DE, products: [meal], note: "non-GMO; southern Germany"}
+    - {code: CH, products: [meal], note: "non-GMO"}
+    - {code: AT, products: [meal], note: "non-GMO"}
+    - {code: FR, products: [meal], note: "non-GMO"}
   size_evidence: >-
     >5,000 t/day soy crush across the two plants, ~60% imported / 40% domestic
     non-GMO beans (observed, Non-GMO Report directory profile); group processes
@@ -266,6 +292,7 @@
 - name: "Denofa"
   aka: ["Denofa AS", "De-No-Fa"]
   scope: "europe"
+  tier: 1
   side: "buyer"
   website: "https://www.denofa.no"
   ownership: "Private — 100% owned by Amaggi (Brazil)"
@@ -276,6 +303,11 @@
     area), with its own 510 m ISPS deep-water quay. Products: soymeal, soy oil,
     lecithin.
   destinations: "Meal to Norwegian/Swedish/Finnish feed (incl. salmon aqua chain); oil and lecithin to European food/feed"
+  destinations_structured:
+    - {code: "NO", products: [meal], note: "feed incl. salmon aqua chain"}
+    - {code: SE, products: [meal], note: "feed"}
+    - {code: FI, products: [meal], note: "feed"}
+    - {code: EU, products: [oil], note: "oil and lecithin to European food/feed"}
   size_evidence: >-
     ~450,000 t/yr of soybeans imported — 60-80% Brazil (Amaggi IP non-GMO chain
     via Itacoatiara/Madeira), 20-40% Canada/US; ~NOK 2bn turnover, ~75 employees
@@ -311,6 +343,9 @@
     Barcelona Port Authority approval). Plans to expand into concentrated and
     textured soy protein ingredients.
   destinations: "Catalan, Spanish and European feed and food ingredient sectors (observed, deal release)"
+  destinations_structured:
+    - {code: ES, products: [meal, oil], note: "Catalan/Spanish feed and food ingredient sectors"}
+    - {code: EU, products: [meal, oil], note: "per deal release"}
   size_evidence: >-
     No public crush capacity figure found for this specific plant. Scale evidence
     limited to its description as 'an important infrastructural element' of the
@@ -344,6 +379,8 @@
     meal for compound feed; no own crush. Acquired Hamlet Protein (specialty
     soy-based young-animal proteins) — completed 2026-05-01.
   destinations: "Own feed mills / member farmers (NL and international subsidiaries)"
+  destinations_structured:
+    - {code: NL, products: [meal], note: "own feed mills / member farmers; international subsidiaries unspecified"}
   size_evidence: >-
     No free tonnage of soymeal purchases. Market position evidence: Greenpeace NL
     supply-chain analysis names Agrifirm among the three compounders holding >50%
@@ -381,6 +418,12 @@
     deforestation-free-standard soybean meal starting with the Netherlands, with
     blockchain traceability and verified carbon footprints (observed).
   destinations: "Own feed mills in NL/DE/BE/PL/UK"
+  destinations_structured:
+    - {code: NL, products: [meal], note: "own feed mills"}
+    - {code: DE, products: [meal], note: "own feed mills"}
+    - {code: BE, products: [meal], note: "own feed mills"}
+    - {code: PL, products: [meal], note: "own feed mills"}
+    - {code: GB, products: [meal], note: "own feed mills"}
   size_evidence: >-
     ~100 KMT Bunge meal supply agreement is the only free hard volume; ForFarmers
     is one of the top-3 Dutch compounders (>half the market combined). Also buys
@@ -419,6 +462,8 @@
     No own soy crush found. Large international footprint (Asia, Africa, LatAm)
     outside this file's scope.
   destinations: "Own feed mills, NL and international"
+  destinations_structured:
+    - {code: NL, products: [meal], note: "own feed mills; international footprint outside this file's scope"}
   size_evidence: >-
     Only free evidence is the Greenpeace top-3 Dutch market position; no soymeal
     purchase tonnage or direct-import share published.

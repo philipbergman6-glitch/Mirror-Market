@@ -12,6 +12,7 @@
 - name: "Ragasa Industrias"
   aka: ["RAGASA", "Raúl García y Compañía (origin)"]
   scope: "latam_importers"
+  tier: 1
   side: "buyer"
   website: "https://www.ragasa.com.mx"
   ownership: "Private Mexican family company, Monterrey (founded 1917 as Raúl García y Compañía; name from founder Raúl García) [observed]"
@@ -19,6 +20,8 @@
   products: [beans, meal, oil]
   footprint: "Monterrey, Nuevo León — described by USSEC as the largest crusher of US soybeans in Mexico; second crushing plant completed 2017 lifted capacity to ~2 MMT beans/yr [observed]. ~40% of Mexican crush capacity per earlier USDA FAS reporting [observed]."
   destinations: "Domestic Mexico — bottled/branded soy oil plus meal and pelleted hulls to Mexican swine, poultry, layer and dairy feeders [observed]"
+  destinations_structured:
+    - {code: MX, products: [oil, meal], note: "domestic crush output — bottled/branded oil plus meal and pelleted hulls to swine, poultry, layer and dairy feeders"}
   size_evidence: "USSEC: 'RAGASA processes one million metric tons (MT) of soybeans per year and with its new crushing plant... will process two million MT of beans annually'; post-expansion the company expected ~2,000 railcars/month of US beans (Todays Farmer, supply manager Francisco Belden)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -40,6 +43,7 @@
 - name: "Agydsa (Aceites, Grasas y Derivados)"
   aka: ["AGYDSA", "La Patrona", "Agydsa-Patrona", "GOSA", "MOSA", "SOBA"]
   scope: "latam_importers"
+  tier: 1
   side: "buyer"
   website: "https://www.agydsa.net"
   ownership: "Private Mexican group, Guadalajara (founded 1941; merged with Aceitera Nueva Galicia 1965). Shareholder detail not publicly disclosed [observed for history; ownership detail is a gap]"
@@ -47,6 +51,8 @@
   products: [beans, meal, oil]
   footprint: "Group of AGYDSA (Guadalajara — full refining/bottling), PATRONA (Córdoba, Veracruz — crush + refining), GOSA (El Salto, Jalisco — crush-only), plus MOSA and SOBA; group crushes ~1.4 MMT oilseeds/yr across soy, canola, safflower, sunflower, sesame, coconut [observed]. ~22% of Mexican soy crush capacity as 'Agydsa-Patrona' per USDA FAS-sourced reporting [observed]."
   destinations: "Domestic Mexico — oil to central/western/northern (AGYDSA) and Gulf/south/southeast (PATRONA) regions [observed]"
+  destinations_structured:
+    - {code: MX, products: [oil], note: "regional split — AGYDSA central/western/northern, PATRONA Gulf/south/southeast"}
   size_evidence: "Company history page: group units 'crush 1,400,000 tonnes of oilseeds annually'. FAS-sourced capacity share ~22% (second largest)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -68,6 +74,8 @@
   products: [beans, meal, oil]
   footprint: "~13% of Mexican soy crush capacity (third largest) per USDA FAS-sourced reporting [observed]. Plant location detail not verified free [gap]."
   destinations: "Domestic Mexico feed/oil market [inferred]"
+  destinations_structured:
+    - {code: MX, products: [meal, oil], note: "inferred"}
   size_evidence: "FAS-sourced capacity share ~13%. No free disclosed tonnage found."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -90,6 +98,14 @@
   products: [beans, meal, oil]
   footprint: "Mexico: ~11% of soy crush capacity per USDA FAS-sourced reporting [observed]. Central America: integrated poultry + feed in Honduras, Guatemala, Nicaragua, Costa Rica (and Colombia) under local brands [observed]. Chile: EWOS/Cargill Aqua Nutrition salmon feed (acquired EWOS Oct 2015), one of the four major salmon-feed suppliers [observed]."
   destinations: "Own downstream feed/poultry/aqua operations plus third-party Mexican feed and oil buyers [inferred]"
+  destinations_structured:
+    - {code: MX, products: [meal, oil], note: "crush output to third-party Mexican feed and oil buyers plus own operations; inferred"}
+    - {code: HN, products: [meal], note: "own integrated poultry + feed operations; inferred"}
+    - {code: GT, products: [meal], note: "own integrated poultry + feed operations; inferred"}
+    - {code: NI, products: [meal], note: "own integrated poultry + feed operations; inferred"}
+    - {code: CR, products: [meal], note: "own integrated poultry + feed operations; inferred"}
+    - {code: CO, products: [meal], note: "own integrated poultry + feed operations; inferred"}
+    - {code: CL, products: [meal], note: "EWOS/Cargill Aqua Nutrition salmon feed; inferred"}
   size_evidence: "FAS-sourced Mexico crush share ~11%; USDA FAS Chile Salmon Overview names Cargill among the four dominant salmon-feed sellers."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -115,6 +131,8 @@
   products: [beans, meal, oil]
   footprint: "~6% of Mexican soy crush capacity per USDA FAS-sourced reporting [observed]. Plant detail not verified free [gap]."
   destinations: "Domestic Mexico feed/oil market [inferred]"
+  destinations_structured:
+    - {code: MX, products: [meal, oil], note: "inferred"}
   size_evidence: "FAS-sourced capacity share ~6% — fifth of the five firms holding ~92% of capacity."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -127,6 +145,7 @@
 - name: "Industrias Bachoco"
   aka: ["Bachoco", "OK Foods (US subsidiary)"]
   scope: "latam_importers"
+  tier: 1
   side: "buyer"
   website: "https://www.bachoco.com.mx"
   ownership: "Robinson Bours family-controlled; founded 1952; listed on the Mexican Stock Exchange (formerly also NYSE — US delisting completed after the family's tender) [observed]"
@@ -134,6 +153,8 @@
   products: [meal, beans]
   footprint: "Mexico's largest poultry integrator (~25,000 employees, MX$93.9bn revenue 2023) — vertically integrated 'preparing feed, breeding and growing chickens', plus swine; US subsidiary OK Foods (Arkansas) [observed]"
   destinations: "Own feed mills — internal consumption for poultry/swine [observed]"
+  destinations_structured:
+    - {code: MX, products: [meal, beans], note: "internal consumption — own feed mills for poultry/swine"}
   size_evidence: "Revenue MX$93.90bn (2023). Specific feed-mill count and soybean-meal purchase tonnage not disclosed free."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -153,6 +174,8 @@
   products: [beans, oil, meal]
   footprint: "Primarily Mexico's largest wheat flour miller (~$1.1bn revenue, 20 mills after buying seven Bunge Mexico mills in 2022). Oilseed leg: Grupo Trimex del Sureste plant inside the ASIPONA port precinct at Coatzacoalcos, Veracruz, listed in SADER/gob.mx's industrial import directory with soybeans among authorized import products [observed]."
   destinations: "Domestic Mexico [inferred]"
+  destinations_structured:
+    - {code: MX, products: [beans, oil, meal], note: "inferred; no product breakdown in sources — entry products carried over"}
   size_evidence: "gob.mx industrialization import directory lists the Coatzacoalcos plant for soy; no soy crush tonnage disclosed free."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -178,6 +201,8 @@
   products: [meal, beans]
   footprint: "Colombia — feed mills (Contegral, Finca) integrated to own poultry/egg/swine; port access via Compas at Buenaventura, Tolú, Aguadulce [observed]"
   destinations: "Own Colombian feed/poultry operations [observed]"
+  destinations_structured:
+    - {code: CO, products: [meal, beans], note: "internal consumption — Contegral/Finca feed mills integrated to own poultry/egg/swine"}
   size_evidence: "Sector context: Colombia imported 2.04 MMT of US soybean meal in MY2024/25 (3rd-largest US meal buyer, Illinois Soybean Assoc.); feed industry used 2.043 MMT meal + 595 kt beans in 2025, US share 98.9% of macro-ingredients (pig333/ANDI-sourced). Grupo Bios was #1 Colombian feed group in 2022, #2 in 2024 (La Nota rankings). Company-level import tonnage not disclosed."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -206,6 +231,8 @@
   products: [meal, beans]
   footprint: "Colombia (with Italcol de Occidente) — became the #1 feed group in 2024, overtaking Grupo Bios (La Nota ranking); revenues COP 3.6 trillion with 96.78% profit growth in 2023 (La República) [observed]"
   destinations: "Colombian poultry/swine/pet-food feed market [observed]"
+  destinations_structured:
+    - {code: CO, products: [meal, beans], note: "poultry/swine/pet-food feed market"}
   size_evidence: "La Nota 2024/2025 sector rankings (#1); La República 2023 revenue COP 3.6tn. Company-level SBM import tonnage not disclosed free."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -228,6 +255,8 @@
   products: [meal, beans]
   footprint: "Colombia — with Agrinal, the #3 feed group in 2024 rankings behind Italcol and Grupo Bios [observed]"
   destinations: "Colombian poultry/swine/aqua/pet feed market [observed]"
+  destinations_structured:
+    - {code: CO, products: [meal, beans], note: "poultry/swine/aqua/pet feed market"}
   size_evidence: "La Nota 2024 sector ranking (#3 with Agrinal Colombia). No company-level import tonnage free."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -247,6 +276,10 @@
   products: [meal, beans, oil]
   footprint: "Peru: consumer goods + B2B + oilseed crushing + aquafeed (Alicorp's four core businesses); Vitapro shrimp-feed mill in Trujillo (Peru's first BAP-certified feed mill). Ecuador: new ~$80m aquafeed plant opened late 2024. Chile: Salmofood salmon feed — one of the four major suppliers [observed]"
   destinations: "Andean/Chilean aqua and feed markets — Nicovita (shrimp) and Salmofood (salmon) brands [observed]"
+  destinations_structured:
+    - {code: PE, products: [meal], note: "Nicovita shrimp feed + own crush/consumer businesses"}
+    - {code: EC, products: [meal], note: "Nicovita shrimp feed — new ~$80m aquafeed plant late 2024"}
+    - {code: CL, products: [meal], note: "Salmofood salmon feed — one of four major suppliers"}
   size_evidence: "Aquafeed.com: Alicorp animal-nutrition division renamed Vitapro across Peru/Ecuador/Chile; IntraFish/Feedinfo: $80m Ecuador plant late 2024; USDA FAS Chile Salmon Overview: four major salmon-feed sellers incl. Salmofood. Soy-complex purchase tonnage not disclosed."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -275,6 +308,8 @@
   products: [meal]
   footprint: "Peru's leading poultry integrator with own feed mills [inferred]. Sector context: Peruvian poultry produces ~65m birds/month requiring ~3.5 MMT feed/yr; corn + SBM = 49% of broiler production cost; Peru grows no soybeans (USDA FAS) [observed at sector level]."
   destinations: "Own Peruvian feed/poultry operations [inferred]"
+  destinations_structured:
+    - {code: PE, products: [meal], note: "internal consumption — own feed mills; inferred"}
   size_evidence: "None free at company level — only the FAS sector totals above. Gap."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -294,6 +329,9 @@
   products: [meal]
   footprint: "Ecuador: among the largest shrimp-feed producers; building a ~USD 65m plant in Durán with ~470 kt/yr end-state feed capacity. Chile: one of four major salmon-feed suppliers [observed]"
   destinations: "Ecuadorian shrimp and Chilean salmon farmers [observed]"
+  destinations_structured:
+    - {code: EC, products: [meal], note: "shrimp feed — Durán plant ~470 kt/yr end-state capacity"}
+    - {code: CL, products: [meal], note: "salmon feed — one of four major suppliers"}
   size_evidence: "Skretting corporate announcement: Durán plant USD 65m, 470,000 t/yr; USDA FAS Chile Salmon Overview lists Skretting among the four dominant feed sellers; Ecuador shrimp-feed market ~1,676 kt (2024, IMARC) with soybean meal the largest ingredient share."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -319,6 +357,9 @@
   products: [meal]
   footprint: "Chile: one of four major salmon-feed suppliers. Ecuador: shrimp feed; acquired the remaining 30% of BioMar Ecuador (2025) [observed]"
   destinations: "Chilean salmon and Ecuadorian shrimp farmers [observed]"
+  destinations_structured:
+    - {code: CL, products: [meal], note: "salmon feed — one of four major suppliers"}
+    - {code: EC, products: [meal], note: "shrimp feed — BioMar Ecuador (ex-Alimentsa), fully owned 2025"}
   size_evidence: "USDA FAS Chile Salmon Overview (four major suppliers); BioMar 2025 results noting full ownership of BioMar Ecuador. Soy tonnage not disclosed."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -341,6 +382,8 @@
   products: [meal]
   footprint: "Chile's largest protein producer: integrated poultry/pork feed mills plus salmon via AquaChile [inferred; AquaChile ownership observed in sector press]"
   destinations: "Own Chilean feed operations [inferred]"
+  destinations_structured:
+    - {code: CL, products: [meal], note: "internal consumption — own poultry/pork feed mills; inferred"}
   size_evidence: "None free at company level for soy purchases. Gap."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -360,6 +403,11 @@
   products: [meal, beans]
   footprint: "Central America's dominant integrator: wheat/corn milling, poultry and pork processing, animal feed under the Aliansa brand, with production in Guatemala, El Salvador, Honduras and Costa Rica; Pollo Campero restaurants [observed]"
   destinations: "Own CA feed/poultry/pork operations [observed]"
+  destinations_structured:
+    - {code: GT, products: [meal, beans], note: "internal consumption — Aliansa feed + poultry/pork production"}
+    - {code: SV, products: [meal, beans], note: "internal consumption — Aliansa feed + poultry/pork production"}
+    - {code: HN, products: [meal, beans], note: "internal consumption — Aliansa feed + poultry/pork production"}
+    - {code: CR, products: [meal, beans], note: "internal consumption — Aliansa feed + poultry/pork production"}
   size_evidence: "Wikipedia/company profile (54,000 employees, multi-country footprint). Context: Guatemala is the largest CA market for US ag ($1.9bn in 2025, +15%), and Honduras sources the vast majority of its SBM from the US (USB See For Yourself 2025). Company-level soy tonnage not disclosed free."
   confidence: "observed"
   as_of: "2026-08-08"

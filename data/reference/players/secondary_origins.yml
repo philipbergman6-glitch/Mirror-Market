@@ -26,6 +26,8 @@
   products: ["beans", "meal", "oil"]
   footprint: "Largest Canadian grain-handling network post-merger; port terminals incl. Cascadia and Pacific (Vancouver), Prince Rupert Grain (stake), two Thunder Bay facilities, and Montreal — the eastern terminals serve Ontario/Quebec soybeans."
   destinations: "Ships grains/oilseeds to customers in ~70 countries (Bunge/Viterra statement); soy-specific destination split not published — unverified"
+  destinations_structured:
+    - {code: GLOBAL, products: [beans, meal, oil], note: "~70 countries, all grains/oilseeds (company statement); soy-specific split unverified"}
   size_evidence: "Merger scale (US$8.2bn) and six-port network are observed in merger coverage and Viterra's own port page; company-level soybean export tonnage is not publicly broken out."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -108,6 +110,13 @@
   products: ["beans"]
   footprint: "Contracts directly with farmers across Canada (Ontario/Quebec/Maritimes core) via identity-preserved, closed-loop food-grade programs; own variety development including Japan-specific natto varieties."
   destinations: "Japan, South Korea, Western Europe, Taiwan, mainland China, Southeast Asia (company statement)"
+  destinations_structured:
+    - {code: JP, products: [beans], note: "food-grade/IP core market (company statement)"}
+    - {code: KR, products: [beans], note: "company statement"}
+    - {code: EU, products: [beans], note: "Western Europe (company statement)"}
+    - {code: TW, products: [beans], note: "company statement"}
+    - {code: CN, products: [beans], note: "company statement"}
+    - {code: SE-ASIA, products: [beans], note: "company statement"}
   size_evidence: "No tonnage disclosed. Evidence of niche leadership: dedicated Japan-market variety development (incl. a natto variety named by a large Japanese natto maker) and listing in Soy Canada's food-grade exporter directory."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -128,6 +137,7 @@
 - name: "Kernel Holding"
   aka: ["Kernel", "WSE: KER (delisted 2024)"]
   scope: "secondary_origins"
+  tier: 1
   side: "seller"
   website: "https://www.kernel.ua"
   ownership: "Controlled by Andriy Verevskyi (Namsen Ltd) after 2023-24 buyout/delisting from the Warsaw Stock Exchange"
@@ -135,6 +145,9 @@
   products: ["beans", "meal", "oil"]
   footprint: "Ukraine's largest oilseed processor and grain exporter; own Black Sea transshipment terminals (Chornomorsk); acquired an edible-oils transshipment terminal to expand port capacity."
   destinations: "EU and Turkey lead Ukraine's soy flows; Kernel-specific soy split unverified"
+  destinations_structured:
+    - {code: EU, products: [beans, meal, oil], note: "origin-level Ukraine soy flow; Kernel-specific split unverified"}
+    - {code: TR, products: [beans, meal, oil], note: "origin-level Ukraine soy flow; Kernel-specific split unverified"}
   size_evidence: "Largest Ukrainian grain exporter MY2024/25: 5.4 MMT of grain, 12% share (+2pp y/y) — all-grains figure, not soy-specific (UkrAgroConsult)."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -157,6 +170,11 @@
   products: ["beans"]
   footprint: "Historic Dnipro/Southern Buh river-barge network + Mykolaiv terminal, largely lost to the war: >68% of assets occupied or blocked. Rebuilt flows via Danube ports with Constanța (Romania) as the main hub."
   destinations: "unverified (pre-war soy went to Middle East/Asia incl. Israel, Sri Lanka per historic rankings — dated)"
+  destinations_structured:
+    - {code: MENA, products: [beans], note: "pre-war flows per historic rankings — dated, current split unverified"}
+    - {code: ASIA, products: [beans], note: "pre-war flows per historic rankings — dated, current split unverified"}
+    - {code: IL, products: [beans], note: "pre-war — dated"}
+    - {code: LK, products: [beans], note: "pre-war — dated"}
   size_evidence: "~5.1% of Ukrainian grain exports MY2024/25 (rank #5) despite asset losses; pre-war record 5.64 MMT (2021), targeting return to ~15% share (UkrAgroConsult / Odessa Journal)."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -193,6 +211,7 @@
 - name: "Sodrugestvo Group"
   aka: ["Содружество", "Sodruzhestvo"]
   scope: "secondary_origins"
+  tier: 1
   side: "seller"
   website: "https://www.sodrugestvo.com"
   ownership: "Private (Lutsenko family-founded, Luxembourg-headquartered international group)"
@@ -200,6 +219,11 @@
   products: ["beans", "meal", "oil"]
   footprint: "Largest soybean crusher in Russia/CIS — Kaliningrad complex crushes up to 7,000 t/day of soybeans (+1,100 t/day rapeseed) with own deepwater terminal. Building Far East Agroterminal crush plant at Belogorsk (Amur), ~1 MMT/yr bean intake, planned 2026 launch, output contracted to China."
   destinations: "Meal: first far-abroad export contract — 25,000 t to Turkey (Jan 2026), Russian-origin only; analysts see North Africa/Israel next. Far East plant: China. Historically Kaliningrad crushed imported South American beans for the domestic/CIS market."
+  destinations_structured:
+    - {code: TR, products: [meal], note: "25,000 t first far-abroad contract, Jan 2026"}
+    - {code: CN, products: [meal, oil], note: "Belogorsk plant output contracted; plant planned 2026 launch — not yet flowing"}
+    - {code: MENA, products: [meal], note: "North Africa — analyst forecast only, not yet shipped"}
+    - {code: IL, products: [meal], note: "analyst forecast only, not yet shipped"}
   size_evidence: "7,000 t/day bean crush (USSEC); 25 kt Turkey meal contract (All About Feed); Belogorsk ~1 MMT/yr agreement with Heilongjiang counterparty (Interfax)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -228,6 +252,11 @@
   products: ["oil", "meal"]
   footprint: "Major Russian oils & fats producer (sunflower-led, expanding in processed soy per market coverage); export terminal at Taman (Black Sea), 1.5 MMT/yr handling capacity."
   destinations: "unverified for soy specifically; Russian veg-oil exports flow heavily to China, India, Algeria, Turkey"
+  destinations_structured:
+    - {code: CN, products: [oil], note: "origin-level Russian veg-oil flow; EFKO soy-specific split unverified"}
+    - {code: IN, products: [oil], note: "origin-level Russian veg-oil flow; EFKO soy-specific split unverified"}
+    - {code: DZ, products: [oil], note: "origin-level Russian veg-oil flow; EFKO soy-specific split unverified"}
+    - {code: TR, products: [oil], note: "origin-level Russian veg-oil flow; EFKO soy-specific split unverified"}
   size_evidence: "Taman terminal 1.5 MMT/yr capacity (UkrAgroConsult); named alongside Rusagro as expanding in the processed-soy segment (Bonafide market overview)."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -271,6 +300,8 @@
   products: ["beans"]
   footprint: "Nine offices across Uruguay; elevator network handling ~1.2 MMT of soybeans and wheat; exports via Nueva Palmira and Montevideo."
   destinations: "China dominates Uruguayan beans (~80% of shipments)"
+  destinations_structured:
+    - {code: CN, products: [beans], note: "~80% of Uruguayan bean shipments — origin-level share, not Cargill-specific"}
   size_evidence: "Cargill's own claim: largest agricultural exporter in Uruguay; elevator handling ~1.2 MMT soy+wheat with a 99.95% deforestation-free supply pledge (Mordor overview)."
   confidence: "observed"
   as_of: "2026-08-08"
@@ -296,6 +327,8 @@
   products: ["beans"]
   footprint: "Storage/origination anchored on Nueva Palmira: Dec 2024 acquisition of a grain/oilseed facility 2.5 km from the port (38,000 t steel silos + 12,000 t silo bags), with 2025 upgrade investment."
   destinations: "China-dominated Uruguayan flow; LDC-specific split unverified"
+  destinations_structured:
+    - {code: CN, products: [beans], note: "origin-level Uruguayan flow; LDC-specific split unverified"}
   size_evidence: "Facility acquisition detail (World Grain / OFI Magazine); no LDC-specific Uruguay export tonnage published."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -315,6 +348,9 @@
   products: ["beans", "meal", "oil"]
   footprint: "Origination plus an oilseed crush plant — notable because Uruguay's total crush is tiny (~150 kt/yr)."
   destinations: "Meal and oil sold to China and Europe (Mordor overview); bean flow China-dominated"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "meal/oil sales per Mordor overview; bean flow China-dominated at origin level"}
+    - {code: EU, products: [meal, oil], note: "Europe per Mordor overview (secondary source)"}
   size_evidence: "Ranked second among Uruguay traders in Mordor's industry analysis; no tonnage disclosed."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -355,6 +391,10 @@
   products: ["meal", "oil", "beans"]
   footprint: "Crush plant at Puerto Quijarro on the Bolivia-Brazil border, shipping via the adjacent Puerto Aguirre private river port onto the Paraguay-Paraná waterway."
   destinations: "unverified free — Andean Community (Colombia/Peru/Ecuador) is the sector's traditional meal market (inferred)"
+  destinations_structured:
+    - {code: CO, products: [meal], note: "inferred — sector's traditional Andean meal market, company split unverified"}
+    - {code: PE, products: [meal], note: "inferred — sector's traditional Andean meal market, company split unverified"}
+    - {code: EC, products: [meal], note: "inferred — sector's traditional Andean meal market, company split unverified"}
   size_evidence: "Named among the main companies in Bolivia's oilseed market by PCR's sector rating (with Fino, IOL, Nutrioil, Prolega); company-level tonnage not free."
   confidence: "inferred"
   as_of: "2026-08-08"
@@ -377,6 +417,8 @@
   products: ["meal", "oil"]
   footprint: "Santa Cruz-based crushing and refining; one of the historic big-three crushers (older USDA data put ADM-SAO ~35%, Fino ~25%, Rico ~25% of crush — dated)."
   destinations: "unverified free — Andean Community traditional (inferred)"
+  destinations_structured:
+    - {code: LATAM, products: [meal, oil], note: "Andean Community traditional market — inferred, company split unverified"}
   size_evidence: "Listed by PCR and CANIOB among the dominant six that control ~85% of byproduct output; historic USDA share figures are dated (pre-2015)."
   confidence: "inferred"
   as_of: "2026-08-08"

@@ -35,6 +35,7 @@ from app.charts import (  # noqa: E402  (must follow sys.path.insert above)
     build_technical_chart,
     delta_str,
 )
+from scripts.validate_players import validate_players  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -1000,6 +1001,14 @@ def _build_health_html(health: dict) -> str:
 def generate():
     """Generate the static HTML dashboard."""
     log.info("Starting HTML generation...")
+
+    # Hard-fail on players knowledge-base schema violations (issue #122) —
+    # a bad country code must break the build, not ship as a dead filter.
+    player_errors = validate_players()
+    if player_errors:
+        for err in player_errors:
+            log.error("players: %s", err)
+        raise SystemExit(f"players validation failed with {len(player_errors)} violation(s)")
 
     # Load analysts
     from analysis.briefing import generate_briefing

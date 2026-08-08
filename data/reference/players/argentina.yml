@@ -93,6 +93,8 @@
   products: [beans, meal, oil]
   footprint: "Timbúes complex (ex-Noble): crush ~2.3 Mt/year per COFCO's own newsroom, own berths on the Coronda/Paraná (Km 462), up to 60% self-generated power. Separate port terminal at Puerto General San Martín (Km 450.8). Ex-Nidera legacy incl. Saforcada plant (reactivated 2,000 t/24h per BCR decade review) and a Puerto General San Martín plant."
   destinations: "unverified (China pull inferred from state parentage, not from published company-level flow data)"
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "inferred from state parentage; not from published company-level flow data"}
   size_evidence: "BCR DJVE rankings: #3 in 2023/24 with 10.35 Mt; #3 calendar-2024 (8.6 Mt); #3 H1-2026 (6.4 Mt, incl. 3.8 Mt corn). Timbúes crush capacity 2.3 Mt/yr (company statement)."
   confidence: inferred
   as_of: "2026-08-07"
@@ -140,6 +142,7 @@
 - name: "Aceitera General Deheza"
   aka: ["AGD"]
   scope: argentina
+  tier: 1
   ownership: "Private, Argentine (Urquía family). 50% JV partner in Terminal 6 with Bunge (split commonly reported 50/50 — not primary-verified)."
   roles: [originator, crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -166,6 +169,7 @@
 - name: "Molinos Agro S.A."
   aka: ["MOLA (BYMA ticker)", "ex-Molinos Río de la Plata agro arm"]
   scope: argentina
+  tier: 1
   ownership: "Public (listed BYMA: MOLA), controlled by the Perez Companc family group. Spun off from Molinos Río de la Plata (2016 — legacy detail, inferred from Wikipedia-level sources). No Renova stake (original founding partner via Molinos Río exited; frequent-error flag). Lost the Vicentin cramdown bid with LDC; withdrew May 2026. Announced 2025 JV with ACA: ~US$500M, up to 15,000 t/d new crush plant at Timbúes."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -192,6 +196,7 @@
 - name: "Asociación de Cooperativas Argentinas"
   aka: ["ACA"]
   scope: argentina
+  tier: 1
   ownership: "Co-operative (federation of Argentine farm co-ops — the largest farmer-owned originator). JV with Molinos Agro for the announced Timbúes crush plant (2025, ~US$500M, up to 15,000 t/d)."
   roles: [originator, exporter, terminal-operator, crusher]
   products: [beans, meal, oil]
@@ -252,6 +257,7 @@
 - name: "Nueva Vicentin Argentina"
   aka: ["Vicentin S.A.I.C. (pre-cramdown)", "Grupo Grassi (controller)"]
   scope: argentina
+  tier: 1
   ownership: "Controlled by Grassi S.A. (Rosario brokerage, Grassi family) after winning Argentina's first-ever concursal cramdown: court (Judge Lorenzini, Reconquista) approved Grassi's proposal Dec 2025 over a Molinos Agro-LDC consortium; share transfer effected; board Mariano Grassi (pres), Leandro Salvatierra (VP), Hugo A. Grassi. Rivals formally withdrew May 2026 — control now definitive. First creditor payments (US$1.3bn defaulted debt, 664 creditors in the first tranche) executed Jan 2026; BCRA credit standing regularized Jun 2026. Retains 33.3% of Renova (Bunge ~66.7%)."
   roles: [crusher, exporter, terminal-operator, originator]
   products: [beans, meal, oil]

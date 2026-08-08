@@ -8,6 +8,7 @@
 - name: "Archer-Daniels-Midland Company"
   aka: ["ADM", "NYSE: ADM"]
   scope: "global"
+  tier: 1
   ownership: "Public — NYSE: ADM (SEC EDGAR CIK 0000007084)"
   roles: [originator, crusher, refiner, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -23,6 +24,8 @@
   destinations: >-
     unverified — 10-K discloses no sales by destination country; company states it
     connects "crops and markets in over 180 countries" (reach, not flows).
+  destinations_structured:
+    - {code: GLOBAL, products: [beans, meal, oil], note: "reach claim only — 'over 180 countries'; 10-K discloses no sales by destination country"}
   size_evidence: >-
     FY2025 10-K (filed 2026-02-17): total revenues $80.269B; Ag Services & Oilseeds
     segment $61.571B (Ag Services $40.363B, Crushing $10.353B, Refined Products
@@ -50,6 +53,7 @@
 - name: "Bunge Global SA"
   aka: ["Bunge", "NYSE: BG", "Viterra (merged into Bunge 2025-07-02)", "Bunge Limited (pre-2023 Bermuda entity)"]
   scope: "global"
+  tier: 1
   ownership: >-
     Public — NYSE: BG (SEC EDGAR CIK 1996862); Swiss-incorporated (Geneva) since the
     2023-11-01 redomestication, corporate HQ Chesterfield, MO. Former Viterra owners
@@ -71,6 +75,8 @@
     unverified — 10-K discloses customer types (feed manufacturers, livestock
     producers, biofuel companies, other processors), not destination countries;
     China appears only as demand/tariff risk factor (inferred exposure).
+  destinations_structured:
+    - {code: CN, products: [beans, meal, oil], note: "inferred exposure — China appears only as demand/tariff risk factor in 10-K; no destination split disclosed"}
   size_evidence: >-
     FY2025 10-K (filed 2026-02-19): soybeans crushed 41.0M MT (2024: 36.8M);
     soybeans merchandised 20.5M MT; refined oil production 3.6M MT; net sales
@@ -111,6 +117,7 @@
 - name: "Cargill, Incorporated"
   aka: ["Cargill"]
   scope: "global"
+  tier: 1
   ownership: >-
     Private — Cargill-MacMillan family holds ~87-88% (Forbes/AgFunder estimates;
     exact split not disclosed by the company). No public equity; does not disclose
@@ -132,6 +139,8 @@
     unverified — no company disclosure; China exposure inferred (Cargill Brazil
     president cited Chinese demand for Brazilian beans competing with its own
     crush plans, 2025).
+  destinations_structured:
+    - {code: CN, products: [beans], note: "inferred — Chinese demand for Brazilian beans cited by Cargill Brazil president (2025); no company disclosure, no volumes"}
   size_evidence: >-
     FY2025 (ended 2025-05-31) revenue $154B (press coverage of the annual report;
     the report PDF itself 403s). Cargill Brazil originated/processed/sold volumes:
@@ -171,6 +180,7 @@
 - name: "Louis Dreyfus Company B.V."
   aka: ["LDC", "Louis Dreyfus"]
   scope: "global"
+  tier: 1
   ownership: >-
     Private — controlled by Margarita Louis-Dreyfus via the Akira family trust
     (reached 96.2% after the Jan-2019 minority buy-out); Abu Dhabi's ADQ later
@@ -195,6 +205,8 @@
     unverified — no disclosed destination split; China flows indicated by trade
     coverage (Panjiva headline on LDC/Cargill Brazil-to-China bean flows) but no
     volumes.
+  destinations_structured:
+    - {code: CN, products: [beans], note: "inferred — Brazil-to-China bean flows indicated by trade coverage (Panjiva headline); no disclosed split, no volumes"}
   size_evidence: >-
     FY2025 results: net sales $53.2B (2024: $50.6B), net income $653M, shipped
     volumes +10.6% YoY driven primarily by Grains & Oilseeds, capex $2B. Argentina:
@@ -239,6 +251,7 @@
 - name: "COFCO International Ltd"
   aka: ["COFCO Intl", "CIL", "ex-Noble Agri", "ex-Nidera"]
   scope: "global"
+  tier: 1
   ownership: >-
     State-owned — "the overseas agriculture business platform for COFCO
     Corporation, China's largest food and agriculture company" (company site).
@@ -259,6 +272,8 @@
     China explicitly (company newsroom: Brazil-to-China deforestation-free soybean
     trade deliveries), consistent with its mandate as COFCO Corp's overseas arm;
     China's share of volumes unverified.
+  destinations_structured:
+    - {code: CN, products: [beans], note: "explicit — Brazil-to-China soybean deliveries per company newsroom; China's share of volumes unverified"}
   size_evidence: >-
     2024: 108.4M MT commodities handled (2023: 121.7M), revenue $38.5B (2023:
     $50.1B); 12,000 people in 36 countries (company who-we-are page, fetched).
@@ -294,6 +309,7 @@
 - name: "Amaggi"
   aka: ["Andre Maggi Group", "Agropecuaria Maggi Ltda", "Amaggi Exportacao e Importacao Ltda"]
   scope: "global"
+  tier: 1
   ownership: "Private — Brazilian family-held (Maggi family); CNPJ 00.315.457/0001-95."
   roles: [originator, crusher, exporter, terminal-operator]
   products: [beans, meal, oil]
@@ -308,6 +324,10 @@
   destinations: >-
     inferred from asset/office network: EU (Denofa Norway, Netherlands office),
     China (rep office), Asia (Singapore desk); no disclosed destination volumes.
+  destinations_structured:
+    - {code: EU, products: [beans], note: "inferred from asset/office network (Denofa Norway crush asset, Netherlands office); no disclosed volumes"}
+    - {code: CN, products: [beans, meal, oil], note: "inferred from China representative office; no disclosed volumes"}
+    - {code: ASIA, products: [beans, meal, oil], note: "inferred from Singapore desk; no disclosed volumes"}
   size_evidence: >-
     Company site: "18 million tons of grains and fibers sold per year worldwide";
     1.2M MT own production. Trase ranks Amaggi among the 6 companies accounting
@@ -339,6 +359,7 @@
 - name: "CHS Inc."
   aka: ["CHS", "Cenex Harvest States", "NASDAQ: CHSCP (preferred)"]
   scope: "global"
+  tier: 1
   ownership: >-
     US farmer-owned cooperative; SEC registrant (CIK 0000823277, active 10-K
     filer); NASDAQ-listed preferred shares only — common equity is member-owned.
@@ -357,6 +378,9 @@
   destinations: >-
     Asia-Pacific and EMEA via regional marketing offices; specific country
     volumes unverified.
+  destinations_structured:
+    - {code: ASIA, products: [beans, meal, oil], note: "Asia-Pacific via regional marketing offices (Singapore HQ; China/South Korea/Taiwan/Australia); country volumes unverified"}
+    - {code: EU, products: [beans, meal, oil], note: "prose says 'EMEA'; all named offices are European (Geneva HQ; Bulgaria/Hungary/Romania/Serbia/Spain/Ukraine); country volumes unverified"}
   size_evidence: >-
     Free SEC 10-Ks (EDGAR CIK 0000823277); FY2024 net income $1.1B; handles
     ">2 billion bushels of grain annually" (company claim).
@@ -403,6 +427,8 @@
     exporter and largest river port operator (Sarcom) per Chain Reaction
     Research (pre-split data).
   destinations: "unverified — Russian entity claims exports to 70+ countries, no breakdown."
+  destinations_structured:
+    - {code: GLOBAL, products: [beans, meal, oil], note: "reach claim only — Russian entity (sodrugestvo.ru) says exports to 70+ countries; unverified, no breakdown; pre-split framing outdated"}
   size_evidence: >-
     Weak: revenues ">$3.6B by 2023" from a low-quality biographical source only.
     Best free deep profile is Chain Reaction Research (pre-split). Neither
