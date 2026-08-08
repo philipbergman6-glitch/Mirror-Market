@@ -19,7 +19,7 @@ Buy-side (destinations) and mixed:
 - `asia_importers.yml` — JP/KR/TW/VN/ID/TH — #105
 - `europe.yml` — EU/UK/Norway import crushers — #106
 - `mena.yml` — Egypt/Turkey/Iran/North Africa — #107
-- `africa.yml` — South Africa + Nigeria — #109
+- `africa.yml` — South Africa + Nigeria (#109) + Ethiopia/Uganda/Kenya (#135)
 - `latam_importers.yml` — Mexico + Andean/Central America — #110
 
 ## Schema
