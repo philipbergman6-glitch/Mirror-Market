@@ -18,7 +18,7 @@ from types import MappingProxyType
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from trust.domain import Dataset, Source
+from trust.domain import Dataset, Source, ValidationPolicy
 
 SCHEMA_VERSION = 1
 
@@ -158,21 +158,6 @@ class FreshnessContract:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> FreshnessContract:
         return cls(stale_after_hours=int(data["stale_after_hours"]))
-
-
-@dataclass(frozen=True)
-class ValidationPolicy:
-    rule_ids: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "rule_ids", _strings(self.rule_ids, "validation.rule_ids"))
-
-    def to_dict(self) -> dict[str, list[str]]:
-        return {"rule_ids": list(self.rule_ids)}
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> ValidationPolicy:
-        return cls(rule_ids=tuple(str(value) for value in data["rule_ids"]))
 
 
 @dataclass(frozen=True)

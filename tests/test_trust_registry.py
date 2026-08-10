@@ -245,3 +245,12 @@ def test_datasets_from_one_source_can_have_different_cadence_and_rights() -> Non
     assert weekly.rights is not None
     assert daily.rights.publication_eligible is True
     assert weekly.rights.publication_eligible is False
+
+
+def test_validation_policy_records_whether_empty_publication_is_permitted() -> None:
+    required = ValidationPolicy(("publication.present",))
+    optional = ValidationPolicy(("publication.present",), allows_empty_publication=True)
+
+    assert required.allows_empty_publication is False
+    assert optional.allows_empty_publication is True
+    assert ValidationPolicy.from_dict(optional.to_dict()) == optional

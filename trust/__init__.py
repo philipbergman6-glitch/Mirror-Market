@@ -24,6 +24,8 @@ from trust.domain import (
     RunStatus,
     Source,
     Timestamp,
+    ValidationPolicy,
+    evaluate_run_status,
 )
 from trust.registry import (
     FX_CONTRACTS,
@@ -45,7 +47,6 @@ from trust.registry import (
     RightsAction,
     RightsDecision,
     RightsPolicy,
-    ValidationPolicy,
 )
 
 __all__ = [
@@ -92,4 +93,5 @@ __all__ = [
     "Timestamp",
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
+    "evaluate_run_status",
 ]
