@@ -222,6 +222,11 @@ def _stable_id(prefix: str, identity: Mapping[str, Any]) -> str:
     return f"{prefix}_{digest}"
 
 
+def _manifest_hash(payload: Mapping[str, Any]) -> str:
+    """Hash a normalized manifest payload, excluding only the hash itself."""
+    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
 def _dataset_id(source_id: str, dataset_key: str) -> str:
     return _stable_id("dst", {"source_id": source_id, "key": dataset_key})
 
@@ -246,6 +251,13 @@ def _envelope(data: Mapping[str, Any], record_type: str) -> None:
 def _check_serialized_id(data: Mapping[str, Any], field_name: str, actual: str) -> None:
     if data.get(field_name) != actual:
         raise ValueError(f"serialized {field_name} does not match the record identity")
+
+
+def _check_serialized_manifest_hash(data: Mapping[str, Any], actual: str) -> None:
+    serialized_hash = data.get("manifest_hash")
+    serialized_payload = {key: value for key, value in data.items() if key != "manifest_hash"}
+    if serialized_hash != _manifest_hash(serialized_payload) or serialized_hash != actual:
+        raise ValueError("serialized manifest_hash does not match the manifest content")
 
 
 @dataclass(frozen=True)
@@ -992,7 +1004,10 @@ class Run:
     ended_at: datetime | None
     status: RunStatus
     dataset_result_ids: tuple[str, ...] = ()
+    parser_versions: Mapping[str, str] = field(default_factory=dict)
+    findings_summary: Mapping[FindingSeverity, int] = field(default_factory=dict)
     run_id: str = field(init=False)
+    manifest_hash: str = field(init=False)
     schema_version: ClassVar[int] = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -1008,6 +1023,29 @@ class Run:
             "dataset_result_ids",
             _sorted_identifiers(self.dataset_result_ids, "run.dataset_result_ids", "dsr"),
         )
+        parser_versions = {
+            _identifier(dataset_id, "run.parser_versions key", "dst"): _text(
+                version,
+                f"run.parser_versions.{dataset_id}",
+            )
+            for dataset_id, version in self.parser_versions.items()
+        }
+        object.__setattr__(
+            self,
+            "parser_versions",
+            MappingProxyType({key: parser_versions[key] for key in sorted(parser_versions)}),
+        )
+        findings_summary: dict[FindingSeverity, int] = {}
+        for raw_severity, count in self.findings_summary.items():
+            severity = _enum(FindingSeverity, raw_severity)
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                raise ValueError(f"run.findings_summary.{severity.value} must be a non-negative integer")
+            findings_summary[severity] = count
+        object.__setattr__(
+            self,
+            "findings_summary",
+            MappingProxyType(dict(sorted(findings_summary.items(), key=lambda item: item[0].value))),
+        )
         if self.status is RunStatus.RUNNING and self.ended_at is not None:
             raise ValueError("a running run cannot have ended_at")
         if self.status is not RunStatus.RUNNING and self.ended_at is None:
@@ -1017,8 +1055,9 @@ class Run:
             "run_id",
             _stable_id("run", {"code_revision": self.code_revision, "started_at": self.started_at.isoformat()}),
         )
+        object.__setattr__(self, "manifest_hash", _manifest_hash(self._manifest_payload()))
 
-    def to_dict(self) -> dict[str, Any]:
+    def _manifest_payload(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "record_type": "run",
@@ -1028,7 +1067,14 @@ class Run:
             "ended_at": self.ended_at.isoformat() if self.ended_at else None,
             "status": self.status.value,
             "dataset_result_ids": list(self.dataset_result_ids),
+            "parser_versions": dict(self.parser_versions),
+            "findings_summary": {
+                severity.value: count for severity, count in self.findings_summary.items()
+            },
         }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**self._manifest_payload(), "manifest_hash": self.manifest_hash}
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Run:
@@ -1039,8 +1085,14 @@ class Run:
             ended_at=datetime.fromisoformat(str(data["ended_at"])) if data.get("ended_at") else None,
             status=RunStatus(str(data["status"])),
             dataset_result_ids=tuple(data["dataset_result_ids"]),
+            parser_versions={str(key): str(value) for key, value in data["parser_versions"].items()},
+            findings_summary={
+                FindingSeverity(str(severity)): int(count)
+                for severity, count in data["findings_summary"].items()
+            },
         )
         _check_serialized_id(data, "run_id", result.run_id)
+        _check_serialized_manifest_hash(data, result.manifest_hash)
         return result
 
 
@@ -1053,6 +1105,7 @@ class Edition:
     derived_revision_ids: tuple[str, ...] = ()
     generated_artifact_hashes: Mapping[str, str] = field(default_factory=dict)
     edition_id: str = field(init=False)
+    manifest_hash: str = field(init=False)
     schema_version: ClassVar[int] = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -1095,8 +1148,9 @@ class Edition:
                 },
             ),
         )
+        object.__setattr__(self, "manifest_hash", _manifest_hash(self._manifest_payload()))
 
-    def to_dict(self) -> dict[str, Any]:
+    def _manifest_payload(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "record_type": "edition",
@@ -1108,6 +1162,9 @@ class Edition:
             "derived_revision_ids": list(self.derived_revision_ids),
             "generated_artifact_hashes": dict(self.generated_artifact_hashes),
         }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**self._manifest_payload(), "manifest_hash": self.manifest_hash}
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Edition:
@@ -1121,6 +1178,7 @@ class Edition:
             generated_artifact_hashes=data["generated_artifact_hashes"],
         )
         _check_serialized_id(data, "edition_id", result.edition_id)
+        _check_serialized_manifest_hash(data, result.manifest_hash)
         return result
 
 
