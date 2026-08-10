@@ -98,6 +98,45 @@ def test_import_unknown_column_hard_fails(history_env: Path, patched_db: Path) -
         import_history()
 
 
+def test_india_mandi_roundtrips_through_history(
+    history_env: Path, patched_db: Path
+) -> None:
+    """India is snapshot-only and MUST stay in the round-trip set.
+
+    The data.gov.in resource serves the current day only — its
+    arrival_date filter is ignored upstream — so the committed CSV is the
+    single record of India's history. Drop this table from HISTORY_TABLES
+    and every CI fetch is discarded at the end of the run, leaving India
+    permanently unable to build a series (#155).
+    """
+    assert "india_domestic_prices" in history.HISTORY_TABLES
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT OR REPLACE INTO india_domestic_prices "
+        "(Date, commodity, Close, Unit) VALUES (?, ?, ?, ?)",
+        ("2026-08-10", "Soybean (Mandi MP)", 66_875.0, "INR/MT"),
+    )
+    conn.commit()
+    conn.close()
+
+    export_history()
+    assert (history_env / "india_domestic_prices.csv").exists()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM india_domestic_prices")
+    conn.commit()
+    conn.close()
+
+    import_history()
+    conn = sqlite3.connect(str(patched_db))
+    rows = conn.execute(
+        "SELECT Date, commodity, Close FROM india_domestic_prices"
+    ).fetchall()
+    conn.close()
+    assert rows == [("2026-08-10", "Soybean (Mandi MP)", 66_875.0)]
+
+
 def test_history_tables_all_exist(history_env: Path, patched_db: Path) -> None:
     """Every table in HISTORY_TABLES must exist in the schema (guards typos)."""
     conn = sqlite3.connect(str(patched_db))
