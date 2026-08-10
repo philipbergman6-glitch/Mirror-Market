@@ -74,13 +74,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/ci_layer_alert.py
 
+      - name: Generate static dashboard
+        run: python scripts/generate_html.py
+
+      # main.py already exported history, but the briefing is written to the
+      # DB by generate_html.py (main.py never generates one) — so today's row
+      # lands *after* that export. Without this second pass the briefings CSV
+      # would never gain a row and every briefing would die with the runner,
+      # which is the whole loss the table was added to prevent. The export is
+      # idempotent and its empty/shrink/column guards make a re-run safe.
+      - name: Export history after briefing
+        if: ${{ !cancelled() }}
+        run: python -c "from pipeline.history import export_history; export_history()"
+
       # Snapshot-only sources (AgRural, SAFEX, forward curve, CONAB,
-      # inspections, Gulf bids) have no upstream history — the committed
-      # CSVs under data/history/ are the persistence layer. main.py seeds
-      # the empty runner DB from them at start and re-exports at end.
+      # inspections, Gulf bids, briefings) have no upstream history — the
+      # committed CSVs under data/history/ are the persistence layer. main.py
+      # seeds the empty runner DB from them at start and re-exports at end.
       # [skip ci] prevents the data commit from retriggering workflows.
+      # !cancelled() because this step now runs after dashboard generation: a
+      # failed dashboard build must not also cost us the day's data.
       - name: Commit history snapshots
-        if: github.ref == 'refs/heads/main'
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -90,9 +105,6 @@ jobs:
             git pull --rebase origin main
             git push origin main
           fi
-
-      - name: Generate static dashboard
-        run: python scripts/generate_html.py
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
