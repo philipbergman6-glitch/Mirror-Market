@@ -20,6 +20,7 @@ import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol, TypeVar, runtime_checkable
 
@@ -29,8 +30,10 @@ from trust.domain import (
     DatasetResult,
     Edition,
     Finding,
+    ObservationIdentity,
     ObservationRevision,
     Promotion,
+    QualityState,
     RawArtifact,
     Run,
 )
@@ -68,6 +71,10 @@ class ArtifactRetentionError(TrustRepositoryError):
     """Raw artifact content contradicts its dataset retention contract."""
 
 
+class SupersessionCycleError(TrustRepositoryError):
+    """An observation supersession link would create a cycle."""
+
+
 class VersionedRecord(Protocol):
     """Structural interface implemented by canonical durable domain records."""
 
@@ -97,6 +104,18 @@ class TrustRepository(Protocol):
 
     def read_artifact(self, artifact_id: str) -> RawArtifact | None: ...
 
+    def append_observation_revision(self, revision: ObservationRevision) -> None: ...
+
+    def observation_revisions(self, identity: ObservationIdentity) -> tuple[ObservationRevision, ...]: ...
+
+    def current_accepted_revision(self, identity: ObservationIdentity) -> ObservationRevision | None: ...
+
+    def revision_effective_at(
+        self,
+        identity: ObservationIdentity,
+        requested_at: datetime,
+    ) -> ObservationRevision | None: ...
+
     def replace_current_edition(self, promotion: Promotion) -> None: ...
 
     def current_edition(self) -> Promotion | None: ...
@@ -107,6 +126,13 @@ class _RecordLayout:
     directory: tuple[str, ...]
     id_field: str
     id_prefix: str
+
+
+@dataclass(frozen=True)
+class _SupersessionNode:
+    observation_id: object
+    ingested_at: datetime | None
+    supersedes_revision_id: str | None
 
 
 _RECORD_LAYOUTS = {
@@ -142,6 +168,9 @@ class _DirectoryTrustRepository:
             (self._durable_root / directory).mkdir(exist_ok=True)
 
     def store(self, record: VersionedRecord) -> None:
+        if isinstance(record, ObservationRevision):
+            self.append_observation_revision(record)
+            return
         payload = dict(record.to_dict())
         record_type = payload.get("record_type")
         if not isinstance(record_type, str) or record_type not in _RECORD_LAYOUTS:
@@ -153,6 +182,9 @@ class _DirectoryTrustRepository:
             raise RepositoryFormatError(f"invalid canonical {record_type} record") from exc
         if self._serialize(canonical_record.to_dict()) != self._serialize(payload):
             raise RepositoryFormatError(f"non-canonical {record_type} serialization")
+        if isinstance(canonical_record, ObservationRevision):
+            self.append_observation_revision(canonical_record)
+            return
         layout = _RECORD_LAYOUTS[record_type]
         record_id = self._record_id(payload, layout)
         contents = self._serialize(payload)
@@ -167,6 +199,11 @@ class _DirectoryTrustRepository:
             raise RepositoryFormatError(f"unsupported record decoder: {decoder!r}")
         layout = _RECORD_LAYOUTS[record_type]
         self._validate_identifier(record_id, layout.id_prefix)
+        if record_type == "observation-revision":
+            revision = self._read_observation_revision(record_id)
+            if revision is None:
+                return None
+            return self._observation_ledger(revision.identity).get(record_id)  # type: ignore[return-value]
         path = self._record_path(layout, record_id)
         if not path.exists():
             return None
@@ -216,6 +253,80 @@ class _DirectoryTrustRepository:
         except (KeyError, OSError, TypeError, ValueError) as exc:
             raise RepositoryFormatError(f"invalid durable raw artifact {artifact_id}") from exc
 
+    def append_observation_revision(self, revision: ObservationRevision) -> None:
+        payload = revision.to_dict()
+        layout = _RECORD_LAYOUTS["observation-revision"]
+        record_id = self._record_id(payload, layout)
+        contents = self._serialize(payload)
+
+        with self._exclusive_lock():
+            ledger = self._observation_ledger(revision.identity)
+            existing = self._read_observation_revision(record_id)
+            if existing is not None:
+                if self._serialize(existing.to_dict()) != contents:
+                    raise ImmutableRecordConflict(f"immutable record {record_id} already exists with different data")
+                return
+            if revision.supersedes_revision_id == revision.revision_id:
+                raise SupersessionCycleError("observation supersession cycle cannot include the revision itself")
+            self._validate_schema_version(payload)
+            try:
+                canonical_revision = ObservationRevision.from_dict(payload)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise RepositoryFormatError("invalid canonical observation-revision record") from exc
+            if self._serialize(canonical_revision.to_dict()) != contents:
+                raise RepositoryFormatError("non-canonical observation-revision serialization")
+            supersession_ledger = ledger
+            superseded_id = canonical_revision.supersedes_revision_id
+            if superseded_id is not None and superseded_id not in supersession_ledger:
+                superseded = self._read_observation_revision(superseded_id)
+                if superseded is not None:
+                    supersession_ledger = {**supersession_ledger, superseded_id: superseded}
+            self._validate_appended_supersession(canonical_revision, supersession_ledger)
+            destination = self._observation_revision_path(canonical_revision)
+            self._store_immutable(destination, contents, f"immutable record {record_id}")
+
+    def observation_revisions(self, identity: ObservationIdentity) -> tuple[ObservationRevision, ...]:
+        revisions = [
+            revision
+            for revision in self._observation_ledger(identity).values()
+            if revision.identity.observation_id == identity.observation_id
+        ]
+        return tuple(sorted(revisions, key=lambda revision: (revision.ingested_at, revision.revision_id)))
+
+    def current_accepted_revision(self, identity: ObservationIdentity) -> ObservationRevision | None:
+        return self._accepted_head(self.observation_revisions(identity))
+
+    def revision_effective_at(
+        self,
+        identity: ObservationIdentity,
+        requested_at: datetime,
+    ) -> ObservationRevision | None:
+        if not isinstance(requested_at, datetime) or requested_at.tzinfo is None or requested_at.utcoffset() is None:
+            raise ValueError("requested_at must be a timezone-aware datetime")
+        instant = requested_at.astimezone(timezone.utc)
+        revisions = tuple(
+            revision for revision in self.observation_revisions(identity) if revision.ingested_at <= instant
+        )
+        return self._accepted_head(revisions)
+
+    @staticmethod
+    def _accepted_head(revisions: tuple[ObservationRevision, ...]) -> ObservationRevision | None:
+        superseded_ids = {
+            revision.supersedes_revision_id
+            for revision in revisions
+            if revision.quality_state is QualityState.ACCEPTED
+            and revision.public_eligible
+            and revision.supersedes_revision_id is not None
+        }
+        eligible = [
+            revision
+            for revision in revisions
+            if revision.quality_state is QualityState.ACCEPTED
+            and revision.public_eligible
+            and revision.revision_id not in superseded_ids
+        ]
+        return eligible[-1] if eligible else None
+
     def replace_current_edition(self, promotion: Promotion) -> None:
         payload = promotion.to_dict()
         self._validate_schema_version(payload)
@@ -253,6 +364,190 @@ class _DirectoryTrustRepository:
         directory = self._durable_root.joinpath(*layout.directory)
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{record_id}.json"
+
+    def _observation_partition(self, identity: ObservationIdentity) -> Path:
+        return self._durable_root / "observations" / identity.dataset_id / str(identity.effective_date.year)
+
+    def _observation_revision_path(self, revision: ObservationRevision) -> Path:
+        directory = self._observation_partition(revision.identity)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{revision.revision_id}.json"
+
+    def _observation_revision_paths(self, revision_id: str) -> tuple[Path, ...]:
+        observations_root = self._durable_root / "observations"
+        legacy_path = observations_root / f"{revision_id}.json"
+        paths = [legacy_path] if legacy_path.exists() else []
+        paths.extend(observations_root.glob(f"*/*/{revision_id}.json"))
+        return tuple(sorted(paths))
+
+    def _read_observation_revision(self, revision_id: str) -> ObservationRevision | None:
+        paths = self._observation_revision_paths(revision_id)
+        if not paths:
+            return None
+        if len(paths) > 1:
+            raise RepositoryFormatError(f"duplicate durable observation revision {revision_id}")
+        path = paths[0]
+        payload = self._read_payload(path)
+        if payload.get("record_type") != "observation-revision":
+            raise RepositoryFormatError(f"record {path.name} is not an observation-revision")
+        if payload.get("revision_id") != path.stem:
+            raise RepositoryFormatError(f"record {path.name} contradicts its durable identifier")
+        revision = self._decode_observation_revision(path, payload)
+        self._validate_observation_partition(path, revision)
+        return revision
+
+    def _observation_ledger(self, identity: ObservationIdentity) -> dict[str, ObservationRevision]:
+        serialized: dict[str, Mapping[str, Any]] = {}
+        paths: dict[str, Path] = {}
+        observations_root = self._durable_root / "observations"
+        revision_paths = (
+            *observations_root.glob("rev_*.json"),
+            *self._observation_partition(identity).glob("rev_*.json"),
+        )
+        for path in sorted(revision_paths):
+            payload = self._read_payload(path)
+            if payload.get("record_type") != "observation-revision":
+                raise RepositoryFormatError(f"record {path.name} is not an observation-revision")
+            revision_id = payload.get("revision_id")
+            if revision_id != path.stem:
+                raise RepositoryFormatError(f"record {path.name} contradicts its durable identifier")
+            if revision_id in serialized:
+                raise RepositoryFormatError(f"duplicate durable observation revision {revision_id}")
+            serialized[path.stem] = payload
+            paths[path.stem] = path
+
+        self._validate_serialized_supersession_graph(serialized)
+        ledger: dict[str, ObservationRevision] = {}
+        for revision_id, serialized_payload in serialized.items():
+            path = paths[revision_id]
+            revision = self._decode_observation_revision(path, serialized_payload)
+            self._validate_observation_partition(path, revision)
+            ledger[revision.revision_id] = revision
+        return ledger
+
+    def _decode_observation_revision(
+        self,
+        path: Path,
+        payload: Mapping[str, Any],
+    ) -> ObservationRevision:
+        try:
+            revision = ObservationRevision.from_dict(payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RepositoryFormatError(f"invalid durable observation-revision record {path.name}") from exc
+        if self._serialize(revision.to_dict()) != self._serialize(payload):
+            raise RepositoryFormatError(f"non-canonical durable observation-revision record {path.name}")
+        return revision
+
+    def _validate_observation_partition(self, path: Path, revision: ObservationRevision) -> None:
+        observations_root = self._durable_root / "observations"
+        if path.parent != observations_root and (
+            path.parent.parent.name != revision.identity.dataset_id
+            or path.parent.name != str(revision.identity.effective_date.year)
+        ):
+            raise RepositoryFormatError(
+                f"observation revision {revision.revision_id} contradicts its durable partition"
+            )
+
+    @staticmethod
+    def _validate_serialized_supersession_graph(records: Mapping[str, Mapping[str, Any]]) -> None:
+        nodes: dict[str, _SupersessionNode] = {}
+        for revision_id, payload in records.items():
+            superseded_id = payload.get("supersedes_revision_id")
+            if superseded_id is not None and not isinstance(superseded_id, str):
+                raise RepositoryFormatError("superseded revision identifier is invalid")
+            try:
+                ingested_at = datetime.fromisoformat(str(payload.get("ingested_at")))
+            except ValueError:
+                ingested_at = None
+            nodes[revision_id] = _SupersessionNode(
+                observation_id=payload.get("observation_id"),
+                ingested_at=ingested_at,
+                supersedes_revision_id=superseded_id,
+            )
+        _DirectoryTrustRepository._validate_complete_supersession_graph(nodes)
+
+    @staticmethod
+    def _validate_complete_supersession_graph(nodes: Mapping[str, _SupersessionNode]) -> None:
+        links: dict[str, str] = {}
+        edges: list[tuple[_SupersessionNode, _SupersessionNode]] = []
+        for revision_id, node in nodes.items():
+            superseded_id = node.supersedes_revision_id
+            if superseded_id is None:
+                continue
+            prior = _DirectoryTrustRepository._validated_supersession_prior(node, nodes.get(superseded_id))
+            links[revision_id] = superseded_id
+            edges.append((node, prior))
+        _DirectoryTrustRepository._reject_supersession_cycles(links)
+        for node, prior in edges:
+            _DirectoryTrustRepository._validate_supersession_time(node, prior)
+
+    @staticmethod
+    def _validate_appended_supersession(
+        revision: ObservationRevision,
+        ledger: Mapping[str, ObservationRevision],
+    ) -> None:
+        superseded_id = revision.supersedes_revision_id
+        if superseded_id is None:
+            return
+        prior = ledger.get(superseded_id)
+        node = _DirectoryTrustRepository._supersession_node(revision)
+        prior_node = _DirectoryTrustRepository._validated_supersession_prior(
+            node,
+            _DirectoryTrustRepository._supersession_node(prior) if prior is not None else None,
+        )
+        _DirectoryTrustRepository._validate_supersession_time(node, prior_node)
+
+    @staticmethod
+    def _supersession_node(revision: ObservationRevision) -> _SupersessionNode:
+        return _SupersessionNode(
+            observation_id=revision.identity.observation_id,
+            ingested_at=revision.ingested_at,
+            supersedes_revision_id=revision.supersedes_revision_id,
+        )
+
+    @staticmethod
+    def _validated_supersession_prior(
+        node: _SupersessionNode,
+        prior: _SupersessionNode | None,
+    ) -> _SupersessionNode:
+        superseded_id = node.supersedes_revision_id
+        if superseded_id is None:  # pragma: no cover - callers only validate linked nodes
+            raise AssertionError("supersession validation requires a linked node")
+        if prior is None:
+            raise RepositoryFormatError(f"superseded revision {superseded_id} is not in the ledger")
+        if prior.observation_id != node.observation_id:
+            raise RepositoryFormatError("a revision can only supersede the same observation identity")
+        return prior
+
+    @staticmethod
+    def _validate_supersession_time(node: _SupersessionNode, prior: _SupersessionNode) -> None:
+        if (
+            node.ingested_at is not None
+            and node.ingested_at.tzinfo is not None
+            and node.ingested_at.utcoffset() is not None
+            and prior.ingested_at is not None
+            and prior.ingested_at.tzinfo is not None
+            and prior.ingested_at.utcoffset() is not None
+            and node.ingested_at < prior.ingested_at
+        ):
+            raise RepositoryFormatError("a successor revision cannot predate the revision it supersedes")
+
+    @staticmethod
+    def _reject_supersession_cycles(links: Mapping[str, str]) -> None:
+        complete: set[str] = set()
+        for revision_id in links:
+            if revision_id in complete:
+                continue
+            path: list[str] = []
+            visiting: set[str] = set()
+            cursor = revision_id
+            while cursor in links and cursor not in complete:
+                if cursor in visiting:
+                    raise SupersessionCycleError("observation supersession cycle detected")
+                visiting.add(cursor)
+                path.append(cursor)
+                cursor = links[cursor]
+            complete.update(path)
 
     @staticmethod
     def _validate_artifact_policy(reference: ArtifactReference, contract: DatasetContract) -> None:
@@ -395,6 +690,7 @@ __all__ = [
     "GitDirectoryTrustRepository",
     "ImmutableRecordConflict",
     "RepositoryFormatError",
+    "SupersessionCycleError",
     "TemporaryDirectoryTrustRepository",
     "TrustRepository",
     "TrustRepositoryError",
