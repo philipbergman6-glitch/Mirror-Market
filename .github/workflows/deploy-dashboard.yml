@@ -102,7 +102,12 @@ jobs:
           git add data/history
           if ! git diff --staged --quiet; then
             git commit -m "chore(data): daily history snapshot [skip ci]"
-            git pull --rebase origin main
+            # --autostash: this step now runs after dashboard generation, so
+            # the freshly written (tracked) docs/index.html is an unstaged
+            # change and a plain `pull --rebase` would abort on the dirty
+            # tree. Autostash sets it aside and restores it, keeping the new
+            # dashboard in place for the Pages artifact upload below.
+            git pull --rebase --autostash origin main
             git push origin main
           fi
 
