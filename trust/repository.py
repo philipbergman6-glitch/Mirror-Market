@@ -4,12 +4,13 @@ Callers provide canonical trust-domain records.  The adapters own collection
 layout, deterministic JSON serialization, schema validation, locking, and
 atomic file replacement; no caller constructs a durable storage path.
 
-Raw artifact content is deliberately not supported here.  DT-06 extends this
-module with the rights-aware, content-addressed artifact behavior.
+Raw artifact metadata and permitted content share the same seam.  Rights and
+retention policy are checked before content-addressed payloads are written.
 """
 
 from __future__ import annotations
 
+import base64
 import fcntl
 import json
 import os
@@ -23,14 +24,17 @@ from pathlib import Path
 from typing import Any, BinaryIO, Protocol, TypeVar, runtime_checkable
 
 from trust.domain import (
+    ArtifactReference,
     Correction,
     DatasetResult,
     Edition,
     Finding,
     ObservationRevision,
     Promotion,
+    RawArtifact,
     Run,
 )
+from trust.registry import DatasetContract, RawRetention, RightsAction
 
 _REPOSITORY_DIRECTORIES = (
     "registry",
@@ -60,6 +64,10 @@ class CurrentEditionConflict(TrustRepositoryError):
     """A pointer update was based on a different current edition."""
 
 
+class ArtifactRetentionError(TrustRepositoryError):
+    """Raw artifact content contradicts its dataset retention contract."""
+
+
 class VersionedRecord(Protocol):
     """Structural interface implemented by canonical durable domain records."""
 
@@ -84,6 +92,10 @@ class TrustRepository(Protocol):
     def store(self, record: VersionedRecord) -> None: ...
 
     def read(self, decoder: RecordDecoder[RecordT], record_id: str) -> RecordT | None: ...
+
+    def store_artifact(self, artifact: RawArtifact, contract: DatasetContract) -> ArtifactReference: ...
+
+    def read_artifact(self, artifact_id: str) -> RawArtifact | None: ...
 
     def replace_current_edition(self, promotion: Promotion) -> None: ...
 
@@ -147,11 +159,7 @@ class _DirectoryTrustRepository:
         destination = self._record_path(layout, record_id)
 
         with self._exclusive_lock():
-            if destination.exists():
-                if destination.read_bytes() == contents:
-                    return
-                raise ImmutableRecordConflict(f"immutable record {record_id} already exists with different data")
-            self._atomic_replace(destination, contents)
+            self._store_immutable(destination, contents, f"immutable record {record_id}")
 
     def read(self, decoder: RecordDecoder[RecordT], record_id: str) -> RecordT | None:
         record_type = _DECODER_RECORD_TYPES.get(decoder)
@@ -171,6 +179,42 @@ class _DirectoryTrustRepository:
             return decoder.from_dict(payload)
         except (KeyError, TypeError, ValueError) as exc:
             raise RepositoryFormatError(f"invalid durable {record_type} record") from exc
+
+    def store_artifact(self, artifact: RawArtifact, contract: DatasetContract) -> ArtifactReference:
+        reference = artifact.reference
+        self._validate_artifact_policy(reference, contract)
+        metadata = artifact.to_dict()
+        metadata["content_base64"] = None
+        metadata_contents = self._serialize(metadata)
+        metadata_path = self._artifact_metadata_path(reference.artifact_id)
+
+        with self._exclusive_lock():
+            if artifact.content is not None:
+                payload_path = self._artifact_payload_path(reference.content_hash)
+                self._store_immutable(payload_path, artifact.content, f"content hash {reference.content_hash}")
+            self._store_immutable(
+                metadata_path,
+                metadata_contents,
+                f"immutable artifact metadata {reference.artifact_id}",
+            )
+        return reference
+
+    def read_artifact(self, artifact_id: str) -> RawArtifact | None:
+        self._validate_identifier(artifact_id, "art")
+        metadata_path = self._artifact_metadata_path(artifact_id)
+        if not metadata_path.exists():
+            return None
+        metadata = self._read_payload(metadata_path)
+        if metadata.get("record_type") != "raw-artifact" or metadata.get("artifact_id") != artifact_id:
+            raise RepositoryFormatError(f"artifact metadata {artifact_id} contradicts its durable identifier")
+        try:
+            reference = ArtifactReference.from_dict(metadata["reference"])
+            if reference.content_retained:
+                content = self._artifact_payload_path(reference.content_hash).read_bytes()
+                metadata["content_base64"] = base64.b64encode(content).decode("ascii")
+            return RawArtifact.from_dict(metadata)
+        except (KeyError, OSError, TypeError, ValueError) as exc:
+            raise RepositoryFormatError(f"invalid durable raw artifact {artifact_id}") from exc
 
     def replace_current_edition(self, promotion: Promotion) -> None:
         payload = promotion.to_dict()
@@ -209,6 +253,40 @@ class _DirectoryTrustRepository:
         directory = self._durable_root.joinpath(*layout.directory)
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{record_id}.json"
+
+    @staticmethod
+    def _validate_artifact_policy(reference: ArtifactReference, contract: DatasetContract) -> None:
+        dataset = contract.dataset
+        if (
+            reference.source_id != dataset.source_id
+            or reference.dataset_id != dataset.dataset_id
+            or reference.dataset_key != dataset.key
+        ):
+            raise ArtifactRetentionError("raw artifact does not belong to the supplied dataset contract")
+        rights = contract.rights
+        if reference.content_retained and (
+            contract.raw_retention is not RawRetention.CONTENT
+            or rights is None
+            or not rights.allows(RightsAction.RAW_CONTENT_RETENTION)
+        ):
+            raise ArtifactRetentionError("dataset policy does not allow raw content retention")
+
+    def _artifact_metadata_path(self, artifact_id: str) -> Path:
+        directory = self._durable_root / "artifacts" / "metadata"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{artifact_id}.json"
+
+    def _artifact_payload_path(self, content_hash: str) -> Path:
+        directory = self._durable_root / "artifacts" / "payloads" / "sha256"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / content_hash
+
+    def _store_immutable(self, destination: Path, contents: bytes, label: str) -> None:
+        if destination.exists():
+            if destination.read_bytes() == contents:
+                return
+            raise ImmutableRecordConflict(f"{label} already exists with different data")
+        self._atomic_replace(destination, contents)
 
     @staticmethod
     def _record_id(payload: Mapping[str, Any], layout: _RecordLayout) -> str:
@@ -312,6 +390,7 @@ def _sync_directory(directory: Path) -> None:
 
 
 __all__ = [
+    "ArtifactRetentionError",
     "CurrentEditionConflict",
     "GitDirectoryTrustRepository",
     "ImmutableRecordConflict",
