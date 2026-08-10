@@ -112,6 +112,106 @@ def test_history_tables_all_exist(history_env: Path, patched_db: Path) -> None:
     assert not missing, f"HISTORY_TABLES references unknown tables: {missing}"
 
 
+def test_export_shrinking_table_leaves_csv_untouched(
+    history_env: Path, patched_db: Path
+) -> None:
+    """A DB behind the committed CSV must not truncate it.
+
+    The empty-table guard misses this: a local run without import_history()
+    first has *some* rows, just fewer than the CSV.
+    """
+    _insert_spot(patched_db, "2026-07-29", 2500.0)
+    _insert_spot(patched_db, "2026-07-30", 2510.0)
+    export_history()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM brazil_spot_prices WHERE Date = '2026-07-29'")
+    conn.commit()
+    conn.close()
+
+    export_history()
+    csv_text = (history_env / "brazil_spot_prices.csv").read_text()
+    assert "2026-07-29" in csv_text, "shrinking export overwrote committed history"
+
+
+def test_export_shrink_allowed_with_override(
+    history_env: Path, patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MIRROR_HISTORY_ALLOW_SHRINK=1 permits a deliberate prune."""
+    _insert_spot(patched_db, "2026-07-29", 2500.0)
+    _insert_spot(patched_db, "2026-07-30", 2510.0)
+    export_history()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM brazil_spot_prices WHERE Date = '2026-07-29'")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("MIRROR_HISTORY_ALLOW_SHRINK", "1")
+    export_history()
+    csv_text = (history_env / "brazil_spot_prices.csv").read_text()
+    assert "2026-07-29" not in csv_text
+
+
+def test_export_dropped_column_leaves_csv_untouched(
+    history_env: Path, patched_db: Path
+) -> None:
+    """A DB predating a schema column must not drop that column from history.
+
+    CREATE TABLE IF NOT EXISTS never adds columns to an existing table, so an
+    older local DB exports a narrower row set at an unchanged row count — the
+    shrink guard alone would let it through.
+    """
+    history_env.mkdir()
+    (history_env / "safex_prices.csv").write_text(
+        "Date,commodity,Close,Volume,unit,contract\n"
+        "2026-08-07,Soybean (SAFEX),7930.0,151.0,ZAR/MT,AUG26\n"
+    )
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DROP TABLE safex_prices")
+    conn.execute(
+        "CREATE TABLE safex_prices (Date TEXT NOT NULL, commodity TEXT NOT NULL, "
+        "Close REAL, Volume REAL, unit TEXT, PRIMARY KEY (Date, commodity))"
+    )
+    conn.execute(
+        "INSERT INTO safex_prices VALUES "
+        "('2026-08-07', 'Soybean (SAFEX)', 7930.0, 151.0, 'ZAR/MT')"
+    )
+    conn.commit()
+    conn.close()
+
+    export_history()
+    csv_text = (history_env / "safex_prices.csv").read_text()
+    assert "contract" in csv_text, "export dropped a column from committed history"
+
+
+def test_briefings_roundtrip(history_env: Path, patched_db: Path) -> None:
+    """The briefing archive is point-in-time — nothing upstream can rebuild it."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO briefings (briefing_date, text, signals_json, snapshot_json, "
+        "generated_at) VALUES ('2026-08-08', 'body', '[]', '{}', '2026-08-08T12:00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    export_history()
+    assert (history_env / "briefings.csv").exists()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM briefings")
+    conn.commit()
+    conn.close()
+
+    import_history()
+    conn = sqlite3.connect(str(patched_db))
+    try:
+        rows = conn.execute("SELECT briefing_date, text FROM briefings").fetchall()
+    finally:
+        conn.close()
+    assert rows == [("2026-08-08", "body")]
+
+
 # --- forward_curve history schema -------------------------------------------
 
 

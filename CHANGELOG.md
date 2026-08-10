@@ -4,6 +4,73 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — History persistence: briefings, export sales, regression guards (2026-08-10)
+
+Audit of what actually survives the ephemeral CI runner. `HISTORY_TABLES`
+covered 11 of 27 tables; two of the omissions were genuine, unrecoverable
+losses, and `export_history()` could silently truncate good history.
+
+### Two tables added to `HISTORY_TABLES`
+
+* **`briefings`** — written every run by `analysis/briefing/orchestrator.py`
+  and destroyed with the runner. No upstream serves it: a past day's `text`
+  and `snapshot_json` cannot be reconstructed from any source. This was the
+  single largest ongoing data loss in the pipeline.
+* **`export_sales`** — `fetchers/export_sales` requests only the *current*
+  marketing year (`_current_market_year`), so the outgoing year is never
+  re-fetched. At the next rollover (Sep 1 for soybeans) the prior year's
+  weekly series would have disappeared from CI.
+
+Deliberately **not** added: `crop_progress` (NASS re-fetched from 2020),
+`dce_futures` (akshare serves 2005→now), `worldbank_prices` (CMO xlsx serves
+1960→now), `prices`/`cot`/`weather`/`psd`/`currencies`/`usda`/`eia_energy`
+(all self-healing). `nigeria_spot_prices` stays out on the AFEX licence gate.
+
+### Two export regression guards
+
+The existing empty-table guard was not sufficient. Both new checks log an
+error and leave the CSV untouched:
+
+* **Shrink guard** — refuses an export with fewer rows than the committed
+  CSV. Triggered in practice by running `export_history()` from a local DB
+  without `import_history()` first; would have truncated `brazil_estimates`
+  (5970 → 5373), `forward_curve` (486 → 432), `gulf_bids` (107 → 86),
+  `argentina_fob` (27 → 14) and `brazil_spot_prices` (294 → 291).
+* **Column guard** — refuses an export missing a column present in the
+  committed CSV. `CREATE TABLE IF NOT EXISTS` never adds columns to an
+  existing table, so a DB predating a schema change exports narrower rows at
+  an *unchanged row count*, invisible to the shrink guard. Caught
+  `safex_prices.contract` being dropped.
+
+`MIRROR_HISTORY_ALLOW_SHRINK=1` overrides both for a deliberate prune.
+
+Tests: 4 added to `tests/test_history.py` (shrink refused, shrink-with-
+override permitted, dropped column refused, briefings round-trip).
+
+### `tests/test_main_exit_code.py` — three fixture defects found while verifying
+
+The module's docstring says "we don't run the full pipeline (it hits the
+network)", but three things made that untrue:
+
+* **Unstubbed fetchers.** `fetch_afex`, `fetch_magyp_fob`,
+  `fetch_conab_farmgate` and `fetch_mandi_prices` were never patched, so
+  every test in the module made live network calls with retries — the full
+  suite stalled for minutes and its result depended on whether those sites
+  answered. Now stubbed, plus an assertion that every `fetch_*` symbol on
+  `main` is in the patch dict, so the next layer added can't silently
+  reintroduce this. Suite time: minutes (indefinite) → 4s.
+* **Wrong stub semantics.** Those four run through `_run_scraper_layer` with
+  `empty_fails=True` (a daily quote source with zero rows is broken, not
+  quiet), so empty stubs would count as hard failures and trip the
+  systemic-outage backstop. Three now return minimal real-shaped rows;
+  `fetch_mandi_prices` stays empty because Layer 16 sets `empty_fails=False`.
+* **Real history CSVs written from tests.** The fixture patched
+  `STORAGE_DIR`/`DB_PATH` to a tmp dir but not `HISTORY_DIR`, and `run()`
+  ends with `export_history()` — so the tests appended stub rows to the
+  repo's committed `data/history/*.csv`. Now patched to tmp. (The new shrink
+  guard is what surfaced this: it started refusing exports it should never
+  have been asked to make.)
+
 ## Unreleased — Upstream source repairs (2026-05)
 
 Two layers were silently failing on every pipeline run; both are now fixed

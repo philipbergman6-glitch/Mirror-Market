@@ -20,6 +20,27 @@ import pytest
 from pipeline.results import FetchResult
 
 
+def _make_nigeria_spot() -> pd.DataFrame:
+    return pd.DataFrame({"Date": ["2026-01-02"], "price_ngn_mt": [850000.0]})
+
+
+def _make_brazil_spot() -> pd.DataFrame:
+    return pd.DataFrame({"Date": ["2026-01-02"], "price_brl_mt": [2500.0]})
+
+
+def _make_argentina_fob() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": ["2026-01-02"],
+            "product": ["Soybeans"],
+            "position": ["1201.90.00"],
+            "ship_from": ["Up-river"],
+            "ship_to": [None],
+            "price_usd_mt": [420.0],
+        }
+    )
+
+
 @pytest.fixture
 def stub_fetchers(monkeypatch, tmp_path):
     """Replace every fetcher with a no-op that returns the right shape.
@@ -30,6 +51,10 @@ def stub_fetchers(monkeypatch, tmp_path):
     import config
     monkeypatch.setattr(config, "STORAGE_DIR", str(tmp_path))
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "mirror_market.db"))
+    # run() ends with export_history(); without this it writes the stub rows
+    # into the repo's real data/history/ CSVs.
+    monkeypatch.setattr(config, "HISTORY_DIR", str(tmp_path / "history"))
+    monkeypatch.setattr("pipeline.history.HISTORY_DIR", str(tmp_path / "history"))
 
     # Force local SQLite (no Turso)
     monkeypatch.setattr(config, "TURSO_DATABASE_URL", "")
@@ -74,7 +99,27 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_agrural": FetchResult.empty(),
         "fetch_noticias_agricolas": FetchResult.empty(),
         "fetch_gulf_bids": FetchResult.empty(),
+        # These four run through _run_scraper_layer with empty_fails=True
+        # (a daily quote source with zero rows is broken, not quiet), so an
+        # empty stub would count as a hard failure and trip the systemic-
+        # outage backstop. They get minimal real-shaped rows instead.
+        "fetch_magyp_fob": FetchResult.ok({"Argentina FOB": _make_argentina_fob()}),
+        "fetch_afex": FetchResult.ok({"Soybean (AFEX Nigeria)": _make_nigeria_spot()}),
+        "fetch_conab_farmgate": FetchResult.ok(
+            {"Soybean (CONAB Paraná farmgate)": _make_brazil_spot()}
+        ),
+        # Layer 16 sets empty_fails=False — a quiet mandi day is not a failure.
+        "fetch_mandi_prices": FetchResult.empty(),
     }
+    # Every fetcher main.py imports must be stubbed: an unpatched one makes a
+    # real network call (with retries) on every test in this module, which is
+    # what these stubs exist to prevent.
+    unpatched = {
+        name
+        for name in dir(main)
+        if name.startswith("fetch_") and name not in patches
+    }
+    assert not unpatched, f"unstubbed fetchers would hit the network: {sorted(unpatched)}"
     for name, retval in patches.items():
         monkeypatch.setattr(main, name, mock.Mock(return_value=retval))
 
