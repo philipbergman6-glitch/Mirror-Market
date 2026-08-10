@@ -34,7 +34,12 @@ Registering `briefings` in `HISTORY_TABLES` was necessary but not sufficient.
 `save_briefing()`. In `deploy-dashboard.yml` that step ran *after* both
 `main.py` (which calls `export_history()`) and the commit step — so today's
 briefing was written to a DB that was already exported and about to be
-destroyed. The CSV would have stayed frozen at its seed rows indefinitely.
+destroyed, and the CSV would never have gained a row.
+
+No seed CSV ships here: `data/history/` is written only by the daily deploy
+workflow (enforced by the `history-guard` job in `ci.yml`), so
+`briefings.csv` and `export_sales.csv` are created on the first run after
+merge.
 
 Dashboard generation now runs before the data commit, followed by a second
 `export_history()` pass that picks up the briefing. The commit step gains
