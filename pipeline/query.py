@@ -229,6 +229,14 @@ def read_brazil_spot(commodity: str | None = None) -> pd.DataFrame:
     return _read_table("brazil_spot_prices", "commodity", commodity)
 
 
+def read_nigeria_spot(commodity: str | None = None) -> pd.DataFrame:
+    """Read AFEX Nigeria soybean reference prices (NGN/MT) from SQLite.
+
+    Reference prices, not settlements — see fetchers/afex.py.
+    """
+    return _read_table("nigeria_spot_prices", "commodity", commodity)
+
+
 def read_safex(commodity: str | None = None) -> pd.DataFrame:
     """Read JSE SAFEX South Africa settlement prices from SQLite."""
     return _read_table("safex_prices", "commodity", commodity)
