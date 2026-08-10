@@ -596,8 +596,11 @@ def demand_analysis() -> dict:
     dce_comparison = {}
     prices = _load_soy_prices()
 
+    # No.2 (B0) is the imported/GMO crush bean — the import-parity counterpart
+    # to CBOT. No.1 (A0) is the domestic non-GMO food bean and is deliberately
+    # left unmapped: its premium over CBOT is a food-grade spread (#152).
     dce_map = {
-        "DCE Soybean": "Soybeans",
+        "DCE Soybean No.2": "Soybeans",
         "DCE Soybean Meal": "Soybean Meal",
         "DCE Soybean Oil": "Soybean Oil",
     }

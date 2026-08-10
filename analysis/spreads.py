@@ -29,7 +29,11 @@ CRUSH_OIL_YIELD_MT = CRUSH_OIL_FACTOR / _BUSHEL_LBS               # ≈0.183 MT 
 CRUSH_MEAL_YIELD_MT = (CRUSH_MEAL_FACTOR * 20.0) / _BUSHEL_LBS    # ≈0.733 MT meal/MT beans
 
 # DCE continuous main-contract series names as stored in `dce_futures`.
-_DCE_BEAN = "DCE Soybean"
+# The bean leg is No.2 (B0), the imported/GMO deliverable bean Chinese
+# crushers actually crush — NOT No.1 (A0), the domestic non-GMO food bean,
+# whose ~700-1,100 CNY/MT food premium drove the margin ~1,000 CNY/MT
+# negative before this was corrected (#152).
+_DCE_BEAN = "DCE Soybean No.2"
 _DCE_OIL = "DCE Soybean Oil"
 _DCE_MEAL = "DCE Soybean Meal"
 
@@ -106,8 +110,8 @@ def compute_dce_crush_margin(dce_df: pd.DataFrame) -> pd.DataFrame:
     dce_df : pd.DataFrame
         Long-format DCE data as returned by `read_dce_futures()`, with
         'commodity', 'Date' and 'Close' columns containing the
-        'DCE Soybean', 'DCE Soybean Oil' and 'DCE Soybean Meal' series
-        (CNY/MT).
+        'DCE Soybean No.2', 'DCE Soybean Oil' and 'DCE Soybean Meal'
+        series (CNY/MT).
 
     Returns
     -------

@@ -244,7 +244,7 @@ def _populate_full_briefing_fixtures(patched_db):
         "Open_Interest": [50000.0] * 5,
         "Settle": [4510.0] * 5,
     })
-    store.save_dce_futures_data("DCE Soybean", dce)
+    store.save_dce_futures_data("DCE Soybean No.2", dce)
 
     fc = pd.DataFrame({
         "contract_month": ["2024-11", "2025-01", "2025-03"],

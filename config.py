@@ -49,7 +49,7 @@ LAYER_MIN_KEYS = {
     "weather": 14,     # of 18 regions
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 10 commodities
-    "dce": 3,          # of 7 contracts (5 DCE + 2 CZCE rapeseed)
+    "dce": 3,          # of 8 contracts (6 DCE + 2 CZCE rapeseed)
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
     "forward_curve": 7,  # of 9 commodities
@@ -329,8 +329,15 @@ WORLDBANK_PRICES_URL = (
 # Layer 9 — DCE (Dalian Commodity Exchange) futures via AKShare (no API key)
 # China is the world's largest soybean importer; DCE is the main exchange
 # ---------------------------------------------------------------------------
+# Two DCE bean contracts, and they are NOT interchangeable. No.1 (A) is the
+# domestic non-GMO, food-grade bean (tofu/soymilk) and carries a ~700-1,100
+# CNY/MT food premium; Chinese crushers do not crush it. No.2 (B) is the
+# imported/GMO deliverable bean — the crush bean, and the only honest
+# counterpart to CBOT for an import-parity comparison. The board crush and
+# the vs-CBOT premium both key off No.2 (see analysis/spreads.py:_DCE_BEAN).
 DCE_CONTRACTS = {
-    "DCE Soybean":      "A0",   # Soybean No.1 continuous
+    "DCE Soybean No.1": "A0",   # Soybean No.1 continuous — domestic non-GMO food bean
+    "DCE Soybean No.2": "B0",   # Soybean No.2 continuous — imported/GMO crush bean
     "DCE Soybean Meal": "M0",   # Soybean Meal continuous
     "DCE Soybean Oil":  "Y0",   # Soybean Oil continuous
     "DCE Palm Oil":     "P0",   # Palm Oil continuous
