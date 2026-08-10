@@ -2,8 +2,21 @@ name: Update Dashboard
 
 on:
   schedule:
-    # Weekdays at 12:00 UTC (after US market open, captures prior day settlement)
-    - cron: '0 12 * * 1-5'
+    # Weekdays, nominally 19:00 UTC. GitHub's scheduler is best-effort and
+    # runs late: across 30 observed scheduled runs the delay was +64 to
+    # +298 min (median +138), so the real landing window is ~20:00–24:00 UTC.
+    # That window is what this time is chosen for, not the cron string:
+    #   CBOT settles 18:15 UTC (CDT) / 19:15 UTC (CST)  -> same-day settled
+    #   Argentina MAGyP FOB publishes after ~15:05 UTC  -> same-day
+    #   AMS Gulf bids (report 3147) ~18:48 UTC          -> same-day
+    # Brazil CEPEA publishes after 21:01 UTC, so it is picked up on the
+    # later landings only and stays D-1 in the worst case; a slot late
+    # enough to guarantee it would routinely spill past UTC midnight.
+    # The previous '0 12' landed ~14:15 UTC, ~4 h BEFORE the CBOT
+    # settlement, and published an unfinished bar as the day's close.
+    # Correctness does not depend on this time: fetchers/_settlement.py
+    # drops the current session's bar on any run that lands early.
+    - cron: '0 19 * * 1-5'
   workflow_dispatch: {}
   push:
     branches: [main]

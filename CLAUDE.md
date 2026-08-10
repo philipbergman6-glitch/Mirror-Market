@@ -179,6 +179,16 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Known Limitations
 
+### Settlement guard — no unsettled bars (Layers 1, 7, 11)
+
+yfinance emits a row for the session **in progress**, so a run landing mid-session used to store an unfinished bar as the day's close (observed: ZS=F 2026-08-07 stored at 1181.25 against a 1156.50 settlement — 2.1% wrong, well under `pipeline/clean.py`'s >10% warning). It self-healed on the next run, but the dashboard published on day D carried day D's partial print.
+
+`fetchers/_settlement.py` drops the current session's row until the venue has settled, applied at `fetchers.yfinance.fetch_one` — the single choke point for every yfinance frame (Layer 1 prices, Layer 7 currencies, Layer 11 forward-curve contracts, which took `Close.iloc[-1]` off the same partial bar). The cutoff is `SETTLEMENT_CUTOFF_LOCAL = (14, 30)` in `SETTLEMENT_TIMEZONE = "America/Chicago"` — one time clearing CBOT 13:15 CT, CME livestock/palm 13:05 CT, ICE cotton 13:20 CT and sugar 12:00 CT, expressed in venue-local time so US DST is handled by zoneinfo. A dropped bar logs a WARNING; the missing day is visible, and today's close lands on the next run.
+
+Consequence: a run landing before the cutoff publishes a dashboard whose newest price row is D−1. That is the intended trade — a gap over a wrong number.
+
+The daily schedule (`.github/workflows/deploy-dashboard.yml`) targets a landing window of ~20:00–24:00 UTC (cron `0 19`, plus GitHub's observed +64 to +298 min scheduler delay), which is after CBOT settlement year-round and picks up Argentina MAGyP and AMS Gulf bids same-day. Brazil CEPEA publishes after 21:01 UTC and is caught on later landings only. Correctness does not depend on the cron — the guard does.
+
 ### Front-month roll-day discontinuities (Layer 1)
 
 `fetchers/yfinance.py` pulls front-month commodity tickers (`ZS=F`, `ZL=F`, etc.). yfinance silently switches the underlying contract as expirations approach, which introduces artificial price gaps on roll days. These gaps do not represent economic moves.
