@@ -4,6 +4,84 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — History persistence: briefings, export sales, regression guards (2026-08-10)
+
+Audit of what actually survives the ephemeral CI runner. `HISTORY_TABLES`
+covered 11 of 26 tables; two of the omissions were genuine, unrecoverable
+losses, and `export_history()` could silently truncate good history.
+
+### Two tables added to `HISTORY_TABLES`
+
+* **`briefings`** — written every run by `analysis/briefing/orchestrator.py`
+  and destroyed with the runner. No upstream serves it: a past day's `text`
+  and `snapshot_json` cannot be reconstructed from any source. This was the
+  single largest ongoing data loss in the pipeline.
+* **`export_sales`** — `fetchers/export_sales` requests only the *current*
+  marketing year (`_current_market_year`), so the outgoing year is never
+  re-fetched. At the next rollover (Sep 1 for soybeans) the prior year's
+  weekly series would have disappeared from CI.
+
+Deliberately **not** added: `crop_progress` (NASS re-fetched from 2020),
+`dce_futures` (akshare serves 2005→now), `worldbank_prices` (CMO xlsx serves
+1960→now), `prices`/`cot`/`weather`/`psd`/`currencies`/`usda`/`eia_energy`
+(all self-healing).
+
+### Workflow ordering — without this the briefings table stays empty forever
+
+Registering `briefings` in `HISTORY_TABLES` was necessary but not sufficient.
+`main.py` never generates a briefing; `scripts/generate_html.py` does, via
+`generate_briefing()` → `generate_briefing_data(archive=True)` →
+`save_briefing()`. In `deploy-dashboard.yml` that step ran *after* both
+`main.py` (which calls `export_history()`) and the commit step — so today's
+briefing was written to a DB that was already exported and about to be
+destroyed, and the CSV would never have gained a row.
+
+No seed CSV ships here: `data/history/` is written only by the daily deploy
+workflow (enforced by the `history-guard` job in `ci.yml`), so
+`briefings.csv` and `export_sales.csv` are created on the first run after
+merge.
+
+Dashboard generation now runs before the data commit, followed by a second
+`export_history()` pass that picks up the briefing. The commit step gains
+`!cancelled()` so a failed dashboard build no longer costs the day's data
+as well. The export is idempotent and its guards make the re-run safe.
+
+### Two export regression guards
+
+The existing empty-table guard was not sufficient. Both new checks log an
+error and leave the CSV untouched:
+
+* **Shrink guard** — refuses an export with fewer rows than the committed
+  CSV. Triggered in practice by running `export_history()` from a local DB
+  without `import_history()` first; would have truncated `brazil_estimates`
+  (5970 → 5373), `forward_curve` (486 → 432), `gulf_bids` (107 → 86),
+  `argentina_fob` (27 → 14) and `brazil_spot_prices` (294 → 291).
+* **Column guard** — refuses an export missing a column present in the
+  committed CSV. `CREATE TABLE IF NOT EXISTS` never adds columns to an
+  existing table, so a DB predating a schema change exports narrower rows at
+  an *unchanged row count*, invisible to the shrink guard. Caught
+  `safex_prices.contract` being dropped.
+
+`MIRROR_HISTORY_ALLOW_SHRINK=1` overrides both for a deliberate prune.
+
+Tests: 4 added to `tests/test_history.py` (shrink refused, shrink-with-
+override permitted, dropped column refused, briefings round-trip).
+
+### `tests/test_main_exit_code.py` — two fixture defects found while verifying
+
+* **Real history CSVs written from tests.** The fixture patched
+  `STORAGE_DIR`/`DB_PATH` to a tmp dir but not `HISTORY_DIR`, and `run()`
+  ends with `export_history()` — so every run of this module appended stub
+  rows to the repo's *committed* `data/history/*.csv`. Now patched to tmp.
+  The new shrink guard is what surfaced it: it started refusing exports that
+  should never have been requested in the first place.
+* **No guard against the next unstubbed fetcher.** #127 fixed three fetchers
+  that had been added to `main.py` without stubs (the "no network" docstring
+  had stopped being true; the live data.gov.in call could hang the suite for
+  25+ minutes). That was a one-time fix — this makes it permanent with an
+  assertion that every `fetch_*` symbol on `main` appears in the patch dict,
+  so the same bug cannot return with the next layer.
+
 ## Unreleased — Upstream source repairs (2026-05)
 
 Two layers were silently failing on every pipeline run; both are now fixed

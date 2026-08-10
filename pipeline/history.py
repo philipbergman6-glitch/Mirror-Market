@@ -59,6 +59,16 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     "gulf_bids": ("report_date", "commodity", "location", "delivery"),
     # WASDE self-heals 12 months; the CSV preserves revisions beyond that.
     "wasde": ("commodity", "year", "attribute", "reference_period"),
+    # The briefing is generated from that run's DB and stored by
+    # analysis/briefing/orchestrator.py. Nothing upstream serves it: a past
+    # day's text + snapshot_json cannot be reconstructed from any source, so
+    # without this the CI runner writes one every day and deletes it.
+    "briefings": ("briefing_date",),
+    # ESR is fetched for the *current* marketing year only
+    # (fetchers/export_sales._current_market_year), so the prior year is never
+    # re-requested. At each MY rollover (Sep 1 for soybeans) the outgoing
+    # year's weekly series would vanish from an ephemeral DB.
+    "export_sales": ("commodity", "week_ending", "country"),
 }
 
 
@@ -124,6 +134,20 @@ def import_history() -> int:
     return total
 
 
+def _csv_shape(path: str) -> tuple[int, list[str]]:
+    """(data rows excluding header, header columns) of an existing CSV.
+
+    Returns (0, []) when the file is absent — a first export has nothing
+    to regress against.
+    """
+    if not os.path.exists(path):
+        return 0, []
+    with open(path, newline="", encoding="utf-8") as fh:
+        reader = csv.reader(fh)
+        header = next(reader, None) or []
+        return sum(1 for _ in reader), header
+
+
 def export_history() -> int:
     """Dump every history table to data/history/<table>.csv. Returns rows.
 
@@ -131,7 +155,16 @@ def export_history() -> int:
     mid-write crash never leaves a truncated CSV for git to commit.
     Empty tables are skipped (never overwrite a populated CSV with an
     empty file — a table can be empty because its fetch layer failed).
+
+    A *shrinking* export is refused for the same reason. The empty guard
+    alone is not enough: a local DB that is merely behind the committed
+    CSVs (import_history() not run first, or a layer that fetched fewer
+    rows than last time) would otherwise silently replace good history
+    with a shorter file. Set MIRROR_HISTORY_ALLOW_SHRINK=1 to override
+    when a shrink is genuinely intended (a deliberate prune or a schema
+    change that drops rows).
     """
+    allow_shrink = os.getenv("MIRROR_HISTORY_ALLOW_SHRINK", "").strip() == "1"
     os.makedirs(HISTORY_DIR, exist_ok=True)
     total = 0
     with get_connection() as conn:
@@ -145,6 +178,32 @@ def export_history() -> int:
                 continue
             header = [d[0] for d in cursor.description]
             path = _csv_path(table)
+            existing_rows, existing_header = _csv_shape(path)
+            if len(rows) < existing_rows and not allow_shrink:
+                logger.error(
+                    "History export: %s would shrink %d → %d rows — CSV left "
+                    "untouched. Run import_history() first, or set "
+                    "MIRROR_HISTORY_ALLOW_SHRINK=1 if the shrink is intended.",
+                    table,
+                    existing_rows,
+                    len(rows),
+                )
+                continue
+            # A DB older than the schema (CREATE TABLE IF NOT EXISTS never
+            # adds columns to an existing table) exports fewer columns and
+            # would drop a whole field from the committed history. Row count
+            # is unchanged in that case, so it needs its own guard.
+            dropped = [c for c in existing_header if c not in header]
+            if dropped and not allow_shrink:
+                logger.error(
+                    "History export: %s would drop column(s) %s — CSV left "
+                    "untouched. The local DB predates the current schema; "
+                    "recreate it, or set MIRROR_HISTORY_ALLOW_SHRINK=1 if the "
+                    "columns were removed on purpose.",
+                    table,
+                    dropped,
+                )
+                continue
             tmp_path = path + ".tmp"
             with open(tmp_path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)

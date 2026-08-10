@@ -30,6 +30,10 @@ def stub_fetchers(monkeypatch, tmp_path):
     import config
     monkeypatch.setattr(config, "STORAGE_DIR", str(tmp_path))
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "mirror_market.db"))
+    # run() ends with export_history(); without this it writes the stub rows
+    # into the repo's real data/history/ CSVs.
+    monkeypatch.setattr(config, "HISTORY_DIR", str(tmp_path / "history"))
+    monkeypatch.setattr("pipeline.history.HISTORY_DIR", str(tmp_path / "history"))
 
     # Force local SQLite (no Turso)
     monkeypatch.setattr(config, "TURSO_DATABASE_URL", "")
@@ -81,6 +85,13 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_mandi_prices": FetchResult.empty(),
         "fetch_magyp_fob": FetchResult.empty(),
     }
+    # #127 was a one-time fix; this makes it permanent. Any fetcher added to
+    # main.py without a stub here makes a real network call (with retries) on
+    # every test in this module, which is exactly what these stubs prevent.
+    unpatched = {
+        name for name in dir(main) if name.startswith("fetch_") and name not in patches
+    }
+    assert not unpatched, f"unstubbed fetchers would hit the network: {sorted(unpatched)}"
     for name, retval in patches.items():
         monkeypatch.setattr(main, name, mock.Mock(return_value=retval))
 
