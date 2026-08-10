@@ -49,6 +49,7 @@ from trust.registry import (
     RightsPolicy,
 )
 from trust.repository import (
+    ArtifactRetentionError,
     CurrentEditionConflict,
     GitDirectoryTrustRepository,
     ImmutableRecordConflict,
@@ -60,6 +61,7 @@ from trust.repository import (
 
 __all__ = [
     "ArtifactReference",
+    "ArtifactRetentionError",
     "CadenceContract",
     "CadenceKind",
     "CandidateObservation",
