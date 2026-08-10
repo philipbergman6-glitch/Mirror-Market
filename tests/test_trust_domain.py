@@ -130,7 +130,12 @@ def values() -> dict[str, object]:
         eligible=True,
         as_of_date=date(2026, 8, 10),
     )
-    completed_run = replace(run, dataset_result_ids=(result.dataset_result_id,))
+    completed_run = replace(
+        run,
+        dataset_result_ids=(result.dataset_result_id,),
+        parser_versions={dataset.dataset_id: "magyp-fob/1.0.0"},
+        findings_summary={FindingSeverity.WARNING: 1},
+    )
     edition = Edition(
         run_id=completed_run.run_id,
         created_at=NOW + timedelta(minutes=3),
@@ -434,6 +439,79 @@ def test_promotion_is_an_evidenced_pointer_change_with_stable_identity(
         replace(promotion, verification_evidence=())
     with pytest.raises(ValueError, match="must change"):
         replace(promotion, previous_edition_id=promotion.edition_id)
+
+
+def test_successful_and_failed_run_manifests_round_trip(values: dict[str, object]) -> None:
+    successful = values["run"]
+    failed = Run(
+        code_revision="failing-revision",
+        started_at=NOW + timedelta(hours=1),
+        ended_at=NOW + timedelta(hours=1, minutes=2),
+        status=RunStatus.FAILED,
+        findings_summary={FindingSeverity.REJECT: 1},
+    )
+
+    for manifest in (successful, failed):
+        serialized = json.loads(json.dumps(manifest.to_dict()))
+        restored = Run.from_dict(serialized)
+
+        assert restored == manifest
+        assert restored.manifest_hash == manifest.manifest_hash
+        assert serialized["manifest_hash"] == manifest.manifest_hash
+
+    assert failed.dataset_result_ids == ()
+    assert failed.parser_versions == {}
+
+
+def test_manifest_hashes_are_deterministic_and_cover_pinned_outputs(values: dict[str, object]) -> None:
+    run = values["run"]
+    edition = values["edition"]
+    extra_dataset_id = f"dst_{'c' * 64}"
+    equivalent_run = replace(
+        run,
+        parser_versions={
+            extra_dataset_id: "derived/2.0.0",
+            **dict(run.parser_versions),
+        },
+        findings_summary={FindingSeverity.REJECT: 0, **dict(run.findings_summary)},
+    )
+    reordered_run = replace(
+        run,
+        parser_versions={
+            **dict(run.parser_versions),
+            extra_dataset_id: "derived/2.0.0",
+        },
+        findings_summary={**dict(run.findings_summary), FindingSeverity.REJECT: 0},
+    )
+    derived_revision_id = f"rev_{'c' * 64}"
+    pinned_edition = replace(edition, derived_revision_ids=(derived_revision_id,))
+
+    assert equivalent_run.manifest_hash == reordered_run.manifest_hash
+    assert pinned_edition.manifest_hash != edition.manifest_hash
+    assert replace(edition, revision_ids=(f"rev_{'d' * 64}",)).manifest_hash != edition.manifest_hash
+    assert replace(edition, generated_artifact_hashes={"dashboard.html": HASH_A}).manifest_hash != edition.manifest_hash
+
+
+def test_manifest_round_trip_rejects_content_hash_tampering(values: dict[str, object]) -> None:
+    serialized_run = values["run"].to_dict()
+    serialized_run["status"] = RunStatus.FAILED.value
+    serialized_edition = values["edition"].to_dict()
+    serialized_edition["generated_artifact_hashes"] = {"dashboard.html": HASH_A}
+    serialized_with_extra_content = values["run"].to_dict()
+    serialized_with_extra_content["unexpected"] = "tampered"
+    serialized_with_normalized_content = values["run"].to_dict()
+    serialized_with_normalized_content["findings_summary"] = {
+        FindingSeverity.WARNING.value: 1.9
+    }
+
+    with pytest.raises(ValueError, match="manifest_hash does not match"):
+        Run.from_dict(serialized_run)
+    with pytest.raises(ValueError, match="manifest_hash does not match"):
+        Edition.from_dict(serialized_edition)
+    with pytest.raises(ValueError, match="manifest_hash does not match"):
+        Run.from_dict(serialized_with_extra_content)
+    with pytest.raises(ValueError, match="manifest_hash does not match"):
+        Run.from_dict(serialized_with_normalized_content)
 
 
 def test_correction_replacement_is_explicit_and_evidenced(values: dict[str, object]) -> None:
