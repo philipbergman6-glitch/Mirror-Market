@@ -37,7 +37,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 
-from config import HISTORY_DIR, SEA_PUBLISH, SOPA_PUBLISH
+from config import AFEX_PUBLISH_RAW, HISTORY_DIR, SEA_PUBLISH, SOPA_PUBLISH
 from pipeline.connection import get_connection, managed_connection
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,10 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # revision once the day passes.
     **({"sea_india_rates": ("Date", "series")} if SEA_PUBLISH else {}),
     **({"sopa_crop_estimates": ("crop_year", "state", "fetched_date")} if SOPA_PUBLISH else {}),
+    # Layer 36, published by owner decision 2026-11-05 on the same stance.
+    # AFEX re-serves its full history every run, so this CSV is a publication
+    # and a fallback record, not the only copy; the flag withholds it.
+    **({"nigeria_spot_prices": ("Date", "commodity")} if AFEX_PUBLISH_RAW else {}),
     # One full curve per fetched_date — term-structure history.
     "forward_curve": ("fetched_date", "commodity", "contract_month"),
     # Named-contract daily bars (Layer 11b). Listed contracts self-heal by

@@ -151,7 +151,7 @@ notice is a maintenance act: the DCE publishes it each December.
 ## 4. The fast refresh
 
 `python main.py --fast` — `config.FAST_REFRESH_LAYERS` (`prices`, `currencies`,
-`forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) instead of all 39
+`forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) instead of all 40
 layers over `15y`.
 
 It is the **same code** as the daily build with two arguments different, not a

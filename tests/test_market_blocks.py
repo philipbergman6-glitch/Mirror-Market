@@ -631,12 +631,14 @@ def test_the_origin_ledger_caption_reaches_the_markup_beside_kind_chips(seeded, 
 
 
 def test_a_market_with_no_counterpart_set_renders_absent_not_empty(seeded, registry):
-    """Europe and Nigeria have no ledger by decision — a legal configuration.
+    """Europe has no ledger by decision — a legal configuration.
 
     `absent` says "no such thing exists here"; `empty` would say "we tried and
     got nothing", which would be a report of an outage that is not happening.
+    (Nigeria left this set on 2026-11-05 when the AFEX leg, Layer 36, gave it
+    a one-leg ledger on India's precedent.)
     """
-    for slug in ("europe", "nigeria"):
+    for slug in ("europe",):
         ledger = _block(_build(slug, seeded, registry), "ledger")
         assert ledger.state == "absent"
         assert ledger.reason

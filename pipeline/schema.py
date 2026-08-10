@@ -727,6 +727,16 @@ CREATE TABLE IF NOT EXISTS cec_estimates (
 );
 """
 
+_CREATE_NIGERIA_SPOT = """
+CREATE TABLE IF NOT EXISTS nigeria_spot_prices (
+    Date        TEXT NOT NULL,
+    commodity   TEXT NOT NULL,
+    price_ngn   REAL,                       -- NGN/MT (feed publishes NGN/kg)
+    unit        TEXT,
+    PRIMARY KEY (Date, commodity)
+);
+"""
+
 _CREATE_SAFEX = """
 CREATE TABLE IF NOT EXISTS safex_prices (
     Date        TEXT NOT NULL,
@@ -998,6 +1008,7 @@ ALL_SCHEMAS = (
     _CREATE_COMMODITY_FRESHNESS,
     _CREATE_INDIA_DOMESTIC,
     _CREATE_BRAZIL_SPOT,
+    _CREATE_NIGERIA_SPOT,
     _CREATE_SAFEX,
     _CREATE_SAGIS_DELIVERIES,
     _CREATE_SAGIS_SUPPLY_DEMAND,

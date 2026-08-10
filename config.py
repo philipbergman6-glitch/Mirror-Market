@@ -166,6 +166,7 @@ PRODUCTION_LAYERS = (
      "Tropical-cyclone forecast tracks and wind radii — Atlantic, East/Central Pacific"),
     ("cyclones_jtwc", "35", "JTWC", "Per advisory, read daily",
      "Tropical-cyclone forecast tracks and wind radii — West Pacific, Indian Ocean, Southern Hemisphere"),
+    ("afex", "36", "AFEX (Africa Exchange)", "Daily", "Nigeria soybean reference price"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # Layers whose rendered output is the private desk edition only. A public
@@ -1984,6 +1985,61 @@ AGRURAL_URL = "https://agrural.com.br/precossojaemilho/"
 AGRURAL_COMMODITIES = ["Soybean (AgRural Paranaguá FOB)"]
 
 # ---------------------------------------------------------------------------
+# Layer 36 — AFEX Nigeria soybean reference price (free, no API key)
+# Nigeria's only feedable soy price. See research/2026-08-10-nigeria-price-source.md.
+#
+# What this series IS: a daily *reference* price published every calendar
+# day — including weekends, which is how we know it is not a session
+# settlement (74% of changes are day-over-day; no weekday clustering).
+# quote_kind "exchange_reference"; label it that way, never "settlement".
+#
+# Licence: AFEX's terms forbid reproducing platform data without written
+# permission, and no permission has been asked for or granted (the draft at
+# research/2026-08-10-afex-permission-request.md was never sent). Published
+# anyway by owner decision 2026-11-05, extending the A18 stance (#468: every
+# series public, internal use, no sale, risk accepted) that already covers
+# AgRural, SEA and SOPA. AFEX_PUBLISH_RAW is the one switch: False withholds
+# the table from the history export and the Nigeria price leg from every
+# page (app/markets.py reads it), so a licence objection is one flag flip.
+# ---------------------------------------------------------------------------
+AFEX_PRICE_URL = "https://api-md.afexnigeria.com/AFEXMD/api/v1/securities/price"
+# The endpoint 401s without this Origin and 200s with it (isolated by
+# controlled test, 2026-08-10; still true 2026-11-05). We send AFEX's own
+# site as Origin because that is what the endpoint requires; flagged in the
+# research note as the one detail to raise with AFEX rather than rely on
+# indefinitely.
+AFEX_ORIGIN = "https://africaexchange.com"
+# Feed key → our commodity name. 'S'-prefixed keys are NGN/kg spot;
+# the 'D'-prefixed twin (DSBS) carries the same number ×1000, which is
+# what corroborates the NGN/MT reading rather than assuming it.
+AFEX_SERIES = {
+    "SSBS": "Soybean (AFEX Nigeria)",
+}
+AFEX_COMMODITIES = tuple(AFEX_SERIES.values())
+# The request shape AFEX's own front end sends (2026-11-05): one security
+# per request, bounded by dates. The bare URL stopped carrying the soybean
+# series between 2026-08 and 2026-11 — it now answers 30 days of maize only.
+# date_from is the earliest date the SSBS series has ever carried a non-zero
+# price (2021-01-23 is the first row at all; earlier rows read 0.0).
+AFEX_HISTORY_START = "2021-01-01"
+# The feed stamps rows in Nigeria's calendar day. The current day is
+# published while it may still change and the feed does not say when it is
+# final, so only days at least this many days old are stored — the same
+# shape as MANDI_MIN_AGE_DAYS (Layer 16). The full history is re-read every
+# run, so a revised day repairs itself through the (Date, commodity) upsert.
+AFEX_TIMEZONE = "Africa/Lagos"
+AFEX_MIN_AGE_DAYS = 1
+# Longest flat run observed across the full 2021-2026 history is 26 days
+# (24 runs >= 7d, 4 runs >= 14d). A plateau below this is normal market
+# behaviour, not a stall — the default freshness threshold would false-alarm
+# several times a year. Above it, warn loudly.
+AFEX_MAX_FLAT_DAYS = 26
+# Owner decision 2026-11-05 (A18 stance extended). False withholds the raw
+# series from data/history/ and the Nigeria price leg from every page.
+AFEX_PUBLISH_RAW = True
+AFEX_ATTRIBUTION = "Source: AFEX (Africa Exchange) daily reference price — not a settlement"
+
+# ---------------------------------------------------------------------------
 # Layer 23 — SAGIS weekly producer deliveries (free, no API key)
 #
 # South Africa's first *physical flow* series: tonnage delivered by producers
@@ -2399,6 +2455,9 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # and the layer would stay green. Same long-weekend-plus-holiday budget as
     # the other daily exchange legs (#157).
     "safex": 7,
+    # AFEX publishes a dated row every calendar day, flat or not, so a row
+    # older than a week means the feed, not the market, has stopped (#166).
+    "afex": 7,
     # Agmarknet mandi spot. Each run re-reads a trailing month of completed
     # days, so the newest Date normally trails today by one Indian day; a
     # frozen or silently-emptied upstream leaves it standing still while the
@@ -2664,6 +2723,7 @@ HEALTH_TABLE_WRITER_LAYERS = {
     "india_domestic_prices": ("india_domestic",),
     "brazil_spot_prices": ("cepea", "agrural", "conab_precos"),
     "safex_prices": ("safex",),
+    "nigeria_spot_prices": ("afex",),
 }
 
 # ---------------------------------------------------------------------------
@@ -3238,26 +3298,54 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "nigeria": {
         "name": "Nigeria",
-        "venue": "no domestic price venue ingested",
+        "venue": "AFEX (Africa Exchange) daily reference price",
         "home_currency": "NGN",
         "currency_pair": "NGN/USD",
-        # The only market on the map with no price leg of any kind. AFEX is
-        # in flight (PR #166 / X4 #134) and pending a licence answer.
-        "price": None,
-        "price_absent_reason": (
-            "no Nigerian soybean price source is ingested — AFEX is in flight "
-            "and pending a licence answer (X4 #134)"
-        ),
+        # Layer 36 (X4 #134 → PR #166, published 2026-11-05 by owner decision
+        # under the A18 stance). An EXCHANGE REFERENCE PRICE, not a settlement
+        # and not a trade: AFEX publishes one number per calendar day, weekends
+        # included, with no session and no volume behind it. The leg is the
+        # first Nigerian price in the stack; AFEX_PUBLISH_RAW=False withdraws
+        # it again (app/markets.py reads the flag so the page says why).
+        "price": {
+            "layer": "afex",
+            "table": "nigeria_spot_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (AFEX Nigeria)"],
+            "headline_key": "Soybean (AFEX Nigeria)",
+            "cadence": "daily",
+            "quote_kind": "exchange_reference",
+            "value_column": "price_ngn",
+            "unit": "home_per_mt",
+            "publish_gate": {
+                "flag": "AFEX_PUBLISH_RAW",
+                "absent_reason": (
+                    "the AFEX Nigeria reference price is ingested but withheld from "
+                    "publication (config.AFEX_PUBLISH_RAW is off — AFEX's terms forbid "
+                    "redistribution without written permission)"
+                ),
+            },
+        },
         "crush": None,
-        "crush_absent_reason": "no Nigerian price leg to build a margin from",
+        "crush_absent_reason": (
+            "AFEX publishes a bean reference only — no Nigerian meal or oil "
+            "price is ingested, so there is no margin to strike"
+        ),
         "basis": None,
-        "basis_absent_reason": "no Nigerian price leg to take a basis from",
+        "basis_absent_reason": (
+            "no Nigerian export or import assessment against a board is ingested; "
+            "the AFEX bean is a domestic reference, not a basis"
+        ),
         "weather_regions": [
             ("Nigeria Benue", "domestic crop"),
             ("Nigeria Kaduna", "domestic crop"),
         ],
         "psd_country": "Nigeria",
         "players_country": "NG",
+        # No ledger (see LEDGERS / LEDGER_ABSENT_REASONS); the AFEX leg prints
+        # on the headline ledger as a level and its move.
+        "headline_leg": "nigeria:afex",
     },
 }
 
@@ -3357,6 +3445,12 @@ LEDGER_LEGS = {
         "block": "price",
         "key": "Soybean (Mandi MH)",
         "label": "India mandi — Maharashtra",
+    },
+    "nigeria:afex": {
+        "market": "nigeria",
+        "block": "price",
+        "key": "Soybean (AFEX Nigeria)",
+        "label": "AFEX Nigeria soybean (exchange reference)",
     },
     "south_africa:safex": {
         "market": "south_africa",
@@ -3498,6 +3592,10 @@ LEDGERS = {
     # Five rows of markets a country has no trade relationship with is worse
     # than nothing: it implies one.
     "europe": None,
+    # Layer 36 (2026-11-05) gave Nigeria a price leg but not a ledger: a
+    # one-leg ledger is a price block, not a ledger (app/markets.py refuses
+    # it), and no counterpart qualifies — see LEDGER_ABSENT_REASONS. The leg
+    # reaches the headline through MARKETS["nigeria"]["headline_leg"].
     "nigeria": None,
 }
 
@@ -3509,8 +3607,11 @@ LEDGER_ABSENT_REASONS = {
         "was verified dead on 2026-08-08"
     ),
     "nigeria": (
-        "no Nigerian price leg of any kind is ingested, and rows of markets "
-        "Nigeria has no trade relationship with would imply one (M12 #161)"
+        "no counterpart qualifies: Nigeria's soybean trade is domestic and "
+        "regional, with no imported bean connected to the AFEX reference by "
+        "trade, so a counterpart row would invite an arbitrage no one can work "
+        "(M12 #161), and a one-leg ledger is a price block, not a ledger. The "
+        "AFEX leg is on the headline ledger as a level and its move."
     ),
 }
 
@@ -3980,11 +4081,13 @@ LEG_PLACES: dict[str, tuple[str, ...]] = {
     "dalian:board":       ("P-NCN", "P-PNG", "P-NOLA"),
     "india:mandi_mp":     ("P-IDR",),
     "india:mandi_mh":     (),
+    "nigeria:afex":       (),
     "south_africa:safex": ("P-RFT", "P-DUR"),
 }
 LEG_PLACES_ABSENT_REASONS: dict[str, str] = {
     "brazil:cepea": "an in-state wholesale indicator, not a port price — it has no port to flag (K1 §3)",
     "india:mandi_mh": "a state-wide mandi median with no stated hub or port (K1 §3)",
+    "nigeria:afex": "an exchange reference price with no stated delivery hub or port (K1 §3)",
 }
 
 # Geometry and severity (spec §5.1), read by the hazard assessment.

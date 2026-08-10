@@ -335,7 +335,7 @@ def test_daily_leg_with_too_little_around_it_is_a_brief(site_db):
 
 
 def test_no_daily_leg_with_two_blocks_is_a_brief(site_db):
-    """Nigeria has no price leg at all; weather alone is one block, not two."""
+    """Only weather is seeded (no AFEX rows), so weather alone is one block, not two."""
     _seed_prices(site_db, ["Nigeria Benue", "Nigeria Kaduna"], table="weather", key_col="region")
     tiers = markets_mod.compute_tiers()
     assert tiers["nigeria"].tier == "stub"
@@ -568,7 +568,10 @@ def test_stub_page_lists_a_reason_per_block(rendered):
     out, _ = rendered
     html = (out / "markets" / "nigeria.html").read_text()
     assert "has no page yet" in html
-    assert "no Nigerian soybean price source is ingested" in html
+    # Since Layer 36 (AFEX) Nigeria has a price source; with no rows seeded the
+    # stub says the leg is empty, not that the source does not exist.
+    assert "nigeria_spot_prices holds no daily observation" in html
+    assert "no Nigerian meal or oil price is ingested" in html
 
 
 def test_market_nav_lists_every_market_on_every_page(rendered):

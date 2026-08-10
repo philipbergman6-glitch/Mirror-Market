@@ -65,6 +65,7 @@ ALLOWED: dict[str, TableSpec] = {
     "india_domestic_prices": TableSpec("commodity", "Date"),
     "brazil_spot_prices": TableSpec("commodity", "Date"),
     "safex_prices": TableSpec("commodity", "Date"),
+    "nigeria_spot_prices": TableSpec("commodity", "Date"),
     "sagis_deliveries": TableSpec("commodity", "week_end"),
     "sagis_supply_demand": TableSpec("commodity", "month_end"),
     "cec_estimates": TableSpec("commodity", "release_date"),

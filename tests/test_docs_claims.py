@@ -128,8 +128,8 @@ def test_registry_counts_are_what_the_docs_were_corrected_to() -> None:
     doc silently rewrote itself. This one fails loudly on a roster change, so
     the change is a deliberate doc edit rather than a passive one.
     """
-    assert _operational_layer_count() == 39
-    assert _numbered_group_count() == 35
+    assert _operational_layer_count() == 40
+    assert _numbered_group_count() == 36
 
 
 # A16 #459: AGENTS.md is the model-neutral door to CLAUDE.md, and the
