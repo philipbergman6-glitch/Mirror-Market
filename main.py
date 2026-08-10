@@ -1,13 +1,13 @@
 """
 Mirror Market — main entry point.
 
-Run this script to fetch, clean, and store all 20 data layers:
+Run this script to fetch, clean, and store all 22 data layers:
     commodity prices, USDA crop data + progress, FRED, COT, weather,
     PSD, currencies, World Bank, DCE futures, export sales, forward
     curves, WASDE, EIA, crush + inspections, CONAB (estimates +
     weekly farmgate prices), India mandi domestic, CEPEA via Notícias
-    Agrícolas, SAFEX, AgRural FOB, and AMS Gulf export bids — then
-    print a verification summary.
+    Agrícolas, SAFEX, AgRural FOB, AMS Gulf export bids, Argentina
+    MAGyP FOB, and AFEX Nigeria — then print a verification summary.
 
 Usage:
     python main.py
@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from config import LAYER_MIN_KEYS, MAX_FAILED_LAYERS, setup_logging
+from fetchers.afex import fetch_afex
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
 from fetchers.conab import fetch_conab_estimates
@@ -64,6 +65,7 @@ from pipeline.clean import (
     clean_fred_series,
     clean_india_domestic,
     clean_inspections,
+    clean_nigeria_spot,
     clean_ohlcv,
     clean_psd,
     clean_safex,
@@ -92,6 +94,7 @@ from pipeline.store import (
     save_india_domestic,
     save_inspection_destinations,
     save_inspections,
+    save_nigeria_spot,
     save_port_flows,
     save_price_data,
     save_psd_data,
@@ -305,6 +308,7 @@ def run() -> int:
         "india_domestic": False,
         "cepea": False, "safex": False,
         "agrural": False, "gulf_bids": False,
+        "afex": False,
     }
     # Layers intentionally short-circuited (upstream anti-bot walls) —
     # reported separately so the Failed list only carries real outages.
@@ -541,6 +545,17 @@ def run() -> int:
         "magyp_fob", "Layer 21", "Argentina MAGyP official FOB prices",
         fetch=lambda: fetch_magyp_fob(),
         save=lambda n, d: save_argentina_fob(d),
+    )
+    # Layer 22: AFEX serves its whole history on every call, so an empty
+    # result means the feed is broken rather than merely quiet → empty_fails
+    # stays on. Deliberately NOT in data/history/ — it self-heals from the
+    # source, and while the AFEX licence question is open nothing of theirs
+    # should be committed to a public repo (see config.AFEX_PUBLISH_RAW).
+    results["afex"] = _run_scraper_layer(
+        "afex", "Layer 22", "AFEX Nigeria soybean reference prices",
+        fetch=lambda: fetch_afex(),
+        save=lambda n, d: save_nigeria_spot(n, d),
+        clean=lambda d: clean_nigeria_spot(d),
     )
 
     # ── Export snapshot-only history back to git-committed CSVs ──

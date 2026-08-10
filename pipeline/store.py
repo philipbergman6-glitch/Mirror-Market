@@ -197,7 +197,7 @@ def clear_database():
         "argentina_fob",
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
-        "brazil_spot_prices", "safex_prices", "briefings",
+        "brazil_spot_prices", "nigeria_spot_prices", "safex_prices", "briefings",
     ]
     with get_connection() as conn:
         for table in tables:
@@ -623,6 +623,24 @@ def save_brazil_spot(commodity: str, df: pd.DataFrame):
         df["unit"] = "BRL/MT"
     _save("brazil_spot_prices", df[["Date", "commodity", "price_brl", "unit"]],
           ["Date", "commodity"], f"brazil_spot/{commodity}")
+
+
+def save_nigeria_spot(commodity: str, df: pd.DataFrame):
+    """Write AFEX Nigeria reference prices (NGN/MT) → 'nigeria_spot_prices'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "Date" in df.columns:
+        df["Date"] = _date(df["Date"])
+    if "price_ngn_mt" in df.columns:
+        df["price_ngn"] = df["price_ngn_mt"]
+    if "Unit" in df.columns:
+        df["unit"] = df["Unit"].fillna("NGN/MT").astype(str)
+    else:
+        df["unit"] = "NGN/MT"
+    _save("nigeria_spot_prices", df[["Date", "commodity", "price_ngn", "unit"]],
+          ["Date", "commodity"], f"nigeria_spot/{commodity}")
 
 
 def save_safex(commodity: str, df: pd.DataFrame):

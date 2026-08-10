@@ -515,6 +515,37 @@ def clean_brazil_spot(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def clean_nigeria_spot(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean AFEX Nigeria soybean reference prices (Layer 22).
+
+    Steps:
+        1. Copy first.
+        2. Parse Date and sort.
+        3. Convert price_ngn_mt to numeric, drop missing/non-positive.
+
+    The fetcher already enforces the NGN/MT sanity band and de-duplicates
+    dates; this is the same defensive numeric pass the other spot layers get.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date").reset_index(drop=True)
+
+    if "price_ngn_mt" in df.columns:
+        df["price_ngn_mt"] = pd.to_numeric(df["price_ngn_mt"], errors="coerce")
+        df = df.dropna(subset=["price_ngn_mt"])
+        df = df[df["price_ngn_mt"] > 0]
+
+    return df.reset_index(drop=True)
+
+
 def clean_safex(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean JSE SAFEX South Africa settlement price data.
