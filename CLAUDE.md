@@ -112,7 +112,9 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 - Database: `data/storage/mirror_market.db` (SQLite, gitignored)
 - Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `inspection_destinations`, `gulf_bids`, `argentina_fob`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `briefings`
 - `forward_curve` keys on `(commodity, contract_month, fetched_date)` — one full curve per run accumulates term-structure history; `read_forward_curve()` returns only each commodity's latest snapshot.
-- All config lives in `config.py` (tickers, API URLs, region coordinates, thresholds)
+- V1 pipeline config lives in `config.py` (tickers, API URLs, region coordinates, thresholds).
+  V2 source/dataset cadence, identity, freshness, validation, retention, rights,
+  and criticality policy lives in the authoritative `trust.registry` contract registry.
 
 ### Git-based history persistence (`pipeline/history.py`)
 
