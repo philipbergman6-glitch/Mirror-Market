@@ -48,6 +48,15 @@ from trust.registry import (
     RightsDecision,
     RightsPolicy,
 )
+from trust.repository import (
+    CurrentEditionConflict,
+    GitDirectoryTrustRepository,
+    ImmutableRecordConflict,
+    RepositoryFormatError,
+    TemporaryDirectoryTrustRepository,
+    TrustRepository,
+    TrustRepositoryError,
+)
 
 __all__ = [
     "ArtifactReference",
@@ -58,6 +67,7 @@ __all__ = [
     "ContractIdentity",
     "Correction",
     "CorrectionDecision",
+    "CurrentEditionConflict",
     "Criticality",
     "Dataset",
     "DatasetContract",
@@ -71,7 +81,9 @@ __all__ = [
     "FX_CONTRACTS",
     "FreshnessState",
     "FreshnessContract",
+    "GitDirectoryTrustRepository",
     "IdentityContract",
+    "ImmutableRecordConflict",
     "MAGYP_FOB_CONTRACT",
     "MAGYP_SOURCE",
     "ObservationIdentity",
@@ -81,6 +93,7 @@ __all__ = [
     "QualityState",
     "RawArtifact",
     "RawRetention",
+    "RepositoryFormatError",
     "RegistryValidationError",
     "REQUIRED_FX_PAIRS",
     "RightsAction",
@@ -91,6 +104,9 @@ __all__ = [
     "Source",
     "SOY_BENCHMARK_CONTRACTS",
     "Timestamp",
+    "TemporaryDirectoryTrustRepository",
+    "TrustRepository",
+    "TrustRepositoryError",
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
     "evaluate_run_status",
