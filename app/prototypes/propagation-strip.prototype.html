@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — THROWAWAY. Not production. Not linked from any page.
+  Question: issue #145 — what does the propagation strip show, and what claim does it make?
+  Open directly in a browser. Switch variants with the bottom bar or ?v=a|b|c|d
+
+  All numbers are REAL, read out of data/storage/mirror_market.db on 2026-08-10,
+  scenario date 2026-08-07 (Fri). CBOT uses the TRUE settle 1156.50 (post-#153 fix),
+  not the unfinished-bar 1181.25 that the pipeline stored that day.
+  Print times are STATIC venue schedules from the M4 latency inventory (#146) —
+  the schema stores no time of day, so no timestamp here is observed.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Propagation strip (#145)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAFAF7; --card:#FFFFFF; --rule:#D8DCD8; --rule-heavy:#191C1A;
+    --text:#191C1A; --text-muted:#5D6660; --text-dim:#9BA39E;
+    --green:#2D6A4F; --bullish:#1F7A3D; --bearish:#C23B2E;
+    --warning:#A8730A; --warn-fill:#E8C983; --warn-ink:#4A3608; --info:#2F5D8F; --neutral:#E4E8E4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--text);font:400 14px/1.45 Inter,system-ui,sans-serif;padding-bottom:96px}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 32px 64px}
+  .num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  .masthead{border-bottom:3px solid var(--rule-heavy);padding-bottom:12px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
+  .masthead h1{font:800 42px/1 Archivo,sans-serif;letter-spacing:-.03em;margin:0}
+  .masthead h1 em{font-style:normal;color:var(--green)}
+  .meta{text-align:right;font-size:12px;color:var(--text-muted)}
+  .proto-tag{display:inline-block;background:var(--bearish);color:#fff;font:600 11px/1 Inter;letter-spacing:.06em;padding:5px 8px;border-radius:3px;text-transform:uppercase}
+  .sec{padding:26px 0;border-bottom:1px solid var(--rule)}
+  .sec-head{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+  .sec-no{font-family:"IBM Plex Mono",monospace;color:var(--green);font-size:13px}
+  .sec-head h2{font:700 15px/1 Archivo,sans-serif;text-transform:uppercase;letter-spacing:.05em;margin:0}
+  .why{margin-left:auto;font-size:12px;color:var(--text-dim)}
+  .lede{font-size:13px;color:var(--text-muted);max-width:76ch;margin:0 0 18px}
+  .claim{font-size:12px;color:var(--warn-ink);background:rgba(168,115,10,.08);border-left:3px solid var(--warning);padding:10px 12px;margin:16px 0;max-width:86ch}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:18px}
+  .up{color:var(--bullish)} .down{color:var(--bearish)} .flat{color:var(--text-muted)}
+  .dim{color:var(--text-dim)} .muted{color:var(--text-muted)}
+  table{width:100%;border-collapse:collapse}
+  th{font:600 11px/1 Inter;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);text-align:left;padding:0 10px 8px 0;border-bottom:1px solid var(--rule)}
+  td{padding:11px 10px 11px 0;border-bottom:1px dotted var(--rule);font-size:13px;vertical-align:baseline}
+  tr.dark td{background:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(155,163,158,.10) 6px,rgba(155,163,158,.10) 12px)}
+  .pill{display:inline-block;font:600 10px/1 Inter;letter-spacing:.05em;text-transform:uppercase;padding:4px 7px;border-radius:3px;white-space:nowrap}
+  .p-moved{background:#DCEBE1;color:#14532B} .p-silent{background:var(--neutral);color:var(--text-muted)}
+  .p-late{background:var(--warn-fill);color:var(--warn-ink)} .p-dark{background:var(--bearish);color:#fff}
+  .p-none{background:transparent;color:var(--text-dim);border:1px dashed var(--rule)}
+  .kind{font:500 10px/1 "IBM Plex Mono",monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-top:14px}
+  /* ---- B: clock rail ---- */
+  .rail{position:relative;height:132px;margin:34px 0 8px}
+  .rail-line{position:absolute;top:64px;left:0;right:0;height:2px;background:var(--rule-heavy)}
+  .tick{position:absolute;top:58px;width:1px;height:14px;background:var(--rule)}
+  .tick span{position:absolute;top:18px;left:-14px;width:28px;text-align:center;font:400 10px "IBM Plex Mono",monospace;color:var(--text-dim)}
+  .chip{position:absolute;transform:translateX(-50%);text-align:center;width:112px}
+  .chip .dot{width:11px;height:11px;border-radius:50%;margin:0 auto;border:2px solid var(--card)}
+  .chip .lbl{font:600 11px Inter;margin-top:5px}
+  .chip .mv{font:500 12px "IBM Plex Mono",monospace}
+  .chip.above{top:0} .chip.above .dot{margin-top:56px} .chip.above .lbl{margin-top:5px}
+  .chip.below{top:70px}
+  .event{position:absolute;top:26px;bottom:0;width:2px;background:var(--bearish)}
+  .event span{position:absolute;top:-22px;left:6px;white-space:nowrap;font:600 10px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--bearish)}
+  .tray{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;padding-top:16px;border-top:1px dotted var(--rule)}
+  .tray .t{border:1px dashed var(--rule);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text-muted)}
+  /* ---- C: gap board ---- */
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .gcard{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:16px}
+  .gcard .mkt{font:700 12px Archivo,sans-serif;text-transform:uppercase;letter-spacing:.05em}
+  .gcard .big{font:700 30px/1 Archivo,sans-serif;letter-spacing:-.02em;margin:10px 0 2px}
+  .gcard .big span{font-size:13px;color:var(--text-dim);font-weight:400;letter-spacing:0}
+  .gcard .sub{font-size:12px;color:var(--text-muted);margin-top:8px;padding-top:8px;border-top:1px dotted var(--rule)}
+  .bar{height:6px;background:var(--neutral);border-radius:3px;position:relative;margin:12px 0 4px}
+  .bar i{position:absolute;top:0;bottom:0;border-radius:3px}
+  /* ---- D: relay ---- */
+  .relay{display:flex;align-items:stretch;gap:0;margin:24px 0 8px;overflow-x:auto}
+  .step{min-width:158px;flex:1;padding:14px 16px;border-left:1px solid var(--rule);position:relative}
+  .step:first-child{border-left:none}
+  .step .t{font:400 11px "IBM Plex Mono",monospace;color:var(--text-dim)}
+  .step .m{font:700 13px Archivo,sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 4px}
+  .step .v{font:500 18px "IBM Plex Mono",monospace}
+  .step .n{font-size:11px;color:var(--text-muted);margin-top:6px}
+  .cut{width:0;border-left:2px dashed var(--bearish);position:relative;margin:0 10px}
+  .cut span{position:absolute;top:-6px;left:8px;white-space:nowrap;font:600 10px Inter;text-transform:uppercase;letter-spacing:.05em;color:var(--bearish)}
+  .after{background:rgba(31,122,61,.05)}
+  /* ---- switcher ---- */
+  .bar-fixed{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--rule);padding:12px 32px;display:flex;gap:8px;align-items:center;z-index:50;box-shadow:0 -2px 12px rgba(0,0,0,.05)}
+  .bar-fixed b{font:700 11px Archivo;text-transform:uppercase;letter-spacing:.06em;margin-right:8px}
+  .bar-fixed a{font:500 12px Inter;text-decoration:none;color:var(--text-muted);border:1px solid var(--rule);border-radius:999px;padding:7px 14px}
+  .bar-fixed a.on{background:var(--green);border-color:var(--green);color:#fff}
+  .bar-fixed .sp{margin-left:auto;font-size:11px;color:var(--text-dim)}
+  .variant{display:none} .variant.on{display:block}
+  @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <h1>Propagation <em>strip</em></h1>
+    <div class="meta">
+      <div><span class="proto-tag">Prototype · #145</span></div>
+      <div style="margin-top:8px">Scenario · Fri 07 Aug 2026 · real DB values<br>All times UTC · static venue schedules, never observed</div>
+    </div>
+  </div>
+
+  <!-- ============================ A · LEDGER ============================ -->
+  <section class="variant" id="v-a">
+    <div class="sec">
+      <div class="sec-head"><span class="sec-no">A</span><h2>Ledger — every leg, with its state named</h2>
+        <span class="why">who has repriced, who has not printed, who is dark</span></div>
+      <p class="lede">One row per leg. The state column does the honest work: a market that has <em>not printed since</em> is visually different from one that printed and barely moved. Nothing is hidden; the empty markets are rows too.</p>
+
+      <div class="card">
+      <table>
+        <thead><tr>
+          <th style="width:22%">Market · leg</th><th>Kind</th><th class="num">Last print</th>
+          <th class="num">Venue prints</th><th class="num">Session move</th><th class="num">Level</th><th style="width:18%">State</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><b>Dalian</b> · Soybean Meal M<span class="dim">2601</span></td><td class="kind">board</td>
+            <td class="num">07 Aug</td><td class="num dim">07:00</td>
+            <td class="num up">+0.64%</td><td class="num">3,154 <span class="dim">CNY/MT</span></td>
+            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
+          <tr><td><b>Dalian</b> · Soybean No.2 B<span class="dim">2601</span></td><td class="kind">board</td>
+            <td class="num">07 Aug</td><td class="num dim">07:00</td>
+            <td class="num up">+0.97%</td><td class="num">4,875 <span class="dim">CNY/MT</span></td>
+            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
+          <tr><td><b>CBOT</b> · Soybeans <span class="dim">ZS front</span></td><td class="kind">board</td>
+            <td class="num">07 Aug</td><td class="num dim">18:15</td>
+            <td class="num flat">−0.06%</td><td class="num">1,156.50 <span class="dim">¢/bu</span></td>
+            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
+          <tr><td><b>South Africa</b> · SAFEX soy</td><td class="kind">board</td>
+            <td class="num">07 Aug</td><td class="num dim">~12:00</td>
+            <td class="num flat">+0.03%</td><td class="num">8,082 <span class="dim">ZAR/MT</span></td>
+            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
+          <tr><td><b>Brazil</b> · CEPEA Paraná</td><td class="kind">physical</td>
+            <td class="num">06 Aug</td><td class="num dim">21:01</td>
+            <td class="num up">+0.56%</td><td class="num">2,291.67 <span class="dim">BRL/MT</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+          <tr><td><b>Brazil</b> · ESALQ/B3 Paranaguá</td><td class="kind">physical</td>
+            <td class="num">06 Aug</td><td class="num dim">21:01</td>
+            <td class="num flat">+0.05%</td><td class="num">2,416.33 <span class="dim">BRL/MT</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+          <tr><td><b>US Gulf</b> · CIF NOLA barge</td><td class="kind">physical</td>
+            <td class="num">06 Aug</td><td class="num dim">18:48</td>
+            <td class="num dim">basis, n/a</td><td class="num">+12.78 <span class="dim">¢/bu over</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+          <tr><td><b>Argentina</b> · MAGyP official FOB</td><td class="kind">administered</td>
+            <td class="num">06 Aug</td><td class="num dim">15:05</td>
+            <td class="num dim">no range yet</td><td class="num">457.00 <span class="dim">USD/MT</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+          <tr><td><b>Europe</b> · EC Moselle rapeseed</td><td class="kind">assessment</td>
+            <td class="num">w/e 02 Aug</td><td class="num dim">weekly, Thu</td>
+            <td class="num dim">weekly cadence</td><td class="num">486 <span class="dim">EUR/t</span></td>
+            <td><span class="pill p-late">due 08 Aug</span></td></tr>
+          <tr class="dark"><td><b>India</b> · Mandi spot <span class="dim">MP · MH</span></td><td class="kind">physical</td>
+            <td class="num">—</td><td class="num dim">D+1</td>
+            <td class="num">—</td><td class="num">—</td>
+            <td><span class="pill p-dark">dark · layer 16 empty</span></td></tr>
+          <tr class="dark"><td><b>Nigeria</b> · <span class="dim">no domestic price leg</span></td><td class="kind">—</td>
+            <td class="num">—</td><td class="num dim">—</td><td class="num">—</td><td class="num">—</td>
+            <td><span class="pill p-none">no series exists</span></td></tr>
+        </tbody>
+      </table>
+      <div class="legend">
+        <span><b class="pill p-moved">repriced</b> printed on the scenario date</span>
+        <span><b class="pill p-silent">no print since</b> series is alive, its venue simply has not published yet</span>
+        <span><b class="pill p-late">due</b> past its expected cadence</span>
+        <span><b class="pill p-dark">dark</b> ingest is broken — not a market signal</span>
+      </div>
+      </div>
+
+      <p class="claim"><b>The claim this variant makes:</b> "here is every leg and when it last spoke." It never asserts causation and never blends
+        board, physical, administered and weekly-assessment prices into one number. Cost: eleven rows is a table, not a strip — it reads as reference, not as a glance.</p>
+    </div>
+  </section>
+
+  <!-- ============================ B · CLOCK RAIL ============================ -->
+  <section class="variant" id="v-b">
+    <div class="sec">
+      <div class="sec-head"><span class="sec-no">B</span><h2>Clock rail — the trading day as a line</h2>
+        <span class="why">the sequence is the point; the gap is where you are early</span></div>
+      <p class="lede">A 24h UTC rail with each venue pinned at its <em>scheduled</em> publication time. Moves sit above the line, the event cut sits where the news broke.
+        Everything to the right of the cut has had a chance to react; everything left of it has not. Markets with no schedule fall into the tray below.</p>
+
+      <div class="card">
+        <div class="rail">
+          <div class="rail-line"></div>
+          <div class="tick" style="left:0%"><span>00</span></div>
+          <div class="tick" style="left:16.6%"><span>04</span></div>
+          <div class="tick" style="left:33.3%"><span>08</span></div>
+          <div class="tick" style="left:50%"><span>12</span></div>
+          <div class="tick" style="left:66.6%"><span>16</span></div>
+          <div class="tick" style="left:83.3%"><span>20</span></div>
+
+          <div class="event" style="left:8.3%"><span>◀ event 02:00</span></div>
+
+          <div class="chip above" style="left:29.2%">
+            <div class="dot" style="background:var(--bullish)"></div>
+            <div class="lbl">Dalian</div><div class="mv up">+0.97%</div>
+            <div class="dim" style="font-size:10px">07:00 close</div>
+          </div>
+          <div class="chip below" style="left:50%">
+            <div class="dot" style="background:var(--text-muted)"></div>
+            <div class="lbl">SAFEX</div><div class="mv flat">+0.03%</div>
+            <div class="dim" style="font-size:10px">~12:00</div>
+          </div>
+          <div class="chip above" style="left:62.8%">
+            <div class="dot" style="background:var(--text-dim)"></div>
+            <div class="lbl">Argentina FOB</div><div class="mv dim">D−1</div>
+            <div class="dim" style="font-size:10px">15:05</div>
+          </div>
+          <div class="chip below" style="left:75.9%">
+            <div class="dot" style="background:var(--text-dim)"></div>
+            <div class="lbl">US Gulf CIF</div><div class="mv dim">D−1</div>
+            <div class="dim" style="font-size:10px">18:48</div>
+          </div>
+          <div class="chip above" style="left:76.0%">
+            <div class="dot" style="background:var(--bearish)"></div>
+            <div class="lbl">CBOT</div><div class="mv flat">−0.06%</div>
+            <div class="dim" style="font-size:10px">18:15 settle</div>
+          </div>
+          <div class="chip below" style="left:87.5%">
+            <div class="dot" style="background:var(--bullish)"></div>
+            <div class="lbl">Brazil CEPEA</div><div class="mv up">+0.56%</div>
+            <div class="dim" style="font-size:10px">21:01 · D−1</div>
+          </div>
+        </div>
+        <div class="tray">
+          <div class="t"><b>India mandi</b> — no schedule, ~D+1, <span class="down">and currently dark</span></div>
+          <div class="t"><b>EC Moselle</b> — weekly, Thursday. Not on a daily rail</div>
+          <div class="t"><b>Nigeria</b> — no price series exists</div>
+        </div>
+        <div class="legend"><span>Positions are <b>venue schedules</b>, not observed print times — the stack stores no time of day.</span></div>
+      </div>
+
+      <p class="claim"><b>The claim this variant makes:</b> "the day has an order, and you are reading it mid-way." It makes the timezone gap physical and shows instantly that Dalian is the freshest settled leg, not CBOT.
+        Risk: a rail <em>looks</em> intraday. A trader may read the dots as ticks. And half the legs are D−1, which the rail can only express as a footnote.</p>
+    </div>
+  </section>
+
+  <!-- ============================ C · GAP BOARD ============================ -->
+  <section class="variant" id="v-c">
+    <div class="sec">
+      <div class="sec-head"><span class="sec-no">C</span><h2>Gap board — this market against the complex</h2>
+        <span class="why">not "did it move" but "did it move like the others"</span></div>
+      <p class="lede">Each leg's session move measured against the median move of the legs that printed the same day (+0.30% here). Divergence is the signal;
+        legs that did not print are shown as an explicit gap, never as 0.00%.</p>
+
+      <div class="grid">
+        <div class="gcard">
+          <div class="mkt">Dalian · bean B</div>
+          <div class="big up">+0.97<span>%</span></div>
+          <div class="muted" style="font-size:12px">+0.67 pts vs complex</div>
+          <div class="bar"><i style="left:50%;width:24%;background:var(--bullish)"></i></div>
+          <div class="sub"><b>Led.</b> Printed 07:00 UTC, before every other board.</div>
+        </div>
+        <div class="gcard">
+          <div class="mkt">CBOT · beans</div>
+          <div class="big flat">−0.06<span>%</span></div>
+          <div class="muted" style="font-size:12px">−0.36 pts vs complex</div>
+          <div class="bar"><i style="right:50%;width:13%;background:var(--bearish)"></i></div>
+          <div class="sub"><b>Diverged.</b> Settled 18:15 UTC — 11h after Dalian, and did not follow.</div>
+        </div>
+        <div class="gcard">
+          <div class="mkt">Brazil · CEPEA</div>
+          <div class="big up">+0.56<span>%</span></div>
+          <div class="muted" style="font-size:12px">as of <b>06 Aug</b> — one day behind</div>
+          <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
+          <div class="sub"><b>Not comparable.</b> Structurally D−1; the 07 Aug print lands after tonight's run.</div>
+        </div>
+        <div class="gcard">
+          <div class="mkt">Argentina · official FOB</div>
+          <div class="big dim">457.00<span> USD/MT</span></div>
+          <div class="muted" style="font-size:12px">4 observations — no range yet</div>
+          <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
+          <div class="sub"><b>Level only.</b> Administered minimum, not a traded print. History starts 07 Aug 2026.</div>
+        </div>
+        <div class="gcard">
+          <div class="mkt">South Africa · SAFEX</div>
+          <div class="big flat">+0.03<span>%</span></div>
+          <div class="muted" style="font-size:12px">−0.27 pts vs complex</div>
+          <div class="bar"><i style="right:50%;width:9%;background:var(--text-muted)"></i></div>
+          <div class="sub"><b>Local basis market.</b> Moves on ZAR and domestic supply more than on the complex.</div>
+        </div>
+        <div class="gcard">
+          <div class="mkt">US Gulf · CIF</div>
+          <div class="big dim">+12.78<span> ¢/bu</span></div>
+          <div class="muted" style="font-size:12px">basis — not a flat price</div>
+          <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
+          <div class="sub"><b>Different unit.</b> Cannot enter a % comparison; shown for the export bid, D−1.</div>
+        </div>
+        <div class="gcard" style="border-style:dashed;background:transparent">
+          <div class="mkt down">India · mandi</div>
+          <div class="big dim">—</div>
+          <div class="muted" style="font-size:12px">layer 16 holds zero rows</div>
+          <div class="bar" style="background:transparent"></div>
+          <div class="sub"><b>Dark.</b> Ingest failure — this is our gap, not the market's silence.</div>
+        </div>
+        <div class="gcard" style="border-style:dashed;background:transparent">
+          <div class="mkt dim">Nigeria</div>
+          <div class="big dim">—</div>
+          <div class="muted" style="font-size:12px">no domestic price series exists</div>
+          <div class="bar" style="background:transparent"></div>
+          <div class="sub"><b>Structural.</b> PSD, NGN/USD and weather only.</div>
+        </div>
+      </div>
+
+      <p class="claim"><b>The claim this variant makes:</b> "this market is out of line with the complex." Strongest analytical read of the four, and it forces the level-vs-history distinction into the open.
+        Risk: a "complex median" is one step from the lead-lag modelling that #145 rules out of scope — and it silently privileges whichever legs happened to print.</p>
+    </div>
+  </section>
+
+  <!-- ============================ D · RELAY ============================ -->
+  <section class="variant" id="v-d">
+    <div class="sec">
+      <div class="sec-head"><span class="sec-no">D</span><h2>Relay — who has spoken since the event</h2>
+        <span class="why">the 6am question, answered as a single cut</span></div>
+      <p class="lede">One cut line: the event. Left of it, prints that predate the news and cannot contain it. Right of it, prints that could.
+        Reading order is settlement order, not importance order — so the freshest leg leads even when it is not the biggest market.</p>
+
+      <div class="card">
+        <div class="relay">
+          <div class="step">
+            <div class="t">06 Aug 21:01</div><div class="m">Brazil CEPEA</div>
+            <div class="v up">+0.56%</div><div class="n">Before the event. Stale by construction.</div>
+          </div>
+          <div class="step">
+            <div class="t">06 Aug 18:48</div><div class="m">US Gulf CIF</div>
+            <div class="v dim">+12.78¢</div><div class="n">Before the event.</div>
+          </div>
+          <div class="step">
+            <div class="t">06 Aug 15:05</div><div class="m">Argentina FOB</div>
+            <div class="v dim">457.00</div><div class="n">Before the event.</div>
+          </div>
+          <div class="cut"><span>event · 07 Aug 02:00</span></div>
+          <div class="step after">
+            <div class="t">07 Aug 07:00</div><div class="m">Dalian</div>
+            <div class="v up">+0.97%</div><div class="n">First to price it. 5h after.</div>
+          </div>
+          <div class="step after">
+            <div class="t">07 Aug ~12:00</div><div class="m">SAFEX</div>
+            <div class="v flat">+0.03%</div><div class="n">Priced it. Barely moved.</div>
+          </div>
+          <div class="step after">
+            <div class="t">07 Aug 18:15</div><div class="m">CBOT</div>
+            <div class="v flat">−0.06%</div><div class="n">Priced it. Did not follow Dalian.</div>
+          </div>
+        </div>
+        <div class="tray">
+          <div class="t"><b>Still to speak today</b> — Brazil CEPEA 21:01, US Gulf 18:48, Argentina 15:05 (all land in tonight's run)</div>
+          <div class="t"><b>Cannot speak</b> — India (dark), Nigeria (no series), Europe (weekly)</div>
+        </div>
+        <div class="legend"><span>Event time is entered by hand. Print times are venue schedules. No timestamp here was observed by the pipeline.</span></div>
+      </div>
+
+      <p class="claim"><b>The claim this variant makes:</b> "three markets have priced this, three have not yet, three cannot." It answers the 6am question most directly and makes "has not printed" structurally impossible to confuse with "did not move."
+        Risk: it needs an <em>event time</em> — and nothing in the stack produces one, because there is no news layer. Without a hand-entered cut, this variant has no spine.</p>
+    </div>
+  </section>
+
+  <section class="sec" style="border-bottom:none">
+    <div class="sec-head"><span class="sec-no">·</span><h2>The four constraints every variant had to obey</h2></div>
+    <ul class="lede" style="max-width:90ch">
+      <li><b>No observed timestamps.</b> Schema stores dates only (M4 / #146). Every clock face here is a static venue schedule.</li>
+      <li><b>Silence ≠ flat.</b> A leg that has not printed must never render as 0.00%.</li>
+      <li><b>Dark ≠ silent.</b> India's blank is our ingest failure (#155), not the market declining to move.</li>
+      <li><b>Kinds do not mix.</b> Board / physical / administered / weekly-assessment are four different objects; a shared % column quietly claims they are one.</li>
+    </ul>
+  </section>
+</div>
+
+<div class="bar-fixed">
+  <b>Variant</b>
+  <a href="?v=a" data-v="a">A · Ledger</a>
+  <a href="?v=b" data-v="b">B · Clock rail</a>
+  <a href="?v=c" data-v="c">C · Gap board</a>
+  <a href="?v=d" data-v="d">D · Relay</a>
+  <span class="sp">throwaway prototype · issue #145 · not production</span>
+</div>
+
+<script>
+  const v = (new URLSearchParams(location.search).get('v') || 'a').toLowerCase();
+  const pick = document.getElementById('v-' + v) ? v : 'a';
+  document.getElementById('v-' + pick).classList.add('on');
+  document.querySelectorAll('.bar-fixed a').forEach(a => {
+    if (a.dataset.v === pick) a.classList.add('on');
+  });
+  console.log('PROTOTYPE state → variant:', pick);
+</script>
+</body>
+</html>
