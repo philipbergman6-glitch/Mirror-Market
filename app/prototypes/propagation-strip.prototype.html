@@ -7,6 +7,13 @@
   All numbers are REAL, read out of data/storage/mirror_market.db on 2026-08-10,
   scenario date 2026-08-07 (Fri). CBOT uses the TRUE settle 1156.50 (post-#153 fix),
   not the unfinished-bar 1181.25 that the pipeline stored that day.
+
+  USD/MT conversions use pipeline/units.py factors (soybeans 36.7437 bu/MT) and the
+  currencies table close for the matching date:
+    CNY/USD 07 Aug 0.1484362 · 06 Aug 0.1481547
+    ZAR/USD 07 Aug 0.0615801 · 06 Aug 0.0613316
+    BRL/USD 06 Aug 0.1946093 · 05 Aug 0.1944126
+
   Print times are STATIC venue schedules from the M4 latency inventory (#146) —
   the schema stores no time of day, so no timestamp here is observed.
 -->
@@ -37,33 +44,40 @@
   .sec-no{font-family:"IBM Plex Mono",monospace;color:var(--green);font-size:13px}
   .sec-head h2{font:700 15px/1 Archivo,sans-serif;text-transform:uppercase;letter-spacing:.05em;margin:0}
   .why{margin-left:auto;font-size:12px;color:var(--text-dim)}
-  .lede{font-size:13px;color:var(--text-muted);max-width:76ch;margin:0 0 18px}
-  .claim{font-size:12px;color:var(--warn-ink);background:rgba(168,115,10,.08);border-left:3px solid var(--warning);padding:10px 12px;margin:16px 0;max-width:86ch}
+  .lede{font-size:13px;color:var(--text-muted);max-width:80ch;margin:0 0 18px}
+  .claim{font-size:12px;color:var(--warn-ink);background:rgba(168,115,10,.08);border-left:3px solid var(--warning);padding:10px 12px;margin:16px 0;max-width:90ch}
   .card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:18px}
   .up{color:var(--bullish)} .down{color:var(--bearish)} .flat{color:var(--text-muted)}
   .dim{color:var(--text-dim)} .muted{color:var(--text-muted)}
   table{width:100%;border-collapse:collapse}
-  th{font:600 11px/1 Inter;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);text-align:left;padding:0 10px 8px 0;border-bottom:1px solid var(--rule)}
-  td{padding:11px 10px 11px 0;border-bottom:1px dotted var(--rule);font-size:13px;vertical-align:baseline}
+  th{font:600 11px/1.3 Inter;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);text-align:left;padding:0 10px 8px 0;border-bottom:1px solid var(--rule);vertical-align:bottom}
+  th.usdcol{color:var(--green)}
+  td{padding:11px 10px 11px 0;border-bottom:1px dotted var(--rule);font-size:13px;vertical-align:top}
+  td.usdcol{background:rgba(45,106,79,.045)}
+  .usd{font:500 16px/1.15 "IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  .nat{font:400 11px/1.4 "IBM Plex Mono",monospace;color:var(--text-dim);font-variant-numeric:tabular-nums;display:block;margin-top:3px}
   tr.dark td{background:repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(155,163,158,.10) 6px,rgba(155,163,158,.10) 12px)}
   .pill{display:inline-block;font:600 10px/1 Inter;letter-spacing:.05em;text-transform:uppercase;padding:4px 7px;border-radius:3px;white-space:nowrap}
   .p-moved{background:#DCEBE1;color:#14532B} .p-silent{background:var(--neutral);color:var(--text-muted)}
   .p-late{background:var(--warn-fill);color:var(--warn-ink)} .p-dark{background:var(--bearish);color:#fff}
   .p-none{background:transparent;color:var(--text-dim);border:1px dashed var(--rule)}
+  .fx{display:inline-block;font:500 10px/1 "IBM Plex Mono",monospace;color:var(--info);border:1px solid #C6D4E6;background:#EDF2F8;border-radius:3px;padding:3px 5px;margin-top:4px;white-space:nowrap}
   .kind{font:500 10px/1 "IBM Plex Mono",monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
   .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-top:14px}
+  .fxnote{font-size:11px;color:var(--text-muted);margin-top:12px;padding-top:10px;border-top:1px dotted var(--rule)}
   /* ---- B: clock rail ---- */
-  .rail{position:relative;height:132px;margin:34px 0 8px}
-  .rail-line{position:absolute;top:64px;left:0;right:0;height:2px;background:var(--rule-heavy)}
-  .tick{position:absolute;top:58px;width:1px;height:14px;background:var(--rule)}
+  .rail{position:relative;height:150px;margin:38px 0 8px}
+  .rail-line{position:absolute;top:72px;left:0;right:0;height:2px;background:var(--rule-heavy)}
+  .tick{position:absolute;top:66px;width:1px;height:14px;background:var(--rule)}
   .tick span{position:absolute;top:18px;left:-14px;width:28px;text-align:center;font:400 10px "IBM Plex Mono",monospace;color:var(--text-dim)}
-  .chip{position:absolute;transform:translateX(-50%);text-align:center;width:112px}
+  .chip{position:absolute;transform:translateX(-50%);text-align:center;width:122px}
   .chip .dot{width:11px;height:11px;border-radius:50%;margin:0 auto;border:2px solid var(--card)}
   .chip .lbl{font:600 11px Inter;margin-top:5px}
-  .chip .mv{font:500 12px "IBM Plex Mono",monospace}
-  .chip.above{top:0} .chip.above .dot{margin-top:56px} .chip.above .lbl{margin-top:5px}
-  .chip.below{top:70px}
-  .event{position:absolute;top:26px;bottom:0;width:2px;background:var(--bearish)}
+  .chip .usdv{font:500 13px "IBM Plex Mono",monospace}
+  .chip .natv{font:400 10px "IBM Plex Mono",monospace;color:var(--text-dim)}
+  .chip.above{top:0} .chip.above .dot{margin-top:64px}
+  .chip.below{top:78px}
+  .event{position:absolute;top:30px;bottom:0;width:2px;background:var(--bearish)}
   .event span{position:absolute;top:-22px;left:6px;white-space:nowrap;font:600 10px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--bearish)}
   .tray{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;padding-top:16px;border-top:1px dotted var(--rule)}
   .tray .t{border:1px dashed var(--rule);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text-muted)}
@@ -73,16 +87,19 @@
   .gcard .mkt{font:700 12px Archivo,sans-serif;text-transform:uppercase;letter-spacing:.05em}
   .gcard .big{font:700 30px/1 Archivo,sans-serif;letter-spacing:-.02em;margin:10px 0 2px}
   .gcard .big span{font-size:13px;color:var(--text-dim);font-weight:400;letter-spacing:0}
+  .gcard .lvl{font:500 13px "IBM Plex Mono",monospace;margin-top:6px}
+  .gcard .lvl b{font-weight:500}
   .gcard .sub{font-size:12px;color:var(--text-muted);margin-top:8px;padding-top:8px;border-top:1px dotted var(--rule)}
   .bar{height:6px;background:var(--neutral);border-radius:3px;position:relative;margin:12px 0 4px}
   .bar i{position:absolute;top:0;bottom:0;border-radius:3px}
   /* ---- D: relay ---- */
   .relay{display:flex;align-items:stretch;gap:0;margin:24px 0 8px;overflow-x:auto}
-  .step{min-width:158px;flex:1;padding:14px 16px;border-left:1px solid var(--rule);position:relative}
+  .step{min-width:168px;flex:1;padding:14px 16px;border-left:1px solid var(--rule);position:relative}
   .step:first-child{border-left:none}
   .step .t{font:400 11px "IBM Plex Mono",monospace;color:var(--text-dim)}
   .step .m{font:700 13px Archivo,sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:6px 0 4px}
   .step .v{font:500 18px "IBM Plex Mono",monospace}
+  .step .vl{font:400 11px "IBM Plex Mono",monospace;color:var(--text-dim);margin-top:2px}
   .step .n{font-size:11px;color:var(--text-muted);margin-top:6px}
   .cut{width:0;border-left:2px dashed var(--bearish);position:relative;margin:0 10px}
   .cut span{position:absolute;top:-6px;left:8px;white-space:nowrap;font:600 10px Inter;text-transform:uppercase;letter-spacing:.05em;color:var(--bearish)}
@@ -104,79 +121,114 @@
     <h1>Propagation <em>strip</em></h1>
     <div class="meta">
       <div><span class="proto-tag">Prototype · #145</span></div>
-      <div style="margin-top:8px">Scenario · Fri 07 Aug 2026 · real DB values<br>All times UTC · static venue schedules, never observed</div>
+      <div style="margin-top:8px">Scenario · Fri 07 Aug 2026 · real DB values<br>
+        <b>Every leg carries USD/MT and its home currency</b><br>
+        All times UTC · static venue schedules, never observed</div>
     </div>
   </div>
 
   <!-- ============================ A · LEDGER ============================ -->
   <section class="variant" id="v-a">
     <div class="sec">
-      <div class="sec-head"><span class="sec-no">A</span><h2>Ledger — every leg, with its state named</h2>
+      <div class="sec-head"><span class="sec-no">A</span><h2>Ledger — every leg, in USD/MT and at home</h2>
         <span class="why">who has repriced, who has not printed, who is dark</span></div>
-      <p class="lede">One row per leg. The state column does the honest work: a market that has <em>not printed since</em> is visually different from one that printed and barely moved. Nothing is hidden; the empty markets are rows too.</p>
+      <p class="lede">One row per leg, in venue-print order. <b>USD/MT is the decision number</b> — set in the tinted column, with the home-currency print directly beneath it so the local market is never hidden.
+        Where the two moves disagree, an <span class="fx">FX +0.41</span> tag names the difference: that is currency doing the work, not the crop.</p>
 
       <div class="card">
       <table>
         <thead><tr>
-          <th style="width:22%">Market · leg</th><th>Kind</th><th class="num">Last print</th>
-          <th class="num">Venue prints</th><th class="num">Session move</th><th class="num">Level</th><th style="width:18%">State</th>
+          <th style="width:19%">Market · leg</th><th>Kind</th><th class="num">Last print</th>
+          <th class="num">Venue prints</th>
+          <th class="num usdcol" style="width:16%">Level<br><span style="font-weight:400;text-transform:none;letter-spacing:0">USD/MT · home</span></th>
+          <th class="num usdcol" style="width:17%">Session move<br><span style="font-weight:400;text-transform:none;letter-spacing:0">in USD · in home ccy</span></th>
+          <th style="width:16%">State</th>
         </tr></thead>
         <tbody>
           <tr><td><b>Dalian</b> · Soybean Meal M<span class="dim">2601</span></td><td class="kind">board</td>
             <td class="num">07 Aug</td><td class="num dim">07:00</td>
-            <td class="num up">+0.64%</td><td class="num">3,154 <span class="dim">CNY/MT</span></td>
+            <td class="num usdcol"><span class="usd">468.17</span><span class="nat">CNY 3,154.00 /MT</span></td>
+            <td class="num usdcol"><span class="usd up">+0.83%</span><span class="nat">local +0.64%</span><span class="fx">FX +0.19</span></td>
             <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
-          <tr><td><b>Dalian</b> · Soybean No.2 B<span class="dim">2601</span></td><td class="kind">board</td>
-            <td class="num">07 Aug</td><td class="num dim">07:00</td>
-            <td class="num up">+0.97%</td><td class="num">4,875 <span class="dim">CNY/MT</span></td>
-            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
-          <tr><td><b>CBOT</b> · Soybeans <span class="dim">ZS front</span></td><td class="kind">board</td>
-            <td class="num">07 Aug</td><td class="num dim">18:15</td>
-            <td class="num flat">−0.06%</td><td class="num">1,156.50 <span class="dim">¢/bu</span></td>
-            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
+
           <tr><td><b>South Africa</b> · SAFEX soy</td><td class="kind">board</td>
             <td class="num">07 Aug</td><td class="num dim">~12:00</td>
-            <td class="num flat">+0.03%</td><td class="num">8,082 <span class="dim">ZAR/MT</span></td>
+            <td class="num usdcol"><span class="usd">497.72</span><span class="nat">ZAR 8,082.40 /MT</span></td>
+            <td class="num usdcol"><span class="usd up">+0.44%</span><span class="nat">local +0.03%</span><span class="fx">FX +0.41</span></td>
             <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
-          <tr><td><b>Brazil</b> · CEPEA Paraná</td><td class="kind">physical</td>
-            <td class="num">06 Aug</td><td class="num dim">21:01</td>
-            <td class="num up">+0.56%</td><td class="num">2,291.67 <span class="dim">BRL/MT</span></td>
-            <td><span class="pill p-silent">no print since</span></td></tr>
-          <tr><td><b>Brazil</b> · ESALQ/B3 Paranaguá</td><td class="kind">physical</td>
-            <td class="num">06 Aug</td><td class="num dim">21:01</td>
-            <td class="num flat">+0.05%</td><td class="num">2,416.33 <span class="dim">BRL/MT</span></td>
-            <td><span class="pill p-silent">no print since</span></td></tr>
-          <tr><td><b>US Gulf</b> · CIF NOLA barge</td><td class="kind">physical</td>
-            <td class="num">06 Aug</td><td class="num dim">18:48</td>
-            <td class="num dim">basis, n/a</td><td class="num">+12.78 <span class="dim">¢/bu over</span></td>
-            <td><span class="pill p-silent">no print since</span></td></tr>
+
+          <tr><td><b>CBOT</b> · Soybeans <span class="dim">ZS front</span></td><td class="kind">board</td>
+            <td class="num">07 Aug</td><td class="num dim">18:15</td>
+            <td class="num usdcol"><span class="usd">424.94</span><span class="nat">1,156.50 ¢/bu</span></td>
+            <td class="num usdcol"><span class="usd flat">−0.06%</span><span class="nat">local −0.06%</span><span class="nat">no FX leg</span></td>
+            <td><span class="pill p-moved">repriced 07 Aug</span></td></tr>
+
           <tr><td><b>Argentina</b> · MAGyP official FOB</td><td class="kind">administered</td>
             <td class="num">06 Aug</td><td class="num dim">15:05</td>
-            <td class="num dim">no range yet</td><td class="num">457.00 <span class="dim">USD/MT</span></td>
+            <td class="num usdcol"><span class="usd">457.00</span><span class="nat">published in USD</span></td>
+            <td class="num usdcol"><span class="usd dim">no range yet</span><span class="nat">4 observations</span></td>
             <td><span class="pill p-silent">no print since</span></td></tr>
+
+          <tr><td><b>US Gulf</b> · CIF NOLA barge <span class="dim">Sep¹</span></td><td class="kind">physical</td>
+            <td class="num">06 Aug</td><td class="num dim">18:48</td>
+            <td class="num usdcol"><span class="usd">469.49</span><span class="nat">$12.7775 /bu · +100¢ over Nov</span></td>
+            <td class="num usdcol"><span class="usd dim">1 obs stored</span><span class="nat">basis +36.74 USD/MT</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+
+          <tr><td><b>Brazil</b> · ESALQ/B3 Paranaguá</td><td class="kind">physical</td>
+            <td class="num">06 Aug</td><td class="num dim">21:01</td>
+            <td class="num usdcol"><span class="usd">470.24</span><span class="nat">BRL 2,416.33 /MT</span></td>
+            <td class="num usdcol"><span class="usd up">+0.15%</span><span class="nat">local +0.05%</span><span class="fx">FX +0.10</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+
+          <tr><td><b>Brazil</b> · CEPEA Paraná</td><td class="kind">physical</td>
+            <td class="num">06 Aug</td><td class="num dim">21:01</td>
+            <td class="num usdcol"><span class="usd">445.98</span><span class="nat">BRL 2,291.67 /MT</span></td>
+            <td class="num usdcol"><span class="usd up">+0.67%</span><span class="nat">local +0.56%</span><span class="fx">FX +0.11</span></td>
+            <td><span class="pill p-silent">no print since</span></td></tr>
+
+          <tr><td><b>Dalian</b> · Soybean No.2 B<span class="dim">2601</span></td><td class="kind">board</td>
+            <td class="num">07 Aug</td><td class="num dim">07:00</td>
+            <td class="num usdcol"><span class="usd">723.63</span><span class="nat">CNY 4,875.00 /MT</span></td>
+            <td class="num usdcol"><span class="usd up">+1.17%</span><span class="nat">local +0.97%</span><span class="fx">FX +0.20</span></td>
+            <td><span class="pill p-late">wrong bean · #152</span></td></tr>
+
           <tr><td><b>Europe</b> · EC Moselle rapeseed</td><td class="kind">assessment</td>
-            <td class="num">w/e 02 Aug</td><td class="num dim">weekly, Thu</td>
-            <td class="num dim">weekly cadence</td><td class="num">486 <span class="dim">EUR/t</span></td>
-            <td><span class="pill p-late">due 08 Aug</span></td></tr>
+            <td class="num">—</td><td class="num dim">weekly, Thu</td>
+            <td class="num usdcol"><span class="usd dim">—</span><span class="nat">EC publishes EUR/t and USD/t</span></td>
+            <td class="num usdcol"><span class="usd dim">—</span><span class="nat">not yet ingested (M6)</span></td>
+            <td><span class="pill p-none">layer to build</span></td></tr>
+
           <tr class="dark"><td><b>India</b> · Mandi spot <span class="dim">MP · MH</span></td><td class="kind">physical</td>
             <td class="num">—</td><td class="num dim">D+1</td>
-            <td class="num">—</td><td class="num">—</td>
+            <td class="num usdcol"><span class="usd dim">—</span><span class="nat">INR/USD is live; the price is not</span></td>
+            <td class="num usdcol"><span class="usd dim">—</span><span class="nat">—</span></td>
             <td><span class="pill p-dark">dark · layer 16 empty</span></td></tr>
+
           <tr class="dark"><td><b>Nigeria</b> · <span class="dim">no domestic price leg</span></td><td class="kind">—</td>
-            <td class="num">—</td><td class="num dim">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num">—</td><td class="num dim">—</td>
+            <td class="num usdcol"><span class="usd dim">—</span><span class="nat">NGN/USD tracked, nothing to convert</span></td>
+            <td class="num usdcol"><span class="usd dim">—</span><span class="nat">—</span></td>
             <td><span class="pill p-none">no series exists</span></td></tr>
         </tbody>
       </table>
+
       <div class="legend">
         <span><b class="pill p-moved">repriced</b> printed on the scenario date</span>
         <span><b class="pill p-silent">no print since</b> series is alive, its venue simply has not published yet</span>
-        <span><b class="pill p-late">due</b> past its expected cadence</span>
+        <span><b class="pill p-late">due / flagged</b> past cadence, or a known data defect</span>
         <span><b class="pill p-dark">dark</b> ingest is broken — not a market signal</span>
+      </div>
+      <div class="fxnote">
+        <b>FX used</b> — CNY/USD 0.1484362 (07 Aug) · ZAR/USD 0.0615801 (07 Aug) · BRL/USD 0.1946093 (06 Aug), each matched to the leg's own print date.
+        FX closes are New-York-afternoon marks, so a 07:00 UTC Dalian settle is being converted at a rate struck ~11h later. The USD figure is a <em>same-day comparable</em>, not a simultaneous one.
       </div>
       </div>
 
-      <p class="claim"><b>The claim this variant makes:</b> "here is every leg and when it last spoke." It never asserts causation and never blends
-        board, physical, administered and weekly-assessment prices into one number. Cost: eleven rows is a table, not a strip — it reads as reference, not as a glance.</p>
+      <p class="claim"><b>What USD/MT changed here.</b> Two rows only make sense once converted. <b>SAFEX</b> is flat at home (+0.03%) but <b>+0.44% in dollars</b> — a rand move, not a soybean move; a South African seller and a dollar buyer had opposite days.
+        And <b>Dalian No.2 at 723.63 USD/MT against CBOT's 424.94</b> is not a 70% China premium — it is the A0 food-grade bean, which is exactly bug <b>#152</b>. Converting to one unit made a defect visible that two currencies had hidden.</p>
+
+      <p class="claim"><b>The claim this variant makes:</b> "here is every leg, in one comparable unit, and when it last spoke." It never asserts causation and never blends board, physical, administered and weekly-assessment prices into a single headline number. Cost: eleven rows is a table, not a glance.</p>
     </div>
   </section>
 
@@ -185,8 +237,8 @@
     <div class="sec">
       <div class="sec-head"><span class="sec-no">B</span><h2>Clock rail — the trading day as a line</h2>
         <span class="why">the sequence is the point; the gap is where you are early</span></div>
-      <p class="lede">A 24h UTC rail with each venue pinned at its <em>scheduled</em> publication time. Moves sit above the line, the event cut sits where the news broke.
-        Everything to the right of the cut has had a chance to react; everything left of it has not. Markets with no schedule fall into the tray below.</p>
+      <p class="lede">A 24h UTC rail with each venue pinned at its <em>scheduled</em> publication time. USD/MT sits on the chip, the home-currency print beneath it.
+        Everything right of the event cut has had a chance to react; everything left of it has not. Markets with no daily schedule fall into the tray.</p>
 
       <div class="card">
         <div class="rail">
@@ -202,33 +254,39 @@
 
           <div class="chip above" style="left:29.2%">
             <div class="dot" style="background:var(--bullish)"></div>
-            <div class="lbl">Dalian</div><div class="mv up">+0.97%</div>
-            <div class="dim" style="font-size:10px">07:00 close</div>
+            <div class="lbl">Dalian meal</div>
+            <div class="usdv up">468.17 <span class="dim">+0.83%</span></div>
+            <div class="natv">CNY 3,154 · +0.64%</div>
           </div>
           <div class="chip below" style="left:50%">
-            <div class="dot" style="background:var(--text-muted)"></div>
-            <div class="lbl">SAFEX</div><div class="mv flat">+0.03%</div>
-            <div class="dim" style="font-size:10px">~12:00</div>
+            <div class="dot" style="background:var(--bullish)"></div>
+            <div class="lbl">SAFEX</div>
+            <div class="usdv up">497.72 <span class="dim">+0.44%</span></div>
+            <div class="natv">ZAR 8,082 · +0.03%</div>
           </div>
           <div class="chip above" style="left:62.8%">
             <div class="dot" style="background:var(--text-dim)"></div>
-            <div class="lbl">Argentina FOB</div><div class="mv dim">D−1</div>
-            <div class="dim" style="font-size:10px">15:05</div>
+            <div class="lbl">Argentina FOB</div>
+            <div class="usdv dim">457.00</div>
+            <div class="natv">USD native · D−1</div>
           </div>
-          <div class="chip below" style="left:75.9%">
+          <div class="chip below" style="left:75.6%">
             <div class="dot" style="background:var(--text-dim)"></div>
-            <div class="lbl">US Gulf CIF</div><div class="mv dim">D−1</div>
-            <div class="dim" style="font-size:10px">18:48</div>
+            <div class="lbl">US Gulf CIF</div>
+            <div class="usdv dim">469.49</div>
+            <div class="natv">$12.78/bu · D−1</div>
           </div>
-          <div class="chip above" style="left:76.0%">
+          <div class="chip above" style="left:76.5%">
             <div class="dot" style="background:var(--bearish)"></div>
-            <div class="lbl">CBOT</div><div class="mv flat">−0.06%</div>
-            <div class="dim" style="font-size:10px">18:15 settle</div>
+            <div class="lbl">CBOT</div>
+            <div class="usdv flat">424.94 <span class="dim">−0.06%</span></div>
+            <div class="natv">1,156.50 ¢/bu</div>
           </div>
-          <div class="chip below" style="left:87.5%">
+          <div class="chip below" style="left:88%">
             <div class="dot" style="background:var(--bullish)"></div>
-            <div class="lbl">Brazil CEPEA</div><div class="mv up">+0.56%</div>
-            <div class="dim" style="font-size:10px">21:01 · D−1</div>
+            <div class="lbl">Brazil CEPEA</div>
+            <div class="usdv up">445.98 <span class="dim">+0.67%</span></div>
+            <div class="natv">BRL 2,292 · D−1</div>
           </div>
         </div>
         <div class="tray">
@@ -236,7 +294,7 @@
           <div class="t"><b>EC Moselle</b> — weekly, Thursday. Not on a daily rail</div>
           <div class="t"><b>Nigeria</b> — no price series exists</div>
         </div>
-        <div class="legend"><span>Positions are <b>venue schedules</b>, not observed print times — the stack stores no time of day.</span></div>
+        <div class="legend"><span>Positions are <b>venue schedules</b>, not observed print times — the stack stores no time of day. USD conversion uses each leg's own print-date FX close.</span></div>
       </div>
 
       <p class="claim"><b>The claim this variant makes:</b> "the day has an order, and you are reading it mid-way." It makes the timezone gap physical and shows instantly that Dalian is the freshest settled leg, not CBOT.
@@ -249,56 +307,63 @@
     <div class="sec">
       <div class="sec-head"><span class="sec-no">C</span><h2>Gap board — this market against the complex</h2>
         <span class="why">not "did it move" but "did it move like the others"</span></div>
-      <p class="lede">Each leg's session move measured against the median move of the legs that printed the same day (+0.30% here). Divergence is the signal;
-        legs that did not print are shown as an explicit gap, never as 0.00%.</p>
+      <p class="lede">Each leg's <b>USD</b> session move against the median USD move of the legs that printed the same day (+0.44% here). Measuring in dollars is what makes the comparison legitimate at all —
+        a median across CNY, ZAR and cents/bu would be arithmetic on four different things. Legs that did not print show as an explicit gap, never as 0.00%.</p>
 
       <div class="grid">
         <div class="gcard">
-          <div class="mkt">Dalian · bean B</div>
-          <div class="big up">+0.97<span>%</span></div>
-          <div class="muted" style="font-size:12px">+0.67 pts vs complex</div>
-          <div class="bar"><i style="left:50%;width:24%;background:var(--bullish)"></i></div>
+          <div class="mkt">Dalian · meal</div>
+          <div class="big up">+0.83<span>% USD</span></div>
+          <div class="muted" style="font-size:12px">+0.39 pts vs complex · local +0.64%</div>
+          <div class="lvl"><b>468.17</b> USD/MT <span class="dim">· CNY 3,154</span></div>
+          <div class="bar"><i style="left:50%;width:20%;background:var(--bullish)"></i></div>
           <div class="sub"><b>Led.</b> Printed 07:00 UTC, before every other board.</div>
         </div>
         <div class="gcard">
           <div class="mkt">CBOT · beans</div>
-          <div class="big flat">−0.06<span>%</span></div>
-          <div class="muted" style="font-size:12px">−0.36 pts vs complex</div>
-          <div class="bar"><i style="right:50%;width:13%;background:var(--bearish)"></i></div>
+          <div class="big flat">−0.06<span>% USD</span></div>
+          <div class="muted" style="font-size:12px">−0.50 pts vs complex · no FX leg</div>
+          <div class="lvl"><b>424.94</b> USD/MT <span class="dim">· 1,156.50 ¢/bu</span></div>
+          <div class="bar"><i style="right:50%;width:16%;background:var(--bearish)"></i></div>
           <div class="sub"><b>Diverged.</b> Settled 18:15 UTC — 11h after Dalian, and did not follow.</div>
         </div>
         <div class="gcard">
+          <div class="mkt">South Africa · SAFEX</div>
+          <div class="big up">+0.44<span>% USD</span></div>
+          <div class="muted" style="font-size:12px">in line · <b>local only +0.03%</b></div>
+          <div class="lvl"><b>497.72</b> USD/MT <span class="dim">· ZAR 8,082</span></div>
+          <div class="bar"><i style="left:50%;width:11%;background:var(--bullish)"></i></div>
+          <div class="sub"><b>FX did the work.</b> The rand moved, the domestic price did not. Two different stories depending on the currency you pay in.</div>
+        </div>
+        <div class="gcard">
           <div class="mkt">Brazil · CEPEA</div>
-          <div class="big up">+0.56<span>%</span></div>
+          <div class="big up">+0.67<span>% USD</span></div>
           <div class="muted" style="font-size:12px">as of <b>06 Aug</b> — one day behind</div>
+          <div class="lvl"><b>445.98</b> USD/MT <span class="dim">· BRL 2,292</span></div>
           <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
           <div class="sub"><b>Not comparable.</b> Structurally D−1; the 07 Aug print lands after tonight's run.</div>
         </div>
         <div class="gcard">
+          <div class="mkt">US Gulf · CIF</div>
+          <div class="big dim">469.49<span> USD/MT</span></div>
+          <div class="muted" style="font-size:12px">$12.7775/bu · basis +100¢ over Nov</div>
+          <div class="lvl">basis alone = <b>+36.74</b> USD/MT</div>
+          <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
+          <div class="sub"><b>Level only.</b> One observation stored locally — no move to quote, D−1.</div>
+        </div>
+        <div class="gcard">
           <div class="mkt">Argentina · official FOB</div>
           <div class="big dim">457.00<span> USD/MT</span></div>
-          <div class="muted" style="font-size:12px">4 observations — no range yet</div>
+          <div class="muted" style="font-size:12px">published in USD — no conversion needed</div>
+          <div class="lvl">4 observations <span class="dim">— no range yet</span></div>
           <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
-          <div class="sub"><b>Level only.</b> Administered minimum, not a traded print. History starts 07 Aug 2026.</div>
-        </div>
-        <div class="gcard">
-          <div class="mkt">South Africa · SAFEX</div>
-          <div class="big flat">+0.03<span>%</span></div>
-          <div class="muted" style="font-size:12px">−0.27 pts vs complex</div>
-          <div class="bar"><i style="right:50%;width:9%;background:var(--text-muted)"></i></div>
-          <div class="sub"><b>Local basis market.</b> Moves on ZAR and domestic supply more than on the complex.</div>
-        </div>
-        <div class="gcard">
-          <div class="mkt">US Gulf · CIF</div>
-          <div class="big dim">+12.78<span> ¢/bu</span></div>
-          <div class="muted" style="font-size:12px">basis — not a flat price</div>
-          <div class="bar" style="background:repeating-linear-gradient(135deg,var(--neutral),var(--neutral) 5px,#fff 5px,#fff 10px)"></div>
-          <div class="sub"><b>Different unit.</b> Cannot enter a % comparison; shown for the export bid, D−1.</div>
+          <div class="sub"><b>Administered minimum</b>, not a traded print. History starts 07 Aug 2026.</div>
         </div>
         <div class="gcard" style="border-style:dashed;background:transparent">
           <div class="mkt down">India · mandi</div>
           <div class="big dim">—</div>
           <div class="muted" style="font-size:12px">layer 16 holds zero rows</div>
+          <div class="lvl dim">INR/USD is live; the price is not</div>
           <div class="bar" style="background:transparent"></div>
           <div class="sub"><b>Dark.</b> Ingest failure — this is our gap, not the market's silence.</div>
         </div>
@@ -306,12 +371,13 @@
           <div class="mkt dim">Nigeria</div>
           <div class="big dim">—</div>
           <div class="muted" style="font-size:12px">no domestic price series exists</div>
+          <div class="lvl dim">NGN/USD tracked, nothing to convert</div>
           <div class="bar" style="background:transparent"></div>
           <div class="sub"><b>Structural.</b> PSD, NGN/USD and weather only.</div>
         </div>
       </div>
 
-      <p class="claim"><b>The claim this variant makes:</b> "this market is out of line with the complex." Strongest analytical read of the four, and it forces the level-vs-history distinction into the open.
+      <p class="claim"><b>The claim this variant makes:</b> "this market is out of line with the complex, in dollars." Strongest analytical read of the four, and USD is what licenses the comparison.
         Risk: a "complex median" is one step from the lead-lag modelling that #145 rules out of scope — and it silently privileges whichever legs happened to print.</p>
     </div>
   </section>
@@ -322,34 +388,46 @@
       <div class="sec-head"><span class="sec-no">D</span><h2>Relay — who has spoken since the event</h2>
         <span class="why">the 6am question, answered as a single cut</span></div>
       <p class="lede">One cut line: the event. Left of it, prints that predate the news and cannot contain it. Right of it, prints that could.
-        Reading order is settlement order, not importance order — so the freshest leg leads even when it is not the biggest market.</p>
+        Each step carries USD/MT over the home-currency print. Reading order is settlement order, not importance order — so the freshest leg leads even when it is not the biggest market.</p>
 
       <div class="card">
         <div class="relay">
           <div class="step">
             <div class="t">06 Aug 21:01</div><div class="m">Brazil CEPEA</div>
-            <div class="v up">+0.56%</div><div class="n">Before the event. Stale by construction.</div>
+            <div class="v up">445.98 <span class="dim">+0.67%</span></div>
+            <div class="vl">BRL 2,291.67 · +0.56%</div>
+            <div class="n">Before the event. Stale by construction.</div>
           </div>
           <div class="step">
             <div class="t">06 Aug 18:48</div><div class="m">US Gulf CIF</div>
-            <div class="v dim">+12.78¢</div><div class="n">Before the event.</div>
+            <div class="v dim">469.49</div>
+            <div class="vl">$12.7775/bu · +100¢ Nov</div>
+            <div class="n">Before the event.</div>
           </div>
           <div class="step">
             <div class="t">06 Aug 15:05</div><div class="m">Argentina FOB</div>
-            <div class="v dim">457.00</div><div class="n">Before the event.</div>
+            <div class="v dim">457.00</div>
+            <div class="vl">published in USD</div>
+            <div class="n">Before the event.</div>
           </div>
           <div class="cut"><span>event · 07 Aug 02:00</span></div>
           <div class="step after">
-            <div class="t">07 Aug 07:00</div><div class="m">Dalian</div>
-            <div class="v up">+0.97%</div><div class="n">First to price it. 5h after.</div>
+            <div class="t">07 Aug 07:00</div><div class="m">Dalian meal</div>
+            <div class="v up">468.17 <span class="dim">+0.83%</span></div>
+            <div class="vl">CNY 3,154 · +0.64%</div>
+            <div class="n">First to price it. 5h after.</div>
           </div>
           <div class="step after">
             <div class="t">07 Aug ~12:00</div><div class="m">SAFEX</div>
-            <div class="v flat">+0.03%</div><div class="n">Priced it. Barely moved.</div>
+            <div class="v up">497.72 <span class="dim">+0.44%</span></div>
+            <div class="vl">ZAR 8,082 · <b>+0.03%</b></div>
+            <div class="n">Priced it in dollars only — the rand moved, the local price did not.</div>
           </div>
           <div class="step after">
             <div class="t">07 Aug 18:15</div><div class="m">CBOT</div>
-            <div class="v flat">−0.06%</div><div class="n">Priced it. Did not follow Dalian.</div>
+            <div class="v flat">424.94 <span class="dim">−0.06%</span></div>
+            <div class="vl">1,156.50 ¢/bu</div>
+            <div class="n">Priced it. Did not follow Dalian.</div>
           </div>
         </div>
         <div class="tray">
@@ -365,12 +443,13 @@
   </section>
 
   <section class="sec" style="border-bottom:none">
-    <div class="sec-head"><span class="sec-no">·</span><h2>The four constraints every variant had to obey</h2></div>
-    <ul class="lede" style="max-width:90ch">
+    <div class="sec-head"><span class="sec-no">·</span><h2>The five constraints every variant had to obey</h2></div>
+    <ul class="lede" style="max-width:92ch">
       <li><b>No observed timestamps.</b> Schema stores dates only (M4 / #146). Every clock face here is a static venue schedule.</li>
       <li><b>Silence ≠ flat.</b> A leg that has not printed must never render as 0.00%.</li>
       <li><b>Dark ≠ silent.</b> India's blank is our ingest failure (#155), not the market declining to move.</li>
-      <li><b>Kinds do not mix.</b> Board / physical / administered / weekly-assessment are four different objects; a shared % column quietly claims they are one.</li>
+      <li><b>Kinds do not mix.</b> Board / physical / administered / weekly-assessment are four different objects; a shared % column quietly claims they are one. USD/MT makes them <em>comparable</em>, not <em>equivalent</em>.</li>
+      <li><b>The USD number carries an FX timestamp of its own.</b> FX closes are New-York-afternoon marks, so a 07:00 UTC Dalian settle converts at a rate struck ~11h later. Same-day comparable, never simultaneous — and the strip says so out loud.</li>
     </ul>
   </section>
 </div>
@@ -391,7 +470,7 @@
   document.querySelectorAll('.bar-fixed a').forEach(a => {
     if (a.dataset.v === pick) a.classList.add('on');
   });
-  console.log('PROTOTYPE state → variant:', pick);
+  console.log('PROTOTYPE state → variant:', pick, '| every leg dual-quoted USD/MT + home ccy');
 </script>
 </body>
 </html>
