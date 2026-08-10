@@ -34,6 +34,8 @@ from trust import (
     RunStatus,
     Source,
     Timestamp,
+    ValidationPolicy,
+    evaluate_run_status,
 )
 
 NOW = datetime(2026, 8, 10, 12, 30, tzinfo=timezone.utc)
@@ -123,11 +125,12 @@ def values() -> dict[str, object]:
         status=DatasetResultStatus.SUCCESS,
         candidate_count=1,
         accepted_revision_ids=(revision.revision_id,),
-        artifact_ids=(artifact.artifact_id,),
-        finding_ids=(finding.finding_id,),
+        artifact_references=(artifact,),
+        findings=(finding,),
         coverage=Decimal("1.00"),
         freshness=FreshnessState.CURRENT,
         eligible=True,
+        validation_policy=ValidationPolicy(("identity.required", "value.positive")),
         as_of_date=date(2026, 8, 10),
     )
     completed_run = replace(
@@ -539,3 +542,245 @@ def test_correction_replacement_is_explicit_and_evidenced(values: dict[str, obje
         replace(revision, correction_type="source-correction", correction_reason=None)
     with pytest.raises(ValueError, match="type and reason"):
         replace(revision, correction_type=None, correction_reason="Corrected by source")
+
+
+def test_dataset_result_exposes_the_complete_ingestion_outcome(values: dict[str, object]) -> None:
+    artifact = values["artifact"]
+    finding = values["finding"]
+    revision = values["revision"]
+    run = values["run"]
+    dataset = values["dataset"]
+    result = DatasetResult(
+        run_id=run.run_id,
+        dataset_id=dataset.dataset_id,
+        status=DatasetResultStatus.SUCCESS,
+        candidate_count=1,
+        accepted_revision_ids=(revision.revision_id,),
+        artifact_references=(artifact,),
+        findings=(finding,),
+        coverage=Decimal("1"),
+        freshness=FreshnessState.CURRENT,
+        eligible=True,
+        validation_policy=ValidationPolicy(("identity.required", "value.positive")),
+    )
+
+    assert result.artifact_references == (artifact,)
+    assert result.artifact_ids == (artifact.artifact_id,)
+    assert result.candidate_count == 1
+    assert result.accepted_count == 1
+    assert result.accepted_revision_ids == (revision.revision_id,)
+    assert result.findings == (finding,)
+    assert result.finding_ids == (finding.finding_id,)
+    assert result.coverage == Decimal("1")
+    assert result.freshness is FreshnessState.CURRENT
+    assert result.eligible is True
+    assert DatasetResult.from_dict(json.loads(json.dumps(result.to_dict()))) == result
+
+
+def test_every_dataset_result_state_is_explicit_and_round_trips(values: dict[str, object]) -> None:
+    successful = values["dataset_result"]
+    warning = values["finding"]
+    legitimate_empty = replace(
+        successful,
+        status=DatasetResultStatus.LEGITIMATE_EMPTY,
+        candidate_count=0,
+        accepted_revision_ids=(),
+        artifact_references=(),
+        findings=(),
+        validation_policy=ValidationPolicy(("publication.present",), allows_empty_publication=True),
+    )
+    external_failure = replace(
+        successful,
+        status=DatasetResultStatus.EXTERNAL_FAILURE,
+        candidate_count=0,
+        accepted_revision_ids=(),
+        artifact_references=(),
+        findings=(),
+        coverage=Decimal("0"),
+        freshness=FreshnessState.UNAVAILABLE,
+        eligible=False,
+        error="source timed out",
+    )
+    contract_failure = replace(
+        successful,
+        status=DatasetResultStatus.CONTRACT_FAILURE,
+        accepted_revision_ids=(),
+        findings=(replace(warning, severity=FindingSeverity.REJECT),),
+        coverage=Decimal("0"),
+        eligible=False,
+        error="coverage contract failed",
+    )
+    quarantined = replace(
+        successful,
+        status=DatasetResultStatus.QUARANTINED,
+        accepted_revision_ids=(),
+        findings=(replace(warning, severity=FindingSeverity.QUARANTINE),),
+        coverage=Decimal("0"),
+        eligible=False,
+    )
+    results = (successful, legitimate_empty, external_failure, contract_failure, quarantined)
+
+    assert {result.status for result in results} == set(DatasetResultStatus)
+    assert all(
+        DatasetResult.from_dict(json.loads(json.dumps(result.to_dict()))) == result
+        for result in results
+    )
+
+
+def test_dataset_result_rejects_contradictory_state_combinations(values: dict[str, object]) -> None:
+    successful = values["dataset_result"]
+    warning = values["finding"]
+    reject = replace(warning, severity=FindingSeverity.REJECT)
+    quarantine = replace(warning, severity=FindingSeverity.QUARANTINE)
+    contradictions = (
+        {"findings": (reject,)},
+        {"findings": (quarantine,)},
+        {"accepted_revision_ids": ()},
+        {"artifact_references": ()},
+        {"freshness": FreshnessState.UNAVAILABLE},
+        {"error": "success cannot carry an error"},
+        {
+            "status": DatasetResultStatus.LEGITIMATE_EMPTY,
+            "candidate_count": 0,
+            "accepted_revision_ids": (),
+            "artifact_references": (),
+            "findings": (),
+        },
+        {
+            "status": DatasetResultStatus.LEGITIMATE_EMPTY,
+            "accepted_revision_ids": (),
+            "validation_policy": ValidationPolicy(
+                ("publication.present",),
+                allows_empty_publication=True,
+            ),
+        },
+        {
+            "status": DatasetResultStatus.EXTERNAL_FAILURE,
+            "accepted_revision_ids": (),
+            "eligible": True,
+            "error": "source timed out",
+        },
+        {
+            "status": DatasetResultStatus.EXTERNAL_FAILURE,
+            "accepted_revision_ids": (),
+            "eligible": False,
+        },
+        {
+            "status": DatasetResultStatus.EXTERNAL_FAILURE,
+            "eligible": False,
+            "error": "source timed out",
+        },
+        {
+            "status": DatasetResultStatus.CONTRACT_FAILURE,
+            "accepted_revision_ids": (),
+            "eligible": False,
+            "error": "contract failed",
+        },
+        {
+            "status": DatasetResultStatus.QUARANTINED,
+            "accepted_revision_ids": (),
+            "eligible": False,
+        },
+        {
+            "status": DatasetResultStatus.QUARANTINED,
+            "accepted_revision_ids": (),
+            "findings": (quarantine,),
+            "eligible": True,
+        },
+    )
+
+    for changes in contradictions:
+        with pytest.raises(ValueError):
+            replace(successful, **changes)
+
+
+def test_run_status_evaluation_consumes_only_dataset_results(values: dict[str, object]) -> None:
+    successful = values["dataset_result"]
+    critical_dataset_ids = (successful.dataset_id,)
+    first_supporting_failure = replace(
+        successful,
+        dataset_id=f"dst_{'c' * 64}",
+        status=DatasetResultStatus.EXTERNAL_FAILURE,
+        candidate_count=0,
+        accepted_revision_ids=(),
+        artifact_references=(),
+        findings=(),
+        coverage=Decimal("0"),
+        freshness=FreshnessState.UNAVAILABLE,
+        eligible=False,
+        error="source timed out",
+    )
+    second_supporting_failure = replace(
+        first_supporting_failure,
+        dataset_id=f"dst_{'d' * 64}",
+    )
+
+    assert evaluate_run_status(
+        (successful,),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.SUCCEEDED
+    assert evaluate_run_status(
+        (successful, first_supporting_failure),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.SUCCEEDED
+    assert evaluate_run_status(
+        (successful, first_supporting_failure, second_supporting_failure),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.FAILED
+    assert evaluate_run_status(
+        (
+            replace(
+                successful,
+                status=DatasetResultStatus.QUARANTINED,
+                accepted_revision_ids=(),
+                findings=(replace(values["finding"], severity=FindingSeverity.QUARANTINE),),
+                eligible=False,
+            ),
+        ),
+        critical_dataset_ids=(),
+        max_hard_failures=0,
+    ) is RunStatus.FAILED
+    assert evaluate_run_status(
+        (replace(successful, eligible=False),),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.FAILED
+    assert evaluate_run_status(
+        (replace(successful, freshness=FreshnessState.STALE),),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.FAILED
+    assert evaluate_run_status(
+        (
+            replace(
+                successful,
+                status=DatasetResultStatus.LEGITIMATE_EMPTY,
+                candidate_count=0,
+                accepted_revision_ids=(),
+                validation_policy=ValidationPolicy(
+                    ("publication.present",),
+                    allows_empty_publication=True,
+                ),
+            ),
+        ),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.FAILED
+    assert evaluate_run_status(
+        (),
+        critical_dataset_ids=critical_dataset_ids,
+        max_hard_failures=1,
+    ) is RunStatus.FAILED
+
+
+def test_validation_policy_deserialization_does_not_coerce_truthy_values() -> None:
+    with pytest.raises(ValueError, match="must be a boolean"):
+        ValidationPolicy.from_dict(
+            {
+                "rule_ids": ["publication.present"],
+                "allows_empty_publication": "false",
+            }
+        )

@@ -21,7 +21,7 @@ import hashlib
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -157,6 +157,32 @@ def _sorted_identifiers(values: tuple[str, ...], field_name: str, prefix: str) -
     if len(normalized) != len(set(normalized)):
         raise ValueError(f"{field_name} cannot contain duplicates")
     return tuple(sorted(normalized))
+
+
+@dataclass(frozen=True)
+class ValidationPolicy:
+    """The canonical validation contract applied to one dataset result."""
+
+    rule_ids: tuple[str, ...]
+    allows_empty_publication: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "rule_ids", _sorted_unique(self.rule_ids, "validation.rule_ids"))
+        if not isinstance(self.allows_empty_publication, bool):
+            raise ValueError("validation.allows_empty_publication must be a boolean")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "rule_ids": list(self.rule_ids),
+            "allows_empty_publication": self.allows_empty_publication,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ValidationPolicy:
+        return cls(
+            rule_ids=tuple(str(value) for value in data["rule_ids"]),
+            allows_empty_publication=data["allows_empty_publication"],
+        )
 
 
 def _json_value(value: Any, field_name: str = "value") -> Any:
@@ -907,11 +933,12 @@ class DatasetResult:
     status: DatasetResultStatus
     candidate_count: int
     accepted_revision_ids: tuple[str, ...]
-    artifact_ids: tuple[str, ...]
-    finding_ids: tuple[str, ...]
+    artifact_references: tuple[ArtifactReference, ...]
+    findings: tuple[Finding, ...]
     coverage: Decimal | int | str
     freshness: FreshnessState
     eligible: bool
+    validation_policy: ValidationPolicy
     as_of_date: date | None = None
     error: str | None = None
     dataset_result_id: str = field(init=False)
@@ -931,17 +958,27 @@ class DatasetResult:
             or self.candidate_count < 0
         ):
             raise ValueError("dataset_result.candidate_count must be a non-negative integer")
-        id_fields = {
-            "accepted_revision_ids": "rev",
-            "artifact_ids": "art",
-            "finding_ids": "fnd",
-        }
-        for field_name, prefix in id_fields.items():
-            object.__setattr__(
-                self,
-                field_name,
-                _sorted_identifiers(getattr(self, field_name), f"dataset_result.{field_name}", prefix),
-            )
+        object.__setattr__(
+            self,
+            "accepted_revision_ids",
+            _sorted_identifiers(
+                self.accepted_revision_ids,
+                "dataset_result.accepted_revision_ids",
+                "rev",
+            ),
+        )
+        artifacts = tuple(sorted(self.artifact_references, key=lambda artifact: artifact.artifact_id))
+        if len(artifacts) != len({artifact.artifact_id for artifact in artifacts}):
+            raise ValueError("dataset_result.artifact_references cannot contain duplicates")
+        if any(artifact.dataset_id != self.dataset_id for artifact in artifacts):
+            raise ValueError("dataset result artifacts must belong to its dataset")
+        object.__setattr__(self, "artifact_references", artifacts)
+        findings = tuple(sorted(self.findings, key=lambda finding: finding.finding_id))
+        if len(findings) != len({finding.finding_id for finding in findings}):
+            raise ValueError("dataset_result.findings cannot contain duplicates")
+        if any(finding.run_id != self.run_id or finding.dataset_id != self.dataset_id for finding in findings):
+            raise ValueError("dataset result findings must belong to its run and dataset")
+        object.__setattr__(self, "findings", findings)
         if len(self.accepted_revision_ids) > self.candidate_count:
             raise ValueError("accepted revisions cannot exceed candidate count")
         coverage = _decimal(self.coverage, "dataset_result.coverage")
@@ -949,13 +986,70 @@ class DatasetResult:
         if coverage < 0 or coverage > 1:
             raise ValueError("dataset_result.coverage must be between 0 and 1")
         object.__setattr__(self, "freshness", _enum(FreshnessState, self.freshness))
+        if not isinstance(self.eligible, bool):
+            raise ValueError("dataset_result.eligible must be a boolean")
+        if not isinstance(self.validation_policy, ValidationPolicy):
+            raise ValueError("dataset_result.validation_policy must be a ValidationPolicy")
         if self.as_of_date is not None:
             object.__setattr__(self, "as_of_date", _date(self.as_of_date, "dataset_result.as_of_date"))
         if self.error is not None:
             object.__setattr__(self, "error", _text(self.error, "dataset_result.error"))
+        failure_statuses = {
+            DatasetResultStatus.EXTERNAL_FAILURE,
+            DatasetResultStatus.CONTRACT_FAILURE,
+        }
+        successful_statuses = {
+            DatasetResultStatus.SUCCESS,
+            DatasetResultStatus.LEGITIMATE_EMPTY,
+        }
+        severities = {finding.severity for finding in self.findings}
+        if self.status in successful_statuses and severities & {
+            FindingSeverity.QUARANTINE,
+            FindingSeverity.REJECT,
+        }:
+            raise ValueError("a successful dataset result cannot contain unresolved quarantine or reject findings")
+        if self.status in successful_statuses and self.freshness is FreshnessState.UNAVAILABLE:
+            raise ValueError("a successful dataset result must have an available freshness state")
+        if self.status is DatasetResultStatus.SUCCESS and not self.accepted_revision_ids:
+            raise ValueError("a successful dataset result requires an accepted revision")
+        if self.accepted_revision_ids and not self.artifact_references:
+            raise ValueError("accepted revisions require an artifact reference")
+        if self.status is DatasetResultStatus.LEGITIMATE_EMPTY:
+            if not self.validation_policy.allows_empty_publication:
+                raise ValueError("a legitimate empty result requires a dataset contract that permits it")
+            if self.candidate_count != 0:
+                raise ValueError("a legitimate empty result cannot contain candidate rows")
+        if self.status is not DatasetResultStatus.SUCCESS and self.accepted_revision_ids:
+            raise ValueError("only a successful dataset result may expose accepted revisions")
+        if self.status in failure_statuses:
+            if self.eligible:
+                raise ValueError("a failed dataset result cannot be eligible")
+            if self.error is None:
+                raise ValueError("an external or contract failure requires an error")
+        elif self.error is not None:
+            raise ValueError("only an external or contract failure may contain an error")
+        if self.status is DatasetResultStatus.CONTRACT_FAILURE and FindingSeverity.REJECT not in severities:
+            raise ValueError("a contract failure requires a reject finding")
+        if self.status is DatasetResultStatus.QUARANTINED:
+            if self.eligible:
+                raise ValueError("a quarantined dataset result cannot be eligible")
+            if FindingSeverity.QUARANTINE not in severities or FindingSeverity.REJECT in severities:
+                raise ValueError("a quarantined dataset result requires quarantine findings without rejects")
         object.__setattr__(
             self, "dataset_result_id", _stable_id("dsr", {"run_id": self.run_id, "dataset_id": self.dataset_id})
         )
+
+    @property
+    def accepted_count(self) -> int:
+        return len(self.accepted_revision_ids)
+
+    @property
+    def artifact_ids(self) -> tuple[str, ...]:
+        return tuple(artifact.artifact_id for artifact in self.artifact_references)
+
+    @property
+    def finding_ids(self) -> tuple[str, ...]:
+        return tuple(finding.finding_id for finding in self.findings)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -967,11 +1061,12 @@ class DatasetResult:
             "status": self.status.value,
             "candidate_count": self.candidate_count,
             "accepted_revision_ids": list(self.accepted_revision_ids),
-            "artifact_ids": list(self.artifact_ids),
-            "finding_ids": list(self.finding_ids),
+            "artifact_references": [artifact.to_dict() for artifact in self.artifact_references],
+            "findings": [finding.to_dict() for finding in self.findings],
             "coverage": _decimal_text(cast(Decimal, self.coverage)),
             "freshness": self.freshness.value,
             "eligible": self.eligible,
+            "validation_policy": self.validation_policy.to_dict(),
             "as_of_date": self.as_of_date.isoformat() if self.as_of_date else None,
             "error": self.error,
         }
@@ -985,16 +1080,62 @@ class DatasetResult:
             status=DatasetResultStatus(str(data["status"])),
             candidate_count=int(data["candidate_count"]),
             accepted_revision_ids=tuple(data["accepted_revision_ids"]),
-            artifact_ids=tuple(data["artifact_ids"]),
-            finding_ids=tuple(data["finding_ids"]),
+            artifact_references=tuple(
+                ArtifactReference.from_dict(artifact) for artifact in data["artifact_references"]
+            ),
+            findings=tuple(Finding.from_dict(finding) for finding in data["findings"]),
             coverage=str(data["coverage"]),
             freshness=FreshnessState(str(data["freshness"])),
-            eligible=bool(data["eligible"]),
+            eligible=data["eligible"],
+            validation_policy=ValidationPolicy.from_dict(data["validation_policy"]),
             as_of_date=date.fromisoformat(str(data["as_of_date"])) if data.get("as_of_date") else None,
             error=data.get("error"),
         )
         _check_serialized_id(data, "dataset_result_id", result.dataset_result_id)
         return result
+
+
+def evaluate_run_status(
+    results: Sequence[DatasetResult],
+    *,
+    critical_dataset_ids: Collection[str],
+    max_hard_failures: int,
+) -> RunStatus:
+    """Evaluate terminal run status from typed dataset outcomes alone."""
+    if (
+        not isinstance(max_hard_failures, int)
+        or isinstance(max_hard_failures, bool)
+        or max_hard_failures < 0
+    ):
+        raise ValueError("max_hard_failures must be a non-negative integer")
+    normalized_critical_ids = {
+        _identifier(dataset_id, "critical_dataset_ids", "dst")
+        for dataset_id in critical_dataset_ids
+    }
+    results_by_dataset = {result.dataset_id: result for result in results}
+    if len(results_by_dataset) != len(results):
+        raise ValueError("run status evaluation requires one result per dataset")
+    if len({result.run_id for result in results}) > 1:
+        raise ValueError("run status evaluation cannot combine results from different runs")
+
+    critical_failure = any(
+        dataset_id not in results_by_dataset
+        or results_by_dataset[dataset_id].status is not DatasetResultStatus.SUCCESS
+        or not results_by_dataset[dataset_id].eligible
+        or results_by_dataset[dataset_id].freshness is not FreshnessState.CURRENT
+        for dataset_id in normalized_critical_ids
+    )
+    hard_failure_statuses = {
+        DatasetResultStatus.EXTERNAL_FAILURE,
+        DatasetResultStatus.CONTRACT_FAILURE,
+        DatasetResultStatus.QUARANTINED,
+    }
+    hard_failure_count = sum(
+        result.status in hard_failure_statuses for result in results_by_dataset.values()
+    )
+    if critical_failure or hard_failure_count > max_hard_failures:
+        return RunStatus.FAILED
+    return RunStatus.SUCCEEDED
 
 
 @dataclass(frozen=True)
