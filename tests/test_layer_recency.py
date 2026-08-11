@@ -639,6 +639,42 @@ def _run_sagis_smd(days_ago: float) -> bool:
     )
 
 
+# ── Layer 25 (CEC): the observation date lives in `release_date` ───────────
+# The CEC layer is the whole reason the SAGIS mirror can be trusted as the
+# fetch target rather than the issuing department: a mirror that quietly
+# stops republishing serves the same 23 PDFs at HTTP 200 forever, and only
+# the recency gate can see it. That makes `release_date` load-bearing in
+# _DATE_COLUMNS — without it the layer would be undatable, which the gate
+# treats as "cannot certify recency" rather than as fresh.
+
+
+def _cec_result(days_ago: float):
+    from pipeline.results import FetchResult
+
+    released = pd.Timestamp.now().normalize() - pd.Timedelta(days=days_ago)
+    frame = pd.DataFrame({
+        "commodity": ["Soybeans (CEC)"],
+        "season_year": [2026],
+        "release_date": [released.date().isoformat()],
+        "estimate_kind": ["forecast"],
+        "forecast_seq": [6],
+        "forecast_label": ["Area planted and sixth production forecast"],
+        "area_ha": [1_212_700.0],
+        "production_t": [3_043_825.0],
+        "unit": ["MT"],
+        "source_url": ["https://www.sagis.org.za/x/CEC_2026-07-28.pdf"],
+    })
+    return FetchResult.ok({"Soybeans (CEC)": frame})
+
+
+def _run_cec(days_ago: float) -> bool:
+    return main._run_scraper_layer(
+        "cec", "Layer 25", "CEC South Africa official crop estimates",
+        fetch=lambda: _cec_result(days_ago),
+        save=lambda n, d: None,
+    )
+
+
 def test_sagis_smd_month_end_is_a_recognised_observation_date():
     assert "month_end" in main._DATE_COLUMNS
 
@@ -654,3 +690,32 @@ def test_sagis_smd_frozen_workbook_records_failed(freshness_calls):
     assert _run_sagis_smd(days_ago=LAYER_MAX_DATA_AGE_DAYS["sagis_smd"] + 1) is False
     assert [c["status"] for c in freshness_calls] == ["failed"]
     assert "sagis_smd" in main._HARD_FAILURES
+
+
+def test_cec_release_date_is_a_recognised_observation_date():
+    assert "release_date" in main._DATE_COLUMNS
+
+
+def test_cec_within_budget_stamps_success(freshness_calls):
+    """A monthly release, read the day before the next one is due."""
+    assert _run_cec(days_ago=33) is True
+    assert [c["status"] for c in freshness_calls] == ["success"]
+
+
+def test_cec_frozen_mirror_records_failed(freshness_calls):
+    assert _run_cec(days_ago=LAYER_MAX_DATA_AGE_DAYS["cec"] + 1) is False
+    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert "cec" in main._HARD_FAILURES
+
+
+def test_cec_budget_survives_the_december_gap(freshness_calls):
+    """Only Jan-Nov carry a summer-crop table.
+
+    The December release covers winter cereals alone, so the soybean series
+    has one legitimate ~61-day hole a year (27 Nov 2025 → 27 Jan 2026). A
+    budget under that would fail the layer every January for a source doing
+    exactly what it always does.
+    """
+    assert LAYER_MAX_DATA_AGE_DAYS["cec"] > 61
+    assert _run_cec(days_ago=61) is True
+    assert [c["status"] for c in freshness_calls] == ["success"]

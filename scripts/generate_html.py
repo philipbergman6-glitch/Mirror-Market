@@ -884,6 +884,87 @@ def _build_emerging_markets(data: dict) -> str:
                     f'{_esc(sa_smd["attribution"])}</div>'
                 )
 
+        # South Africa CEC official crop estimates (Layer 25). A revision
+        # series: the headline is the current forecast, and the two deltas
+        # are the in-season revision and the year-on-year crop. The USDA
+        # figure is labelled a lag rather than a divergence — PSD carries the
+        # CEC's own final number once a season closes (#204).
+        sa_cec = info.get("south_africa_estimates", {})
+        if sa_cec:
+            parts.append(
+                '<div class="subhdr" style="font-size:14px;">'
+                'CEC Official Crop Estimates</div>'
+            )
+            for key, label in (
+                ("soybeans", "Soybeans"),
+                ("sunflower", "Sunflower Seed"),
+            ):
+                view = sa_cec.get(key)
+                if not view:
+                    continue
+                cec_cards = ['<div class="grid grid-3">']
+                stage = _esc(view.get("forecast_label", ""))
+                released = _esc(view.get("release_date", ""))
+                production = view.get("production_t")
+                headline = f"{production:,.0f}" if production is not None else "—"
+                sub = f"MT · {stage}" + (f" · {released}" if released else "")
+                cec_cards.append(
+                    f'<div class="mc"><div class="mc-label">{label} — '
+                    f'{view["season_year"]} Crop</div>'
+                    f'<div class="mc-val">{headline}</div>'
+                    f'<div class="mc-delta muted">{sub}</div></div>'
+                )
+                revision = view.get("revision_pct")
+                if revision is not None:
+                    rev_cls = "" if revision == 0 else ("up" if revision > 0 else "down")
+                    prev = _esc(view.get("prev_release_date", ""))
+                    cec_cards.append(
+                        f'<div class="mc"><div class="mc-label">{label} — '
+                        'Revision</div>'
+                        f'<div class="mc-val {rev_cls}">{revision:+.2f}%</div>'
+                        f'<div class="mc-delta muted">vs {prev}</div></div>'
+                    )
+                yoy = view.get("yoy_pct")
+                if yoy is not None:
+                    yoy_cls = "up" if yoy > 0 else "down"
+                    cec_cards.append(
+                        f'<div class="mc"><div class="mc-label">{label} — YoY</div>'
+                        f'<div class="mc-val {yoy_cls}">{yoy:+.1f}%</div>'
+                        f'<div class="mc-delta muted">vs '
+                        f'{view.get("prior_season_year", "")} final</div></div>'
+                    )
+                cec_cards.append('</div>')
+                parts.append("\n".join(cec_cards))
+
+                area = view.get("area_ha")
+                implied = view.get("yield_t_ha")
+                usda = view.get("usda_psd_t")
+                notes = []
+                if area:
+                    notes.append(f"Area {area:,.0f} ha")
+                if implied:
+                    notes.append(f"implied yield {implied:.2f} t/ha")
+                if usda is not None:
+                    gap = view.get("vs_usda_pct")
+                    gap_str = f" (CEC {gap:+.1f}%)" if gap is not None else ""
+                    notes.append(
+                        f"USDA PSD carries {usda:,.0f} MT for "
+                        f"{view['usda_psd_year']}/"
+                        f"{str(view['usda_psd_year'] + 1)[-2:]}{gap_str} — PSD has "
+                        "matched the CEC's final crop exactly for three seasons, "
+                        "so this is lag, not disagreement"
+                    )
+                if notes:
+                    parts.append(
+                        '<div class="muted" style="font-size:12px;">'
+                        f'{_esc(" · ".join(notes))}</div>'
+                    )
+            attribution = sa_cec.get("attribution")
+            if attribution:
+                parts.append(
+                    f'<div class="muted" style="font-size:12px;">{_esc(attribution)}</div>'
+                )
+
         parts.append('<hr class="divider">')
 
     return "\n".join(parts)

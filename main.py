@@ -37,6 +37,7 @@ from config import (
 )
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
+from fetchers.cec import fetch_cec_estimates
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.cot import fetch_cot_recent
@@ -94,6 +95,7 @@ from pipeline.store import (
     save_argentina_fob,
     save_brazil_estimates,
     save_brazil_spot,
+    save_cec_estimates,
     save_cot_data,
     save_crop_progress,
     save_currency_data,
@@ -220,6 +222,7 @@ def _mark_stale(
 # conventions (pipeline/clean.py), not the raw upstream ones.
 _DATE_COLUMNS = (
     "Date", "date", "week_ending", "week_end", "month_end", "report_date",
+    "release_date",
 )
 
 
@@ -840,6 +843,14 @@ def run() -> int:
         fetch=lambda: fetch_sagis_supply_demand(),
         save=lambda n, d: save_sagis_smd(n, d),
         clean=lambda d: clean_sagis_smd(d),
+    )
+    # Layer 25: South Africa's official crop estimate. The layer re-reads
+    # every release in its parse window each run, so an empty return means
+    # the listing page or the report layout changed — empty_fails stays on.
+    results["cec"] = _run_scraper_layer(
+        "cec", "Layer 25", "CEC South Africa official crop estimates",
+        fetch=lambda: fetch_cec_estimates(),
+        save=lambda n, d: save_cec_estimates(n, d),
     )
 
     # ── Export snapshot-only history back to git-committed CSVs ──
