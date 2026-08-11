@@ -121,6 +121,57 @@ def test_static_site_deployer_copies_rendered_dashboard_to_public_index(tmp_path
     assert (public_dir / "index.html").read_text(encoding="utf-8") == "<main>verified edition</main>"
 
 
+def test_static_artifact_contract_exposes_trust_metadata_without_prohibited_raw_data(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    trust_state = _public_trust_state_with_degradation()
+    candidate_dir = tmp_path / "candidate" / trust_state.edition_id
+    public_dir = tmp_path / "public"
+    cache_path = tmp_path / "trusted-query-cache.sqlite"
+    cache_path.write_text("raw artifact content: 499.50 BRL/saca", encoding="utf-8")
+    _stub_static_generation_dependencies(monkeypatch)
+
+    artifacts = generate_html.static_site_candidate_renderer(public_trust_state=trust_state)(
+        cache_path,
+        candidate_dir,
+        object(),
+    )
+    render = CandidateEditionRender(
+        edition_id=trust_state.edition_id,
+        output_dir=candidate_dir,
+        cache_build=QueryCacheBuild(
+            cache_path=cache_path,
+            mode="edition",
+            revision_count=1,
+            edition_id=trust_state.edition_id,
+        ),
+        generated_artifact_paths=artifacts,
+    )
+
+    evidence = generate_html.static_site_deployer(public_dir=public_dir)(object(), render)
+
+    candidate_html = (candidate_dir / "index.html").read_text(encoding="utf-8")
+    public_html = (public_dir / "index.html").read_text(encoding="utf-8")
+    assert evidence == ("deployed.dashboard.index.html",)
+    assert public_html == candidate_html
+    assert trust_state.edition_id in public_html
+    assert "2026-08-10T12:33:00+00:00" in public_html
+    assert "dst_" + "2" * 64 in public_html
+    assert "current" in public_html
+    assert "dst_" + "3" * 64 in public_html
+    assert "stale" in public_html
+    assert "agrural_paranagua.soybean.beans.fob" in public_html
+    assert "src_agrural" in public_html
+    assert "2026-08-10" in public_html
+    assert "accepted" in public_html
+    assert "obs_" + "4" * 64 in public_html
+    assert "rev_" + "5" * 64 in public_html
+    assert "499.50" not in public_html
+    assert "BRL/saca" not in public_html
+    assert "raw artifact content" not in public_html
+
+
 def _public_trust_state() -> EditionPublicTrustState:
     return EditionPublicTrustState(
         edition_id="edn_" + "1" * 64,
@@ -132,6 +183,30 @@ def _public_trust_state() -> EditionPublicTrustState:
                 label="agrural_paranagua.soybean.beans.fob",
                 source_id="src_agrural",
                 dataset_id="dst_" + "2" * 64,
+                dataset_key="agrural_paranagua",
+                as_of_date=date(2026, 8, 10),
+                quality_state=QualityState.ACCEPTED,
+                observation_id="obs_" + "4" * 64,
+                revision_id="rev_" + "5" * 64,
+            ),
+        ),
+    )
+
+
+def _public_trust_state_with_degradation() -> EditionPublicTrustState:
+    return EditionPublicTrustState(
+        edition_id="edn_" + "1" * 64,
+        generated_at=datetime(2026, 8, 10, 12, 33, tzinfo=timezone.utc),
+        critical_freshness={
+            "dst_" + "2" * 64: FreshnessState.CURRENT,
+            "dst_" + "3" * 64: FreshnessState.STALE,
+        },
+        degraded_dataset_ids=("dst_" + "3" * 64,),
+        critical_numbers=(
+            CriticalNumberProvenance(
+                label="agrural_paranagua.soybean.beans.fob",
+                source_id="src_agrural",
+                dataset_id="dst_" + "3" * 64,
                 dataset_key="agrural_paranagua",
                 as_of_date=date(2026, 8, 10),
                 quality_state=QualityState.ACCEPTED,
