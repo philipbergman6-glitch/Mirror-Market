@@ -767,6 +767,18 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "usda": 400,  # annual NASS crop data
 }
 
+
+def freshness_limit_days(layer: str) -> int:
+    """Days a layer may go without a successful run before it reads stale.
+
+    Single source for the three surfaces that judge run-freshness — the
+    briefing warning block, the dashboard Layer Freshness table, and
+    `analysis.health` — so a cadence added above reaches all of them at
+    once. The sidebar drifted onto a hardcoded 7 and spent months calling
+    healthy monthlies "old" (issue #176).
+    """
+    return FRESHNESS_WARNING_DAYS_BY_LAYER.get(layer, FRESHNESS_WARNING_DAYS)
+
 # Recency budget for "success" (audit F3). FRESHNESS_WARNING_DAYS_BY_LAYER
 # above measures when we last *ran*; this measures how old the newest
 # observation we *received* is allowed to be. Without it a frozen upstream

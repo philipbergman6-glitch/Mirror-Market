@@ -180,12 +180,82 @@ def test_legacy_row_without_status_column_falls_back_to_age_check(monkeypatch):
     assert "30 days old" in warnings[0]
 
 
+@pytest.fixture
+def dashboard_items(monkeypatch):
+    """Return a callable: rows -> {layer: status} from the dashboard path."""
+
+    def _run(rows: list[dict]) -> dict[str, str]:
+        import pipeline.query as query
+        from scripts import generate_html
+
+        df = _freshness_frame(rows)
+        monkeypatch.setattr(query, "read_freshness", lambda: df)
+        return {i["name"]: i["status"] for i in generate_html._build_freshness_items()}
+
+    return _run
+
+
+def test_dashboard_buckets_use_the_layers_own_cadence(dashboard_items):
+    """Issue #176: the sidebar bucketed every layer on a hardcoded 7 days.
+
+    COT publishes Friday for the previous Tuesday, so 5 days old is its
+    normal state, and the monthlies (42d) sat permanently in `old`. A badge
+    that is negative on a healthy layer every day is why the reader stops
+    reading badges.
+    """
+    statuses = dashboard_items(
+        [
+            _row("cot", "success", success_age_days=5),      # inside 12d
+            _row("safex", "success", success_age_days=20),  # no entry => 7d
+            _row("wasde", "success", success_age_days=20),   # inside 42d
+            _row("usda", "success", success_age_days=200),   # inside 400d
+            _row("prices", "success", success_age_days=3),   # inside default 7d
+            _row("agrural", "success", success_age_days=9),  # past default 7d
+        ]
+    )
+
+    assert statuses["cot"] == "stale"
+    assert statuses["wasde"] == "stale"
+    assert statuses["usda"] == "stale"
+    assert statuses["prices"] == "stale"
+    assert statuses["safex"] == "old"
+    assert statuses["agrural"] == "old"
+
+
+def test_dashboard_keeps_the_sub_day_fresh_boundary(dashboard_items):
+    """Cadence moves the stale/old cutoff only.
+
+    A daily layer fetched 3h ago and one fetched 20h ago are both `fresh`;
+    a weekly layer at 2 days is not, even though it is well inside COT's
+    12-day window. "Ran today" stays a distinct claim from "within cadence".
+    """
+    statuses = dashboard_items(
+        [
+            _row("prices", "success", success_age_days=0.1),
+            _row("fred", "success", success_age_days=0.8),
+            _row("cot", "success", success_age_days=2),
+        ]
+    )
+
+    assert statuses["prices"] == "fresh"
+    assert statuses["fred"] == "fresh"
+    assert statuses["cot"] == "stale"
+
+
 def test_status_buckets_match_the_dashboard_path(monkeypatch):
     """Cross-check: the same frame through both renderers must agree on which
     layers are problems and which are silent.
 
     This is the acceptance criterion for #60 — 'parity with the dashboard
     freshness path'. Wording differs by surface; the verdict must not.
+
+    "Problem" on the dashboard is `old` (or `degraded`, which only the health
+    path sets): `stale` means inside the layer's publication cadence but not
+    from today, which the briefing deliberately says nothing about. The
+    original fixtures (0.1d, 0.1d, 100d, 400d-disabled) all sat outside the
+    band where the two renderers could disagree, so the equality held by
+    selection — #176. These rows sit inside it: cot@5d and wasde@20d are
+    silent on both surfaces, safex@20d (no cadence entry) fires on both.
     """
     from scripts import generate_html
 
@@ -194,7 +264,13 @@ def test_status_buckets_match_the_dashboard_path(monkeypatch):
         _row("cepea", "disabled", success_age_days=400),
         _row("fred", "success", success_age_days=0.1),
         _row("psd", "success", success_age_days=100),
+        # The previously-untested 1–7d band and the slow-cadence layers.
+        _row("agrural", "success", success_age_days=3),
+        _row("cot", "success", success_age_days=5),
+        _row("wasde", "success", success_age_days=20),
+        _row("safex", "success", success_age_days=20),
     ]
+    layers = [r["layer_name"] for r in rows]
     df = _freshness_frame(rows)
 
     monkeypatch.setattr(freshness_section, "read_freshness", lambda: df)
@@ -206,19 +282,17 @@ def test_status_buckets_match_the_dashboard_path(monkeypatch):
 
     monkeypatch.setattr(query, "read_freshness", lambda: df)
 
+    briefing_lines = [
+        ln for ln in freshness_section.format().splitlines() if "WARNING:" in ln
+    ]
     briefing_flagged = {
-        layer
-        for layer in ("prices", "cepea", "fred", "psd")
-        if any(
-            layer in ln
-            for ln in freshness_section.format().splitlines()
-            if "WARNING:" in ln
-        )
+        layer for layer in layers if any(layer in ln for ln in briefing_lines)
     }
 
     items = generate_html._build_freshness_items()
     dashboard_flagged = {
-        i["name"] for i in items if i["status"] not in ("fresh", "disabled")
+        i["name"] for i in items if i["status"] in ("old", "degraded")
     }
 
-    assert briefing_flagged == dashboard_flagged == {"prices", "psd"}
+    expected = {"prices", "psd", "safex"}
+    assert briefing_flagged == dashboard_flagged == expected

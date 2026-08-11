@@ -35,7 +35,10 @@ from app.charts import (  # noqa: E402  (must follow sys.path.insert above)
     build_technical_chart,
     delta_str,
 )
-from config import HEALTH_TABLE_WRITER_LAYERS  # noqa: E402
+from config import (  # noqa: E402
+    HEALTH_TABLE_WRITER_LAYERS,
+    freshness_limit_days,
+)
 from scripts.validate_players import validate_players  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -141,7 +144,12 @@ def _build_freshness_items() -> list[dict]:
             elif age < timedelta(days=1):
                 status = "fresh"
                 age_str = f"{int(age.total_seconds() // 3600)}h ago"
-            elif age < timedelta(days=7):
+            elif age <= timedelta(days=freshness_limit_days(layer)):
+                # Inside the layer's own publication cadence: not today's
+                # data, but not a problem either. A literal 7 here painted
+                # weekly COT and the monthlies "old" every day of their
+                # normal cycle — the exact badge-blindness the per-layer
+                # policy exists to prevent (issue #176).
                 status = "stale"
                 age_str = f"{age.days}d ago"
             else:
