@@ -23,35 +23,10 @@ import pytest
 import main
 from pipeline import schema
 
-_SCHEMA_CONSTANTS = [
-    schema._CREATE_PRICES,
-    schema._CREATE_ECONOMIC,
-    schema._CREATE_USDA,
-    schema._CREATE_COT,
-    schema._CREATE_WEATHER,
-    schema._CREATE_PSD,
-    schema._CREATE_CURRENCIES,
-    schema._CREATE_WORLDBANK,
-    schema._CREATE_DCE_FUTURES,
-    schema._CREATE_CROP_PROGRESS,
-    schema._CREATE_EXPORT_SALES,
-    schema._CREATE_FORWARD_CURVE,
-    schema._CREATE_WASDE,
-    schema._CREATE_INSPECTIONS,
-    schema._CREATE_INSPECTION_PORT_FLOWS,
-    schema._CREATE_INSPECTION_DESTINATIONS,
-    schema._CREATE_ARGENTINA_FOB,
-    schema._CREATE_GULF_BIDS,
-    schema._CREATE_EIA_ENERGY,
-    schema._CREATE_BRAZIL_ESTIMATES,
-    schema._CREATE_INDIA_DOMESTIC,
-    schema._CREATE_BRAZIL_SPOT,
-    schema._CREATE_SAFEX,
-    schema._CREATE_SAGIS_DELIVERIES,
-    schema._CREATE_DATA_FRESHNESS,
-    schema._CREATE_COMMODITY_FRESHNESS,
-    schema._CREATE_BRIEFINGS,
-]
+# Every table the pipeline creates, taken from the schema module itself.
+# Re-listing them here let a new table (Layer 24's sagis_supply_demand)
+# exist in production while being absent from every test DB.
+_SCHEMA_CONSTANTS = list(schema.ALL_SCHEMAS)
 
 
 @pytest.fixture
@@ -133,7 +108,8 @@ def freshness_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 def patched_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Temp SQLite file wired into pipeline.store and pipeline.query.
 
-    Creates a fresh DB with all 21 tables, then monkeypatches
+    Creates a fresh DB with every table in schema.ALL_SCHEMAS, then
+    monkeypatches
     `get_connection`, `DB_PATH`, `STORAGE_DIR`, and `is_cloud` in both
     pipeline modules so save_* / read_* functions transparently target
     the temp DB. Returns the DB path so a test can also issue raw SQL.

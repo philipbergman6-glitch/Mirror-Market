@@ -820,6 +820,62 @@ def _build_emerging_markets(data: dict) -> str:
                     f'<div class="muted" style="font-size:12px;">{_esc(attribution)}</div>'
                 )
 
+        # SAGIS monthly supply & demand — crush volume, trade, stocks.
+        # The cadence is in the header because it is a real caveat next to
+        # the weekly block above: soybean trade is published monthly only and
+        # ~4 weeks in arrears (SAGIS's weekly imports/exports and its 8-week
+        # forward intentions cover maize and wheat only, #203).
+        sa_smd = info.get("south_africa_supply_demand", {})
+        if sa_smd:
+            month = _esc(sa_smd.get("month_label", ""))
+            parts.append(
+                '<div class="subhdr" style="font-size:14px;">'
+                f'SAGIS Monthly Supply &amp; Demand — {month}</div>'
+            )
+            smd_cards = ['<div class="grid grid-3">']
+            season = _esc(sa_smd.get("season_label", ""))
+            months = sa_smd.get("month_number")
+            for key, label, note in (
+                ("crush", "Crush (beans processed)",
+                 "oil &amp; oilcake — volume, not margin"),
+                ("imports", "Imports", "beans destined for RSA"),
+                ("exports_whole", "Bean Exports", "whole beans, all routes"),
+            ):
+                total = sa_smd.get(f"{key}_season_to_date_mt")
+                if total is None:
+                    continue
+                yoy = sa_smd.get(f"{key}_yoy_pct")
+                yoy_cls = "" if yoy is None else ("up" if yoy > 0 else "down")
+                yoy_str = (
+                    f"{yoy:+.1f}% YoY · same {months} months"
+                    if yoy is not None else "season to date"
+                )
+                smd_cards.append(
+                    f'<div class="mc"><div class="mc-label">{label} — {season}</div>'
+                    f'<div class="mc-val">{total:,.0f}</div>'
+                    f'<div class="mc-delta {yoy_cls}">{yoy_str}</div>'
+                    f'<div class="mc-delta muted">MT · {note}</div></div>'
+                )
+            stock = sa_smd.get("closing_stock_mt")
+            if stock is not None:
+                share = sa_smd.get("stock_processors_share_pct")
+                share_str = (
+                    f"{share:.0f}% held by processors" if share is not None
+                    else "closing stock"
+                )
+                smd_cards.append(
+                    f'<div class="mc"><div class="mc-label">Closing Stock — {month}</div>'
+                    f'<div class="mc-val">{stock:,.0f}</div>'
+                    f'<div class="mc-delta muted">MT · {share_str}</div></div>'
+                )
+            smd_cards.append('</div>')
+            parts.append("\n".join(smd_cards))
+            if sa_smd.get("attribution") and not sa_flow:
+                parts.append(
+                    '<div class="muted" style="font-size:12px;">'
+                    f'{_esc(sa_smd["attribution"])}</div>'
+                )
+
         parts.append('<hr class="divider">')
 
     return "\n".join(parts)

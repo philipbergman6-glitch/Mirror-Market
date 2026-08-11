@@ -590,6 +590,60 @@ def clean_sagis_deliveries(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+_SAGIS_SMD_NUMERIC = (
+    "opening_stock", "deliveries", "imports", "processed_total",
+    "processed_human", "processed_feed", "processed_oil_oilcake",
+    "withdrawn_by_producers", "released_to_end_consumers", "seed_for_planting",
+    "exports_whole", "exports_border_posts", "exports_harbours",
+    "sundries_net_dispatches", "sundries_surplus_deficit", "unutilised_stock",
+    "stock_storers_traders", "stock_processors", "products_exported",
+    "products_exported_africa", "products_exported_other",
+)
+
+
+def clean_sagis_smd(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean SAGIS monthly soybean supply & demand (Layer 24).
+
+    Steps:
+        1. Copy first.
+        2. Parse month_end / report_month and sort by (season_year, month_number).
+        3. Coerce every tonnage column to numeric.
+        4. Drop rows with no month_end — a row that cannot be dated cannot be
+           graded for recency, and would read as an undated observation.
+
+    Zeros and negatives are kept. A month of zero imports is the norm for
+    South African soybeans (0 t in Mar and Apr 2026), and the two sundries
+    columns are signed by definition — filtering either would rewrite the
+    source's own balance sheet, which the fetcher checks arithmetically.
+    Unreported months never reach here: the fetcher cuts the season at the
+    workbook's own SMD vintage, because the report prints future months as 0.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    for col in ("month_end", "report_month"):
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+
+    for col in _SAGIS_SMD_NUMERIC:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    sort_cols = [c for c in ("season_year", "month_number") if c in df.columns]
+    if sort_cols:
+        df = df.sort_values(sort_cols)
+
+    if "month_end" in df.columns:
+        df = df.dropna(subset=["month_end"])
+
+    return df.reset_index(drop=True)
+
+
 def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean World Bank monthly price data.

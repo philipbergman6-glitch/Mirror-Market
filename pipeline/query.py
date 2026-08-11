@@ -249,6 +249,22 @@ def read_sagis_deliveries(commodity: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_sagis_supply_demand(commodity: str | None = None) -> pd.DataFrame:
+    """Read SAGIS South Africa monthly soybean supply & demand (MT) from SQLite.
+
+    `month_end` and `report_month` are parsed to datetime; `season_year` is
+    the *start* year of the March–February marketing season and
+    `month_number` its position in that season (1 = March). Rows are physical
+    flow and stock, not price — `processed_oil_oilcake` is South Africa's
+    crush volume, not a margin. Any surface rendering these must carry
+    `config.SAGIS_ATTRIBUTION`.
+    """
+    return _read_table(
+        "sagis_supply_demand", "commodity", commodity,
+        date_cols=("month_end", "report_month"),
+    )
+
+
 def read_freshness() -> pd.DataFrame:
     """
     Read data freshness timestamps for all layers.
