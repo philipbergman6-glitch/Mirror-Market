@@ -617,6 +617,18 @@ _YAHOO_MARKET_RIGHTS = _rights_policy(
     evidence="Existing delayed-data access; downstream publication rights review pending",
 )
 
+_AGRURAL_RIGHTS = _rights_policy(
+    raw=RightsDecision.PROHIBITED,
+    normalized=RightsDecision.UNKNOWN,
+    internal=RightsDecision.ALLOWED,
+    public=RightsDecision.UNKNOWN,
+    derived=RightsDecision.UNKNOWN,
+    commercial=RightsDecision.UNKNOWN,
+    redistribution=RightsDecision.PROHIBITED,
+    attribution="AgRural",
+    evidence="Public AgRural price page; downstream publication rights review pending",
+)
+
 MAGYP_SOURCE = Source(
     key="magyp",
     name="Argentina MAGyP official FOB service",
@@ -626,6 +638,11 @@ YAHOO_FINANCE_SOURCE = Source(
     key="yahoo-finance",
     name="Yahoo Finance market data",
     attribution="Yahoo Finance",
+)
+AGRURAL_SOURCE = Source(
+    key="agrural",
+    name="AgRural Brazil physical soybean prices",
+    attribution="AgRural",
 )
 
 _BUSINESS_DAILY_ARGENTINA = CadenceContract(CadenceKind.BUSINESS_DAILY, 24, "America/Argentina/Buenos_Aires")
@@ -697,6 +714,37 @@ MAGYP_FOB_CONTRACT = _pilot_contract(
     rules=("identity.required", "value.positive", "delivery-window.valid", "coverage.soy-complex"),
     raw_retention=RawRetention.METADATA_ONLY,
     rights=_MAGYP_RIGHTS,
+)
+
+AGRURAL_PARANAGUA_CONTRACT = _pilot_contract(
+    source=AGRURAL_SOURCE,
+    key="paranagua-soybean-fob",
+    name="Paranagua soybean FOB physical price",
+    cadence=_BUSINESS_DAILY_UTC,
+    required_fields=(
+        "commodity",
+        "product_form",
+        "location",
+        "price_type",
+        "currency",
+        "unit",
+        "effective_date",
+    ),
+    fixed_fields={
+        "commodity": "soybean",
+        "product_form": "beans",
+        "location": "paranagua",
+        "price_type": "physical-fob",
+        "currency": "brl",
+        "unit": "brl-mt",
+    },
+    expected_keys=("soybean:beans:paranagua",),
+    coverage_key_fields=("commodity", "product_form", "location"),
+    unit="brl-mt",
+    criticality=Criticality.CRITICAL,
+    rules=("identity.required", "value.positive", "coverage.paranagua-fob"),
+    raw_retention=RawRetention.METADATA_ONLY,
+    rights=_AGRURAL_RIGHTS,
 )
 
 _BENCHMARK_SPECS = (
@@ -788,8 +836,8 @@ FX_CONTRACTS = tuple(
 )
 
 PILOT_REGISTRY = ContractRegistry(
-    sources=(MAGYP_SOURCE, YAHOO_FINANCE_SOURCE),
-    datasets=(MAGYP_FOB_CONTRACT, *SOY_BENCHMARK_CONTRACTS, *FX_CONTRACTS),
+    sources=(AGRURAL_SOURCE, MAGYP_SOURCE, YAHOO_FINANCE_SOURCE),
+    datasets=(AGRURAL_PARANAGUA_CONTRACT, MAGYP_FOB_CONTRACT, *SOY_BENCHMARK_CONTRACTS, *FX_CONTRACTS),
 )
 
 
@@ -799,6 +847,8 @@ __all__ = [
     "ContractRegistry",
     "CoverageContract",
     "Criticality",
+    "AGRURAL_PARANAGUA_CONTRACT",
+    "AGRURAL_SOURCE",
     "DatasetContract",
     "FX_CONTRACTS",
     "FreshnessContract",
