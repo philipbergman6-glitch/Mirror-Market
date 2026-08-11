@@ -192,6 +192,24 @@ def _migrate_forward_curve_pk(conn) -> None:
         logger.exception("forward_curve PK migration failed — leaving table as-is")
 
 
+def _migrate_forward_curve_observation_date(conn) -> None:
+    """Add the observation_date column to forward_curve if absent. Idempotent.
+
+    Must run *after* _migrate_forward_curve_pk, which rebuilds the table at
+    its pre-observation_date shape. Legacy rows keep NULL — they were stored
+    with mixed leg dates, so there is no single date to backfill them with.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(forward_curve)").fetchall()}
+    except Exception:
+        return
+    if cols and "observation_date" not in cols:
+        try:
+            conn.execute("ALTER TABLE forward_curve ADD COLUMN observation_date TEXT")
+        except Exception as exc:
+            logger.warning("Could not add observation_date column to forward_curve: %s", exc)
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
@@ -200,6 +218,7 @@ def init_database():
             conn.execute(ddl)
         _migrate_usda_pk(conn)
         _migrate_forward_curve_pk(conn)
+        _migrate_forward_curve_observation_date(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
         _migrate_safex_contract(conn)
@@ -446,16 +465,27 @@ def save_export_sales(commodity: str, df: pd.DataFrame):
 
 
 def save_forward_curve(commodity: str, df: pd.DataFrame):
-    """Write forward curve → 'forward_curve'. Stamps fetched_date with today UTC."""
+    """Write forward curve → 'forward_curve'. Stamps fetched_date with today UTC.
+
+    observation_date is the fetcher's — the session the whole curve was read
+    at — and is never derived from the clock here.
+    """
     if df.empty:
         return
     df = df.copy()
     df["commodity"] = commodity
     df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     df = _str_cols(df, "contract_month", "label", "ticker")
+    # Kept nullable rather than "" — a curve stored without an observation
+    # date must read as "never learned", not as a blank date.
+    df["observation_date"] = (
+        df["observation_date"].map(lambda v: None if pd.isna(v) else str(v))
+        if "observation_date" in df.columns else None
+    )
     _save(
         "forward_curve",
-        df[["commodity", "contract_month", "label", "ticker", "close", "fetched_date"]],
+        df[["commodity", "contract_month", "label", "ticker", "close",
+            "observation_date", "fetched_date"]],
         ["commodity", "contract_month", "fetched_date"],
         f"forward_curve/{commodity}",
     )
