@@ -721,6 +721,42 @@ def test_conab_gate_rejects_implausible_magnitudes() -> None:
         _validate_download("\n".join(out))
 
 
+def test_conab_gate_rejects_corruption_below_the_head_of_the_file() -> None:
+    """The file is sorted by product name, so a head-only sample would only
+    ever see the NPK fertilisers. Corrupt the *second half* of the real
+    rows and the strided sample must still catch it."""
+    lines = [ln for ln in _load_conab_live().split("\n") if ln.strip()]
+    half = len(lines) // 2
+    mangled = lines[:half] + [ln + ";extra" for ln in lines[half:]]
+    with pytest.raises(ScraperShapeError, match="field-count mismatch"):
+        _validate_download("\n".join(mangled))
+
+
+def test_conab_gate_rejects_empty_price_column() -> None:
+    """Every price blanked: names, row count and field widths all intact."""
+    lines = [ln for ln in _load_conab_live().split("\n") if ln.strip()]
+    out = [lines[0]]
+    for line in lines[1:]:
+        fields = line.split(";")
+        fields[-1] = ""
+        out.append(";".join(fields))
+    with pytest.raises(ScraperShapeError, match="implausible"):
+        _validate_download("\n".join(out))
+
+
+def test_conab_gate_tolerates_the_files_normal_blank_prices() -> None:
+    """~7% of real rows carry no price; blanks are missing data, not a
+    format break, so a heavier-than-usual blank week must still pass."""
+    lines = [ln for ln in _load_conab_live().split("\n") if ln.strip()]
+    out = [lines[0]]
+    for i, line in enumerate(lines[1:]):
+        fields = line.split(";")
+        if i % 3 == 0:
+            fields[-1] = ""
+        out.append(";".join(fields))
+    _validate_download("\n".join(out))  # must not raise
+
+
 # ── Notícias Agrícolas CEPEA/ESALQ republication (Layer 17) ─────────────────
 
 def _load_noticias_html(name: str = "noticias_agricolas_parana.html") -> str:

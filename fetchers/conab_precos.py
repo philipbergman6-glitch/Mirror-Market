@@ -57,7 +57,8 @@ _KG_TO_MT = 1000.0  # R$/kg → BRL/MT
 _MIN_DOWNLOAD_BYTES = 1_000_000
 _MIN_DATA_ROWS = 10_000
 _SAMPLE_ROWS = 500
-_MIN_NUMERIC_SHARE = 0.9
+_MIN_NUMERIC_SHARE = 0.9  # of the *quoted* (non-blank) sampled prices
+_MIN_QUOTED_SHARE = 0.5  # live file: ~93% of rows carry a price
 _PLAUSIBLE_MEDIAN_PRICE_KG = (0.1, 1_000.0)
 
 _REQUIRED_COLUMNS = (
@@ -103,6 +104,13 @@ def _validate_download(text: str) -> None:
       band. A silent kg→tonne requote keeps every column name and row
       count intact; only the band catches it (observed: the whole file
       x1000 parses clean and ships 2,070,000 BRL/MT).
+
+    The sample is strided across the whole file, not taken off the head:
+    the file is sorted by product name, so a head sample only ever sees
+    the NPK fertilisers and both the field-count and the magnitude check
+    would then depend on CONAB's row ordering. Blank prices are a normal
+    feature of the file (~7% of rows), so they are excluded from the
+    numeric share rather than counted as format breakage.
     """
     size = len(text.encode("latin-1", errors="replace"))
     if size < _MIN_DOWNLOAD_BYTES:
@@ -125,7 +133,9 @@ def _validate_download(text: str) -> None:
             f"CONAB prices: download header missing {missing} — got {header}"
         )
 
-    sample = lines[1 : 1 + _SAMPLE_ROWS]
+    rows = lines[1:]
+    stride = max(1, len(rows) // _SAMPLE_ROWS)
+    sample = rows[::stride][:_SAMPLE_ROWS]
     ragged = sum(1 for line in sample if len(line.split(";")) != len(header))
     if ragged:
         raise ScraperShapeError(
@@ -135,16 +145,25 @@ def _validate_download(text: str) -> None:
 
     value_idx = header.index("valor_produto_kg")
     values: list[float] = []
+    quoted = 0
     for line in sample:
-        raw = line.split(";")[value_idx].strip().replace(",", ".")
+        raw = line.split(";")[value_idx].strip()
+        if not raw:  # blank = price not collected that week, normal
+            continue
+        quoted += 1
         try:
-            values.append(float(raw))
+            values.append(float(raw.replace(",", ".")))
         except ValueError:
             continue
-    if len(values) < _MIN_NUMERIC_SHARE * len(sample):
+    if not values or len(values) < _MIN_NUMERIC_SHARE * quoted:
         raise ScraperShapeError(
-            f"CONAB prices: implausible download — only {len(values)}/{len(sample)} "
-            "sampled valor_produto_kg values are numeric (decimal format changed?)"
+            f"CONAB prices: implausible download — only {len(values)}/{quoted} "
+            "quoted valor_produto_kg values are numeric (decimal format changed?)"
+        )
+    if quoted < _MIN_QUOTED_SHARE * len(sample):
+        raise ScraperShapeError(
+            f"CONAB prices: implausible download — only {quoted}/{len(sample)} "
+            "sampled rows carry a price at all (empty price column?)"
         )
 
     median = sorted(values)[len(values) // 2]
