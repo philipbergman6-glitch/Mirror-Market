@@ -767,6 +767,17 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "usda": 400,  # annual NASS crop data
 }
 
+# analysis/health.py runs the same cadence question one level down: per
+# commodity/region row inside a stored table rather than per layer. Tables
+# whose source publishes slower than daily map to their layer above so the
+# two checks can never disagree — weekly COT and monthly World Bank rows
+# would otherwise be flagged STALE on every single run. Tables absent from
+# this map are daily and keep the tighter health default.
+HEALTH_TABLE_LAYERS = {
+    "cot": "cot",
+    "worldbank_prices": "worldbank",
+}
+
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------

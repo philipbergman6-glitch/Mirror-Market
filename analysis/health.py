@@ -23,18 +23,36 @@ from config import (
     DB_PATH,
     DCE_CONTRACTS,
     FORWARD_CURVE_CONTRACTS,
+    FRESHNESS_WARNING_DAYS,
+    FRESHNESS_WARNING_DAYS_BY_LAYER,
     GROWING_REGIONS,
+    HEALTH_TABLE_LAYERS,
 )
 from pipeline.connection import get_connection, is_cloud
 
 logger = logging.getLogger(__name__)
 
 
-# How many business days old before we flag as stale
+# How many business days old before we flag a daily table as stale
 _STALE_THRESHOLD_DAYS = 3
+# Weekend slack — Monday-morning data from Friday is 3 calendar days old
+_WEEKEND_SLACK_DAYS = 2
 
 # How many identical consecutive Close prices before flagging as "flat"
 _FLAT_PRICE_DAYS = 3
+
+
+def _stale_limit_days(table: str) -> int:
+    """Calendar days a table's newest row may age before it counts as stale.
+
+    Slower-than-daily tables defer to the per-layer freshness policy in
+    config (which already builds in cadence slack); daily tables get the
+    tight health threshold plus a weekend allowance.
+    """
+    layer = HEALTH_TABLE_LAYERS.get(table)
+    if layer is not None:
+        return FRESHNESS_WARNING_DAYS_BY_LAYER.get(layer, FRESHNESS_WARNING_DAYS)
+    return _STALE_THRESHOLD_DAYS + _WEEKEND_SLACK_DAYS
 
 
 def run_health_check() -> dict:
@@ -95,6 +113,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
     """
     issues = []
     today = datetime.now(timezone.utc).date()
+    limit_days = _stale_limit_days(table)
 
     with get_connection() as conn:
         try:
@@ -132,8 +151,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
         try:
             last_dt = pd.to_datetime(last_date).date()
             age_days = (today - last_dt).days
-            # Skip weekend check: if today is Monday, data from Friday is only 3 days old
-            if age_days > _STALE_THRESHOLD_DAYS + 2:  # +2 for weekends
+            if age_days > limit_days:
                 issues.append({
                     "severity": "warning",
                     "table": table,
@@ -287,6 +305,7 @@ def _build_commodity_status() -> list[dict]:
 
     with get_connection() as conn:
         for table, key_col, date_col in table_specs:
+            limit_days = _stale_limit_days(table)
             try:
                 rows = conn.execute(
                     f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
@@ -304,7 +323,7 @@ def _build_commodity_status() -> list[dict]:
                         age_days = (today - last_dt).days
                         if age_days <= 1:
                             status = "fresh"
-                        elif age_days <= _STALE_THRESHOLD_DAYS + 2:
+                        elif age_days <= limit_days:
                             status = "aging"
                         else:
                             status = "stale"
