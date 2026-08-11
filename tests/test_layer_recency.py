@@ -719,3 +719,57 @@ def test_cec_budget_survives_the_december_gap(freshness_calls):
     assert LAYER_MAX_DATA_AGE_DAYS["cec"] > 61
     assert _run_cec(days_ago=61) is True
     assert [c["status"] for c in freshness_calls] == ["success"]
+
+
+# ── #212: a partial fetch saves its rows and still grades failed ────────────
+#
+# FetchResult.partial is the "save first, grade second" shape (#157) applied
+# to *key coverage* rather than recency: some keys came back, others never
+# answered. _run_scraper_layer keyed only on `has_rows`, so a partial took
+# the success path and stamped a fresh last_success over a half-dark layer.
+
+
+def _run_partial_mandi(saved: list) -> bool:
+    from pipeline.results import FetchResult
+
+    return main._run_scraper_layer(
+        "india_domestic", "Layer 16", "India mandi soy prices (data.gov.in)",
+        fetch=lambda: FetchResult.partial(
+            {"Soybean (Mandi MP)": _dated_frame(0, rows=1)},
+            "Maharashtra: offset 60 failed after 3 attempts (HTTP 429)",
+        ),
+        save=lambda n, d: saved.append(n),
+        empty_fails=False,
+    )
+
+
+def test_partial_scraper_result_records_failed(freshness_calls):
+    """Rows arriving is not the same as *every key's* rows arriving."""
+    assert _run_partial_mandi(saved=[]) is False
+
+    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert "india_domestic" in main._HARD_FAILURES
+
+
+def test_partial_scraper_result_still_saves_the_rows_it_got(freshness_calls):
+    """The resource serves the current day only — a dropped day is permanent."""
+    saved: list = []
+    _run_partial_mandi(saved=saved)
+
+    assert saved == ["Soybean (Mandi MP)"]
+
+
+def test_partial_freshness_row_carries_the_rows_it_did_fetch(freshness_calls):
+    """A partial outage records what it got, not a fabricated zero (#182)."""
+    _run_partial_mandi(saved=[])
+
+    assert freshness_calls[0]["rows"] == 1
+
+
+def test_india_domestic_carries_a_recency_budget():
+    """app/markets.py was grading India against DEFAULT_MAX_AGE_DAYS (#212).
+
+    Set to 7 by M19 #222; #212 recorded the Diwali risk against it rather
+    than loosening it. Pinned so a change is a decision, not a drift.
+    """
+    assert LAYER_MAX_DATA_AGE_DAYS["india_domestic"] == 7

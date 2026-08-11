@@ -9,7 +9,9 @@ Distinguishes three states the main loop must treat differently:
                 trades that day) and must NOT be reported as a failure.
 * ``failed``  — the underlying source/transport/parse failed. The freshness
                 row should be recorded with ``status='failed'`` so the
-                dashboard can show "last good run was X days ago".
+                dashboard can show "last good run was X days ago". A failed
+                result may still carry rows (see ``FetchResult.partial``):
+                the rows are saved, only the verdict changes.
 
 ``ScraperShapeError`` is raised by HTML parsers when the page no longer has
 the expected structure (missing column, wrong row count, etc). It is the
@@ -41,7 +43,8 @@ class FetchResult:
     """Typed return value for every fetcher.
 
     ``data`` is the per-key DataFrame mapping (commodity name → DataFrame).
-    For ``status='failed'`` it is always an empty dict.
+    For ``status='failed'`` it is an empty dict, unless the result came from
+    ``partial()`` — see there for why a failure may carry rows.
     For ``status='empty'`` it is empty *or* contains empty DataFrames.
     For ``status='ok'`` at least one DataFrame has rows.
     """
@@ -61,6 +64,25 @@ class FetchResult:
     @classmethod
     def failed(cls, error: str) -> FetchResult:
         return cls(data={}, status="failed", error=error)
+
+    @classmethod
+    def partial(cls, data: dict[str, pd.DataFrame], error: str) -> FetchResult:
+        """Some keys came back, others failed on transport/parse.
+
+        Graded ``failed`` while still carrying its rows, which is the
+        project's established "save first, grade second" shape (#157): the
+        rows that *did* arrive are stored — for a source that serves only
+        the current day, dropping them would punch a permanent hole in
+        history — but ``last_success`` must not advance off a run that
+        only half happened.
+
+        Distinct from ``empty``: a key that returned zero rows was asked
+        and answered (mandis closed, no report this week). A key that
+        failed transport was never answered at all, so its absence says
+        nothing about whether data existed. Recording that as a success
+        is the silent failure this project prefers to crash over.
+        """
+        return cls(data=data, status="failed", error=error)
 
     @property
     def total_rows(self) -> int:

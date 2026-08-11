@@ -1076,6 +1076,17 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # legs. Two enforcement points off one number: main.py stops stamping
     # last_success, and app/markets.py's tier probe demotes the India page to a
     # brief within the week rather than on the 14-day default (M19 #222).
+    #
+    # Known risk, deliberately accepted (#212): India's closure calendar is the
+    # longest of any daily leg here, and the Diwali stretch (Dhanteras through
+    # Bhai Dooj, ~5 days — 17–23 Oct in 2026) with a Sunday at each end could
+    # exceed 7 and fire a false stale, demoting the India page over an ordinary
+    # festival week. 7 is kept anyway because a *full* blackout needs every one
+    # of ~115 reporting mandis per state shut, not just the Indore hub, which
+    # makes the real worst case very likely shorter. Nothing settles this from
+    # our own data yet: history starts 2026-08-10 and the resource serves only
+    # the current day, so there is no observed multi-day gap to measure.
+    # Revisit at the first Diwali (Oct 2026) with a real gap in hand.
     "india_domestic": 7,
     "fred": 10,        # 1-day publication lag on the daily series
     "weather": 10,     # includes forecast rows, so age is normally negative
