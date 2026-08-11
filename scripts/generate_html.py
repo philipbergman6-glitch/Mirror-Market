@@ -35,6 +35,7 @@ from app.charts import (  # noqa: E402  (must follow sys.path.insert above)
     build_technical_chart,
     delta_str,
 )
+from config import HEALTH_TABLE_WRITER_LAYERS  # noqa: E402
 from scripts.validate_players import validate_players  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -153,12 +154,75 @@ def _build_freshness_items() -> list[dict]:
     return items
 
 
-def _build_masthead(freshness_items: list[dict], now: datetime) -> dict:
+_HEALTH_CRITICAL_NOTE = "data health critical"
+
+
+def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
+    """Demote, in place, every layer a health critical is attributed to.
+
+    `data_freshness` only records that a layer ran; `analysis.health`
+    checks whether the rows it wrote are actually there and current. A
+    layer can satisfy the first and fail the second, which is how
+    "17/17 layers fresh" used to render above a DATA HEALTH section full
+    of criticals (issue #58). Demoted layers get their own `degraded`
+    status so the sidebar badge agrees with the masthead count.
+
+    Criticals on a table no layer claims (`table` is "all" when the DB is
+    missing entirely) can't be pinned to a layer; they are counted and
+    reported instead of silently dropped.
+
+    Returns {"degraded_layers", "critical_count", "unmapped_critical_tables"}.
+    """
+    issues = (health or {}).get("issues") or []
+    criticals = [i for i in issues if i.get("severity") == "critical"]
+
+    degraded: set[str] = set()
+    unmapped: set[str] = set()
+    for issue in criticals:
+        table = issue.get("table", "")
+        writers = HEALTH_TABLE_WRITER_LAYERS.get(table)
+        if not writers:
+            unmapped.add(table)
+            continue
+        degraded.update(writers)
+
+    if unmapped:
+        log.error(
+            "Health criticals on unmapped table(s) %s — masthead count cannot "
+            "attribute them; add the table to config.HEALTH_TABLE_WRITER_LAYERS",
+            ", ".join(sorted(unmapped)),
+        )
+
+    # Demote, never downgrade: `old` (the layer's last run failed) is a
+    # stronger statement than `degraded`, and a layer that already lost its
+    # fresh badge doesn't need to lose it twice. Only `fresh` changes status
+    # — everything non-disabled still picks up the annotation, so a stale
+    # layer that is *also* health-critical says so in the sidebar.
+    for item in freshness_items:
+        if item["name"] not in degraded or item["status"] == "disabled":
+            continue
+        if item["status"] == "fresh":
+            item["status"] = "degraded"
+        if _HEALTH_CRITICAL_NOTE not in item["age"]:
+            item["age"] = f"{item['age']} · {_HEALTH_CRITICAL_NOTE}"
+
+    return {
+        "degraded_layers": sorted(degraded),
+        "critical_count": len(criticals),
+        "unmapped_critical_tables": sorted(unmapped),
+    }
+
+
+def _build_masthead(freshness_items: list[dict], now: datetime,
+                    health: dict | None = None) -> dict:
     """Masthead meta: date line, freshness counts, stale-layer note.
 
     Disabled layers are excluded from both numerator and denominator so
     "N/M layers fresh" only describes layers that are supposed to run.
+    Health criticals demote their writing layers first — see
+    `_apply_health_criticals`.
     """
+    health_summary = _apply_health_criticals(freshness_items, health)
     active = [i for i in freshness_items if i["status"] != "disabled"]
     fresh = [i for i in active if i["status"] == "fresh"]
     stale = [i for i in active if i["status"] != "fresh"]
@@ -167,6 +231,7 @@ def _build_masthead(freshness_items: list[dict], now: datetime) -> dict:
         "fresh_count": len(fresh),
         "total_layers": len(active),
         "stale_layers": stale,
+        **health_summary,
     }
 
 
@@ -1101,7 +1166,9 @@ def generate():
     context = {
         "sections": SECTIONS,
         "generated_at": now.strftime("%Y-%m-%d %H:%M UTC"),
-        "masthead": _build_masthead(freshness_items, now),
+        # Built before the sidebar reads `freshness_items` — the masthead
+        # demotes health-critical layers in place so both agree.
+        "masthead": _build_masthead(freshness_items, now, health),
         "freshness_items": freshness_items,
         "command_center": _build_command_center(cc_data),
         "technicals": _build_technicals(tech_data),

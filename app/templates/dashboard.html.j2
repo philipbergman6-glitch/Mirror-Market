@@ -47,6 +47,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .masthead h1 em { font-style: normal; color: var(--green); }
 .mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
 .mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.mast-critical { color: var(--bearish); font-weight: 600; }
 .stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; }
 .stale-note b { font-weight: 600; }
 
@@ -157,7 +158,7 @@ details .det-content { padding: 0 16px 16px; }
   <h1>Mirror<br><em>Market</em></h1>
   <div class="mast-meta">
     <div class="day">{{ masthead.day_line }}</div>
-    <div>Generated {{ generated_at }} · {{ masthead.fresh_count }}/{{ masthead.total_layers }} layers fresh</div>
+    <div>Generated {{ generated_at }} · {{ masthead.fresh_count }}/{{ masthead.total_layers }} layers fresh{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
     <div>Soy complex + competing crops · all prices USD/MT</div>
   </div>
 </header>
@@ -461,7 +462,7 @@ details .det-content { padding: 0 16px 16px; }
         {% for item in freshness_items %}
         <tr>
           <td>{{ item.name }}</td>
-          <td><span class="{% if item.status == 'fresh' %}up{% elif item.status == 'old' %}down{% else %}muted{% endif %}">{{ item.status }}</span></td>
+          <td><span class="{% if item.status == 'fresh' %}up{% elif item.status in ('old', 'degraded') %}down{% else %}muted{% endif %}">{{ item.status }}</span></td>
           <td class="num">{{ item.age }}</td>
         </tr>
         {% endfor %}
