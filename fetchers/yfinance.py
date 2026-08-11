@@ -26,6 +26,7 @@ from config import (
     REQUEST_TIMEOUT,
 )
 from fetchers._backoff import retry_sleep
+from fetchers._settlement import drop_unsettled_session
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,12 @@ def fetch_one(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame
 
             # Drop any completely empty rows (holidays / missing days)
             data = data.dropna(how="all")
+
+            # Yahoo returns a row for the session in progress. Before the
+            # venue settles that row is an unfinished bar, and storing it
+            # publishes a partial print as the day's close — see
+            # fetchers/_settlement.py.
+            data = drop_unsettled_session(data, label=ticker)
 
             return data
 

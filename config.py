@@ -112,6 +112,27 @@ DEFAULT_HISTORY_PERIOD = "15y"
 # Below this we return None rather than a noisy short-window mean.
 SEASONAL_MIN_YEARS_PER_MONTH = 5
 
+# Settlement guard (see fetchers/_settlement.py).
+#
+# yfinance returns a row for the *current* session as soon as trading opens.
+# Before the venue settles, that row is an unfinished bar — a real observed
+# case stored ZS=F 2026-08-07 at 1181.25 when the settlement was 1156.50, a
+# 2.1% error published as that day's close. Anything below the >10% move
+# warning in pipeline/clean.py passes silently, so the guard is structural:
+# the current session's bar is dropped until the venue has settled.
+#
+# One cutoff covers every venue we pull through yfinance, expressed in
+# Chicago local time so US DST is handled by the zoneinfo database rather
+# than by a hand-maintained UTC offset:
+#   CBOT grains/oilseeds (ZS/ZL/ZM/ZC/ZW)   settle 13:15 CT
+#   CME livestock (LE/HE), CME palm (CPO)   settle 13:05 CT
+#   ICE US cotton (CT)                      settle 14:20 ET = 13:20 CT
+#   ICE US sugar (SB)                       settle 13:00 ET = 12:00 CT
+# 14:30 CT clears the latest of them with ~70 min of headroom for Yahoo to
+# publish the settled bar.
+SETTLEMENT_TIMEZONE = "America/Chicago"
+SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
+
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
 # Sign up: https://quickstats.nass.usda.gov/api
