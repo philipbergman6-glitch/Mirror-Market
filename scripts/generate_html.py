@@ -164,6 +164,13 @@ def _build_freshness_items() -> list[dict]:
 
 _HEALTH_CRITICAL_NOTE = "data health critical"
 
+# Buckets that mean "this layer is doing what it is supposed to do".
+# `fresh` is sub-day, `stale` is older than a day but still inside the
+# layer's own publication cadence (`config.freshness_limit_days`) — a
+# weekly COT four days after its Friday release is not a problem, and the
+# masthead must not call it one (#179).
+_ON_SCHEDULE_STATUSES = ("fresh", "stale")
+
 
 def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
     """Demote, in place, every layer a health critical is attributed to.
@@ -201,15 +208,15 @@ def _apply_health_criticals(freshness_items: list[dict], health: dict | None) ->
             ", ".join(sorted(unmapped)),
         )
 
-    # Demote, never downgrade: `old` (the layer's last run failed) is a
-    # stronger statement than `degraded`, and a layer that already lost its
-    # fresh badge doesn't need to lose it twice. Only `fresh` changes status
-    # — everything non-disabled still picks up the annotation, so a stale
-    # layer that is *also* health-critical says so in the sidebar.
+    # Demote, never downgrade: `old` (the layer is past its cadence, or its
+    # last run failed) is a stronger statement than `degraded`, and a layer
+    # that already lost its on-schedule badge doesn't need to lose it twice.
+    # `stale` does get demoted — it counts as on-schedule (#179), so leaving
+    # it would let a health-critical layer stay inside the masthead count.
     for item in freshness_items:
         if item["name"] not in degraded or item["status"] == "disabled":
             continue
-        if item["status"] == "fresh":
+        if item["status"] in _ON_SCHEDULE_STATUSES:
             item["status"] = "degraded"
         if _HEALTH_CRITICAL_NOTE not in item["age"]:
             item["age"] = f"{item['age']} · {_HEALTH_CRITICAL_NOTE}"
@@ -223,22 +230,30 @@ def _apply_health_criticals(freshness_items: list[dict], health: dict | None) ->
 
 def _build_masthead(freshness_items: list[dict], now: datetime,
                     health: dict | None = None) -> dict:
-    """Masthead meta: date line, freshness counts, stale-layer note.
+    """Masthead meta: date line, on-schedule counts, late-layer note.
+
+    The headline claim is "on schedule", not "ran today" (#179): the count
+    is over `_ON_SCHEDULE_STATUSES`, so a weekly or monthly layer inside
+    its own cadence is not held against it. Counting sub-day freshness
+    here made the number structurally unreachable and put healthy layers
+    in the warning-coloured late note every day of their normal cycle —
+    the sub-day distinction survives, in the Layer Freshness table where
+    `fresh` and `stale` are still separate badges.
 
     Disabled layers are excluded from both numerator and denominator so
-    "N/M layers fresh" only describes layers that are supposed to run.
-    Health criticals demote their writing layers first — see
+    "N/M layers on schedule" only describes layers that are supposed to
+    run. Health criticals demote their writing layers first — see
     `_apply_health_criticals`.
     """
     health_summary = _apply_health_criticals(freshness_items, health)
     active = [i for i in freshness_items if i["status"] != "disabled"]
-    fresh = [i for i in active if i["status"] == "fresh"]
-    stale = [i for i in active if i["status"] != "fresh"]
+    on_schedule = [i for i in active if i["status"] in _ON_SCHEDULE_STATUSES]
+    late = [i for i in active if i["status"] not in _ON_SCHEDULE_STATUSES]
     return {
         "day_line": now.strftime("%A · %-d %B %Y"),
-        "fresh_count": len(fresh),
+        "on_schedule_count": len(on_schedule),
         "total_layers": len(active),
-        "stale_layers": stale,
+        "late_layers": late,
         **health_summary,
     }
 
