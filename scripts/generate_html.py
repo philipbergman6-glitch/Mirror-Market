@@ -723,7 +723,9 @@ def _build_emerging_markets(data: dict) -> str:
         # South Africa SAFEX
         dom_sa = info.get("south_africa_domestic", {})
         if dom_sa:
-            parts.append('<div class="subhdr" style="font-size:14px;">SAFEX Settlement Prices</div>')
+            # "Last Traded", not "Settlement": the free Grain SA table has no
+            # settlement column and the JSE's official MTM is licensed (#157).
+            parts.append('<div class="subhdr" style="font-size:14px;">SAFEX Last Traded Prices</div>')
             zar = dom_sa.get("soybean_safex_zar")
             usd = dom_sa.get("soybean_safex_usd")
             basis = dom_sa.get("safex_cbot_basis_usd")

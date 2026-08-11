@@ -680,7 +680,9 @@ MAGYP_FOB_LOOKBACK_DAYS = 7
 
 # ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)
-# JSE agricultural settlement prices in ZAR/MT
+# JSE agricultural *last traded* prices in ZAR/MT — not settlement/MTM. The
+# Grain SA table carries no settlement column and the JSE's own MTM file is
+# licensed (#157); see fetchers/safex.py for the full note.
 # ---------------------------------------------------------------------------
 SAFEX_STATS_URL = "https://www.grainsa.co.za/pages/industry-reports/safex-feeds"
 # Display names stored by fetchers/safex.py; the JSE contract-code mapping
@@ -815,6 +817,13 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # Daily exchange/market data — a long weekend plus a holiday.
     "prices": 7,
     "currencies": 7,
+    # SAFEX is a *stale-serving* page: on a non-trading day Grain SA re-serves
+    # the previous session's rows rather than emptying (verified 2026-08-02 and
+    # 2026-08-08). So "rows came back" says nothing about whether the JSE/BVG
+    # feed is still moving — if it froze, the same rows would return forever
+    # and the layer would stay green. Same long-weekend-plus-holiday budget as
+    # the other daily exchange legs (#157).
+    "safex": 7,
     "fred": 10,        # 1-day publication lag on the daily series
     "weather": 10,     # includes forecast rows, so age is normally negative
     "dce": 21,         # Spring Festival / Golden Week close the DCE for ~2 weeks

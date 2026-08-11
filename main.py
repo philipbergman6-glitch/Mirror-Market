@@ -472,16 +472,36 @@ def _run_scraper_layer(
     empty_fails: a daily quote source that returns zero rows is broken
     (CEPEA, AgRural, Gulf bids); SAFEX legitimately publishes nothing on
     JSE holidays, so its empty result records as empty-success instead.
+
+    Rows arriving is not the same as *new* rows arriving, so the success
+    path runs the same LAYER_MAX_DATA_AGE_DAYS recency gate the dict layers
+    get. It previously did not, which left every scraper layer able to stamp
+    a fresh last_success off a frozen upstream — the exact failure the gate
+    exists to catch, and a live risk here because the SAFEX page re-serves
+    the previous session's rows rather than emptying (#157). Layers absent
+    from LAYER_MAX_DATA_AGE_DAYS are still not checked, so this changes
+    behaviour only for those that opt in by carrying a budget.
     """
     try:
         logger.info("[%s] Fetching %s ...", label, desc)
         result = fetch()
 
         if result.has_rows:
+            # Clean before the recency check: the check reads the cleaners'
+            # own date conventions (_DATE_COLUMNS), not the raw upstream ones.
+            cleaned: dict[str, Any] = {}
             for name, df in result.data.items():
                 if clean is not None:
                     df = clean(df)
+                cleaned[name] = df
+                # Save before grading, as _run_dict_layer does: a stale
+                # upstream still gets its rows stored (they dedupe against
+                # what is there), and only the freshness verdict changes.
                 save(name, df)
+
+            if not _check_layer_recency(key, cleaned, rows_fetched=result.total_rows):
+                return False
+
             save_freshness(key, result.total_rows)
             logger.info("[%s] %s: %d rows saved", label, key, result.total_rows)
             return True

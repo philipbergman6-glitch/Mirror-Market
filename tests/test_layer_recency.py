@@ -479,3 +479,64 @@ def test_empty_non_critical_layer_still_records_empty_success(freshness_calls):
 
     assert freshness_calls[0]["status"] == "success"
     assert freshness_calls[0]["rows"] == 0
+
+
+# ── Scraper layers run the same gate (#157) ────────────────────────────────
+#
+# _run_scraper_layer called save_freshness directly on its success path, so
+# Layers 17-21 were exempt from the recency budget no matter what config
+# said. That mattered most for SAFEX: the Grain SA page re-serves the
+# previous session's rows on a non-trading day rather than emptying, so a
+# frozen upstream returns rows forever and would have stayed green forever.
+
+
+def _scraper_result(days_ago: float):
+    """A FetchResult carrying one dated frame, as the scrapers produce."""
+    from pipeline.results import FetchResult
+
+    return FetchResult.ok({"Soybean (SAFEX)": _dated_frame(days_ago, rows=1)})
+
+
+def _run_safex(days_ago: float, saved: list | None = None) -> bool:
+    return main._run_scraper_layer(
+        "safex", "Layer 18", "JSE SAFEX South Africa soy prices",
+        fetch=lambda: _scraper_result(days_ago),
+        save=lambda n, d: (saved if saved is not None else []).append(n),
+        empty_fails=False,
+    )
+
+
+def test_scraper_layer_within_budget_stamps_success(freshness_calls):
+    assert _run_safex(days_ago=1) is True
+    assert freshness_calls == [{"layer": "safex", "rows": 1, "status": "success"}]
+
+
+def test_scraper_layer_beyond_budget_records_failed(freshness_calls):
+    """A stale-serving page must not stamp a fresh last_success."""
+    budget = LAYER_MAX_DATA_AGE_DAYS["safex"]
+
+    assert _run_safex(days_ago=budget + 5) is False
+    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert "safex" in main._HARD_FAILURES
+
+
+def test_stale_scraper_rows_are_still_saved(freshness_calls):
+    """Grading changes; the rows are still stored, as _run_dict_layer does."""
+    saved: list = []
+    _run_safex(days_ago=LAYER_MAX_DATA_AGE_DAYS["safex"] + 5, saved=saved)
+
+    assert saved == ["Soybean (SAFEX)"]
+
+
+def test_scraper_layer_without_a_budget_is_not_checked(freshness_calls):
+    """"Not listed in LAYER_MAX_DATA_AGE_DAYS = not checked" still holds."""
+    assert "agrural" not in LAYER_MAX_DATA_AGE_DAYS
+
+    ok = main._run_scraper_layer(
+        "agrural", "Layer 19", "AgRural Paranagua FOB",
+        fetch=lambda: _scraper_result(days_ago=400),
+        save=lambda n, d: None,
+    )
+
+    assert ok is True
+    assert [c["status"] for c in freshness_calls] == ["success"]

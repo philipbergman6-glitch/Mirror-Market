@@ -55,13 +55,24 @@ def test_safex_parse_extracts_soybean_and_sunflower() -> None:
     assert soy["Date"].iloc[0]  # non-empty
 
 
-def test_safex_parse_picks_nearest_contract_by_month() -> None:
-    """Fixture lists MAY26–DEC27; MAY26 is nearest regardless of volume."""
+def test_safex_parse_picks_most_liquid_contract() -> None:
+    """Fixture lists MAY26–DEC27; the most-traded contract wins (#157).
+
+    Reverses the audit-F2 nearest-expiry rule from #81: on the live board
+    of 2026-08-11 nearest-expiry was reading AUG26 at 163 lots while DEC26
+    traded 433, i.e. it followed the contract into expiry as liquidity
+    rolled away from it.
+
+    On this fixture the soybean margin is thin — JUL26 419 lots against
+    MAY26 417 — so it also documents the rule's known weak spot: near a
+    roll, two contracts can swap the lead on a couple of lots and move the
+    stored series by ~1%. Sunflower is unambiguous (MAY26 174 vs JUL26 119).
+    """
     result = _parse_safex_table(_load_safex_html())
     soy = result["Soybean (SAFEX)"]
     assert len(soy) == 1
-    assert soy["Contract"].iloc[0] == "MAY26"
-    assert soy["Close"].iloc[0] == 6939.00
+    assert soy["Contract"].iloc[0] == "JUL26"
+    assert soy["Close"].iloc[0] == 7015.80
     assert soy["Date"].iloc[0] == "2026-05-11"
     sun = result["Sunflower (SAFEX)"]
     assert sun["Contract"].iloc[0] == "MAY26"
@@ -86,16 +97,20 @@ def _safex_row(contract: str, traded: str, price: str, volume: str) -> str:
     )
 
 
-def test_safex_nearest_contract_beats_higher_volume() -> None:
-    """Audit F2 fixture: Jul-31 board must pick AUG26 (8100), not the
-    higher-volume DEC26 (8250)."""
+def test_safex_higher_volume_beats_nearest_contract() -> None:
+    """Deliberate reversal of the audit-F2 rule (#81 → #157).
+
+    Same Jul-31 board as the original test, opposite expectation: DEC26 on
+    1901 lots is where the market is, and AUG26's 12 lots is a near-dead
+    contract whose print is the noisier of the two.
+    """
     html = _safex_page(
         _safex_row("DEC26", "2026-07-31", "8250.00", "1901")
         + _safex_row("AUG26", "2026-07-31", "8100.00", "12")
     )
     soy = _parse_safex_table(html)["Soybean (SAFEX)"]
-    assert soy["Contract"].iloc[0] == "AUG26"
-    assert soy["Close"].iloc[0] == 8100.00
+    assert soy["Contract"].iloc[0] == "DEC26"
+    assert soy["Close"].iloc[0] == 8250.00
 
 
 def test_safex_undated_row_hard_fails() -> None:
