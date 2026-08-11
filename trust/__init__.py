@@ -2,10 +2,13 @@
 
 from trust.dataset_health import DatasetHealthInput, evaluate_dataset_health, last_expected_publication_date
 from trust.derived import (
+    USD_MT_CONVERSION_VERSION,
     DerivedCalculation,
     DerivedInputRequirement,
     DerivedObservationResult,
     derive_observation,
+    derive_usd_mt_observation,
+    usd_mt_identity_for_price,
 )
 from trust.domain import (
     ArtifactReference,
@@ -187,6 +190,7 @@ __all__ = [
     "TrustRepositoryError",
     "TrustQueryCacheError",
     "TrustQueryCacheSelectionError",
+    "USD_MT_CONVERSION_VERSION",
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
     "build_query_cache",
@@ -194,6 +198,7 @@ __all__ = [
     "critical_edition_contract_from_registry",
     "decimal_fx_rate",
     "derive_observation",
+    "derive_usd_mt_observation",
     "render_candidate_edition",
     "verify_candidate_generated_artifacts",
     "verify_candidate_semantics",
@@ -207,4 +212,5 @@ __all__ = [
     "import_v1_history",
     "last_expected_publication_date",
     "trusted_fx_frame",
+    "usd_mt_identity_for_price",
 ]
