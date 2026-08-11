@@ -50,6 +50,47 @@ jobs:
   check:
     uses: ./.github/workflows/ci.yml
 
+  # The trusted path's only production consumer, and the reason trust/ is
+  # merged rather than parked on a branch: it runs on every weekday build
+  # against live MAGyP, so drift between trust/ and the v1 pipeline surfaces
+  # the morning it appears instead of months later.
+  #
+  # Deliberately its own job, not a step in build-deploy. `continue-on-error`
+  # covers a step *failing*, not a step being *slow*: the runner can walk up
+  # to MAGYP_FOB_LOOKBACK_DAYS of circulars at MAX_RETRIES x REQUEST_TIMEOUT
+  # each, which on a bad MAGyP day is minutes out of build-deploy's 30-minute
+  # budget — spent before the dashboard is even generated. A separate job with
+  # its own runner and its own timeout cannot delay or starve the publish at
+  # all. Purely observational: nothing reads its output, and job-level
+  # continue-on-error keeps a divergence from reddening the workflow. It stays
+  # this way until the pilots in #194 reconcile cleanly.
+  reconcile-trusted:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Reconcile MAGyP FOB (v1 vs trusted)
+        run: python scripts/reconcile_magyp_fob.py
+
+      - name: Upload reconciliation report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: magyp-reconciliation
+          path: data/reconciliation/magyp_fob.json
+          if-no-files-found: warn
+
   build-deploy:
     needs: check
     runs-on: ubuntu-latest
@@ -86,27 +127,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/ci_layer_alert.py
-
-      # The trusted path's only production consumer, and the reason trust/
-      # is merged rather than parked on a branch: it runs daily against live
-      # MAGyP, so drift between trust/ and the v1 pipeline surfaces the
-      # morning it appears instead of months later. Purely observational —
-      # nothing reads its output, and continue-on-error means a divergence
-      # (or a broken runner) can never block the dashboard deploy. It stays
-      # this way until the pilots in #194 reconcile cleanly.
-      - name: Reconcile MAGyP FOB (v1 vs trusted)
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: python scripts/reconcile_magyp_fob.py
-
-      - name: Upload reconciliation report
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: magyp-reconciliation
-          path: data/reconciliation/magyp_fob.json
-          if-no-files-found: warn
 
       - name: Generate static dashboard
         run: python scripts/generate_html.py
