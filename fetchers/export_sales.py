@@ -37,6 +37,15 @@ logger = logging.getLogger(__name__)
 _AUTH_HEADER = "X-Api-Key"
 
 
+def is_configured() -> bool:
+    """Is this layer configured to run at all? (DictLayer.run_if, #180.)
+
+    Reads the module global at call time, so this and the fetch functions'
+    own key checks below can never disagree.
+    """
+    return bool(FAS_API_KEY)
+
+
 def _current_market_year(start_month: int = EXPORT_SALES_DEFAULT_MY_START) -> int:
     """
     Return the current USDA marketing year for a given MY start month.
