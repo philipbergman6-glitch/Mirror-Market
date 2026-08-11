@@ -55,6 +55,37 @@ def _stale_limit_days(table: str) -> int:
     return _STALE_THRESHOLD_DAYS + _WEEKEND_SLACK_DAYS
 
 
+def _observed_filter(conn, table: str, date_col: str) -> tuple[str, list[str]]:
+    """SQL WHERE clause + params restricting a table to observed rows.
+
+    Two rules, both needed so a dead fetcher can't hide behind its own
+    forecast horizon (weather writes ~7 days ahead of today):
+
+    - future-dated rows never prove liveness, whatever their flag;
+    - rows flagged ``is_forecast = 1`` are excluded once their date passes.
+
+    NULL / missing ``is_forecast`` counts as observed — same rule as
+    ``analysis.briefing.sections.weather.observed_only`` — so tables and
+    DBs predating the flag behave exactly as before.
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    # substr() keeps the comparison correct for rows carrying a time part.
+    clauses = [f"substr({date_col}, 1, 10) <= ?"]
+    params = [today]
+    if "is_forecast" in _table_columns(conn, table):
+        clauses.append("(is_forecast IS NULL OR is_forecast = 0)")
+    return " WHERE " + " AND ".join(clauses), params
+
+
+def _table_columns(conn, table: str) -> set[str]:
+    """Column names of ``table``; empty set if it can't be introspected."""
+    try:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except Exception:
+        logger.warning("Could not introspect columns of %s", table, exc_info=True)
+        return set()
+
+
 def run_health_check() -> dict:
     """
     Run a full health check across all data tables.
@@ -106,6 +137,9 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
     """
     Check a table for missing or stale commodities.
 
+    Only observed rows count — see ``_observed_filter``; a region whose
+    only rows are forecasts reads as MISSING, not fresh.
+
     ``stale_exempt`` keys skip the staleness loop only — for series whose
     normal cadence is slower than the daily threshold (e.g. weekly).
 
@@ -117,9 +151,11 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
 
     with get_connection() as conn:
         try:
+            where, params = _observed_filter(conn, table, date_col)
             rows = conn.execute(
                 f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
-                f"FROM {table} GROUP BY {key_col}"
+                f"FROM {table}{where} GROUP BY {key_col}",
+                params,
             ).fetchall()
         except Exception:
             issues.append({
@@ -141,7 +177,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
                 "severity": "critical",
                 "table": table,
                 "commodity": expected,
-                "message": f"MISSING from {table} — no rows at all",
+                "message": f"MISSING from {table} — no observed rows",
             })
 
     # Check for stale data
@@ -307,9 +343,11 @@ def _build_commodity_status() -> list[dict]:
         for table, key_col, date_col in table_specs:
             limit_days = _stale_limit_days(table)
             try:
+                where, params = _observed_filter(conn, table, date_col)
                 rows = conn.execute(
                     f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
-                    f"FROM {table} GROUP BY {key_col}"
+                    f"FROM {table}{where} GROUP BY {key_col}",
+                    params,
                 ).fetchall()
             except Exception:
                 continue
