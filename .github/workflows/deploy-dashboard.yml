@@ -43,9 +43,26 @@ permissions:
   # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue
   issues: write
 
+# One group, so two runs can never call deploy-pages at the same time.
+#
+# `cancel-in-progress` is conditional because a *push* run and a *scheduled*
+# run are not worth the same. On 2026-08-11 four PRs merged inside 15 minutes
+# (#209, #215, #216, #217), fanning out four full pipeline runs. Queueing them
+# was strictly harmful: each re-downloaded every upstream — enough to exhaust
+# the shared data.gov.in sample-key throttle and darken Layer 16 with HTTP 429
+# (#212) — and each raced the others to push data/history back to main, which
+# is how #218's deploy died. A superseded push run is worthless by
+# construction: the run behind it regenerates the whole dashboard from an
+# empty DB, so nothing it would have published is lost.
+#
+# Scheduled and manual runs are never cancelled *by* a later run of their own
+# kind: the daily run is the one that must land, and a workflow_dispatch is
+# someone waiting on a result. The remaining edge is a merge landing while the
+# 19:00 UTC scheduled run is mid-flight — the push run cancels it and then
+# publishes a strictly fresher dashboard itself, so the outcome is benign.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   check:
@@ -162,16 +179,50 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/history
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(data): daily history snapshot [skip ci]"
-            # --autostash: this step now runs after dashboard generation, so
-            # the freshly written (tracked) docs/index.html is an unstaged
-            # change and a plain `pull --rebase` would abort on the dirty
-            # tree. Autostash sets it aside and restores it, keeping the new
-            # dashboard in place for the Pages artifact upload below.
-            git pull --rebase --autostash origin main
-            git push origin main
+          if git diff --staged --quiet; then
+            echo "No history snapshot changes."
+            exit 0
           fi
+          git commit -m "chore(data): daily history snapshot [skip ci]"
+
+          # Push first and only rebase when main has actually moved, retrying
+          # a bounded number of times.
+          #
+          # This step runs BEFORE the Pages upload/deploy below, so any
+          # non-zero exit here means the dashboard is never published — a
+          # data-persistence hiccup taking down the publish with it. That is
+          # exactly how #218 went stale: two runs on 2026-08-11 each wrote a
+          # `briefings` row for that same date with different text, so the
+          # CSVs differed on one line at one primary key and the bare
+          # `pull --rebase` stopped on a content conflict with no way to
+          # resolve it.
+          #
+          # `-X theirs` is the resolution, and reads backwards: a rebase
+          # replays our commit ONTO upstream, so it calls upstream "ours" and
+          # the commit being replayed "theirs". This therefore means "prefer
+          # our freshly exported snapshot". That is safe and correct because
+          # data/history is generated, not authored — this run seeded its DB
+          # from the committed CSVs at checkout (`import_history()`) and then
+          # added today's fetch, so our export is at least as complete as
+          # what we are replaying onto, and `export_history()`'s own
+          # empty/shrink/column guards already refused to write a regression.
+          # The strategy cannot reach beyond data/history: the commit stages
+          # nothing else, so no other path can conflict.
+          #
+          # --autostash: this step runs after dashboard generation, so the
+          # freshly written (tracked) docs/index.html is an unstaged change
+          # and a plain `pull --rebase` would abort on the dirty tree.
+          # Autostash sets it aside and restores it, keeping the new
+          # dashboard in place for the Pages artifact upload below.
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — rebasing onto moved main."
+            git pull --rebase -X theirs --autostash origin main
+          done
+          echo "::error::history snapshot push failed after 3 attempts"
+          exit 1
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

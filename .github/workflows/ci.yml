@@ -26,7 +26,17 @@ jobs:
           fetch-depth: 0
       - name: Block manual data/history edits
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          # No --depth: checkout above already fetched full history, and a
+          # shallow fetch of the base grafts a depth-1 orphan tip onto it.
+          # The moment main advances after the branch point — which the daily
+          # `chore(data): daily history snapshot` commit does routinely — that
+          # tip shares no ancestry with HEAD and the three-dot diff dies with
+          # `fatal: origin/main...HEAD: no merge base` (exit 128). The guard
+          # then fails every PR it was meant to wave through, and its own
+          # error message never prints. Latent since the guard was added; it
+          # only stayed green because PRs happened to run before a snapshot
+          # landed.
+          git fetch origin ${{ github.base_ref }}
           CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- data/history/)
           if [ -n "$CHANGED" ]; then
             echo "::error::data/history/ is written only by the daily deploy workflow. Drop these files from the PR (git checkout origin/${{ github.base_ref }} -- data/history/):"
