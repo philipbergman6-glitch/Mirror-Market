@@ -98,12 +98,19 @@ def stub_fetchers(monkeypatch, tmp_path):
     return main
 
 
+# Dates must be relative to today, not pinned. A layer's "success" now also
+# requires recency (config.LAYER_MAX_DATA_AGE_DAYS, audit F3), so hardcoded
+# 2026-01 dates would make every critical layer here read as a frozen
+# upstream and fail the run — increasingly so as the calendar moves on.
+def _recent_index(periods: int = 2) -> pd.DatetimeIndex:
+    return pd.date_range(end=pd.Timestamp.now().normalize(), periods=periods, freq="D")
+
+
 def _make_ohlcv() -> pd.DataFrame:
-    idx = pd.to_datetime(["2026-01-01", "2026-01-02"])
     return pd.DataFrame(
         {"Open": [10.0, 11.0], "High": [11.0, 12.0],
          "Low": [9.0, 10.0], "Close": [10.5, 11.5], "Volume": [100, 110]},
-        index=idx,
+        index=_recent_index(),
     )
 
 
@@ -115,8 +122,18 @@ def _make_prices_at_floor() -> dict[str, pd.DataFrame]:
 
 def _make_fred_at_floor() -> dict[str, pd.Series]:
     from config import LAYER_MIN_KEYS
-    series = pd.Series([1.0, 2.0], index=pd.to_datetime(["2026-01-01", "2026-01-02"]))
+    series = pd.Series([1.0, 2.0], index=_recent_index())
     return {f"Series{i}": series for i in range(LAYER_MIN_KEYS["fred"])}
+
+
+def _make_worldbank() -> dict[str, pd.DataFrame]:
+    """A recent Pink Sheet vintage — monthly, so dated to the current month."""
+    dates = pd.date_range(end=pd.Timestamp.now().normalize(), periods=3, freq="MS")
+    return {
+        "Palm Oil": pd.DataFrame(
+            {"Date": dates, "price": [900.0, 910.0, 920.0], "unit": "$/mt"}
+        )
+    }
 
 
 def test_exit_zero_when_critical_layers_succeed(stub_fetchers, monkeypatch):
@@ -125,6 +142,15 @@ def test_exit_zero_when_critical_layers_succeed(stub_fetchers, monkeypatch):
     # Make prices and FRED return non-empty so both critical layers succeed
     monkeypatch.setattr(main, "fetch_prices", mock.Mock(return_value=_make_prices_at_floor()))
     monkeypatch.setattr(main, "fetch_all_series", mock.Mock(return_value=_make_fred_at_floor()))
+    # World Bank now counts an empty return as a hard failure (#56): {} means
+    # either the download died or the stale-file guard discarded the vintage,
+    # neither of which is "nothing to publish this month". With the five
+    # scraper layers already hard-failing on empty, leaving it empty here
+    # would put this run at 6 and trip the MAX_FAILED_LAYERS backstop — which
+    # is not what this test is about.
+    monkeypatch.setattr(
+        main, "fetch_worldbank_prices", mock.Mock(return_value=_make_worldbank())
+    )
 
     assert main.run() == 0
 

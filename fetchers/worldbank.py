@@ -20,7 +20,12 @@ import re
 import pandas as pd
 import requests
 
-from config import MAX_RETRIES, WORLDBANK_CMO_LANDING_URL, WORLDBANK_PRICES_URL
+from config import (
+    LAYER_MAX_DATA_AGE_DAYS,
+    MAX_RETRIES,
+    WORLDBANK_CMO_LANDING_URL,
+    WORLDBANK_PRICES_URL,
+)
 from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
@@ -241,6 +246,11 @@ def fetch_worldbank_prices() -> dict[str, pd.DataFrame]:
     dict
         {commodity_name: DataFrame} — e.g. {"Palm Oil": DataFrame, ...}
         Each DataFrame has columns: Date, price, unit
+
+        Empty when the download failed **or** when the file that came back
+        is older than the stale-file budget. An empty return is treated as
+        a layer failure by main.py (DictLayer.empty_fails), not as an
+        empty-success, so it can never stamp a fresh last_success.
     """
     raw_bytes = _download_pink_sheet()
     if not raw_bytes:
@@ -256,12 +266,20 @@ def fetch_worldbank_prices() -> dict[str, pd.DataFrame]:
     )
     if latest is not None:
         age_days = (pd.Timestamp.today() - latest).days
-        if age_days > 100:
+        budget = LAYER_MAX_DATA_AGE_DAYS["worldbank"]
+        if age_days > budget:
+            # Audit F3a: this used to log the error and return the frozen
+            # data anyway, which stored a stale vintage and stamped the
+            # layer green. Detecting the trap and walking into it is worse
+            # than not detecting it — the log line was the only evidence,
+            # and nothing reads the logs.
             logger.error(
-                "Pink Sheet data ends %s (%d days ago) — the download link "
-                "is probably a stale GUID; check WORLDBANK_CMO_LANDING_URL",
-                latest.strftime("%Y-%m"), age_days,
+                "Pink Sheet data ends %s (%d days ago, budget %d) — the "
+                "download link is probably a stale GUID; discarding the file "
+                "rather than storing it. Check WORLDBANK_CMO_LANDING_URL",
+                latest.strftime("%Y-%m"), age_days, budget,
             )
+            return {}
     return results
 
 

@@ -767,6 +767,53 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "usda": 400,  # annual NASS crop data
 }
 
+# Recency budget for "success" (audit F3). FRESHNESS_WARNING_DAYS_BY_LAYER
+# above measures when we last *ran*; this measures how old the newest
+# observation we *received* is allowed to be. Without it a frozen upstream
+# — one that answers 200 OK with last month's file every day — stamps a
+# fresh last_success forever and no surface downstream can tell.
+#
+# A layer whose newest observation exceeds its budget is recorded with
+# status='failed', which preserves the previous last_success. That is the
+# mechanism: last_success stops advancing, so the layer ages out of its
+# FRESHNESS_WARNING_DAYS_BY_LAYER window on its own and shows up stale on
+# every surface that already reads freshness.
+#
+# Budgets are calendar days from the newest observation date and are sized
+# to survive the layer's normal quiet periods (weekends, exchange holidays,
+# publication lag) — a threshold that cries wolf gets ignored, which is the
+# failure mode this whole block exists to avoid.
+#
+# NOT LISTED = NOT CHECKED. A layer is only listed when "newest observation
+# date" is a meaningful quantity for it:
+#   psd, wasde, usda  — keyed by marketing year / crop year, no date column
+#                       at all (verified against the live schema), so there
+#                       is nothing to measure.
+#   forward_curve     — rows are dated by *contract month*, i.e. months in
+#                       the future; a frozen curve stays "recent" for a year.
+#   crop_progress     — seasonal by design; NASS publishes nothing between
+#                       roughly December and March, so any budget short
+#                       enough to be useful fires every winter.
+# These four are covered by the run-cadence window, not by data recency.
+LAYER_MAX_DATA_AGE_DAYS = {
+    # Daily exchange/market data — a long weekend plus a holiday.
+    "prices": 7,
+    "currencies": 7,
+    "fred": 10,        # 1-day publication lag on the daily series
+    "weather": 10,     # includes forecast rows, so age is normally negative
+    "dce": 21,         # Spring Festival / Golden Week close the DCE for ~2 weeks
+    # Weekly publications — observation lag on top of the weekly cadence,
+    # plus room for one missed release.
+    "cot": 18,         # Friday release reports the *previous Tuesday*
+    "export_sales": 21,
+    "eia": 21,
+    # Monthly publication. 100 days matches the identical guard inside
+    # fetchers/worldbank.py — the CMO deep link rotates yearly and the old
+    # GUID keeps serving a frozen file with HTTP 200. One number, one
+    # meaning, two enforcement points.
+    "worldbank": 100,
+}
+
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------
