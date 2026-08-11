@@ -401,6 +401,25 @@ def test_generic_store_and_read_agree_with_observation_ledger_methods(
     )
 
 
+def test_batch_observation_append_is_idempotent_and_queryable(
+    repository: TrustRepository,
+    observation_revision: ObservationRevision,
+) -> None:
+    later_revision = replace(
+        observation_revision,
+        value=Decimal("501.25"),
+        ingested_at=NOW + timedelta(minutes=5),
+    )
+
+    repository.append_observation_revisions((observation_revision, later_revision, observation_revision))
+
+    assert repository.read(ObservationRevision, observation_revision.revision_id) == observation_revision
+    assert repository.observation_revisions(observation_revision.identity) == (
+        observation_revision,
+        later_revision,
+    )
+
+
 def test_observation_queries_remain_compatible_with_the_dt05_flat_layout(
     repository: TrustRepository,
     observation_revision: ObservationRevision,
@@ -422,6 +441,18 @@ def test_appending_an_existing_dt05_revision_is_idempotent(
     _write_dt05_observation(repository, observation_revision, tmp_path)
 
     repository.append_observation_revision(observation_revision)
+
+    assert repository.observation_revisions(observation_revision.identity) == (observation_revision,)
+
+
+def test_batch_appending_an_existing_dt05_revision_is_idempotent(
+    repository: TrustRepository,
+    observation_revision: ObservationRevision,
+    tmp_path: Path,
+) -> None:
+    _write_dt05_observation(repository, observation_revision, tmp_path)
+
+    repository.append_observation_revisions((observation_revision,))
 
     assert repository.observation_revisions(observation_revision.identity) == (observation_revision,)
 
@@ -568,6 +599,24 @@ def test_revision_identifier_conflicts_are_rejected_across_partitions(
 
     with pytest.raises(ImmutableRecordConflict, match=observation_revision.revision_id):
         repository.append_observation_revision(conflicting)
+
+    assert repository.observation_revisions(other_identity) == ()
+
+
+def test_batch_revision_identifier_conflicts_are_rejected_across_partitions(
+    repository: TrustRepository,
+    observation_revision: ObservationRevision,
+) -> None:
+    repository.append_observation_revision(observation_revision)
+    other_identity = replace(
+        observation_revision.identity,
+        effective_date=date(2027, 1, 2),
+    )
+    conflicting = replace(observation_revision, identity=other_identity)
+    object.__setattr__(conflicting, "revision_id", observation_revision.revision_id)
+
+    with pytest.raises(ImmutableRecordConflict, match=observation_revision.revision_id):
+        repository.append_observation_revisions((conflicting,))
 
     assert repository.observation_revisions(other_identity) == ()
 

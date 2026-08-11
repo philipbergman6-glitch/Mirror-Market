@@ -27,6 +27,7 @@ from trust.domain import (
     ValidationPolicy,
     evaluate_run_status,
 )
+from trust.legacy_importer import LegacyImportSummary, import_v1_history
 from trust.registry import (
     FX_CONTRACTS,
     MAGYP_FOB_CONTRACT,
@@ -89,6 +90,7 @@ __all__ = [
     "GitDirectoryTrustRepository",
     "IdentityContract",
     "ImmutableRecordConflict",
+    "LegacyImportSummary",
     "MAGYP_FOB_CONTRACT",
     "MAGYP_SOURCE",
     "ObservationIdentity",
@@ -116,4 +118,5 @@ __all__ = [
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
     "evaluate_run_status",
+    "import_v1_history",
 ]

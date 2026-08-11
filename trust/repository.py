@@ -17,7 +17,7 @@ import os
 import re
 import tempfile
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -111,6 +111,8 @@ class TrustRepository(Protocol):
     def read_artifact(self, artifact_id: str) -> RawArtifact | None: ...
 
     def append_observation_revision(self, revision: ObservationRevision) -> None: ...
+
+    def append_observation_revisions(self, revisions: Sequence[ObservationRevision]) -> None: ...
 
     def observation_revisions(self, identity: ObservationIdentity) -> tuple[ObservationRevision, ...]: ...
 
@@ -273,36 +275,65 @@ class _DirectoryTrustRepository:
             raise RepositoryFormatError(f"invalid durable raw artifact {artifact_id}") from exc
 
     def append_observation_revision(self, revision: ObservationRevision) -> None:
-        payload = revision.to_dict()
-        layout = _RECORD_LAYOUTS["observation-revision"]
-        record_id = self._record_id(payload, layout)
-        contents = self._serialize(payload)
-
         with self._exclusive_lock():
-            ledger = self._observation_ledger(revision.identity)
-            existing = self._read_observation_revision(record_id)
-            if existing is not None:
-                if self._serialize(existing.to_dict()) != contents:
-                    raise ImmutableRecordConflict(f"immutable record {record_id} already exists with different data")
+            prepared = self._prepare_new_revision_or_skip_existing(revision)
+            if prepared is None:
                 return
-            if revision.supersedes_revision_id == revision.revision_id:
-                raise SupersessionCycleError("observation supersession cycle cannot include the revision itself")
-            self._validate_schema_version(payload)
-            try:
-                canonical_revision = ObservationRevision.from_dict(payload)
-            except (KeyError, TypeError, ValueError) as exc:
-                raise RepositoryFormatError("invalid canonical observation-revision record") from exc
-            if self._serialize(canonical_revision.to_dict()) != contents:
-                raise RepositoryFormatError("non-canonical observation-revision serialization")
-            supersession_ledger = ledger
-            superseded_id = canonical_revision.supersedes_revision_id
-            if superseded_id is not None and superseded_id not in supersession_ledger:
-                superseded = self._read_observation_revision(superseded_id)
-                if superseded is not None:
-                    supersession_ledger = {**supersession_ledger, superseded_id: superseded}
-            self._validate_appended_supersession(canonical_revision, supersession_ledger)
+            canonical_revision, contents = prepared
+            ledger = self._observation_ledger(canonical_revision.identity)
+            self._validate_appended_supersession(
+                canonical_revision,
+                self._ledger_with_external_supersession_target(canonical_revision, ledger),
+            )
             destination = self._observation_revision_path(canonical_revision)
-            self._store_immutable(destination, contents, f"immutable record {record_id}")
+            self._store_immutable(destination, contents, f"immutable record {canonical_revision.revision_id}")
+
+    def append_observation_revisions(self, revisions: Sequence[ObservationRevision]) -> None:
+        with self._exclusive_lock():
+            prepared = tuple(
+                prepared
+                for revision in revisions
+                if (prepared := self._prepare_new_revision_or_skip_existing(revision)) is not None
+            )
+            if all(revision.supersedes_revision_id is None for revision, _contents in prepared):
+                self._append_independent_observation_revisions(prepared)
+                return
+            pending_by_identity: dict[str, dict[str, ObservationRevision]] = {}
+            for revision, contents in prepared:
+                ledger = pending_by_identity.get(revision.identity.observation_id)
+                if ledger is None:
+                    ledger = self._observation_ledger(revision.identity)
+                    pending_by_identity[revision.identity.observation_id] = ledger
+                if revision.revision_id in ledger:
+                    if self._serialize(ledger[revision.revision_id].to_dict()) != contents:
+                        raise ImmutableRecordConflict(
+                            f"immutable record {revision.revision_id} already exists with different data"
+                        )
+                    continue
+                self._validate_appended_supersession(
+                    revision,
+                    self._ledger_with_external_supersession_target(revision, ledger),
+                )
+                destination = self._observation_revision_path(revision)
+                self._store_immutable(destination, contents, f"immutable record {revision.revision_id}")
+                ledger[revision.revision_id] = revision
+
+    def _append_independent_observation_revisions(
+        self,
+        prepared: Sequence[tuple[ObservationRevision, bytes]],
+    ) -> None:
+        pending_contents: dict[str, bytes] = {}
+        for revision, contents in prepared:
+            existing_contents = pending_contents.get(revision.revision_id)
+            if existing_contents is not None:
+                if existing_contents != contents:
+                    raise ImmutableRecordConflict(
+                        f"immutable record {revision.revision_id} already exists with different data"
+                    )
+                continue
+            pending_contents[revision.revision_id] = contents
+            destination = self._observation_revision_path(revision)
+            self._store_immutable(destination, contents, f"immutable record {revision.revision_id}")
 
     def observation_revisions(self, identity: ObservationIdentity) -> tuple[ObservationRevision, ...]:
         revisions = [
@@ -482,6 +513,57 @@ class _DirectoryTrustRepository:
         if self._serialize(revision.to_dict()) != self._serialize(payload):
             raise RepositoryFormatError(f"non-canonical durable observation-revision record {path.name}")
         return revision
+
+    def _prepared_revision(self, revision: ObservationRevision) -> tuple[ObservationRevision, bytes]:
+        payload = revision.to_dict()
+        layout = _RECORD_LAYOUTS["observation-revision"]
+        record_id = self._record_id(payload, layout)
+        if revision.supersedes_revision_id == revision.revision_id:
+            raise SupersessionCycleError("observation supersession cycle cannot include the revision itself")
+        self._validate_schema_version(payload)
+        contents = self._serialize(payload)
+        try:
+            canonical_revision = ObservationRevision.from_dict(payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RepositoryFormatError("invalid canonical observation-revision record") from exc
+        if canonical_revision.revision_id != record_id:
+            raise RepositoryFormatError("observation-revision record contradicts its durable identifier")
+        if self._serialize(canonical_revision.to_dict()) != contents:
+            raise RepositoryFormatError("non-canonical observation-revision serialization")
+        return canonical_revision, contents
+
+    def _prepare_new_revision_or_skip_existing(
+        self,
+        revision: ObservationRevision,
+    ) -> tuple[ObservationRevision, bytes] | None:
+        payload = revision.to_dict()
+        layout = _RECORD_LAYOUTS["observation-revision"]
+        record_id = self._record_id(payload, layout)
+        contents = self._serialize(payload)
+        if self._revision_exists_idempotently(record_id, contents):
+            return None
+        return self._prepared_revision(revision)
+
+    def _revision_exists_idempotently(self, revision_id: str, contents: bytes) -> bool:
+        existing = self._read_observation_revision(revision_id)
+        if existing is None:
+            return False
+        if self._serialize(existing.to_dict()) != contents:
+            raise ImmutableRecordConflict(f"immutable record {revision_id} already exists with different data")
+        return True
+
+    def _ledger_with_external_supersession_target(
+        self,
+        revision: ObservationRevision,
+        ledger: Mapping[str, ObservationRevision],
+    ) -> Mapping[str, ObservationRevision]:
+        superseded_id = revision.supersedes_revision_id
+        if superseded_id is None or superseded_id in ledger:
+            return ledger
+        superseded = self._read_observation_revision(superseded_id)
+        if superseded is None:
+            return ledger
+        return {**ledger, superseded_id: superseded}
 
     def _validate_observation_partition(self, path: Path, revision: ObservationRevision) -> None:
         observations_root = self._durable_root / "observations"
