@@ -50,6 +50,17 @@ logger = logging.getLogger(__name__)
 
 _KG_TO_MT = 1000.0  # R$/kg → BRL/MT
 
+# Download sanity gate. Live file 2026-08-11: 13,608,731 bytes, 89,699 data
+# rows, median valor_produto_kg 5.53 R$/kg (p25 1.83, p75 27.99 across all
+# products). Floors sit an order of magnitude below the live values so a
+# genuine shrink of the rolling window never trips them.
+_MIN_DOWNLOAD_BYTES = 1_000_000
+_MIN_DATA_ROWS = 10_000
+_SAMPLE_ROWS = 500
+_MIN_NUMERIC_SHARE = 0.9  # of the *quoted* (non-blank) sampled prices
+_MIN_QUOTED_SHARE = 0.5  # live file: ~93% of rows carry a price
+_PLAUSIBLE_MEDIAN_PRICE_KG = (0.1, 1_000.0)
+
 _REQUIRED_COLUMNS = (
     "produto",
     "uf",
@@ -72,6 +83,96 @@ def _download() -> str:
         if attempt < MAX_RETRIES:
             retry_sleep(attempt)
     return ""
+
+
+def _validate_download(text: str) -> None:
+    """Sanity-gate the raw download before it reaches the parser.
+
+    Three independent checks, each a hard-fail (ScraperShapeError):
+
+    * **size** — the live file is ~13.6 MB / ~90k data rows carrying a
+      rolling ~18 months. A truncated or padded body (proxy error page,
+      cut connection answered 200 OK) is rejected on bytes *and* on data
+      rows, so neither a big-but-empty nor a small-but-dense payload slips
+      through.
+    * **shape** — the header line must carry every required column, and
+      the sampled data rows must have the same field count as the header.
+      Catches a dropped header (the first data row would otherwise become
+      the column names) and a delimiter switch.
+    * **magnitude** — the sampled ``valor_produto_kg`` values must be
+      mostly numeric and their median must sit inside a plausible R$/kg
+      band. A silent kg→tonne requote keeps every column name and row
+      count intact; only the band catches it (observed: the whole file
+      x1000 parses clean and ships 2,070,000 BRL/MT).
+
+    The sample is strided across the whole file, not taken off the head:
+    the file is sorted by product name, so a head sample only ever sees
+    the NPK fertilisers and both the field-count and the magnitude check
+    would then depend on CONAB's row ordering. Blank prices are a normal
+    feature of the file (~7% of rows), so they are excluded from the
+    numeric share rather than counted as format breakage.
+    """
+    size = len(text.encode("latin-1", errors="replace"))
+    if size < _MIN_DOWNLOAD_BYTES:
+        raise ScraperShapeError(
+            f"CONAB prices: undersized download — {size} bytes "
+            f"(< {_MIN_DOWNLOAD_BYTES} minimum)"
+        )
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) - 1 < _MIN_DATA_ROWS:
+        raise ScraperShapeError(
+            f"CONAB prices: undersized download — {max(len(lines) - 1, 0)} data rows "
+            f"(< {_MIN_DATA_ROWS} minimum)"
+        )
+
+    header = [c.strip() for c in lines[0].split(";")]
+    missing = [c for c in _REQUIRED_COLUMNS if c not in header]
+    if missing:
+        raise ScraperShapeError(
+            f"CONAB prices: download header missing {missing} — got {header}"
+        )
+
+    rows = lines[1:]
+    stride = max(1, len(rows) // _SAMPLE_ROWS)
+    sample = rows[::stride][:_SAMPLE_ROWS]
+    ragged = sum(1 for line in sample if len(line.split(";")) != len(header))
+    if ragged:
+        raise ScraperShapeError(
+            f"CONAB prices: download header/row field-count mismatch — "
+            f"{ragged}/{len(sample)} sampled rows are not {len(header)} fields wide"
+        )
+
+    value_idx = header.index("valor_produto_kg")
+    values: list[float] = []
+    quoted = 0
+    for line in sample:
+        raw = line.split(";")[value_idx].strip()
+        if not raw:  # blank = price not collected that week, normal
+            continue
+        quoted += 1
+        try:
+            values.append(float(raw.replace(",", ".")))
+        except ValueError:
+            continue
+    if not values or len(values) < _MIN_NUMERIC_SHARE * quoted:
+        raise ScraperShapeError(
+            f"CONAB prices: implausible download — only {len(values)}/{quoted} "
+            "quoted valor_produto_kg values are numeric (decimal format changed?)"
+        )
+    if quoted < _MIN_QUOTED_SHARE * len(sample):
+        raise ScraperShapeError(
+            f"CONAB prices: implausible download — only {quoted}/{len(sample)} "
+            "sampled rows carry a price at all (empty price column?)"
+        )
+
+    median = sorted(values)[len(values) // 2]
+    low, high = _PLAUSIBLE_MEDIAN_PRICE_KG
+    if not low <= median <= high:
+        raise ScraperShapeError(
+            f"CONAB prices: implausible download — median sampled price {median} "
+            f"outside the {low}-{high} R$/kg band (unit change?)"
+        )
 
 
 def _week_end_date(week_range: str) -> str | None:
@@ -147,6 +248,7 @@ def fetch_conab_farmgate() -> FetchResult:
         return FetchResult.failed("CONAB prices: download failed")
 
     try:
+        _validate_download(text)
         df = _parse_farmgate(text)
     except ScraperShapeError as exc:
         logger.error("CONAB prices: %s", exc)
@@ -159,7 +261,12 @@ def fetch_conab_farmgate() -> FetchResult:
     return FetchResult.ok({CONAB_FARMGATE_SERIES: df})
 
 
-__all__: Sequence[str] = ("_parse_farmgate", "_week_end_date", "fetch_conab_farmgate")
+__all__: Sequence[str] = (
+    "_parse_farmgate",
+    "_validate_download",
+    "_week_end_date",
+    "fetch_conab_farmgate",
+)
 
 
 # ── Quick self-test ──────────────────────────────────────────────────────────

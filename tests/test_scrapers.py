@@ -12,6 +12,8 @@ continue to pass against the snapshot — that's the alert signal.
 
 from __future__ import annotations
 
+import contextlib
+import gzip
 from datetime import date
 from pathlib import Path
 
@@ -21,7 +23,7 @@ from bs4 import BeautifulSoup
 
 from fetchers.agrural import _parse_agrural_table, fetch_agrural
 from fetchers.cepea import _parse_cepea_tables
-from fetchers.conab_precos import _parse_farmgate, _week_end_date
+from fetchers.conab_precos import _parse_farmgate, _validate_download, _week_end_date
 from fetchers.india_domestic import _extract_soy_prices
 from fetchers.mandi import _aggregate as _mandi_aggregate
 from fetchers.mandi import _collect_records as _mandi_collect
@@ -650,6 +652,109 @@ def test_conab_farmgate_raises_when_filter_matches_nothing() -> None:
 def test_conab_week_end_date_parses_range() -> None:
     assert _week_end_date("21-07-2025 - 25-07-2025  ") == "2025-07-25"
     assert _week_end_date("garbage") is None
+
+
+# ── CONAB download sanity gate (live fixture) ───────────────────────────────
+#
+# tests/fixtures/conab_precos_semanal_uf.txt.gz is the real PrecosSemanalUF.txt
+# as served on 2026-08-11 (13,608,731 bytes, 89,700 lines), gzipped for the
+# repo. The failure cases below are derived from those genuine bytes by
+# truncation/mutilation — nothing here is hand-authored.
+
+def _load_conab_live() -> str:
+    with gzip.open(FIXTURES / "conab_precos_semanal_uf.txt.gz", "rb") as fh:
+        return fh.read().decode("latin-1")
+
+
+def test_conab_gate_passes_on_the_genuine_download() -> None:
+    text = _load_conab_live()
+    _validate_download(text)  # must not raise
+    df = _parse_farmgate(text)
+    assert len(df) > 50
+    assert df["price_brl_mt"].between(500, 5000).all()
+
+
+def test_conab_gate_rejects_truncated_download() -> None:
+    """A 200 OK that delivers only the first few KB must not be parsed."""
+    truncated = _load_conab_live()[:5000]
+    with pytest.raises(ScraperShapeError, match="undersized"):
+        _validate_download(truncated)
+
+
+def test_conab_gate_rejects_full_size_but_row_starved_download() -> None:
+    """Big payload, almost no rows — padded/garbage body, not a price file."""
+    text = _load_conab_live()
+    head = "\n".join(text.split("\n")[:200])
+    with pytest.raises(ScraperShapeError, match="undersized"):
+        _validate_download(head + "\n" + "x" * 2_000_000)
+
+
+def test_conab_gate_rejects_headerless_download() -> None:
+    """Header row dropped upstream — the first data row would be eaten as
+    column names and the shape check must catch it before parse."""
+    body = _load_conab_live().split("\n", 1)[1]
+    with pytest.raises(ScraperShapeError, match="header"):
+        _validate_download(body)
+
+
+def test_conab_gate_rejects_delimiter_switch() -> None:
+    """Semicolons swapped for tabs: same bytes, unparseable shape."""
+    text = _load_conab_live().replace(";", "\t")
+    with pytest.raises(ScraperShapeError, match="header"):
+        _validate_download(text)
+
+
+def test_conab_gate_rejects_implausible_magnitudes() -> None:
+    """Prices requoted R$/tonne (x1000) keep every column name and row
+    count — only the magnitude band catches it."""
+    lines = _load_conab_live().split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        fields = line.split(";")
+        value = fields[-1].strip().replace(",", ".")
+        with contextlib.suppress(ValueError):
+            fields[-1] = f"{float(value) * 1000:.2f}".replace(".", ",")
+        out.append(";".join(fields))
+    with pytest.raises(ScraperShapeError, match="implausible"):
+        _validate_download("\n".join(out))
+
+
+def test_conab_gate_rejects_corruption_below_the_head_of_the_file() -> None:
+    """The file is sorted by product name, so a head-only sample would only
+    ever see the NPK fertilisers. Corrupt the *second half* of the real
+    rows and the strided sample must still catch it."""
+    lines = [ln for ln in _load_conab_live().split("\n") if ln.strip()]
+    half = len(lines) // 2
+    mangled = lines[:half] + [ln + ";extra" for ln in lines[half:]]
+    with pytest.raises(ScraperShapeError, match="field-count mismatch"):
+        _validate_download("\n".join(mangled))
+
+
+def test_conab_gate_rejects_empty_price_column() -> None:
+    """Every price blanked: names, row count and field widths all intact."""
+    lines = [ln for ln in _load_conab_live().split("\n") if ln.strip()]
+    out = [lines[0]]
+    for line in lines[1:]:
+        fields = line.split(";")
+        fields[-1] = ""
+        out.append(";".join(fields))
+    with pytest.raises(ScraperShapeError, match="implausible"):
+        _validate_download("\n".join(out))
+
+
+def test_conab_gate_tolerates_the_files_normal_blank_prices() -> None:
+    """~7% of real rows carry no price; blanks are missing data, not a
+    format break, so a heavier-than-usual blank week must still pass."""
+    lines = [ln for ln in _load_conab_live().split("\n") if ln.strip()]
+    out = [lines[0]]
+    for i, line in enumerate(lines[1:]):
+        fields = line.split(";")
+        if i % 3 == 0:
+            fields[-1] = ""
+        out.append(";".join(fields))
+    _validate_download("\n".join(out))  # must not raise
 
 
 # ── Notícias Agrícolas CEPEA/ESALQ republication (Layer 17) ─────────────────

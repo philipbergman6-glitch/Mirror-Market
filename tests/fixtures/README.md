@@ -17,11 +17,19 @@ parsing without hitting the network.
 | `noticias_agricolas_milho.html` | Notícias Agrícolas ESALQ/B3 corn indicator (corn-redirect fixture — must *fail* the soy parse) | live download 2026-08-07 |
 | `conab_serie_historica_graos.txt.gz` | CONAB `https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt` (gzip of the verbatim 2,722,833-byte body; latin-1) | live download 2026-08-11 |
 | `conab_serie_historica_graos.headers.txt` | response headers of that same download (carries `Last-Modified: Tue, 11 Aug 2026 11:00:16 GMT` — the survey's publication date) | live download 2026-08-11 |
+| `conab_precos_semanal_uf.txt.gz` | CONAB `PrecosSemanalUF.txt` — `https://portaldeinformacoes.conab.gov.br/downloads/arquivos/PrecosSemanalUF.txt` | live download 2026-08-11 (HTTP 200, 13,608,731 bytes, 89,700 lines; gzipped verbatim for the repo, latin-1) |
 
 The CONAB missing-Mato-Grosso case in `tests/test_fetcher_conab.py` is
 derived at test time by deleting the real `MT` rows from a copy of that
 file — real layout, one state removed. Nothing about the file is
 hand-authored.
+
+The `PrecosSemanalUF` fixture is likewise the *unmodified* live payload.
+The download-gate failure cases in `tests/test_scrapers.py` are derived
+from it in-memory (truncation, header drop, delimiter swap, kg→tonne
+requote) — nothing is hand-authored, so a real upstream change shows up
+as a fixture/parser divergence rather than as a test that was written to
+match the regex.
 
 ## Treat fixtures as snapshots
 
