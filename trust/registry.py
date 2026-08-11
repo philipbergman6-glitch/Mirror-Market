@@ -13,6 +13,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -41,6 +42,24 @@ def _record(data: Mapping[str, Any], record_type: str) -> None:
         raise ValueError(f"unsupported {record_type} schema version: {data.get('schema_version')!r}")
     if data.get("record_type") != record_type:
         raise ValueError(f"expected record_type {record_type!r}")
+
+
+def _decimal(value: Decimal | int | str, field_name: str) -> Decimal:
+    if isinstance(value, (bool, float)):
+        raise ValueError(f"{field_name} must use Decimal, int, or a decimal string")
+    try:
+        result = value if isinstance(value, Decimal) else Decimal(value)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a decimal number") from exc
+    if not result.is_finite():
+        raise ValueError(f"{field_name} must be finite")
+    return result
+
+
+def _decimal_text(value: Decimal) -> str:
+    if value == 0:
+        return "0"
+    return format(value.normalize(), "f")
 
 
 class CadenceKind(str, Enum):
@@ -81,6 +100,8 @@ class CadenceContract:
     kind: CadenceKind
     expected_interval_hours: int
     timezone: str
+    publication_weekdays: tuple[int, ...] | None = None
+    publication_days_of_month: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", CadenceKind(self.kind))
@@ -96,12 +117,38 @@ class CadenceContract:
         except ZoneInfoNotFoundError as exc:
             raise ValueError(f"cadence.timezone is not an IANA timezone: {timezone_name}") from exc
         object.__setattr__(self, "timezone", timezone_name)
+        weekdays = self.publication_weekdays
+        if weekdays is None and self.kind is CadenceKind.BUSINESS_DAILY:
+            weekdays = (0, 1, 2, 3, 4)
+        elif weekdays is None and self.kind is CadenceKind.WEEKLY:
+            weekdays = (0,)
+        if weekdays is not None:
+            if (
+                any(not isinstance(day, int) or isinstance(day, bool) or day < 0 or day > 6 for day in weekdays)
+                or len(weekdays) != len(set(weekdays))
+            ):
+                raise ValueError("cadence.publication_weekdays must contain unique weekday integers 0-6")
+            object.__setattr__(self, "publication_weekdays", tuple(sorted(weekdays)))
+        month_days = self.publication_days_of_month
+        if month_days is None and self.kind is CadenceKind.MONTHLY:
+            month_days = (1,)
+        if month_days is not None:
+            if (
+                any(not isinstance(day, int) or isinstance(day, bool) or day < 1 or day > 31 for day in month_days)
+                or len(month_days) != len(set(month_days))
+            ):
+                raise ValueError("cadence.publication_days_of_month must contain unique day integers 1-31")
+            object.__setattr__(self, "publication_days_of_month", tuple(sorted(month_days)))
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "kind": self.kind.value,
             "expected_interval_hours": self.expected_interval_hours,
             "timezone": self.timezone,
+            "publication_weekdays": list(self.publication_weekdays) if self.publication_weekdays else None,
+            "publication_days_of_month": (
+                list(self.publication_days_of_month) if self.publication_days_of_month else None
+            ),
         }
 
     @classmethod
@@ -110,6 +157,16 @@ class CadenceContract:
             kind=CadenceKind(str(data["kind"])),
             expected_interval_hours=int(data["expected_interval_hours"]),
             timezone=str(data["timezone"]),
+            publication_weekdays=(
+                tuple(int(value) for value in data["publication_weekdays"])
+                if data.get("publication_weekdays") is not None
+                else None
+            ),
+            publication_days_of_month=(
+                tuple(int(value) for value in data["publication_days_of_month"])
+                if data.get("publication_days_of_month") is not None
+                else None
+            ),
         )
 
 
@@ -158,6 +215,40 @@ class FreshnessContract:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> FreshnessContract:
         return cls(stale_after_hours=int(data["stale_after_hours"]))
+
+
+@dataclass(frozen=True)
+class CoverageContract:
+    expected_keys: tuple[str, ...]
+    key_fields: tuple[str, ...]
+    minimum_coverage: Decimal | int | str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "expected_keys", _strings(self.expected_keys, "coverage.expected_keys"))
+        object.__setattr__(self, "key_fields", _strings(self.key_fields, "coverage.key_fields"))
+        if not self.expected_keys:
+            raise ValueError("coverage.expected_keys cannot be empty")
+        if not self.key_fields:
+            raise ValueError("coverage.key_fields cannot be empty")
+        minimum = _decimal(self.minimum_coverage, "coverage.minimum_coverage")
+        if minimum < 0 or minimum > 1:
+            raise ValueError("coverage.minimum_coverage must be between 0 and 1")
+        object.__setattr__(self, "minimum_coverage", minimum)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "expected_keys": list(self.expected_keys),
+            "key_fields": list(self.key_fields),
+            "minimum_coverage": _decimal_text(self.minimum_coverage),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> CoverageContract:
+        return cls(
+            expected_keys=tuple(str(value) for value in data["expected_keys"]),
+            key_fields=tuple(str(value) for value in data["key_fields"]),
+            minimum_coverage=str(data["minimum_coverage"]),
+        )
 
 
 @dataclass(frozen=True)
@@ -229,6 +320,7 @@ class DatasetContract:
     dataset: Dataset
     cadence: CadenceContract | None
     identity: IdentityContract | None
+    coverage: CoverageContract | None
     freshness: FreshnessContract | None
     units: tuple[str, ...]
     criticality: Criticality | None
@@ -251,6 +343,7 @@ class DatasetContract:
             "dataset": self.dataset.to_dict(),
             "cadence": self.cadence.to_dict() if self.cadence else None,
             "identity": self.identity.to_dict() if self.identity else None,
+            "coverage": self.coverage.to_dict() if self.coverage else None,
             "freshness": self.freshness.to_dict() if self.freshness else None,
             "units": list(self.units),
             "criticality": self.criticality.value if self.criticality else None,
@@ -264,6 +357,7 @@ class DatasetContract:
         _record(data, "dataset-contract")
         cadence = data.get("cadence")
         identity = data.get("identity")
+        coverage = data.get("coverage")
         freshness = data.get("freshness")
         validation = data.get("validation")
         rights = data.get("rights")
@@ -271,6 +365,7 @@ class DatasetContract:
             dataset=Dataset.from_dict(data["dataset"]),
             cadence=CadenceContract.from_dict(cadence) if cadence else None,
             identity=IdentityContract.from_dict(identity) if identity else None,
+            coverage=CoverageContract.from_dict(coverage) if coverage else None,
             freshness=FreshnessContract.from_dict(freshness) if freshness else None,
             units=tuple(str(value) for value in data["units"]),
             criticality=Criticality(str(data["criticality"])) if data.get("criticality") else None,
@@ -400,7 +495,16 @@ class ContractRegistry:
                 issues.append(f"dataset {label} references an unregistered source")
             missing_sections = (
                 name
-                for name in ("cadence", "identity", "freshness", "criticality", "validation", "raw_retention", "rights")
+                for name in (
+                    "cadence",
+                    "identity",
+                    "coverage",
+                    "freshness",
+                    "criticality",
+                    "validation",
+                    "raw_retention",
+                    "rights",
+                )
                 if getattr(contract, name) is None
             )
             issues.extend(f"dataset {label} is missing {name}" for name in missing_sections)
@@ -421,6 +525,11 @@ class ContractRegistry:
                 fixed_unit = contract.identity.fixed_fields.get("unit")
                 if fixed_unit is not None and fixed_unit not in contract.units:
                     issues.append(f"dataset {label} has a contradictory fixed unit and units contract")
+
+            if contract.coverage is not None and contract.identity is not None:
+                absent_key_fields = sorted(set(contract.coverage.key_fields) - set(contract.identity.required_fields))
+                if absent_key_fields:
+                    issues.append(f"dataset {label} coverage uses non-identity fields: {', '.join(absent_key_fields)}")
 
             if contract.validation is not None and not contract.validation.rule_ids:
                 issues.append(f"dataset {label} is missing validation rules")
@@ -533,6 +642,8 @@ def _pilot_contract(
     cadence: CadenceContract,
     required_fields: tuple[str, ...],
     fixed_fields: Mapping[str, str],
+    expected_keys: tuple[str, ...],
+    coverage_key_fields: tuple[str, ...],
     unit: str,
     criticality: Criticality,
     rules: tuple[str, ...],
@@ -543,6 +654,11 @@ def _pilot_contract(
         dataset=Dataset(source.source_id, key, name),
         cadence=cadence,
         identity=IdentityContract(required_fields, fixed_fields),
+        coverage=CoverageContract(
+            expected_keys=expected_keys,
+            key_fields=coverage_key_fields,
+            minimum_coverage=Decimal("1"),
+        ),
         freshness=_DAILY_FRESHNESS,
         units=(unit,),
         criticality=criticality,
@@ -574,6 +690,8 @@ MAGYP_FOB_CONTRACT = _pilot_contract(
         "currency": "usd",
         "unit": "usd-mt",
     },
+    expected_keys=("soybean:beans", "soybean:meal", "soybean:oil"),
+    coverage_key_fields=("commodity", "product_form"),
     unit="usd-mt",
     criticality=Criticality.SUPPORTING,
     rules=("identity.required", "value.positive", "delivery-window.valid", "coverage.soy-complex"),
@@ -611,6 +729,8 @@ SOY_BENCHMARK_CONTRACTS = tuple(
             "currency": "usd",
             "unit": unit,
         },
+        expected_keys=(f"{commodity}:{product_form}",),
+        coverage_key_fields=("commodity", "product_form"),
         unit=unit,
         criticality=Criticality.CRITICAL,
         rules=(
@@ -655,6 +775,8 @@ FX_CONTRACTS = tuple(
             "currency": "usd",
             "unit": f"usd-per-{pair.split('/')[0].lower()}",
         },
+        expected_keys=(f"foreign-exchange:{pair.lower().replace('/', '-')}",),
+        coverage_key_fields=("commodity", "product_form"),
         unit=f"usd-per-{pair.split('/')[0].lower()}",
         criticality=Criticality.CRITICAL,
         rules=("identity.required", "value.positive", "ohlc.relationship", "fx.daily-move", "fx.orientation"),
@@ -674,6 +796,7 @@ __all__ = [
     "CadenceContract",
     "CadenceKind",
     "ContractRegistry",
+    "CoverageContract",
     "Criticality",
     "DatasetContract",
     "FX_CONTRACTS",

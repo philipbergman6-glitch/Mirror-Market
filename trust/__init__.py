@@ -1,5 +1,6 @@
 """Dependency-free domain vocabulary for Mirror Market's trusted data path."""
 
+from trust.dataset_health import DatasetHealthInput, evaluate_dataset_health, last_expected_publication_date
 from trust.domain import (
     ArtifactReference,
     CandidateObservation,
@@ -28,6 +29,15 @@ from trust.domain import (
     evaluate_run_status,
 )
 from trust.legacy_importer import LegacyImportSummary, import_v1_history
+from trust.quality import (
+    NumericValidationPolicy,
+    QualityEvaluation,
+    QualityRule,
+    QualityRuleContext,
+    QualityRuleEngine,
+    RuleFinding,
+    generic_candidate_quality_rules,
+)
 from trust.query_cache import (
     QueryCacheBuild,
     TrustQueryCacheError,
@@ -45,6 +55,7 @@ from trust.registry import (
     CadenceContract,
     CadenceKind,
     ContractRegistry,
+    CoverageContract,
     Criticality,
     DatasetContract,
     FreshnessContract,
@@ -76,12 +87,14 @@ __all__ = [
     "CandidateObservation",
     "ContractRegistry",
     "ContractIdentity",
+    "CoverageContract",
     "Correction",
     "CorrectionDecision",
     "CurrentEditionConflict",
     "Criticality",
     "Dataset",
     "DatasetContract",
+    "DatasetHealthInput",
     "DatasetResult",
     "DatasetResultStatus",
     "DeliveryWindow",
@@ -105,6 +118,11 @@ __all__ = [
     "PILOT_REGISTRY",
     "QueryCacheBuild",
     "QualityState",
+    "NumericValidationPolicy",
+    "QualityEvaluation",
+    "QualityRule",
+    "QualityRuleContext",
+    "QualityRuleEngine",
     "RawArtifact",
     "RawRetention",
     "RepositoryFormatError",
@@ -115,6 +133,7 @@ __all__ = [
     "RightsPolicy",
     "Run",
     "RunStatus",
+    "RuleFinding",
     "Source",
     "SOY_BENCHMARK_CONTRACTS",
     "SupersessionCycleError",
@@ -127,6 +146,9 @@ __all__ = [
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
     "build_query_cache",
+    "evaluate_dataset_health",
     "evaluate_run_status",
+    "generic_candidate_quality_rules",
     "import_v1_history",
+    "last_expected_publication_date",
 ]

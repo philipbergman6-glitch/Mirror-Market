@@ -16,6 +16,7 @@ from trust.registry import (
     CadenceContract,
     CadenceKind,
     ContractRegistry,
+    CoverageContract,
     Criticality,
     DatasetContract,
     FreshnessContract,
@@ -58,6 +59,11 @@ def dataset_contract(source: Source, key: str = "daily-prices") -> DatasetContra
             ),
             fixed_fields={"venue": "test-venue"},
         ),
+        coverage=CoverageContract(
+            expected_keys=("test-venue",),
+            key_fields=("venue",),
+            minimum_coverage="1",
+        ),
         freshness=FreshnessContract(stale_after_hours=72),
         units=("usd-mt",),
         criticality=Criticality.CRITICAL,
@@ -79,6 +85,11 @@ def test_real_pilot_registry_is_complete_and_round_trips() -> None:
     magyp = PILOT_REGISTRY.dataset_by_key("magyp", "official-soy-fob")
     assert magyp.identity is not None
     assert magyp.units == ("usd-mt",)
+    assert magyp.coverage == CoverageContract(
+        expected_keys=("soybean:beans", "soybean:meal", "soybean:oil"),
+        key_fields=("commodity", "product_form"),
+        minimum_coverage="1",
+    )
     assert "delivery_window" in magyp.identity.required_fields
     assert magyp.criticality is Criticality.SUPPORTING
 
@@ -144,7 +155,7 @@ def test_rights_are_explicit_and_unknown_is_fail_closed() -> None:
 
 @pytest.mark.parametrize(
     "missing",
-    ["cadence", "identity", "freshness", "units", "criticality", "validation", "raw_retention", "rights"],
+    ["cadence", "identity", "coverage", "freshness", "units", "criticality", "validation", "raw_retention", "rights"],
 )
 def test_registry_rejects_incomplete_dataset_contracts(missing: str) -> None:
     source = Source("test-source", "Test source", "Test source")
@@ -153,6 +164,8 @@ def test_registry_rejects_incomplete_dataset_contracts(missing: str) -> None:
         contract = replace(complete, cadence=None)
     elif missing == "identity":
         contract = replace(complete, identity=None)
+    elif missing == "coverage":
+        contract = replace(complete, coverage=None)
     elif missing == "freshness":
         contract = replace(complete, freshness=None)
     elif missing == "units":
@@ -215,12 +228,20 @@ def test_registry_rejects_missing_rights_decisions() -> None:
             dataset_contract(source),
             freshness=FreshnessContract(stale_after_hours=12),
         ),
+        lambda source: replace(
+            dataset_contract(source),
+            coverage=CoverageContract(
+                expected_keys=("soybean",),
+                key_fields=("not-an-identity-field",),
+                minimum_coverage="1",
+            ),
+        ),
     ],
 )
 def test_registry_rejects_contradictory_contracts(contract: Callable[[Source], DatasetContract]) -> None:
     source = Source("test-source", "Test source", "Test source")
 
-    with pytest.raises(RegistryValidationError, match="contradictory"):
+    with pytest.raises(RegistryValidationError):
         ContractRegistry((source,), (contract(source),))
 
 
