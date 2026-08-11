@@ -37,6 +37,17 @@ Parser strategy:
     ScraperShapeError — the schema changed and silence would be worse
     than a crash. Zero records for the filter is a normal holiday/Sunday
     outcome (mandis closed), not an error.
+
+User-Agent:
+    api.data.gov.in **blackholes** any request whose User-Agent names
+    Python — the connection is accepted and then never answered, so it
+    surfaces as a read timeout rather than a 403 (verified 2026-08-10:
+    ``python-requests/2.32.3`` and ``Python/3.11 aiohttp/3.9`` both hang
+    until the client gives up; ``Mirror-Market/…`` and curl's default
+    both return 200 in ~1.2s from the same IP, same second). requests'
+    default UA is exactly that string, so the layer had been dark on
+    every run since it shipped. The honest project UA below is not a
+    spoof and is load-bearing — do not drop it.
 """
 
 from __future__ import annotations
@@ -66,6 +77,17 @@ from pipeline.results import FetchResult, ScraperShapeError
 logger = logging.getLogger(__name__)
 
 _QUINTAL_TO_MT = 10.0  # INR/quintal (100 kg) → INR/MT
+
+# See the User-Agent note in the module docstring: a Python-identifying UA
+# is silently blackholed by api.data.gov.in. Identifies the project
+# honestly rather than impersonating a browser — the endpoint only rejects
+# Python, not non-browsers.
+_HEADERS = {
+    "User-Agent": (
+        "Mirror-Market/1.0 "
+        "(+https://github.com/philipbergman6-glitch/Mirror-Market)"
+    ),
+}
 
 
 def _api_key() -> str:
@@ -98,7 +120,12 @@ def _fetch_page(offset: int, state: str) -> dict:
     last_error = "no attempts made"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = requests.get(MANDI_API_URL, params=params, timeout=REQUEST_TIMEOUT)
+            resp = requests.get(
+                MANDI_API_URL,
+                params=params,
+                headers=_HEADERS,
+                timeout=REQUEST_TIMEOUT,
+            )
             if resp.status_code == 200:
                 return resp.json()
             last_error = f"HTTP {resp.status_code}"

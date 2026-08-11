@@ -37,7 +37,7 @@ python -m analysis.briefing
 - `FAS_API_KEY` — USDA FAS OpenData API key (Layer 10 — export sales)
 - `EIA_API_KEY` — Energy Information Administration API key (Layer 13 — biofuel/energy)
 
-Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21 work without API keys. Layer 16 uses the published data.gov.in sample key by default; set `DATA_GOV_IN_API_KEY` (optional) for a personal key with higher row limits.
+Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21 work without API keys. Layer 16 uses the published data.gov.in sample key by default; set `DATA_GOV_IN_API_KEY` (optional) for a personal key with higher row limits. **api.data.gov.in blackholes any Python-identifying User-Agent** — it accepts the connection and never answers, so it reads as a timeout, not a 403. `fetchers/mandi.py` sends an explicit project UA; dropping it silently darkens the layer (#155).
 
 ### Optional (Cloud Database — dormant)
 

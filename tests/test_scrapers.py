@@ -25,6 +25,7 @@ from fetchers.conab_precos import _parse_farmgate, _week_end_date
 from fetchers.india_domestic import _extract_soy_prices
 from fetchers.mandi import _aggregate as _mandi_aggregate
 from fetchers.mandi import _collect_records as _mandi_collect
+from fetchers.mandi import _fetch_page as _mandi_fetch_page
 from fetchers.noticias_agricolas import _parse_indicator_page
 from fetchers.safex import _parse_safex_table
 from fetchers.usda import _parse_inspections
@@ -569,6 +570,36 @@ def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
     )
     with pytest.raises(ScraperShapeError, match="records"):
         _mandi_collect("Madhya Pradesh")
+
+
+def test_mandi_never_sends_a_python_user_agent(monkeypatch) -> None:
+    """api.data.gov.in blackholes Python-identifying User-Agents.
+
+    It does not 403 — it accepts the connection and never answers, so the
+    failure surfaces as a read timeout and the layer goes silently dark
+    (that is exactly what happened between 2026-08-07 and 2026-08-10).
+    requests' default UA is ``python-requests/x.y``, so an explicit header
+    is the whole fix; this test fails if it is ever dropped.
+    """
+    seen: dict[str, object] = {}
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict:
+            return {"total": 0, "records": []}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        seen["headers"] = headers or {}
+        return _Resp()
+
+    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
+    _mandi_fetch_page(0, "Madhya Pradesh")
+
+    ua = str(seen["headers"].get("User-Agent", ""))
+    assert ua, "mandi requests must carry an explicit User-Agent"
+    assert "python" not in ua.lower()
 
 
 # ── CONAB weekly farmgate prices (Layer 15b) ────────────────────────────────
