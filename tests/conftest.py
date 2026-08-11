@@ -8,6 +8,7 @@
 - patched_db: temp SQLite file with all tables created, with
   pipeline.store and pipeline.query monkeypatched to use it. The fixture
   returns the path so tests can also poke at the DB directly via raw SQL.
+- freshness_calls: captures main.py's save_freshness calls without a DB.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import main
 from pipeline import schema
 
 _SCHEMA_CONSTANTS = [
@@ -98,6 +100,26 @@ def tmp_db(tmp_path: Path) -> sqlite3.Connection:
         conn.execute(ddl)
     conn.commit()
     return conn
+
+
+@pytest.fixture
+def freshness_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Capture every save_freshness call main.py makes, without touching a DB.
+
+    Each entry is {"layer", "rows", "status"}. `_HARD_FAILURES` is module
+    state on main, so it is cleared either side of the test — the freshness
+    row and the hard-failure set are the two things the layer-grading tests
+    assert on, and they have to be read together.
+    """
+    calls: list[dict] = []
+
+    def _capture(layer_name, rows_fetched=0, status="success"):
+        calls.append({"layer": layer_name, "rows": rows_fetched, "status": status})
+
+    monkeypatch.setattr(main, "save_freshness", _capture)
+    main._HARD_FAILURES.clear()
+    yield calls
+    main._HARD_FAILURES.clear()
 
 
 @pytest.fixture

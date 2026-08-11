@@ -356,18 +356,20 @@ class DictLayer:
     fetch: Callable[[], dict]
     save: Callable[[str, Any], None]            # (name, frame) -> None
     clean: Callable[[str, Any], Any] | None = None  # (name, frame) -> frame
-    # API-key-gated layers (F3c, #180). skip_gate() is consulted *before*
-    # fetch(); when it returns True the layer is logged as skipped and no
-    # freshness row is written, matching "the layer never ran".
+    # API-key-gated layers (F3c, #180). run_if() is consulted *before*
+    # fetch(); when it returns False the layer is logged with skip_msg and
+    # no freshness row is written, matching "the layer never ran". The two
+    # fields always travel together — test_layer_run_if.py pins that.
     #
-    # The gate has to come before the fetch, not after it: fetch_all_*
-    # returns a bare {} both when the key is absent and when the upstream
-    # answered with nothing, so a skip inferred from the result graded a
-    # FAS/EIA outage as "you never configured this layer" — no failed
-    # status, no last_attempt, nothing for the CI alerter to read. With the
-    # gate ahead of the fetch, a configured layer always reaches
-    # _finalize_layer and its empty result is graded under the #175 rules.
-    skip_gate: Callable[[], bool] | None = None
+    # The question has to be asked of the *config*, ahead of the fetch,
+    # never inferred from the result: a fetcher's empty return means both
+    # "no key, never ran" and "key set, upstream had nothing", and only the
+    # second is an outage. Reading it off the result made those two
+    # indistinguishable, so a dead upstream could record no status at all —
+    # nothing for scripts/ci_layer_alert.py or the dashboard to see. Asked
+    # this way, a configured layer always reaches _finalize_layer and its
+    # empty result is graded under the #175 rules.
+    run_if: Callable[[], bool] | None = None
     skip_msg: str | None = None
     # Override for _empty_is_failure's LAYER_MIN_KEYS-derived default (#175).
     # None derives; set it only for a layer with no floor to derive from.
@@ -379,7 +381,7 @@ class DictLayer:
 
 def _run_dict_layer(layer: DictLayer) -> bool:
     try:
-        if layer.skip_gate is not None and layer.skip_gate():
+        if layer.run_if is not None and not layer.run_if():
             logger.info("[%s] %s", layer.label, layer.skip_msg)
             return False
 
@@ -518,7 +520,7 @@ def _build_dict_layers() -> list[DictLayer]:
             fetch=lambda: fetch_all_export_sales(),
             save=lambda n, d: save_export_sales(n, d),
             clean=lambda n, d: clean_export_sales(d),
-            skip_gate=lambda: not export_sales_configured(),
+            run_if=export_sales_configured,
             skip_msg="Export sales skipped (FAS_API_KEY not set)",
         ),
         DictLayer(
@@ -542,7 +544,7 @@ def _build_dict_layers() -> list[DictLayer]:
             fetch=lambda: fetch_all_eia(),
             save=lambda n, d: save_eia_data(n, d),
             clean=lambda n, d: clean_eia(d),
-            skip_gate=lambda: not eia_configured(),
+            run_if=eia_configured,
             skip_msg="EIA skipped (EIA_API_KEY not set)",
         ),
     ]

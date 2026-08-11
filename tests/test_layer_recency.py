@@ -32,22 +32,6 @@ from config import (
 )
 
 
-@pytest.fixture
-def freshness_calls(monkeypatch):
-    """Capture every save_freshness call main.py makes, without touching a DB."""
-    calls: list[dict] = []
-
-    def _capture(layer_name, rows_fetched=0, status="success"):
-        calls.append(
-            {"layer": layer_name, "rows": rows_fetched, "status": status}
-        )
-
-    monkeypatch.setattr(main, "save_freshness", _capture)
-    main._HARD_FAILURES.clear()
-    yield calls
-    main._HARD_FAILURES.clear()
-
-
 def _dated_frame(days_ago: float, rows: int = 5, col: str = "Date") -> pd.DataFrame:
     end = pd.Timestamp.now().normalize() - pd.Timedelta(days=days_ago)
     dates = pd.date_range(end=end, periods=rows, freq="D")

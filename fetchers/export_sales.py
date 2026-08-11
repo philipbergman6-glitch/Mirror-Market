@@ -38,13 +38,10 @@ _AUTH_HEADER = "X-Api-Key"
 
 
 def is_configured() -> bool:
-    """Is this layer configured to run at all? (#180)
+    """Is this layer configured to run at all? (DictLayer.run_if, #180.)
 
-    Read at call time rather than import time so the answer tracks the
-    module global the rest of the fetcher gates on. main.py consults this
-    *before* calling fetch_all_export_sales, because a bare {} return means
-    two opposite things — "no key, never ran" and "key set, ESR returned
-    nothing" — and only the second is an outage worth recording.
+    Reads the module global at call time, so this and the fetch functions'
+    own key checks below can never disagree.
     """
     return bool(FAS_API_KEY)
 
