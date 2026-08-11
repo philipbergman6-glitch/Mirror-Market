@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from config import FRESHNESS_WARNING_DAYS, FRESHNESS_WARNING_DAYS_BY_LAYER
+from config import freshness_limit_days
 from pipeline.query import read_freshness
 
 logger = logging.getLogger(__name__)
@@ -52,10 +52,7 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
 
             # Layers publish on different cadences — weekly COT being 6 days
             # old is by design, not an outage.
-            limit_days = FRESHNESS_WARNING_DAYS_BY_LAYER.get(
-                layer, FRESHNESS_WARNING_DAYS
-            )
-            threshold = timedelta(days=limit_days)
+            threshold = timedelta(days=freshness_limit_days(layer))
             if pd.notna(last):
                 age = now - last
                 if age > threshold:

@@ -23,10 +23,9 @@ from config import (
     DB_PATH,
     DCE_CONTRACTS,
     FORWARD_CURVE_CONTRACTS,
-    FRESHNESS_WARNING_DAYS,
-    FRESHNESS_WARNING_DAYS_BY_LAYER,
     GROWING_REGIONS,
     HEALTH_TABLE_LAYERS,
+    freshness_limit_days,
 )
 from pipeline.connection import get_connection, is_cloud
 
@@ -51,7 +50,7 @@ def _stale_limit_days(table: str) -> int:
     """
     layer = HEALTH_TABLE_LAYERS.get(table)
     if layer is not None:
-        return FRESHNESS_WARNING_DAYS_BY_LAYER.get(layer, FRESHNESS_WARNING_DAYS)
+        return freshness_limit_days(layer)
     return _STALE_THRESHOLD_DAYS + _WEEKEND_SLACK_DAYS
 
 
