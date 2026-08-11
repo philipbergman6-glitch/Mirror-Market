@@ -9,6 +9,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
+import trust.repository as repository_module
 from trust import (
     AGRURAL_PARANAGUA_CONTRACT,
     FX_CONTRACTS,
@@ -25,7 +28,10 @@ from trust import (
     DatasetResult,
     DatasetResultStatus,
     Edition,
+    EditionPromotionWorkflowError,
+    EditionPublicTrustState,
     EditionStatus,
+    EditionVerificationVerdict,
     FreshnessState,
     FxPairIdentity,
     ObservationIdentity,
@@ -39,6 +45,8 @@ from trust import (
     ValidationPolicy,
     build_and_verify_candidate_edition,
     critical_edition_contract_from_registry,
+    edition_public_trust_state,
+    promote_verified_edition,
     render_candidate_edition,
     verify_candidate_edition,
     verify_candidate_generated_artifacts,
@@ -47,6 +55,7 @@ from trust import (
 )
 
 NOW = datetime(2026, 8, 10, 12, 30, tzinfo=timezone.utc)
+ORIGINAL_OS_REPLACE = repository_module.os.replace
 SOURCE_REVISION_ID = "rev_" + "1" * 64
 MISSING_SOURCE_REVISION_ID = "rev_" + "2" * 64
 MISSING_DERIVED_REVISION_ID = "rev_" + "3" * 64
@@ -905,6 +914,180 @@ def test_successful_candidate_verification_creates_verified_manifest_without_pro
     assert repository.current_edition() is None
 
 
+def test_promotion_skips_deployment_when_verification_failed(tmp_path) -> None:
+    repository: TrustRepository = TemporaryDirectoryTrustRepository(tmp_path / "trust")
+    pinned = _revision(value="499.50")
+    run = _run()
+    candidate = Edition(
+        run_id=run.run_id,
+        created_at=NOW + timedelta(minutes=3),
+        status=EditionStatus.CANDIDATE,
+        revision_ids=(pinned.revision_id,),
+    )
+    repository.store(run)
+    repository.append_observation_revision(pinned)
+    repository.store(candidate)
+    verification = CandidateEditionVerification(
+        edition_id=candidate.edition_id,
+        render=None,
+        verdict=verify_candidate_edition(
+            candidate,
+            CriticalEditionContract(required_revision_ids=(MISSING_SOURCE_REVISION_ID,)),
+        ),
+        failed_edition_id=candidate.edition_id,
+    )
+    deployed: list[str] = []
+
+    result = promote_verified_edition(
+        repository,
+        verification,
+        _deployment_recorder(deployed),
+        promoted_at=NOW + timedelta(minutes=5),
+    )
+
+    assert result.promoted is False
+    assert result.deployed is False
+    assert result.alert_reasons == ("verification.failed",)
+    assert deployed == []
+    assert repository.current_edition() is None
+
+
+def test_successful_promotion_deploys_then_updates_current_pointer(tmp_path) -> None:
+    repository, verification = _verified_promotion_scenario(tmp_path)
+    deployed: list[str] = []
+
+    result = promote_verified_edition(
+        repository,
+        verification,
+        _deployment_recorder(deployed, evidence=("static-pages", "provenance-json")),
+        promoted_at=NOW + timedelta(minutes=6),
+    )
+
+    assert result.promoted is True
+    assert result.deployed is True
+    assert result.alert_reasons == ()
+    assert result.promotion is not None
+    assert result.promotion.verification_evidence == (
+        "provenance-json",
+        "static-pages",
+        "verified-edition",
+    )
+    assert deployed == [verification.verified_edition_id]
+    assert repository.current_edition() == result.promotion
+
+
+def test_deployment_failure_records_failed_state_and_preserves_current(tmp_path) -> None:
+    repository, verification = _verified_promotion_scenario(tmp_path)
+    current = _seed_current_edition(repository)
+
+    with pytest.raises(EditionPromotionWorkflowError) as raised:
+        promote_verified_edition(
+            repository,
+            verification,
+            _deployment_failure,
+            promoted_at=NOW + timedelta(minutes=7),
+        )
+
+    result = raised.value.result
+    assert result.promoted is False
+    assert result.deployed is False
+    assert result.alert_reasons == ("deployment.failed",)
+    assert result.failed_edition_id is not None
+    failed = repository.read(Edition, result.failed_edition_id)
+    assert failed is not None
+    assert failed.status is EditionStatus.DEPLOYMENT_FAILED
+    assert repository.current_edition() == current
+
+
+def test_pointer_failure_records_failed_state_and_preserves_prior_current(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository, verification = _verified_promotion_scenario(tmp_path)
+    current = _seed_current_edition(repository)
+    deployed: list[str] = []
+
+    with monkeypatch.context() as patch:
+        patch.setattr(repository_module.os, "replace", _fail_replace)
+        with pytest.raises(EditionPromotionWorkflowError) as raised:
+            promote_verified_edition(
+                repository,
+                verification,
+                _deployment_recorder(deployed),
+                promoted_at=NOW + timedelta(minutes=8),
+            )
+
+    result = raised.value.result
+    assert result.promoted is False
+    assert result.deployed is True
+    assert result.alert_reasons == ("pointer-update.failed",)
+    assert result.failed_edition_id is not None
+    assert repository.current_edition() == current
+    assert deployed == [verification.verified_edition_id]
+
+
+def test_promotion_retry_is_idempotent_when_edition_is_already_current(tmp_path) -> None:
+    repository, verification = _verified_promotion_scenario(tmp_path)
+    deployed: list[str] = []
+    first = promote_verified_edition(
+        repository,
+        verification,
+        _deployment_recorder(deployed),
+        promoted_at=NOW + timedelta(minutes=9),
+    )
+
+    retry = promote_verified_edition(
+        repository,
+        verification,
+        _deployment_recorder(deployed),
+        promoted_at=NOW + timedelta(minutes=10),
+    )
+
+    assert first.promoted is True
+    assert retry.promoted is True
+    assert retry.idempotent is True
+    assert retry.promotion == first.promotion
+    assert deployed == [verification.verified_edition_id]
+    assert repository.current_edition() == first.promotion
+
+
+def test_public_trust_state_exposes_edition_health_and_revision_provenance(tmp_path) -> None:
+    repository: TrustRepository = TemporaryDirectoryTrustRepository(tmp_path / "trust")
+    revision = _revision(value="499.50")
+    run = _run(dataset_result_ids=())
+    result = _dataset_result(run.run_id, revision, freshness=FreshnessState.STALE)
+    run = _run(dataset_result_ids=(result.dataset_result_id,))
+    edition = Edition(
+        run_id=run.run_id,
+        created_at=NOW + timedelta(minutes=3),
+        status=EditionStatus.VERIFIED,
+        revision_ids=(revision.revision_id,),
+    )
+    repository.store(run)
+    repository.append_observation_revision(revision)
+    repository.store(result)
+    repository.store(edition)
+
+    trust_state = edition_public_trust_state(repository, edition.edition_id)
+
+    assert isinstance(trust_state, EditionPublicTrustState)
+    assert trust_state.edition_id == edition.edition_id
+    assert trust_state.generated_at == edition.created_at
+    assert trust_state.critical_freshness == {revision.identity.dataset_id: FreshnessState.STALE}
+    assert trust_state.degraded_dataset_ids == (revision.identity.dataset_id,)
+    assert len(trust_state.critical_numbers) == 1
+    provenance = trust_state.critical_numbers[0]
+    assert provenance.source_id == revision.identity.source_id
+    assert provenance.as_of_date == revision.identity.effective_date
+    assert provenance.quality_state is QualityState.ACCEPTED
+    assert provenance.observation_id == revision.identity.observation_id
+    assert provenance.revision_id == revision.revision_id
+    public_state = trust_state.to_public_dict()
+    critical_numbers = public_state["critical_numbers"]
+    assert isinstance(critical_numbers, list)
+    assert "499.50" not in critical_numbers[0].values()
+
+
 def _run(*, dataset_result_ids: tuple[str, ...] = ()) -> Run:
     return Run(
         code_revision="6da43a8436b33d69f41762bdd72d7139ad415cd1",
@@ -981,6 +1164,7 @@ def _dataset_result(
     *,
     freshness: FreshnessState = FreshnessState.CURRENT,
 ) -> DatasetResult:
+    assert revision.artifact is not None
     return DatasetResult(
         run_id=run_id,
         dataset_id=revision.identity.dataset_id,
@@ -1203,3 +1387,90 @@ def _dashboard_bytes(edition_id: str) -> bytes:
 
 def _hash_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def _verified_promotion_scenario(
+    tmp_path: Path,
+) -> tuple[TrustRepository, CandidateEditionVerification]:
+    repository: TrustRepository = TemporaryDirectoryTrustRepository(tmp_path / "trust")
+    pinned = _revision(value="499.50")
+    run = _run()
+    verified = Edition(
+        run_id=run.run_id,
+        created_at=NOW + timedelta(minutes=4),
+        status=EditionStatus.VERIFIED,
+        revision_ids=(pinned.revision_id,),
+    )
+    render = CandidateEditionRender(
+        edition_id=verified.edition_id,
+        output_dir=tmp_path / "candidate",
+        cache_build=_cache_build(tmp_path),
+        generated_artifact_paths={},
+    )
+    repository.store(run)
+    repository.append_observation_revision(pinned)
+    repository.store(verified)
+    return repository, CandidateEditionVerification(
+        edition_id=verified.edition_id,
+        render=render,
+        verdict=EditionVerificationVerdict(verified=True, status=EditionStatus.VERIFIED),
+        verified_edition_id=verified.edition_id,
+    )
+
+
+def _seed_current_edition(repository: TrustRepository) -> Promotion:
+    run = _run()
+    current_edition = Edition(
+        run_id=run.run_id,
+        created_at=NOW + timedelta(minutes=1),
+        status=EditionStatus.VERIFIED,
+        revision_ids=(),
+    )
+    current = Promotion(
+        edition_id=current_edition.edition_id,
+        promoted_at=NOW + timedelta(minutes=2),
+        verification_evidence=("previous-check",),
+    )
+    repository.store(run)
+    repository.store(current_edition)
+    repository.replace_current_edition(current)
+    return current
+
+
+def _cache_build(tmp_path: Path):
+    return type(
+        "StubCacheBuild",
+        (),
+        {
+            "cache_path": tmp_path / "candidate" / "trusted-query-cache.sqlite",
+            "mode": "edition",
+            "edition_id": "edn_" + "9" * 64,
+            "revision_count": 1,
+            "derived_revision_count": 0,
+            "legacy_row_count": 0,
+        },
+    )()
+
+
+def _deployment_recorder(
+    deployed: list[str],
+    *,
+    evidence: tuple[str, ...] = ("static-pages",),
+):
+    def deploy(edition: Edition, render: CandidateEditionRender) -> tuple[str, ...]:
+        del render
+        deployed.append(edition.edition_id)
+        return evidence
+
+    return deploy
+
+
+def _deployment_failure(edition: Edition, render: CandidateEditionRender) -> tuple[str, ...]:
+    del edition, render
+    raise OSError("simulated deployment failure")
+
+
+def _fail_replace(source: Path, destination: Path) -> None:
+    if Path(destination).name == "current-edition.json":
+        raise OSError("simulated pointer replacement failure")
+    ORIGINAL_OS_REPLACE(source, destination)

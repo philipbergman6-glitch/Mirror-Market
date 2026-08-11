@@ -6,7 +6,7 @@ import hashlib
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +17,7 @@ from trust.domain import (
     EditionStatus,
     FreshnessState,
     ObservationRevision,
+    Promotion,
     QualityState,
     Run,
 )
@@ -31,6 +32,7 @@ _REVISION_ID_RE = re.compile(r"^rev_[0-9a-f]{64}$")
 _DATASET_ID_RE = re.compile(r"^dst_[0-9a-f]{64}$")
 GeneratedArtifactPaths = Mapping[str, str | Path] | tuple[Path, ...]
 CandidateRenderer = Callable[[Path, Path, Edition], GeneratedArtifactPaths]
+EditionDeployer = Callable[[Edition, "CandidateEditionRender"], Iterable[str] | None]
 
 
 def _revision_ids(values: tuple[str, ...], field_name: str) -> tuple[str, ...]:
@@ -237,6 +239,88 @@ class CandidateEditionVerification:
             raise ValueError("candidate_verification.verified_edition_id must be an edition identifier")
         if self.failed_edition_id is not None and not re.fullmatch(r"^edn_[0-9a-f]{64}$", self.failed_edition_id):
             raise ValueError("candidate_verification.failed_edition_id must be an edition identifier")
+
+
+@dataclass(frozen=True)
+class PromotionWorkflowResult:
+    """Outcome of a verified-edition promotion attempt."""
+
+    edition_id: str
+    promoted: bool
+    deployed: bool
+    idempotent: bool = False
+    promotion: Promotion | None = None
+    failed_edition_id: str | None = None
+    alert_reasons: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"^edn_[0-9a-f]{64}$", self.edition_id):
+            raise ValueError("promotion_workflow.edition_id must be an edition identifier")
+        if self.failed_edition_id is not None and not re.fullmatch(r"^edn_[0-9a-f]{64}$", self.failed_edition_id):
+            raise ValueError("promotion_workflow.failed_edition_id must be an edition identifier")
+        object.__setattr__(
+            self,
+            "alert_reasons",
+            _reason_codes(self.alert_reasons, "promotion_workflow.alert_reasons"),
+        )
+        if self.promoted and self.promotion is None:
+            raise ValueError("promoted workflow results require a promotion record")
+
+
+class EditionPromotionWorkflowError(Exception):
+    """A promotion side effect failed after a durable failed-edition state was recorded."""
+
+    def __init__(self, message: str, result: PromotionWorkflowResult) -> None:
+        super().__init__(message)
+        self.result = result
+
+
+@dataclass(frozen=True)
+class CriticalNumberProvenance:
+    """Trader-facing metadata for one critical displayed number."""
+
+    label: str
+    source_id: str
+    dataset_id: str
+    dataset_key: str
+    as_of_date: date
+    quality_state: QualityState
+    observation_id: str
+    revision_id: str
+
+    def to_public_dict(self) -> dict[str, str]:
+        return {
+            "label": self.label,
+            "source_id": self.source_id,
+            "dataset_id": self.dataset_id,
+            "dataset_key": self.dataset_key,
+            "as_of_date": self.as_of_date.isoformat(),
+            "quality_state": self.quality_state.value,
+            "observation_id": self.observation_id,
+            "revision_id": self.revision_id,
+        }
+
+
+@dataclass(frozen=True)
+class EditionPublicTrustState:
+    """Metadata safe to display or publish beside a static edition."""
+
+    edition_id: str
+    generated_at: datetime
+    critical_freshness: Mapping[str, FreshnessState]
+    degraded_dataset_ids: tuple[str, ...]
+    critical_numbers: tuple[CriticalNumberProvenance, ...]
+
+    def to_public_dict(self) -> dict[str, object]:
+        return {
+            "edition_id": self.edition_id,
+            "generated_at": self.generated_at.isoformat(),
+            "critical_freshness": {
+                dataset_id: freshness.value for dataset_id, freshness in sorted(self.critical_freshness.items())
+            },
+            "degraded_dataset_ids": list(self.degraded_dataset_ids),
+            "critical_numbers": [provenance.to_public_dict() for provenance in self.critical_numbers],
+        }
 
 
 @dataclass(frozen=True)
@@ -576,12 +660,12 @@ def build_and_verify_candidate_edition(
         raise ValueError(f"edition {edition_id} is not durable")
     critical_verdict = verify_durable_candidate_edition(repository, edition_id, critical_contract)
     if not critical_verdict.verified:
-        failed_edition_id = _store_rejected_edition(repository, edition)
+        pre_render_failed_edition_id = _store_rejected_edition(repository, edition)
         return CandidateEditionVerification(
             edition_id=edition.edition_id,
             render=None,
             verdict=critical_verdict,
-            failed_edition_id=failed_edition_id,
+            failed_edition_id=pre_render_failed_edition_id,
         )
 
     render = render_candidate_edition(repository, edition_id, candidate_root, renderer)
@@ -614,6 +698,8 @@ def build_and_verify_candidate_edition(
             semantic_contract,
         )
     verdict = _combine_verdicts((semantic_verdict, artifact_verdict))
+    verified_edition_id: str | None
+    failed_edition_id: str | None
     if verdict.verified:
         verified_edition_id = _store_verified_edition(repository, edition)
         failed_edition_id = None
@@ -626,6 +712,149 @@ def build_and_verify_candidate_edition(
         verdict=verdict,
         verified_edition_id=verified_edition_id,
         failed_edition_id=failed_edition_id,
+    )
+
+
+def promote_verified_edition(
+    repository: TrustRepository,
+    verification: CandidateEditionVerification,
+    deployer: EditionDeployer,
+    *,
+    promoted_at: datetime,
+) -> PromotionWorkflowResult:
+    """Deploy a verified candidate and atomically move the public current pointer.
+
+    Deployment is intentionally adapter-driven: this layer owns trust state and
+    idempotency, while callers own copying static artifacts to their final
+    destination.
+    """
+
+    edition_id = verification.verified_edition_id or verification.edition_id
+    current = repository.current_edition()
+    if current is not None and current.edition_id == edition_id:
+        return PromotionWorkflowResult(
+            edition_id=edition_id,
+            promoted=True,
+            deployed=False,
+            idempotent=True,
+            promotion=current,
+        )
+
+    if not verification.verdict.verified or verification.verified_edition_id is None or verification.render is None:
+        return PromotionWorkflowResult(
+            edition_id=edition_id,
+            promoted=False,
+            deployed=False,
+            alert_reasons=("verification.failed",),
+            failed_edition_id=verification.failed_edition_id,
+        )
+
+    edition = repository.read(Edition, verification.verified_edition_id)
+    if edition is None:
+        result = PromotionWorkflowResult(
+            edition_id=verification.verified_edition_id,
+            promoted=False,
+            deployed=False,
+            alert_reasons=("edition.missing",),
+        )
+        raise EditionPromotionWorkflowError("verified edition is not durable", result)
+
+    previous_edition_id = current.edition_id if current is not None else None
+    try:
+        deployment_evidence = tuple(deployer(edition, verification.render) or ())
+    except Exception as exc:
+        failed_edition_id = _store_rejected_edition(repository, edition)
+        result = PromotionWorkflowResult(
+            edition_id=edition.edition_id,
+            promoted=False,
+            deployed=False,
+            failed_edition_id=failed_edition_id,
+            alert_reasons=("deployment.failed",),
+        )
+        raise EditionPromotionWorkflowError("edition deployment failed", result) from exc
+
+    promotion = Promotion(
+        edition_id=edition.edition_id,
+        previous_edition_id=previous_edition_id,
+        promoted_at=promoted_at,
+        verification_evidence=tuple((*deployment_evidence, "verified-edition")),
+    )
+    try:
+        repository.replace_current_edition(promotion)
+    except Exception as exc:
+        failed_edition_id = _store_rejected_edition(repository, edition)
+        result = PromotionWorkflowResult(
+            edition_id=edition.edition_id,
+            promoted=False,
+            deployed=True,
+            failed_edition_id=failed_edition_id,
+            alert_reasons=("pointer-update.failed",),
+        )
+        raise EditionPromotionWorkflowError("current-edition pointer update failed", result) from exc
+
+    return PromotionWorkflowResult(
+        edition_id=edition.edition_id,
+        promoted=True,
+        deployed=True,
+        promotion=promotion,
+    )
+
+
+def edition_public_trust_state(
+    repository: TrustRepository,
+    edition_id: str,
+) -> EditionPublicTrustState:
+    """Build safe public metadata for a promoted or verified static edition."""
+
+    edition = repository.read(Edition, edition_id)
+    if edition is None:
+        raise ValueError(f"edition {edition_id} is not durable")
+    run = repository.read(Run, edition.run_id)
+    if run is None:
+        raise ValueError(f"edition {edition_id} has no durable run")
+
+    dataset_results, _ = _dataset_results_by_dataset(repository, run)
+    critical_freshness = {
+        dataset_id: result.freshness for dataset_id, result in sorted(dataset_results.items())
+    }
+    degraded_dataset_ids = tuple(
+        dataset_id
+        for dataset_id, result in sorted(dataset_results.items())
+        if result.status is not DatasetResultStatus.SUCCESS
+        or result.freshness is not FreshnessState.CURRENT
+        or not result.eligible
+    )
+    critical_numbers = tuple(
+        provenance
+        for revision_id in (*edition.revision_ids, *edition.derived_revision_ids)
+        if (provenance := _critical_number_provenance(repository, revision_id)) is not None
+    )
+    return EditionPublicTrustState(
+        edition_id=edition.edition_id,
+        generated_at=edition.created_at,
+        critical_freshness=critical_freshness,
+        degraded_dataset_ids=degraded_dataset_ids,
+        critical_numbers=critical_numbers,
+    )
+
+
+def _critical_number_provenance(
+    repository: TrustRepository,
+    revision_id: str,
+) -> CriticalNumberProvenance | None:
+    revision = repository.read(ObservationRevision, revision_id)
+    if revision is None:
+        return None
+    identity = revision.identity
+    return CriticalNumberProvenance(
+        label=".".join((identity.dataset_key, identity.commodity, identity.product_form, identity.price_type)),
+        source_id=identity.source_id,
+        dataset_id=identity.dataset_id,
+        dataset_key=identity.dataset_key,
+        as_of_date=identity.effective_date,
+        quality_state=revision.quality_state,
+        observation_id=identity.observation_id,
+        revision_id=revision.revision_id,
     )
 
 
