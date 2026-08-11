@@ -131,7 +131,7 @@ def test_filter_options_reflect_dataset():
 
 def test_real_dataset_loads_and_every_country_named():
     players = load_players()
-    assert len(players) == 193
+    assert len(players) == 205
     cards = [build_card(e, TODAY) for e in players]
     for card in cards:
         assert display_name(card["country"]) != card["country"] or card["country"] in COUNTRY_NAMES
