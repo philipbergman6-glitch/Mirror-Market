@@ -241,8 +241,11 @@ def read_freshness() -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Columns: layer_name, last_success, last_attempt, rows_fetched, status
-        (last_attempt and status default to NaN/'success' for legacy rows.)
+        Columns: layer_name, last_success, last_attempt, rows_fetched, status,
+        keys_returned, keys_expected
+        (last_attempt and status default to NaN/'success' for legacy rows;
+        the key-coverage columns are NULL wherever coverage is undefined or
+        was never learned — see save_freshness.)
     """
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()

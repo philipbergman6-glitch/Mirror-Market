@@ -42,11 +42,15 @@ MAX_RETRIES = 3         # how many times to retry a failed request
 # Below the floor the layer is recorded as failed freshness ("partial") —
 # 1 of 13 currencies is an outage, not a success. Layers not listed here
 # succeed with any non-empty key.
+# Counts in the trailing comments are derived, not authoritative — the
+# denominator each layer is actually graded against lives in
+# LAYER_KEY_CATALOGS below, and tests/test_layer_coverage.py asserts every
+# floor here fits inside its catalog.
 LAYER_MIN_KEYS = {
     "prices": 8,       # of 10 tickers
     "currencies": 8,   # of 10 pairs
-    "fred": 8,         # of 10 series
-    "weather": 14,     # of 18 regions
+    "fred": 8,         # of 9 series
+    "weather": 14,     # of 19 regions
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 10 commodities
     "dce": 3,          # of 8 contracts (6 DCE + 2 CZCE rapeseed)
@@ -825,6 +829,42 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # meaning, two enforcement points.
     "worldbank": 100,
 }
+
+# Key coverage (#182): which config catalog each multi-key layer iterates.
+# `keys_expected` is len(catalog), so adding a ticker/region/series moves a
+# layer's expected count with no second edit — the trailing counts in
+# LAYER_MIN_KEYS are comments and two of them had already drifted.
+#
+# The denominator cannot come from the payload: every per-key fetcher
+# inserts into its results dict only *after* a successful fetch, so a
+# weather run that lost 5 of 19 regions returns a 14-key dict and would
+# self-report 14/14 — exactly the outage coverage exists to expose. A layer
+# absent from this map records NULL coverage rather than falling back to
+# that self-reported length. Single-key and scraper layers are deliberately
+# absent: 1/1 is noise, not information.
+LAYER_KEY_CATALOGS: dict[str, dict] = {
+    "prices": COMMODITY_TICKERS,
+    "currencies": CURRENCY_TICKERS,
+    "fred": FRED_SERIES,
+    "weather": GROWING_REGIONS,
+    "cot": COT_COMMODITIES,
+    "psd": PSD_TARGET_COMMODITIES,
+    "dce": DCE_CONTRACTS,
+    "export_sales": EXPORT_SALES_COMMODITIES,
+    "forward_curve": FORWARD_CURVE_CONTRACTS,
+    "eia": EIA_SERIES,
+}
+
+
+def layer_expected_keys(layer: str) -> int | None:
+    """How many keys `layer` should return, or None if coverage is undefined.
+
+    None means "not a coverage-bearing layer" and is recorded as NULL —
+    distinct from 0, which would read as "expected nothing".
+    """
+    catalog = LAYER_KEY_CATALOGS.get(layer)
+    return len(catalog) if catalog is not None else None
+
 
 # analysis/health.py runs the same cadence question one level down: per
 # commodity/region row inside a stored table rather than per layer. Tables

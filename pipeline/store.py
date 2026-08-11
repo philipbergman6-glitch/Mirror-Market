@@ -29,7 +29,12 @@ def _ensure_storage_dir():
 
 
 def _migrate_data_freshness(conn) -> None:
-    """Add status/last_attempt to data_freshness if absent. Idempotent."""
+    """Add status/last_attempt/key-coverage to data_freshness if absent.
+
+    Idempotent. CREATE TABLE IF NOT EXISTS never widens an existing table,
+    so every column added after the original definition needs an entry here
+    or a pre-existing local DB silently keeps the narrow shape.
+    """
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(data_freshness)").fetchall()}
     except Exception:
@@ -37,6 +42,8 @@ def _migrate_data_freshness(conn) -> None:
     for col, ddl in (
         ("status", "ALTER TABLE data_freshness ADD COLUMN status TEXT NOT NULL DEFAULT 'success'"),
         ("last_attempt", "ALTER TABLE data_freshness ADD COLUMN last_attempt TEXT"),
+        ("keys_returned", "ALTER TABLE data_freshness ADD COLUMN keys_returned INTEGER"),
+        ("keys_expected", "ALTER TABLE data_freshness ADD COLUMN keys_expected INTEGER"),
     ):
         if col not in cols:
             try:
@@ -678,12 +685,24 @@ def save_briefing(
 # --- Freshness tracking (special-case: bespoke SQL) -------------------------
 
 
-def save_freshness(layer_name: str, rows_fetched: int = 0, status: str = "success") -> None:
+def save_freshness(
+    layer_name: str,
+    rows_fetched: int = 0,
+    status: str = "success",
+    keys_returned: int | None = None,
+    keys_expected: int | None = None,
+) -> None:
     """Record a freshness row. Success stamps last_success; failed/disabled preserve it.
 
     'disabled' marks a layer intentionally short-circuited (e.g. an upstream
     anti-bot wall) — distinct from 'failed' so it doesn't read as an outage,
     and distinct from 'success' so it doesn't fabricate freshness.
+
+    keys_returned/keys_expected describe how much of a multi-key layer came
+    back (#182). They describe, they never grade: LAYER_MIN_KEYS remains the
+    sole verdict. None (the default) records NULL, meaning "never learned" —
+    a transport failure before any payload existed, or a layer for which
+    partial coverage is not a meaningful state.
     """
     if status not in ("success", "failed", "disabled"):
         raise ValueError(
@@ -702,13 +721,15 @@ def save_freshness(layer_name: str, rows_fetched: int = 0, status: str = "succes
             prior_success = row[0] if row else None
         conn.execute(
             """INSERT OR REPLACE INTO data_freshness
-               (layer_name, last_success, last_attempt, rows_fetched, status)
-               VALUES (?, ?, ?, ?, ?)""",
-            (layer_name, prior_success, now, rows_fetched, status),
+               (layer_name, last_success, last_attempt, rows_fetched, status,
+                keys_returned, keys_expected)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (layer_name, prior_success, now, rows_fetched, status,
+             keys_returned, keys_expected),
         )
         maybe_sync(conn)
-    logger.debug("Freshness recorded for %s at %s (status=%s, %d rows)",
-                 layer_name, now, status, rows_fetched)
+    logger.debug("Freshness recorded for %s at %s (status=%s, %d rows, keys=%s/%s)",
+                 layer_name, now, status, rows_fetched, keys_returned, keys_expected)
 
 
 def update_commodity_freshness():

@@ -37,7 +37,11 @@ def freshness_calls(monkeypatch):
     """Capture every save_freshness call main.py makes, without touching a DB."""
     calls: list[dict] = []
 
-    def _capture(layer_name, rows_fetched=0, status="success"):
+    def _capture(layer_name, rows_fetched=0, status="success",
+                 keys_returned=None, keys_expected=None):
+        # Key coverage (#182) is captured but not asserted here — it
+        # describes a run, it never changes the verdict these tests pin.
+        # tests/test_layer_coverage.py owns those assertions.
         calls.append(
             {"layer": layer_name, "rows": rows_fetched, "status": status}
         )
