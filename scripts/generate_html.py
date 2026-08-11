@@ -11,6 +11,7 @@ and renders a single index.html via Jinja2.
 import base64
 import html as html_lib
 import logging
+import shutil
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1160,7 +1161,12 @@ def _build_health_html(health: dict) -> str:
 # ---------------------------------------------------------------------------
 # Main generation
 # ---------------------------------------------------------------------------
-def generate():
+def generate(
+    *,
+    output_dir: str | Path = OUTPUT_DIR,
+    public_trust_state=None,
+    include_players: bool = True,
+) -> dict[str, Path]:
     """Generate the static HTML dashboard."""
     log.info("Starting HTML generation...")
 
@@ -1215,7 +1221,7 @@ def generate():
         # Built before the sidebar reads `freshness_items` — the masthead
         # demotes health-critical layers in place so both agree.
         "masthead": _build_masthead(freshness_items, now, health),
-        "public_trust": _build_public_trust_metadata(None),
+        "public_trust": _build_public_trust_metadata(public_trust_state),
         "freshness_items": freshness_items,
         "command_center": _build_command_center(cc_data),
         "technicals": _build_technicals(tech_data),
@@ -1238,18 +1244,59 @@ def generate():
     html_output = template.render(**context)
 
     # Write output
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_FILE.write_text(html_output, encoding="utf-8")
+    output_dir = Path(output_dir)
+    output_file = output_dir / "index.html"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(html_output, encoding="utf-8")
 
-    size_kb = OUTPUT_FILE.stat().st_size / 1024
-    log.info("Generated %s (%.0f KB)", OUTPUT_FILE, size_kb)
+    size_kb = output_file.stat().st_size / 1024
+    log.info("Generated %s (%.0f KB)", output_file, size_kb)
+    artifacts = {"dashboard": output_file}
 
     # Players page (issue #123) — same deploy, own template. Validation above
     # already gates the knowledge base, so a failure here is a build bug and
     # must fail the run, not silently ship a dashboard without the page.
-    log.info("Generating players page...")
-    from scripts.generate_players import generate_players_page
-    generate_players_page()
+    if include_players:
+        log.info("Generating players page...")
+        from scripts.generate_players import generate_players_page
+        artifacts["players"] = generate_players_page(output_dir / "players.html")
+    return artifacts
+
+
+def static_site_candidate_renderer(*, public_trust_state=None, include_players: bool = False):
+    """Build a DT-20 CandidateRenderer for the existing static dashboard generator."""
+
+    def _render_candidate_static_site(
+        cache_path: Path,
+        output_dir: Path,
+        edition,
+    ) -> dict[str, Path]:
+        del cache_path, edition
+        return generate(
+            output_dir=output_dir,
+            public_trust_state=public_trust_state,
+            include_players=include_players,
+        )
+
+    return _render_candidate_static_site
+
+
+def static_site_deployer(*, public_dir: str | Path = OUTPUT_DIR):
+    """Build a DT-20 EditionDeployer that publishes rendered static artifacts."""
+
+    def _deploy_static_site(edition, render) -> tuple[str, ...]:
+        del edition
+        public_dir_path = Path(public_dir)
+        public_dir_path.mkdir(parents=True, exist_ok=True)
+        evidence: list[str] = []
+        for key, source_path in sorted(render.generated_artifact_paths.items()):
+            target_name = "index.html" if key == "dashboard" else Path(source_path).name
+            target_path = public_dir_path / target_name
+            shutil.copy2(source_path, target_path)
+            evidence.append(f"deployed.{key}.{target_name}")
+        return tuple(evidence)
+
+    return _deploy_static_site
 
 
 if __name__ == "__main__":
