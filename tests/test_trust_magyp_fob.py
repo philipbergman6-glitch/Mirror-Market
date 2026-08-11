@@ -8,7 +8,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
+from pipeline.results import ScraperShapeError
 from trust import MAGYP_FOB_CONTRACT, Finding, QualityState, TemporaryDirectoryTrustRepository
 from trust.magyp_fob import (
     artifact_from_response,
@@ -16,6 +18,7 @@ from trust.magyp_fob import (
     fetch_magyp_fob_artifact,
     ingest_magyp_fob_replay,
     parse_magyp_candidates,
+    posts_from_replay,
     reconcile_magyp_fob,
     trusted_magyp_fob_frame,
 )
@@ -273,3 +276,23 @@ def test_magyp_contract_keeps_durable_raw_artifact_metadata_only() -> None:
     assert not replay.artifact.reference.content_retained
     assert replay.artifact.content is None
     assert MAGYP_FOB_CONTRACT.dataset.dataset_id == replay.artifact.reference.dataset_id
+
+
+def test_unpublished_date_answers_with_an_empty_json_array() -> None:
+    """Observed live 2026-08-11: an unpublished date returns b"[]", not b"{}".
+
+    The v1 fetcher's docstring claims an empty object; it only survives the
+    real shape because `"posts" in []` is False and `not []` is True. The
+    trusted parser used to hard-fail on every holiday.
+    """
+    replay = artifact_from_response(content=b"[]", retrieved_at=NOW)
+
+    assert posts_from_replay(replay) == []
+    assert parse_magyp_candidates(replay, parsed_at=NOW) == ()
+
+
+def test_non_empty_array_root_is_still_a_schema_change() -> None:
+    replay = artifact_from_response(content=b'[{"posicion":"12019000190C"}]', retrieved_at=NOW)
+
+    with pytest.raises(ScraperShapeError, match="non-empty JSON array"):
+        posts_from_replay(replay)

@@ -155,7 +155,7 @@ def parse_magyp_candidates(
 ) -> tuple[CandidateObservation, ...]:
     """Parse replay bytes into trusted candidate observations."""
 
-    posts = _posts_from_replay(replay)
+    posts = posts_from_replay(replay)
     frame = _parse_posts(posts)
     parsed_instant = _utc(parsed_at or replay.artifact.retrieved_at.value)
     return tuple(
@@ -324,11 +324,24 @@ def reconcile_magyp_fob(legacy: pd.DataFrame, trusted: pd.DataFrame) -> Reconcil
     )
 
 
-def _posts_from_replay(replay: MagypArtifactReplay) -> list[dict[str, Any]]:
+def posts_from_replay(replay: MagypArtifactReplay) -> list[dict[str, Any]]:
     try:
         payload = json.loads(replay.content.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ScraperShapeError(f"MAGyP FOB: raw artifact is not valid JSON: {exc}") from exc
+    if isinstance(payload, list):
+        # An unpublished date (holiday, or today's circular not out yet)
+        # answers with an empty JSON *array*, not the empty object the v1
+        # fetcher's docstring claims — observed live 2026-08-11 against
+        # Fecha=11/08/2026, content-type text/html, body b"[]". v1 survives
+        # this by accident: `"posts" in payload` is a membership test on a
+        # list, and the empty list then trips its falsy check. A *non*-empty
+        # array root is a real schema change and still hard-fails.
+        if not payload:
+            return []
+        raise ScraperShapeError(
+            f"MAGyP FOB: response root is a non-empty JSON array ({len(payload)} items) - schema changed"
+        )
     if not isinstance(payload, Mapping):
         raise ScraperShapeError("MAGyP FOB: response root is not a JSON object")
     if "posts" in payload:

@@ -65,9 +65,13 @@ def _fetch_day(day: date) -> list[dict]:
                 if "posts" in payload:
                     return payload["posts"]
                 if not payload:
-                    # Unpublished date (holiday, or today's circular not
-                    # out yet) responds with an empty object, not an
-                    # empty posts list.
+                    # Unpublished date (holiday, or today's circular not out
+                    # yet) responds with an empty JSON *array* — observed live
+                    # 2026-08-11, body b"[]". This branch catches it only by
+                    # accident: `"posts" in []` is a membership test that is
+                    # False, and `not []` is True. Left as-is because it is
+                    # correct in effect, but do not read the old "empty
+                    # object" claim as the upstream contract.
                     return []
                 raise ScraperShapeError(
                     "MAGyP FOB: response has keys but no 'posts' — schema "
