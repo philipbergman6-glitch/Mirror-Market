@@ -114,6 +114,8 @@ class TrustRepository(Protocol):
 
     def append_observation_revisions(self, revisions: Sequence[ObservationRevision]) -> None: ...
 
+    def all_observation_revisions(self) -> tuple[ObservationRevision, ...]: ...
+
     def observation_revisions(self, identity: ObservationIdentity) -> tuple[ObservationRevision, ...]: ...
 
     def current_accepted_revision(self, identity: ObservationIdentity) -> ObservationRevision | None: ...
@@ -318,6 +320,10 @@ class _DirectoryTrustRepository:
                 self._store_immutable(destination, contents, f"immutable record {revision.revision_id}")
                 ledger[revision.revision_id] = revision
 
+    def all_observation_revisions(self) -> tuple[ObservationRevision, ...]:
+        revisions = self._all_observation_ledger()
+        return tuple(sorted(revisions.values(), key=lambda revision: (revision.ingested_at, revision.revision_id)))
+
     def _append_independent_observation_revisions(
         self,
         prepared: Sequence[tuple[ObservationRevision, bytes]],
@@ -479,6 +485,35 @@ class _DirectoryTrustRepository:
         revision_paths = (
             *observations_root.glob("rev_*.json"),
             *self._observation_partition(identity).glob("rev_*.json"),
+        )
+        for path in sorted(revision_paths):
+            payload = self._read_payload(path)
+            if payload.get("record_type") != "observation-revision":
+                raise RepositoryFormatError(f"record {path.name} is not an observation-revision")
+            revision_id = payload.get("revision_id")
+            if revision_id != path.stem:
+                raise RepositoryFormatError(f"record {path.name} contradicts its durable identifier")
+            if revision_id in serialized:
+                raise RepositoryFormatError(f"duplicate durable observation revision {revision_id}")
+            serialized[path.stem] = payload
+            paths[path.stem] = path
+
+        self._validate_serialized_supersession_graph(serialized)
+        ledger: dict[str, ObservationRevision] = {}
+        for revision_id, serialized_payload in serialized.items():
+            path = paths[revision_id]
+            revision = self._decode_observation_revision(path, serialized_payload)
+            self._validate_observation_partition(path, revision)
+            ledger[revision.revision_id] = revision
+        return ledger
+
+    def _all_observation_ledger(self) -> dict[str, ObservationRevision]:
+        serialized: dict[str, Mapping[str, Any]] = {}
+        paths: dict[str, Path] = {}
+        observations_root = self._durable_root / "observations"
+        revision_paths = (
+            *observations_root.glob("rev_*.json"),
+            *observations_root.glob("*/*/rev_*.json"),
         )
         for path in sorted(revision_paths):
             payload = self._read_payload(path)
