@@ -397,25 +397,86 @@ def test_empty_worldbank_never_records_an_empty_success(freshness_calls):
 def test_worldbank_layer_is_wired_with_empty_fails():
     """Pin the wiring, not just the helper.
 
-    `empty_fails` defaults to False, so a dropped keyword argument silently
-    restores the old empty-success behaviour with no test failing anywhere
-    else.
+    World Bank has no LAYER_MIN_KEYS floor, so nothing derives its
+    behaviour — a dropped keyword argument silently restores the old
+    empty-success with no test failing anywhere else.
     """
     by_key = {layer.key: layer for layer in main._build_dict_layers()}
 
     assert by_key["worldbank"].empty_fails is True
-    assert by_key["prices"].empty_fails is False
+    assert by_key["prices"].empty_fails is None  # derived, not overridden
 
 
-def test_only_worldbank_opts_into_empty_fails():
-    """A layer that returns {} usually means "nothing to publish", which is
-    an empty-success. Flipping that to a hard failure is a per-layer call,
-    so make the exception list explicit rather than incidental."""
+# ── F3b (#175): all-empty grading is derived from the floor ────────────
+
+
+@pytest.mark.parametrize(
+    "layer", sorted(k for k, floor in LAYER_MIN_KEYS.items() if floor >= 2)
+)
+def test_all_empty_fails_for_every_floored_layer(layer, freshness_calls):
+    """F3b: severity must not invert.
+
+    A layer returning 1 of 10 keys is below its floor and records failed.
+    Returning 0 of 10 is strictly worse, yet used to record an empty-
+    *success* that stamped a fresh last_success. A floor of 2+ says the
+    layer has that many independent keys, so zero of them is an outage.
+    """
+    assert main._finalize_layer(layer, {"a": pd.DataFrame(), "b": pd.DataFrame()}) is False
+
+    assert freshness_calls[0]["status"] == "failed"
+    assert layer in main._HARD_FAILURES
+
+
+def test_floorless_layer_still_records_empty_success(freshness_calls):
+    """The permissive default survives for layers that go quiet legitimately.
+
+    crop_progress has no floor because USDA publishes no condition ratings
+    out of season — an empty January run is not an outage.
+    """
+    assert main._finalize_layer("crop_progress", {"a": pd.DataFrame()}) is False
+
+    assert freshness_calls[0]["status"] == "success"
+    assert "crop_progress" not in main._HARD_FAILURES
+
+
+def test_explicit_empty_fails_overrides_the_derived_default(freshness_calls):
+    """The override works in both directions.
+
+    False on a floored layer forces empty-success; True on a floorless one
+    forces failure. Neither is used in the current wiring beyond worldbank
+    and wasde, but the knob is what makes the derivation safe to apply
+    uniformly.
+    """
+    assert main._finalize_layer("dce", {"a": pd.DataFrame()}, empty_fails=False) is False
+    assert freshness_calls[0]["status"] == "success"
+
+    assert main._finalize_layer("conab", {"a": pd.DataFrame()}, empty_fails=True) is False
+    assert freshness_calls[1]["status"] == "failed"
+
+
+def test_critical_layer_ignores_an_empty_fails_override(freshness_calls):
+    """A critical layer with nothing to show is never a success.
+
+    CRITICAL_LAYERS gates the deploy; an override that could switch that
+    off would be a foot-gun, so the check stays unconditional.
+    """
+    assert main._finalize_layer("prices", {"a": pd.DataFrame()}, empty_fails=False) is False
+
+    assert freshness_calls[0]["status"] == "failed"
+
+
+def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers():
+    """Overriding the derived rule is a per-layer judgement call — keep the
+    exception list explicit rather than incidental. Both entries are layers
+    with no floor whose upstream always carries history."""
     opted_in = {
-        layer.key for layer in main._build_dict_layers() if layer.empty_fails
+        layer.key
+        for layer in main._build_dict_layers()
+        if layer.empty_fails is not None
     }
 
-    assert opted_in == {"worldbank"}
+    assert opted_in == {"worldbank", "wasde"}
+    assert not opted_in & set(LAYER_MIN_KEYS)  # nothing floored needs an override
 
 
 # ── Non-regression: the existing gates still work ──────────────────────────
