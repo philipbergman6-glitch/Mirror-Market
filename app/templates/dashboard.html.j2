@@ -1,62 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mirror Market — Daily Soy Complex Read</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+{% extends "_base.html.j2" %}
+{#
+  The headline page (M2 #144). Everything shared — <head>, the palette, the
+  masthead and the market nav — lives in _base.html.j2; this file owns only
+  what is specific to the headline.
+#}
+{% block title %}Mirror Market — Daily Soy Complex Read{% endblock %}
+
+{% block head_extra %}
 <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
-<style>
-:root {
-  --paper: #FAFAF7;
-  --card: #FFFFFF;
-  --rule: #D8DCD8;
-  --rule-heavy: #191C1A;
-  --ink: #191C1A;
-  --green: #2D6A4F;
-  --green-light: #2D6A4F;
-  --text: #191C1A;
-  --text-muted: #5D6660;
-  --text-dim: #9BA39E;
-  --bullish: #1F7A3D;
-  --bearish: #C23B2E;
-  --warning: #A8730A;
-  --info: #2F5D8F;
-  --soybean: #8B6914;
-  --soy-oil: #B05E10;
-  --soy-meal: #8A5A2B;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --display: 'Archivo', sans-serif;
-  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
-.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.up { color: var(--bullish); }
-.down { color: var(--bearish); }
-.muted { color: var(--text-muted); }
+{% endblock %}
 
-.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
-
-/* ---- masthead ---- */
-.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
-.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
-.masthead h1 em { font-style: normal; color: var(--green); }
-.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
-.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
-.mast-critical { color: var(--bearish); font-weight: 600; }
-.stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; }
-.stale-note b { font-weight: 600; }
-
-/* ---- index nav ---- */
-.index-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 20px; padding: 10px 0; overflow-x: auto; white-space: nowrap; }
-.index-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; transition: color 0.1s; }
-.index-nav a:hover { color: var(--ink); }
-.index-nav a .no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 4px; }
-
+{% block page_css %}
 /* ---- sections ---- */
 section { padding: 26px 0; border-bottom: 1px solid var(--rule); }
 section:last-of-type { border-bottom: none; }
@@ -141,40 +95,35 @@ details .det-content { padding: 0 16px 16px; }
 /* ---- misc ---- */
 .dl { display: inline-flex; align-items: center; gap: 6px; color: var(--green); text-decoration: none; font-size: 13px; font-weight: 500; margin-right: 16px; }
 .dl:hover { text-decoration: underline; }
-.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
 
 @media (max-width: 768px) {
-  .page { padding: 20px 16px 48px; }
-  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .mast-meta { margin-left: 0; text-align: left; }
   .legs, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
 }
-</style>
-</head>
-<body>
-<div class="page">
+{% endblock %}
 
-<header class="masthead">
-  <h1>Mirror<br><em>Market</em></h1>
-  <div class="mast-meta">
+{% block mast_meta %}
     <div class="day">{{ masthead.day_line }}</div>
     <div>Generated {{ generated_at }} · {{ masthead.on_schedule_count }}/{{ masthead.total_layers }} layers on schedule{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
     <div>Soy complex + competing crops · all prices USD/MT</div>
-  </div>
-</header>
+{% endblock %}
+
+{% block prenav %}
 {% if masthead.late_layers %}
 <div class="stale-note"><b>Stale:</b>
   {%- for s in masthead.late_layers %} {{ s.name }} ({{ s.age }}){{ "," if not loop.last }}{% endfor %} — everything else current.
 </div>
 {% endif %}
+{% endblock %}
 
+{% block subnav %}
 <nav class="index-nav">
   {% for s in sections %}
   <a href="#{{ s.id }}"><span class="no">{{ s.no }}</span>{{ s.name }}</a>
   {% endfor %}
-  <a href="players.html" style="margin-left:auto; color:var(--green); font-weight:500;">Players &rarr;</a>
 </nav>
+{% endblock %}
 
+{% block content %}
 {# ================================================================ #}
 {# 01 — THE COMPLEX OVERNIGHT                                       #}
 {# ================================================================ #}
@@ -562,9 +511,9 @@ details .det-content { padding: 0 16px 16px; }
     <a class="dl" href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank">View source on GitHub</a>
   </div>
 </section>
+{% endblock %}
 
-</div>
-
+{% block scripts %}
 <script>
 // Collapsible sections — click a numbered header to open/close
 document.querySelectorAll('section').forEach(sec => {
@@ -628,5 +577,4 @@ document.querySelectorAll('.tabs').forEach(tabBar => {
   });
 });
 </script>
-</body>
-</html>
+{% endblock %}

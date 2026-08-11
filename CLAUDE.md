@@ -171,20 +171,30 @@ CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal 
 - Configurable thresholds in `config.py` (RSI, volume spike, weather, freshness)
 - Signals have severity levels: `alert` > `warning` > `info`
 
-## Static HTML Dashboard
+## Static HTML Site
 
-The dashboard is a static HTML page deployed to GitHub Pages.
+A small fixed set of static pages deployed to GitHub Pages: the headline page, the players map, and one page per market. **The market is a parameter, never a code path** — `if market == "india"` in a builder is the drift the whole contract exists to prevent; per-market variation belongs in the registry descriptor.
 
 Key files:
-- `app/charts.py` — Shared Plotly figure builders
-- `app/templates/dashboard.html.j2` — Jinja2 template with CSS from DESIGN.md
-- `scripts/generate_html.py` — Generation script: calls analysts → builds charts → renders template → writes `docs/index.html`
-- `.github/workflows/deploy-dashboard.yml` — GitHub Actions: daily pipeline run + HTML generation + Pages deploy
+- `config.py` → `MARKETS` — the market registry, keyed by slug. **Pointers, never values**: table/column/key *names*, never a price, a date or a tier. Key order is nav order is the headline ledger's row order (`cbot · dalian · brazil · argentina · india · europe · south_africa · nigeria` — role in the trade), declared once so the two consumers cannot disagree.
+- `app/markets.py` — the typed view of that registry (`load_markets()`), plus `compute_tiers()`. It lives outside `config.py` because it reads the DB and `config` is imported *by* `pipeline`.
+- `app/blocks.py` — the nine-block set and the `{state, reason, data}` envelope every block builder returns. `Block.__post_init__` **raises** when a non-`ok` state carries no reason, so "every empty state names its reason" is enforced by the type rather than by nine builders remembering.
+- `app/templates/_base.html.j2` — owns `<head>` entirely: fonts, the DESIGN.md palette, the masthead and both nav bars. Every page extends it, `players.html.j2` included, or it becomes the page that drifts.
+- `app/templates/market_page.html.j2` / `market_brief.html.j2` / `market_stub.html.j2` — one real template per tier (a brief is not a page with more hatching), plus `tombstone.html.j2`.
+- `scripts/generate_site.py` — the orchestrator: owns the page list and the failure-isolation policy.
+- `scripts/generate_html.py` — the **headline page's** renderer, one entry in that list.
+- `.github/workflows/deploy-dashboard.yml` — daily pipeline run + site generation + Pages deploy.
+
+**Tier is computed from the DB every run, never hard-coded** (M1 #143): a daily price leg plus ≥3 of {ledger, crush, basis, weather} → `page`; less than that, or no daily leg with ≥2 → `brief`; otherwise `stub`. "Present" means *current within that layer's own `LAYER_MAX_DATA_AGE_DAYS` budget*, not "the descriptor names a table" — a market whose scraper died a fortnight ago demotes itself. The ledger is not probed separately: it is daily-only, so it is present exactly when a daily leg is. **The URL never changes with the tier** — `docs/markets/india.html` exists in all three tiers, because anything else means yesterday's link 404s when a scraper breaks.
+
+**Failure isolation, three levels.** A block that raises renders as an empty state with reason `generation error` — the same *shape* as a missing source, a deliberately different *reason*. A page that fails is replaced by a **tombstone carrying the error, never left as yesterday's file**: Pages ships the whole `docs/` artifact, so a silently retained page is the same stale-serving failure #157 caught in the SAFEX scraper. The headline failing fails the run outright. Any tombstone reds CI *after* the upload, so the site stays usefully up while the failure is loud.
 
 ```bash
-# Generate the static dashboard locally
-python scripts/generate_html.py
-# Output: docs/index.html
+# Generate the whole site locally
+python scripts/generate_site.py
+# One page, for the dev loop (headline | players | <market slug>)
+python scripts/generate_site.py --only cbot
+# Output: docs/index.html, docs/players.html, docs/markets/<slug>.html
 ```
 
 ## Design System

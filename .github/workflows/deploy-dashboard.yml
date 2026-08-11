@@ -20,16 +20,17 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main]
+    # Broadened by M17 #213. The old hand-kept seven-file list would have
+    # silently missed app/templates/blocks/**, app/markets.py,
+    # scripts/generate_site.py and every module added after it — a maintained
+    # list that fails in exactly the direction that *doesn't* rebuild.
     paths:
-      - 'scripts/generate_html.py'
-      - 'scripts/generate_players.py'
-      - 'scripts/validate_players.py'
-      - 'data/reference/players/**'
-      - 'app/templates/**'
-      - 'app/charts.py'
+      - 'app/**'
+      - 'scripts/**'
       - 'analysis/**'
       - 'pipeline/**'
       - 'fetchers/**'
+      - 'data/reference/players/**'
       - 'config.py'
       - 'main.py'
 
@@ -128,8 +129,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/ci_layer_alert.py
 
-      - name: Generate static dashboard
-        run: python scripts/generate_html.py
+      # The site orchestrator owns the page list (headline, players, eight
+      # market pages) and M8 #150's failure-isolation policy: a failed market
+      # page becomes a tombstone rather than yesterday's file, and any
+      # tombstone exits non-zero. continue-on-error so the deploy still
+      # uploads — the site stays usefully up while CI goes red below.
+      - name: Generate static site
+        id: generate_site
+        continue-on-error: true
+        run: python scripts/generate_site.py
 
       # main.py already exported history, but the briefing is written to the
       # DB by generate_html.py (main.py never generates one) — so today's row
@@ -196,6 +204,17 @@ jobs:
         id: deployment-retry2
         if: steps.deployment.outcome == 'failure' && steps.deployment-retry1.outcome == 'failure'
         uses: actions/deploy-pages@v4
+
+      # A tombstoned page reds the job here, AFTER the upload and deploy —
+      # M8 #150's isolation policy: the site stays usefully up with a dated
+      # error where the broken page was, and CI is loud about it rather than
+      # the failure being invisible behind a green run. `continue-on-error`
+      # on the generate step above is what defers the failure to this point.
+      - name: Fail the run on a page tombstone
+        if: ${{ !cancelled() && steps.generate_site.outcome == 'failure' }}
+        run: |
+          echo "::error::One or more pages were tombstoned — see the 'Generate static site' step."
+          exit 1
 
   # Deploy failures must be loud, not buried in a red run nobody opens:
   # scripts/ci_deploy_alert.py keeps a rolling `ci-deploy-alert` issue —

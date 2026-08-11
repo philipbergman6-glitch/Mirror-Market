@@ -1,0 +1,52 @@
+{% extends "_base.html.j2" %}
+{#
+  Market brief — tier `brief` (M1 #143).
+
+  A real template, not a full page with more hatching (M1 constraint 5): one
+  screen, no section numbering, no propagation ledger (it is daily-only per
+  M10 #151 and a brief may have no daily leg at all), no reserved News slot.
+
+  Same URL as the page tier. A brief is different contents at a stable address,
+  never a 404 because a scraper broke (M8 constraint 3).
+#}
+{% block title %}Mirror Market — {{ market.name }} (brief){% endblock %}
+
+{% block page_css %}
+{% include '_market_css.html.j2' %}
+.block-head h2 { font-size: 14px; }
+{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>{{ market.name }}</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+    <div>{{ market.venue }} · all prices USD/MT</div>
+{% endblock %}
+
+{% block subnav %}
+<div class="tier-stamp">
+  <span class="tier-pill brief">{{ tier.tier }}</span>
+  <span class="venue">{{ market.name }}</span>
+  <span class="tier-why">
+    {%- if tier.has_daily_leg %}a daily leg, but only {{ tier.supporting_count }} of 4 supporting blocks
+    {%- else %}no daily leg; {{ tier.supporting_count }} of 4 supporting blocks
+    {%- endif %} — too little for a full page, so this is one screen without the propagation ledger.
+  </span>
+</div>
+{% endblock %}
+
+{% block content %}
+{% for block in blocks %}
+{% include 'blocks/_block.html.j2' %}
+{% endfor %}
+
+<div class="footer">
+  A brief, not a page: {{ market.name }} does not currently hold enough live data to fill the standard
+  market anatomy. The address does not change when it does — this page becomes the full nine-block
+  layout at the same URL. All prices USD/MT. Not financial advice.
+  <br><br>
+  <a href="{{ root }}index.html">&larr; Daily read</a> ·
+  <a href="{{ root }}players.html">Players</a>
+</div>
+{% endblock %}

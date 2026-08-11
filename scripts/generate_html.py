@@ -70,6 +70,14 @@ LEG_COLORS = {
 }
 
 
+def _standalone_market_nav() -> list[dict]:
+    """Market nav for a standalone `python scripts/generate_html.py` run."""
+    from app.markets import compute_tiers, load_markets, nav_items
+
+    markets = load_markets()
+    return nav_items(compute_tiers(markets), markets=markets)
+
+
 def _safe_call(fn, label: str):
     """Call fn(), returning None on error."""
     try:
@@ -1294,9 +1302,17 @@ def generate(
     *,
     output_dir: str | Path = OUTPUT_DIR,
     public_trust_state=None,
-    include_players: bool = True,
+    include_players: bool = False,
+    market_nav: list[dict] | None = None,
 ) -> dict[str, Path]:
-    """Generate the static HTML dashboard."""
+    """Render the headline page (M2 #144).
+
+    M8 #150 demoted this module to one entry in the site's page list; the page
+    list, the market nav and the failure-isolation policy live in
+    ``scripts/generate_site.py``. ``include_players`` stays for the DT-20
+    trusted-render path and for a standalone run, but the orchestrator renders
+    the players page itself so both pages get the same computed nav.
+    """
     log.info("Starting HTML generation...")
 
     # Hard-fail on players knowledge-base schema violations (issue #122) —
@@ -1346,6 +1362,13 @@ def generate(
     freshness_items = _build_freshness_items()
     context = {
         "sections": SECTIONS,
+        # _base.html.j2 owns <head>, the masthead and the market nav. The nav
+        # is normally passed down by generate_site.py so every page shares one
+        # tier computation; a standalone run computes its own.
+        "market_nav": market_nav if market_nav is not None else _standalone_market_nav(),
+        "root": "",
+        "current_page": "headline",
+        "current_market": None,
         "generated_at": now.strftime("%Y-%m-%d %H:%M UTC"),
         # Built before the sidebar reads `freshness_items` — the masthead
         # demotes health-critical layers in place so both agree.

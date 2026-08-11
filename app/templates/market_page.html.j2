@@ -1,0 +1,55 @@
+{% extends "_base.html.j2" %}
+{#
+  Full market page — tier `page` (M1 #143).
+
+  Nine blocks, fixed order, identical numbering on every market. The market is
+  a parameter, never a code path: this template renders `blocks` and knows
+  nothing about which market it is looking at.
+#}
+{% block title %}Mirror Market — {{ market.name }}{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+{% endblock %}
+
+{% block page_css %}
+{% include '_market_css.html.j2' %}
+{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>{{ market.name }}</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+    <div>{{ market.venue }} · all prices USD/MT</div>
+{% endblock %}
+
+{% block subnav %}
+{# The tier is printed on the page, so a demotion is visible rather than
+   inferred from missing sections (M8 #150). #}
+<div class="tier-stamp">
+  <span class="tier-pill">{{ tier.tier }}</span>
+  <span class="venue">{{ market.name }}</span>
+  <span class="tier-why">daily leg present · {{ tier.supporting_count }} of 4 supporting blocks ({{ tier.present|join(' · ') }})</span>
+</div>
+<nav class="index-nav">
+  {% for b in blocks %}
+  <a href="#block-{{ b.id }}"><span class="no">{{ b.no }}</span>{{ b.title }}</a>
+  {% endfor %}
+</nav>
+{% endblock %}
+
+{% block content %}
+{% for block in blocks %}
+{% include 'blocks/_block.html.j2' %}
+{% endfor %}
+
+<div class="footer">
+  All prices in <strong>USD per metric ton (USD/MT)</strong>; native exchange units are converted at the display layer.
+  {{ market.name }} quotes in {{ market.home_currency }}. Data delayed and provided as-is; not financial advice.
+  <br><br>
+  <a href="{{ root }}index.html">&larr; Daily read</a> ·
+  <a href="{{ root }}players.html">Players</a> ·
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{#
+  One block, in its fixed slot. M18 #214 fills the `ok` branch per block with a
+  partial under this directory; until then every block renders its own empty
+  state — which is the honest thing for it to do, not a placeholder.
+
+  The section number is the block's position in BLOCK_SPECS, so it is identical
+  on every full page. A missing block is a labelled empty state here, never a
+  gap and never a renumber (M1 #143).
+#}
+<section class="block" id="block-{{ block.id }}">
+  <div class="block-head">
+    {% if block.no %}<span class="block-no">{{ block.no }}</span>{% endif %}
+    <h2>{{ block.title }}</h2>
+    {% if block.kind %}<span class="kind">{{ block.kind|replace('_', ' ') }}</span>{% endif %}
+    <span class="why">{{ block.why }}</span>
+  </div>
+  {% if block.state == 'ok' %}
+  {% include 'blocks/' ~ block.id ~ '.html.j2' ignore missing %}
+  {% else %}
+  <div class="empty-state state-{{ block.state }}">
+    <span class="es-label">{% if block.state == 'absent' %}no source{% else %}no data{% endif %}</span>
+    {{ block.reason }}
+  </div>
+  {% endif %}
+</section>
