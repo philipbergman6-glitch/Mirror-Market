@@ -258,6 +258,29 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
     }
 
 
+def _build_public_trust_metadata(trust_state) -> dict | None:
+    """Format DT-20 public trust state for static dashboard display."""
+
+    if trust_state is None:
+        return None
+
+    public_state = trust_state.to_public_dict() if hasattr(trust_state, "to_public_dict") else dict(trust_state)
+
+    critical_freshness = public_state.get("critical_freshness") or {}
+    degraded_dataset_ids = tuple(public_state.get("degraded_dataset_ids") or ())
+    critical_numbers = tuple(public_state.get("critical_numbers") or ())
+    return {
+        "edition_id": public_state["edition_id"],
+        "generated_at": public_state["generated_at"],
+        "critical_freshness": [
+            {"dataset_id": dataset_id, "freshness": freshness}
+            for dataset_id, freshness in sorted(critical_freshness.items())
+        ],
+        "degraded_dataset_ids": degraded_dataset_ids,
+        "critical_numbers": critical_numbers,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Command Center context
 # ---------------------------------------------------------------------------
@@ -1192,6 +1215,7 @@ def generate():
         # Built before the sidebar reads `freshness_items` — the masthead
         # demotes health-critical layers in place so both agree.
         "masthead": _build_masthead(freshness_items, now, health),
+        "public_trust": _build_public_trust_metadata(None),
         "freshness_items": freshness_items,
         "command_center": _build_command_center(cc_data),
         "technicals": _build_technicals(tech_data),
