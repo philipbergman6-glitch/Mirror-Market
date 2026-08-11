@@ -410,46 +410,18 @@ def _run_scraper_layer(
         return False
 
 
-def run() -> int:
-    setup_logging()
-    _HARD_FAILURES.clear()
+def _build_dict_layers() -> list[DictLayer]:
+    """The Layer 1-13 table: uniform dict-of-frames layers.
 
-    logger.info("=" * 60)
-    logger.info("  Mirror Market — Data Pipeline")
-    logger.info("=" * 60)
+    Module-level rather than inline in run() so tests can inspect the
+    wiring — DictLayer flags like empty_fails change behaviour and are
+    otherwise only reachable by executing the whole pipeline.
 
-    # Track which layers succeeded vs failed
-    results = {
-        "prices": False, "usda": False, "crop_progress": False,
-        "fred": False, "cot": False, "weather": False,
-        "psd": False, "currencies": False, "worldbank": False,
-        "dce": False, "export_sales": False, "forward_curve": False,
-        "wasde": False, "eia": False, "crush_inspections": False,
-        "conab": False, "conab_precos": False,
-        "india_domestic": False,
-        "cepea": False, "safex": False,
-        "agrural": False, "gulf_bids": False,
-    }
-    # Layers intentionally short-circuited (upstream anti-bot walls) —
-    # reported separately so the Failed list only carries real outages.
-    disabled = sorted(DISABLED_LAYERS)
-
-    # ── Initialise database schema ─────────────────────────────────
-    init_database()
-
-    # ── Seed snapshot-only history from git-committed CSVs ─────────
-    # Must hard-fail: exporting later from a DB that failed to seed
-    # would overwrite the committed CSVs with today-only data.
-    try:
-        import_history()
-    except HistoryImportError:
-        logger.exception("History import failed — aborting before any export can clobber it")
-        return 1
-
-    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
-    # Built inside run() so tests that monkeypatch main.<fetcher> are
-    # picked up — the lambdas resolve module globals at call time.
-    dict_layers = [
+    Every fetch/save/clean is a lambda, so main.<fetcher> is resolved
+    from module globals at call time and monkeypatching still works
+    regardless of when this table is built.
+    """
+    return [
         DictLayer(
             "prices", "Layer 1", "commodity futures prices",
             fetch=lambda: fetch_prices(),
@@ -536,6 +508,46 @@ def run() -> int:
             skip_msg="EIA skipped (EIA_API_KEY not set)",
         ),
     ]
+
+
+def run() -> int:
+    setup_logging()
+    _HARD_FAILURES.clear()
+
+    logger.info("=" * 60)
+    logger.info("  Mirror Market — Data Pipeline")
+    logger.info("=" * 60)
+
+    # Track which layers succeeded vs failed
+    results = {
+        "prices": False, "usda": False, "crop_progress": False,
+        "fred": False, "cot": False, "weather": False,
+        "psd": False, "currencies": False, "worldbank": False,
+        "dce": False, "export_sales": False, "forward_curve": False,
+        "wasde": False, "eia": False, "crush_inspections": False,
+        "conab": False, "conab_precos": False,
+        "india_domestic": False,
+        "cepea": False, "safex": False,
+        "agrural": False, "gulf_bids": False,
+    }
+    # Layers intentionally short-circuited (upstream anti-bot walls) —
+    # reported separately so the Failed list only carries real outages.
+    disabled = sorted(DISABLED_LAYERS)
+
+    # ── Initialise database schema ─────────────────────────────────
+    init_database()
+
+    # ── Seed snapshot-only history from git-committed CSVs ─────────
+    # Must hard-fail: exporting later from a DB that failed to seed
+    # would overwrite the committed CSVs with today-only data.
+    try:
+        import_history()
+    except HistoryImportError:
+        logger.exception("History import failed — aborting before any export can clobber it")
+        return 1
+
+    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
+    dict_layers = _build_dict_layers()
     for layer in dict_layers:
         results[layer.key] = _run_dict_layer(layer)
 

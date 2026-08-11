@@ -394,42 +394,28 @@ def test_empty_worldbank_never_records_an_empty_success(freshness_calls):
     assert "worldbank" in main._HARD_FAILURES
 
 
-class _StopAfterDictLayers(BaseException):
-    """Abort run() the moment the dict-layer table has been walked.
-
-    Deliberately a BaseException: run()'s per-layer guards catch Exception,
-    so anything narrower would be swallowed and the run would carry on into
-    the live scraper layers (Layers 14-21) and hit the network.
-    """
-
-
-def test_worldbank_layer_is_wired_with_empty_fails(monkeypatch):
+def test_worldbank_layer_is_wired_with_empty_fails():
     """Pin the wiring, not just the helper.
 
     `empty_fails` defaults to False, so a dropped keyword argument silently
     restores the old empty-success behaviour with no test failing anywhere
     else.
     """
-    monkeypatch.setattr(main, "init_database", lambda: None)
-    monkeypatch.setattr(main, "import_history", lambda: None)
+    by_key = {layer.key: layer for layer in main._build_dict_layers()}
 
-    captured: list[main.DictLayer] = []
-    monkeypatch.setattr(
-        main, "_run_dict_layer", lambda layer: captured.append(layer) or False
-    )
-    # Layer 14 is the first thing after the dict-layer loop and is a live
-    # USDA call — stop the run here.
-    def _stop():
-        raise _StopAfterDictLayers
-
-    monkeypatch.setattr(main, "fetch_crush_data", _stop)
-
-    with pytest.raises(_StopAfterDictLayers):
-        main.run()
-
-    by_key = {layer.key: layer for layer in captured}
     assert by_key["worldbank"].empty_fails is True
     assert by_key["prices"].empty_fails is False
+
+
+def test_only_worldbank_opts_into_empty_fails():
+    """A layer that returns {} usually means "nothing to publish", which is
+    an empty-success. Flipping that to a hard failure is a per-layer call,
+    so make the exception list explicit rather than incidental."""
+    opted_in = {
+        layer.key for layer in main._build_dict_layers() if layer.empty_fails
+    }
+
+    assert opted_in == {"worldbank"}
 
 
 # ── Non-regression: the existing gates still work ──────────────────────────
