@@ -251,14 +251,19 @@ def _scenario_export_sales(_: Path) -> None:
 def _scenario_forward_curve(_: Path) -> None:
     df = pd.DataFrame(
         [
-            {"contract_month": "2026-03", "label": "Mar 26", "ticker": "ZSH26.CBT", "close": 1205.0},
-            {"contract_month": "2026-05", "label": "May 26", "ticker": "ZSK26.CBT", "close": 1215.0},
+            {"contract_month": "2026-03", "label": "Mar 26", "ticker": "ZSH26.CBT",
+             "close": 1205.0, "observation_date": "2026-02-27"},
+            {"contract_month": "2026-05", "label": "May 26", "ticker": "ZSK26.CBT",
+             "close": 1215.0, "observation_date": "2026-02-27"},
         ]
     )
     store.save_forward_curve("Soybeans", df)
     out = query.read_forward_curve("Soybeans")
     assert len(out) == 2
     assert sorted(out["close"].tolist()) == [1205.0, 1215.0]
+    # The session the curve was read at survives the round trip — it is
+    # what the dashboard dates the curve by, not the pipeline's run date.
+    assert set(out["observation_date"]) == {"2026-02-27"}
 
 
 def _scenario_wasde(_: Path) -> None:

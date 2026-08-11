@@ -1312,6 +1312,23 @@ def seasonal_analysis() -> dict:
 # Analyst 8: Forward Curve — term structure for soy complex
 # ---------------------------------------------------------------------------
 
+def _curve_as_of(subset: pd.DataFrame) -> str | None:
+    """As-of date for one commodity's forward curve.
+
+    Prefers observation_date — every leg of a curve carries the same one
+    (enforced in fetchers/forward_curve.py) — and falls back to fetched_date
+    for rows stored before that column existed.
+    """
+    for col in ("observation_date", "fetched_date"):
+        if col not in subset.columns:
+            continue
+        stamps = subset[col].dropna()
+        stamps = stamps[stamps.astype(str).str.strip() != ""]
+        if not stamps.empty:
+            return _asof(stamps.max())
+    return None
+
+
 def forward_curve_analysis() -> dict:
     """
     Forward curve analysis for all 3 soy legs.
@@ -1349,8 +1366,10 @@ def forward_curve_analysis() -> dict:
             "analysis": curve_analysis,
             "calendar_spread": cal_spread,
             "unit": mt_label(leg),
-            "as_of": _asof(subset["fetched_date"].max())
-            if "fetched_date" in subset.columns else None,
+            # The session the curve was observed at, not the run date —
+            # they differ on any run landing before settlement. Falls back to
+            # fetched_date for legacy rows stored before observation_date.
+            "as_of": _curve_as_of(subset),
         }
 
     return result

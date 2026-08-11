@@ -164,14 +164,20 @@ CREATE TABLE IF NOT EXISTS export_sales (
 # curve, so term-structure history accumulates instead of being overwritten.
 # Readers wanting "the current curve" filter to the latest fetched_date
 # (see pipeline/query.read_forward_curve).
+#
+# observation_date is the session every leg of that curve was observed on —
+# the date a trader reads the structure at. fetched_date is only when the
+# pipeline ran (they differ whenever the run lands before settlement, or on
+# a holiday). Legacy rows predating the column are NULL.
 _CREATE_FORWARD_CURVE = """
 CREATE TABLE IF NOT EXISTS forward_curve (
-    commodity       TEXT    NOT NULL,
-    contract_month  TEXT    NOT NULL,
-    label           TEXT,
-    ticker          TEXT,
-    close           REAL,
-    fetched_date    TEXT    NOT NULL,
+    commodity        TEXT    NOT NULL,
+    contract_month   TEXT    NOT NULL,
+    label            TEXT,
+    ticker           TEXT,
+    close            REAL,
+    observation_date TEXT,
+    fetched_date     TEXT    NOT NULL,
     PRIMARY KEY (commodity, contract_month, fetched_date)
 );
 """
