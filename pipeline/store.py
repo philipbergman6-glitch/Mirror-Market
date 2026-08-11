@@ -14,7 +14,12 @@ from typing import Any
 
 import pandas as pd
 
-from config import DB_PATH, STORAGE_DIR
+from config import (
+    DB_PATH,
+    EC_OILSEEDS_CADENCE,
+    EC_OILSEEDS_QUOTE_KIND,
+    STORAGE_DIR,
+)
 from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
 from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
@@ -428,6 +433,29 @@ def save_worldbank_data(commodity: str, df: pd.DataFrame):
     df = _str_cols(df, "unit")
     _save("worldbank_prices", df[["commodity", "Date", "price", "unit"]],
           ["commodity", "Date"], f"worldbank/{commodity}")
+
+
+def save_ec_oilseed_prices(series: str, df: pd.DataFrame):
+    """Write EC weekly world oilseed prices → 'ec_oilseed_prices'.
+
+    cadence and quote_kind are stamped on every row rather than looked up at
+    display time: this is a weekly *physical assessment*, and map #142 carries
+    a standing risk that such quotes get read as daily board prices once they
+    share a USD/MT axis with CBOT and Dalian.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["series"] = series
+    df["Date"] = _date(df["Date"])
+    df["cadence"] = EC_OILSEEDS_CADENCE
+    df["quote_kind"] = EC_OILSEEDS_QUOTE_KIND
+    _save(
+        "ec_oilseed_prices",
+        df[["series", "Date", "price_usd", "price_eur", "cadence", "quote_kind"]],
+        ["series", "Date"],
+        f"ec_oilseeds/{series}",
+    )
 
 
 def save_export_sales(commodity: str, df: pd.DataFrame):
