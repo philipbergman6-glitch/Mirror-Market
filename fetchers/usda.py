@@ -395,13 +395,95 @@ def _parse_inspections(
     return df
 
 
-# Table C ("BY REGION AND PORT AREA") column order after the port-area
-# field. TOTALS is deliberately not stored.
-_PORT_FLOW_COMMODITIES = (
-    "Wheat", "Rye", "Corn Yellow", "Corn White", "Sorghum", "Soybeans", "Flaxseed",
-)
+# Grain columns AMS may print in Table C / the destination table. The set
+# of columns is NOT stable — it tracks what actually shipped that season
+# (the 2026-08-06 report drops RYE and FLAXSEED and adds CANOLA), so the
+# column order is read off the report header each run and mapped through
+# this vocabulary. An upstream name that is not in here is drift: we
+# hard-fail rather than silently attach the wrong grain to a column.
+_HEADER_COMMODITY_NAMES: dict[str, str] = {
+    "WHEAT": "Wheat",
+    "RYE": "Rye",
+    "CORN YELLOW": "Corn Yellow",
+    "CORN WHITE": "Corn White",
+    "CORN MIXED": "Corn Mixed",
+    "SORGHUM": "Sorghum",
+    "SOYBEANS": "Soybeans",
+    "FLAXSEED": "Flaxseed",
+    "CANOLA": "Canola",
+    "BARLEY": "Barley",
+    "OATS": "Oats",
+    "SUNFLOWER": "Sunflower",
+}
+_TOTALS_COLUMN = "TOTALS"
 _PORT_TABLE_TITLE = "BY REGION AND PORT AREA"
 _PORT_NUM_RE = re.compile(r"^[\d,]+$")
+
+
+def _parse_commodity_columns(
+    lines: list[str],
+    header_idx: int,
+    label_tokens: tuple[str, ...],
+    table: str,
+) -> list[str]:
+    """Read the grain column order off a WA_GR101 table header.
+
+    The header is two lines: an optional continuation line carrying the
+    first word of a two-word heading ("CORN" above "YELLOW"/"WHITE") and
+    the header line itself, e.g.::
+
+                                           CORN      CORN
+          REGION    PORT AREA       WHEAT     YELLOW     WHITE   ...  TOTALS
+
+    Continuation words are attached by character-span overlap. The
+    leading row-label tokens (``REGION``, ``PORT AREA`` / ``COUNTRY``)
+    are dropped and the trailing ``TOTALS`` column is required but not
+    returned — callers store one value per returned commodity plus the
+    TOTALS column they discard.
+
+    Raises ScraperShapeError if the header is missing its TOTALS column
+    or names a grain this parser has no mapping for.
+    """
+    header = lines[header_idx]
+    above = lines[header_idx - 1] if header_idx > 0 else ""
+    above_tokens = [(m.group(), m.start(), m.end()) for m in re.finditer(r"\S+", above)]
+
+    names: list[str] = []
+    for m in re.finditer(r"\S+", header):
+        prefix = " ".join(
+            tok for tok, start, end in above_tokens
+            if start < m.end() and m.start() < end
+        )
+        names.append(f"{prefix} {m.group()}".strip().upper())
+
+    # Drop the row-label columns ("REGION", "PORT AREA" / "COUNTRY").
+    for expected in label_tokens:
+        if not names or names[0] != expected:
+            raise ScraperShapeError(
+                f"AMS inspections: {table} header {header.strip()!r} does not start "
+                f"with {' '.join(label_tokens)}"
+            )
+        names.pop(0)
+
+    if not names or names[-1] != _TOTALS_COLUMN:
+        raise ScraperShapeError(
+            f"AMS inspections: {table} header {header.strip()!r} does not end "
+            f"with a {_TOTALS_COLUMN} column"
+        )
+    names.pop()
+
+    if not names:
+        raise ScraperShapeError(
+            f"AMS inspections: {table} header {header.strip()!r} has no grain columns"
+        )
+
+    unknown = [n for n in names if n not in _HEADER_COMMODITY_NAMES]
+    if unknown:
+        raise ScraperShapeError(
+            f"AMS inspections: {table} header has unrecognised column(s) "
+            f"{unknown} — upstream layout changed"
+        )
+    return [_HEADER_COMMODITY_NAMES[n] for n in names]
 
 
 def _parse_port_flows(text: str) -> pd.DataFrame:
@@ -450,6 +532,10 @@ def _parse_port_flows(text: str) -> pd.DataFrame:
             "AMS inspections: port-area table header 'REGION  PORT AREA' not found"
         )
 
+    commodities = _parse_commodity_columns(
+        lines, header_idx, ("REGION", "PORT", "AREA"), "port-area table"
+    )
+
     rows: list[dict[str, object]] = []
     region = ""
     for raw_line in lines[header_idx + 1:]:
@@ -473,13 +559,13 @@ def _parse_port_flows(text: str) -> pd.DataFrame:
 
         if not all(_PORT_NUM_RE.match(v) for v in values):
             continue
-        if len(values) != len(_PORT_FLOW_COMMODITIES) + 1:  # +1 for TOTALS
+        if len(values) != len(commodities) + 1:  # +1 for TOTALS
             raise ScraperShapeError(
                 f"AMS inspections: port row '{stripped}' has {len(values)} numeric "
-                f"columns, expected {len(_PORT_FLOW_COMMODITIES) + 1}"
+                f"columns, expected {len(commodities) + 1}"
             )
 
-        for commodity, token in zip(_PORT_FLOW_COMMODITIES, values, strict=False):
+        for commodity, token in zip(commodities, values, strict=False):
             rows.append({
                 "week_ending": week_ending,
                 "region": region,
@@ -495,9 +581,9 @@ def _parse_port_flows(text: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-# Destination table column order after the country field. TOTALS is
-# deliberately not stored. (No Rye/Flaxseed columns here, unlike Table C.)
-_DEST_COMMODITIES = ("Wheat", "Corn Yellow", "Corn White", "Sorghum", "Soybeans")
+# Destination table columns are read off its own header (same drift as
+# Table C — the column set differs between the two tables and between
+# reports). TOTALS is deliberately not stored.
 _DEST_TABLE_TITLE = "BY REGION AND COUNTRY OF DESTINATION"
 
 
@@ -547,6 +633,10 @@ def _parse_destinations(text: str) -> pd.DataFrame:
             "AMS inspections: destination table header 'REGION  COUNTRY' not found"
         )
 
+    commodities = _parse_commodity_columns(
+        lines, header_idx, ("REGION", "COUNTRY"), "destination table"
+    )
+
     rows: list[dict[str, object]] = []
     region = ""
     for raw_line in lines[header_idx + 1:]:
@@ -569,13 +659,13 @@ def _parse_destinations(text: str) -> pd.DataFrame:
 
         if not all(_PORT_NUM_RE.match(v) for v in values):
             continue
-        if len(values) != len(_DEST_COMMODITIES) + 1:  # +1 for TOTALS
+        if len(values) != len(commodities) + 1:  # +1 for TOTALS
             raise ScraperShapeError(
                 f"AMS inspections: destination row '{stripped}' has {len(values)} "
-                f"numeric columns, expected {len(_DEST_COMMODITIES) + 1}"
+                f"numeric columns, expected {len(commodities) + 1}"
             )
 
-        for commodity, token in zip(_DEST_COMMODITIES, values, strict=False):
+        for commodity, token in zip(commodities, values, strict=False):
             rows.append({
                 "week_ending": week_ending,
                 "region": region,
