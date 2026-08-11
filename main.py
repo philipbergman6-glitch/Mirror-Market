@@ -26,7 +26,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from config import LAYER_MIN_KEYS, MAX_FAILED_LAYERS, setup_logging
+import pandas as pd
+
+from config import (
+    LAYER_MAX_DATA_AGE_DAYS,
+    LAYER_MIN_KEYS,
+    MAX_FAILED_LAYERS,
+    setup_logging,
+)
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
 from fetchers.conab import fetch_conab_estimates
@@ -143,6 +150,110 @@ def _mark_empty(layer: str) -> None:
         logger.exception("Could not record empty-success freshness row for %s", layer)
 
 
+def _mark_stale(layer: str, latest: pd.Timestamp, age_days: int, budget: int) -> None:
+    """Record a layer that fetched fine but delivered stale data (audit F3).
+
+    Recorded as 'failed' rather than 'success' so last_success is preserved
+    and stops advancing: the layer then ages out of its freshness window on
+    its own, and every surface that already reads freshness reports it stale
+    without needing to know about this check.
+
+    Counted as a hard failure — a frozen upstream is an outage, just a quiet
+    one, and the CI alerter should raise it like any other.
+    """
+    _HARD_FAILURES.add(layer)
+    logger.error(
+        "[%s] fetched OK but newest observation is %s (%d days old, budget %d) "
+        "— upstream looks frozen; recording as failed rather than stamping "
+        "a fresh last_success",
+        layer, latest.strftime("%Y-%m-%d"), age_days, budget,
+    )
+    try:
+        save_freshness(layer, status="failed")
+    except Exception:
+        logger.exception("Could not record stale-freshness row for %s", layer)
+
+
+# Column names that carry the observation date across the layers. The frames
+# reaching _finalize_layer are post-clean, so these are the cleaners' own
+# conventions (pipeline/clean.py), not the raw upstream ones.
+_DATE_COLUMNS = ("Date", "date", "week_ending", "report_date")
+
+
+def _latest_observation_date(data: dict) -> pd.Timestamp | None:
+    """Newest observation date across a layer's frames, or None if undatable.
+
+    Handles every shape the layers actually produce:
+      - DataFrame with a DatetimeIndex   (prices, currencies — clean_ohlcv)
+      - Series with a DatetimeIndex      (fred — clean_fred_series)
+      - DataFrame with a date column     (cot, weather, dce, worldbank, eia)
+      - DataFrame with 'week_ending'     (export_sales)
+
+    Returns None when nothing datable is present. Callers must treat that as
+    "cannot certify recency", never as "recent".
+    """
+    candidates: list[pd.Timestamp] = []
+
+    for frame in data.values():
+        if frame is None or frame.empty:
+            continue
+
+        if isinstance(frame.index, pd.DatetimeIndex):
+            candidates.append(frame.index.max())
+            continue
+
+        columns = getattr(frame, "columns", None)
+        if columns is None:  # a Series without a DatetimeIndex — undatable
+            continue
+
+        for col in _DATE_COLUMNS:
+            if col in columns:
+                values = pd.to_datetime(frame[col], errors="coerce")
+                if values.notna().any():
+                    candidates.append(values.max())
+                break
+
+    if not candidates:
+        return None
+    # tz-aware and naive timestamps cannot be compared; normalise to naive
+    # UTC, which is what the rest of the freshness path uses.
+    normalised = [
+        ts.tz_convert("UTC").tz_localize(None) if ts.tz is not None else ts
+        for ts in candidates
+    ]
+    return max(normalised)
+
+
+def _check_layer_recency(layer: str, data: dict) -> bool:
+    """True if the layer's data is recent enough for 'success' to be honest.
+
+    Layers absent from LAYER_MAX_DATA_AGE_DAYS are not checked and always
+    pass — see the config block for why each exclusion is deliberate.
+    """
+    budget = LAYER_MAX_DATA_AGE_DAYS.get(layer)
+    if budget is None:
+        return True
+
+    latest = _latest_observation_date(data)
+    if latest is None:
+        # The layer is configured for a recency check but produced nothing
+        # datable. That is a shape change, not a clean bill of health, so it
+        # must not stamp a fresh last_success.
+        logger.error(
+            "[%s] is configured for a recency check but no observation date "
+            "could be found in its frames — treating as unverifiable, not fresh",
+            layer,
+        )
+        _mark_failed(layer)
+        return False
+
+    age_days = (pd.Timestamp.now().normalize() - latest.normalize()).days
+    if age_days > budget:
+        _mark_stale(layer, latest, age_days, budget)
+        return False
+    return True
+
+
 def _mark_disabled(layer: str) -> None:
     """Record an intentionally disabled layer without fabricating freshness.
 
@@ -169,15 +280,21 @@ def _write_pipeline_status(payload: dict) -> None:
     logger.info("Pipeline status written to: %s", path)
 
 
-def _finalize_layer(layer: str, data: dict) -> bool:
+def _finalize_layer(layer: str, data: dict, empty_fails: bool = False) -> bool:
     """Record freshness for a dict-of-frames layer; return overall success.
 
-    Applies the per-layer expected-count floor from LAYER_MIN_KEYS: a layer
-    where only 1 of 13 keys returned data is an outage, not a success, so
-    below-floor runs are logged as partial and recorded as failed freshness
-    (which preserves last_success for staleness display). All-empty is
-    recorded as empty-success — unless the layer is critical, where empty
-    and failed are equally unusable.
+    Three gates stand between a fetch and a stamped last_success:
+
+    1. Shape — the per-layer expected-count floor from LAYER_MIN_KEYS. A
+       layer where only 1 of 13 keys returned data is an outage, not a
+       success, so below-floor runs are recorded as failed freshness (which
+       preserves last_success for staleness display). All-empty is recorded
+       as empty-success — unless the layer is critical or empty_fails is
+       set, where empty and failed are equally unusable.
+    2. Recency — LAYER_MAX_DATA_AGE_DAYS (audit F3). Rows arriving is not
+       the same as *new* rows arriving; a frozen upstream clears gate 1
+       every day forever.
+    3. Only then does the run count as a success.
     """
     non_empty = sum(1 for v in data.values() if not v.empty)
     total_rows = sum(len(v) for v in data.values())
@@ -185,7 +302,7 @@ def _finalize_layer(layer: str, data: dict) -> bool:
 
     if non_empty == 0:
         logger.warning("[%s] returned no data", layer)
-        if layer in CRITICAL_LAYERS:
+        if layer in CRITICAL_LAYERS or empty_fails:
             _mark_failed(layer)
         else:
             _mark_empty(layer)
@@ -196,6 +313,8 @@ def _finalize_layer(layer: str, data: dict) -> bool:
             layer, non_empty, len(data), floor,
         )
         _mark_failed(layer)
+        return False
+    if not _check_layer_recency(layer, data):
         return False
     save_freshness(layer, total_rows)
     return True
@@ -219,6 +338,11 @@ class DictLayer:
     # API-key-gated layers: fetch() returns {} when the key isn't set.
     # Logged as skipped — no freshness row, matching "the layer never ran".
     skip_msg: str | None = None
+    # Mirrors _run_scraper_layer's flag: True when an empty result can only
+    # mean the layer is broken, so it must not stamp an empty-*success*.
+    # World Bank returns {} on both download failure and its own stale-file
+    # guard — neither is "upstream had nothing to publish this month".
+    empty_fails: bool = False
 
 
 def _run_dict_layer(layer: DictLayer) -> bool:
@@ -238,7 +362,7 @@ def _run_dict_layer(layer: DictLayer) -> bool:
         for name, df in data.items():
             layer.save(name, df)
 
-        return _finalize_layer(layer.key, data)
+        return _finalize_layer(layer.key, data, empty_fails=layer.empty_fails)
     except Exception:
         logger.exception("[%s] %s failed — see error above", layer.label, layer.desc)
         _mark_failed(layer.key)
@@ -286,46 +410,18 @@ def _run_scraper_layer(
         return False
 
 
-def run() -> int:
-    setup_logging()
-    _HARD_FAILURES.clear()
+def _build_dict_layers() -> list[DictLayer]:
+    """The Layer 1-13 table: uniform dict-of-frames layers.
 
-    logger.info("=" * 60)
-    logger.info("  Mirror Market — Data Pipeline")
-    logger.info("=" * 60)
+    Module-level rather than inline in run() so tests can inspect the
+    wiring — DictLayer flags like empty_fails change behaviour and are
+    otherwise only reachable by executing the whole pipeline.
 
-    # Track which layers succeeded vs failed
-    results = {
-        "prices": False, "usda": False, "crop_progress": False,
-        "fred": False, "cot": False, "weather": False,
-        "psd": False, "currencies": False, "worldbank": False,
-        "dce": False, "export_sales": False, "forward_curve": False,
-        "wasde": False, "eia": False, "crush_inspections": False,
-        "conab": False, "conab_precos": False,
-        "india_domestic": False,
-        "cepea": False, "safex": False,
-        "agrural": False, "gulf_bids": False,
-    }
-    # Layers intentionally short-circuited (upstream anti-bot walls) —
-    # reported separately so the Failed list only carries real outages.
-    disabled = sorted(DISABLED_LAYERS)
-
-    # ── Initialise database schema ─────────────────────────────────
-    init_database()
-
-    # ── Seed snapshot-only history from git-committed CSVs ─────────
-    # Must hard-fail: exporting later from a DB that failed to seed
-    # would overwrite the committed CSVs with today-only data.
-    try:
-        import_history()
-    except HistoryImportError:
-        logger.exception("History import failed — aborting before any export can clobber it")
-        return 1
-
-    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
-    # Built inside run() so tests that monkeypatch main.<fetcher> are
-    # picked up — the lambdas resolve module globals at call time.
-    dict_layers = [
+    Every fetch/save/clean is a lambda, so main.<fetcher> is resolved
+    from module globals at call time and monkeypatching still works
+    regardless of when this table is built.
+    """
+    return [
         DictLayer(
             "prices", "Layer 1", "commodity futures prices",
             fetch=lambda: fetch_prices(),
@@ -377,6 +473,7 @@ def run() -> int:
             fetch=lambda: fetch_worldbank_prices(),
             save=lambda n, d: save_worldbank_data(n, d),
             clean=lambda n, d: clean_worldbank(d),
+            empty_fails=True,
         ),
         DictLayer(
             "dce", "Layer 9", "DCE futures (AKShare)",
@@ -411,6 +508,46 @@ def run() -> int:
             skip_msg="EIA skipped (EIA_API_KEY not set)",
         ),
     ]
+
+
+def run() -> int:
+    setup_logging()
+    _HARD_FAILURES.clear()
+
+    logger.info("=" * 60)
+    logger.info("  Mirror Market — Data Pipeline")
+    logger.info("=" * 60)
+
+    # Track which layers succeeded vs failed
+    results = {
+        "prices": False, "usda": False, "crop_progress": False,
+        "fred": False, "cot": False, "weather": False,
+        "psd": False, "currencies": False, "worldbank": False,
+        "dce": False, "export_sales": False, "forward_curve": False,
+        "wasde": False, "eia": False, "crush_inspections": False,
+        "conab": False, "conab_precos": False,
+        "india_domestic": False,
+        "cepea": False, "safex": False,
+        "agrural": False, "gulf_bids": False,
+    }
+    # Layers intentionally short-circuited (upstream anti-bot walls) —
+    # reported separately so the Failed list only carries real outages.
+    disabled = sorted(DISABLED_LAYERS)
+
+    # ── Initialise database schema ─────────────────────────────────
+    init_database()
+
+    # ── Seed snapshot-only history from git-committed CSVs ─────────
+    # Must hard-fail: exporting later from a DB that failed to seed
+    # would overwrite the committed CSVs with today-only data.
+    try:
+        import_history()
+    except HistoryImportError:
+        logger.exception("History import failed — aborting before any export can clobber it")
+        return 1
+
+    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
+    dict_layers = _build_dict_layers()
     for layer in dict_layers:
         results[layer.key] = _run_dict_layer(layer)
 
