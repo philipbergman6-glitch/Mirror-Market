@@ -16,7 +16,7 @@ from typing import Any
 import pandas as pd
 
 from config import DB_PATH
-from pipeline.connection import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud, managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def _read_table(
         return pd.DataFrame()
 
     base = sql or f"SELECT * FROM {table}"  # noqa: S608 — table names are literals below
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             if filter_value is not None:
                 df = pd.read_sql(
@@ -247,7 +247,7 @@ def read_freshness() -> pd.DataFrame:
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             df = pd.read_sql("SELECT * FROM data_freshness", conn)
         except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
@@ -272,7 +272,7 @@ def read_briefing(briefing_date: str) -> dict[str, Any] | None:
     """
     if not is_cloud() and not os.path.exists(DB_PATH):
         return None
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             row = conn.execute(
                 "SELECT briefing_date, text, signals_json, snapshot_json, generated_at "
@@ -317,7 +317,7 @@ def read_briefings(
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY briefing_date"
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             df = pd.read_sql(sql, conn, params=tuple(params) if params else None)
         except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
@@ -331,7 +331,7 @@ def read_commodity_freshness() -> pd.DataFrame:
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             df = pd.read_sql("SELECT * FROM commodity_freshness", conn)
         except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:

@@ -56,10 +56,10 @@ def turso_db():
 
 def _cleanup(table: str, where: str, params: tuple) -> None:
     """Best-effort delete of test rows."""
-    from pipeline.connection import get_connection
+    from pipeline.connection import get_connection, managed_connection
 
     try:
-        with get_connection() as conn:
+        with managed_connection(get_connection()) as conn:
             conn.execute(f"DELETE FROM {table} WHERE {where}", params)
     except Exception:
         pass
@@ -173,14 +173,14 @@ def test_psd_roundtrip_preserves_integer_year(turso_db):
 def test_freshness_failed_preserves_prior_success(turso_db):
     """Failed status keeps the prior last_success stamp (cloud variant)."""
     from pipeline import store
-    from pipeline.connection import get_connection
+    from pipeline.connection import get_connection, managed_connection
 
     layer = f"{turso_db}_LAYER"
     try:
         store.save_freshness(layer, rows_fetched=42, status="success")
         store.save_freshness(layer, rows_fetched=0, status="failed")
 
-        with get_connection() as conn:
+        with managed_connection(get_connection()) as conn:
             row = conn.execute(
                 "SELECT last_success, last_attempt, status FROM data_freshness "
                 "WHERE layer_name = ?",

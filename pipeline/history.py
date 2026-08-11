@@ -28,7 +28,7 @@ import logging
 import os
 
 from config import HISTORY_DIR
-from pipeline.connection import get_connection
+from pipeline.connection import get_connection, managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ def import_history() -> int:
         return 0
 
     total = 0
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for table in HISTORY_TABLES:
             path = _csv_path(table)
             if not os.path.exists(path):
@@ -167,7 +167,7 @@ def export_history() -> int:
     allow_shrink = os.getenv("MIRROR_HISTORY_ALLOW_SHRINK", "").strip() == "1"
     os.makedirs(HISTORY_DIR, exist_ok=True)
     total = 0
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for table, pk_cols in HISTORY_TABLES.items():
             cursor = conn.execute(
                 f"SELECT * FROM {table} ORDER BY {', '.join(pk_cols)}"

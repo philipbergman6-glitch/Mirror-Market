@@ -25,7 +25,7 @@ from config import (
     FORWARD_CURVE_CONTRACTS,
     GROWING_REGIONS,
 )
-from pipeline.connection import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud, managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
     issues = []
     today = datetime.now(timezone.utc).date()
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             rows = conn.execute(
                 f"SELECT {key_col}, MAX({date_col}) as last_date, COUNT(*) as cnt "
@@ -185,7 +185,7 @@ def _check_flat_prices() -> list[dict]:
     if not is_cloud() and not os.path.exists(DB_PATH):
         return issues
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             commodities = [r[0] for r in conn.execute(
                 "SELECT DISTINCT commodity FROM prices"
@@ -285,7 +285,7 @@ def _build_commodity_status() -> list[dict]:
     if not is_cloud() and not os.path.exists(DB_PATH):
         return status_list
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for table, key_col, date_col in table_specs:
             try:
                 rows = conn.execute(
