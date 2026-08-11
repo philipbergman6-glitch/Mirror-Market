@@ -70,6 +70,11 @@ _SECTIONS = {
 _FIELD_SPLIT_RE = re.compile(r"\s{2,}")
 
 # 120.00Q  |  95.00Q to 100.00X
+#
+# The two endpoints of a ranged basis quote may reference *different* CBOT
+# contracts (Q=Aug, X=Nov above) — ~3% of cells across 2021-06→2026-08. Both
+# codes are stored; labelling the high leg with the low leg's month prices a
+# spread against the wrong futures contract (#196).
 _BASIS_RE = re.compile(
     r"^(?P<low>-?\d+(?:\.\d+)?)(?P<code_low>[FGHJKMNQUVXZ])"
     r"(?:\s+to\s+(?P<high>-?\d+(?:\.\d+)?)(?P<code_high>[FGHJKMNQUVXZ]))?$"
@@ -214,6 +219,7 @@ def _parse_bid_row(line: str) -> dict[str, object]:
         "basis_low": float(basis["low"]),
         "basis_high": float(basis["high"] or basis["low"]),
         "futures_month": MONTH_CODES[basis["code_low"]],
+        "futures_month_high": MONTH_CODES[basis["code_high"] or basis["code_low"]],
         "basis_change": _normalise_change(basis_change),
         "price_low": float(price["low"]),
         "price_high": float(price["high"] or price["low"]),
@@ -233,7 +239,8 @@ def _parse_gulf_bids(text: str, today: date | None = None) -> pd.DataFrame:
     """Parse every commodity section's bid rows out of the report text.
 
     Returns columns: report_date, commodity, location, delivery,
-    sale_type, basis_low, basis_high (cents/bu), futures_month (1-12),
+    sale_type, basis_low, basis_high (cents/bu), futures_month and
+    futures_month_high (1-12; equal unless the quote spans two contracts),
     basis_change, price_low, price_high ($/bu), average, year_ago,
     freight. Raises ScraperShapeError when the soybean section or its
     rows are missing — corn/wheat sections are allowed to be absent.
