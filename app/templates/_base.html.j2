@@ -1,0 +1,147 @@
+{#
+  Base template — owns <head> entirely (M8 #150).
+
+  Before this existed, dashboard.html.j2 and players.html.j2 each carried their
+  own font tags, their own Plotly tag and their own copy of the DESIGN.md
+  palette: the design system was already duplicated across the *two* pages that
+  existed. One <head> owner kills that, and is the same mechanism that gives
+  every page the identical masthead and market nav.
+
+  CSS stays inline rather than moving to docs/assets/mirror.css: it is ~5 KB
+  against a multi-MB page, so a second request and a cache-busting problem buy
+  nothing.
+
+  Blocks a page fills:
+    title       <title> text
+    head_extra  page-specific <head> tags (Plotly, etc.)
+    page_css    page-specific rules, appended after the shared core
+    brand       masthead wordmark (defaults to Mirror/Market)
+    mast_meta   right-hand masthead column
+    prenav      anything between the masthead and the market nav (stale note)
+    subnav      the page's own section-anchor bar, under the market nav
+    content     the page body inside .page
+    scripts     page-specific <script> tags before </body>
+
+  `root` is the relative prefix back to docs/ ("" for docs/index.html, "../"
+  for docs/markets/<slug>.html). Pages sit at two depths and the nav is
+  identical on all of them, so every internal href is prefixed with it. See
+  app.markets.relative_root().
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Mirror Market{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+{% block head_extra %}{% endblock %}
+<style>
+:root {
+  --paper: #FAFAF7;
+  --card: #FFFFFF;
+  --rule: #D8DCD8;
+  --rule-heavy: #191C1A;
+  --ink: #191C1A;
+  --green: #2D6A4F;
+  --green-light: #2D6A4F;
+  --text: #191C1A;
+  --text-muted: #5D6660;
+  --text-dim: #9BA39E;
+  --bullish: #1F7A3D;
+  --bearish: #C23B2E;
+  --warning: #A8730A;
+  --info: #2F5D8F;
+  --soybean: #8B6914;
+  --soy-oil: #B05E10;
+  --soy-meal: #8A5A2B;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: 'Archivo', sans-serif;
+  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--bullish); }
+.down { color: var(--bearish); }
+.muted { color: var(--text-muted); }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
+
+/* ---- masthead ---- */
+.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
+.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
+.masthead h1 em { font-style: normal; color: var(--green); }
+.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
+.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.mast-meta a { color: var(--green); text-decoration: none; font-weight: 500; }
+.mast-meta a:hover { text-decoration: underline; }
+.mast-critical { color: var(--bearish); font-weight: 600; }
+.stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; }
+.stale-note b { font-weight: 600; }
+
+/* ---- market nav ----
+   DESIGN.md :63/:66 — a second thin bar in the masthead, above the page's own
+   section-anchor bar, two bars in the same visual family. Explicitly NOT a
+   sidebar: that is what the 2026-07-28 redesign removed.
+   Order is registry key order = role in the trade, and it is the same
+   declaration M2's headline ledger reads, so nav and ledger cannot disagree.
+   Stubs are dimmed; pages and briefs render identically. Every market appears
+   in every tier, or the reader cannot tell the market exists. */
+.market-nav { display: flex; gap: 18px; padding: 9px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; white-space: nowrap; align-items: baseline; }
+.market-nav .mn-label { font-family: var(--display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.market-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; font-weight: 500; transition: color 0.1s; }
+.market-nav a:hover { color: var(--ink); }
+.market-nav a.current { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--green); padding-bottom: 2px; }
+.market-nav a.stub { color: var(--text-dim); }
+.market-nav .mn-end { margin-left: auto; color: var(--green); font-weight: 500; }
+
+/* ---- index nav (per-page section anchors) ---- */
+.index-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 20px; padding: 10px 0; overflow-x: auto; white-space: nowrap; }
+.index-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; transition: color 0.1s; }
+.index-nav a:hover { color: var(--ink); }
+.index-nav a .no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 4px; }
+
+/* ---- footer ---- */
+.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
+.footer a { color: var(--green); text-decoration: none; font-weight: 500; }
+.footer a:hover { text-decoration: underline; }
+
+@media (max-width: 768px) {
+  .page { padding: 20px 16px 48px; }
+  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .mast-meta { margin-left: 0; text-align: left; }
+}
+{% block page_css %}{% endblock %}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  {% block brand %}<h1>Mirror<br><em>Market</em></h1>{% endblock %}
+  <div class="mast-meta">
+    {% block mast_meta %}{% endblock %}
+  </div>
+</header>
+{% block prenav %}{% endblock %}
+
+<nav class="market-nav">
+  <span class="mn-label">Markets</span>
+  <a href="{{ root }}index.html"{% if current_page == 'headline' %} class="current"{% endif %}>Headline</a>
+  {% for m in market_nav %}
+  {%- set cls = ('current' if current_market == m.slug else '') ~ (' stub' if m.tier == 'stub' else '') %}
+  <a href="{{ m.href }}"{% if cls.strip() %} class="{{ cls.strip() }}"{% endif %}>{{ m.name }}</a>
+  {% endfor %}
+  <a href="{{ root }}players.html" class="mn-end{% if current_page == 'players' %} current{% endif %}">Players &rarr;</a>
+</nav>
+{% block subnav %}{% endblock %}
+
+{% block content %}{% endblock %}
+
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

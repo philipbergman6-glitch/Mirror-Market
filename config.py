@@ -352,6 +352,55 @@ WORLDBANK_PRICES_URL = (
 )
 
 # ---------------------------------------------------------------------------
+# Layer 22 — European Commission Oilseeds Market Observatory (no API key)
+#
+# The EU rapeseed leg of the Europe market page. Euronext MATIF (ECO)
+# settlements are licensed — free for internal use, EUR 167.55/month to
+# redistribute, and this project publishes — so the futures curve is not
+# ingested (#148). `Rapeseed - EU Moselle` is the Commission's weekly
+# physical FOB assessment for the same commodity in the same region,
+# CC BY 4.0, sourced by the EC from the International Grains Council.
+#
+# Same GUID trap as the Pink Sheet above: the CIRCABC deep link is opaque
+# and a rotated-away link serves a frozen workbook with HTTP 200, so the
+# fetcher resolves it from the landing page by *link text* each run. The
+# pinned URL is only the fallback — note the upstream filename typo
+# ("oliseeds"), which is exactly why the resolver does not match on it.
+# ---------------------------------------------------------------------------
+EC_OILSEEDS_LANDING_URL = (
+    "https://agriculture.ec.europa.eu/data-and-analysis/markets/overviews/"
+    "market-observatories/crops/oilseeds-and-protein-crops_en"
+)
+EC_OILSEEDS_WORLD_PRICES_URL = (
+    "https://circabc.europa.eu/sd/a/"
+    "2ddd7dcd-dff1-41b5-94b9-6cd207181a3c/oliseeds-world-prices.xlsx"
+)
+
+# Workbook column header → our series label.
+#
+# Scope is deliberately one series (#163). The same sheet also carries
+# Soyabeans Argentina/Brazil/US Gulf/Ukraine, Rapeseed AU/CA/UA and
+# Sunflowerseed EU Bordeaux/Ukraine — all parsed by the same code, so
+# widening is an edit to this dict alone. They are left out under the
+# standing preference carried from #130: only add a series that feeds a
+# rendered line. (The soybean FOB columns are a licence-clean independent
+# check on Layers 19/20/21 and are logged as fog on map #142, not built
+# here. Sunflower enters the stack on the oil leg only, per #147, and this
+# is seed.)
+EC_OILSEEDS_SERIES = {
+    "Rapeseed - EU Moselle": "EU Rapeseed (Moselle)",
+}
+
+# Every row in this layer is a weekly physical FOB assessment. Stored on the
+# rows themselves rather than kept in a display-layer lookup, because map
+# #142 carries a standing risk that board / physical / administered /
+# assessment quotes get collapsed into one "price" line — a label that
+# travels with the data cannot be lost by a consumer that forgets to look
+# it up.
+EC_OILSEEDS_CADENCE = "weekly"
+EC_OILSEEDS_QUOTE_KIND = "physical FOB assessment"
+
+# ---------------------------------------------------------------------------
 # Layer 9 — DCE (Dalian Commodity Exchange) futures via AKShare (no API key)
 # China is the world's largest soybean importer; DCE is the main exchange
 # ---------------------------------------------------------------------------
@@ -736,6 +785,50 @@ SAGIS_COMMODITIES = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 24 — SAGIS monthly soybean supply & demand (free, no API key)
+#
+# SA2 (#203) was filed for SAGIS's *weekly* imports/exports and its 8-week
+# forward intentions. Verified live 2026-08-12: those two products exist for
+# **maize and wheat only** — the weekly page's own section header reads
+# "Weekly Imports & Exports … MAIZE | WHEAT", and the only files are
+# `Intended-{MAIZE,WHEAT}-WeekEnding_*.xlsx` and
+# `IMP-EXP_Progressive_{Mielies,Koring}_*`. There is no soybean or sunflower
+# trade file on the weekly page at all, so the forward series the ticket was
+# filed for does not exist for the soy complex.
+#
+# South African soybean trade *does* exist, monthly, on the SMD (Supply and
+# Demand) page — and it carries more than trade: imports, exports split
+# border-posts vs harbours, **tonnes processed** (SA's crush volume) and
+# closing stock split storers-vs-processors. M7 ruled out an SA crush
+# *margin* (SAFEX is seed-only and the JSE meal/oil contracts are
+# cash-settled CBOT); a crush *volume* is a different quantity and is not
+# barred by that finding.
+#
+# Which file: the **season-progressive** workbook
+# `Sojabone<season><season+1>_<pubdate>[_F].xlsx`, which carries all twelve
+# months of one March–February season in one sheet. The per-month
+# announcement files (`Sojabone<YYYYMMDD>.xlsx`) hold only two months each
+# and would need one request per month of history.
+#
+# Both the URL *and* the set of published seasons rotate: the current
+# season's file is re-published every month under a new filename, and only
+# the current season plus the two most recent finals are listed. Resolve
+# from the landing page every run (Layer 8 / Layer 23 trap), and round-trip
+# the table through data/history/ so a season that rolls off the page is not
+# lost from an ephemeral CI database.
+#
+# Licence: the same SAGIS reproduction grant as Layer 23 —
+# SAGIS_ATTRIBUTION must be rendered wherever these numbers appear.
+# ---------------------------------------------------------------------------
+SAGIS_MONTHLY_DATA_URL = "https://www.sagis.org.za/sagis-monthly-data/"
+# Filename commodity token (Afrikaans on this page) → stored commodity key.
+# Deliberately the same key string Layer 23 stores, so the two SAGIS tables
+# join on commodity. Frozen for the same history-CSV reason as above.
+SAGIS_SMD_COMMODITIES = {
+    "Sojabone": "Soybeans (SAGIS)",
+}
+
+# ---------------------------------------------------------------------------
 # Layer 25 — Crop Estimates Committee (CEC), South Africa (free, no API key)
 #
 # South Africa's official area/production estimate, revised monthly through
@@ -851,7 +944,9 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "crop_progress": 12,
     "crush_inspections": 12,
     "sagis": 12,
+    "ec_oilseeds": 12,
     # Monthly publications — allow ~6 weeks.
+    "sagis_smd": 42,
     "wasde": 42,
     "psd": 42,
     "conab": 42,
@@ -929,6 +1024,17 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # candidate for freezing (a week-stamped URL that keeps resolving), which
     # is exactly what this budget is here to catch.
     "sagis": 21,
+    # SAGIS's monthly SMD lands around the 24th–27th and reports through the
+    # *previous* calendar month, so the newest month_end is ~25 days old at
+    # publication and ~55 days old the day before the next release. 90 days
+    # is that worst case plus one missed publication. The season file's URL
+    # rotates monthly, so a frozen link is a live risk here too.
+    "sagis_smd": 90,
+    # Wednesday-dated assessment published the following day, so the newest
+    # row is normally 1-8 days old. 21 tolerates exactly one missed release
+    # and fails on two — and the cadence has never actually missed one:
+    # all 397 gaps across 2018-12-26 → 2026-08-05 are exactly 7 days.
+    "ec_oilseeds": 21,
     # The CEC publishes monthly, but only Jan-Nov carry a summer-crop table:
     # the December release covers winter cereals alone, so the soybean series
     # has one legitimate ~61-day gap a year (27 Nov 2025 -> 27 Jan 2026). 70
@@ -1028,3 +1134,325 @@ HISTORY_DIR = os.path.join(os.path.dirname(__file__), "data", "history")
 # ---------------------------------------------------------------------------
 TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
 TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+
+# ---------------------------------------------------------------------------
+# MARKETS — the site's market registry (M8 #150, built by M17 #213)
+#
+# Market identity was previously scattered across COMMODITY_TICKERS,
+# GROWING_REGIONS, CURRENCY_TICKERS, DCE_CONTRACTS, MANDI_STATES,
+# MAGYP_FOB_POSITIONS, SAFEX_COMMODITIES and NOTICIAS_AGRICOLAS_URLS, and
+# nothing in the repo named "Dalian" or "Argentina" as a *market* at all.
+# This dict is the union of those: one place to read what a market IS.
+#
+# THREE RULES, all load-bearing:
+#
+# 1. POINTERS, NEVER VALUES. Every entry names a table, a column and a key —
+#    never a price, a tier or a date. M1 #143 constraint 3 computes the tier
+#    from what the DB holds on the day of generation; a hard-coded answer
+#    here would freeze today's outage into the site forever.
+# 2. KEY ORDER IS NAV ORDER IS LEDGER ORDER. Declared once (M8), consumed by
+#    the masthead nav and by M2's eight-row headline ledger, so the two can
+#    never disagree. The order is role in the trade: the board everything is
+#    priced off, the buyer, the two exporters, then the domestic markets.
+# 3. THE MARKET IS A PARAMETER, NEVER A CODE PATH. Anything a block builder
+#    would otherwise branch on (`if market == "india"`) belongs in the
+#    descriptor. See app/markets.py for the typed view and the tier rule.
+#
+# `quote_kind` is M3 #145 constraint 4 / M7 #149 finding 5: this stack spans
+# traded board prices, physical export assessments, administered official
+# minimums and weekly assessments. Collapsing those into one "price" label is
+# the easiest way to make the product dishonest, so the kind rides on the
+# descriptor and is rendered on the block.
+#
+# `cadence` gates the propagation ledger: it is daily-only (M10 #151), so a
+# weekly leg renders in a cadence-stamped context band instead of a strip row
+# that would read as an outage.
+# ---------------------------------------------------------------------------
+MARKETS = {
+    "cbot": {
+        "name": "CBOT",
+        "venue": "CME Group / CBOT (Chicago)",
+        "home_currency": "USD",
+        "currency_pair": None,          # the numeraire — no conversion
+        "price": {
+            "layer": "prices",
+            "table": "prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybeans", "Soybean Oil", "Soybean Meal"],
+            "headline_key": "Soybeans",
+            "cadence": "daily",
+            "quote_kind": "board",
+        },
+        "crush": {
+            "kind": "board",
+            "yield_set": "soy_board",
+            "table": "prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
+        },
+        # CIF NOLA barge bids over the named CBOT contract (Layer 20).
+        "basis": {
+            "layer": "gulf_bids",
+            "table": "gulf_bids",
+            "date_column": "report_date",
+            "key_column": "commodity",
+            "keys": ["Soybeans"],
+            "reference": "cbot",
+            "label": "US Gulf CIF over CBOT",
+        },
+        "weather_regions": ["US Midwest (Iowa)", "US Illinois"],
+        "psd_country": "United States",
+        "players_country": "US",
+    },
+    "dalian": {
+        "name": "Dalian",
+        "venue": "Dalian Commodity Exchange (DCE)",
+        "home_currency": "CNY",
+        "currency_pair": "CNY/USD",
+        # No.2 (B0) is the imported/GMO crush bean. No.1 (A0) is the domestic
+        # non-GMO food bean and is NOT this market's benchmark — #152 shipped
+        # the wrong one into both the crush and the vs-CBOT premium.
+        "price": {
+            "layer": "dce",
+            "table": "dce_futures",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["DCE Soybean No.2", "DCE Soybean Oil", "DCE Soybean Meal"],
+            "headline_key": "DCE Soybean No.2",
+            "cadence": "daily",
+            "quote_kind": "board",
+        },
+        "crush": {
+            "kind": "board",
+            "yield_set": "soy_board",
+            "table": "dce_futures",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "legs": {
+                "bean": "DCE Soybean No.2",
+                "oil": "DCE Soybean Oil",
+                "meal": "DCE Soybean Meal",
+            },
+        },
+        # Import parity vs CBOT, computed from the two price legs above.
+        "basis": {
+            "layer": "dce",
+            "table": "dce_futures",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["DCE Soybean No.2"],
+            "reference": "cbot",
+            "label": "DCE No.2 over CBOT (import parity)",
+        },
+        "weather_regions": ["China Heilongjiang", "China Jilin"],
+        "psd_country": "China",
+        "players_country": "CN",
+    },
+    "brazil": {
+        "name": "Brazil",
+        "venue": "CEPEA/ESALQ Paraná · Paranaguá FOB",
+        "home_currency": "BRL",
+        "currency_pair": "BRL/USD",
+        "price": {
+            "layer": "cepea",
+            "table": "brazil_spot_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (CEPEA)", "Soybean (ESALQ/B3 Paranaguá)"],
+            "headline_key": "Soybean (CEPEA)",
+            "cadence": "daily",
+            "quote_kind": "physical",
+        },
+        # M7 #149: computable only with one named Paranaguá oil/meal scrape
+        # that does not exist yet. Absent, not broken — the block says so.
+        "crush": None,
+        "crush_absent_reason": (
+            "no Brazil oil/meal cash quote is ingested — the Paranaguá premium "
+            "trio is an unbuilt scrape (M7 #149)"
+        ),
+        "basis": {
+            "layer": "agrural",
+            "table": "brazil_spot_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (AgRural Paranaguá FOB)"],
+            "reference": "cbot",
+            "label": "Paranaguá FOB over CBOT",
+        },
+        "weather_regions": ["Brazil Mato Grosso", "Brazil Parana"],
+        "psd_country": "Brazil",
+        "players_country": "BR",
+    },
+    "argentina": {
+        "name": "Argentina",
+        "venue": "MAGyP official FOB (up-river)",
+        "home_currency": "ARS",
+        "currency_pair": "ARS/USD",
+        # Ley 21.453 official minimum export values: natively USD/MT and
+        # administered, not traded. Never label this a market price.
+        "price": {
+            "layer": "magyp_fob",
+            "table": "argentina_fob",
+            "date_column": "date",
+            "key_column": "product",
+            "keys": ["Soybeans", "Soybean Oil", "Soybean Meal"],
+            "headline_key": "Soybeans",
+            "cadence": "daily",
+            "quote_kind": "administered",
+        },
+        "crush": {
+            "kind": "administered",
+            "yield_set": "soy_board",
+            "table": "argentina_fob",
+            "date_column": "date",
+            "key_column": "product",
+            "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
+            # M7 #149 / M5 #147: the meal position 23040010100B is inferred,
+            # not cross-checked against datos.gob.ar series 358, and 3 of 4
+            # inferred meal codes were wrong last time this was checked. The
+            # margin is provisional until that check lands.
+            "provisional": True,
+        },
+        "basis": {
+            "layer": "magyp_fob",
+            "table": "argentina_fob",
+            "date_column": "date",
+            "key_column": "product",
+            "keys": ["Soybeans"],
+            "reference": "cbot",
+            "label": "Argentina official FOB over CBOT",
+        },
+        "weather_regions": ["Argentina Pampas", "Argentina Cordoba"],
+        "psd_country": "Argentina",
+        "players_country": "AR",
+    },
+    "india": {
+        "name": "India",
+        "venue": "Agmarknet mandi spot (MP · MH)",
+        "home_currency": "INR",
+        "currency_pair": "INR/USD",
+        # Bean-only. NCDEX derivatives are suspended to >=2027-03-31, so there
+        # is no Indian futures curve and no India crush margin.
+        "price": {
+            "layer": "india_domestic",
+            "table": "india_domestic_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+            "headline_key": "Soybean (Mandi MP)",
+            "cadence": "daily",
+            "quote_kind": "physical",
+        },
+        "crush": None,
+        "crush_absent_reason": (
+            "mandi is bean-only — no Indian oil or meal quote exists at daily "
+            "cadence (NCDEX suspended to >=2027-03-31)"
+        ),
+        # M1 #143 caught the mandi level printing +66% over CBOT, against a
+        # source row carrying Low = INR 1,010/MT beside High = INR 71,500. The
+        # basis line stays absent until #206 validates the level.
+        "basis": None,
+        "basis_absent_reason": (
+            "mandi level fails validation against CBOT (+66%; unit mix in the "
+            "source) — blocked on #206"
+        ),
+        "weather_regions": ["India Madhya Pradesh", "India Maharashtra"],
+        "psd_country": "India",
+        "players_country": "IN",
+    },
+    "europe": {
+        "name": "Europe",
+        "venue": "EC Oilseeds Observatory (EU Moselle rapeseed)",
+        "home_currency": "EUR",
+        # EUR is absent from CURRENCY_TICKERS; the EC workbook publishes USD
+        # itself (and derives its own EUR column from it), so the page quotes
+        # the authoritative USD leg rather than a rate we do not hold.
+        "currency_pair": None,
+        # Weekly physical assessment, not the MATIF futures curve — those
+        # settlements are licensed at EUR 167.55/month and are not shown.
+        "price": {
+            "layer": "ec_oilseeds",
+            "table": "ec_oilseed_prices",
+            "date_column": "Date",
+            "key_column": "series",
+            # Stored under the display label from EC_OILSEEDS_SERIES, not the
+            # workbook's own column header.
+            "keys": ["EU Rapeseed (Moselle)"],
+            "headline_key": "EU Rapeseed (Moselle)",
+            "cadence": "weekly",
+            "quote_kind": "weekly_assessment",
+        },
+        "crush": None,
+        "crush_absent_reason": "no EU rapeseed oil or meal assessment is ingested",
+        "basis": None,
+        "basis_absent_reason": "no EU futures board to take a basis against (MATIF is licensed)",
+        "weather_regions": [],
+        "weather_absent_reason": "no European growing region is in GROWING_REGIONS",
+        "psd_country": "European Union",
+        "players_country": None,
+    },
+    "south_africa": {
+        "name": "South Africa",
+        "venue": "JSE/SAFEX (Grain SA) · SAGIS deliveries",
+        "home_currency": "ZAR",
+        "currency_pair": "ZAR/USD",
+        # LAST TRADED, not settlement: the free Grain SA table has no
+        # settlement column and JSE MTM is licensed (#157). The contract shown
+        # is the most-liquid one that session, and it must be named on the page.
+        "price": {
+            "layer": "safex",
+            "table": "safex_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (SAFEX)", "Sunflower (SAFEX)"],
+            "headline_key": "Soybean (SAFEX)",
+            "cadence": "daily",
+            "quote_kind": "board_last_traded",
+        },
+        # M7 #149 finding 4: SAFEX is seed-only and the JSE meal/oil products
+        # are cash-settled CBOT in rand, so a "margin" off them is an FX
+        # translation, not local crush economics. Established dead end.
+        "crush": None,
+        "crush_absent_reason": (
+            "SAFEX is seed-only; JSE meal/oil are cash-settled CBOT in rand, so "
+            "a margin off them is an FX translation, not crush economics (M7 #149)"
+        ),
+        "basis": None,
+        "basis_absent_reason": "no South African export assessment against a board is ingested",
+        # SA's physical-flow leg — the reason this is a flow page, not a price
+        # page (#157 -> #202). SAGIS_ATTRIBUTION must render wherever it shows.
+        "flows": {
+            "layer": "sagis",
+            "table": "sagis_deliveries",
+            "date_column": "week_end",
+            "key_column": "commodity",
+            "keys": ["Soybeans", "Sunflower Seed"],
+            "cadence": "weekly",
+        },
+        "weather_regions": ["South Africa Free State", "South Africa Mpumalanga"],
+        "psd_country": "South Africa",
+        "players_country": "ZA",
+    },
+    "nigeria": {
+        "name": "Nigeria",
+        "venue": "no domestic price venue ingested",
+        "home_currency": "NGN",
+        "currency_pair": "NGN/USD",
+        # The only market on the map with no price leg of any kind. AFEX is
+        # in flight (PR #166 / X4 #134) and pending a licence answer.
+        "price": None,
+        "price_absent_reason": (
+            "no Nigerian soybean price source is ingested — AFEX is in flight "
+            "and pending a licence answer (X4 #134)"
+        ),
+        "crush": None,
+        "crush_absent_reason": "no Nigerian price leg to build a margin from",
+        "basis": None,
+        "basis_absent_reason": "no Nigerian price leg to take a basis from",
+        "weather_regions": ["Nigeria Benue", "Nigeria Kaduna"],
+        "psd_country": "Nigeria",
+        "players_country": "NG",
+    },
+}

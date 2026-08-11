@@ -69,6 +69,7 @@ from pipeline.query import (
     read_psd,
     read_safex,
     read_sagis_deliveries,
+    read_sagis_supply_demand,
     read_wasde,
     read_weather,
 )
@@ -232,6 +233,97 @@ def _sagis_delivery_pace(df: pd.DataFrame) -> dict[str, Any]:
         out["avg3_progressive_mt"] = round(avg, 1)
         out["vs_avg3_pct"] = round((progressive - avg) / abs(avg) * 100, 1)
         out["avg3_seasons"] = [int(s) for s in recent.index]
+
+    return out
+
+
+def _sagis_smd_pace(df: pd.DataFrame) -> dict[str, Any]:
+    """Latest reported month and season-to-date pace from SAGIS's SMD.
+
+    Comparisons run at the same **month position in the season** (1 = March),
+    for the reason Layer 23 compares at the same week number: the source
+    frames a March–February marketing season, and a season-to-date total is
+    only comparable against the same number of months of the season before.
+
+    Three quantities, one row each in the briefing:
+      * crush — `processed_oil_oilcake`, tonnes of beans crushed for oil and
+        oilcake. A *volume*, never a margin: M7 established South Africa has
+        no honest crush margin (SAFEX is seed-only, the JSE meal/oil
+        contracts are cash-settled CBOT).
+      * trade — imports and whole-bean exports, the series SA2 was filed to
+        find, at the only cadence they exist for soybeans.
+      * stock — closing stock and the processors' share of it.
+
+    Returns {} when the frame is empty. Season-to-date totals are summed here
+    rather than stored; the layer keeps components only.
+    """
+    if df is None or df.empty:
+        return {}
+
+    frame = df.dropna(subset=["month_end"]).copy()
+    if frame.empty:
+        return {}
+
+    frame["season_year"] = frame["season_year"].astype(int)
+    frame["month_number"] = frame["month_number"].astype(int)
+
+    current_season = int(frame["season_year"].max())
+    current = frame[frame["season_year"] == current_season].sort_values("month_number")
+    if current.empty:
+        return {}
+
+    latest = current.iloc[-1]
+    position = int(latest["month_number"])
+    month_end = pd.Timestamp(latest["month_end"])
+
+    def _value(row, column: str) -> float | None:
+        value = row.get(column)
+        return round(float(value), 1) if pd.notna(value) else None
+
+    out: dict[str, Any] = {
+        "season_year": current_season,
+        "season_label": f"{current_season}/{current_season + 1}",
+        "month_number": position,
+        "month_end": str(month_end.date()),
+        "month_label": month_end.strftime("%b %Y"),
+        "report_month": (
+            pd.Timestamp(latest["report_month"]).strftime("%Y-%m")
+            if pd.notna(latest.get("report_month")) else None
+        ),
+        "crush_mt": _value(latest, "processed_oil_oilcake"),
+        "processed_total_mt": _value(latest, "processed_total"),
+        "imports_mt": _value(latest, "imports"),
+        "exports_whole_mt": _value(latest, "exports_whole"),
+        "exports_harbours_mt": _value(latest, "exports_harbours"),
+        "exports_border_posts_mt": _value(latest, "exports_border_posts"),
+        "closing_stock_mt": _value(latest, "unutilised_stock"),
+        "stock_processors_mt": _value(latest, "stock_processors"),
+    }
+
+    stock = out["closing_stock_mt"]
+    processors = out["stock_processors_mt"]
+    if stock and processors is not None:
+        out["stock_processors_share_pct"] = round(processors / stock * 100, 1)
+
+    # Season-to-date, and the same months of the prior season.
+    prior = frame[
+        (frame["season_year"] == current_season - 1)
+        & (frame["month_number"] <= position)
+    ]
+    for column, name in (
+        ("processed_oil_oilcake", "crush"),
+        ("imports", "imports"),
+        ("exports_whole", "exports_whole"),
+    ):
+        season_to_date = float(current[column].sum())
+        out[f"{name}_season_to_date_mt"] = round(season_to_date, 1)
+        if len(prior) == position and prior[column].notna().all():
+            previous = float(prior[column].sum())
+            out[f"{name}_prev_season_mt"] = round(previous, 1)
+            if previous:
+                out[f"{name}_yoy_pct"] = round(
+                    (season_to_date - previous) / abs(previous) * 100, 1
+                )
 
     return out
 
@@ -1677,6 +1769,19 @@ def emerging_markets_analysis() -> dict:
                         entry["south_africa_deliveries"] = sagis_entry
             except Exception as exc:
                 logger.warning("South Africa SAGIS deliveries analytics failed: %s", exc)
+
+            # --- SAGIS monthly supply & demand (crush, trade, stocks) ---
+            # Separate try for the same reason as the block above: a monthly
+            # balance sheet and a weekly flow fail independently, and the SA
+            # page loses only the block whose source broke.
+            try:
+                smd_df = read_sagis_supply_demand("Soybeans (SAGIS)")
+                pace = _sagis_smd_pace(smd_df)
+                if pace:
+                    pace["attribution"] = SAGIS_ATTRIBUTION
+                    entry["south_africa_supply_demand"] = pace
+            except Exception as exc:
+                logger.warning("South Africa SAGIS S&D analytics failed: %s", exc)
 
             # --- CEC official crop estimates (Layer 25) ---
             # Its own try for the same reason as the flow block above: the

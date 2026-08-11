@@ -1,49 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mirror Market — Players · Global Counterparty Map</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --paper: #FAFAF7;
-  --card: #FFFFFF;
-  --rule: #D8DCD8;
-  --rule-heavy: #191C1A;
-  --ink: #191C1A;
-  --green: #2D6A4F;
-  --green-light: #2D6A4F;
-  --text: #191C1A;
-  --text-muted: #5D6660;
-  --text-dim: #9BA39E;
-  --bullish: #1F7A3D;
-  --bearish: #C23B2E;
-  --warning: #A8730A;
-  --info: #2F5D8F;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --display: 'Archivo', sans-serif;
-  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
-.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.muted { color: var(--text-muted); }
+{% extends "_base.html.j2" %}
+{#
+  The players page (issue #123). Migrated onto _base.html.j2 by M17 #213: it
+  carried its own copy of the palette, the fonts and the masthead, and M8 #150
+  named it as the page that would otherwise drift from every other page.
+#}
+{% block title %}Mirror Market — Players · Global Counterparty Map{% endblock %}
 
-.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
-
-/* ---- masthead ---- */
-.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
-.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
-.masthead h1 em { font-style: normal; color: var(--green); }
-.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
-.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
-.mast-meta a { color: var(--green); text-decoration: none; font-weight: 500; }
-.mast-meta a:hover { text-decoration: underline; }
-
+{% block page_css %}
 /* ---- filter bar ---- */
 .filter-bar { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); padding: 12px 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .filter-bar label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px; }
@@ -104,33 +67,23 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .cite-link:hover { text-decoration: underline; }
 .pc-foot { font-size: 11px; color: var(--text-dim); padding-top: 8px; }
 
-.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
-.footer a { color: var(--green); text-decoration: none; font-weight: 500; }
-.footer a:hover { text-decoration: underline; }
-
 .no-results { padding: 40px 0; text-align: center; color: var(--text-dim); font-size: 13px; display: none; }
 
 @media (max-width: 768px) {
-  .page { padding: 20px 16px 48px; }
-  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .mast-meta { margin-left: 0; text-align: left; }
   .filter-bar select { min-width: 110px; }
   .pc-dests { display: none; }
 }
-</style>
-</head>
-<body>
-<div class="page">
+{% endblock %}
 
-<header class="masthead">
-  <h1>Mirror<br><em>Players</em></h1>
-  <div class="mast-meta">
+{% block brand %}<h1>Mirror<br><em>Players</em></h1>{% endblock %}
+
+{% block mast_meta %}
     <div class="day">{{ day_line }}</div>
     <div>Generated {{ generated_at }} · <span class="num">{{ total_players }}</span> players · <span class="num">{{ tier1_players }}</span> tier-1</div>
-    <div><a href="index.html">&larr; Back to the daily read</a></div>
-  </div>
-</header>
+    <div><a href="{{ root }}index.html">&larr; Back to the daily read</a></div>
+{% endblock %}
 
+{% block content %}
 <div class="filter-bar" id="filter-bar">
   <label>Role
     <select id="f-role">
@@ -272,12 +225,12 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
   every entry carries its own "as of" date. Country context numbers are built daily from the Mirror Market pipeline (USDA PSD,
   FAS export sales, Open-Meteo). Not financial advice.
   <br><br>
-  <a href="index.html">&larr; Daily read</a> ·
+  <a href="{{ root }}index.html">&larr; Daily read</a> ·
   <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
 </div>
+{% endblock %}
 
-</div>
-
+{% block scripts %}
 <script>
 // Client-side filtering: AND across facets; a card matches a facet when its
 // space-separated token list contains the selected value.
@@ -325,5 +278,4 @@ document.getElementById('f-reset').addEventListener('click', () => {
   applyFilters();
 });
 </script>
-</body>
-</html>
+{% endblock %}

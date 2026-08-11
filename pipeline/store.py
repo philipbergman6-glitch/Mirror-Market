@@ -14,7 +14,12 @@ from typing import Any
 
 import pandas as pd
 
-from config import DB_PATH, STORAGE_DIR
+from config import (
+    DB_PATH,
+    EC_OILSEEDS_CADENCE,
+    EC_OILSEEDS_QUOTE_KIND,
+    STORAGE_DIR,
+)
 from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
 from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
@@ -430,6 +435,29 @@ def save_worldbank_data(commodity: str, df: pd.DataFrame):
           ["commodity", "Date"], f"worldbank/{commodity}")
 
 
+def save_ec_oilseed_prices(series: str, df: pd.DataFrame):
+    """Write EC weekly world oilseed prices → 'ec_oilseed_prices'.
+
+    cadence and quote_kind are stamped on every row rather than looked up at
+    display time: this is a weekly *physical assessment*, and map #142 carries
+    a standing risk that such quotes get read as daily board prices once they
+    share a USD/MT axis with CBOT and Dalian.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["series"] = series
+    df["Date"] = _date(df["Date"])
+    df["cadence"] = EC_OILSEEDS_CADENCE
+    df["quote_kind"] = EC_OILSEEDS_QUOTE_KIND
+    _save(
+        "ec_oilseed_prices",
+        df[["series", "Date", "price_usd", "price_eur", "cadence", "quote_kind"]],
+        ["series", "Date"],
+        f"ec_oilseeds/{series}",
+    )
+
+
 def save_export_sales(commodity: str, df: pd.DataFrame):
     """Write weekly export sales → 'export_sales'."""
     if df.empty:
@@ -704,6 +732,45 @@ def save_sagis_deliveries(commodity: str, df: pd.DataFrame):
         raise ValueError(f"save_sagis_deliveries: frame missing columns {missing}")
     _save("sagis_deliveries", df[_SAGIS_COLUMNS],
           ["commodity", "season_year", "week_number"], f"sagis/{commodity}")
+
+
+_SAGIS_SMD_COLUMNS = [
+    "commodity", "season_year", "month_number", "month_end", "report_month",
+    "opening_stock", "deliveries", "imports", "processed_total",
+    "processed_human", "processed_feed", "processed_oil_oilcake",
+    "withdrawn_by_producers", "released_to_end_consumers", "seed_for_planting",
+    "exports_whole", "exports_border_posts", "exports_harbours",
+    "sundries_net_dispatches", "sundries_surplus_deficit", "unutilised_stock",
+    "stock_storers_traders", "stock_processors", "products_exported",
+    "products_exported_africa", "products_exported_other", "unit",
+]
+
+
+def save_sagis_smd(commodity: str, df: pd.DataFrame):
+    """Write SAGIS monthly soybean supply & demand (MT) → 'sagis_supply_demand'.
+
+    INSERT OR REPLACE on (commodity, season_year, month_number) is load-
+    bearing, as it is for Layer 23: SAGIS revises months for a year or more
+    after the fact — a month first published as preliminary is restated in
+    later reports, and closed seasons keep moving — so every run legitimately
+    rewrites rows it has already stored. `report_month` records which vintage
+    the stored numbers came from.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "unit" not in df.columns:
+        df["unit"] = "MT"
+    for col in ("month_end", "report_month"):
+        if col in df.columns:
+            # The cleaner hands back Timestamp columns; SQLite takes ISO text.
+            df[col] = _date(df[col])
+    missing = [c for c in _SAGIS_SMD_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_sagis_smd: frame missing columns {missing}")
+    _save("sagis_supply_demand", df[_SAGIS_SMD_COLUMNS],
+          ["commodity", "season_year", "month_number"], f"sagis_smd/{commodity}")
 
 
 _CEC_COLUMNS = [

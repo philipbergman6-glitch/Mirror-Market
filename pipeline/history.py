@@ -81,6 +81,12 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # REPLACE, so SAGIS's ongoing revisions to closed seasons still land:
     # the CSV seeds, the live file overwrites, the export re-writes.
     "sagis_deliveries": ("commodity", "season_year", "week_number"),
+    # The SMD page lists only the *current* season's workbook plus the two
+    # most recent finals (verified 2026-08-12: 2026/27, 2025/26F, 2024/25F).
+    # Older seasons exist only as per-month announcement files, which this
+    # layer does not fetch — so a season rolling off the landing page is
+    # gone from an ephemeral CI database, permanently. ~12 rows/season/year.
+    "sagis_supply_demand": ("commodity", "season_year", "month_number"),
 }
 
 

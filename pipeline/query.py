@@ -133,6 +133,16 @@ def read_worldbank_prices(commodity: str | None = None) -> pd.DataFrame:
     return _read_table("worldbank_prices", "commodity", commodity, missing_ok=False)
 
 
+def read_ec_oilseed_prices(series: str | None = None) -> pd.DataFrame:
+    """Read EC weekly world oilseed prices from SQLite.
+
+    Rows carry `cadence` and `quote_kind` — this is a weekly physical FOB
+    assessment, not a daily board price, and must not be plotted on a daily
+    axis as if a flat week were a flat market.
+    """
+    return _read_table("ec_oilseed_prices", "series", series, date_cols=("Date",))
+
+
 def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
     """Read export sales data from SQLite."""
     return _read_table(
@@ -246,6 +256,22 @@ def read_sagis_deliveries(commodity: str | None = None) -> pd.DataFrame:
     """
     return _read_table(
         "sagis_deliveries", "commodity", commodity, date_cols=("week_end",)
+    )
+
+
+def read_sagis_supply_demand(commodity: str | None = None) -> pd.DataFrame:
+    """Read SAGIS South Africa monthly soybean supply & demand (MT) from SQLite.
+
+    `month_end` and `report_month` are parsed to datetime; `season_year` is
+    the *start* year of the March–February marketing season and
+    `month_number` its position in that season (1 = March). Rows are physical
+    flow and stock, not price — `processed_oil_oilcake` is South Africa's
+    crush volume, not a margin. Any surface rendering these must carry
+    `config.SAGIS_ATTRIBUTION`.
+    """
+    return _read_table(
+        "sagis_supply_demand", "commodity", commodity,
+        date_cols=("month_end", "report_month"),
     )
 
 

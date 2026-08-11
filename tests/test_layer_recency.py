@@ -451,15 +451,23 @@ def test_critical_layer_ignores_an_empty_fails_override(freshness_calls):
 
 def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers():
     """Overriding the derived rule is a per-layer judgement call — keep the
-    exception list explicit rather than incidental. Both entries are layers
-    with no floor whose upstream always carries history."""
+    exception list explicit rather than incidental. Every entry is a layer
+    with no floor whose upstream always carries history:
+
+      worldbank    — the Pink Sheet workbook, 60+ years of monthly rows
+      wasde        — every monthly workbook carries 12+ months
+      ec_oilseeds  — a single series, so nothing to derive a floor from; the
+                     EC workbook ships ~400 weekly rows back to 2018 and has
+                     not missed a Wednesday since, so empty means the fetch,
+                     the parse or the stale-file guard broke (#163)
+    """
     opted_in = {
         layer.key
         for layer in main._build_dict_layers()
         if layer.empty_fails is not None
     }
 
-    assert opted_in == {"worldbank", "wasde"}
+    assert opted_in == {"worldbank", "wasde", "ec_oilseeds"}
     assert not opted_in & set(LAYER_MIN_KEYS)  # nothing floored needs an override
 
 
@@ -598,6 +606,39 @@ def test_sagis_budget_tolerates_a_missed_publication():
     assert LAYER_MAX_DATA_AGE_DAYS["sagis"] >= 19
 
 
+# ── Layer 24 (SAGIS SMD): the observation date lives in `month_end` ────────
+# Second layer, second date column. The season workbook's URL rotates every
+# month, so a frozen link would keep serving the same twelve columns — the
+# gate only sees that if `month_end` is a recognised observation date.
+
+
+def _sagis_smd_result(days_ago: float):
+    from pipeline.results import FetchResult
+
+    end = pd.Timestamp.now().normalize() - pd.Timedelta(days=days_ago)
+    frame = pd.DataFrame({
+        "commodity": ["Soybeans (SAGIS)"],
+        "season_year": [2026],
+        "month_number": [4],
+        "month_end": [end],
+        "report_month": [end],
+        "processed_oil_oilcake": [204103.0],
+        "imports": [575.0],
+        "exports_whole": [22959.0],
+        "unutilised_stock": [2058796.0],
+        "unit": ["MT"],
+    })
+    return FetchResult.ok({"Soybeans (SAGIS)": frame})
+
+
+def _run_sagis_smd(days_ago: float) -> bool:
+    return main._run_scraper_layer(
+        "sagis_smd", "Layer 24", "SAGIS South Africa monthly soybean S&D",
+        fetch=lambda: _sagis_smd_result(days_ago),
+        save=lambda n, d: None,
+    )
+
+
 # ── Layer 25 (CEC): the observation date lives in `release_date` ───────────
 # The CEC layer is the whole reason the SAGIS mirror can be trusted as the
 # fetch target rather than the issuing department: a mirror that quietly
@@ -632,6 +673,23 @@ def _run_cec(days_ago: float) -> bool:
         fetch=lambda: _cec_result(days_ago),
         save=lambda n, d: None,
     )
+
+
+def test_sagis_smd_month_end_is_a_recognised_observation_date():
+    assert "month_end" in main._DATE_COLUMNS
+
+
+def test_sagis_smd_within_budget_stamps_success(freshness_calls):
+    """Normal worst case: the report lands ~24th for the previous month, so
+    the newest month_end is ~55 days old the day before the next release."""
+    assert _run_sagis_smd(days_ago=55) is True
+    assert [c["status"] for c in freshness_calls] == ["success"]
+
+
+def test_sagis_smd_frozen_workbook_records_failed(freshness_calls):
+    assert _run_sagis_smd(days_ago=LAYER_MAX_DATA_AGE_DAYS["sagis_smd"] + 1) is False
+    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert "sagis_smd" in main._HARD_FAILURES
 
 
 def test_cec_release_date_is_a_recognised_observation_date():

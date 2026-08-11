@@ -41,6 +41,7 @@ from fetchers.cec import fetch_cec_estimates
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.cot import fetch_cot_recent
+from fetchers.ec_oilseeds import fetch_ec_oilseed_prices
 from fetchers.eia import fetch_all_eia
 from fetchers.eia import is_configured as eia_configured
 from fetchers.export_sales import fetch_all_export_sales
@@ -53,7 +54,7 @@ from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
-from fetchers.sagis import fetch_sagis_deliveries
+from fetchers.sagis import fetch_sagis_deliveries, fetch_sagis_supply_demand
 from fetchers.usda import (
     fetch_all_crop_progress,
     fetch_crush_data,
@@ -70,6 +71,7 @@ from pipeline.clean import (
     clean_conab,
     clean_cot,
     clean_dce_futures,
+    clean_ec_oilseeds,
     clean_eia,
     clean_export_sales,
     clean_forward_curve,
@@ -80,6 +82,7 @@ from pipeline.clean import (
     clean_psd,
     clean_safex,
     clean_sagis_deliveries,
+    clean_sagis_smd,
     clean_wasde,
     clean_weather,
     clean_worldbank,
@@ -97,6 +100,7 @@ from pipeline.store import (
     save_crop_progress,
     save_currency_data,
     save_dce_futures_data,
+    save_ec_oilseed_prices,
     save_eia_data,
     save_export_sales,
     save_forward_curve,
@@ -111,6 +115,7 @@ from pipeline.store import (
     save_psd_data,
     save_safex,
     save_sagis_deliveries,
+    save_sagis_smd,
     save_usda_data,
     save_wasde,
     save_weather_data,
@@ -216,7 +221,8 @@ def _mark_stale(
 # reaching _finalize_layer are post-clean, so these are the cleaners' own
 # conventions (pipeline/clean.py), not the raw upstream ones.
 _DATE_COLUMNS = (
-    "Date", "date", "week_ending", "week_end", "report_date", "release_date",
+    "Date", "date", "week_ending", "week_end", "month_end", "report_date",
+    "release_date",
 )
 
 
@@ -592,6 +598,18 @@ def _build_dict_layers() -> list[DictLayer]:
             empty_fails=True,
         ),
         DictLayer(
+            "ec_oilseeds", "Layer 22", "EC weekly EU rapeseed (Moselle) FOB",
+            fetch=lambda: fetch_ec_oilseed_prices(),
+            save=lambda n, d: save_ec_oilseed_prices(n, d),
+            clean=lambda n, d: clean_ec_oilseeds(d),
+            # Single series, so no LAYER_MIN_KEYS floor to derive from. The
+            # workbook carries ~400 weekly rows of history on every fetch and
+            # has not missed a Wednesday since 2018 — an empty return means
+            # the download, the parse, or the stale-file guard broke, never
+            # "the Commission published nothing this week".
+            empty_fails=True,
+        ),
+        DictLayer(
             "dce", "Layer 9", "DCE futures (AKShare)",
             fetch=lambda: fetch_dce_futures(),
             save=lambda n, d: save_dce_futures_data(n, d),
@@ -814,10 +832,21 @@ def run() -> int:
         save=lambda n, d: save_sagis_deliveries(n, d),
         clean=lambda d: clean_sagis_deliveries(d),
     )
+    # Layer 24: the same reporter's monthly balance sheet — SA soybean
+    # imports, exports, crush volume and stocks. SA2 (#203) was filed for
+    # SAGIS's *weekly* trade flow and its 8-week forward intentions; those
+    # are published for maize and wheat only, so no soy trade series exists
+    # at weekly cadence (verified live 2026-08-12). The season workbook
+    # always carries at least one reported month, so empty_fails stays on.
+    results["sagis_smd"] = _run_scraper_layer(
+        "sagis_smd", "Layer 24", "SAGIS South Africa monthly soybean S&D",
+        fetch=lambda: fetch_sagis_supply_demand(),
+        save=lambda n, d: save_sagis_smd(n, d),
+        clean=lambda d: clean_sagis_smd(d),
+    )
     # Layer 25: South Africa's official crop estimate. The layer re-reads
     # every release in its parse window each run, so an empty return means
     # the listing page or the report layout changed — empty_fails stays on.
-    # Layer 24 is the SAGIS monthly supply & demand balance (PR #215).
     results["cec"] = _run_scraper_layer(
         "cec", "Layer 25", "CEC South Africa official crop estimates",
         fetch=lambda: fetch_cec_estimates(),

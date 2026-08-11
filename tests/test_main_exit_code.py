@@ -66,6 +66,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_all_regions": empty_dict,
         "fetch_psd_all": empty_dict,
         "fetch_worldbank_prices": empty_dict,
+        "fetch_ec_oilseed_prices": empty_dict,
         "fetch_dce_futures": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,
@@ -85,6 +86,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_mandi_prices": FetchResult.empty(),
         "fetch_magyp_fob": FetchResult.empty(),
         "fetch_sagis_deliveries": FetchResult.empty(),
+        "fetch_sagis_supply_demand": FetchResult.empty(),
         "fetch_cec_estimates": FetchResult.empty(),
     }
     # #127 was a one-time fix; this makes it permanent. Any fetcher added to
