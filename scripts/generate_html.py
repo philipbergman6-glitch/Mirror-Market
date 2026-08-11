@@ -154,6 +154,9 @@ def _build_freshness_items() -> list[dict]:
     return items
 
 
+_HEALTH_CRITICAL_NOTE = "data health critical"
+
+
 def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
     """Demote, in place, every layer a health critical is attributed to.
 
@@ -190,10 +193,18 @@ def _apply_health_criticals(freshness_items: list[dict], health: dict | None) ->
             ", ".join(sorted(unmapped)),
         )
 
+    # Demote, never downgrade: `old` (the layer's last run failed) is a
+    # stronger statement than `degraded`, and a layer that already lost its
+    # fresh badge doesn't need to lose it twice. Only `fresh` changes status
+    # — everything non-disabled still picks up the annotation, so a stale
+    # layer that is *also* health-critical says so in the sidebar.
     for item in freshness_items:
-        if item["name"] in degraded and item["status"] not in ("disabled", "degraded"):
+        if item["name"] not in degraded or item["status"] == "disabled":
+            continue
+        if item["status"] == "fresh":
             item["status"] = "degraded"
-            item["age"] = f"{item['age']} · data health critical"
+        if _HEALTH_CRITICAL_NOTE not in item["age"]:
+            item["age"] = f"{item['age']} · {_HEALTH_CRITICAL_NOTE}"
 
     return {
         "degraded_layers": sorted(degraded),

@@ -75,6 +75,34 @@ def test_demotion_is_reflected_in_the_shared_freshness_items() -> None:
     assert by_name["prices"]["status"] == "fresh"
 
 
+def test_a_failed_layer_keeps_its_stronger_status_and_gains_the_note() -> None:
+    """Demote, never downgrade.
+
+    `old` means the layer's last run failed outright — a stronger claim
+    than `degraded`. Overwriting it would lose that from the sidebar
+    badge, and the layer is out of the fresh count either way.
+    """
+    items = [{"name": "weather", "status": "old", "age": "failed · last good 12d ago"}]
+    masthead = generate_html._build_masthead(
+        items, NOW, health={"issues": [_critical("weather")]}
+    )
+
+    assert items[0]["status"] == "old"
+    assert items[0]["age"] == "failed · last good 12d ago · data health critical"
+    assert masthead["fresh_count"] == 0
+    assert masthead["degraded_layers"] == ["weather"]
+
+
+def test_applying_criticals_twice_does_not_double_annotate() -> None:
+    """`freshness_items` is mutated in place — the note must not stack."""
+    items = _items("weather")
+    health = {"issues": [_critical("weather")]}
+    generate_html._build_masthead(items, NOW, health)
+    generate_html._build_masthead(items, NOW, health)
+
+    assert items[0]["age"] == "1h ago · data health critical"
+
+
 def test_warnings_do_not_demote_a_layer() -> None:
     items = _items("prices")
     warning = dict(_critical("prices"), severity="warning")
