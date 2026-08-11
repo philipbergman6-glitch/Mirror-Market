@@ -17,6 +17,7 @@ from trust import (
     Finding,
     FindingSeverity,
     FreshnessState,
+    FxPairIdentity,
     ObservationIdentity,
     ObservationRevision,
     QualityState,
@@ -29,6 +30,7 @@ from trust import (
     TemporaryDirectoryTrustRepository,
     ValidationPolicy,
     derive_observation,
+    derive_usd_mt_observation,
 )
 from trust.registry import DatasetContract
 
@@ -220,6 +222,161 @@ def test_recursive_derived_revision_can_be_used_as_an_eligible_input() -> None:
     assert doubled.input_revision_ids == (spread.revision_id,)
 
 
+@pytest.mark.parametrize(
+    ("commodity", "product_form", "unit", "value", "expected"),
+    [
+        ("soybean", "beans", "cents-bu", "1000", Decimal("1000") * Decimal("36.7437") / Decimal("100")),
+        ("soybean-meal", "meal", "usd-short-ton", "300", Decimal("300") / Decimal("0.907185")),
+        ("soybean-oil", "oil", "cents-lb", "50", Decimal("50") * Decimal("2204.62") / Decimal("100")),
+    ],
+)
+def test_usd_mt_conversion_uses_contract_specific_native_units(
+    commodity: str,
+    product_form: str,
+    unit: str,
+    value: str,
+    expected: Decimal,
+) -> None:
+    fixture = _fixture()
+    price = _revision(
+        _commodity_identity(fixture, commodity=commodity, product_form=product_form, unit=unit),
+        fixture["bid_artifact"],
+        Decimal(value),
+        NOW,
+    )
+
+    result = derive_usd_mt_observation(
+        price_revision=price,
+        contracts_by_dataset=fixture["contracts"],
+        results_by_dataset=fixture["results"],
+    )
+
+    assert result.revision is not None
+    assert result.revision.value == expected
+    assert result.revision.identity.currency == "USD"
+    assert result.revision.identity.unit == "usd-mt"
+    assert result.revision.calculation_version == "usd-mt/1.0.0"
+    assert result.revision.input_revision_ids == (price.revision_id,)
+
+
+def test_usd_mt_conversion_applies_latest_known_good_fx_with_date_policy() -> None:
+    fixture = _fixture()
+    price = _revision(
+        _commodity_identity(fixture, currency="BRL", unit="brl-mt"),
+        fixture["bid_artifact"],
+        Decimal("2100"),
+        NOW,
+    )
+    fx = _fx_revision(fixture, pair="BRL/USD", value="0.184", effective_date=date(2026, 8, 9))
+
+    result = derive_usd_mt_observation(
+        price_revision=price,
+        fx_revision=fx,
+        contracts_by_dataset={**fixture["contracts"], fx.identity.dataset_id: _contract(fixture["ask_dataset"])},
+        results_by_dataset={**fixture["results"], fx.identity.dataset_id: fixture["ask_result"]},
+    )
+
+    assert result.revision is not None
+    assert result.revision.value == Decimal("386.400")
+    assert result.revision.identity.effective_date == price.identity.effective_date
+    assert result.revision.input_revision_ids == tuple(sorted((price.revision_id, fx.revision_id)))
+
+
+@pytest.mark.parametrize(
+    ("fx", "reason"),
+    [
+        (None, "fx.missing"),
+        ("stale", "fx.stale"),
+        ("future", "fx.date"),
+        ("quarantined", "fx.quality"),
+        ("wrong_pair", "fx.pair"),
+    ],
+)
+def test_usd_mt_conversion_returns_unavailable_for_missing_misaligned_or_quarantined_fx(fx, reason: str) -> None:
+    fixture = _fixture()
+    price = _revision(
+        _commodity_identity(fixture, currency="BRL", unit="brl-mt"),
+        fixture["bid_artifact"],
+        Decimal("2100"),
+        NOW,
+    )
+    fx_revision = {
+        "stale": _fx_revision(fixture, pair="BRL/USD", value="0.184", effective_date=date(2026, 8, 5)),
+        "future": _fx_revision(fixture, pair="BRL/USD", value="0.184", effective_date=date(2026, 8, 11)),
+        "quarantined": replace(
+            _fx_revision(fixture, pair="BRL/USD", value="0.184", effective_date=date(2026, 8, 10)),
+            quality_state=QualityState.QUARANTINED,
+        ),
+        "wrong_pair": _fx_revision(fixture, pair="CNY/USD", value="0.140", effective_date=date(2026, 8, 10)),
+    }.get(fx)
+    contracts = fixture["contracts"]
+    results = fixture["results"]
+    if fx_revision is not None:
+        contracts = {**contracts, fx_revision.identity.dataset_id: _contract(fixture["ask_dataset"])}
+        results = {**results, fx_revision.identity.dataset_id: fixture["ask_result"]}
+
+    result = derive_usd_mt_observation(
+        price_revision=price,
+        fx_revision=fx_revision,
+        contracts_by_dataset=contracts,
+        results_by_dataset=results,
+    )
+
+    assert result.revision is None
+    assert reason in result.unavailable_reasons
+
+
+def test_usd_mt_conversion_does_not_double_convert_existing_usd_mt_prices() -> None:
+    fixture = _fixture()
+    price = _revision(
+        _commodity_identity(fixture, unit="usd-mt"),
+        fixture["bid_artifact"],
+        Decimal("425.50"),
+        NOW,
+    )
+
+    result = derive_usd_mt_observation(
+        price_revision=price,
+        contracts_by_dataset=fixture["contracts"],
+        results_by_dataset=fixture["results"],
+    )
+
+    assert result.revision is not None
+    assert result.revision.value == Decimal("425.50")
+
+
+def test_usd_mt_revision_changes_when_price_or_fx_revision_changes() -> None:
+    fixture = _fixture()
+    price = _revision(
+        _commodity_identity(fixture, currency="BRL", unit="brl-mt"),
+        fixture["bid_artifact"],
+        Decimal("2100"),
+        NOW,
+    )
+    fx = _fx_revision(fixture, pair="BRL/USD", value="0.184", effective_date=date(2026, 8, 10))
+    contracts = {**fixture["contracts"], fx.identity.dataset_id: _contract(fixture["ask_dataset"])}
+    results = {**fixture["results"], fx.identity.dataset_id: fixture["ask_result"]}
+
+    first = derive_usd_mt_observation(
+        price_revision=price,
+        fx_revision=fx,
+        contracts_by_dataset=contracts,
+        results_by_dataset=results,
+    ).revision
+    changed_fx = _fx_revision(fixture, pair="BRL/USD", value="0.190", effective_date=date(2026, 8, 10))
+    second = derive_usd_mt_observation(
+        price_revision=price,
+        fx_revision=changed_fx,
+        contracts_by_dataset=contracts,
+        results_by_dataset=results,
+    ).revision
+
+    assert first is not None
+    assert second is not None
+    assert second.revision_id != first.revision_id
+    assert second.input_revision_ids == tuple(sorted((price.revision_id, changed_fx.revision_id)))
+
+
 def _fixture() -> dict[str, object]:
     run = Run(code_revision="abc123", started_at=NOW, ended_at=NOW + timedelta(minutes=1), status=RunStatus.SUCCEEDED)
     bid_source = Source("bid-src", "Bid source")
@@ -334,6 +491,60 @@ def _identity(source: Source, dataset: Dataset, *, source_record_id: str) -> Obs
         location="up-river",
         source_record_id=source_record_id,
     )
+
+
+def _commodity_identity(
+    fixture: dict[str, object],
+    *,
+    commodity: str = "soybean",
+    product_form: str = "beans",
+    currency: str = "USD",
+    unit: str = "cents-bu",
+) -> ObservationIdentity:
+    dataset = fixture["bid_dataset"]
+    source = fixture["bid_source"]
+    return ObservationIdentity(
+        source_id=source.source_id,
+        dataset_id=dataset.dataset_id,
+        dataset_key=dataset.key,
+        commodity=commodity,
+        product_form=product_form,
+        price_type="settlement",
+        currency=currency,
+        unit=unit,
+        effective_date=date(2026, 8, 10),
+        venue="cbot" if currency == "USD" else None,
+        location=None if currency == "USD" else "paranagua",
+        source_record_id=f"{commodity}:{product_form}:{currency}:{unit}",
+    )
+
+
+def _fx_revision(
+    fixture: dict[str, object],
+    *,
+    pair: str,
+    value: str,
+    effective_date: date,
+) -> ObservationRevision:
+    dataset = fixture["ask_dataset"]
+    source = fixture["ask_source"]
+    fx_pair = FxPairIdentity(*pair.split("/"))
+    artifact = fixture["ask_artifact"]
+    identity = ObservationIdentity(
+        source_id=source.source_id,
+        dataset_id=dataset.dataset_id,
+        dataset_key=dataset.key,
+        commodity="foreign-exchange",
+        product_form=fx_pair.product_form,
+        price_type="market-close",
+        currency=fx_pair.quote_currency,
+        unit=fx_pair.unit,
+        effective_date=effective_date,
+        venue="test-fx",
+        fx_pair=fx_pair,
+        source_record_id=pair,
+    )
+    return _revision(identity, artifact, Decimal(value), NOW)
 
 
 def _artifact(source: Source, dataset: Dataset, content_hash: str) -> ArtifactReference:
