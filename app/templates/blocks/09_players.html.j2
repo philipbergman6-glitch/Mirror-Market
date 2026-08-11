@@ -1,0 +1,15 @@
+{# 09 Players — the counterparty map, filtered to this market's country. #}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set d = block.data %}
+<div class="grid grid-2">
+  <div class="mc">
+    <div class="mc-label">{{ d.country }} entries</div>
+    <div class="mc-val">{{ d.count }}</div>
+    <div class="mc-delta muted">{% for role, n in d.roles %}{{ role }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Names</div>
+    <div class="mc-delta">{{ d.names|join(' · ') }}</div>
+    <div class="caption"><a href="{{ root }}{{ d.href }}">Full counterparty map &rarr;</a></div>
+  </div>
+</div>

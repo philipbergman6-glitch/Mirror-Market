@@ -1,0 +1,23 @@
+{# 04c Emerging markets — one shape per country, filled from data.
+
+   Every panel here is a titled group of cards, so the template never branches
+   on which country it is looking at. That is the same "market is a parameter,
+   never a code path" rule the market pages are built on (M8 #150); this
+   section is where the eight per-market pages came from and it will dissolve
+   into them (M2 #144). #}
+{% import 'sections/_cards.html.j2' as c %}
+{% for country in s.countries %}
+<div class="subhdr">{{ country.name }}</div>
+{% for note in country.notes %}
+<div class="alert alert-warn">{{ note }}</div>
+{% endfor %}
+{% for group in country.groups %}{{ c.group(group) }}{% endfor %}
+{% if country.weather_alerts %}
+{% for w in country.weather_alerts %}
+<div class="alert alert-warn">{{ w.region }}: {{ w.alert }} — max {{ w.temp_max if w.temp_max is not none else 'n/a' }}C, precip {{ '%.0f'|format(w.precip or 0) }}mm</div>
+{% endfor %}
+{% elif country.weather_checked %}
+<div class="alert alert-ok">No active weather alerts in {{ country.name }}</div>
+{% endif %}
+<hr class="divider">
+{% endfor %}

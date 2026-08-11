@@ -1,8 +1,7 @@
 """The nine-block envelope every market block returns (M1 #143, M8 #150).
 
 M1 fixed the block set and its order; M8 fixed the return type. This module is
-the type, plus the skeleton builder M17 ships and M18 #214 replaces block by
-block.
+the type; ``app/block_builders.py`` is what fills it (M18 #214).
 
 Why the envelope is a type rather than a convention: M1 constraint 2 requires
 every empty state to name its reason and to distinguish "no source exists"
@@ -98,11 +97,6 @@ def make_block(block_id: str, *, state: str, reason: str = "", **kwargs) -> Bloc
     return Block(id=bid, no=f"{index:02d}", title=title, why=why, state=state, reason=reason, **kwargs)
 
 
-# Why each block is unavailable in the skeleton. M18 #214 replaces these one by
-# one; until it does, a page that says "not built yet" is honest and a page
-# that renders a blank is not.
-_NOT_BUILT = "block builder not built yet — M18 #214"
-
 # Blocks whose source is site-wide rather than per-market, so the registry has
 # no per-market absent reason to give.
 _SITE_WIDE_REASONS = {
@@ -114,40 +108,7 @@ _SITE_WIDE_REASONS = {
 }
 
 
-def skeleton_blocks(market: Market, tier_result, *, block_ids=BLOCK_IDS) -> list[Block]:
-    """The block set M17 ships: structure real, contents pending M18 #214.
-
-    A block whose *source* is genuinely missing renders ``absent`` with the
-    registry's own reason — that verdict is already correct and does not wait
-    on M18. A block that has a source renders ``empty`` pointing at M18, which
-    is the truth today: the data exists, the builder does not.
-    """
-    blocks: list[Block] = []
-    for block_id in block_ids:
-        absent_reason = _absent_reason(market, block_id, tier_result)
-        if absent_reason:
-            blocks.append(make_block(block_id, state=STATE_ABSENT, reason=absent_reason))
-        else:
-            blocks.append(
-                make_block(
-                    block_id,
-                    state=STATE_EMPTY,
-                    reason=_NOT_BUILT,
-                    kind=_kind(market, block_id),
-                )
-            )
-    return blocks
-
-
-def _kind(market: Market, block_id: str) -> str | None:
-    if block_id == "price" and market.price is not None:
-        return market.price.quote_kind
-    if block_id == "crush" and market.crush is not None:
-        return market.crush.kind
-    return None
-
-
-def _absent_reason(market: Market, block_id: str, tier_result) -> str | None:
+def absent_reason(market: Market, block_id: str, tier_result) -> str | None:
     """Non-None when this market structurally has no source for the block."""
     if block_id in ("price", "crush", "basis"):
         source = getattr(market, block_id)
@@ -183,6 +144,6 @@ __all__ = [
     "STATE_OK",
     "STATES",
     "Block",
+    "absent_reason",
     "make_block",
-    "skeleton_blocks",
 ]

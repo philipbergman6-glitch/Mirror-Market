@@ -1,0 +1,18 @@
+{#
+  Number formatting for the block partials (M18 #214).
+
+  Jinja rather than Python: a builder that formats has decided a presentation
+  question inside the data layer, which is how "$1,234.5" ended up unparseable
+  in the f-string builders this ticket replaces.
+#}
+{% macro usd(value, places=1) %}{% if value is none %}<span class="muted">n/a</span>{% else %}${{ '{:,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
+
+{% macro signed(value, places=1, unit='') %}{% if value is none %}<span class="muted">n/a</span>{% else %}<span class="{{ 'up' if value > 0 else 'down' if value < 0 else 'muted' }}">{{ '{:+,.{}f}'.format(value, places) }}{{ unit }}</span>{% endif %}{% endmacro %}
+
+{% macro pct(value, places=1) %}{% if value is none %}<span class="muted">—</span>{% else %}<span class="{{ 'up' if value > 0 else 'down' if value < 0 else 'muted' }}">{{ '{:+.{}f}'.format(value, places) }}%</span>{% endif %}{% endmacro %}
+
+{% macro num(value, places=0) %}{% if value is none %}<span class="muted">n/a</span>{% else %}{{ '{:,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
+
+{#- A print's own date, plus how stale it is. M4 #146: dates only, never a
+    time of day, because the stack stores none. -#}
+{% macro asof(when, age_days=None) %}<div class="caption">as of {{ when }}{% if age_days is not none and age_days > 1 %} · {{ age_days }}d ago{% endif %}</div>{% endmacro %}

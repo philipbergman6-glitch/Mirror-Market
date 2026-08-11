@@ -23,7 +23,8 @@ import pytest
 import config
 from app import blocks as blocks_mod
 from app import markets as markets_mod
-from app.blocks import BLOCK_IDS, Block, make_block, skeleton_blocks
+from app.block_builders import SiteContext, build_blocks
+from app.blocks import BLOCK_IDS, Block, make_block
 from pipeline import schema
 from scripts import generate_site
 
@@ -223,11 +224,12 @@ def test_unknown_block_state_is_rejected():
         Block(id="x", no="01", title="X", why="", state="probably-fine")
 
 
-def test_skeleton_blocks_are_the_nine_ids_in_fixed_order(site_db):
+def test_built_blocks_are_the_nine_ids_in_fixed_order(site_db):
     _seed_cbot_page(site_db)
     markets = markets_mod.load_markets()
     tiers = markets_mod.compute_tiers(markets)
-    built = skeleton_blocks(markets["cbot"], tiers["cbot"])
+    ctx = SiteContext(conn=site_db, today=date.today())
+    built = build_blocks(markets["cbot"], tiers["cbot"], ctx, markets=markets)
     assert [b.id for b in built] == list(BLOCK_IDS)
     assert [b.no for b in built] == [f"{i:02d}" for i in range(1, len(BLOCK_IDS) + 1)]
 

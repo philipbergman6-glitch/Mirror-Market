@@ -1,0 +1,34 @@
+{#
+  One renderer for every metric card in the headline sections (M18 #214).
+
+  The five ported sections all reduced to the same shape — a titled group of
+  cards, each a label, a number, an optional delta and a caption. Rendering
+  that shape once is what stops "the same card, eight countries" drifting into
+  eight hand-written variants, which is exactly what the f-strings had done.
+#}
+{% macro card(c) %}
+<div class="mc">
+  <div class="mc-label">{{ c.label }}</div>
+  <div class="mc-val {{ c.value_class }}">{{ c.prefix }}{{ '{:,.{}f}'.format(c.value, c.places) }}{{ c.suffix }}</div>
+  {% if c.delta %}<div class="mc-delta {{ c.delta_class }}">{{ c.delta }}</div>{% endif %}
+  {% if c.caption %}<div class="mc-delta muted">{{ c.caption }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro group(g) %}
+{% if g %}
+<div class="subhdr" style="font-size:14px;">{{ g.title }}</div>
+<div class="grid grid-{{ [g.cards|length, 4]|min }}">
+  {% for c in g.cards %}{{ card(c) }}{% endfor %}
+</div>
+{% if g.note %}<div class="caption">{{ g.note }}</div>{% endif %}
+{% endif %}
+{% endmacro %}
+
+{% macro asof(when) %}{% if when %}<div class="caption">as of {{ when }}</div>{% endif %}{% endmacro %}
+
+{% macro money(value, places=1) %}{% if value is none %}<span class="muted">n/a</span>{% else %}${{ '{:,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
+
+{% macro signed(value, places=1) %}{% if value is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
+
+{% macro pct(value, places=1) %}{% if value is none %}<span class="muted">—</span>{% else %}{{ '{:+.{}f}'.format(value, places) }}%{% endif %}{% endmacro %}

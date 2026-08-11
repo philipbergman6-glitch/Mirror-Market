@@ -1,0 +1,41 @@
+{# 05 Risk monitor — currencies, positioning, weather, correlations. #}
+{% import 'sections/_cards.html.j2' as c %}
+{% if s.currencies %}
+<div class="subhdr">Key Currencies</div>
+<div class="grid grid-3">
+  {% for fx in s.currencies %}
+  <div class="mc">
+    <div class="mc-label">{{ fx.pair }}</div>
+    <div class="mc-val">{{ '%.4f'|format(fx.close) }}</div>
+    <div class="mc-delta {{ fx.class }}">{{ c.pct(fx.weekly_chg) }}</div>
+    <div class="caption">{% if fx.monthly_chg is not none %}30d: {{ c.pct(fx.monthly_chg) }}{% if fx.as_of %} · {% endif %}{% endif %}{% if fx.as_of %}as of {{ fx.as_of }}{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+<hr class="divider">
+{% endif %}
+
+{% if s.cot %}
+<div class="subhdr">COT Positioning</div>
+<div class="chart-box">{{ s.cot.chart_html | safe }}</div>
+{% for row in s.cot.rows %}
+<div style="font-size:13px; padding:2px 0;"><span class="muted">{{ row.leg }}</span> spec WoW:
+  <span class="{{ row.class }}">{{ c.signed(row.spec_net_chg, 0) }}</span>
+  {%- if row.as_of %} <span class="muted" style="font-size:12px;">(report {{ row.as_of }})</span>{% endif %}
+</div>
+{% endfor %}
+<hr class="divider">
+{% endif %}
+
+{% if s.weather_alerts %}
+<div class="subhdr">Weather Alerts</div>
+{% for w in s.weather_alerts %}
+<div class="alert alert-warn">{{ w.region }}: {{ w.alert }} — max {{ w.temp_max if w.temp_max is not none else 'n/a' }}C, precip {{ '%.0f'|format(w.precip or 0) }}mm{% if w.as_of %} ({{ w.as_of }}){% endif %}</div>
+{% endfor %}
+<hr class="divider">
+{% endif %}
+
+{% if s.correlations %}
+<div class="subhdr">Rolling Correlations</div>
+<div class="chart-box">{{ s.correlations.chart_html | safe }}</div>
+{% endif %}

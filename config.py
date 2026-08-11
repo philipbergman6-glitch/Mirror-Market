@@ -1198,6 +1198,8 @@ MARKETS = {
             "headline_key": "Soybeans",
             "cadence": "daily",
             "quote_kind": "board",
+            "value_column": "Close",
+            "unit": "native_exchange",
         },
         "crush": {
             "kind": "board",
@@ -1206,6 +1208,8 @@ MARKETS = {
             "date_column": "Date",
             "key_column": "commodity",
             "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
+            "value_column": "Close",
+            "unit": "native_exchange",
         },
         # CIF NOLA barge bids over the named CBOT contract (Layer 20).
         "basis": {
@@ -1216,6 +1220,11 @@ MARKETS = {
             "keys": ["Soybeans"],
             "reference": "cbot",
             "label": "US Gulf CIF over CBOT",
+            # AMS 3147 prints a flat CIF price in $/bu (the basis column is
+            # cents/bu over the named contract); several barge locations and
+            # delivery windows print on one report date.
+            "value_column": "average",
+            "unit": "usd_per_bushel",
         },
         "weather_regions": ["US Midwest (Iowa)", "US Illinois"],
         "psd_country": "United States",
@@ -1238,6 +1247,8 @@ MARKETS = {
             "headline_key": "DCE Soybean No.2",
             "cadence": "daily",
             "quote_kind": "board",
+            "value_column": "Close",
+            "unit": "home_per_mt",
         },
         "crush": {
             "kind": "board",
@@ -1250,6 +1261,8 @@ MARKETS = {
                 "oil": "DCE Soybean Oil",
                 "meal": "DCE Soybean Meal",
             },
+            "value_column": "Close",
+            "unit": "home_per_mt",
         },
         # Import parity vs CBOT, computed from the two price legs above.
         "basis": {
@@ -1260,6 +1273,8 @@ MARKETS = {
             "keys": ["DCE Soybean No.2"],
             "reference": "cbot",
             "label": "DCE No.2 over CBOT (import parity)",
+            "value_column": "Close",
+            "unit": "home_per_mt",
         },
         "weather_regions": ["China Heilongjiang", "China Jilin"],
         "psd_country": "China",
@@ -1279,6 +1294,8 @@ MARKETS = {
             "headline_key": "Soybean (CEPEA)",
             "cadence": "daily",
             "quote_kind": "physical",
+            "value_column": "price_brl",
+            "unit": "home_per_mt",
         },
         # M7 #149: computable only with one named Paranaguá oil/meal scrape
         # that does not exist yet. Absent, not broken — the block says so.
@@ -1295,6 +1312,8 @@ MARKETS = {
             "keys": ["Soybean (AgRural Paranaguá FOB)"],
             "reference": "cbot",
             "label": "Paranaguá FOB over CBOT",
+            "value_column": "price_brl",
+            "unit": "home_per_mt",
         },
         "weather_regions": ["Brazil Mato Grosso", "Brazil Parana"],
         "psd_country": "Brazil",
@@ -1316,6 +1335,9 @@ MARKETS = {
             "headline_key": "Soybeans",
             "cadence": "daily",
             "quote_kind": "administered",
+            # Natively USD/MT, and several shipment windows print per day.
+            "value_column": "price_usd_mt",
+            "unit": "usd_per_mt",
         },
         "crush": {
             "kind": "administered",
@@ -1324,6 +1346,8 @@ MARKETS = {
             "date_column": "date",
             "key_column": "product",
             "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
+            "value_column": "price_usd_mt",
+            "unit": "usd_per_mt",
             # M7 #149 / M5 #147: the meal position 23040010100B is inferred,
             # not cross-checked against datos.gob.ar series 358, and 3 of 4
             # inferred meal codes were wrong last time this was checked. The
@@ -1338,6 +1362,8 @@ MARKETS = {
             "keys": ["Soybeans"],
             "reference": "cbot",
             "label": "Argentina official FOB over CBOT",
+            "value_column": "price_usd_mt",
+            "unit": "usd_per_mt",
         },
         "weather_regions": ["Argentina Pampas", "Argentina Cordoba"],
         "psd_country": "Argentina",
@@ -1359,6 +1385,8 @@ MARKETS = {
             "headline_key": "Soybean (Mandi MP)",
             "cadence": "daily",
             "quote_kind": "physical",
+            "value_column": "Close",
+            "unit": "home_per_mt",
         },
         "crush": None,
         "crush_absent_reason": (
@@ -1398,6 +1426,10 @@ MARKETS = {
             "headline_key": "EU Rapeseed (Moselle)",
             "cadence": "weekly",
             "quote_kind": "weekly_assessment",
+            # USD is the authoritative column; the workbook derives its own EUR
+            # from it at a sometimes-stale ECB rate (Layer 22).
+            "value_column": "price_usd",
+            "unit": "usd_per_mt",
         },
         "crush": None,
         "crush_absent_reason": "no EU rapeseed oil or meal assessment is ingested",
@@ -1425,6 +1457,8 @@ MARKETS = {
             "headline_key": "Soybean (SAFEX)",
             "cadence": "daily",
             "quote_kind": "board_last_traded",
+            "value_column": "Close",
+            "unit": "home_per_mt",
         },
         # M7 #149 finding 4: SAFEX is seed-only and the JSE meal/oil products
         # are cash-settled CBOT in rand, so a "margin" off them is an FX
@@ -1445,6 +1479,9 @@ MARKETS = {
             "key_column": "commodity",
             "keys": ["Soybeans", "Sunflower Seed"],
             "cadence": "weekly",
+            # Tonnage, not a price — no currency conversion applies.
+            "value_column": "week_total",
+            "unit": "tonnes",
         },
         "weather_regions": ["South Africa Free State", "South Africa Mpumalanga"],
         "psd_country": "South Africa",

@@ -31,43 +31,11 @@ section.collapsed .sec-head .chev { transform: rotate(-90deg); }
 .leg .px small { font-size: 13px; font-weight: 500; color: var(--text-dim); }
 .leg .chg { font-size: 13px; font-weight: 500; }
 .leg .sub { font-size: 12px; color: var(--text-muted); margin-top: 8px; display: flex; gap: 14px; flex-wrap: wrap; }
-
-.grid { display: grid; gap: 16px; margin-bottom: 16px; align-items: start; }
-.grid-2 { grid-template-columns: repeat(2, 1fr); }
-.grid-3 { grid-template-columns: repeat(3, 1fr); }
-.grid-4 { grid-template-columns: repeat(4, 1fr); }
-
-.mc { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; }
-.mc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
-.mc-val { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.2; }
-.mc-delta { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 2px; }
-
-/* ---- signals ---- */
-.sig { display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px dotted var(--rule); align-items: baseline; font-size: 14px; }
-.sig:last-child { border-bottom: none; }
-.badge { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; min-width: 52px; text-align: center; flex-shrink: 0; }
-.badge-alert { background: var(--bearish); color: #fff; }
-.badge-warning { background: #E8C983; color: #4A3608; }
-.badge-info { background: #E4E8E4; color: var(--text-muted); }
-.sig-commodity { color: var(--text-muted); min-width: 96px; font-size: 13px; flex-shrink: 0; }
-
-/* ---- charts & shared builder classes ---- */
-.chart-box { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
-.chart-empty { height: 160px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 13px; }
-.subhdr { font-family: var(--display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 12px; }
+/* ---- headline-only: collapsible sub-categories ---- */
 .subhdr.togglable { cursor: pointer; user-select: none; }
 .subhdr.togglable::after { content: "\25BE"; font-size: 10px; color: var(--text-dim); margin-left: 8px; }
 .subhdr.togglable.closed::after { content: "\25B8"; }
 .subhdr.togglable.closed + .sub-body { display: none; }
-.divider { border: none; border-top: 1px dotted var(--rule); margin: 20px 0; }
-.caption { font-size: 12px; color: var(--text-muted); margin-top: 4px; margin-bottom: 12px; }
-
-/* ---- alerts ---- */
-.alert { padding: 10px 16px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; border-left: 3px solid; }
-.alert-ok { background: rgba(31,122,61,0.07); border-color: var(--bullish); color: var(--bullish); }
-.alert-warn { background: rgba(168,115,10,0.08); border-color: var(--warning); color: var(--warning); }
-.alert-err { background: rgba(194,59,46,0.07); border-color: var(--bearish); color: var(--bearish); }
-.alert-info { background: rgba(47,93,143,0.07); border-color: var(--info); color: var(--info); }
 
 /* ---- tabs ---- */
 .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--rule); margin-bottom: 18px; }
@@ -77,10 +45,6 @@ section.collapsed .sec-head .chev { transform: rotate(-90deg); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
-/* ---- tables ---- */
-.dtable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-.dtable th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--rule-heavy); }
-.dtable td { padding: 8px 12px; border-bottom: 1px solid var(--rule); }
 
 /* ---- briefing ---- */
 .briefing { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 20px; font-family: var(--mono); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-x: auto; }
@@ -97,7 +61,7 @@ details .det-content { padding: 0 16px 16px; }
 .dl:hover { text-decoration: underline; }
 
 @media (max-width: 768px) {
-  .legs, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .legs { grid-template-columns: 1fr; }
 }
 {% endblock %}
 
@@ -124,6 +88,15 @@ details .det-content { padding: 0 16px 16px; }
 {% endblock %}
 
 {% block content %}
+{#- The five ported sections (M18 #214) arrive as {state, reason, data}. A
+    render that omits one — a focused test, a partial context — treats it as an
+    empty section with that stated, rather than raising on a missing key. -#}
+{% set _missing = {'state': 'empty', 'reason': 'section was not built for this render', 'data': {}} %}
+{% set relative_value = relative_value|default(_missing, true) %}
+{% set risk_monitor = risk_monitor|default(_missing, true) %}
+{% set forward_curves = forward_curves|default(_missing, true) %}
+{% set seasonal = seasonal|default(_missing, true) %}
+{% set emerging_markets = emerging_markets|default(_missing, true) %}
 {# ================================================================ #}
 {# 01 — THE COMPLEX OVERNIGHT                                       #}
 {# ================================================================ #}
@@ -185,10 +158,10 @@ details .det-content { padding: 0 16px 16px; }
 {# ================================================================ #}
 <section id="relative-value">
   <div class="sec-head"><span class="sec-no">03</span><h2>Crush &amp; Relative Value</h2><span class="why">is processing paying · where is Brazil</span></div>
-  {% if relative_value %}
-  {{ relative_value | safe }}
+  {% if relative_value.state == 'ok' %}
+  {% with s = relative_value.data %}{% include 'sections/relative_value.html.j2' %}{% endwith %}
   {% else %}
-  <div class="alert alert-warn">No relative value data available.</div>
+  <div class="alert alert-warn">{{ relative_value.reason }}</div>
   {% endif %}
 </section>
 
@@ -197,7 +170,7 @@ details .det-content { padding: 0 16px 16px; }
 {# ================================================================ #}
 <section id="supply-demand">
   <div class="sec-head"><span class="sec-no">04</span><h2>Supply &amp; Demand</h2><span class="why">WASDE · CONAB · exports · emerging markets</span></div>
-  {% if supply or demand or emerging_markets %}
+  {% if supply or demand or emerging_markets.state == 'ok' %}
   <div class="tabs" data-tabgroup="sd">
     <div class="tab active" data-tab="sd-1">Soy Complex</div>
     <div class="tab" data-tab="sd-2">Competing Crops</div>
@@ -254,10 +227,10 @@ details .det-content { padding: 0 16px 16px; }
   </div>
 
   <div class="tab-panel" data-tabpanel="sd-3">
-    {% if emerging_markets %}
-    {{ emerging_markets | safe }}
+    {% if emerging_markets.state == 'ok' %}
+    {% with s = emerging_markets.data %}{% include 'sections/emerging_markets.html.j2' %}{% endwith %}
     {% else %}
-    <div class="chart-empty">No emerging markets data available</div>
+    <div class="alert alert-warn">{{ emerging_markets.reason }}</div>
     {% endif %}
   </div>
   {% else %}
@@ -270,10 +243,10 @@ details .det-content { padding: 0 16px 16px; }
 {# ================================================================ #}
 <section id="risk">
   <div class="sec-head"><span class="sec-no">05</span><h2>Risk Monitor</h2><span class="why">currencies · positioning · weather</span></div>
-  {% if risk_monitor %}
-  {{ risk_monitor | safe }}
+  {% if risk_monitor.state == 'ok' %}
+  {% with s = risk_monitor.data %}{% include 'sections/risk_monitor.html.j2' %}{% endwith %}
   {% else %}
-  <div class="alert alert-warn">No risk data available.</div>
+  <div class="alert alert-warn">{{ risk_monitor.reason }}</div>
   {% endif %}
 </section>
 
@@ -282,10 +255,10 @@ details .det-content { padding: 0 16px 16px; }
 {# ================================================================ #}
 <section id="forward-curves">
   <div class="sec-head"><span class="sec-no">06</span><h2>Forward Curves</h2><span class="why">contango or backwardation — what the term structure says</span></div>
-  {% if forward_curves %}
-  {{ forward_curves | safe }}
+  {% if forward_curves.state == 'ok' %}
+  {% with s = forward_curves.data %}{% include 'sections/forward_curves.html.j2' %}{% endwith %}
   {% else %}
-  <div class="alert alert-warn">No forward curve data. Run the pipeline first.</div>
+  <div class="alert alert-warn">{{ forward_curves.reason }}</div>
   {% endif %}
 </section>
 
@@ -294,10 +267,10 @@ details .det-content { padding: 0 16px 16px; }
 {# ================================================================ #}
 <section id="seasonal">
   <div class="sec-head"><span class="sec-no">07</span><h2>Seasonal</h2><span class="why">current price vs the historical norm for this month</span></div>
-  {% if seasonal %}
-  {{ seasonal | safe }}
+  {% if seasonal.state == 'ok' %}
+  {% with s = seasonal.data %}{% include 'sections/seasonal.html.j2' %}{% endwith %}
   {% else %}
-  <div class="alert alert-warn">No seasonal data. Run the pipeline first.</div>
+  <div class="alert alert-warn">{{ seasonal.reason }}</div>
   {% endif %}
 </section>
 

@@ -1,0 +1,29 @@
+{# 04 Basis — local minus the CBOT board, struck on a session both printed.
+   Never a cross-day subtraction: two legs from different days is a calendar
+   artefact, not a basis. #}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set d = block.data %}
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">{{ d.label }}</div>
+    <div class="mc-val {{ 'up' if d.basis_usd_mt > 0 else 'down' }}">{{ f.signed(d.basis_usd_mt) }}</div>
+    <div class="mc-delta muted">USD/MT · {{ d.direction }} to the board</div>
+    {{ f.asof(d.as_of, d.age_days) }}
+  </div>
+  <div class="mc">
+    <div class="mc-label">Local</div>
+    <div class="mc-val">{{ f.usd(d.local_usd_mt) }}</div>
+    <div class="mc-delta muted">USD/MT</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">CBOT board</div>
+    <div class="mc-val">{{ f.usd(d.board_usd_mt) }}</div>
+    <div class="mc-delta muted">USD/MT · same session</div>
+  </div>
+</div>
+{% if d.avg is not none %}
+<div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}</div>
+{% else %}
+{# A level with no range behind it can mislead as easily as a wrong number. #}
+<div class="caption">{{ d.history_note }}</div>
+{% endif %}

@@ -1,0 +1,29 @@
+{# 01 Price — the decision number, dual-quoted USD/MT over the home currency
+   (M3 #145). The quote kind is stamped by _block.html.j2's header, so a board
+   settlement, a physical assessment and an administered minimum can never read
+   as the same animal. #}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set d = block.data %}
+<div class="grid grid-{{ [d.legs|length, 3]|min }}">
+  {% for leg in d.legs %}
+  <div class="mc">
+    <div class="mc-label">{{ leg.key }}{% if leg.is_headline %} · headline{% endif %}</div>
+    <div class="mc-val">{{ f.usd(leg.usd_mt) }}<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>
+      {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">21 obs</span>{% endif %}
+    </div>
+    <div class="mc-delta muted">{{ d.home_currency }} {{ f.num(leg.home_value, 2) }}/MT{% if leg.quotes > 1 %} · mean of {{ leg.quotes }} quotes{% endif %}</div>
+    {{ f.asof(leg.as_of, leg.age_days) }}
+  </div>
+  {% endfor %}
+</div>
+{% if d.signals %}
+{# M2 #144: signals ride inside block 01 as severity chips rather than growing
+   a tenth block. Price-only detectors — a generic source carries no volume
+   column, and a signal we cannot compute is absent, not invented. #}
+{% for sig in d.signals %}
+<div class="sig"><span class="badge badge-{{ sig.severity }}">{{ sig.severity }}</span><span>{{ sig.message }}</span></div>
+{% endfor %}
+{% endif %}
+<div class="caption">{{ d.venue }} · {{ d.cadence }} · {{ d.no_timestamp_note }}</div>

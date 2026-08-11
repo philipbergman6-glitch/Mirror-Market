@@ -1,0 +1,27 @@
+{# 03 Crush margin. One engine, every market (M7 #149) — only the yields, the
+   FX and the kind label vary, and the kind is stamped in the block header
+   because a board margin, an administered one and a physical one are not the
+   same claim. #}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set d = block.data %}
+<div class="grid grid-4">
+  <div class="mc">
+    <div class="mc-label">Margin</div>
+    <div class="mc-val {{ 'up' if d.profitable else 'down' }}">{{ f.signed(d.margin_usd_mt) }}<small class="muted"> /MT</small></div>
+    {# A home-currency margin only exists where the legs share one per-MT
+       currency; a board quoted in cents/bu, cents/lb and $/short ton has no
+       such number, and printing one would invent a unit. #}
+    {% if d.margin_home is not none %}<div class="mc-delta muted">{{ d.home_currency }} {{ f.num(d.margin_home, 0) }}/MT</div>{% endif %}
+    {{ f.asof(d.as_of, d.age_days) }}
+  </div>
+  {% for name in ['bean', 'oil', 'meal'] %}
+  <div class="mc">
+    <div class="mc-label">{{ name }} — {{ d.legs[name].key }}</div>
+    <div class="mc-val">{{ f.usd(d.legs[name].usd_mt) }}</div>
+    <div class="mc-delta muted">USD/MT{% if name != 'bean' %} · yield {{ '%.3f'|format(d.yields[name]) }} MT/MT{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+{% if d.provisional %}
+<div class="alert alert-warn">{{ d.provisional_note }}</div>
+{% endif %}
