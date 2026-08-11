@@ -149,6 +149,37 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .dtable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .dtable th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--rule-heavy); }
 .dtable td { padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+.dtable th.num, .dtable td.num { text-align: right; }
+.dtable td.strong { font-weight: 600; }
+
+/* ---- quote-kind label (M3 #145 constraint 4) ----
+   Board settlements, physical assessments, administered minimums and weekly
+   assessments are different animals; collapsing them into one "price" label is
+   the easiest way to make the product dishonest. Rendered by the market blocks
+   AND by the ledger on both surfaces, so it belongs with the palette. */
+.kind { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+
+/* ---- propagation ledger (M3 #145 / M12 #161) ----
+   The state pill is the point of the surface: a market that has not printed
+   must never read as a market that printed unchanged. `repriced` is the only
+   affirmative colour; `no print since` is deliberately quiet unless it is past
+   the gap that is normal for that leg, and `dark` is loud. `out of cadence`
+   (Europe on the headline) is neither an outage nor a print, so it is outlined
+   rather than filled — it carries no value at all. */
+.ledger .lrow.own td { background: rgba(45,106,79,0.045); }
+.ledger .lrow.ref td { color: var(--text-muted); }
+.ledger .caption { margin: 2px 0 0; font-size: 11px; }
+.pill { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.pill-repriced { background: rgba(45,106,79,0.12); color: var(--green); }
+.pill-no_print_since { background: #E4E8E4; color: var(--text-muted); }
+.pill-no_print_since.overdue { background: #E8C983; color: #4A3608; }
+.pill-dark { background: var(--bearish); color: #fff; }
+.pill-out_of_cadence { background: transparent; border: 1px solid var(--rule-heavy); color: var(--text-dim); }
+.fx-tag { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: rgba(47,93,143,0.12); color: var(--info); cursor: help; }
+.ledger-rule { display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; flex-wrap: wrap; }
+.rule-tag { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.ledger-good { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.ledger-note { font-size: 12px; color: var(--text-muted); border-left: 2px solid var(--rule-heavy); padding-left: 12px; margin-top: 12px; }
 
 @media (max-width: 768px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }

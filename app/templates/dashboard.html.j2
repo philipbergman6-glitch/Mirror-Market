@@ -97,6 +97,7 @@ details .det-content { padding: 0 16px 16px; }
 {% set forward_curves = forward_curves|default(_missing, true) %}
 {% set seasonal = seasonal|default(_missing, true) %}
 {% set emerging_markets = emerging_markets|default(_missing, true) %}
+{% set ledger = ledger|default(_missing, true) %}
 {# ================================================================ #}
 {# 01 — THE COMPLEX OVERNIGHT                                       #}
 {# ================================================================ #}
@@ -154,10 +155,22 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 03 — CRUSH & RELATIVE VALUE                                      #}
+{# 03 — PROPAGATION                                                 #}
+{# ================================================================ #}
+<section id="propagation">
+  <div class="sec-head"><span class="sec-no">03</span><h2>Propagation</h2><span class="why">who has repriced, and who has not printed</span></div>
+  {% if ledger.state == 'ok' %}
+  {% with s = ledger.data %}{% include 'sections/ledger.html.j2' %}{% endwith %}
+  {% else %}
+  <div class="alert alert-warn">{{ ledger.reason }}</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# 04 — CRUSH & RELATIVE VALUE                                      #}
 {# ================================================================ #}
 <section id="relative-value">
-  <div class="sec-head"><span class="sec-no">03</span><h2>Crush &amp; Relative Value</h2><span class="why">is processing paying · where is Brazil</span></div>
+  <div class="sec-head"><span class="sec-no">04</span><h2>Crush &amp; Relative Value</h2><span class="why">is processing paying · where is Brazil</span></div>
   {% if relative_value.state == 'ok' %}
   {% with s = relative_value.data %}{% include 'sections/relative_value.html.j2' %}{% endwith %}
   {% else %}
@@ -166,10 +179,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 04 — SUPPLY & DEMAND                                             #}
+{# 05 — SUPPLY & DEMAND                                             #}
 {# ================================================================ #}
 <section id="supply-demand">
-  <div class="sec-head"><span class="sec-no">04</span><h2>Supply &amp; Demand</h2><span class="why">WASDE · CONAB · exports · emerging markets</span></div>
+  <div class="sec-head"><span class="sec-no">05</span><h2>Supply &amp; Demand</h2><span class="why">WASDE · CONAB · exports · emerging markets</span></div>
   {% if supply or demand or emerging_markets.state == 'ok' %}
   <div class="tabs" data-tabgroup="sd">
     <div class="tab active" data-tab="sd-1">Soy Complex</div>
@@ -239,10 +252,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 05 — RISK MONITOR                                                #}
+{# 06 — RISK MONITOR                                                #}
 {# ================================================================ #}
 <section id="risk">
-  <div class="sec-head"><span class="sec-no">05</span><h2>Risk Monitor</h2><span class="why">currencies · positioning · weather</span></div>
+  <div class="sec-head"><span class="sec-no">06</span><h2>Risk Monitor</h2><span class="why">currencies · positioning · weather</span></div>
   {% if risk_monitor.state == 'ok' %}
   {% with s = risk_monitor.data %}{% include 'sections/risk_monitor.html.j2' %}{% endwith %}
   {% else %}
@@ -251,10 +264,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 06 — FORWARD CURVES                                              #}
+{# 07 — FORWARD CURVES                                              #}
 {# ================================================================ #}
 <section id="forward-curves">
-  <div class="sec-head"><span class="sec-no">06</span><h2>Forward Curves</h2><span class="why">contango or backwardation — what the term structure says</span></div>
+  <div class="sec-head"><span class="sec-no">07</span><h2>Forward Curves</h2><span class="why">contango or backwardation — what the term structure says</span></div>
   {% if forward_curves.state == 'ok' %}
   {% with s = forward_curves.data %}{% include 'sections/forward_curves.html.j2' %}{% endwith %}
   {% else %}
@@ -263,10 +276,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 07 — SEASONAL                                                    #}
+{# 08 — SEASONAL                                                    #}
 {# ================================================================ #}
 <section id="seasonal">
-  <div class="sec-head"><span class="sec-no">07</span><h2>Seasonal</h2><span class="why">current price vs the historical norm for this month</span></div>
+  <div class="sec-head"><span class="sec-no">08</span><h2>Seasonal</h2><span class="why">current price vs the historical norm for this month</span></div>
   {% if seasonal.state == 'ok' %}
   {% with s = seasonal.data %}{% include 'sections/seasonal.html.j2' %}{% endwith %}
   {% else %}
@@ -275,10 +288,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 08 — TECHNICALS                                                  #}
+{# 09 — TECHNICALS                                                  #}
 {# ================================================================ #}
 <section id="technicals">
-  <div class="sec-head"><span class="sec-no">08</span><h2>Technicals</h2><span class="why">the deep charts — candles, RSI, MACD</span></div>
+  <div class="sec-head"><span class="sec-no">09</span><h2>Technicals</h2><span class="why">the deep charts — candles, RSI, MACD</span></div>
   {% if technicals %}
   <div class="alert alert-info" style="margin-bottom: 16px;">
     Charts use the yfinance front-month series. On contract roll days the underlying contract changes, which can introduce artificial price gaps; signals within ±3 trading days of a roll are demoted to <em>info</em> severity.
@@ -310,10 +323,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 09 — THE FULL BRIEFING                                           #}
+{# 10 — THE FULL BRIEFING                                           #}
 {# ================================================================ #}
 <section id="briefing">
-  <div class="sec-head"><span class="sec-no">09</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text</span></div>
+  <div class="sec-head"><span class="sec-no">10</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text</span></div>
   {% if briefing_text %}
   <div class="briefing">{{ briefing_text }}</div>
   {% if briefing_uri %}
@@ -333,10 +346,10 @@ details .det-content { padding: 0 16px 16px; }
 </section>
 
 {# ================================================================ #}
-{# 10 — ABOUT THE DATA                                              #}
+{# 11 — ABOUT THE DATA                                              #}
 {# ================================================================ #}
 <section id="about">
-  <div class="sec-head"><span class="sec-no">10</span><h2>About the Data</h2><span class="why">sources · methodology · units</span></div>
+  <div class="sec-head"><span class="sec-no">11</span><h2>About the Data</h2><span class="why">sources · methodology · units</span></div>
 
   <details>
     <summary>Data Sources (21 Layers)</summary>

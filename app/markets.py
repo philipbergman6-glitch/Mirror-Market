@@ -118,6 +118,26 @@ PRICE_UNITS = frozenset({"native_exchange", "usd_per_bushel", "home_per_mt", "us
 # exactly the failure that would never be noticed in review.
 ARBITRAGE_KINDS = frozenset({"open", "policy_blocked"})
 
+# M12 #161 decision 3: two selection rules, not one, and each ledger states the
+# one it was built under. The sentences live here rather than in the registry
+# so eight pages cannot end up with eight paraphrases of the same rule; the
+# registry declares only which rule applies.
+LEDGER_RULE_STATEMENTS = {
+    "origin": (
+        "Origin page — who else is offering this cargo. These are competing "
+        "physical offers, so the spread is an arbitrage a cargo can close."
+    ),
+    "destination": (
+        "Destination page — what landed supply costs from the origins this "
+        "market actually buys from. Not every origin: only the ones connected "
+        "to this market by trade."
+    ),
+}
+
+# Which descriptor sub-blocks a ledger leg may point at. `flows` is tonnage and
+# `crush` is a derived margin — neither is a price a row can dual-quote.
+LEDGER_LEG_BLOCKS = frozenset({"price", "basis"})
+
 
 # ---------------------------------------------------------------------------
 # Descriptor types
@@ -214,6 +234,66 @@ class Crush:
 
 
 @dataclass(frozen=True)
+class LedgerLeg:
+    """One row of a propagation ledger (M12 #161).
+
+    A leg is *not* a market. ``us_gulf:cif`` is the AMS CIF NOLA bid living on
+    the CBOT market's ``basis`` descriptor and has no market key of its own, so
+    the registry now carries two id spaces and this type is the bridge between
+    them: it resolves a leg id to the owning market plus the one key inside
+    that market's descriptor the row reads.
+
+    Nothing about the *data* is restated here — table, date column, unit, FX
+    pair and home currency all come from ``source`` and ``market``, which are
+    the owner's own descriptor. A leg says only what the owner cannot: which
+    key it is, what to call it, and how its print is proved.
+    """
+
+    leg_id: str
+    market: Market
+    block: str
+    key: str
+    label: str
+    trade_proof_column: str | None
+    expected_gap_days: int
+
+    @property
+    def source(self) -> Source:
+        return getattr(self.market, self.block)
+
+    @property
+    def href(self) -> str:
+        """The leg's owning page — not always a page named after the leg.
+
+        ``us_gulf:cif`` lands on the CBOT page, which is where the AMS bid is
+        already explained (M12 decision 1).
+        """
+        return self.market.url
+
+
+@dataclass(frozen=True)
+class Ledger:
+    """One market page's ledger: the pinned own leg plus its counterparts."""
+
+    rule: str
+    note: str
+    legs: tuple[LedgerLeg, ...]
+    reference_leg_ids: frozenset[str] = frozenset()
+
+    @property
+    def own(self) -> LedgerLeg:
+        return self.legs[0]
+
+    @property
+    def counterparts(self) -> tuple[LedgerLeg, ...]:
+        return self.legs[1:]
+
+    @property
+    def rule_statement(self) -> str:
+        return LEDGER_RULE_STATEMENTS[self.rule]
+
+
+@dataclass(frozen=True)
 class Market:
     """One market. The parameter every block builder takes (M8 constraint 1)."""
 
@@ -230,6 +310,9 @@ class Market:
     psd_country: str | None
     players_country: str | None
     absent_reasons: dict[str, str] = field(default_factory=dict)
+    # Wired in a second pass by `load_markets()` — a leg names another market,
+    # so every market has to exist before any ledger can be resolved.
+    ledger: Ledger | None = None
 
     @property
     def url(self) -> str:
@@ -400,6 +483,152 @@ def _market(slug: str, raw: dict) -> Market:
     )
 
 
+def _ledger_leg(leg_id: str, markets: dict[str, Market]) -> LedgerLeg:
+    """Resolve one leg id against the market registry, or hard-fail.
+
+    This is the load-time gate M12 #161 asked for. A leg id lives in a
+    different id space from a market slug, so nothing else in the registry
+    would catch a typo: an unresolvable leg would quietly render an empty row,
+    which reads as "that market has not printed" — the ledger's most important
+    statement, made by accident.
+    """
+    raw = config.LEDGER_LEGS.get(leg_id)
+    if raw is None:
+        raise ValueError(
+            f"ledger leg {leg_id!r} is not in config.LEDGER_LEGS "
+            f"(known: {sorted(config.LEDGER_LEGS)})"
+        )
+    missing = {"market", "block", "key", "label"} - raw.keys()
+    if missing:
+        raise ValueError(f"ledger leg {leg_id!r} missing key(s): {sorted(missing)}")
+
+    market = markets.get(raw["market"])
+    if market is None:
+        raise ValueError(f"ledger leg {leg_id!r} names market {raw['market']!r}, which is not registered")
+    if raw["block"] not in LEDGER_LEG_BLOCKS:
+        raise ValueError(
+            f"ledger leg {leg_id!r} names block {raw['block']!r}, not one of "
+            f"{sorted(LEDGER_LEG_BLOCKS)} — a ledger row is a dual-quoted price"
+        )
+    source = getattr(market, raw["block"])
+    if source is None:
+        raise ValueError(
+            f"ledger leg {leg_id!r} points at {raw['market']}.{raw['block']}, which has no source"
+        )
+    if raw["key"] not in source.keys:
+        raise ValueError(
+            f"ledger leg {leg_id!r} names key {raw['key']!r}, which is not one of "
+            f"{raw['market']}.{raw['block']}'s keys {list(source.keys)}"
+        )
+    if source.quote_kind is None:
+        raise ValueError(
+            f"ledger leg {leg_id!r} reads {raw['market']}.{raw['block']}, which declares no "
+            "quote_kind — a board settlement, a physical bid and an administered minimum sit "
+            "in one USD/MT column on this block and an unlabelled one reads as whatever its "
+            "neighbours are (M3 #145 constraint 4)"
+        )
+    if source.cadence != "daily":
+        raise ValueError(
+            f"ledger leg {leg_id!r} reads a {source.cadence} source — the ledger is "
+            "daily-only (M10 #151); a slower series belongs in a cadence-stamped "
+            "context band, not a row that would read as an outage"
+        )
+    return LedgerLeg(
+        leg_id=leg_id,
+        market=market,
+        block=raw["block"],
+        key=raw["key"],
+        label=raw["label"],
+        trade_proof_column=raw.get("trade_proof_column"),
+        expected_gap_days=int(
+            raw.get("expected_gap_days", config.LEDGER_DEFAULT_EXPECTED_GAP_DAYS)
+        ),
+    )
+
+
+def _ledger(slug: str, raw: dict, markets: dict[str, Market]) -> Ledger:
+    missing = {"rule", "legs", "note"} - raw.keys()
+    if missing:
+        raise ValueError(f"market {slug!r} ledger missing key(s): {sorted(missing)}")
+    if raw["rule"] not in config.LEDGER_RULES:
+        raise ValueError(
+            f"market {slug!r} ledger rule {raw['rule']!r} not in {sorted(config.LEDGER_RULES)}"
+        )
+    if raw["rule"] not in LEDGER_RULE_STATEMENTS:
+        raise ValueError(f"ledger rule {raw['rule']!r} has no statement in LEDGER_RULE_STATEMENTS")
+
+    leg_ids = list(raw["legs"])
+    if len(set(leg_ids)) != len(leg_ids):
+        raise ValueError(f"market {slug!r} ledger repeats a leg: {leg_ids}")
+    if len(leg_ids) < 2:
+        raise ValueError(
+            f"market {slug!r} ledger has {len(leg_ids)} leg(s) — a ledger with nothing "
+            "to compare against is a price block, not a ledger"
+        )
+
+    legs = tuple(_ledger_leg(leg_id, markets) for leg_id in leg_ids)
+    if legs[0].market.slug != slug:
+        raise ValueError(
+            f"market {slug!r} ledger pins {legs[0].leg_id!r}, which belongs to "
+            f"{legs[0].market.slug!r} — the first leg is always the page's own (M12 #161)"
+        )
+
+    reference = frozenset(raw.get("reference_legs") or ())
+    unknown = reference - set(leg_ids)
+    if unknown:
+        raise ValueError(f"market {slug!r} ledger names reference leg(s) not in its own set: {sorted(unknown)}")
+    if legs[0].leg_id in reference:
+        raise ValueError(f"market {slug!r} ledger marks its own pinned leg as a reference row")
+
+    # M12 India: a ledger whose counterparts are all the page's own legs has no
+    # foreign price in it at all, and under a rule that promises "the origins
+    # this market buys from" that reads as a set someone forgot to finish. The
+    # note is where the reason lives, so it is required rather than optional.
+    if not raw["note"].strip():
+        raise ValueError(f"market {slug!r} ledger has an empty note — every ledger states why these legs")
+    if all(leg.market.slug == slug for leg in legs[1:]):
+        log.info(
+            "market %s ledger names no foreign leg — domestic-only by decision (M12 #161)", slug
+        )
+
+    return Ledger(rule=raw["rule"], note=raw["note"].strip(), legs=legs, reference_leg_ids=reference)
+
+
+def _wire_ledgers(markets: dict[str, Market]) -> dict[str, Market]:
+    """Second pass: resolve every ledger now that all markets exist.
+
+    Create-then-wire, for the same reason issues get ids before they can
+    reference each other — a leg names another market, so no ledger can be
+    built during the first pass.
+    """
+    from dataclasses import replace
+
+    unknown = set(config.LEDGERS) - set(markets)
+    if unknown:
+        raise ValueError(f"config.LEDGERS names unregistered market(s): {sorted(unknown)}")
+    undeclared = set(markets) - set(config.LEDGERS)
+    if undeclared:
+        raise ValueError(
+            f"market(s) {sorted(undeclared)} declare no ledger — every market must state its "
+            "counterpart set or an explicit None with a LEDGER_ABSENT_REASONS entry (M12 #161)"
+        )
+
+    wired: dict[str, Market] = {}
+    for slug, market in markets.items():
+        raw = config.LEDGERS[slug]
+        if raw is None:
+            reason = (config.LEDGER_ABSENT_REASONS.get(slug) or "").strip()
+            if not reason:
+                raise ValueError(
+                    f"market {slug!r} has no ledger and no LEDGER_ABSENT_REASONS entry — "
+                    "every empty state must name its reason (M1 #143 constraint 2)"
+                )
+            wired[slug] = replace(market, absent_reasons={**market.absent_reasons, "ledger": reason})
+            continue
+        wired[slug] = replace(market, ledger=_ledger(slug, raw, markets))
+    return wired
+
+
 def load_markets() -> dict[str, Market]:
     """Validate and return every registered market, in registry key order.
 
@@ -411,7 +640,7 @@ def load_markets() -> dict[str, Market]:
         if slug != slug.lower() or not slug.replace("_", "").isalnum():
             raise ValueError(f"market slug {slug!r} must be lowercase alphanumeric with underscores")
         markets[slug] = _market(slug, raw)
-    return markets
+    return _wire_ledgers(markets)
 
 
 # ---------------------------------------------------------------------------
@@ -500,10 +729,15 @@ def compute_tier(market: Market, conn, *, today: date | None = None) -> TierResu
 
     present: list[str] = []
 
-    # The ledger is daily-only (M10 #151): present exactly when a daily leg is.
-    if has_daily_leg:
+    # The ledger is daily-only (M10 #151): present exactly when a daily leg is
+    # AND the registry gives this market a counterpart set at all (M12 #161 —
+    # Europe and Nigeria have none, and a block that cannot render is not a
+    # block this market has).
+    if has_daily_leg and market.ledger is not None:
         present.append("ledger")
-        notes["ledger"] = "daily leg present"
+        notes["ledger"] = f"daily leg present · {len(market.ledger.legs)} rows"
+    elif market.ledger is None:
+        notes["ledger"] = market.absent_reason("ledger")
     else:
         notes["ledger"] = "no daily leg — the ledger is daily-only (M10 #151)"
 
@@ -611,12 +845,16 @@ def relative_root(output_relpath: str) -> str:
 __all__ = [
     "ARBITRAGE_KINDS",
     "CRUSH_YIELD_SETS",
+    "LEDGER_LEG_BLOCKS",
+    "LEDGER_RULE_STATEMENTS",
     "MARKET_URL_TEMPLATE",
     "SUPPORTING_BLOCKS",
     "TIER_BRIEF",
     "TIER_PAGE",
     "TIER_STUB",
     "Crush",
+    "Ledger",
+    "LedgerLeg",
     "Market",
     "Source",
     "TierResult",
