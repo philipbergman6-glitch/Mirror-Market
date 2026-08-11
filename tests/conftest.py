@@ -110,10 +110,16 @@ def freshness_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     state on main, so it is cleared either side of the test — the freshness
     row and the hard-failure set are the two things the layer-grading tests
     assert on, and they have to be read together.
+
+    Key coverage (#182) is accepted and dropped: it describes a run, it
+    never changes the verdict these tests pin, and several of them compare
+    the captured dict with `==`. tests/test_layer_coverage.py shadows this
+    fixture with one that keeps the coverage pair.
     """
     calls: list[dict] = []
 
-    def _capture(layer_name, rows_fetched=0, status="success"):
+    def _capture(layer_name, rows_fetched=0, status="success",
+                 keys_returned=None, keys_expected=None):
         calls.append({"layer": layer_name, "rows": rows_fetched, "status": status})
 
     monkeypatch.setattr(main, "save_freshness", _capture)

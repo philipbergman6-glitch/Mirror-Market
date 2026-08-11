@@ -11,6 +11,21 @@ from pipeline.query import read_freshness
 logger = logging.getLogger(__name__)
 
 
+def _coverage(row) -> tuple[int, int] | None:
+    """(keys_returned, keys_expected) when a layer ran below full coverage.
+
+    None when coverage is undefined (NULL — a layer with no key catalog, or
+    a run that died before it had a payload) or full. Rendering full
+    coverage on every healthy layer every day is the badge-blindness the
+    per-layer-cadence fix removed; only the degraded case is worth a line.
+    """
+    returned, expected = row.get("keys_returned"), row.get("keys_expected")
+    if pd.isna(returned) or pd.isna(expected) or not expected:
+        return None
+    returned, expected = int(returned), int(expected)
+    return (returned, expected) if returned < expected else None
+
+
 def format() -> str:  # noqa: A001 — module-scope name, no conflict with builtin
     """Stale-layer warnings + per-commodity health summary."""
     sections = []
@@ -33,6 +48,17 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
             # the reader to skip this whole block.
             if status == "disabled":
                 continue
+
+            # Key coverage describes, it never grades (#182): the line
+            # explains a verdict reached elsewhere, so it reads WARNING
+            # alongside a failure and NOTE on a layer that still passed.
+            coverage = _coverage(row)
+            if coverage:
+                returned, expected = coverage
+                level = "WARNING" if status == "failed" else "NOTE"
+                layer_warnings.append(
+                    f"  {level}: {layer} returned {returned} of {expected} keys"
+                )
 
             # A failed latest attempt means the briefing is showing whatever
             # the last good fetch left behind — flag it even if that data is

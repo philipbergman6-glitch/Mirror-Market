@@ -32,6 +32,7 @@ from config import (
     LAYER_MAX_DATA_AGE_DAYS,
     LAYER_MIN_KEYS,
     MAX_FAILED_LAYERS,
+    layer_expected_keys,
     setup_logging,
 )
 from fetchers.agrural import fetch_agrural
@@ -129,11 +130,26 @@ DISABLED_LAYERS: frozenset[str] = frozenset()
 _HARD_FAILURES: set[str] = set()
 
 
-def _mark_failed(layer: str) -> None:
-    """Best-effort 'failed' freshness row — never crashes the pipeline itself."""
+def _mark_failed(
+    layer: str,
+    rows_fetched: int = 0,
+    keys_returned: int | None = None,
+    keys_expected: int | None = None,
+) -> None:
+    """Best-effort 'failed' freshness row — never crashes the pipeline itself.
+
+    Callers that already computed the run's counts pass them through, so a
+    partial outage records "3 of 10 keys" instead of a fabricated zero
+    (#182). Callers with no payload at all — the transport-exception paths —
+    leave the key counts None, which records NULL: never learned, as opposed
+    to asked-and-got-nothing.
+    """
     _HARD_FAILURES.add(layer)
     try:
-        save_freshness(layer, status="failed")
+        save_freshness(
+            layer, rows_fetched=rows_fetched, status="failed",
+            keys_returned=keys_returned, keys_expected=keys_expected,
+        )
     except Exception:
         logger.exception("Could not record failed-freshness row for %s", layer)
 
@@ -145,6 +161,10 @@ def _mark_empty(layer: str) -> None:
     legitimately had nothing to publish (no inspection report this week, no
     matching contracts traded, etc). Without this, an empty result is
     indistinguishable from "the layer never ran" on the dashboard.
+
+    Zero rows is the truth here, so rows_fetched=0 stands; key coverage is
+    left NULL because the layers that reach this path have no key catalog
+    to be partial against (#182).
     """
     try:
         save_freshness(layer, rows_fetched=0, status="success")
@@ -152,7 +172,15 @@ def _mark_empty(layer: str) -> None:
         logger.exception("Could not record empty-success freshness row for %s", layer)
 
 
-def _mark_stale(layer: str, latest: pd.Timestamp, age_days: int, budget: int) -> None:
+def _mark_stale(
+    layer: str,
+    latest: pd.Timestamp,
+    age_days: int,
+    budget: int,
+    rows_fetched: int = 0,
+    keys_returned: int | None = None,
+    keys_expected: int | None = None,
+) -> None:
     """Record a layer that fetched fine but delivered stale data (audit F3).
 
     Recorded as 'failed' rather than 'success' so last_success is preserved
@@ -171,7 +199,10 @@ def _mark_stale(layer: str, latest: pd.Timestamp, age_days: int, budget: int) ->
         layer, latest.strftime("%Y-%m-%d"), age_days, budget,
     )
     try:
-        save_freshness(layer, status="failed")
+        save_freshness(
+            layer, rows_fetched=rows_fetched, status="failed",
+            keys_returned=keys_returned, keys_expected=keys_expected,
+        )
     except Exception:
         logger.exception("Could not record stale-freshness row for %s", layer)
 
@@ -226,11 +257,20 @@ def _latest_observation_date(data: dict) -> pd.Timestamp | None:
     return max(normalised)
 
 
-def _check_layer_recency(layer: str, data: dict) -> bool:
+def _check_layer_recency(
+    layer: str,
+    data: dict,
+    rows_fetched: int = 0,
+    keys_returned: int | None = None,
+    keys_expected: int | None = None,
+) -> bool:
     """True if the layer's data is recent enough for 'success' to be honest.
 
     Layers absent from LAYER_MAX_DATA_AGE_DAYS are not checked and always
     pass — see the config block for why each exclusion is deliberate.
+
+    The counts are pass-through: both failure paths here run against a real
+    payload, so they record what it contained rather than defaulting to zero.
     """
     budget = LAYER_MAX_DATA_AGE_DAYS.get(layer)
     if budget is None:
@@ -246,12 +286,17 @@ def _check_layer_recency(layer: str, data: dict) -> bool:
             "could be found in its frames — treating as unverifiable, not fresh",
             layer,
         )
-        _mark_failed(layer)
+        _mark_failed(layer, rows_fetched, keys_returned, keys_expected)
         return False
 
     age_days = (pd.Timestamp.now().normalize() - latest.normalize()).days
     if age_days > budget:
-        _mark_stale(layer, latest, age_days, budget)
+        _mark_stale(
+            layer, latest, age_days, budget,
+            rows_fetched=rows_fetched,
+            keys_returned=keys_returned,
+            keys_expected=keys_expected,
+        )
         return False
     return True
 
@@ -320,24 +365,34 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> 
     non_empty = sum(1 for v in data.values() if not v.empty)
     total_rows = sum(len(v) for v in data.values())
     floor = LAYER_MIN_KEYS.get(layer, 1)
+    # keys_returned is the non-empty-key count — the same quantity the floor
+    # is graded against — so displayed coverage can never contradict the
+    # verdict it explains (#182).
+    expected = layer_expected_keys(layer)
+    # A layer with no catalog records NULL coverage rather than "n of
+    # unknown" — 1/1 on a single-key layer is noise both surfaces would
+    # then have to filter back out.
+    returned = non_empty if expected is not None else None
 
     if non_empty == 0:
         logger.warning("[%s] returned no data", layer)
         if layer in CRITICAL_LAYERS or _empty_is_failure(layer, empty_fails):
-            _mark_failed(layer)
+            _mark_failed(layer, total_rows, returned, expected)
         else:
             _mark_empty(layer)
         return False
     if non_empty < floor:
         logger.warning(
             "[%s] partial: only %d/%d keys returned data (floor %d) — recording as failed",
-            layer, non_empty, len(data), floor,
+            layer, non_empty, expected or len(data), floor,
         )
-        _mark_failed(layer)
+        _mark_failed(layer, total_rows, returned, expected)
         return False
-    if not _check_layer_recency(layer, data):
+    if not _check_layer_recency(layer, data, total_rows, returned, expected):
         return False
-    save_freshness(layer, total_rows)
+    save_freshness(
+        layer, total_rows, keys_returned=returned, keys_expected=expected,
+    )
     return True
 
 
