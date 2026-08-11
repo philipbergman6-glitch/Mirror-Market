@@ -180,6 +180,48 @@ def test_a_basis_with_no_shared_session_is_empty_not_a_cross_day_subtraction(
     assert "share no session" in basis.reason
 
 
+def _seed_india_mandi(conn) -> None:
+    """India's daily leg at the real 2026-08-11 level, plus its FX rate."""
+    for key, close in (("Soybean (Mandi MP)", 67250.0), ("Soybean (Mandi MH)", 67000.0)):
+        conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
+                     "VALUES (?,?,?,?)", (_day(0), key, close, "INR/MT"))
+    conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                 ("INR/USD", _day(0), 0.0105))
+    conn.commit()
+
+
+def test_indias_basis_carries_its_policy_spread_caveat(seeded, registry):
+    """M19 #222: the number alone cannot show that no cargo can close it."""
+    _seed_india_mandi(seeded.conn)
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    basis = _block(build_blocks(registry["india"], None, ctx, markets=registry), "basis")
+    assert basis.state == "ok"
+    # INR 67,250/MT at 0.0105 = USD 706/MT against a 1050 c/bu board = USD 386.
+    assert round(basis.data["basis_usd_mt"]) == 320
+    assert basis.data["arbitrage"] == "policy_blocked"
+    assert "tariff wall" in basis.data["caveat"]
+    # One session is not a range, and the block says which it has.
+    assert basis.data["avg"] is None
+    assert "history building" in basis.data["history_note"]
+
+
+def test_the_policy_spread_caveat_reaches_the_markup(seeded, registry):
+    """A caveat the template drops is the same as no caveat at all."""
+    from jinja2 import Environment, FileSystemLoader
+
+    _seed_india_mandi(seeded.conn)
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    basis = _block(build_blocks(registry["india"], None, ctx, markets=registry), "basis")
+    env = Environment(loader=FileSystemLoader("app/templates"), autoescape=True)
+    html = env.get_template("blocks/04_basis.html.j2").render(block=basis)
+    assert "tariff wall" in html
+    assert "alert-warn" in html
+
+    cbot = _block(_build("cbot", seeded, registry), "basis")
+    open_html = env.get_template("blocks/04_basis.html.j2").render(block=cbot)
+    assert "alert-warn" not in open_html  # an open basis carries no warning
+
+
 def test_crush_uses_one_session_for_all_three_legs(seeded, registry):
     seeded.conn.execute("DELETE FROM prices WHERE commodity = 'Soybean Oil' AND Date = ?",
                         (_day(0),))

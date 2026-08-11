@@ -1022,6 +1022,14 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # and the layer would stay green. Same long-weekend-plus-holiday budget as
     # the other daily exchange legs (#157).
     "safex": 7,
+    # Agmarknet mandi spot. The API serves the *current day only*, so history
+    # exists only as rows we already stored — a frozen or silently-emptied
+    # upstream leaves the newest Date standing still while the layer keeps
+    # returning 200. Same long-weekend-plus-holiday budget as the other daily
+    # legs. Two enforcement points off one number: main.py stops stamping
+    # last_success, and app/markets.py's tier probe demotes the India page to a
+    # brief within the week rather than on the 14-day default (M19 #222).
+    "india_domestic": 7,
     "fred": 10,        # 1-day publication lag on the daily series
     "weather": 10,     # includes forecast rows, so age is normally negative
     "dce": 21,         # Spring Festival / Golden Week close the DCE for ~2 weeks
@@ -1182,6 +1190,14 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
 # `cadence` gates the propagation ledger: it is daily-only (M10 #151), so a
 # weekly leg renders in a cadence-stamped context band instead of a strip row
 # that would read as an outage.
+#
+# `arbitrage` is required on every basis descriptor (M19 #222). A basis is a
+# number a trader can work only where trade actually connects the two legs;
+# India's mandi bean prints +66% over CBOT because GM imports are banned
+# behind a tariff wall, and there is no cargo that closes it. Rendering that
+# beside Paranaguá FOB with the same treatment invites a trade that cannot be
+# taken. `policy_blocked` therefore *requires* a `caveat` — enforced at load in
+# app/markets.py, so the spread cannot ship unlabelled.
 # ---------------------------------------------------------------------------
 MARKETS = {
     "cbot": {
@@ -1225,6 +1241,7 @@ MARKETS = {
             # delivery windows print on one report date.
             "value_column": "average",
             "unit": "usd_per_bushel",
+            "arbitrage": "open",
         },
         "weather_regions": ["US Midwest (Iowa)", "US Illinois"],
         "psd_country": "United States",
@@ -1275,6 +1292,10 @@ MARKETS = {
             "label": "DCE No.2 over CBOT (import parity)",
             "value_column": "Close",
             "unit": "home_per_mt",
+            # China imports the bean this contract deliveries against, so the
+            # spread is worked by real cargoes — bounded by freight, tariff
+            # (3%) and VAT (9%), not closed to zero.
+            "arbitrage": "open",
         },
         "weather_regions": ["China Heilongjiang", "China Jilin"],
         "psd_country": "China",
@@ -1314,6 +1335,7 @@ MARKETS = {
             "label": "Paranaguá FOB over CBOT",
             "value_column": "price_brl",
             "unit": "home_per_mt",
+            "arbitrage": "open",
         },
         "weather_regions": ["Brazil Mato Grosso", "Brazil Parana"],
         "psd_country": "Brazil",
@@ -1364,6 +1386,9 @@ MARKETS = {
             "label": "Argentina official FOB over CBOT",
             "value_column": "price_usd_mt",
             "unit": "usd_per_mt",
+            # Administered minimum, but on physical cargoes that do move —
+            # export duty and the FX regime widen it, they don't block it.
+            "arbitrage": "open",
         },
         "weather_regions": ["Argentina Pampas", "Argentina Cordoba"],
         "psd_country": "Argentina",
@@ -1393,14 +1418,35 @@ MARKETS = {
             "mandi is bean-only — no Indian oil or meal quote exists at daily "
             "cadence (NCDEX suspended to >=2027-03-31)"
         ),
-        # M1 #143 caught the mandi level printing +66% over CBOT, against a
-        # source row carrying Low = INR 1,010/MT beside High = INR 71,500. The
-        # basis line stays absent until #206 validates the level.
-        "basis": None,
-        "basis_absent_reason": (
-            "mandi level fails validation against CBOT (+66%; unit mix in the "
-            "source) — blocked on #206"
-        ),
+        # Unblocked by #206: the +66% is real, cross-checked against SOPA's own
+        # Indore oil and meal quotes (not Agmarknet-derived). Struck on the MP
+        # median alone — the price block's own headline key, and the Indore hub
+        # is the benchmark. MH is carried as the second price leg, not as a
+        # second basis: two lines 0.2% apart would imply a choice that isn't one.
+        "basis": {
+            "layer": "india_domestic",
+            "table": "india_domestic_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (Mandi MP)"],
+            "headline_key": "Soybean (Mandi MP)",
+            "reference": "cbot",
+            "label": "Mandi MP over CBOT (policy spread)",
+            # Same stored column and unit as the price leg it is struck on —
+            # INR/MT through the INR/USD rate, converted only by to_usd_mt.
+            "value_column": "Close",
+            "unit": "home_per_mt",
+            # The whole reason this line needed a decision (#222): no trade
+            # route connects these two legs, so the spread is not a basis a
+            # trader can work — see ARBITRAGE_KINDS.
+            "arbitrage": "policy_blocked",
+            "caveat": (
+                "India bans GM soybean imports behind a tariff wall, so no "
+                "arbitrage connects this bean to CBOT — this is a policy "
+                "spread, not a freight-and-quality one. It reached ~2x in 2021 "
+                "and a wide print is its normal state, not a data error."
+            ),
+        },
         "weather_regions": ["India Madhya Pradesh", "India Maharashtra"],
         "psd_country": "India",
         "players_country": "IN",

@@ -107,6 +107,16 @@ UNITS = frozenset({
 
 # Units that are a price and therefore have a USD/MT rendering.
 PRICE_UNITS = frozenset({"native_exchange", "usd_per_bushel", "home_per_mt", "usd_per_mt"})
+# Whether trade connects a basis's two legs (M19 #222). This is not decoration:
+# `open` means cargoes move between the two markets, so the spread is bounded
+# by freight, quality, duty and FX and a trader can work it. `policy_blocked`
+# means no such route exists — India's mandi bean prints +66% over CBOT because
+# GM imports are banned behind a tariff wall, and nothing closes it (it reached
+# ~2x in 2021). The distinction is closed and load-validated for the same
+# reason QUOTE_KINDS is: rendering a policy spread with the same treatment as
+# Paranaguá FOB invites a trade that cannot be taken, and a missing label is
+# exactly the failure that would never be noticed in review.
+ARBITRAGE_KINDS = frozenset({"open", "policy_blocked"})
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +143,10 @@ class Source:
     headline_key: str | None = None
     reference: str | None = None
     label: str | None = None
+    # Basis sources only. See ARBITRAGE_KINDS; `caveat` is mandatory when the
+    # arbitrage is blocked and rides onto the block with the number.
+    arbitrage: str | None = None
+    caveat: str | None = None
 
     @property
     def max_age_days(self) -> int:
@@ -267,6 +281,23 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         raise ValueError(f"market {slug!r} {block} headline_key {headline!r} is not one of its keys")
     if raw["unit"] not in UNITS:
         raise ValueError(f"market {slug!r} {block} unit {raw['unit']!r} not in {sorted(UNITS)}")
+    arbitrage = raw.get("arbitrage")
+    caveat = raw.get("caveat")
+    if block == "basis":
+        # Required, not defaulted: an omitted field would silently mean "open",
+        # which is the reading that ships a policy spread as a workable basis.
+        if arbitrage not in ARBITRAGE_KINDS:
+            raise ValueError(
+                f"market {slug!r} basis must declare arbitrage in {sorted(ARBITRAGE_KINDS)}, "
+                f"got {arbitrage!r} — see ARBITRAGE_KINDS (M19 #222)"
+            )
+        if arbitrage == "policy_blocked" and not (caveat or "").strip():
+            raise ValueError(
+                f"market {slug!r} basis is arbitrage={arbitrage!r} and must carry a caveat "
+                "saying why the spread cannot be worked (M19 #222)"
+            )
+    elif arbitrage is not None:
+        raise ValueError(f"market {slug!r} {block} source declares arbitrage — basis-only")
     return Source(
         layer=raw["layer"],
         table=raw["table"],
@@ -280,6 +311,8 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         headline_key=headline,
         reference=raw.get("reference"),
         label=raw.get("label"),
+        arbitrage=arbitrage,
+        caveat=caveat,
     )
 
 
@@ -576,6 +609,7 @@ def relative_root(output_relpath: str) -> str:
 
 
 __all__ = [
+    "ARBITRAGE_KINDS",
     "CRUSH_YIELD_SETS",
     "MARKET_URL_TEMPLATE",
     "SUPPORTING_BLOCKS",
