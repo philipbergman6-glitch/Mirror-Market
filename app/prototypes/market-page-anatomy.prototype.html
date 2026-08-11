@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway. Ticket M1 #143 (map #142).
+  Question: what is the fixed block anatomy of a market page, and how does it
+  degrade when a market is missing a leg?
+
+  Three structurally different degradation treatments (?variant=A|B|C) rendered
+  across four real markets (?market=dalian|india|nigeria|euronext), chosen to
+  span the fidelity range: rich → thin → skeleton → empty.
+
+  All numbers are REAL. Live-fetched 2026-08-11: DCE (akshare), CBOT + FX
+  (yfinance), India mandi (data/history CSV, 2026-08-11).
+  From the local DB, whose last pipeline run was 2026-08-07: Brazil CEPEA /
+  AgRural (2026-08-06), US Gulf AMS bids (2026-08-06), Argentina MAGyP FOB
+  (2026-08-06), PSD, weather. Those stale dates render as real state pills —
+  they are not placeholders.
+  Nothing is invented. Where a market has no source, the block is genuinely absent.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE — Market page anatomy (M1 #143)</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAFAF7; --card:#FFFFFF; --rule:#D8DCD8; --rule-heavy:#191C1A;
+    --text:#191C1A; --text-muted:#5D6660; --text-dim:#9BA39E;
+    --green:#2D6A4F; --green-light:#E4EEE8;
+    --bullish:#1F7A3D; --bearish:#C23B2E;
+    --warning:#A8730A; --warn-fill:#E8C983; --warn-ink:#4A3608;
+    --info:#2F5D8F; --info-fill:#E4E8E4;
+    --soy:#8B6914; --oil:#B05E10; --meal:#8A5A2B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--text);
+       font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.45;
+       padding-bottom:110px}
+  .page{max-width:1180px;margin:0 auto;padding:0 32px 64px}
+  .num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+  .up{color:var(--bullish)} .down{color:var(--bearish)}
+  .muted{color:var(--text-muted)} .dim{color:var(--text-dim)}
+
+  /* masthead */
+  .masthead{display:flex;justify-content:space-between;align-items:flex-end;
+            padding:26px 0 12px;border-bottom:3px solid var(--rule-heavy)}
+  .brand{font-family:Archivo,sans-serif;font-weight:800;font-size:42px;
+         letter-spacing:-0.03em;line-height:1}
+  .brand .accent{color:var(--green)}
+  .brand .kicker{display:block;font-size:13px;font-weight:600;letter-spacing:.08em;
+                 text-transform:uppercase;color:var(--text-muted);margin-bottom:6px}
+  .meta{text-align:right;font-size:12px;color:var(--text-muted);line-height:1.7}
+  .meta .num{color:var(--text)}
+  .stale{margin:10px 0 0;padding:8px 12px;background:rgba(168,115,10,.08);
+         border-left:3px solid var(--warning);font-size:13px;color:var(--warn-ink)}
+  .protobar{background:#191C1A;color:#fff;font-size:12px;letter-spacing:.06em;
+            text-transform:uppercase;padding:6px 32px;font-family:"IBM Plex Mono",monospace}
+
+  /* index nav */
+  .idxnav{position:sticky;top:0;z-index:20;background:var(--paper);
+          border-bottom:1px solid var(--rule);display:flex;gap:18px;
+          padding:9px 0;font-size:12px;overflow-x:auto}
+  .idxnav a{color:var(--text-muted);text-decoration:none;white-space:nowrap}
+  .idxnav a .n{font-family:"IBM Plex Mono",monospace;color:var(--green);margin-right:5px}
+  .idxnav a.off{color:var(--text-dim)}
+  .idxnav a.off .n{color:var(--text-dim)}
+
+  /* sections */
+  section{padding:24px 0;border-bottom:1px solid var(--rule)}
+  .sechead{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+  .sec-no{font-family:"IBM Plex Mono",monospace;color:var(--green);font-size:13px}
+  .sechead h2{font-family:Archivo,sans-serif;font-weight:700;font-size:15px;
+              text-transform:uppercase;letter-spacing:.05em;margin:0}
+  .why{margin-left:auto;font-size:12px;color:var(--text-dim);text-align:right}
+
+  /* cards + grids */
+  .grid{display:grid;gap:16px}
+  .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .card{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:16px}
+  .leg-name{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+  .leg-price{font-family:Archivo,sans-serif;font-weight:700;font-size:32px;letter-spacing:-.02em;margin:6px 0 2px}
+  .leg-price .u{font-size:13px;color:var(--text-dim);font-family:Inter,sans-serif;font-weight:500;margin-left:4px}
+  .leg-native{font-size:12px;color:var(--text-muted)}
+  .leg-sub{font-size:12px;color:var(--text-muted);margin-top:8px;padding-top:8px;border-top:1px dotted var(--rule)}
+
+  .bigstat{font-family:Archivo,sans-serif;font-weight:700;font-size:30px;letter-spacing:-.02em}
+  .bigstat .u{font-size:14px;color:var(--text-dim);font-weight:500;font-family:Inter,sans-serif}
+  .cap{font-size:13px;color:var(--text-muted);margin-top:4px}
+
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
+      border-bottom:1px dotted var(--rule);font-size:13px}
+  .kv .k{color:var(--text-muted)} .kv .v{font-family:"IBM Plex Mono",monospace}
+
+  /* pills */
+  .pill{display:inline-block;font-size:11px;padding:2px 7px;border-radius:3px;
+        font-family:"IBM Plex Mono",monospace;letter-spacing:.02em;white-space:nowrap}
+  .pill.ok{background:var(--green-light);color:var(--green)}
+  .pill.warn{background:var(--warn-fill);color:var(--warn-ink)}
+  .pill.dark{background:var(--bearish);color:#fff}
+  .pill.neutral{background:var(--info-fill);color:var(--text-muted)}
+  .kindtag{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em}
+
+  /* ledger */
+  table.ledger{width:100%;border-collapse:collapse;font-size:13px}
+  table.ledger th{text-align:left;font-size:11px;text-transform:uppercase;
+                  letter-spacing:.06em;color:var(--text-dim);font-weight:600;
+                  padding:0 8px 6px 0;border-bottom:1px solid var(--rule)}
+  table.ledger td{padding:9px 8px 9px 0;border-bottom:1px dotted var(--rule);vertical-align:top}
+  table.ledger tr.own td{background:rgba(45,106,79,.05)}
+  td.usd{font-family:"IBM Plex Mono",monospace;font-weight:500;background:rgba(45,106,79,.04)}
+  .sub{display:block;font-size:11px;color:var(--text-muted);font-family:"IBM Plex Mono",monospace}
+  .notshown{font-size:12px;color:var(--text-dim);padding-top:10px}
+
+  /* empty states (variant A) */
+  .empty{background:repeating-linear-gradient(135deg,#fff,#fff 9px,#FAFAF7 9px,#FAFAF7 18px);
+         border:1px dashed var(--rule);border-radius:8px;padding:16px}
+  .empty .h{font-size:13px;font-weight:600;color:var(--text-muted)}
+  .empty .r{font-size:12px;color:var(--text-dim);margin-top:4px}
+  .reserved{border:1px dashed var(--rule);border-radius:8px;padding:14px 16px;
+            background:#fff;font-size:12px;color:var(--text-dim)}
+
+  /* variant B manifest */
+  .manifest{font-size:12px;color:var(--text-muted);padding:14px 16px;background:#fff;
+            border:1px solid var(--rule);border-radius:8px}
+  .manifest b{color:var(--text)}
+
+  /* variant C brief */
+  .brief{background:var(--card);border:1px solid var(--rule);border-radius:8px;
+         padding:22px 24px;margin-top:22px}
+  .brief h3{font-family:Archivo,sans-serif;font-size:20px;margin:0 0 2px;letter-spacing:-.01em}
+  .brief .tier{font-size:11px;font-family:"IBM Plex Mono",monospace;color:var(--text-dim);
+               text-transform:uppercase;letter-spacing:.08em}
+  .brief .row{display:flex;justify-content:space-between;padding:7px 0;
+              border-bottom:1px dotted var(--rule);font-size:13px}
+  .briefgrid{display:grid;grid-template-columns:1.2fr 1fr;gap:28px;margin-top:14px}
+  .tierbanner{margin:16px 0 0;padding:10px 14px;border-left:3px solid var(--info);
+              background:var(--info-fill);font-size:12px;color:var(--text-muted)}
+
+  /* switcher */
+  .switch{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:100;
+          background:#191C1A;color:#fff;border-radius:999px;padding:8px 10px;
+          display:flex;align-items:center;gap:6px;box-shadow:0 6px 24px rgba(0,0,0,.28);
+          font-family:"IBM Plex Mono",monospace;font-size:12px}
+  .switch button{background:transparent;border:0;color:#fff;font-size:15px;cursor:pointer;
+                 padding:2px 8px;border-radius:999px}
+  .switch button:hover{background:rgba(255,255,255,.15)}
+  .switch .lbl{min-width:250px;text-align:center}
+  .switch .sep{width:1px;height:18px;background:rgba(255,255,255,.25);margin:0 4px}
+  .switch .hint{color:#9BA39E;font-size:10px}
+  @media(max-width:900px){.g3,.g4,.g2,.briefgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="protobar">Prototype · M1 #143 · market page anatomy — press ← → for treatment, ↑ ↓ for market</div>
+<div id="app"></div>
+
+<div class="switch">
+  <button onclick="cycle('market',-1)">↑</button>
+  <span class="lbl" id="lbl-market"></span>
+  <button onclick="cycle('market',1)">↓</button>
+  <span class="sep"></span>
+  <button onclick="cycle('variant',-1)">←</button>
+  <span class="lbl" id="lbl-variant"></span>
+  <button onclick="cycle('variant',1)">→</button>
+</div>
+
+<script>
+/* ─────────────────────────── REAL DATA ─────────────────────────── */
+const REF = {                       // CBOT, last SETTLED session 2026-08-10 (prev 2026-08-07)
+  bean:{usd:425.40, prev:434.03, native:"1,157.75 ¢/bu"},
+  oil:{usd:1531.33, prev:1487.02, native:"69.46 ¢/lb"},
+  meal:{usd:334.77, prev:348.99, native:"303.70 $/st"},
+  crush:100.84, crushPrev:94.51,
+  inProgress:{bean:1167.75}         // 2026-08-11 session, unsettled — not stored
+};
+const pct=(a,b)=>((a-b)/b*100);
+const sgn=v=>(v>=0?"+":"")+v.toFixed(2);
+const cls=v=>v>=0?"up":"down";
+const n=(v,d=2)=>v.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+
+const MARKETS = {
+  dalian:{
+    key:"dalian", name:"Dalian", full:"Dalian · DCE", country:"China",
+    tz:"settles 07:00 UTC", date:"2026-08-11",
+    fx:{pair:"CNY/USD", rate:0.14825797, prev:0.14820524, label:"CNY 6.745 / USD", date:"2026-08-11"},
+    legs:[
+      {name:"Soybean No.2 (B0)", colour:"var(--soy)", usd:563.83, prevUsd:563.92, native:"3,803 CNY/MT", nativeChg:-0.05, note:"imported / GMO crush bean"},
+      {name:"Soybean Meal (M0)", colour:"var(--meal)", usd:465.53, prevUsd:466.55, native:"3,140 CNY/MT", nativeChg:-0.25},
+      {name:"Soybean Oil (Y0)", colour:"var(--oil)", usd:1255.44, prevUsd:1251.59, native:"8,468 CNY/MT", nativeChg:+0.27}
+    ],
+    extraLeg:{name:"Soybean No.1 (A0) — food bean", usd:728.55, native:"4,914 CNY/MT",
+              note:"carried, not on the board crush · rendering decision open (M13 #165)"},
+    crush:{value:7.73, unit:"USD/MT", prev:7.67, native:"52.13 CNY/MT", kind:"board crush",
+           note:"oil ×0.183 + meal ×0.733 − bean, DCE legs, all CNY/MT native"},
+    basis:{label:"Import parity — B0 vs CBOT bean", value:+138.43, unit:"USD/MT",
+           note:"freight + 3% tariff + 9% VAT sit inside this number; it is not a clean arb"},
+    weather:{region:"Heilongjiang", precip:"36.3 mm / 10d", tmax:"29.3 °C",
+             caveat:"China grows 21 Mt and imports 115 Mt — its weather is a minor input to its own price"},
+    psd:[["Imports","115,000"],["Crush","111,000"],["Production","21,000"],["Ending stocks","44,269"]],
+    positioning:null, positioningWhy:"No Chinese equivalent of the CFTC COT exists. DCE publishes broker-rank tables, not a commercial/non-commercial split.",
+    players:"10 Chinese counterparties on the players map",
+    ledger:[
+      {mkt:"Dalian B0", kind:"board", time:"07:00", usd:563.83, chgUsd:-0.02, home:"3,803 CNY/MT", chgHome:-0.05, state:"repriced 11 Aug", pill:"ok", own:true},
+      {mkt:"CBOT beans", kind:"board", time:"18:15", usd:425.40, chgUsd:-1.99, home:"1,157.75 ¢/bu", chgHome:-1.99, state:"10 Aug settled · 11 Aug in progress", pill:"warn"},
+      {mkt:"US Gulf CIF", kind:"physical", time:"18:48", usd:469.42, chgUsd:null, home:"12.78 $/bu", chgHome:null, state:"no print since 6 Aug", pill:"warn"},
+      {mkt:"Brazil Paranaguá", kind:"physical", time:"21:01", usd:468.44, chgUsd:null, home:"2,416.67 BRL/MT", chgHome:null, state:"no print since 6 Aug", pill:"warn"},
+      {mkt:"Argentina FOB", kind:"administered", time:"15:05", usd:451.00, chgUsd:null, home:"451.00 USD/MT", chgHome:null, state:"no print since 6 Aug", pill:"warn"}
+    ],
+    notShown:"Not shown — Nigeria (no domestic price series), Europe (feed not yet ingested)."
+  },
+
+  india:{
+    key:"india", name:"India", full:"India · Mandi spot", country:"India",
+    tz:"Agmarknet, ~D−1", date:"2026-08-11",
+    fx:{pair:"INR/USD", rate:0.010479433, prev:0.010503066, label:"INR 95.42 / USD", date:"2026-08-11"},
+    legs:[
+      {name:"Soybean — Madhya Pradesh", colour:"var(--soy)", usd:706.62, prevUsd:null, native:"₹67,430/MT", nativeChg:null, note:"median modal across 100 mandis"},
+      {name:"Soybean — Maharashtra", colour:"var(--soy)", usd:702.12, prevUsd:null, native:"₹67,000/MT", nativeChg:null, note:"median modal across 62 mandis"}
+    ],
+    crush:null, crushWhy:"No domestic oil or meal price is available at all (NCDEX derivatives suspended to ≥2027-03-31; mandi feed is bean-only). A crush margin cannot be computed at any fidelity.",
+    basis:{label:"Mandi MP vs CBOT bean", value:+281.22, unit:"USD/MT",
+           note:"+66% over CBOT. India runs a protected bean market, but a premium this wide is unvalidated — see the note in the ticket."},
+    weather:{region:"Madhya Pradesh + Maharashtra", precip:"29.5 / 15.8 mm 10d", tmax:"29.2 / 31.1 °C",
+             caveat:"Kharif soybean in-season — this is the market's most decision-relevant block"},
+    psd:[["Production","11,500"],["Crush","10,000"],["Imports","200"],["Ending stocks","541"]],
+    positioning:null, positioningWhy:"NCDEX soy futures are suspended by SEBI to ≥2027-03-31. There is no open interest to report.",
+    players:"16 Indian counterparties on the players map",
+    history:"1 session of stored history (from 2026-08-10 — the resource serves the current day only)",
+    ledger:[
+      {mkt:"Mandi MP", kind:"physical", time:"~D−1", usd:706.62, chgUsd:null, home:"₹67,430/MT", chgHome:null, state:"repriced 11 Aug · no prior session stored", pill:"warn", own:true},
+      {mkt:"CBOT beans", kind:"board", time:"18:15", usd:425.40, chgUsd:-1.99, home:"1,157.75 ¢/bu", chgHome:-1.99, state:"10 Aug settled", pill:"ok"},
+      {mkt:"Dalian B0", kind:"board", time:"07:00", usd:563.83, chgUsd:-0.02, home:"3,803 CNY/MT", chgHome:-0.05, state:"repriced 11 Aug", pill:"ok"},
+      {mkt:"Brazil Paranaguá", kind:"physical", time:"21:01", usd:468.44, chgUsd:null, home:"2,416.67 BRL/MT", chgHome:null, state:"no print since 6 Aug", pill:"warn"},
+      {mkt:"Argentina FOB", kind:"administered", time:"15:05", usd:451.00, chgUsd:null, home:"451.00 USD/MT", chgHome:null, state:"no print since 6 Aug", pill:"warn"}
+    ],
+    notShown:"Not shown — Nigeria (no domestic price series), Europe (feed not yet ingested)."
+  },
+
+  nigeria:{
+    key:"nigeria", name:"Nigeria", full:"Nigeria", country:"Nigeria",
+    tz:"no price venue", date:"—",
+    fx:{pair:"NGN/USD", rate:0.0007350941, prev:0.0007345973, label:"NGN 1,360.4 / USD", date:"2026-08-11"},
+    legs:[], legsWhy:"No domestic price series of any kind — the only market on the map without one. AFEX / FEWS NET / NBS are under evaluation (X4 #134).",
+    crush:null, crushWhy:"Requires a local price. None exists.",
+    basis:null, basisWhy:"A basis is a local price minus a board. There is no local price.",
+    weather:{region:"Benue + Kaduna", precip:"104.8 / 52.8 mm 10d", tmax:"31.2 / 29.8 °C",
+             caveat:"Wet-season peak. With no price leg, this is the only daily-moving block on the page"},
+    psd:[["Production","1,500"],["Crush","975"],["Domestic use","1,450"],["Exports","50"]],
+    positioning:null, positioningWhy:"No exchange.",
+    players:"5 Nigerian counterparties on the players map",
+    ledger:[
+      {mkt:"Nigeria", kind:"—", time:"—", usd:null, chgUsd:null, home:null, chgHome:null, state:"dark — no series exists", pill:"dark", own:true},
+      {mkt:"CBOT beans", kind:"board", time:"18:15", usd:425.40, chgUsd:-1.99, home:"1,157.75 ¢/bu", chgHome:-1.99, state:"10 Aug settled", pill:"ok"},
+      {mkt:"US Gulf CIF", kind:"physical", time:"18:48", usd:469.42, chgUsd:null, home:"12.78 $/bu", chgHome:null, state:"no print since 6 Aug", pill:"warn"},
+      {mkt:"Brazil Paranaguá", kind:"physical", time:"21:01", usd:468.44, chgUsd:null, home:"2,416.67 BRL/MT", chgHome:null, state:"no print since 6 Aug", pill:"warn"},
+      {mkt:"Argentina FOB", kind:"administered", time:"15:05", usd:451.00, chgUsd:null, home:"451.00 USD/MT", chgHome:null, state:"no print since 6 Aug", pill:"warn"}
+    ],
+    notShown:"Not shown — India (bean-only, one stored session), Europe (feed not yet ingested)."
+  },
+
+  euronext:{
+    key:"euronext", name:"Europe", full:"Europe · rapeseed", country:"EU-27",
+    tz:"weekly assessment", date:"—",
+    fx:null, fxWhy:"EUR is not in the currency layer — the 10 tracked pairs are BRL, ARS, PYG, CNY, IDR, MYR, INR, THB, ZAR, NGN.",
+    legs:[], legsWhy:"MATIF settlements are licensed (€167.55/month to redistribute) and deliberately not shown. The EC Oilseeds Observatory weekly assessment is decided but NOT YET INGESTED (build #163).",
+    crush:null, crushWhy:"No price leg of any kind yet.",
+    basis:null, basisWhy:"No price leg of any kind yet.",
+    weather:null, weatherWhy:"No European region among the 18 weather regions.",
+    psd:[["Meal imports","20,200"],["Crush","14,500"],["Meal production","11,455"],["Meal use","31,042"]],
+    positioning:null, positioningWhy:"MATIF open interest is part of the licensed package.",
+    players:"12 European counterparties on the players map",
+    ledger:null, ledgerWhy:"The ledger is daily-only (M10). A weekly assessment rendered as a ledger row would read as a five-day outage.",
+    notShown:""
+  }
+};
+
+/* ─────────────────────── BLOCK RENDERERS ───────────────────────
+   Each returns {present:bool, html, reason} — the variants differ ONLY in
+   what they do with present:false. */
+
+const B = {};
+
+B.price = m => {
+  if(!m.legs || !m.legs.length) return {present:false, reason:m.legsWhy};
+  const cards = m.legs.map(l=>{
+    const chg = l.prevUsd!=null ? pct(l.usd,l.prevUsd) : null;
+    return `<div class="card">
+      <div class="leg-name" style="color:${l.colour}">${l.name}</div>
+      <div class="leg-price num">${n(l.usd)}<span class="u">USD/MT</span></div>
+      <div class="leg-native num">${l.native}${l.nativeChg!=null?` · <span class="${cls(l.nativeChg)}">${sgn(l.nativeChg)}%</span> local`:""}</div>
+      <div class="leg-sub">${chg!=null
+        ? `<span class="${cls(chg)}">${chg>=0?"▲":"▼"} ${sgn(chg)}%</span> in USD${l.nativeChg!=null && Math.abs(chg-l.nativeChg)>=0.025?` · <span class="pill neutral">FX ${sgn(chg-l.nativeChg)}</span>`:""}`
+        : `<span class="dim">no prior session stored — change cannot be shown</span>`}
+        ${l.note?`<br><span class="dim">${l.note}</span>`:""}</div>
+    </div>`;}).join("");
+  const extra = m.extraLeg ? `<div class="card" style="margin-top:16px">
+      <div class="kv"><span class="k">${m.extraLeg.name}</span>
+      <span class="v">${n(m.extraLeg.usd)} USD/MT · ${m.extraLeg.native}</span></div>
+      <div class="dim" style="font-size:12px;margin-top:6px">${m.extraLeg.note}</div></div>` : "";
+  const hist = m.history ? `<div class="dim" style="font-size:12px;margin-top:10px">History: ${m.history}</div>`:"";
+  return {present:true, html:`<div class="grid ${m.legs.length>2?"g3":"g2"}">${cards}</div>${extra}${hist}`};
+};
+
+B.ledger = m => {
+  if(!m.ledger) return {present:false, reason:m.ledgerWhy};
+  const rows = m.ledger.map(r=>`<tr class="${r.own?"own":""}">
+    <td>${r.mkt}${r.own?' <span class="pill ok">this market</span>':""}<span class="sub">${r.kind} · ${r.time}</span></td>
+    <td class="usd">${r.usd!=null?n(r.usd):"—"}<span class="sub">${r.home??""}</span></td>
+    <td>${r.chgUsd!=null?`<span class="${cls(r.chgUsd)}">${sgn(r.chgUsd)}%</span>`:'<span class="dim">—</span>'}
+        <span class="sub">${r.chgHome!=null?sgn(r.chgHome)+"% local":""}</span></td>
+    <td><span class="pill ${r.pill}">${r.state}</span></td></tr>`).join("");
+  return {present:true, html:`<table class="ledger">
+    <tr><th>Leg (settlement order)</th><th>USD/MT</th><th>Session</th><th>State</th></tr>${rows}</table>
+    ${m.notShown?`<div class="notshown">${m.notShown}</div>`:""}
+    <div class="notshown">USD values convert at a New-York-afternoon FX mark — same-day comparable, never simultaneous. Print times are published venue schedules, not observed timestamps.</div>`};
+};
+
+B.crush = m => {
+  if(!m.crush) return {present:false, reason:m.crushWhy};
+  const d = m.crush.value - m.crush.prev;
+  return {present:true, html:`<div class="grid g2"><div class="card">
+      <div class="kindtag">${m.crush.kind}</div>
+      <div class="bigstat num ${cls(m.crush.value)}">${sgn(m.crush.value)}<span class="u"> ${m.crush.unit}</span></div>
+      <div class="cap">${m.crush.native} · <span class="${cls(d)}">${sgn(d)}</span> vs prior session</div>
+      <div class="dim" style="font-size:12px;margin-top:8px">${m.crush.note}</div></div>
+    <div class="card"><div class="kindtag">reference — CBOT board crush</div>
+      <div class="bigstat num ${cls(REF.crush)}">${sgn(REF.crush)}<span class="u"> USD/MT</span></div>
+      <div class="cap">10 Aug settled · <span class="${cls(REF.crush-REF.crushPrev)}">${sgn(REF.crush-REF.crushPrev)}</span> vs 7 Aug</div>
+      <div class="dim" style="font-size:12px;margin-top:8px">Both are <b>board</b> crushes — comparable. A physical or administered margin would not be.</div></div></div>`};
+};
+
+B.basis = m => {
+  if(!m.basis) return {present:false, reason:m.basisWhy};
+  return {present:true, html:`<div class="card">
+    <div class="kindtag">${m.basis.label}</div>
+    <div class="bigstat num ${cls(m.basis.value)}">${sgn(m.basis.value)}<span class="u"> ${m.basis.unit}</span></div>
+    <div class="cap">${m.basis.note}</div></div>`};
+};
+
+B.fx = m => {
+  if(!m.fx) return {present:false, reason:m.fxWhy};
+  const c = pct(m.fx.rate, m.fx.prev);
+  return {present:true, html:`<div class="grid g2"><div class="card">
+      <div class="kv"><span class="k">${m.fx.pair}</span><span class="v">${m.fx.label}</span></div>
+      <div class="kv"><span class="k">Session</span><span class="v ${cls(c)}">${sgn(c)}%</span></div>
+      <div class="kv"><span class="k">Mark</span><span class="v">${m.fx.date} · NY afternoon</span></div>
+    </div><div class="card"><div class="dim" style="font-size:12px">
+      Every USD/MT figure on this page is struck at this rate. Where the local price and the USD price disagree, the difference is this line — tagged <span class="pill neutral">FX</span> wherever it exceeds 0.025pt.</div></div></div>`};
+};
+
+B.weather = m => {
+  if(!m.weather) return {present:false, reason:m.weatherWhy};
+  return {present:true, html:`<div class="grid g3">
+    <div class="card"><div class="kindtag">region</div><div class="cap" style="font-size:14px;color:var(--text)">${m.weather.region}</div></div>
+    <div class="card"><div class="kindtag">precip 10d</div><div class="bigstat num">${m.weather.precip}</div></div>
+    <div class="card"><div class="kindtag">max temp</div><div class="bigstat num">${m.weather.tmax}</div></div>
+    </div><div class="dim" style="font-size:12px;margin-top:10px">${m.weather.caveat}</div>`};
+};
+
+B.psd = m => ({present:true, html:`<div class="card">${m.psd.map(([k,v])=>
+    `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("")}
+    <div class="dim" style="font-size:12px;margin-top:8px">USDA PSD, 2026/27 marketing year, 1000 MT. Annual — this block does not move daily.</div></div>`});
+
+B.positioning = m => m.positioning
+  ? {present:true, html:m.positioning}
+  : {present:false, reason:m.positioningWhy};
+
+B.news = m => ({present:true, reserved:true, html:`<div class="reserved">
+    News block reserved — no layer ingests text (out of scope on this map). Slot held so the layout does not move when it lands.</div>`});
+
+B.players = m => ({present:true, html:`<div class="card"><div class="kv">
+    <span class="k">${m.players}</span><span class="v"><a href="players.html" style="color:var(--green)">open counterparty map →</a></span></div></div>`});
+
+const BLOCKS = [
+  {id:"price", title:"Local price", why:"what this market pays, in USD/MT and its own money", fn:B.price},
+  {id:"ledger", title:"Propagation ledger", why:"who has repriced, in settlement order", fn:B.ledger},
+  {id:"crush", title:"Crush margin", why:"is processing here profitable", fn:B.crush},
+  {id:"basis", title:"Basis vs the board", why:"local against the reference price", fn:B.basis},
+  {id:"fx", title:"Currency", why:"the rate every USD figure here is struck at", fn:B.fx},
+  {id:"weather", title:"Weather", why:"this market's growing regions", fn:B.weather},
+  {id:"psd", title:"Supply & demand", why:"the annual balance behind the daily print", fn:B.psd},
+  {id:"positioning", title:"Positioning", why:"who is long and who is short", fn:B.positioning},
+  {id:"news", title:"News", why:"reserved", fn:B.news},
+  {id:"players", title:"Players", why:"who trades here", fn:B.players}
+];
+
+/* ─────────────────────────── VARIANTS ─────────────────────────── */
+const VARIANTS = {
+  A:{name:"Fixed skeleton · honest empty states", render:renderA},
+  B:{name:"Collapse · absence manifest", render:renderB},
+  C:{name:"Tiered · page or brief by evidence", render:renderC}
+};
+
+function masthead(m, sub){
+  const stale = m.key==="euronext"
+    ? "No ingested source for this market. Everything below is either annual or a reserved slot."
+    : (m.key==="nigeria" ? "No domestic price series exists for Nigeria. Nothing on this page reprices intraday except FX."
+    : null);
+  return `<div class="page"><div class="masthead">
+    <div class="brand"><span class="kicker">Mirror Market · market page</span>${m.name} <span class="accent">${m.country==="China"?"soy complex":m.country==="EU-27"?"rapeseed":"soy"}</span></div>
+    <div class="meta">Tuesday, 11 August 2026<br>
+      Local venue: <span class="num">${m.tz}</span><br>
+      Last local print: <span class="num">${m.date}</span><br>
+      All values USD/MT unless labelled</div>
+  </div>${stale?`<div class="stale">⚠ ${stale}</div>`:""}${sub??""}`;
+}
+
+function sectionHTML(i, blk, out){
+  return `<section id="${blk.id}"><div class="sechead">
+    <span class="sec-no">${String(i).padStart(2,"0")}</span><h2>${blk.title}</h2>
+    <span class="why">${blk.why}</span></div>${out.html}</section>`;
+}
+
+function nav(items, dimSet){
+  return `<div class="idxnav">${items.map((b,i)=>
+    `<a class="${dimSet.has(b.id)?"off":""}" href="#${b.id}"><span class="n">${String(i+1).padStart(2,"0")}</span>${b.title}</a>`).join("")}</div>`;
+}
+
+/* A — every block always renders, in the same order; absent ones show why. */
+function renderA(m){
+  const outs = BLOCKS.map(b=>({b, o:b.fn(m)}));
+  const dim = new Set(outs.filter(x=>!x.o.present).map(x=>x.b.id));
+  const body = outs.map((x,i)=>{
+    const html = x.o.present ? x.o.html
+      : `<div class="empty"><div class="h">Not available for ${m.name}</div><div class="r">${x.o.reason}</div></div>`;
+    return sectionHTML(i+1, x.b, {html});
+  }).join("");
+  const missing = outs.filter(x=>!x.o.present).length;
+  return masthead(m, nav(BLOCKS, dim)) + body +
+    `<div class="notshown">Treatment A · ${missing} of ${BLOCKS.length} blocks empty on this page. Every market renders the same ten sections in the same order and the numbering never shifts.</div></div>`;
+}
+
+/* B — absent blocks vanish; one manifest line at the foot names them. */
+function renderB(m){
+  const outs = BLOCKS.map(b=>({b, o:b.fn(m)}));
+  const shown = outs.filter(x=>x.o.present);
+  const gone  = outs.filter(x=>!x.o.present);
+  const body = shown.map((x,i)=>sectionHTML(i+1, x.b, x.o)).join("");
+  const manifest = gone.length ? `<section><div class="manifest">
+      <b>Not on this page.</b> ${gone.map(x=>`<b>${x.b.title}</b> — ${x.o.reason}`).join("<br>")}
+    </div></section>` : "";
+  return masthead(m, nav(shown.map(x=>x.b), new Set())) + body + manifest +
+    `<div class="notshown">Treatment B · ${shown.length} sections rendered, ${gone.length} folded into the manifest. Section numbers mean different things on different markets.</div></div>`;
+}
+
+/* C — the page tier is decided by evidence; thin markets become a brief. */
+function tierOf(m){
+  const hasPrice = !!(m.legs && m.legs.length);
+  const support = ["crush","basis","weather","ledger"].filter(id=>BLOCKS.find(b=>b.id===id).fn(m).present).length;
+  if(hasPrice && support>=3) return "page";
+  if(hasPrice || support>=2) return "brief";
+  return "stub";
+}
+function renderC(m){
+  const tier = tierOf(m);
+  if(tier==="page"){
+    const outs = BLOCKS.map(b=>({b,o:b.fn(m)})).filter(x=>x.o.present);
+    return masthead(m, nav(outs.map(x=>x.b), new Set()) +
+      `<div class="tierbanner">Tier: <b>full market page</b> — a daily local price plus three or more supporting blocks.</div>`)
+      + outs.map((x,i)=>sectionHTML(i+1,x.b,x.o)).join("")
+      + `<div class="notshown">Treatment C · tier decided from data, not from a hand-kept list.</div></div>`;
+  }
+  const outs = BLOCKS.map(b=>({b,o:b.fn(m)}));
+  const present = outs.filter(x=>x.o.present);
+  const absent  = outs.filter(x=>!x.o.present);
+  const isStub = tier==="stub";
+  const lead = present.find(x=>x.b.id==="price") ?? present.find(x=>x.b.id==="psd");
+  return masthead(m, `<div class="tierbanner">Tier: <b>${isStub?"placeholder — market not yet covered":"market brief"}</b> —
+      ${isStub?"no daily leg and fewer than two supporting blocks. This market gets a card on the headline page and a stub here, not a page pretending to be one."
+              :"a daily leg but not enough around it to fill a page. One screen, no section numbering, no empty scaffolding."}</div>`)
+    + `<div class="brief"><div class="tier">${m.full}</div><h3>${isStub?"Not yet covered":"Market brief"}</h3>
+        <div class="briefgrid"><div>${lead? lead.o.html : ""}
+          ${!isStub && present.find(x=>x.b.id==="basis") ? present.find(x=>x.b.id==="basis").o.html : ""}</div>
+        <div>${present.filter(x=>["weather","psd","fx"].includes(x.b.id)).map(x=>
+              `<div class="row"><span class="k muted">${x.b.title}</span><span class="dim">shown below</span></div>`).join("")}
+          <div class="manifest" style="margin-top:12px"><b>Missing here.</b><br>${absent.map(x=>`${x.b.title} — ${x.o.reason}`).join("<br>")}</div>
+        </div></div></div>`
+    + present.filter(x=>["weather","psd","fx","ledger","players"].includes(x.b.id))
+        .map((x,i)=>sectionHTML(i+1,x.b,x.o)).join("")
+    + `<div class="notshown">Treatment C · this market is ${isStub?"a stub":"a brief"}; Dalian is a full page. Same blocks, different container.</div></div>`;
+}
+
+/* ───────────────────────── SWITCHER ───────────────────────── */
+const MKEYS = Object.keys(MARKETS), VKEYS = Object.keys(VARIANTS);
+function state(){
+  const p = new URLSearchParams(location.search);
+  return {market: MKEYS.includes(p.get("market"))?p.get("market"):"dalian",
+          variant: VKEYS.includes(p.get("variant"))?p.get("variant"):"A"};
+}
+function cycle(which, dir){
+  const s = state(), keys = which==="market"?MKEYS:VKEYS;
+  const i = (keys.indexOf(s[which]) + dir + keys.length) % keys.length;
+  s[which] = keys[i];
+  history.replaceState(null,"",`?market=${s.market}&variant=${s.variant}`);
+  draw();
+}
+function draw(){
+  const s = state(), m = MARKETS[s.market];
+  document.getElementById("app").innerHTML = VARIANTS[s.variant].render(m);
+  document.getElementById("lbl-market").textContent = `${m.full}`;
+  document.getElementById("lbl-variant").textContent = `${s.variant} — ${VARIANTS[s.variant].name}`;
+}
+addEventListener("keydown", e=>{
+  if(/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if(e.key==="ArrowRight") cycle("variant",1);
+  if(e.key==="ArrowLeft")  cycle("variant",-1);
+  if(e.key==="ArrowDown")  cycle("market",1);
+  if(e.key==="ArrowUp")    cycle("market",-1);
+});
+draw();
+</script>
+</body>
+</html>
