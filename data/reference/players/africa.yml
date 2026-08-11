@@ -505,6 +505,7 @@
 - name: Alema Koudijs Feed PLC
   aka: [AKF, Alema Farms + De Heus JV]
   scope: africa
+  country: ET
   side: buyer
   website: "https://www.alemakoudijs.com"
   ownership: >-
@@ -551,6 +552,7 @@
 - name: Rich Land Biochemical Production PLC
   aka: [Richland, Rich Land Bure]
   scope: africa
+  country: ET
   side: seller
   website: "https://richlandbc.com"
   ownership: >-
@@ -594,6 +596,7 @@
 - name: MSA Trading PLC
   aka: [MSA Exporting]
   scope: africa
+  country: ET
   side: seller
   website: "https://msaexportingplc.com"
   ownership: >-
@@ -639,6 +642,7 @@
 - name: PhiBela Industrial PLC (Belayneh Kindie Group)
   aka: [Phibela, BKG, Belayneh Kindie Import Export]
   scope: africa
+  country: ET
   side: both
   website: "https://bkgethiopia.com"
   ownership: >-
@@ -688,6 +692,7 @@
 - name: Ethiopia Commodity Exchange
   aka: [ECX]
   scope: africa
+  country: ET
   side: seller
   website: "https://www.ecx.com.et"
   ownership: >-
@@ -733,6 +738,7 @@
 - name: Mukwano Group (AK Oils & Fats)
   aka: [AK Oils and Fats (U) Ltd, Mukwano Industries]
   scope: africa
+  country: UG
   side: seller
   website: "https://www.mukwano.com"
   ownership: >-
@@ -783,6 +789,7 @@
 - name: Mount Meru Millers Uganda
   aka: [Mount Meru Group Lira]
   scope: africa
+  country: UG
   side: seller
   website: "https://www.mountmerugroup.com"
   ownership: >-
@@ -833,6 +840,7 @@
 - name: Biyinzika Poultry International
   aka: [Biyinzika]
   scope: africa
+  country: UG
   side: buyer
   website: "https://www.biyinzika.co.ug"
   ownership: >-
@@ -871,6 +879,7 @@
 - name: Export Trading Group
   aka: [ETG, Export Trading Company]
   scope: africa
+  country: KE
   tier: 1
   side: both
   website: "https://www.etgworld.com"
@@ -921,6 +930,7 @@
 - name: De Heus Kenya
   aka: [Royal De Heus Athi River]
   scope: africa
+  country: KE
   side: buyer
   website: "https://www.deheus.com"
   ownership: >-
@@ -962,6 +972,7 @@
 - name: Unga Group Plc
   aka: [Unga Farm Care (EA), Fugo Feeds, Tunga Nutrition Kenya]
   scope: africa
+  country: KE
   side: buyer
   website: "https://www.ungagroup.com"
   ownership: >-
@@ -1009,6 +1020,7 @@
 - name: Bidco Africa
   aka: [Bidco, SoyaGold, Bidco Uganda Ltd (BUL) affiliate]
   scope: africa
+  country: KE
   side: buyer
   website: "https://www.bidcoafrica.com"
   ownership: >-
