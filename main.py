@@ -52,7 +52,7 @@ from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
-from fetchers.sagis import fetch_sagis_deliveries
+from fetchers.sagis import fetch_sagis_deliveries, fetch_sagis_supply_demand
 from fetchers.usda import (
     fetch_all_crop_progress,
     fetch_crush_data,
@@ -79,6 +79,7 @@ from pipeline.clean import (
     clean_psd,
     clean_safex,
     clean_sagis_deliveries,
+    clean_sagis_smd,
     clean_wasde,
     clean_weather,
     clean_worldbank,
@@ -109,6 +110,7 @@ from pipeline.store import (
     save_psd_data,
     save_safex,
     save_sagis_deliveries,
+    save_sagis_smd,
     save_usda_data,
     save_wasde,
     save_weather_data,
@@ -213,7 +215,9 @@ def _mark_stale(
 # Column names that carry the observation date across the layers. The frames
 # reaching _finalize_layer are post-clean, so these are the cleaners' own
 # conventions (pipeline/clean.py), not the raw upstream ones.
-_DATE_COLUMNS = ("Date", "date", "week_ending", "week_end", "report_date")
+_DATE_COLUMNS = (
+    "Date", "date", "week_ending", "week_end", "month_end", "report_date",
+)
 
 
 def _latest_observation_date(data: dict) -> pd.Timestamp | None:
@@ -809,6 +813,18 @@ def run() -> int:
         fetch=lambda: fetch_sagis_deliveries(),
         save=lambda n, d: save_sagis_deliveries(n, d),
         clean=lambda d: clean_sagis_deliveries(d),
+    )
+    # Layer 24: the same reporter's monthly balance sheet — SA soybean
+    # imports, exports, crush volume and stocks. SA2 (#203) was filed for
+    # SAGIS's *weekly* trade flow and its 8-week forward intentions; those
+    # are published for maize and wheat only, so no soy trade series exists
+    # at weekly cadence (verified live 2026-08-12). The season workbook
+    # always carries at least one reported month, so empty_fails stays on.
+    results["sagis_smd"] = _run_scraper_layer(
+        "sagis_smd", "Layer 24", "SAGIS South Africa monthly soybean S&D",
+        fetch=lambda: fetch_sagis_supply_demand(),
+        save=lambda n, d: save_sagis_smd(n, d),
+        clean=lambda d: clean_sagis_smd(d),
     )
 
     # ── Export snapshot-only history back to git-committed CSVs ──

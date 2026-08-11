@@ -308,6 +308,51 @@ CREATE TABLE IF NOT EXISTS sagis_deliveries (
 );
 """
 
+# SAGIS monthly soybean supply & demand (Layer 24). Keyed by season +
+# position-in-season for the same reason Layer 23 is keyed by week number:
+# the source frames every comparison inside a March–February marketing
+# season, and month_number 1 is always March. month_end carries the calendar
+# date the recency gate and every chart read from.
+#
+# Only components are stored. The section totals the report prints —
+# (b) Acquisition, (c) Utilisation, (e) Sundries — are sums of columns below
+# and are re-derived at read time, which is also what makes the fetcher's
+# balance check possible. `report_month` is the SMD-MMYYYY vintage that
+# produced the row: SAGIS revises months for a year or more, so a row's
+# numbers and the report they came from are two different facts.
+_CREATE_SAGIS_SUPPLY_DEMAND = """
+CREATE TABLE IF NOT EXISTS sagis_supply_demand (
+    commodity                 TEXT NOT NULL,
+    season_year               INTEGER NOT NULL,  -- start year of the Mar-Feb season
+    month_number              INTEGER NOT NULL,  -- 1..12, 1 = March
+    month_end                 TEXT NOT NULL,     -- ISO last day of the month
+    report_month              TEXT,              -- ISO first-of-month of the SMD vintage
+    opening_stock             REAL,
+    deliveries                REAL,              -- direct from farms
+    imports                   REAL,              -- destined for RSA
+    processed_total           REAL,              -- commercial use, incl. export equivalent
+    processed_human           REAL,
+    processed_feed            REAL,
+    processed_oil_oilcake     REAL,              -- SA crush volume
+    withdrawn_by_producers    REAL,
+    released_to_end_consumers REAL,
+    seed_for_planting         REAL,
+    exports_whole             REAL,              -- whole beans
+    exports_border_posts      REAL,
+    exports_harbours          REAL,
+    sundries_net_dispatches   REAL,              -- signed
+    sundries_surplus_deficit  REAL,              -- signed
+    unutilised_stock          REAL,              -- closing stock
+    stock_storers_traders     REAL,
+    stock_processors          REAL,
+    products_exported         REAL,              -- soybean equivalent of products
+    products_exported_africa  REAL,
+    products_exported_other   REAL,
+    unit                      TEXT,
+    PRIMARY KEY (commodity, season_year, month_number)
+);
+"""
+
 _CREATE_SAFEX = """
 CREATE TABLE IF NOT EXISTS safex_prices (
     Date        TEXT NOT NULL,
@@ -384,6 +429,7 @@ ALL_SCHEMAS = (
     _CREATE_BRAZIL_SPOT,
     _CREATE_SAFEX,
     _CREATE_SAGIS_DELIVERIES,
+    _CREATE_SAGIS_SUPPLY_DEMAND,
     _CREATE_BRIEFINGS,
 )
 
@@ -437,6 +483,10 @@ UNIQUE_INDEXES = (
     "ON sagis_deliveries (commodity, season_year, week_number);",
     "CREATE INDEX IF NOT EXISTS ix_sagis_week_end "
     "ON sagis_deliveries (week_end);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_sagis_smd_commodity_season_month "
+    "ON sagis_supply_demand (commodity, season_year, month_number);",
+    "CREATE INDEX IF NOT EXISTS ix_sagis_smd_month_end "
+    "ON sagis_supply_demand (month_end);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
     "ON briefings (briefing_date);",
 )

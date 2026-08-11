@@ -100,6 +100,58 @@ def _format_sa_deliveries(info: dict) -> list[str]:
     return lines
 
 
+def _format_sa_supply_demand(info: dict) -> list[str]:
+    """South Africa balance-sheet lines — SAGIS monthly supply & demand.
+
+    Monthly, and stated as such: SAGIS publishes soybean trade only at this
+    cadence (its weekly imports/exports and 8-week forward intentions are
+    maize and wheat, #203), so these numbers are ~4 weeks behind the SAFEX
+    print above them and must not read as this week's flow.
+
+    Crush is a **volume** — tonnes of beans processed for oil and oilcake.
+    South Africa has no honest crush *margin* (M7), and this line must never
+    be labelled as one.
+    """
+    smd = info.get("south_africa_supply_demand", {})
+    if not smd:
+        return []
+
+    lines = [
+        f"    SAGIS S&D (monthly, {smd.get('month_label', '')}): "
+        f"crush {smd['crush_mt']:,.0f} MT"
+        if smd.get("crush_mt") is not None else
+        f"    SAGIS S&D (monthly, {smd.get('month_label', '')}):"
+    ]
+
+    for key, label in (
+        ("crush", "Crush"),
+        ("imports", "Imports"),
+        ("exports_whole", "Bean Exports"),
+    ):
+        total = smd.get(f"{key}_season_to_date_mt")
+        if total is None:
+            continue
+        yoy = smd.get(f"{key}_yoy_pct")
+        yoy_str = f", {yoy:+.1f}% YoY" if yoy is not None else ""
+        lines.append(
+            f"      {label} {smd.get('season_label', '')} season-to-date: "
+            f"{total:,.0f} MT{yoy_str} — same {smd.get('month_number')} months"
+        )
+
+    stock = smd.get("closing_stock_mt")
+    if stock is not None:
+        share = smd.get("stock_processors_share_pct")
+        share_str = f" ({share:.0f}% held by processors)" if share is not None else ""
+        lines.append(f"      Closing stock: {stock:,.0f} MT{share_str}")
+
+    attribution = smd.get("attribution")
+    # Same reporter as the deliveries block directly above; print the
+    # acknowledgement once, not twice.
+    if attribution and not info.get("south_africa_deliveries"):
+        lines.append(f"      {attribution}")
+    return lines
+
+
 def format() -> str:  # noqa: A001
     lines = ["EMERGING MARKETS (Soybeans):"]
 
@@ -196,6 +248,7 @@ def format() -> str:  # noqa: A001
                 )
 
         lines.extend(_format_sa_deliveries(info))
+        lines.extend(_format_sa_supply_demand(info))
 
     india_section = _format_india_domestic(countries)
     if india_section:

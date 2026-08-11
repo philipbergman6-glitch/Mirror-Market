@@ -706,6 +706,45 @@ def save_sagis_deliveries(commodity: str, df: pd.DataFrame):
           ["commodity", "season_year", "week_number"], f"sagis/{commodity}")
 
 
+_SAGIS_SMD_COLUMNS = [
+    "commodity", "season_year", "month_number", "month_end", "report_month",
+    "opening_stock", "deliveries", "imports", "processed_total",
+    "processed_human", "processed_feed", "processed_oil_oilcake",
+    "withdrawn_by_producers", "released_to_end_consumers", "seed_for_planting",
+    "exports_whole", "exports_border_posts", "exports_harbours",
+    "sundries_net_dispatches", "sundries_surplus_deficit", "unutilised_stock",
+    "stock_storers_traders", "stock_processors", "products_exported",
+    "products_exported_africa", "products_exported_other", "unit",
+]
+
+
+def save_sagis_smd(commodity: str, df: pd.DataFrame):
+    """Write SAGIS monthly soybean supply & demand (MT) → 'sagis_supply_demand'.
+
+    INSERT OR REPLACE on (commodity, season_year, month_number) is load-
+    bearing, as it is for Layer 23: SAGIS revises months for a year or more
+    after the fact — a month first published as preliminary is restated in
+    later reports, and closed seasons keep moving — so every run legitimately
+    rewrites rows it has already stored. `report_month` records which vintage
+    the stored numbers came from.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "unit" not in df.columns:
+        df["unit"] = "MT"
+    for col in ("month_end", "report_month"):
+        if col in df.columns:
+            # The cleaner hands back Timestamp columns; SQLite takes ISO text.
+            df[col] = _date(df[col])
+    missing = [c for c in _SAGIS_SMD_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_sagis_smd: frame missing columns {missing}")
+    _save("sagis_supply_demand", df[_SAGIS_SMD_COLUMNS],
+          ["commodity", "season_year", "month_number"], f"sagis_smd/{commodity}")
+
+
 # --- Briefing archive -------------------------------------------------------
 
 

@@ -735,6 +735,50 @@ SAGIS_COMMODITIES = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 24 — SAGIS monthly soybean supply & demand (free, no API key)
+#
+# SA2 (#203) was filed for SAGIS's *weekly* imports/exports and its 8-week
+# forward intentions. Verified live 2026-08-12: those two products exist for
+# **maize and wheat only** — the weekly page's own section header reads
+# "Weekly Imports & Exports … MAIZE | WHEAT", and the only files are
+# `Intended-{MAIZE,WHEAT}-WeekEnding_*.xlsx` and
+# `IMP-EXP_Progressive_{Mielies,Koring}_*`. There is no soybean or sunflower
+# trade file on the weekly page at all, so the forward series the ticket was
+# filed for does not exist for the soy complex.
+#
+# South African soybean trade *does* exist, monthly, on the SMD (Supply and
+# Demand) page — and it carries more than trade: imports, exports split
+# border-posts vs harbours, **tonnes processed** (SA's crush volume) and
+# closing stock split storers-vs-processors. M7 ruled out an SA crush
+# *margin* (SAFEX is seed-only and the JSE meal/oil contracts are
+# cash-settled CBOT); a crush *volume* is a different quantity and is not
+# barred by that finding.
+#
+# Which file: the **season-progressive** workbook
+# `Sojabone<season><season+1>_<pubdate>[_F].xlsx`, which carries all twelve
+# months of one March–February season in one sheet. The per-month
+# announcement files (`Sojabone<YYYYMMDD>.xlsx`) hold only two months each
+# and would need one request per month of history.
+#
+# Both the URL *and* the set of published seasons rotate: the current
+# season's file is re-published every month under a new filename, and only
+# the current season plus the two most recent finals are listed. Resolve
+# from the landing page every run (Layer 8 / Layer 23 trap), and round-trip
+# the table through data/history/ so a season that rolls off the page is not
+# lost from an ephemeral CI database.
+#
+# Licence: the same SAGIS reproduction grant as Layer 23 —
+# SAGIS_ATTRIBUTION must be rendered wherever these numbers appear.
+# ---------------------------------------------------------------------------
+SAGIS_MONTHLY_DATA_URL = "https://www.sagis.org.za/sagis-monthly-data/"
+# Filename commodity token (Afrikaans on this page) → stored commodity key.
+# Deliberately the same key string Layer 23 stores, so the two SAGIS tables
+# join on commodity. Frozen for the same history-CSV reason as above.
+SAGIS_SMD_COMMODITIES = {
+    "Sojabone": "Soybeans (SAGIS)",
+}
+
+# ---------------------------------------------------------------------------
 # Analysis thresholds — configurable per-commodity where appropriate
 # ---------------------------------------------------------------------------
 
@@ -797,6 +841,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "crush_inspections": 12,
     "sagis": 12,
     # Monthly publications — allow ~6 weeks.
+    "sagis_smd": 42,
     "wasde": 42,
     "psd": 42,
     "conab": 42,
@@ -873,6 +918,12 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # candidate for freezing (a week-stamped URL that keeps resolving), which
     # is exactly what this budget is here to catch.
     "sagis": 21,
+    # SAGIS's monthly SMD lands around the 24th–27th and reports through the
+    # *previous* calendar month, so the newest month_end is ~25 days old at
+    # publication and ~55 days old the day before the next release. 90 days
+    # is that worst case plus one missed publication. The season file's URL
+    # rotates monthly, so a frozen link is a live risk here too.
+    "sagis_smd": 90,
     # Monthly publication. 100 days matches the identical guard inside
     # fetchers/worldbank.py — the CMO deep link rotates yearly and the old
     # GUID keeps serving a frozen file with HTTP 200. One number, one

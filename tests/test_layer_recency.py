@@ -596,3 +596,53 @@ def test_sagis_frozen_file_records_failed(freshness_calls):
 def test_sagis_budget_tolerates_a_missed_publication():
     """Weekly cadence + ~5-day observation lag + one skipped release."""
     assert LAYER_MAX_DATA_AGE_DAYS["sagis"] >= 19
+
+
+# ── Layer 24 (SAGIS SMD): the observation date lives in `month_end` ────────
+# Second layer, second date column. The season workbook's URL rotates every
+# month, so a frozen link would keep serving the same twelve columns — the
+# gate only sees that if `month_end` is a recognised observation date.
+
+
+def _sagis_smd_result(days_ago: float):
+    from pipeline.results import FetchResult
+
+    end = pd.Timestamp.now().normalize() - pd.Timedelta(days=days_ago)
+    frame = pd.DataFrame({
+        "commodity": ["Soybeans (SAGIS)"],
+        "season_year": [2026],
+        "month_number": [4],
+        "month_end": [end],
+        "report_month": [end],
+        "processed_oil_oilcake": [204103.0],
+        "imports": [575.0],
+        "exports_whole": [22959.0],
+        "unutilised_stock": [2058796.0],
+        "unit": ["MT"],
+    })
+    return FetchResult.ok({"Soybeans (SAGIS)": frame})
+
+
+def _run_sagis_smd(days_ago: float) -> bool:
+    return main._run_scraper_layer(
+        "sagis_smd", "Layer 24", "SAGIS South Africa monthly soybean S&D",
+        fetch=lambda: _sagis_smd_result(days_ago),
+        save=lambda n, d: None,
+    )
+
+
+def test_sagis_smd_month_end_is_a_recognised_observation_date():
+    assert "month_end" in main._DATE_COLUMNS
+
+
+def test_sagis_smd_within_budget_stamps_success(freshness_calls):
+    """Normal worst case: the report lands ~24th for the previous month, so
+    the newest month_end is ~55 days old the day before the next release."""
+    assert _run_sagis_smd(days_ago=55) is True
+    assert [c["status"] for c in freshness_calls] == ["success"]
+
+
+def test_sagis_smd_frozen_workbook_records_failed(freshness_calls):
+    assert _run_sagis_smd(days_ago=LAYER_MAX_DATA_AGE_DAYS["sagis_smd"] + 1) is False
+    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert "sagis_smd" in main._HARD_FAILURES
