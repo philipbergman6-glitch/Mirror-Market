@@ -351,6 +351,55 @@ WORLDBANK_PRICES_URL = (
 )
 
 # ---------------------------------------------------------------------------
+# Layer 22 — European Commission Oilseeds Market Observatory (no API key)
+#
+# The EU rapeseed leg of the Europe market page. Euronext MATIF (ECO)
+# settlements are licensed — free for internal use, EUR 167.55/month to
+# redistribute, and this project publishes — so the futures curve is not
+# ingested (#148). `Rapeseed - EU Moselle` is the Commission's weekly
+# physical FOB assessment for the same commodity in the same region,
+# CC BY 4.0, sourced by the EC from the International Grains Council.
+#
+# Same GUID trap as the Pink Sheet above: the CIRCABC deep link is opaque
+# and a rotated-away link serves a frozen workbook with HTTP 200, so the
+# fetcher resolves it from the landing page by *link text* each run. The
+# pinned URL is only the fallback — note the upstream filename typo
+# ("oliseeds"), which is exactly why the resolver does not match on it.
+# ---------------------------------------------------------------------------
+EC_OILSEEDS_LANDING_URL = (
+    "https://agriculture.ec.europa.eu/data-and-analysis/markets/overviews/"
+    "market-observatories/crops/oilseeds-and-protein-crops_en"
+)
+EC_OILSEEDS_WORLD_PRICES_URL = (
+    "https://circabc.europa.eu/sd/a/"
+    "2ddd7dcd-dff1-41b5-94b9-6cd207181a3c/oliseeds-world-prices.xlsx"
+)
+
+# Workbook column header → our series label.
+#
+# Scope is deliberately one series (#163). The same sheet also carries
+# Soyabeans Argentina/Brazil/US Gulf/Ukraine, Rapeseed AU/CA/UA and
+# Sunflowerseed EU Bordeaux/Ukraine — all parsed by the same code, so
+# widening is an edit to this dict alone. They are left out under the
+# standing preference carried from #130: only add a series that feeds a
+# rendered line. (The soybean FOB columns are a licence-clean independent
+# check on Layers 19/20/21 and are logged as fog on map #142, not built
+# here. Sunflower enters the stack on the oil leg only, per #147, and this
+# is seed.)
+EC_OILSEEDS_SERIES = {
+    "Rapeseed - EU Moselle": "EU Rapeseed (Moselle)",
+}
+
+# Every row in this layer is a weekly physical FOB assessment. Stored on the
+# rows themselves rather than kept in a display-layer lookup, because map
+# #142 carries a standing risk that board / physical / administered /
+# assessment quotes get collapsed into one "price" line — a label that
+# travels with the data cannot be lost by a consumer that forgets to look
+# it up.
+EC_OILSEEDS_CADENCE = "weekly"
+EC_OILSEEDS_QUOTE_KIND = "physical FOB assessment"
+
+# ---------------------------------------------------------------------------
 # Layer 9 — DCE (Dalian Commodity Exchange) futures via AKShare (no API key)
 # China is the world's largest soybean importer; DCE is the main exchange
 # ---------------------------------------------------------------------------
@@ -765,6 +814,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "crop_progress": 12,
     "crush_inspections": 12,
     # Monthly publications — allow ~6 weeks.
+    "ec_oilseeds": 12,
     "wasde": 42,
     "psd": 42,
     "conab": 42,
@@ -832,6 +882,11 @@ LAYER_MAX_DATA_AGE_DAYS = {
     "cot": 18,         # Friday release reports the *previous Tuesday*
     "export_sales": 21,
     "eia": 21,
+    # Wednesday-dated assessment published the following day, so the newest
+    # row is normally 1-8 days old. 21 tolerates exactly one missed release
+    # and fails on two — and the cadence has never actually missed one:
+    # all 397 gaps across 2018-12-26 → 2026-08-05 are exactly 7 days.
+    "ec_oilseeds": 21,
     # Monthly publication. 100 days matches the identical guard inside
     # fetchers/worldbank.py — the CMO deep link rotates yearly and the old
     # GUID keeps serving a frozen file with HTTP 200. One number, one

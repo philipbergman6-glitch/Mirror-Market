@@ -40,6 +40,7 @@ from fetchers.akshare import fetch_dce_futures
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.cot import fetch_cot_recent
+from fetchers.ec_oilseeds import fetch_ec_oilseed_prices
 from fetchers.eia import fetch_all_eia
 from fetchers.eia import is_configured as eia_configured
 from fetchers.export_sales import fetch_all_export_sales
@@ -68,6 +69,7 @@ from pipeline.clean import (
     clean_conab,
     clean_cot,
     clean_dce_futures,
+    clean_ec_oilseeds,
     clean_eia,
     clean_export_sales,
     clean_forward_curve,
@@ -93,6 +95,7 @@ from pipeline.store import (
     save_crop_progress,
     save_currency_data,
     save_dce_futures_data,
+    save_ec_oilseed_prices,
     save_eia_data,
     save_export_sales,
     save_forward_curve,
@@ -582,6 +585,18 @@ def _build_dict_layers() -> list[DictLayer]:
             fetch=lambda: fetch_worldbank_prices(),
             save=lambda n, d: save_worldbank_data(n, d),
             clean=lambda n, d: clean_worldbank(d),
+            empty_fails=True,
+        ),
+        DictLayer(
+            "ec_oilseeds", "Layer 22", "EC weekly EU rapeseed (Moselle) FOB",
+            fetch=lambda: fetch_ec_oilseed_prices(),
+            save=lambda n, d: save_ec_oilseed_prices(n, d),
+            clean=lambda n, d: clean_ec_oilseeds(d),
+            # Single series, so no LAYER_MIN_KEYS floor to derive from. The
+            # workbook carries ~400 weekly rows of history on every fetch and
+            # has not missed a Wednesday since 2018 — an empty return means
+            # the download, the parse, or the stale-file guard broke, never
+            # "the Commission published nothing this week".
             empty_fails=True,
         ),
         DictLayer(

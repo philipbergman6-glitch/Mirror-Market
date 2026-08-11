@@ -66,6 +66,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_all_regions": empty_dict,
         "fetch_psd_all": empty_dict,
         "fetch_worldbank_prices": empty_dict,
+        "fetch_ec_oilseed_prices": empty_dict,
         "fetch_dce_futures": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,

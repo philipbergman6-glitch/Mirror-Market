@@ -548,6 +548,33 @@ def clean_safex(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def clean_ec_oilseeds(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean EC weekly world oilseed prices.
+
+    Steps:
+        1. Ensure Date is datetime and sort ascending.
+        2. Drop rows with no USD price — the authoritative column.
+        3. Drop duplicate weeks, keeping the last.
+
+    `price_eur` NaNs are deliberately preserved: the Commission publishes
+    `n.q.` ("not quoted") for weeks it did not convert, and the EUR block is
+    derived from the USD one rather than independently assessed. Filling or
+    recomputing those gaps would publish our arithmetic as the Commission's.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.dropna(subset=["price_usd"])
+    df = df.drop_duplicates(subset=["Date"], keep="last")
+    df = df.sort_values("Date").reset_index(drop=True)
+    return df
+
+
 def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean World Bank monthly price data.

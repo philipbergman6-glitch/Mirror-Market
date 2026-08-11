@@ -106,6 +106,18 @@ CREATE TABLE IF NOT EXISTS worldbank_prices (
 );
 """
 
+_CREATE_EC_OILSEED_PRICES = """
+CREATE TABLE IF NOT EXISTS ec_oilseed_prices (
+    series      TEXT    NOT NULL,
+    Date        TEXT    NOT NULL,
+    price_usd   REAL,
+    price_eur   REAL,
+    cadence     TEXT,
+    quote_kind  TEXT,
+    PRIMARY KEY (series, Date)
+);
+"""
+
 _CREATE_DCE_FUTURES = """
 CREATE TABLE IF NOT EXISTS dce_futures (
     commodity       TEXT NOT NULL,
@@ -345,6 +357,7 @@ ALL_SCHEMAS = (
     _CREATE_PSD,
     _CREATE_CURRENCIES,
     _CREATE_WORLDBANK,
+    _CREATE_EC_OILSEED_PRICES,
     _CREATE_DCE_FUTURES,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,
@@ -387,6 +400,8 @@ UNIQUE_INDEXES = (
     "ON currencies (pair, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_worldbank_commodity_date "
     "ON worldbank_prices (commodity, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_ec_oilseed_prices_series_date "
+    "ON ec_oilseed_prices (series, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_dce_futures_commodity_date "
     "ON dce_futures (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_crop_progress_commodity_week_desc "
