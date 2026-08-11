@@ -32,6 +32,7 @@ from trust import (
     RawArtifact,
     Run,
     RunStatus,
+    SettlementState,
     Source,
     Timestamp,
     ValidationPolicy,
@@ -101,6 +102,7 @@ def values() -> dict[str, object]:
         parser_version="magyp-fob/1.0.0",
         parsed_at=NOW,
         source_published_at=Timestamp(NOW - timedelta(hours=1)),
+        settlement_state=SettlementState.SETTLED,
     )
     revision = ObservationRevision(
         identity=identity,
@@ -114,6 +116,7 @@ def values() -> dict[str, object]:
         source_published_at=Timestamp(NOW - timedelta(hours=1)),
         observed_at=Timestamp(NOW - timedelta(hours=2), inferred=False),
         ingested_at=NOW,
+        settlement_state=SettlementState.SETTLED,
         parser_version="magyp-fob/1.0.0",
         quality_state=QualityState.ACCEPTED,
         finding_ids=(finding.finding_id,),

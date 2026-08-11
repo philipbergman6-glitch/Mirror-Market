@@ -11,7 +11,17 @@ from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 from typing import Any
 
-from trust.domain import CandidateObservation, Finding, FindingSeverity, ObservationIdentity, QualityState, Timestamp
+from trust.domain import (
+    CandidateObservation,
+    ContractIdentity,
+    Finding,
+    FindingSeverity,
+    ObservationIdentity,
+    ObservationRevision,
+    QualityState,
+    SettlementState,
+    Timestamp,
+)
 from trust.registry import DatasetContract
 
 _KEY_RE = re.compile(r"[a-z0-9][a-z0-9._-]*")
@@ -184,7 +194,7 @@ def generic_candidate_quality_rules(
     if contract.identity is None:
         raise ValueError("generic candidate validators require a dataset identity contract")
     policy = numeric_policy or NumericValidationPolicy()
-    return (
+    rules = [
         QualityRule("identity.required", version, "candidate", FindingSeverity.REJECT, _identity_required(contract)),
         QualityRule("identity.fixed-fields", version, "candidate", FindingSeverity.REJECT, _identity_fixed(contract)),
         QualityRule("identity.extra-fields", version, "candidate", FindingSeverity.REJECT, _identity_extra_fields),
@@ -200,7 +210,21 @@ def generic_candidate_quality_rules(
         QualityRule("value.finite", version, "candidate", FindingSeverity.REJECT, _value_finite),
         QualityRule("value.sign", version, "candidate", FindingSeverity.REJECT, _value_sign(policy)),
         QualityRule("value.range", version, "candidate", FindingSeverity.QUARANTINE, _value_range(policy)),
-    )
+    ]
+    requested_rules = set(contract.validation.rule_ids if contract.validation is not None else ())
+    if "contract.named" in requested_rules:
+        rules.append(QualityRule("contract.named", version, "candidate", FindingSeverity.REJECT, _contract_named))
+    if "settlement.confirmed" in requested_rules:
+        rules.append(
+            QualityRule("settlement.confirmed", version, "candidate", FindingSeverity.REJECT, _settlement_confirmed)
+        )
+    if "ohlc.relationship" in requested_rules:
+        rules.append(QualityRule("ohlc.relationship", version, "candidate", FindingSeverity.REJECT, _ohlc_relationship))
+    if "price.daily-move" in requested_rules:
+        rules.append(
+            QualityRule("price.daily-move", version, "candidate", FindingSeverity.QUARANTINE, _price_daily_move)
+        )
+    return tuple(rules)
 
 
 def _disposition(findings: tuple[Finding, ...]) -> QualityState:
@@ -277,6 +301,8 @@ def _identity_from_object(identity: ObservationIdentity) -> Mapping[str, Any]:
 
 def _value_for(subject: Any, field_name: str) -> Any:
     if isinstance(subject, CandidateObservation):
+        return getattr(subject, field_name, None)
+    if isinstance(subject, ObservationRevision):
         return getattr(subject, field_name, None)
     return _subject_mapping(subject).get(field_name)
 
@@ -499,3 +525,131 @@ def _value_range(policy: NumericValidationPolicy) -> RuleEvaluator:
         return ()
 
     return evaluate
+
+
+def _contract_named(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    contract = _identity_mapping(context.subject).get("contract")
+    if isinstance(contract, ContractIdentity):
+        return ()
+    if isinstance(contract, Mapping):
+        missing = sorted({"exchange", "code", "delivery_month"} - set(str(key) for key in contract))
+        if missing:
+            return (
+                RuleFinding(
+                    evidence={"field": "contract", "missing": missing},
+                    message="Named contract must include exchange, code, and delivery month",
+                ),
+            )
+        return ()
+    return (
+        RuleFinding(
+            evidence={"field": "contract", "observed": str(contract) if contract is not None else None},
+            message="Named contract identity is required",
+        ),
+    )
+
+
+def _settlement_confirmed(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    state = _settlement_state(context.subject)
+    if state is SettlementState.SETTLED:
+        return ()
+    return (
+        RuleFinding(
+            evidence={"settlement_state": state.value if state is not None else None},
+            message="Settlement observations must be final settled bars",
+        ),
+    )
+
+
+def _settlement_state(subject: Any) -> SettlementState | None:
+    raw = _value_for(subject, "settlement_state")
+    if isinstance(raw, SettlementState):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            return SettlementState(raw.strip().lower())
+        except ValueError:
+            return None
+    return None
+
+
+def _ohlc_relationship(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    values = {field_name: _candidate_decimal(context, field_name) for field_name in _OHLC_FIELDS}
+    present = {field_name: value for field_name, value in values.items() if value is not None}
+    if not present:
+        return ()
+    if len(present) != len(_OHLC_FIELDS):
+        return (
+            RuleFinding(
+                evidence={"missing": sorted(set(_OHLC_FIELDS) - set(present))},
+                message="OHLC observations must provide a complete candle",
+            ),
+        )
+    open_value = present["open_value"]
+    high_value = present["high_value"]
+    low_value = present["low_value"]
+    close_value = present["close_value"]
+    assert open_value is not None and high_value is not None and low_value is not None and close_value is not None
+    if high_value < max(open_value, low_value, close_value) or low_value > min(open_value, high_value, close_value):
+        return (
+            RuleFinding(
+                evidence={field_name: str(value) for field_name, value in present.items()},
+                message="OHLC candle violates high/low relationships",
+            ),
+        )
+    return ()
+
+
+_OHLC_FIELDS = ("open_value", "high_value", "low_value", "close_value")
+
+
+def _price_daily_move(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    value = _candidate_decimal(context)
+    previous = _previous_value(context)
+    if value is None or previous is None or previous <= 0:
+        return ()
+    threshold = _move_threshold(context)
+    move = abs((value - previous) / previous)
+    if move > threshold:
+        return (
+            RuleFinding(
+                evidence={
+                    "previous_value": str(previous),
+                    "observed": str(value),
+                    "absolute_move_ratio": str(move),
+                    "threshold": str(threshold),
+                },
+                message="Price move exceeds the configured quarantine threshold",
+            ),
+        )
+    return ()
+
+
+def _previous_value(context: QualityRuleContext) -> Decimal | None:
+    subject_value = _value_for(context.subject, "previous_value")
+    if subject_value is not None:
+        return _decimal_or_none(subject_value)
+    previous_by_subject = context.dataset_context.get("previous_value_by_subject_id")
+    if isinstance(previous_by_subject, Mapping):
+        return _decimal_or_none(previous_by_subject.get(context.subject_id))
+    previous_by_observation = context.dataset_context.get("previous_value_by_observation_id")
+    observation_id = _identity_mapping(context.subject).get("observation_id")
+    if isinstance(previous_by_observation, Mapping) and observation_id is not None:
+        return _decimal_or_none(previous_by_observation.get(str(observation_id)))
+    return _decimal_or_none(context.dataset_context.get("previous_value"))
+
+
+def _move_threshold(context: QualityRuleContext) -> Decimal:
+    configured = context.dataset_context.get("daily_move_quarantine_threshold")
+    threshold = _decimal_or_none(configured) if configured is not None else None
+    return threshold if threshold is not None and threshold > 0 else Decimal("0.25")
+
+
+def _decimal_or_none(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, (bool, float)):
+        return None
+    try:
+        result = value if isinstance(value, Decimal) else Decimal(value)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return result if result.is_finite() else None
