@@ -51,6 +51,7 @@ from trust.registry import (
 from trust.repository import (
     ArtifactRetentionError,
     CurrentEditionConflict,
+    EditionPromotionError,
     GitDirectoryTrustRepository,
     ImmutableRecordConflict,
     RepositoryFormatError,
@@ -78,6 +79,7 @@ __all__ = [
     "DatasetResultStatus",
     "DeliveryWindow",
     "Edition",
+    "EditionPromotionError",
     "EditionStatus",
     "Finding",
     "FindingSeverity",
