@@ -27,7 +27,7 @@ from config import (
     HEALTH_TABLE_LAYERS,
     freshness_limit_days,
 )
-from pipeline.connection import get_connection, is_cloud
+from pipeline.connection import get_connection, is_cloud, managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
     today = datetime.now(timezone.utc).date()
     limit_days = _stale_limit_days(table)
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             where, params = _observed_filter(conn, table, date_col)
             rows = conn.execute(
@@ -238,7 +238,7 @@ def _check_flat_prices() -> list[dict]:
     if not is_cloud() and not os.path.exists(DB_PATH):
         return issues
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         try:
             commodities = [r[0] for r in conn.execute(
                 "SELECT DISTINCT commodity FROM prices"
@@ -338,7 +338,7 @@ def _build_commodity_status() -> list[dict]:
     if not is_cloud() and not os.path.exists(DB_PATH):
         return status_list
 
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for table, key_col, date_col in table_specs:
             limit_days = _stale_limit_days(table)
             try:

@@ -18,6 +18,8 @@ Key concepts for learning:
 import logging
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from config import DB_PATH, STORAGE_DIR, TURSO_AUTH_TOKEN, TURSO_DATABASE_URL
 
@@ -70,6 +72,22 @@ def get_connection():
     # Local SQLite fallback
     os.makedirs(STORAGE_DIR, exist_ok=True)
     return sqlite3.connect(DB_PATH)
+
+
+@contextmanager
+def managed_connection(conn) -> Iterator:
+    """Commit or roll back through the connection context, then close it.
+
+    ``sqlite3.Connection`` implements ``with conn`` for transaction handling
+    only; it deliberately does not close the file descriptor on exit.
+    """
+    try:
+        with conn:
+            yield conn
+    finally:
+        close = getattr(conn, "close", None)
+        if callable(close):
+            close()
 
 
 def maybe_sync(conn) -> None:

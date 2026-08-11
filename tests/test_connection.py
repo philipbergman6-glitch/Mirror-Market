@@ -61,6 +61,31 @@ def test_get_connection_falls_back_to_sqlite_without_turso_env(monkeypatch, tmp_
         conn.close()
 
 
+def test_managed_connection_closes_after_context_exit():
+    class FakeConnection:
+        closed = False
+        entered = False
+
+        def __enter__(self):
+            self.entered = True
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def close(self):
+            self.closed = True
+
+    conn = FakeConnection()
+
+    with connection.managed_connection(conn) as active:
+        assert active is conn
+        assert conn.entered is True
+        assert conn.closed is False
+
+    assert conn.closed is True
+
+
 def test_get_connection_raises_when_require_turso_and_libsql_missing(monkeypatch):
     """MIRROR_REQUIRE_TURSO=1 + no libsql ⇒ TursoUnavailableError, not fallback."""
     monkeypatch.setattr("pipeline.connection.TURSO_DATABASE_URL", "libsql://example.turso.io")

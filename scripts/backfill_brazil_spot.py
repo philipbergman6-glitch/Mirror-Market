@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import setup_logging  # noqa: E402
-from pipeline.connection import get_connection, maybe_sync  # noqa: E402
+from pipeline.connection import get_connection, managed_connection, maybe_sync  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ SNAPSHOT_SOURCES = {
 
 def backfill() -> int:
     """Reconstruct BRL/MT spot rows from briefing snapshots. Returns rows written."""
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         rows = conn.execute(
             "SELECT briefing_date, snapshot_json FROM briefings ORDER BY briefing_date"
         ).fetchall()
