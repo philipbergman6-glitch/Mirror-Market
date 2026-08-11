@@ -279,11 +279,25 @@ def test_a_builder_that_raises_becomes_a_reasoned_empty_state(
     assert price.reason == "generation error"
 
 
-def test_the_ledger_states_its_open_dependency_rather_than_guessing(seeded, registry):
+def test_the_ledger_renders_its_registry_counterpart_set(seeded, registry):
+    """M12 #161 chose the sets and M19 #223 built the block; see
+    tests/test_propagation_ledger.py for the row contract itself."""
     tiers = compute_tiers(registry, today=TODAY)
     ledger = _block(_build("cbot", seeded, registry, tiers["cbot"]), "ledger")
-    assert ledger.state == "empty"
-    assert "M12 #161" in ledger.reason
+    assert ledger.state == "ok", ledger.reason
+    assert [row["leg_id"] for row in ledger.data["rows"]][0] == "cbot:board"
+
+
+def test_a_market_with_no_counterpart_set_renders_absent_not_empty(seeded, registry):
+    """Europe and Nigeria have no ledger by decision — a legal configuration.
+
+    `absent` says "no such thing exists here"; `empty` would say "we tried and
+    got nothing", which would be a report of an outage that is not happening.
+    """
+    for slug in ("europe", "nigeria"):
+        ledger = _block(_build(slug, seeded, registry), "ledger")
+        assert ledger.state == "absent"
+        assert ledger.reason
 
 
 def test_news_is_never_ok(seeded, registry):

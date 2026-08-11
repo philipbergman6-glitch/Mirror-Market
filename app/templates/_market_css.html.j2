@@ -9,9 +9,8 @@
 .tier-why { color: var(--text-dim); }
 .venue { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
 
-/* ---- quote-kind label (M3 constraint 4) — board, physical, administered and
-   weekly-assessment quotes are different animals and must stay labelled ---- */
-.kind { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+{# `.kind` moved to _base.html.j2 with M19 #223: the headline ledger renders it
+   too, and a second copy here is the drift the one-<head>-owner rule prevents. #}
 
 /* ---- blocks ---- */
 .block { padding: 22px 0; border-bottom: 1px solid var(--rule); }

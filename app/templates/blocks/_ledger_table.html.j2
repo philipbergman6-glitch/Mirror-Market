@@ -1,0 +1,83 @@
+{#
+  The propagation ledger table (M3 #145 shape, M12 #161 rows) — shared by the
+  market-page block and the headline section so the two cannot drift into
+  different treatments of the same row.
+
+  Expects `d` (the builder's data) and the page-global `root`.
+
+  Row contract, in column order:
+    leg      what is quoted, and on which page it lives
+    kind     board / physical / administered — never collapsed into "price"
+    USD/MT   the comparable number
+    home     the venue's OWN print, in the unit the venue publishes. Where the
+             market quotes in USD/MT that cell is a dash rather than the same
+             number twice — restating a figure is not a second view of it.
+    moves    both, side by side, with an FX tag when the currency did the work
+    spread   vs the pinned leg, on a session they SHARE (market pages only)
+    state    repriced / no print since / dark — silence never reads as flat
+#}
+{% import 'blocks/_macros.html.j2' as f %}
+<table class="dtable ledger">
+  <thead>
+    <tr>
+      <th>{{ 'Market' if not d.has_spread else 'Leg' }}</th>
+      <th>Kind</th>
+      <th class="num">USD/MT</th>
+      <th class="num">Home print</th>
+      <th class="num">Move · USD</th>
+      <th class="num">Move · home</th>
+      {% if d.has_spread %}<th class="num">Spread</th>{% endif %}
+      <th>State</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in d.rows %}
+    <tr class="lrow{% if row.is_own %} own{% endif %}{% if row.is_reference %} ref{% endif %}">
+      {#- On a market page the row is a LEG, so the leg leads and the link says
+          which page explains it — `us_gulf:cif` lands on CBOT, which has no
+          page of its own (M12 #161 decision 1). On the headline the row is a
+          MARKET, so the market leads and the leg rides underneath. -#}
+      <td>
+        {% if d.has_spread %}
+        <a href="{{ root }}{{ row.href }}">{{ row.label }}</a>
+        <div class="caption">on the {{ row.market_name }} page{% if row.is_own %} · pinned{% endif %}{% if row.is_reference %} · reference, not a peer{% endif %}</div>
+        {% else %}
+        <a href="{{ root }}{{ row.href }}">{{ row.market_label or row.market_name }}</a>
+        <div class="caption">{{ row.label }}</div>
+        {% endif %}
+      </td>
+      <td>{% if row.kind %}<span class="kind">{{ row.kind|replace('_', ' ') }}</span>{% endif %}</td>
+      <td class="num strong">{{ f.usd(row.usd_mt) }}</td>
+      <td class="num">
+        {%- if row.has_home_quote and row.home_value is not none -%}
+        {{ f.num(row.home_value, 2) }} <span class="muted">{{ row.home_unit }}</span>
+        {%- if row.quotes and row.quotes > 1 %}<div class="caption">mean of {{ row.quotes }} quotes</div>{% endif -%}
+        {%- else -%}
+        <span class="muted">—</span>
+        {%- endif -%}
+      </td>
+      <td class="num">{{ f.pct(row.usd_chg_pct) }}</td>
+      <td class="num">
+        {%- if row.has_home_quote -%}{{ f.pct(row.home_chg_pct) }}{%- else -%}<span class="muted">—</span>{%- endif -%}
+        {%- if row.fx_tag %} <span class="fx-tag" title="{{ row.fx_note }}">FX</span>{% endif -%}
+      </td>
+      {% if d.has_spread %}
+      <td class="num">
+        {%- if row.is_own -%}
+        <span class="muted">pinned</span>
+        {%- elif row.spread_usd_mt is not none -%}
+        {{ f.signed(row.spread_usd_mt) }}
+        {%- if row.spread_as_of and row.spread_as_of != row.as_of %}<div class="caption">struck {{ row.spread_as_of }}</div>{% endif -%}
+        {%- else -%}
+        <span class="muted" title="{{ row.spread_note }}">n/a</span>
+        {%- endif -%}
+      </td>
+      {% endif %}
+      <td>
+        <span class="pill pill-{{ row.state }}{% if row.overdue and row.state == 'no_print_since' %} overdue{% endif %}">{{ row.state|replace('_', ' ') }}</span>
+        <div class="caption">{{ row.state_detail }}</div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

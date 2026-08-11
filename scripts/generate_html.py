@@ -53,14 +53,17 @@ TEMPLATE_DIR = PROJECT_ROOT / "app" / "templates"
 SECTIONS = [
     {"id": "overnight", "no": "01", "name": "Overnight"},
     {"id": "signals", "no": "02", "name": "Signals"},
-    {"id": "relative-value", "no": "03", "name": "Crush & Value"},
-    {"id": "supply-demand", "no": "04", "name": "Supply & Demand"},
-    {"id": "risk", "no": "05", "name": "Risk"},
-    {"id": "forward-curves", "no": "06", "name": "Curves"},
-    {"id": "seasonal", "no": "07", "name": "Seasonal"},
-    {"id": "technicals", "no": "08", "name": "Technicals"},
-    {"id": "briefing", "no": "09", "name": "Briefing"},
-    {"id": "about", "no": "10", "name": "About"},
+    # M2 #144 put the eight-row ledger third — the headline's sole per-market
+    # presence, and the way a reader gets to a market page (M19 #223).
+    {"id": "propagation", "no": "03", "name": "Propagation"},
+    {"id": "relative-value", "no": "04", "name": "Crush & Value"},
+    {"id": "supply-demand", "no": "05", "name": "Supply & Demand"},
+    {"id": "risk", "no": "06", "name": "Risk"},
+    {"id": "forward-curves", "no": "07", "name": "Curves"},
+    {"id": "seasonal", "no": "08", "name": "Seasonal"},
+    {"id": "technicals", "no": "09", "name": "Technicals"},
+    {"id": "briefing", "no": "10", "name": "Briefing"},
+    {"id": "about", "no": "11", "name": "About"},
 ]
 
 LEG_COLORS = {
@@ -68,6 +71,23 @@ LEG_COLORS = {
     "Soybean Oil": COLORS["soy_oil"],
     "Soybean Meal": COLORS["soy_meal"],
 }
+
+
+def _build_headline_ledger() -> dict:
+    """M2 #144's eight-row ledger, in the {state, reason, data} envelope.
+
+    Its own DB session: this renderer is also runnable standalone, and the
+    market-page orchestrator's SiteContext does not reach here.
+    """
+    from app.block_builders import SiteContext, headline_ledger
+    from app.markets import load_markets
+
+    ctx = SiteContext.open()
+    try:
+        state, reason, data = headline_ledger(load_markets(), ctx)
+    finally:
+        ctx.close()
+    return {"state": state, "reason": reason, "data": data}
 
 
 def _standalone_market_nav() -> list[dict]:
@@ -727,6 +747,13 @@ def generate(
     log.info("Running health check...")
     health = _safe_call(run_health_check, "health")
 
+    log.info("Building the headline ledger...")
+    ledger = _safe_call(_build_headline_ledger, "headline_ledger") or {
+        "state": "empty",
+        "reason": "the headline ledger could not be built for this render",
+        "data": {},
+    }
+
     # Build template context
     log.info("Building template context...")
     now = datetime.now(timezone.utc)
@@ -757,6 +784,10 @@ def generate(
         "risk_monitor": risk_monitor_section(risk_data),
         "forward_curves": forward_curves_section(fc_data),
         "seasonal": seasonal_section(seasonal_data),
+        # M19 #223: the eight-row ledger, built from the same registry and the
+        # same builder the market pages use — one implementation, so the
+        # headline and a page can never disagree about who has repriced.
+        "ledger": ledger,
         "briefing_text": _build_briefing_text(briefing_text) if briefing_text else "",
         "briefing_uri": _to_data_uri(briefing_text) if briefing_text else "",
         "health_html": _build_health_html(health) if health else "",

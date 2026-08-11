@@ -46,6 +46,7 @@ from app.blocks import (
     make_block,
 )
 from app.markets import Market, Source, TierResult
+from pipeline.units import native_label
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +67,20 @@ PSD_ATTRIBUTES = ("Production", "Imports", "Exports", "Ending Stocks")
 # The market whose board every basis is struck against. Named once here rather
 # than read from each `Source.reference`, which is checked against it.
 REFERENCE_MARKET = "cbot"
+
+# M3 #145's state pills. Three, not four: a venue that re-dates a carried price
+# has not repriced, which `no_print_since` already says — see `leg_prints`.
+# `out_of_cadence` exists only on the headline ledger, whose rows are markets
+# rather than legs and therefore include Europe's weekly leg.
+LEDGER_STATE_REPRICED = "repriced"
+LEDGER_STATE_NO_PRINT = "no_print_since"
+LEDGER_STATE_DARK = "dark"
+LEDGER_STATE_OUT_OF_CADENCE = "out_of_cadence"
+
+# How far the USD and home-currency moves must diverge before the row is tagged
+# `FX`. A tenth of a percentage point: below that the rate is rounding, above it
+# the currency is doing work the reader would otherwise credit to the market.
+FX_DIVERGENCE_PP = 0.1
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +152,25 @@ class SiteContext:
         rows = self.series(source).get(key) or []
         return rows[-1] if rows else None
 
+    def leg_prints(self, leg) -> list[tuple[date, float, int]]:
+        """One ledger leg's *prints*, oldest-first — trade-proved where it can be.
+
+        Deliberately not ``series()``: a leg whose venue re-dates a
+        carry-forward row (SAFEX, #157) has rows that are not prints, and the
+        ledger's whole claim is about which markets have repriced. Where the
+        registry names a ``trade_proof_column`` the read enforces it here too,
+        rather than trusting the fetcher to have done it — the invariant is
+        cheap to state at both ends and expensive to discover at neither.
+        """
+        source = leg.source
+
+        def build():
+            rows = _read_series(
+                self.conn, source, self.today, proof_column=leg.trade_proof_column
+            )
+            return rows.get(leg.key) or []
+        return self.cached(("leg", leg.leg_id), build)
+
     # -- FX ------------------------------------------------------------------
     def fx_series(self, pair: str | None) -> list[tuple[date, float]]:
         """``<CCY>/USD`` closes, oldest-first. Empty when the pair is unset."""
@@ -181,18 +215,33 @@ class SiteContext:
         return self.cached("reference_series", build)
 
 
-def _read_series(conn, source: Source, today: date) -> dict[str, list[tuple[date, float, int]]]:
+def _read_series(
+    conn,
+    source: Source,
+    today: date,
+    *,
+    proof_column: str | None = None,
+) -> dict[str, list[tuple[date, float, int]]]:
     if conn is None:
         return {key: [] for key in source.keys}
     lookback = LOOKBACK_DAYS_BY_CADENCE.get(source.cadence, 400)
     cutoff = (today - _days(lookback)).isoformat()
     placeholders = ",".join("?" for _ in source.keys)
+    # M12/#157: where a venue publishes a field that proves a trade happened,
+    # a row failing it is not a print. `<= 0` is proof of no trade and the row
+    # goes; NULL is proof of nothing and the row stays — dropping it would
+    # invent an outage, which is the one thing a "who has repriced" surface
+    # must never do.
+    proof_clause = (
+        f"AND ({proof_column} IS NULL OR {proof_column} > 0) " if proof_column else ""
+    )
     sql = (
         f"SELECT {source.key_column}, {source.date_column}, "  # noqa: S608 — identifiers come from the registry
         f"AVG({source.value_column}), COUNT({source.value_column}) "
         f"FROM {source.table} "
         f"WHERE {source.key_column} IN ({placeholders}) "
         f"AND {source.date_column} >= ? AND {source.value_column} IS NOT NULL "
+        f"{proof_clause}"
         f"GROUP BY {source.key_column}, {source.date_column} "
         f"ORDER BY {source.date_column}"
     )
@@ -367,18 +416,358 @@ def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
 # 02 Propagation ledger
 # ---------------------------------------------------------------------------
 def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
-    """Deliberately unbuilt: which counterpart legs belong here is undecided.
+    """The propagation ledger: who has repriced, and who has not printed.
 
-    M3 #145 settled what a ledger row *is* (a settlement-ordered dual quote
-    with a state pill). Which 3–4 counterparts sit under a given market's own
-    leg is [M12 #161](https://github.com/philipbergman6-glitch/Mirror-Market/issues/161),
-    still open. Picking a set here would answer a decision ticket inside a
-    build ticket and bury the answer in a template, so the block states the
-    dependency instead — an honest empty state is the contract's own provision
-    for exactly this.
+    Shape from M3 #145 — settlement-ordered rows, each dual-quoting USD/MT over
+    its home print, both moves with an ``FX`` tag when they diverge, and a state
+    pill so silence can never read as flat. Counterpart set from M12 #161, read
+    from the registry (``config.LEDGERS``) rather than chosen here.
+
+    Two things this builder is careful about, both of which would otherwise
+    produce a confident wrong number:
+
+    **A row stamp is not a print.** Where a venue publishes a field proving a
+    trade, ``leg_prints`` enforces it — Grain SA re-dates a carried SAFEX price
+    with Volume 0 (#157), and a ledger that read that as a reprice would be
+    lying in exactly the place it claims to be authoritative.
+
+    **A spread is one session's number.** The legs print on different days —
+    that is the point of the surface — so the spread against the pinned leg is
+    struck on the most recent session *both* printed, and its date is rendered
+    whenever that is not the row's own. Subtracting two different days would
+    manufacture an arbitrage out of a calendar gap.
     """
-    del market, ctx
-    return STATE_EMPTY, "counterpart legs are not chosen yet — blocked on M12 #161", {}
+    ledger = market.ledger
+    own_prints = ctx.leg_prints(ledger.own)
+    if not own_prints:
+        return STATE_EMPTY, (
+            f"{ledger.own.label} has no trade-proved print inside its "
+            f"{ledger.own.source.max_age_days}-day budget — with no pinned leg there is "
+            "nothing for the counterparts to be a spread against"
+        ), {}
+
+    rows = [
+        _ledger_row(
+            leg,
+            ctx,
+            is_own=(index == 0),
+            is_reference=leg.leg_id in ledger.reference_leg_ids,
+            own_prints=own_prints if index else None,
+            own_leg=ledger.own,
+        )
+        for index, leg in enumerate(ledger.legs)
+    ]
+
+    # Settlement-ordered (M3): newest print first, so the reader's eye lands on
+    # whoever repriced most recently. The pinned own leg keeps its place at the
+    # top whatever its date — it is the page's subject, not a competitor — and
+    # reference rows ride last by decision (M12: CBOT on South Africa is a
+    # yardstick, not a peer).
+    own_row, others = rows[0], rows[1:]
+    others.sort(key=lambda row: (row["is_reference"], _sort_date(row)))
+    ordered = [own_row, *others]
+
+    dated = [row["as_of"] for row in ordered if row["as_of"]]
+    leading_edge = max(dated) if dated else None
+    for row in ordered:
+        row["state"], row["state_detail"], row["overdue"] = _ledger_state(
+            row, leading_edge=leading_edge, today=ctx.today
+        )
+
+    return STATE_OK, "", {
+        "rule": ledger.rule,
+        "rule_statement": ledger.rule_statement,
+        "note": ledger.note,
+        "rows": ordered,
+        "leading_edge": leading_edge,
+        "has_spread": True,
+        "commodity": "Soybean",
+        # M12 decision 2 — one commodity per ledger, named on the block. In a
+        # single USD/MT column a per-row good label is not strong enough to stop
+        # five numbers reading as one price in five places.
+        "commodity_note": (
+            "Every row is the soybean. Meal and oil are a different good and would "
+            "be a second ledger, not more rows here."
+        ),
+        # M3 #145 / M4 #146: the stack stores no time of day, so the ordering is
+        # by settlement *date* and the page must not imply anything finer.
+        "no_timestamp_note": (
+            "ordered by print date — this stack stores no time of day, so two legs "
+            "sharing a date are not ordered against each other"
+        ),
+    }
+
+
+def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, str, dict]:
+    """The headline page's eight-row ledger (M2 #144 / M12 #161).
+
+    Rows are **markets** here, not legs, and the market cell is the link — this
+    is the headline's sole per-market presence, so a reader scans it to decide
+    which page to open. Three consequences, all of them M12's:
+
+    * **No spread column.** There is no pinned own leg on the headline, so
+      there is nothing for a spread to be against. Levels and moves only.
+    * **Europe carries no value.** Its only leg is the EC's weekly assessment —
+      out of the ledger's cadence, not missing — so it renders
+      ``out_of_cadence`` rather than a value that would invite comparison
+      against seven daily prints, and rather than a ``dark`` pill that would
+      report an outage that is not happening.
+    * **Nigeria is dark**, with the registry's own reason: no price leg of any
+      kind is ingested.
+    """
+    rows: list[dict] = []
+    for market in markets.values():
+        if market.ledger is not None:
+            leg = market.ledger.own
+            row = _ledger_row(
+                leg, ctx, is_own=False, is_reference=False, own_prints=None, own_leg=leg
+            )
+            row["forced_state"] = None
+        else:
+            row = _headline_placeholder(market)
+        # On the headline the row IS the market, so the market name leads and
+        # the leg label rides underneath as the thing actually quoted.
+        row["market_label"] = market.name
+        row["href"] = market.url
+        rows.append(row)
+
+    dated = [row["as_of"] for row in rows if row["as_of"]]
+    leading_edge = max(dated) if dated else None
+    for row in rows:
+        forced = row.pop("forced_state", None)
+        if forced:
+            row["state"], row["state_detail"], row["overdue"] = forced
+        else:
+            row["state"], row["state_detail"], row["overdue"] = _ledger_state(
+                row, leading_edge=leading_edge, today=ctx.today
+            )
+
+    if not dated:
+        return STATE_EMPTY, "no market on the ledger has a print in its window", {}
+    return STATE_OK, "", {
+        "rows": rows,
+        "leading_edge": leading_edge,
+        "has_spread": False,
+        "commodity": "Soybean",
+        "commodity_note": (
+            "Every row is the soybean — Europe's row names its own good, which is "
+            "why it carries no value here."
+        ),
+        "no_timestamp_note": (
+            "ordered as declared in the registry — role in the trade. This stack "
+            "stores no time of day, so no finer ordering than the date exists."
+        ),
+    }
+
+
+def _headline_placeholder(market: Market) -> dict:
+    """A row for a market with no ledger — valueless, and it says which kind."""
+    source = market.price
+    row = {
+        "leg_id": None,
+        "label": source.label if source is not None else market.venue,
+        "market_slug": market.slug,
+        "market_name": market.name,
+        "href": market.url,
+        "kind": source.quote_kind if source is not None else None,
+        "is_own": False,
+        "is_reference": False,
+        "expected_gap_days": None,
+        "budget_days": None,
+        "trade_proved": False,
+        "as_of": None,
+        "age_days": None,
+        "usd_mt": None,
+        "home_value": None,
+        "home_unit": "",
+        "has_home_quote": False,
+        "usd_chg_pct": None,
+        "home_chg_pct": None,
+        "fx_tag": False,
+        "fx_note": None,
+        "quotes": None,
+        "spread_usd_mt": None,
+        "spread_as_of": None,
+        "spread_note": None,
+    }
+    if source is None:
+        row["forced_state"] = (LEDGER_STATE_DARK, market.absent_reason("price"), True)
+    else:
+        row["label"] = source.label or (source.headline_key or source.keys[0])
+        row["forced_state"] = (
+            LEDGER_STATE_OUT_OF_CADENCE,
+            f"{source.cadence} assessment — outside the ledger's daily cadence, "
+            "so no value is shown here (M10 #151)",
+            False,
+        )
+    return row
+
+
+def _sort_date(row: dict):
+    """Newest first, undated last — a leg with no print cannot be ordered by one."""
+    return (row["as_of"] is None, "" if row["as_of"] is None else _negated(row["as_of"]))
+
+
+def _negated(iso: str) -> str:
+    """Descending-by-date sort key for an ISO date, as a string."""
+    return "".join(chr(ord("9") - (ord(ch) - ord("0"))) if ch.isdigit() else ch for ch in iso)
+
+
+def _ledger_row(
+    leg,
+    ctx: SiteContext,
+    *,
+    is_own: bool,
+    is_reference: bool,
+    own_prints: list[tuple[date, float, int]] | None,
+    own_leg,
+) -> dict:
+    """One ledger row, before its state pill is set (that needs the whole set)."""
+    source = leg.source
+    owner = leg.market
+    prints = ctx.leg_prints(leg)
+
+    row = {
+        "leg_id": leg.leg_id,
+        "label": leg.label,
+        "market_slug": owner.slug,
+        "market_name": owner.name,
+        "href": leg.href,
+        "kind": source.quote_kind,
+        "is_own": is_own,
+        "is_reference": is_reference,
+        "expected_gap_days": leg.expected_gap_days,
+        # The same recency answer main.py grades this layer on — one number in
+        # the codebase, so the site cannot call a source alive that the pipeline
+        # has already failed.
+        "budget_days": source.max_age_days,
+        "trade_proved": leg.trade_proof_column is not None,
+        "as_of": None,
+        "age_days": None,
+        "usd_mt": None,
+        "home_value": None,
+        "home_unit": _home_unit(source, leg.key, owner.home_currency),
+        "has_home_quote": source.unit != "usd_per_mt",
+        "usd_chg_pct": None,
+        "home_chg_pct": None,
+        "fx_tag": False,
+        "fx_note": None,
+        "quotes": None,
+        "spread_usd_mt": None,
+        "spread_as_of": None,
+        "spread_note": None,
+    }
+    if not prints:
+        return row
+
+    when, value, quotes = prints[-1]
+    fx = ctx.fx_on(owner.currency_pair, when)
+    row.update({
+        "as_of": when.isoformat(),
+        "age_days": _age_days(ctx.today, when),
+        "usd_mt": source.to_usd_mt(value, leg.key, fx),
+        "home_value": value,
+        "quotes": quotes,
+    })
+
+    if len(prints) > 1:
+        prior_when, prior_value, _ = prints[-2]
+        row["home_chg_pct"] = _pct_change(value, prior_value)
+        prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when))
+        row["usd_chg_pct"] = _pct_change(row["usd_mt"], prior_usd)
+        # M3 #145: show both moves, and say so when the currency did the work.
+        # A leg quoted in its own currency can be up at home and down in USD;
+        # printing one number would attribute an FX move to the market.
+        if (
+            source.unit == "home_per_mt"
+            and row["usd_chg_pct"] is not None
+            and row["home_chg_pct"] is not None
+            and abs(row["usd_chg_pct"] - row["home_chg_pct"]) >= FX_DIVERGENCE_PP
+        ):
+            row["fx_tag"] = True
+            row["fx_note"] = (
+                f"{owner.currency_pair} moved between prints — the USD and "
+                f"{owner.home_currency} moves are not the same number"
+            )
+
+    if own_prints is not None:
+        row["spread_usd_mt"], row["spread_as_of"], row["spread_note"] = _spread(
+            leg, prints, own_leg, own_prints, ctx
+        )
+    return row
+
+
+def _spread(leg, prints, own_leg, own_prints, ctx: SiteContext):
+    """This leg minus the pinned leg, struck on the newest session both printed.
+
+    Never a cross-day subtraction: two legs from different days differ by the
+    calendar as much as by the arbitrage, and the whole reason this surface
+    exists is that they *do* print on different days.
+    """
+    own_by_date = {day: (value, day) for day, value, _ in own_prints}
+    for day, value, _ in reversed(prints):
+        if day not in own_by_date:
+            continue
+        mine = leg.source.to_usd_mt(value, leg.key, ctx.fx_on(leg.market.currency_pair, day))
+        theirs = own_leg.source.to_usd_mt(
+            own_by_date[day][0], own_leg.key, ctx.fx_on(own_leg.market.currency_pair, day)
+        )
+        if mine is None or theirs is None:
+            continue
+        return mine - theirs, day.isoformat(), None
+    return None, None, (
+        f"no session in the window where both {leg.label} and {own_leg.label} printed — "
+        "a spread across two dates is a calendar artefact, not an arbitrage"
+    )
+
+
+def _ledger_state(row: dict, *, leading_edge: str | None, today: date):
+    """M3 #145's three pills, plus whether being behind is *abnormal*.
+
+    ``dark`` is the leg's own recency budget — the same number ``main.py``
+    grades the layer on, so the site and the pipeline cannot disagree about
+    whether a source is alive. ``overdue`` is M4 section 3.4 trap 5: a daily leg
+    six days silent is well inside ``FRESHNESS_WARNING_DAYS = 7`` and still
+    plainly wrong, so the ledger carries each leg's own expected gap instead.
+    """
+    if row["as_of"] is None:
+        return LEDGER_STATE_DARK, (
+            "no trade-proved print in the window"
+            if row["trade_proved"] else "no print in the window"
+        ), True
+    if row["age_days"] is not None and row["age_days"] > row["budget_days"]:
+        return LEDGER_STATE_DARK, (
+            f"newest print {row['as_of']} is {row['age_days']}d old, past this layer's "
+            f"{row['budget_days']}d budget"
+        ), True
+    if leading_edge is not None and row["as_of"] == leading_edge:
+        return LEDGER_STATE_REPRICED, f"printed {row['as_of']}, the newest on this ledger", False
+    overdue = (row["age_days"] or 0) > row["expected_gap_days"]
+    detail = f"last printed {row['as_of']}"
+    if overdue:
+        detail += (
+            f" — {row['age_days']}d ago, past the {row['expected_gap_days']}d gap that is "
+            "normal for this leg"
+        )
+    return LEDGER_STATE_NO_PRINT, detail, overdue
+
+
+def _home_unit(source: Source, key: str, home_currency: str) -> str:
+    """What the venue's own number is quoted in — never inferred from the table.
+
+    A price is only a price with its unit, and one table can hold three: CBOT's
+    `prices` rows are cents/bu, cents/lb and USD/short ton at once. The registry
+    states the unit; this turns it into a label and nothing here guesses.
+    """
+    if source.unit == "home_per_mt":
+        return f"{home_currency}/MT"
+    if source.unit == "usd_per_mt":
+        return "USD/MT"
+    if source.unit == "usd_per_bushel":
+        return "USD/bu"
+    if source.unit == "native_exchange":
+        return native_label(key) or "native"
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -795,7 +1184,7 @@ def build_blocks(
     """
     blocks: list[Block] = []
     for block_id in block_ids:
-        absent = absent_reason(market, block_id, tier)
+        absent = absent_reason(market, block_id)
         if absent:
             blocks.append(make_block(block_id, state=STATE_ABSENT, reason=absent))
             continue
@@ -822,4 +1211,4 @@ def _kind(market: Market, block_id: str) -> str | None:
     return None
 
 
-__all__ = ["BUILDERS", "SiteContext", "build_blocks"]
+__all__ = ["BUILDERS", "SiteContext", "build_blocks", "headline_ledger"]

@@ -1236,6 +1236,11 @@ MARKETS = {
             "keys": ["Soybeans"],
             "reference": "cbot",
             "label": "US Gulf CIF over CBOT",
+            # A cash bid for physical barge freight-on-board, not a board
+            # settlement. Required because this descriptor is also the
+            # `us_gulf:cif` ledger leg, and M3 #145 constraint 4 does not let an
+            # unlabelled quote onto a surface beside a board price.
+            "quote_kind": "physical",
             # AMS 3147 prints a flat CIF price in $/bu (the basis column is
             # cents/bu over the named contract); several barge locations and
             # delivery windows print on one report date.
@@ -1333,6 +1338,7 @@ MARKETS = {
             "keys": ["Soybean (AgRural Paranaguá FOB)"],
             "reference": "cbot",
             "label": "Paranaguá FOB over CBOT",
+            "quote_kind": "physical",
             "value_column": "price_brl",
             "unit": "home_per_mt",
             "arbitrage": "open",
@@ -1553,4 +1559,253 @@ MARKETS = {
         "psd_country": "Nigeria",
         "players_country": "NG",
     },
+}
+
+
+# ---------------------------------------------------------------------------
+# LEDGER_LEGS — the propagation ledger's leg catalog (M12 #161, built by #223)
+#
+# A ledger row names a LEG, not a market. That is M12's first decision and the
+# reason this catalog exists at all: `us_gulf:cif` is the AMS CIF NOLA barge
+# bid, which lives on the CBOT market's `basis` descriptor and has no market
+# key of its own. Forcing Brazil to compare against a Chicago board rather
+# than against a competing physical answers the wrong question.
+#
+# So there are now TWO id spaces in this registry, and they must not be
+# confused: `MARKETS` is keyed by market slug, this is keyed by leg id. Every
+# leg id resolves to (market slug, descriptor sub-block, key within it) and
+# `app/markets.py` hard-fails at load when it does not — the same treatment
+# `quote_kind`, `arbitrage` and the weather regions already get, because a typo
+# that ships an empty row instead of failing the build is exactly the defect
+# nobody notices in review.
+#
+# Everything else about a leg — its table, date column, unit, FX pair, home
+# currency — is READ FROM THE OWNING MARKET'S DESCRIPTOR, never restated here.
+# A leg entry carries only what the owner cannot say: which of its keys this
+# leg is, what to call it (the owner's name is not the leg's name), and how
+# the print is proved.
+#
+# `trade_proof_column` is M4/#157's finding turned into a rule. SAFEX re-dates
+# a carry-forward row with Volume 0 and High/Low 0.00, so the date beside the
+# price is a ROW stamp, not evidence that anything traded — and a ledger whose
+# whole job is "who has repriced" cannot read a row stamp as a reprice. Where a
+# venue publishes a field that proves a trade, it is named here and a row that
+# fails it is not a print. Assessments (CEPEA, AgRural, AMS, MAGyP, mandi) have
+# no such field by nature: an assessment is not a trade, and demanding volume
+# of one is a category error — their `quote_kind` already says which animal
+# they are.
+#
+# `expected_gap_days` is M4 section 3.4 trap 5. FRESHNESS_WARNING_DAYS = 7 lets
+# a daily leg go six days stale without a word, so the ledger cannot derive
+# "overdue" from the freshness window; each leg states the largest gap between
+# prints that is NORMAL for it. Four calendar days clears a Friday-to-Monday
+# weekend plus one public holiday, which is the shape of every leg below.
+LEDGER_DEFAULT_EXPECTED_GAP_DAYS = 4
+
+LEDGER_LEGS = {
+    "cbot:board": {
+        "market": "cbot",
+        "block": "price",
+        "key": "Soybeans",
+        "label": "CBOT board (ZS front)",
+        # yfinance carries the session's volume; a settlement printed against
+        # zero volume is not a session this board traded.
+        "trade_proof_column": "Volume",
+    },
+    "us_gulf:cif": {
+        # The one leg with no market of its own — it is `cbot.basis`, the AMS
+        # 3147 flat CIF NOLA barge bid in $/bu. Its page link therefore lands
+        # on the CBOT page, which is where that number is already explained.
+        "market": "cbot",
+        "block": "basis",
+        "key": "Soybeans",
+        "label": "US Gulf CIF (NOLA barge)",
+    },
+    "brazil:cepea": {
+        "market": "brazil",
+        "block": "price",
+        "key": "Soybean (CEPEA)",
+        "label": "Brazil CEPEA/ESALQ Paraná",
+    },
+    "brazil:paranagua": {
+        "market": "brazil",
+        "block": "basis",
+        "key": "Soybean (AgRural Paranaguá FOB)",
+        "label": "Brazil Paranaguá FOB",
+    },
+    "argentina:fob": {
+        "market": "argentina",
+        "block": "price",
+        "key": "Soybeans",
+        "label": "Argentina official FOB",
+    },
+    "dalian:board": {
+        "market": "dalian",
+        "block": "price",
+        "key": "DCE Soybean No.2",
+        "label": "Dalian No.2 (crush bean)",
+        "trade_proof_column": "Volume",
+    },
+    "india:mandi_mp": {
+        "market": "india",
+        "block": "price",
+        "key": "Soybean (Mandi MP)",
+        "label": "India mandi — Madhya Pradesh",
+    },
+    "india:mandi_mh": {
+        "market": "india",
+        "block": "price",
+        "key": "Soybean (Mandi MH)",
+        "label": "India mandi — Maharashtra",
+    },
+    "south_africa:safex": {
+        "market": "south_africa",
+        "block": "price",
+        "key": "Soybean (SAFEX)",
+        "label": "SAFEX soybean (last traded)",
+        # #157: the whole reason this field is in the contract. Grain SA
+        # re-stamps a non-trading day's carried price with the current date.
+        "trade_proof_column": "Volume",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# LEDGERS — which legs sit on which page (M12 #161)
+#
+# Two selection rules, not one, and that is the load-bearing decision. Origin
+# pages ask "who else is offering this cargo" — a genuine, closable arbitrage
+# between competing FOBs. Destination pages ask "what does landed supply cost
+# from the origins this market actually buys from" — the SPECIFIC origins, not
+# all of them. One rule fits neither, so each ledger declares its own and the
+# block renders it.
+#
+# Four constraints this data has to keep saying out loud:
+#
+# 1. ONE COMMODITY PER LEDGER. Every ledger below is the soybean. M3 #145's
+#    "kinds do not mix" has a twin in *goods* do not mix: in one USD/MT column
+#    a per-row label is not strong enough to stop the eye reading five numbers
+#    as one price in five places. The straw man's DCE-meal-against-bean row is
+#    out for exactly that reason; a meal ledger would be a second block.
+# 2. FOUR OR FIVE ROWS, NEVER PADDED. Dalian and Argentina have three
+#    counterparts genuinely connected by trade and a fourth candidate that is
+#    filler (Argentine beans to China; a second Argentine leg). A layout
+#    constant is not a reason to render an economic relationship, so M3's
+#    "5 rows" becomes "the legs that exist".
+# 3. CBOT IS NOT PINNED EVERYWHERE. M4 found it is our LEAST reliable same-day
+#    leg while Dalian is the freshest settled one, so reflexively putting it on
+#    every page encodes the assumption the ledger was built to correct. It is
+#    dropped from India — the GM import ban means no cargo closes that +66%,
+#    so the row would invite a trade that cannot be taken — and demoted to a
+#    labelled reference row, last, on South Africa.
+# 4. FIXED, NEVER SEASONAL. A row set that changes under the reader has to be
+#    re-learned each visit, and picking counterparts by harvest window is
+#    lead-lag inference wearing a layout hat — explicitly out of scope on the
+#    map that produced this.
+#
+# The first leg is the page's own, pinned; the rest are counterparts, and each
+# counterpart carries a spread against the pinned leg. `reference_legs` names
+# the rows that are a flat-price yardstick rather than a peer offer.
+LEDGER_RULES = ("origin", "destination")
+
+LEDGERS = {
+    "cbot": {
+        "rule": "origin",
+        "legs": [
+            "cbot:board",
+            "us_gulf:cif",
+            "brazil:paranagua",
+            "argentina:fob",
+            "dalian:board",
+        ],
+        "note": (
+            "The board against its own physical — the Gulf basis, made visible as "
+            "a row — then the two competing origins, and the buyer whose bid "
+            "ultimately clears the cargo."
+        ),
+    },
+    "dalian": {
+        "rule": "destination",
+        "legs": ["dalian:board", "brazil:paranagua", "us_gulf:cif", "cbot:board"],
+        "note": (
+            "China's bean comes from Brazil (dominant) and the US Gulf; CBOT is "
+            "the flat price import parity is struck against. Argentina is "
+            "excluded — it crushes its beans rather than exporting them, so an "
+            "Argentine bean row here would imply a flow that barely exists."
+        ),
+    },
+    "brazil": {
+        "rule": "origin",
+        "legs": [
+            "brazil:cepea",
+            "brazil:paranagua",
+            "us_gulf:cif",
+            "argentina:fob",
+            "cbot:board",
+        ],
+        "note": (
+            "Domestic against own port is the internal-freight and export-premium "
+            "gap — the most actionable line on this page. Then the two competing "
+            "offers, and the reference."
+        ),
+    },
+    "argentina": {
+        "rule": "origin",
+        "legs": ["argentina:fob", "brazil:paranagua", "us_gulf:cif", "cbot:board"],
+        "note": (
+            "The competing FOBs plus the reference; nothing else is connected. "
+            "The pinned leg is an administered legal minimum, not an offer — the "
+            "kind stays on the row."
+        ),
+    },
+    "india": {
+        "rule": "destination",
+        "legs": ["india:mandi_mp", "india:mandi_mh"],
+        # Required by app/markets.py because this ledger names no foreign leg:
+        # a destination ledger with no origin in it has to say why, or it reads
+        # as a set someone forgot to finish.
+        "note": (
+            "No origin qualifies. India bans GM soybean imports behind a tariff "
+            "wall, so no foreign bean is connected to this one by trade and a "
+            "counterpart row would invite an arbitrage that cannot be worked "
+            "(#206). What remains is two independent state medians — a real "
+            "check that catches one state's mandis being shut. CBOT appears on "
+            "this page only in the basis block, labelled the policy spread it is."
+        ),
+    },
+    "south_africa": {
+        "rule": "destination",
+        "legs": [
+            "south_africa:safex",
+            "argentina:fob",
+            "brazil:paranagua",
+            "cbot:board",
+        ],
+        "reference_legs": ["cbot:board"],
+        "note": (
+            "SAFEX seed trades inside an import/export parity band anchored on "
+            "South American FOBs delivered Durban, so those two are the peers. "
+            "CBOT rides last as the flat price both FOBs are quoted against, not "
+            "as a peer."
+        ),
+    },
+    # Europe and Nigeria get NO ledger block — `absent` with a reason, which is
+    # a LEGAL page configuration and not a degraded one (M1 #143 / M10 #151).
+    # Five rows of markets a country has no trade relationship with is worse
+    # than nothing: it implies one.
+    "europe": None,
+    "nigeria": None,
+}
+
+LEDGER_ABSENT_REASONS = {
+    "europe": (
+        "the ledger is daily-only (M10 #151) and Europe's only leg is the EC's "
+        "weekly Moselle rapeseed assessment — wrong cadence and wrong good. The "
+        "straw man's ICE canola counterpart is not available either: that feed "
+        "was verified dead on 2026-08-08"
+    ),
+    "nigeria": (
+        "no Nigerian price leg of any kind is ingested, and rows of markets "
+        "Nigeria has no trade relationship with would imply one (M12 #161)"
+    ),
 }

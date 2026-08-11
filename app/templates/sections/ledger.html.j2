@@ -1,0 +1,19 @@
+{#
+  Headline propagation ledger — eight market rows (M2 #144 / M12 #161).
+
+  The headline's SOLE per-market presence: M2 rejected a per-market card grid
+  because it would restate this table's own columns. The market cell is the
+  link, so this is also how a reader gets to a page.
+
+  Two differences from the market-page block, both from M12:
+  * No spread column — there is no pinned own leg to be a spread against.
+  * Europe carries no value. Its leg is the EC's weekly assessment: out of the
+    ledger's daily cadence, not missing, so `out of cadence` rather than a
+    `dark` pill that would report an outage that is not happening.
+
+  Expects `s` (the section's data) and the page-global `root`.
+#}
+{% set d = s %}
+<div class="ledger-good">All rows: <strong>{{ d.commodity }}</strong> · {{ d.commodity_note }}</div>
+{% include 'blocks/_ledger_table.html.j2' %}
+<div class="caption">{{ d.no_timestamp_note }}{% if d.leading_edge %} Newest print across the complex: {{ d.leading_edge }}.{% endif %}</div>

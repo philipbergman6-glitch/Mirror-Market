@@ -100,7 +100,6 @@ def make_block(block_id: str, *, state: str, reason: str = "", **kwargs) -> Bloc
 # Blocks whose source is site-wide rather than per-market, so the registry has
 # no per-market absent reason to give.
 _SITE_WIDE_REASONS = {
-    "ledger": "the propagation ledger needs a daily leg — this market has none",
     "currency": "{market} quotes in {ccy}, the site numeraire — no conversion applies",
     "news": "reserved — no news layer is ingested (out of scope for map #142)",
     "supply_demand": "no PSD country is mapped to this market",
@@ -108,15 +107,23 @@ _SITE_WIDE_REASONS = {
 }
 
 
-def absent_reason(market: Market, block_id: str, tier_result) -> str | None:
-    """Non-None when this market structurally has no source for the block."""
+def absent_reason(market: Market, block_id: str) -> str | None:
+    """Non-None when this market structurally has no source for the block.
+
+    Every answer here is a fact about the *descriptor*, never a DB reading: the
+    two states exist precisely to separate "no such source" from "our ingest is
+    broken" (M1 #143 constraint 2), and a probe in this function would collapse
+    them again.
+    """
     if block_id in ("price", "crush", "basis"):
         source = getattr(market, block_id)
         return None if source is not None else market.absent_reason(block_id)
     if block_id == "ledger":
-        if tier_result is not None and tier_result.has_daily_leg:
-            return None
-        return _SITE_WIDE_REASONS["ledger"]
+        # Structural, from the registry — not a DB probe. M12 #161 gave Europe
+        # and Nigeria no counterpart set at all, which is a *legal* page
+        # configuration; whether this market's own leg printed today is a data
+        # question the builder answers with `empty`.
+        return None if market.ledger is not None else market.absent_reason("ledger")
     if block_id == "currency":
         if market.currency_pair:
             return None

@@ -1,4 +1,23 @@
-{# 02 Propagation ledger. No `ok` branch exists yet: M12 #161 has not chosen
-   which counterpart legs sit on a given market's ledger, so every render goes
-   through _block.html.j2's empty state. The partial is here so the file set
-   matches the block set — a missing file would read as an oversight. #}
+{# 02 Propagation ledger — who has repriced, and who has not printed.
+
+   Shape from M3 #145; the counterpart set from M12 #161, read from
+   config.LEDGERS. The two things this block must say out loud, because the
+   numbers alone imply neither:
+
+   1. WHICH RULE picked these rows. An origin page's counterparts are competing
+      offers; a destination page's are the origins it actually buys from. Same
+      table, different question, and a reader who assumes the wrong one reads a
+      real spread as an arbitrage that is not there.
+   2. THAT EVERY ROW IS ONE GOOD. In a single USD/MT column a per-row label is
+      not strong enough to stop five numbers reading as one price in five
+      places, so the good is named once, above them all.
+#}
+{% set d = block.data %}
+<div class="ledger-rule">
+  <span class="rule-tag">{{ d.rule }}</span>
+  <span>{{ d.rule_statement }}</span>
+</div>
+<div class="ledger-good">All rows: <strong>{{ d.commodity }}</strong> · {{ d.commodity_note }}</div>
+{% include 'blocks/_ledger_table.html.j2' %}
+<div class="caption">{{ d.no_timestamp_note }}.{% if d.leading_edge %} Newest print on this ledger: {{ d.leading_edge }}.{% endif %}</div>
+<div class="ledger-note">{{ d.note }}</div>
