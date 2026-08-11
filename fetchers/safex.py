@@ -3,7 +3,15 @@ Layer 18 — SAFEX South Africa domestic soy prices via Grain SA.
 
 Source: Grain SA SAFEX Feeds page (https://www.grainsa.co.za/pages/industry-reports/safex-feeds)
 Data provider: BVG (credited on the page)
-Prices: ZAR/MT — daily settlement prices for JSE Agricultural futures contracts
+Prices: ZAR/MT — the *last traded price* for JSE Agricultural futures contracts.
+
+    NOT the JSE official mark-to-market (MTM) settlement. The Grain SA table
+    has no settlement column at all — its columns are Instrument, Contract,
+    LastTradedTime, LastTradedPrice, Difference, HighPrice, LowPrice, Volume,
+    OpenInterest. The JSE's own MTM file sits behind its Client Portal and its
+    terms bar use "for commercial gain" without written permission, so the MTM
+    number is not available to this project (#157). Every docstring and label
+    downstream must therefore say "last traded", never "settlement".
 
 Why it matters:
     South Africa is the regional soy hub for sub-Saharan Africa.  The SAFEX
@@ -21,11 +29,29 @@ Parser strategy:
     extract rows. Mismatched structure raises ScraperShapeError so the
     pipeline records 'failed' instead of silently empty.
 
-    "Nearest contract" = the contract whose MMMYY code expires soonest
-    (month arithmetic, not page order or volume). The contract label is
-    kept alongside the price so a contract roll is visible downstream.
-    Rows without a parseable trade *date* hard-fail — a frozen page must
-    never be stamped with today's date.
+    Contract selection = **the most-liquid contract that session**, i.e. the
+    largest Volume, ties broken by nearest expiry. Nearest-expiry alone was
+    wrong twice over (#157):
+
+      1. It rides the contract into its own death. On 2026-08-11 the nearest
+         contract AUG26 traded 163 lots while DEC26 traded 433 and SEP26 271
+         — liquidity had already rolled away, so the SA price leg was reading
+         the thinnest board on the page.
+      2. It cannot see a carried-forward price. LastTradedTime is a *row*
+         stamp, not a trade time: on 2026-08-11 OCT26 carried the date
+         2026-08-11 with Volume 0, Difference 0.00 and High/Low 0.00 — it did
+         not trade at all, yet its stale price was stamped with today's date.
+         Requiring Volume > 0 excludes those rows structurally, which the
+         date-honesty guard below cannot do on its own.
+
+    The contract label is kept alongside the price so a roll is visible
+    downstream. Rows without a parseable trade *date* hard-fail — a frozen
+    page must never be stamped with today's date.
+
+    On a non-trading day the page stale-serves the previous session's rows,
+    volumes included (verified across 2026-08-02 and 2026-08-08). Those rows
+    carry their own real date, so they land on the date they belong to and
+    dedupe against what is already stored — never under today's.
 """
 
 from __future__ import annotations
@@ -145,8 +171,8 @@ def _normalize_header(text: str) -> str:
     return "".join(text.split()).lower()
 
 
-def _find_settlement_table(soup: BeautifulSoup) -> tuple[list[str], list[list[str]]]:
-    """Locate the settlement table and return (header_cells, body_rows).
+def _find_price_table(soup: BeautifulSoup) -> tuple[list[str], list[list[str]]]:
+    """Locate the price table and return (header_cells, body_rows).
 
     Raises ScraperShapeError if the table can't be found or its header
     lacks the required columns. Skips a preamble "Last Updated" row by
@@ -210,29 +236,29 @@ def _to_float(val: str) -> float | None:
 def _parse_safex_table(html: str) -> dict[str, pd.DataFrame]:
     """Parse the Grain SA SAFEX HTML page into per-commodity DataFrames.
 
-    For each instrument code in ``_INSTRUMENT_MAP`` we pick the nearest
-    contract — smallest (year, month) from its MMMYY code — and emit a
-    single-row DataFrame carrying the contract label.
+    For each instrument code in ``_INSTRUMENT_MAP`` we pick the most-liquid
+    contract that actually traded — largest Volume, ties broken by nearest
+    expiry — and emit a single-row DataFrame carrying the contract label.
 
     Returns
     -------
     dict
         ``{commodity_name: DataFrame}`` with columns Date, Close, Volume,
         Contract, Unit. Empty dict if none of our tracked instruments
-        appear on the page (that's a normal "no rows for this filter"
-        outcome, not a shape error).
+        appear on the page, or if none of their contracts traded (both are
+        normal "nothing to report" outcomes, not shape errors).
 
     Raises
     ------
     ScraperShapeError
-        If the page no longer exposes a recognisable settlement table,
+        If the page no longer exposes a recognisable price table,
         if a tracked row's contract code stops parsing as MMMYY (nearest-
         contract selection would be meaningless), or if the selected row
         carries no parseable trade date (a frozen page must not be stored
         under today's date).
     """
     soup = BeautifulSoup(html, "html.parser")
-    header, rows = _find_settlement_table(soup)
+    header, rows = _find_price_table(soup)
 
     col = {name: header.index(name) for name in _REQUIRED_COLUMNS}
 
@@ -240,7 +266,8 @@ def _parse_safex_table(html: str) -> dict[str, pd.DataFrame]:
 
     for instrument_code, commodity_name in _INSTRUMENT_MAP.items():
         # Collect all contracts for this instrument with a usable price.
-        candidates: list[tuple[tuple[int, int], str, float, float | None, str]] = []
+        candidates: list[tuple[tuple[int, int], str, float, float, str]] = []
+        untraded = 0
         for cells in rows:
             if cells[col["instrument"]].upper() != instrument_code:
                 continue
@@ -254,15 +281,31 @@ def _parse_safex_table(html: str) -> dict[str, pd.DataFrame]:
                     f"Grain SA SAFEX: unparseable contract code {contract!r} for "
                     f"{instrument_code} — cannot order contracts by expiry"
                 )
+            # A zero/absent volume means this contract did not trade in the
+            # session the page is showing, so its price is a carry-forward
+            # from some earlier session that the page has re-stamped with the
+            # current date. Storing it would fabricate a print.
             volume = _to_float(cells[col["volume"]])
+            if volume is None or volume <= 0:
+                untraded += 1
+                continue
             candidates.append((sort_key, contract, price, volume, cells[col["lasttradedtime"]]))
 
         if not candidates:
-            logger.debug("Grain SA SAFEX: no rows for %s (%s)", commodity_name, instrument_code)
+            # Not a shape error: every contract on the board can legitimately
+            # go a session without trading. Empty here reaches the pipeline as
+            # empty-success (empty_fails=False for this layer), not as an
+            # outage — the same grading a JSE holiday gets.
+            logger.warning(
+                "Grain SA SAFEX: no traded contract for %s (%s) — %d contract(s) "
+                "present but all with zero volume; storing nothing rather than a "
+                "carried-forward price",
+                commodity_name, instrument_code, untraded,
+            )
             continue
 
-        # Nearest expiry = smallest (year, month); ties broken by first occurrence.
-        candidates.sort(key=lambda t: t[0])
+        # Most liquid first; ties broken by nearest expiry.
+        candidates.sort(key=lambda t: (-t[3], t[0]))
         _, contract, close, volume, traded_at = candidates[0]
 
         trade_date = _parse_trade_date(traded_at)

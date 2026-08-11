@@ -517,7 +517,8 @@ def clean_brazil_spot(df: pd.DataFrame) -> pd.DataFrame:
 
 def clean_safex(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean JSE SAFEX South Africa settlement price data.
+    Clean JSE SAFEX South Africa last-traded price data (not settlement/MTM —
+    see fetchers/safex.py).
 
     Steps:
         1. Copy first.

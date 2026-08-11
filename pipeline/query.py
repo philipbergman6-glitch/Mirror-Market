@@ -230,7 +230,10 @@ def read_brazil_spot(commodity: str | None = None) -> pd.DataFrame:
 
 
 def read_safex(commodity: str | None = None) -> pd.DataFrame:
-    """Read JSE SAFEX South Africa settlement prices from SQLite."""
+    """Read JSE SAFEX South Africa last-traded prices from SQLite.
+
+    Not settlement/MTM — the free source carries no settlement column (#157).
+    """
     return _read_table("safex_prices", "commodity", commodity)
 
 
