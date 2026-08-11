@@ -778,6 +778,26 @@ HEALTH_TABLE_LAYERS = {
     "worldbank_prices": "worldbank",
 }
 
+# Which pipeline layer(s) write each table analysis/health.py inspects.
+# The dashboard masthead counts layers, health counts commodities inside
+# tables; without this map a layer that wrote *something* reads "fresh"
+# while DATA HEALTH lists its commodities as MISSING. A health critical
+# demotes every layer that writes the offending table (issue #58).
+# brazil_spot_prices has three writers (Layers 15b/17/19) — a critical
+# there can't be pinned to one, so all three lose the fresh badge.
+HEALTH_TABLE_WRITER_LAYERS = {
+    "prices": ("prices",),
+    "cot": ("cot",),
+    "weather": ("weather",),
+    "currencies": ("currencies",),
+    "dce_futures": ("dce",),
+    "forward_curve": ("forward_curve",),
+    "worldbank_prices": ("worldbank",),
+    "india_domestic_prices": ("india_domestic",),
+    "brazil_spot_prices": ("cepea", "agrural", "conab_precos"),
+    "safex_prices": ("safex",),
+}
+
 # ---------------------------------------------------------------------------
 # Storage
 # ---------------------------------------------------------------------------
