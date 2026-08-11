@@ -452,3 +452,73 @@ def test_the_cec_estimates_panel_survived_the_port():
     assert "implied yield 2.08 t/ha" in group["note"]
     assert "lag, not disagreement" in group["note"]
     assert "Crop Estimates Committee" in group["note"]
+
+
+# ---------------------------------------------------------------------------
+# Section templates render (#226)
+# ---------------------------------------------------------------------------
+# The builder returning the right dict is only half the contract: the section
+# template reads keys off it, and a key the builder never set is an
+# UndefinedError at render time — which tombstones the headline page and, with
+# it, the whole deploy. These run the builder output through the real template,
+# so a missing key fails here instead of on `main`.
+
+
+def _render_section(name: str, data: dict) -> str:
+    from jinja2 import Environment, FileSystemLoader
+
+    from scripts.generate_html import TEMPLATE_DIR
+
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    return env.get_template(f"sections/{name}.html.j2").render(s=data)
+
+
+def _oil_pair(**over) -> dict:
+    base = {
+        "soy_oil": 1_150.0, "soy_oil_weekly_chg": 1.2, "soy_oil_as_of": "2026-08-11",
+        "palm_oil": 1_020.0, "palm_oil_weekly_chg": -0.4, "palm_oil_as_of": "2026-08-11",
+    }
+    return {**base, **over}
+
+
+def test_the_palm_panel_renders_though_only_rapeseed_carries_a_spread():
+    """The two oil panels share one template loop that asks for a spread.
+
+    Palm has none, and the *missing* key — not a None one — is what raised
+    UndefinedError on the headline page and failed the deploy (#226).
+    """
+    result = relative_value_section({"oil_vs_palm": _oil_pair()})
+    assert result["state"] == "ok"
+    assert result["data"]["oil_vs_palm"]["spread_usd_mt"] is None
+
+    html = _render_section("relative_value", result["data"])
+    assert "Palm Oil" in html
+    assert "1,020.00" in html
+    assert "spread" not in html.lower()  # no spread block on a pair without one
+
+
+def test_the_rapeseed_panel_still_renders_its_spread():
+    result = relative_value_section({
+        "oil_vs_rapeseed": {
+            "soy_oil": 1_150.0, "soy_oil_weekly_chg": 1.2,
+            "rapeseed_oil": 1_310.0, "rapeseed_oil_weekly_chg": 0.8,
+            "rapeseed_oil_cny": 9_400.0, "spread_usd_mt": 160.0,
+        },
+    })
+    html = _render_section("relative_value", result["data"])
+    assert "Rapeseed − soy oil spread" in html
+    assert "+160.0" in html
+    assert "CZCE rapeseed oil premium" in html
+
+
+def test_both_oil_panels_render_side_by_side():
+    result = relative_value_section({
+        "oil_vs_palm": _oil_pair(),
+        "oil_vs_rapeseed": {
+            "soy_oil": 1_150.0, "rapeseed_oil": 1_310.0, "spread_usd_mt": 160.0,
+        },
+    })
+    html = _render_section("relative_value", result["data"])
+    assert "Soy Oil vs Palm Oil" in html
+    assert "Soy Oil vs CZCE Rapeseed Oil" in html
+    assert html.count("Rapeseed − soy oil spread") == 1
