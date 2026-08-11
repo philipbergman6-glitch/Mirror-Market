@@ -280,7 +280,26 @@ def _write_pipeline_status(payload: dict) -> None:
     logger.info("Pipeline status written to: %s", path)
 
 
-def _finalize_layer(layer: str, data: dict, empty_fails: bool = False) -> bool:
+def _empty_is_failure(layer: str, empty_fails: bool | None) -> bool:
+    """Can this layer's zero-row result only mean the fetch broke? (F3b, #175)
+
+    Derived from the LAYER_MIN_KEYS floor rather than a second hand-kept
+    list: a floor of 2+ says the layer has that many independent keys, so
+    zero of them is an outage by construction. Without this, severity
+    inverts — 1 of 10 keys is below floor and records failed, while 0 of 10
+    records an empty-*success* that stamps a fresh last_success.
+
+    empty_fails overrides in both directions for layers with no floor to
+    derive from: True for a single-key source whose upstream always has
+    history (worldbank, wasde), False for one that legitimately publishes
+    nothing sometimes. None (the default) derives.
+    """
+    if empty_fails is not None:
+        return empty_fails
+    return LAYER_MIN_KEYS.get(layer, 1) >= 2
+
+
+def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> bool:
     """Record freshness for a dict-of-frames layer; return overall success.
 
     Three gates stand between a fetch and a stamped last_success:
@@ -289,8 +308,8 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool = False) -> bool:
        layer where only 1 of 13 keys returned data is an outage, not a
        success, so below-floor runs are recorded as failed freshness (which
        preserves last_success for staleness display). All-empty is recorded
-       as empty-success — unless the layer is critical or empty_fails is
-       set, where empty and failed are equally unusable.
+       as empty-success only for layers that can legitimately publish
+       nothing — see _empty_is_failure; critical layers never can.
     2. Recency — LAYER_MAX_DATA_AGE_DAYS (audit F3). Rows arriving is not
        the same as *new* rows arriving; a frozen upstream clears gate 1
        every day forever.
@@ -302,7 +321,7 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool = False) -> bool:
 
     if non_empty == 0:
         logger.warning("[%s] returned no data", layer)
-        if layer in CRITICAL_LAYERS or empty_fails:
+        if layer in CRITICAL_LAYERS or _empty_is_failure(layer, empty_fails):
             _mark_failed(layer)
         else:
             _mark_empty(layer)
@@ -338,11 +357,12 @@ class DictLayer:
     # API-key-gated layers: fetch() returns {} when the key isn't set.
     # Logged as skipped — no freshness row, matching "the layer never ran".
     skip_msg: str | None = None
-    # Mirrors _run_scraper_layer's flag: True when an empty result can only
-    # mean the layer is broken, so it must not stamp an empty-*success*.
-    # World Bank returns {} on both download failure and its own stale-file
-    # guard — neither is "upstream had nothing to publish this month".
-    empty_fails: bool = False
+    # Override for _empty_is_failure's LAYER_MIN_KEYS-derived default (#175).
+    # None derives; set it only for a layer with no floor to derive from.
+    # True: World Bank returns {} on both download failure and its own
+    # stale-file guard, and WASDE workbooks always carry 12+ months —
+    # neither empty is "upstream had nothing to publish this month".
+    empty_fails: bool | None = None
 
 
 def _run_dict_layer(layer: DictLayer) -> bool:
@@ -499,6 +519,10 @@ def _build_dict_layers() -> list[DictLayer]:
             fetch=lambda: fetch_wasde_estimates(),
             save=lambda n, d: save_wasde(n, d),
             clean=lambda n, d: clean_wasde(d),
+            # No LAYER_MIN_KEYS floor to derive from, and every monthly
+            # workbook carries 12+ months — empty means the download or
+            # parse broke, never "nothing published".
+            empty_fails=True,
         ),
         DictLayer(
             "eia", "Layer 13", "EIA energy/biofuel data",
@@ -611,8 +635,11 @@ def run() -> int:
             results["conab"] = True
             save_freshness("conab", len(conab_df))
         else:
-            logger.warning("[Layer 15] CONAB returned no data")
-            _mark_empty("conab")
+            # CONAB's file carries the whole survey history every fetch, so
+            # an empty national frame means the download or the UF
+            # aggregation broke — not "no estimate published" (#175).
+            logger.error("[Layer 15] CONAB returned no data — recording as failed")
+            _mark_failed("conab")
     except Exception:
         logger.exception("[Layer 15] CONAB failed — see error above")
         _mark_failed("conab")

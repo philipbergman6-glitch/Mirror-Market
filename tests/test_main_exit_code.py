@@ -151,6 +151,14 @@ def test_exit_zero_when_critical_layers_succeed(stub_fetchers, monkeypatch):
     monkeypatch.setattr(
         main, "fetch_worldbank_prices", mock.Mock(return_value=_make_worldbank())
     )
+    # #175 widened that judgement from World Bank alone to every layer with a
+    # LAYER_MIN_KEYS floor: zero of N independent keys is an outage, not an
+    # empty-success. The fixture's all-empty world is therefore a legitimate
+    # 14-layer outage now, and tripping the backstop is the *correct* verdict
+    # on it — just not the one this test is about. Lifting the threshold
+    # isolates the critical-layer exit path; test_all_empty_world_trips_the
+    # _backstop below asserts the un-lifted behaviour.
+    monkeypatch.setattr(main, "MAX_FAILED_LAYERS", 50)
 
     assert main.run() == 0
 
@@ -184,6 +192,41 @@ def test_exit_one_when_many_layers_hard_fail(stub_fetchers, monkeypatch):
         monkeypatch.setattr(main, fetcher, mock.Mock(side_effect=RuntimeError("network down")))
 
     assert main.run() == 1
+
+
+def test_all_empty_world_trips_the_backstop(stub_fetchers, monkeypatch):
+    """F3b (#175) end to end: quiet empties are outages, and they add up.
+
+    Every non-critical fetcher returns nothing while both critical layers
+    pass. Before #175 that run exited 0 with a green dashboard built on
+    empty tables — every floored layer recorded an empty-*success* that
+    stamped a fresh last_success. Now the same run is graded as what it is.
+    """
+    main = stub_fetchers
+
+    monkeypatch.setattr(main, "fetch_prices", mock.Mock(return_value=_make_prices_at_floor()))
+    monkeypatch.setattr(main, "fetch_all_series", mock.Mock(return_value=_make_fred_at_floor()))
+
+    assert main.run() == 1
+
+    from pipeline.query import read_freshness
+    status = read_freshness().set_index("layer_name")["status"].to_dict()
+
+    # Floored layers: zero of N independent keys can only mean broken.
+    for layer in ("currencies", "cot", "weather", "psd", "dce", "forward_curve"):
+        assert status[layer] == "failed", f"{layer} recorded {status[layer]} on empty"
+
+    # Floorless opt-ins — upstream always carries history.
+    assert status["wasde"] == "failed"
+    assert status["worldbank"] == "failed"
+
+    # The Layer 15 custom block: CONAB ships the whole survey every fetch.
+    assert status["conab"] == "failed"
+
+    # Still permissive where an empty result is a real publishing calendar:
+    # no USDA condition ratings out of season, no AMS report some weeks.
+    assert status["crop_progress"] == "success"
+    assert status["crush_inspections"] == "success"
 
 
 def test_exit_one_when_prices_fail(stub_fetchers, monkeypatch):
