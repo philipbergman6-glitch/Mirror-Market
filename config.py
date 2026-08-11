@@ -670,6 +670,43 @@ AGRURAL_URL = "https://agrural.com.br/precossojaemilho/"
 AGRURAL_COMMODITIES = ["Soybean (AgRural Paranaguá FOB)"]
 
 # ---------------------------------------------------------------------------
+# Layer 22 — AFEX Nigeria soybean reference price (free, no API key)
+# Nigeria's only feedable soy price. See research/2026-08-10-nigeria-price-source.md.
+#
+# What this series IS: a daily *reference* price published every calendar
+# day — including weekends, which is how we know it is not a session
+# settlement (74% of changes are day-over-day; no weekday clustering).
+# Label it "reference price", never "settlement", wherever it surfaces.
+#
+# Redistribution constraint (same posture as AgRural above, and stricter):
+# AFEX's terms forbid reproducing platform data without written permission.
+# Until that permission is granted, this layer is LOCAL-ONLY —
+# AFEX_PUBLISH_RAW stays False, the table is excluded from data/history/
+# (so nothing is committed to a public repo), and the dashboard may show
+# only the derived USD/MT premium to CBOT, not the raw NGN series.
+# ---------------------------------------------------------------------------
+AFEX_PRICE_URL = "https://api-md.afexnigeria.com/AFEXMD/api/v1/securities/price"
+# The endpoint 401s without this Origin and 200s with it (isolated by
+# controlled test, 2026-08-10). We send AFEX's own site as Origin because
+# that is what the endpoint requires; flagged in the research note as the
+# one detail to raise with AFEX rather than rely on indefinitely.
+AFEX_ORIGIN = "https://africaexchange.com"
+# Feed key → our commodity name. 'S'-prefixed keys are NGN/kg spot;
+# the 'D'-prefixed twin (DSBS) carries the same number ×1000, which is
+# what corroborates the NGN/MT reading rather than assuming it.
+AFEX_SERIES = {
+    "SSBS": "Soybean (AFEX Nigeria)",
+}
+AFEX_COMMODITIES = tuple(AFEX_SERIES.values())
+# Longest flat run observed across the full 2021-2026 history is 26 days
+# (24 runs >= 7d, 4 runs >= 14d). A plateau below this is normal market
+# behaviour, not a stall — the default freshness threshold would false-alarm
+# several times a year. Above it, warn loudly.
+AFEX_MAX_FLAT_DAYS = 26
+# Set True only after AFEX grants written redistribution permission.
+AFEX_PUBLISH_RAW = False
+
+# ---------------------------------------------------------------------------
 # Analysis thresholds — configurable per-commodity where appropriate
 # ---------------------------------------------------------------------------
 
