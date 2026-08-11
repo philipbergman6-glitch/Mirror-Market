@@ -1,0 +1,40 @@
+{% extends "_base.html.j2" %}
+{#
+  Page tombstone — M8 #150's middle failure level.
+
+  A page that fails to render is REPLACED by this, never left as yesterday's
+  file. GitHub Pages ships the whole docs/ artifact, so a silently retained
+  page is exactly the stale-serving failure mode #157 caught in the SAFEX
+  scraper: the reader has no way to tell a live page from a frozen one.
+
+  The site stays usefully up and CI goes red after the upload — a tombstone
+  fails the job (see scripts/generate_site.py).
+#}
+{% block title %}Mirror Market — {{ page_name }} unavailable{% endblock %}
+
+{% block page_css %}
+.tomb { background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--bearish); border-radius: 8px; padding: 20px; margin: 28px 0; max-width: 720px; }
+.tomb h2 { font-family: var(--display); font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.tomb .err { font-family: var(--mono); font-size: 12px; color: var(--bearish); background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: 10px 12px; margin-top: 12px; white-space: pre-wrap; overflow-x: auto; }
+.tomb p { font-size: 13px; color: var(--text-muted); }
+{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+{% endblock %}
+
+{% block content %}
+<div class="tomb">
+  <h2>{{ page_name }} could not be generated today.</h2>
+  <p>
+    This page is deliberately blank rather than showing yesterday's numbers. Every other page in
+    the site was built from today's run and is current; use the nav above.
+  </p>
+  <div class="err">{{ error }}</div>
+</div>
+
+<div class="footer">
+  <a href="{{ root }}index.html">&larr; Daily read</a>
+</div>
+{% endblock %}

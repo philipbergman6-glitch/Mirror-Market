@@ -429,6 +429,7 @@ def render_players_html(
     contexts: dict[str, list[dict]],
     generated_at: str,
     day_line: str,
+    market_nav: list[dict] | None = None,
 ) -> str:
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     template = env.get_template("players.html.j2")
@@ -442,10 +443,29 @@ def render_players_html(
         day_line=day_line,
         total_players=total,
         tier1_players=tier1,
+        # _base.html.j2 owns the masthead and the market nav (M8 #150). The
+        # nav is normally passed down by scripts/generate_site.py so every
+        # page shares one computed tier set; standalone runs compute their own.
+        market_nav=market_nav if market_nav is not None else _standalone_market_nav(),
+        root="",
+        current_page="players",
+        current_market=None,
     )
 
 
-def generate_players_page(output_file: Path = OUTPUT_FILE) -> Path:
+def _standalone_market_nav() -> list[dict]:
+    """Market nav for a standalone `python scripts/generate_players.py` run."""
+    from app.markets import compute_tiers, load_markets, nav_items
+
+    markets = load_markets()
+    return nav_items(compute_tiers(markets), markets=markets)
+
+
+def generate_players_page(
+    output_file: Path = OUTPUT_FILE,
+    *,
+    market_nav: list[dict] | None = None,
+) -> Path:
     """Load the knowledge base, build DB context, write docs/players.html."""
     from datetime import datetime, timezone
 
@@ -460,6 +480,7 @@ def generate_players_page(output_file: Path = OUTPUT_FILE) -> Path:
         contexts=contexts,
         generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
         day_line=now.strftime("%A · %-d %B %Y"),
+        market_nav=market_nav,
     )
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text(html, encoding="utf-8")

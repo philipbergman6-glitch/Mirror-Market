@@ -1,0 +1,60 @@
+{% extends "_base.html.j2" %}
+{#
+  Market stub — tier `stub` (M1 #143).
+
+  A named placeholder giving the reason. It exists because the market exists:
+  the nav lists every market in every tier, or the reader cannot tell that
+  Nigeria or Europe is part of this picture at all. What a stub must never do
+  is dress an absence up as thin coverage, so it renders no blocks — only the
+  per-block reasons, as a list.
+#}
+{% block title %}Mirror Market — {{ market.name }} (stub){% endblock %}
+
+{% block page_css %}
+{% include '_market_css.html.j2' %}
+.stub-lead { font-size: 14px; color: var(--text-muted); padding: 22px 0 6px; max-width: 640px; }
+.stub-lead b { color: var(--ink); font-weight: 600; }
+.reason-row { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; }
+.reason-row .rk { min-width: 120px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.reason-row .rv { color: var(--text-muted); }
+{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>{{ market.name }}</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+    <div>{{ market.venue }}</div>
+{% endblock %}
+
+{% block subnav %}
+<div class="tier-stamp">
+  <span class="tier-pill stub">{{ tier.tier }}</span>
+  <span class="venue">{{ market.name }}</span>
+  <span class="tier-why">no daily price leg and fewer than 2 supporting blocks</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<p class="stub-lead">
+  <b>{{ market.name }} has no page yet.</b> It is on the map and it keeps this address — when the
+  sources below land, this becomes a brief and then a full market page at the same URL, with nothing
+  to re-link. What is missing, and why:
+</p>
+
+<div style="padding-bottom: 22px;">
+  {% for block in blocks %}
+  <div class="reason-row">
+    <span class="rk">{{ block.title }}</span>
+    <span class="rv">{{ block.reason }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="footer">
+  Nothing on this page is inferred or filled in from a neighbouring market. Not financial advice.
+  <br><br>
+  <a href="{{ root }}index.html">&larr; Daily read</a> ·
+  <a href="{{ root }}players.html">Players</a>
+</div>
+{% endblock %}
