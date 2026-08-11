@@ -232,6 +232,20 @@ def test_port_flows_unknown_header_column_hard_fails() -> None:
         _parse_port_flows(text)
 
 
+def test_port_flows_parses_earlier_real_vintage() -> None:
+    """The 2026-05-11 capture (FLAXSEED column, no CANOLA) parses too.
+
+    Two real vintages with different column sets prove the column order is
+    read off the header rather than pinned to whatever last shipped.
+    """
+    text = (_FIXTURES / "ams_inspections.txt").read_text(encoding="utf-8")
+    expected = {
+        "Wheat", "Corn Yellow", "Corn White", "Sorghum", "Soybeans", "Flaxseed",
+    }
+    assert set(_parse_port_flows(text)["commodity"]) == expected
+    assert set(_parse_destinations(text)["commodity"]) == expected
+
+
 def test_port_flows_row_width_mismatch_hard_fails() -> None:
     text = _live_report().replace(
         "GULF      S. TEXAS              0           0       0    55,593         0        0     55,593",

@@ -446,6 +446,11 @@ def _parse_commodity_columns(
     """
     header = lines[header_idx]
     above = lines[header_idx - 1] if header_idx > 0 else ""
+    # A rule line ("------") is not a continuation row: a report whose
+    # headings were all single-word would otherwise glue dashes onto every
+    # column name and hard-fail as if the layout had drifted.
+    if above.strip() and set(above.strip()) <= {"-"}:
+        above = ""
     above_tokens = [(m.group(), m.start(), m.end()) for m in re.finditer(r"\S+", above)]
 
     names: list[str] = []
