@@ -610,3 +610,78 @@ def test_update_commodity_freshness_records_per_commodity_rows(patched_db):
     assert by_commodity["Soybeans"][3] == 2
     assert by_commodity["Corn"][2] == "2026-01-01"
     assert by_commodity["Corn"][3] == 1
+
+
+# ---------------------------------------------------------------------------
+# gulf_bids.price_change (#190)
+# ---------------------------------------------------------------------------
+
+
+def _gulf_bid_row(price_change: str | None = "DN 0.1025-DN 0.1075") -> pd.DataFrame:
+    return pd.DataFrame([{
+        "report_date": "2026-08-11",
+        "commodity": "Soybeans",
+        "location": "Gulf Coast Ports",
+        "delivery": "Current",
+        "sale_type": "Bid",
+        "basis_low": 95.0,
+        "basis_high": 100.0,
+        "futures_month": 8,
+        "basis_change": "UNCH",
+        "price_change": price_change,
+        "price_low": 12.4250,
+        "price_high": 12.6875,
+        "average": 12.5563,
+        "year_ago": 10.9775,
+        "freight": "CIF-B",
+    }])
+
+
+def test_save_gulf_bids_persists_ranged_price_change(patched_db):
+    store.save_gulf_bids(_gulf_bid_row())
+
+    rows = _fetchall(patched_db, "SELECT basis_change, price_change FROM gulf_bids")
+    assert rows == [("UNCH", "DN 0.1025-DN 0.1075")]
+
+
+def test_save_gulf_bids_accepts_blank_change(patched_db):
+    store.save_gulf_bids(_gulf_bid_row(price_change=None))
+
+    rows = _fetchall(patched_db, "SELECT price_change FROM gulf_bids")
+    assert rows == [(None,)]
+
+
+def test_init_database_adds_price_change_to_legacy_gulf_bids(patched_db):
+    """A DB predating #190 gains the column instead of failing every insert."""
+    conn = sqlite3.connect(str(patched_db))
+    try:
+        conn.execute("DROP TABLE gulf_bids")
+        conn.execute(
+            """CREATE TABLE gulf_bids (
+                   report_date   TEXT NOT NULL,
+                   commodity     TEXT NOT NULL,
+                   location      TEXT NOT NULL,
+                   delivery      TEXT NOT NULL,
+                   sale_type     TEXT,
+                   basis_low     REAL,
+                   basis_high    REAL,
+                   futures_month INTEGER,
+                   basis_change  TEXT,
+                   price_low     REAL,
+                   price_high    REAL,
+                   average       REAL,
+                   year_ago      REAL,
+                   freight       TEXT,
+                   PRIMARY KEY (report_date, commodity, location, delivery)
+               )"""
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    store.init_database()
+    store.save_gulf_bids(_gulf_bid_row())
+
+    assert _fetchall(patched_db, "SELECT price_change FROM gulf_bids") == [
+        ("DN 0.1025-DN 0.1075",)
+    ]

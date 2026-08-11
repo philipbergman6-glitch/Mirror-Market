@@ -94,6 +94,23 @@ def _migrate_weather_is_forecast(conn) -> None:
             logger.warning("Could not add is_forecast column to weather: %s", exc)
 
 
+def _migrate_gulf_bids_price_change(conn) -> None:
+    """Add the price_change column to gulf_bids if absent. Idempotent.
+
+    Ranged price changes are what dropped the headline soybean row (#190);
+    the column is stored verbatim, both endpoints kept.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(gulf_bids)").fetchall()}
+    except Exception:
+        return
+    if cols and "price_change" not in cols:
+        try:
+            conn.execute("ALTER TABLE gulf_bids ADD COLUMN price_change TEXT")
+        except Exception as exc:
+            logger.warning("Could not add price_change column to gulf_bids: %s", exc)
+
+
 def _migrate_usda_pk(conn) -> None:
     """Rebuild the usda table with reference_period_desc in the PK. Idempotent.
 
@@ -186,6 +203,7 @@ def init_database():
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
         _migrate_safex_contract(conn)
+        _migrate_gulf_bids_price_change(conn)
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -551,14 +569,20 @@ def save_gulf_bids(df: pd.DataFrame):
     df = df.copy()
     if "report_date" in df.columns:
         df["report_date"] = _date(df["report_date"])
-    df = _str_cols(df, "commodity", "location", "delivery", "sale_type",
-                   "basis_change", "freight")
+    df = _str_cols(df, "commodity", "location", "delivery", "sale_type", "freight")
+    # AMS leaves the change columns blank on some deliveries (#190) — those
+    # stay NULL rather than becoming an empty string that reads as a value.
+    for col in ("basis_change", "price_change"):
+        if col not in df.columns:
+            df[col] = None
+        df[col] = df[col].where(df[col].notna(), None)
     _save(
         "gulf_bids",
         df[[
             "report_date", "commodity", "location", "delivery", "sale_type",
             "basis_low", "basis_high", "futures_month", "basis_change",
-            "price_low", "price_high", "average", "year_ago", "freight",
+            "price_change", "price_low", "price_high", "average", "year_ago",
+            "freight",
         ]],
         ["report_date", "commodity", "location", "delivery"],
         "gulf_bids",

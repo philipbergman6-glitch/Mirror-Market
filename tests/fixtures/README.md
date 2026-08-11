@@ -9,6 +9,7 @@ parsing without hitting the network.
 |------|--------|----------|
 | `ams_inspections.txt` | USDA AMS report `wa_gr101.txt` | live download 2026-05-11 |
 | `ams_inspections_2026-08-06.txt` | USDA AMS report `wa_gr101.txt` (https://www.ams.usda.gov/mnreports/wa_gr101.txt), week ending AUG 06 2026 — 6-column Table C / destination layout: WHEAT, CORN YELLOW, CORN WHITE, SORGHUM, SOYBEANS, CANOLA (no RYE/FLAXSEED) | live download 2026-08-11 |
+| `ams_3147_2026-08-11.pdf` | USDA AMS report 3147 "Louisiana and Texas Export Bids" (https://www.ams.usda.gov/mnreports/ams_3147.pdf), report for 8/11/2026 – Final. The headline soybean Current row carries a *ranged* price change (`DN 0.1025-DN 0.1075`) and several rows leave Year Ago blank — both dropped silently by the pre-#190 single-token row regex | live download 2026-08-11 |
 | `safex_grainsa.html` | Grain SA SAFEX feeds page | live download 2026-05-11 |
 | `cepea_soybean.html` | CEPEA/ESALQ soybean indicator | synthetic (live returned HTTP 403 anti-bot) |
 | `ncdex_bhavcopy.csv` | NCDEX Bhav Copy | synthetic (live URL templates 404 — see config.py) |

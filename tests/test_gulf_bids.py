@@ -3,9 +3,10 @@
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from fetchers.gulf_bids import _parse_gulf_bids
+from fetchers.gulf_bids import _extract_text, _parse_gulf_bids
 from fetchers.usda import _parse_destinations, _parse_port_flows
 from pipeline.results import ScraperShapeError
 
@@ -57,6 +58,47 @@ def test_gulf_bids_wheat_single_value_quote() -> None:
     assert wheat["price_low"] == wheat["price_high"] == 7.1075
 
 
+def test_gulf_bids_ranged_change_column_parses() -> None:
+    """AMS prints ranged change columns; both endpoints are preserved (#190)."""
+    text = _GULF_TEXT.replace(
+        "12.9800-13.0000   DN 0.3400", "12.9800-13.0000   DN 0.1025-DN 0.1075"
+    ).replace("120.00Q to 122.00Q   UNCH", "120.00Q to 122.00Q   UP 1.00-DN 4.00")
+    df = _parse_gulf_bids(text, today=_TODAY)
+    soy = df[(df["commodity"] == "Soybeans") & (df["delivery"] == "Current")].iloc[0]
+    assert soy["basis_change"] == "UP 1.00-DN 4.00"
+    assert soy["price_change"] == "DN 0.1025-DN 0.1075"
+
+
+def test_gulf_bids_blank_change_column_parses() -> None:
+    """A blank change column yields None rather than dropping the row (#190)."""
+    text = _GULF_TEXT.replace(
+        "12.9800-13.0000   DN 0.3400   12.9900", "12.9800-13.0000      12.9900"
+    ).replace("120.00Q to 122.00Q   UNCH", "120.00Q to 122.00Q       ")
+    df = _parse_gulf_bids(text, today=_TODAY)
+    soy = df[(df["commodity"] == "Soybeans") & (df["delivery"] == "Current")].iloc[0]
+    assert pd.isna(soy["basis_change"])
+    assert pd.isna(soy["price_change"])
+    assert soy["price_low"] == 12.98
+    assert soy["average"] == 12.99
+    assert soy["year_ago"] == 10.5275
+
+
+def test_gulf_bids_unreadable_row_hard_fails() -> None:
+    """An unparseable bid row raises rather than being silently skipped (#190)."""
+    text = _GULF_TEXT.replace("12.9800-13.0000", "TWELVE-NINETY-EIGHT")
+    with pytest.raises(ScraperShapeError, match="unparseable bid row"):
+        _parse_gulf_bids(text, today=_TODAY)
+
+
+def test_gulf_bids_missing_year_ago_parses() -> None:
+    """The Year Ago column is blank on some deliveries."""
+    text = _GULF_TEXT.replace("12.9900   10.5275   CIF-B", "12.9900            CIF-B")
+    df = _parse_gulf_bids(text, today=_TODAY)
+    soy = df[(df["commodity"] == "Soybeans") & (df["delivery"] == "Current")].iloc[0]
+    assert soy["average"] == 12.99
+    assert pd.isna(soy["year_ago"])
+
+
 def test_gulf_bids_stale_report_raises() -> None:
     with pytest.raises(ScraperShapeError, match="days old"):
         _parse_gulf_bids(_GULF_TEXT, today=date(2026, 9, 30))
@@ -66,6 +108,50 @@ def test_gulf_bids_missing_soy_section_raises() -> None:
     text = _GULF_TEXT.replace("Soybeans", "Sorghum")
     with pytest.raises(ScraperShapeError, match="soybean section"):
         _parse_gulf_bids(text, today=_TODAY)
+
+
+# ── Live AMS 3147 PDF (#190) ─────────────────────────────────────────────────
+# tests/fixtures/ams_3147_2026-08-11.pdf — live download of
+# https://www.ams.usda.gov/mnreports/ams_3147.pdf on 2026-08-11. Its
+# headline soybean Current row carries a *ranged* price change
+# ("DN 0.1025-DN 0.1075") which the single-token regex dropped, and
+# several rows have a blank Year Ago column.
+
+_FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def _live_gulf_text() -> str:
+    return _extract_text((_FIXTURES_DIR / "ams_3147_2026-08-11.pdf").read_bytes())
+
+
+def test_gulf_bids_live_pdf_keeps_headline_soybean_current_row() -> None:
+    df = _parse_gulf_bids(_live_gulf_text(), today=date(2026, 8, 11))
+    assert (df["report_date"] == "2026-08-11").all()
+
+    soy = df[(df["commodity"] == "Soybeans") & (df["delivery"] == "Current")]
+    assert len(soy) == 1
+    row = soy.iloc[0]
+    assert row["basis_low"] == 95.0
+    assert row["basis_high"] == 100.0
+    assert row["price_low"] == 12.4250
+    assert row["price_high"] == 12.6875
+    assert row["price_change"] == "DN 0.1025-DN 0.1075"
+    assert row["average"] == 12.5563
+    assert row["year_ago"] == 10.9775
+    assert row["freight"] == "CIF-B"
+
+
+def test_gulf_bids_live_pdf_keeps_every_bid_row() -> None:
+    """No row in the real report is silently shed (7 corn, 7 soy, 8 wheat)."""
+    df = _parse_gulf_bids(_live_gulf_text(), today=date(2026, 8, 11))
+    counts = df["commodity"].value_counts().to_dict()
+    assert counts == {"Corn": 7, "Soybeans": 7, "Wheat": 8}
+
+    # Blank Year Ago cells survive as NULL rather than shifting the columns.
+    corn_nov = df[(df["commodity"] == "Corn") & (df["delivery"] == "Nov")].iloc[0]
+    assert corn_nov["average"] == 5.6100
+    assert pd.isna(corn_nov["year_ago"])
+    assert corn_nov["freight"] == "CIF-B"
 
 
 # Trimmed from the real WA_GR101 report (week ending 2026-07-23).
