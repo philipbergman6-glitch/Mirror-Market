@@ -215,7 +215,24 @@ def _dedupe(records: list[dict]) -> list[dict]:
 
 
 def _collect_records(state: str) -> list[dict]:
-    """Paginate through the state-filtered resource until ``total`` rows are in hand."""
+    """Paginate through the state-filtered resource until ``total`` rows are in hand.
+
+    A walk that ends short of the resource's own ``total`` raises. The
+    daily number this feeds is a **median across the reporting mandis**,
+    so a truncated walk does not produce a missing number — it produces a
+    *plausible wrong one*, computed over whichever pages happened to
+    survive, with nothing in its shape to mark it as partial. That is the
+    failure mode #206 traced: three different closes for MP on the same
+    date (₹67,430 / ₹67,250 / ₹67,360) were three different surviving
+    subsets, not three different markets.
+
+    Two ways the walk can end short, both previously silent:
+      * the page cap (``MANDI_MAX_PAGES``) — logged a warning and returned
+        the truncated set;
+      * a page answering zero records before ``total`` is reached, which
+        broke the loop as if the set were complete.
+    Both now raise. A truncated median is worse than no row at all.
+    """
     records: list[dict] = []
     total: int | None = None
 
@@ -231,10 +248,19 @@ def _collect_records(state: str) -> list[dict]:
         records.extend(page_records)
         if len(records) >= total or not page_records:
             break
-    else:
-        logger.warning(
-            "Mandi API: %s stopped at page cap %d with %d/%s records",
-            state, MANDI_MAX_PAGES, len(records), total,
+
+    # Measured before _dedupe: a shortfall here means pages we never
+    # received, which is the truncation that corrupts the median. Paging
+    # *overlap* (raw ≥ total, distinct < total) is a different and much
+    # milder defect — it inflates the mandi count without moving the
+    # median — and _dedupe keeps warning about it rather than raising,
+    # because a source that legitimately repeats an identical row would
+    # otherwise hard-fail the layer every day.
+    if total is not None and len(records) < total:
+        raise requests.RequestException(
+            f"Mandi API: {state} walk truncated at {len(records)}/{total} records "
+            f"after {page + 1} page(s) of {_page_limit()} — a median over a "
+            "partial mandi set is a wrong number, not a missing one (#206)"
         )
     return _dedupe(records)
 
@@ -313,9 +339,32 @@ def fetch_mandi_prices() -> FetchResult:
     Returns one series per state in ``MANDI_STATES``. A schema change
     (ScraperShapeError) in any state is ``failed`` — the resource is
     shared, so a shape break in one state means the source changed for
-    all. Transport exhaustion on one state degrades to a partial result
-    if another state succeeded. Zero matching records everywhere is
-    ``empty`` (mandis closed — Sunday/holiday).
+    all. Zero matching records everywhere is ``empty`` (mandis closed —
+    Sunday/holiday).
+
+    Transport exhaustion on **any** state is ``failed``, even when another
+    state returned a full set. Why the whole layer and not just that
+    state:
+
+      * States are never pooled (see ``MANDI_STATES``), so a missing state
+        does not corrupt the surviving state's number. The rows that did
+        arrive are therefore still worth storing — hence
+        ``FetchResult.partial``, which saves them and grades the run
+        failed, rather than ``FetchResult.failed``, which would discard
+        them. The resource serves the current day only, so a discarded
+        day is a permanent hole.
+      * But the *verdict* has to be the failure. ``india_domestic`` has no
+        ``LAYER_MIN_KEYS`` floor, so nothing downstream would notice half
+        the layer going dark; it would stamp a fresh ``last_success``
+        against a state that was never asked. That is precisely the
+        empty-success inversion CLAUDE.md's "Success requires rows"
+        section exists to prevent.
+      * An empty state and a failed state are not the same thing and are
+        not treated the same here. Empty means asked and answered with
+        nothing (a state holiday — MP and MH keep different local
+        calendars, so one-state-empty is an ordinary day) and does not
+        contribute an error. Failed means never answered, so its absence
+        carries no information about whether data existed.
     """
     data: dict[str, pd.DataFrame] = {}
     errors: list[str] = []
@@ -344,12 +393,17 @@ def fetch_mandi_prices() -> FetchResult:
         )
         data[series] = df
 
-    if data:
-        if errors:
-            logger.warning("Mandi API: partial result — %s", "; ".join(errors))
-        return FetchResult.ok(data)
     if errors:
-        return FetchResult.failed("; ".join(errors))
+        reason = "; ".join(errors)
+        if data:
+            logger.error(
+                "Mandi API: partial result — %s of %d state(s) failed: %s",
+                len(errors), len(MANDI_STATES), reason,
+            )
+            return FetchResult.partial(data, reason)
+        return FetchResult.failed(reason)
+    if data:
+        return FetchResult.ok(data)
     return FetchResult.empty(
         f"no {MANDI_COMMODITY} rows for any of {', '.join(MANDI_STATES)} today"
     )

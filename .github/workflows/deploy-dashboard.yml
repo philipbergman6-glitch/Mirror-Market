@@ -133,6 +133,14 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           FAS_API_KEY: ${{ secrets.FAS_API_KEY }}
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+          # Layer 16 (India mandi). Without this, _api_key() falls back to the
+          # published sample key, which is capped at 10 rows/page and shares a
+          # global throttle — ~19 requests per run, and a merge burst of four
+          # runs exhausted it and took the layer dark on 2026-08-11 (#212).
+          # A personal key raises the page limit to 100, cutting the request
+          # count (and the 429 exposure) ~10x. Unset resolves to empty and
+          # falls back, so this is safe to ship ahead of the secret.
+          DATA_GOV_IN_API_KEY: ${{ secrets.DATA_GOV_IN_API_KEY }}
         run: python main.py
 
       # Layer failures must be loud, not buried in logs: open/update a

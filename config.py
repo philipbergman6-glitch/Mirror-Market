@@ -1022,6 +1022,25 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # and the layer would stay green. Same long-weekend-plus-holiday budget as
     # the other daily exchange legs (#157).
     "safex": 7,
+    # India mandi arrivals are daily, but the closure calendar is the longest
+    # of any daily leg here: mandis shut on Sundays *and* on state holidays,
+    # and MP and MH keep different local calendars. The binding case is the
+    # Diwali stretch — Dhanteras through Bhai Dooj is ~5 days (17–23 Oct in
+    # 2026) with a Sunday at each end. 7, the budget the other daily legs
+    # carry, would fire on that ordinary festival week.
+    #
+    # 10 days is that worst case with a day to spare. It is deliberately
+    # *tighter* than the DEFAULT_MAX_AGE_DAYS=14 that app/markets.py was
+    # falling back to (#212) — a default nobody chose — and still catches a
+    # genuinely frozen feed inside a fortnight.
+    #
+    # Uncertainty stated plainly: a full blackout needs *every* reporting
+    # mandi in both states shut, since Agmarknet returns rows if any one of
+    # ~115 per state reports, so the real worst case is probably shorter
+    # than 10. Our own history starts 2026-08-10 and the resource serves
+    # only the current day, so there is no observed multi-day gap to
+    # measure this against yet. Revisit after the first Diwali (Oct 2026).
+    "india_domestic": 10,
     "fred": 10,        # 1-day publication lag on the daily series
     "weather": 10,     # includes forecast rows, so age is normally negative
     "dce": 21,         # Spring Festival / Golden Week close the DCE for ~2 weeks

@@ -394,3 +394,60 @@ def test_relative_root_matches_page_depth():
     assert markets_mod.relative_root("index.html") == ""
     assert markets_mod.relative_root("players.html") == ""
     assert markets_mod.relative_root("markets/cbot.html") == "../"
+
+
+# ── #212: the tier reason must name our outage as ours ─────────────────────
+#
+# One data.gov.in rate limit costs India two blocks at once — the daily leg
+# and, because the ledger is daily-only, the ledger with it — which is enough
+# to demote the market. The demotion itself is correct: we genuinely do not
+# have the number. What was wrong is that the page printed it in the same
+# words it uses for "nobody publishes this", turning our ingest failure into
+# a judgement about India.
+
+
+def _seed_freshness(conn, layer: str, status: str, last_success: str | None) -> None:
+    conn.execute(schema._CREATE_DATA_FRESHNESS)
+    conn.execute(
+        "INSERT OR REPLACE INTO data_freshness "
+        "(layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (layer, last_success, date.today().isoformat(), 0, status),
+    )
+    conn.commit()
+
+
+def test_missing_rows_after_a_failed_ingest_says_so(site_db):
+    """"no rows" alone cannot tell a rate limit from a market with no source."""
+    _seed_freshness(site_db, "india_domestic", "failed", "2026-08-11T00:00:00")
+
+    tier = markets_mod.compute_tiers()["india"]
+
+    assert tier.has_daily_leg is False
+    assert "our india_domestic ingest failed" in tier.notes["price"]
+    assert "last good run 2026-08-11" in tier.notes["price"]
+
+
+def test_a_market_with_no_source_is_not_blamed_on_our_ingest(site_db):
+    """The other half of the distinction: absent by nature, not by outage."""
+    _seed_freshness(site_db, "india_domestic", "success", date.today().isoformat())
+
+    tier = markets_mod.compute_tiers()["india"]
+
+    assert "ingest failed" not in tier.notes["price"]
+    # India has no crush source at all — that reason is about the market.
+    assert "ingest failed" not in tier.notes["crush"]
+
+
+def test_a_healthy_ingest_leaves_the_note_alone(site_db):
+    _seed_prices(
+        site_db,
+        ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+        table="india_domestic_prices",
+    )
+    _seed_freshness(site_db, "india_domestic", "success", date.today().isoformat())
+
+    tier = markets_mod.compute_tiers()["india"]
+
+    assert tier.has_daily_leg is True
+    assert tier.notes["price"].startswith("current to")
