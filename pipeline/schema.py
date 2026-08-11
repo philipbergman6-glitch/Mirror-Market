@@ -287,6 +287,27 @@ CREATE TABLE IF NOT EXISTS brazil_spot_prices (
 );
 """
 
+# SAGIS weekly producer deliveries (Layer 23). Keyed by season + week
+# number rather than by week_end: SAGIS's own comparison columns are built
+# on week *number* ("The beginning and end dates of a week are therefore not
+# the same for each year"), and a season's week 1 can start in either
+# February or March. week_end is carried alongside as the observation date
+# the recency gate and every chart read from.
+_CREATE_SAGIS_DELIVERIES = """
+CREATE TABLE IF NOT EXISTS sagis_deliveries (
+    commodity       TEXT NOT NULL,
+    season_year     INTEGER NOT NULL,   -- start year of the Mar-Feb season
+    week_number     INTEGER NOT NULL,   -- 1..52 within that season
+    week_end        TEXT NOT NULL,      -- ISO date of the week's last day
+    season_status   TEXT,               -- 'Active' | 'Final'
+    first_published REAL,               -- tonnage as first reported
+    adjustments     REAL,               -- later revisions (signed)
+    week_total      REAL,               -- first_published + adjustments
+    unit            TEXT,
+    PRIMARY KEY (commodity, season_year, week_number)
+);
+"""
+
 _CREATE_SAFEX = """
 CREATE TABLE IF NOT EXISTS safex_prices (
     Date        TEXT NOT NULL,
@@ -362,6 +383,7 @@ ALL_SCHEMAS = (
     _CREATE_INDIA_DOMESTIC,
     _CREATE_BRAZIL_SPOT,
     _CREATE_SAFEX,
+    _CREATE_SAGIS_DELIVERIES,
     _CREATE_BRIEFINGS,
 )
 
@@ -411,6 +433,10 @@ UNIQUE_INDEXES = (
     "ON brazil_spot_prices (Date, commodity);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_safex_date_commodity "
     "ON safex_prices (Date, commodity);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_sagis_commodity_season_week "
+    "ON sagis_deliveries (commodity, season_year, week_number);",
+    "CREATE INDEX IF NOT EXISTS ix_sagis_week_end "
+    "ON sagis_deliveries (week_end);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
     "ON briefings (briefing_date);",
 )

@@ -548,6 +548,48 @@ def clean_safex(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def clean_sagis_deliveries(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean SAGIS weekly producer deliveries (Layer 23).
+
+    Steps:
+        1. Copy first.
+        2. Parse week_end and sort by (season_year, week_number).
+        3. Coerce the three tonnage components to numeric.
+        4. Drop rows with no week_total.
+
+    Zero and negative values are kept deliberately. A week of zero
+    deliveries is real — the season is 52 weeks long but the harvest runs
+    roughly March–July, so most of the year genuinely reports near-nothing.
+    `adjustments` is signed and legitimately negative (week 1 of 2026/27:
+    3,350 delivered, −666 adjustment), and a large enough downward revision
+    can push `week_total` negative. Filtering either would silently rewrite
+    the source's own arithmetic.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "week_end" in df.columns:
+        df["week_end"] = pd.to_datetime(df["week_end"])
+
+    for col in ("first_published", "adjustments", "week_total"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    sort_cols = [c for c in ("season_year", "week_number") if c in df.columns]
+    if sort_cols:
+        df = df.sort_values(sort_cols)
+
+    if "week_total" in df.columns:
+        df = df.dropna(subset=["week_total"])
+
+    return df.reset_index(drop=True)
+
+
 def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean World Bank monthly price data.

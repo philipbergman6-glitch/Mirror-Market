@@ -84,6 +84,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_conab_farmgate": FetchResult.empty(),
         "fetch_mandi_prices": FetchResult.empty(),
         "fetch_magyp_fob": FetchResult.empty(),
+        "fetch_sagis_deliveries": FetchResult.empty(),
     }
     # #127 was a one-time fix; this makes it permanent. Any fetcher added to
     # main.py without a stub here makes a real network call (with retries) on

@@ -55,6 +55,51 @@ def _format_india_domestic(em_countries: dict) -> str:
     return "\n".join(lines)
 
 
+def _format_sa_deliveries(info: dict) -> list[str]:
+    """South Africa physical-flow lines — SAGIS weekly producer deliveries.
+
+    The SA leg is a flow page, not a price page: the SAFEX print above is
+    licence-capped to a last-traded number, while these tonnages carry an
+    explicit reproduction grant (#202). Comparisons are stated at the same
+    *week number*, which is how SAGIS itself frames them.
+    """
+    deliveries = info.get("south_africa_deliveries", {})
+    if not deliveries:
+        return []
+
+    lines: list[str] = []
+    for key, label in (("soybeans", "Soybeans"), ("sunflower", "Sunflower Seed")):
+        pace = deliveries.get(key)
+        if not pace:
+            continue
+        week = pace.get("week_number")
+        week_end = pace.get("week_end")
+        lines.append(
+            f"    SAGIS {label} Deliveries: {pace['week_total_mt']:,.0f} MT "
+            f"(wk {week}, ending {week_end})"
+        )
+
+        prog_parts = [f"{pace['progressive_mt']:,.0f} MT season-to-date"]
+        yoy = pace.get("yoy_pct")
+        if yoy is not None:
+            prog_parts.append(f"{yoy:+.1f}% YoY")
+        avg = pace.get("vs_avg3_pct")
+        if avg is not None:
+            prog_parts.append(f"{avg:+.1f}% vs 3y avg")
+        lines.append(
+            f"      {pace.get('season_label', '')} "
+            f"({pace.get('season_status', '').lower() or 'season'}): "
+            + ", ".join(prog_parts)
+            + " — same week number"
+        )
+
+    if lines:
+        attribution = deliveries.get("attribution")
+        if attribution:
+            lines.append(f"      {attribution}")
+    return lines
+
+
 def format() -> str:  # noqa: A001
     lines = ["EMERGING MARKETS (Soybeans):"]
 
@@ -149,6 +194,8 @@ def format() -> str:  # noqa: A001
                     f"    SAFEX-CBOT Basis: ${basis:+.1f}/MT"
                     + (" (sub-Saharan premium)" if basis > 0 else " (import parity)")
                 )
+
+        lines.extend(_format_sa_deliveries(info))
 
     india_section = _format_india_domestic(countries)
     if india_section:

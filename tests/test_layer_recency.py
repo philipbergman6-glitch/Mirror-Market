@@ -540,3 +540,59 @@ def test_scraper_layer_without_a_budget_is_not_checked(freshness_calls):
 
     assert ok is True
     assert [c["status"] for c in freshness_calls] == ["success"]
+
+
+# ── Layer 23 (SAGIS): the observation date lives in `week_end` ─────────────
+# The gate reads _DATE_COLUMNS off the *cleaned* frame. SAGIS is the first
+# layer whose date column is `week_end`, so if that name were missing from
+# _DATE_COLUMNS the gate would find nothing datable — and a frozen weekly
+# file is exactly what a week-stamped URL is prone to serving.
+
+
+def _sagis_result(days_ago: float):
+    from pipeline.results import FetchResult
+
+    end = pd.Timestamp.now().normalize() - pd.Timedelta(days=days_ago)
+    frame = pd.DataFrame({
+        "commodity": ["Soybeans (SAGIS)"],
+        "season_year": [2026],
+        "week_number": [22],
+        "week_end": [end],
+        "season_status": ["Active"],
+        "first_published": [5680.0],
+        "adjustments": [0.0],
+        "week_total": [5680.0],
+        "unit": ["MT"],
+    })
+    return FetchResult.ok({"Soybeans (SAGIS)": frame})
+
+
+def _run_sagis(days_ago: float) -> bool:
+    return main._run_scraper_layer(
+        "sagis", "Layer 23", "SAGIS South Africa weekly producer deliveries",
+        fetch=lambda: _sagis_result(days_ago),
+        save=lambda n, d: None,
+    )
+
+
+def test_sagis_week_end_is_a_recognised_observation_date():
+    assert "week_end" in main._DATE_COLUMNS
+
+
+def test_sagis_within_budget_stamps_success(freshness_calls):
+    """Normal worst case: published on the 3rd working day, stamping the
+    previous week's end — the newest week_end is ~12 days old the day
+    before the next release."""
+    assert _run_sagis(days_ago=12) is True
+    assert [c["status"] for c in freshness_calls] == ["success"]
+
+
+def test_sagis_frozen_file_records_failed(freshness_calls):
+    assert _run_sagis(days_ago=LAYER_MAX_DATA_AGE_DAYS["sagis"] + 1) is False
+    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert "sagis" in main._HARD_FAILURES
+
+
+def test_sagis_budget_tolerates_a_missed_publication():
+    """Weekly cadence + ~5-day observation lag + one skipped release."""
+    assert LAYER_MAX_DATA_AGE_DAYS["sagis"] >= 19
