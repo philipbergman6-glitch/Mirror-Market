@@ -37,6 +37,15 @@ from fetchers._backoff import retry_sleep
 logger = logging.getLogger(__name__)
 
 
+def is_configured() -> bool:
+    """Is this layer configured to run at all? (DictLayer.run_if, #180.)
+
+    Reads the module global at call time, so this and the fetch functions'
+    own key checks below can never disagree.
+    """
+    return bool(EIA_API_KEY)
+
+
 def fetch_eia_series(
     name: str,
     route: str,

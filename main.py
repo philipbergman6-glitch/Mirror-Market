@@ -41,7 +41,9 @@ from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.cot import fetch_cot_recent
 from fetchers.eia import fetch_all_eia
+from fetchers.eia import is_configured as eia_configured
 from fetchers.export_sales import fetch_all_export_sales
+from fetchers.export_sales import is_configured as export_sales_configured
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
 from fetchers.gulf_bids import fetch_gulf_bids
@@ -409,8 +411,20 @@ class DictLayer:
     fetch: Callable[[], dict]
     save: Callable[[str, Any], None]            # (name, frame) -> None
     clean: Callable[[str, Any], Any] | None = None  # (name, frame) -> frame
-    # API-key-gated layers: fetch() returns {} when the key isn't set.
-    # Logged as skipped — no freshness row, matching "the layer never ran".
+    # API-key-gated layers (F3c, #180). run_if() is consulted *before*
+    # fetch(); when it returns False the layer is logged with skip_msg and
+    # no freshness row is written, matching "the layer never ran". The two
+    # fields always travel together — test_layer_run_if.py pins that.
+    #
+    # The question has to be asked of the *config*, ahead of the fetch,
+    # never inferred from the result: a fetcher's empty return means both
+    # "no key, never ran" and "key set, upstream had nothing", and only the
+    # second is an outage. Reading it off the result made those two
+    # indistinguishable, so a dead upstream could record no status at all —
+    # nothing for scripts/ci_layer_alert.py or the dashboard to see. Asked
+    # this way, a configured layer always reaches _finalize_layer and its
+    # empty result is graded under the #175 rules.
+    run_if: Callable[[], bool] | None = None
     skip_msg: str | None = None
     # Override for _empty_is_failure's LAYER_MIN_KEYS-derived default (#175).
     # None derives; set it only for a layer with no floor to derive from.
@@ -422,12 +436,12 @@ class DictLayer:
 
 def _run_dict_layer(layer: DictLayer) -> bool:
     try:
-        logger.info("[%s] Fetching %s ...", layer.label, layer.desc)
-        data = layer.fetch()
-
-        if not data and layer.skip_msg:
+        if layer.run_if is not None and not layer.run_if():
             logger.info("[%s] %s", layer.label, layer.skip_msg)
             return False
+
+        logger.info("[%s] Fetching %s ...", layer.label, layer.desc)
+        data = layer.fetch()
 
         if layer.clean is not None and data:
             logger.info("[Cleaning] Processing %s data ...", layer.key)
@@ -561,6 +575,7 @@ def _build_dict_layers() -> list[DictLayer]:
             fetch=lambda: fetch_all_export_sales(),
             save=lambda n, d: save_export_sales(n, d),
             clean=lambda n, d: clean_export_sales(d),
+            run_if=export_sales_configured,
             skip_msg="Export sales skipped (FAS_API_KEY not set)",
         ),
         DictLayer(
@@ -584,6 +599,7 @@ def _build_dict_layers() -> list[DictLayer]:
             fetch=lambda: fetch_all_eia(),
             save=lambda n, d: save_eia_data(n, d),
             clean=lambda n, d: clean_eia(d),
+            run_if=eia_configured,
             skip_msg="EIA skipped (EIA_API_KEY not set)",
         ),
     ]
