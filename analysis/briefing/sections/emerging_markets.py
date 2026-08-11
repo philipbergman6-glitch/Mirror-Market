@@ -152,6 +152,76 @@ def _format_sa_supply_demand(info: dict) -> list[str]:
     return lines
 
 
+def _format_sa_estimates(info: dict) -> list[str]:
+    """South Africa official crop estimate lines — the CEC revision series.
+
+    The USDA line is deliberately phrased as a lag, not a divergence: PSD
+    carries the CEC's own final figure once a season closes, so the two are
+    the same number at different points in time rather than two agencies'
+    views (#204). Nothing here mirrors the CONAB-vs-USDA driver.
+    """
+    estimates = info.get("south_africa_estimates", {})
+    if not estimates:
+        return []
+
+    lines: list[str] = []
+    for key, label in (("soybeans", "Soybeans"), ("sunflower", "Sunflower Seed")):
+        view = estimates.get(key)
+        if not view:
+            continue
+
+        stage = view.get("forecast_label") or view.get("estimate_kind", "")
+        headline = f"    CEC {label} ({view['season_year']} crop): "
+        production = view.get("production_t")
+        if production is not None:
+            headline += f"{production:,.0f} MT"
+        else:
+            # January's preliminary area and October's intentions carry no
+            # production number at all — say so rather than printing a gap.
+            headline += "area only, no production forecast yet"
+        headline += f" — {stage.lower()}, {view.get('release_date', '')}"
+        lines.append(headline)
+
+        detail = []
+        area = view.get("area_ha")
+        if area:
+            detail.append(f"area {area:,.0f} ha")
+        implied = view.get("yield_t_ha")
+        if implied:
+            detail.append(f"implied yield {implied:.2f} t/ha")
+        revision = view.get("revision_pct")
+        if revision is not None:
+            detail.append(
+                f"{revision:+.2f}% vs {view.get('prev_release_date', 'previous')}"
+                if revision else "unchanged on the previous forecast"
+            )
+        yoy = view.get("yoy_pct")
+        if yoy is not None:
+            detail.append(
+                f"{yoy:+.1f}% vs the {view['prior_season_year']} final "
+                f"({view['prior_season_t']:,.0f} MT)"
+            )
+        if detail:
+            lines.append("      " + "; ".join(detail))
+
+        usda = view.get("usda_psd_t")
+        if usda is not None:
+            gap = view.get("vs_usda_pct")
+            gap_str = f", CEC {gap:+.1f}%" if gap is not None else ""
+            lines.append(
+                f"      USDA PSD carries {usda:,.0f} MT for "
+                f"{view['usda_psd_year']}/{str(view['usda_psd_year'] + 1)[-2:]}"
+                f"{gap_str} — PSD has matched the CEC's final crop exactly "
+                "for three seasons, so read this as lag, not disagreement"
+            )
+
+    if lines:
+        attribution = estimates.get("attribution")
+        if attribution:
+            lines.append(f"      {attribution}")
+    return lines
+
+
 def format() -> str:  # noqa: A001
     lines = ["EMERGING MARKETS (Soybeans):"]
 
@@ -249,6 +319,7 @@ def format() -> str:  # noqa: A001
 
         lines.extend(_format_sa_deliveries(info))
         lines.extend(_format_sa_supply_demand(info))
+        lines.extend(_format_sa_estimates(info))
 
     india_section = _format_india_domestic(countries)
     if india_section:

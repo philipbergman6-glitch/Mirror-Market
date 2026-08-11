@@ -18,12 +18,39 @@ Why it matters:
 Series construction:
     One series per configured state (``MANDI_STATES``), one row per
     arrival date — the MEDIAN of ``modal_price`` across all reporting
-    mandis in that state (~76/day in MP), robust to single-mandi
+    mandis in that state (~115/day in MP), robust to single-mandi
     outliers. Prices arrive in INR/quintal (100 kg) and are stored as
-    INR/MT (×10). High/Low carry the cross-mandi max/min, Volume the
-    reporting-mandi count. USD conversion happens at the analysis layer.
-    Series are stored per-state and never pooled — a cross-state median
-    would put a level break on the existing MP history.
+    INR/MT (×10). Volume is the distinct reporting-mandi row count.
+    USD conversion happens at the analysis layer. Series are stored
+    per-state and never pooled — a cross-state median would put a level
+    break on the existing MP history.
+
+Level validation (#206, 2026-08-12):
+    The mandi level is *correct* and its ~+66% premium over CBOT is
+    real, not a units error. On 2026-08-11 the MP median across all 115
+    reporting mandis was ₹6,725/qtl (₹67,250/MT, $705/MT) against CBOT
+    $425/MT — a +$280/MT, +66% premium. Three checks agree:
+    commodityonline's national mandi average ₹6,706/qtl (09 Aug),
+    Agriwatch's ₹6,700–6,900/qtl band, and — the one that is *not*
+    Agmarknet-derived — SOPA's own Indore complex quotes, soy oil
+    ₹1,400/10kg and soymeal ex-factory ₹57,000–57,500/MT, which imply a
+    bean value of ~₹70,400/MT at an 18%/79% yield, i.e. a ~+4.7% gross
+    crush margin on our number. India's GM-import ban plus its tariff
+    wall means there is no arbitrage pulling the domestic bean toward
+    CBOT; a large premium is the market's normal state, and it reached
+    ~2× in 2021. Variety/grade mixing was measured and is immaterial
+    (MP Yellow ₹6,765 vs Soyabeen ₹6,725, FAQ-only median 0.36% from
+    the all-rows median), so no variety filter is applied.
+
+Why there is no High/Low:
+    Dropped in #206. Agmarknet's ``min_price``/``max_price`` are the
+    extremes of individual *lots* at one mandi, including distress and
+    refuse lots: on 2026-08-11 Indore APMC reported min ₹1,475 against a
+    modal ₹6,750, and Tarana APMC ₹800 — so the cross-mandi min of those
+    minima stored a ₹1,010/MT "low" on a ₹67,250/MT day. There is no
+    intraday range here to record: the series is one cross-sectional
+    median per day, and Open/High/Low are all left NaN rather than
+    filled with a number that reads like a trading range and is not one.
 
 Key handling:
     ``DATA_GOV_IN_API_KEY`` is used when set; otherwise the published
@@ -64,9 +91,12 @@ from config import (
     MANDI_API_URL,
     MANDI_COMMODITY,
     MANDI_MAX_PAGES,
+    MANDI_MODAL_MAX_INR_QUINTAL,
+    MANDI_MODAL_MIN_INR_QUINTAL,
     MANDI_PAGE_LIMIT,
     MANDI_PAGE_LIMIT_PERSONAL,
     MANDI_SAMPLE_API_KEY,
+    MANDI_SORT_FIELD,
     MANDI_STATES,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
@@ -107,7 +137,16 @@ def _fetch_page(offset: int, state: str) -> dict:
     exhausted retries.
 
     429s are expected on the shared-throttle sample key and retried with
-    backoff like any transport failure.
+    backoff like any transport failure. So is the throttle's *other*
+    shape: an HTTP 200 carrying ``{"error": "Rate limit exceeded"}`` and
+    no records, which is a transport condition wearing a payload's
+    clothes — retried here rather than being handed on to
+    ``_collect_records``, where a missing ``records`` key means "the
+    schema changed" and hard-fails the whole layer (observed twice
+    against the shared sample key, 2026-08-12).
+
+    Pagination is sorted (``MANDI_SORT_FIELD``): unsorted offset paging
+    on this resource repeats rows across pages and drops others entirely.
     """
     params: dict[str, str | int] = {
         "api-key": _api_key(),
@@ -116,6 +155,7 @@ def _fetch_page(offset: int, state: str) -> dict:
         "offset": offset,
         "filters[commodity]": MANDI_COMMODITY,
         "filters[state]": state,
+        f"sort[{MANDI_SORT_FIELD}]": "asc",
     }
     last_error = "no attempts made"
     for attempt in range(1, MAX_RETRIES + 1):
@@ -127,8 +167,12 @@ def _fetch_page(offset: int, state: str) -> dict:
                 timeout=REQUEST_TIMEOUT,
             )
             if resp.status_code == 200:
-                return resp.json()
-            last_error = f"HTTP {resp.status_code}"
+                payload = resp.json()
+                if "records" in payload or not payload.get("error"):
+                    return payload
+                last_error = f"API error: {payload['error']}"
+            else:
+                last_error = f"HTTP {resp.status_code}"
             logger.warning(
                 "Mandi API: %s at offset %d (attempt %d)",
                 last_error, offset, attempt,
@@ -143,6 +187,31 @@ def _fetch_page(offset: int, state: str) -> dict:
     raise requests.RequestException(
         f"Mandi API: offset {offset} failed after {MAX_RETRIES} attempts ({last_error})"
     )
+
+
+def _dedupe(records: list[dict]) -> list[dict]:
+    """Drop rows that are identical in every field, preserving order.
+
+    Belt-and-braces behind ``MANDI_SORT_FIELD``: an unsorted page walk
+    served the same mandi twice and skipped another, which inflated
+    Volume (the reporting-mandi count) without moving the median. A
+    market legitimately appears more than once per day under different
+    variety/grade rows — those differ in a field and are kept.
+    """
+    seen: set[tuple] = set()
+    unique: list[dict] = []
+    for rec in records:
+        key = tuple(sorted((k, str(v)) for k, v in rec.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(rec)
+    if len(unique) < len(records):
+        logger.warning(
+            "Mandi API: dropped %d duplicate row(s) of %d — paging overlap",
+            len(records) - len(unique), len(records),
+        )
+    return unique
 
 
 def _collect_records(state: str) -> list[dict]:
@@ -167,7 +236,7 @@ def _collect_records(state: str) -> list[dict]:
             "Mandi API: %s stopped at page cap %d with %d/%s records",
             state, MANDI_MAX_PAGES, len(records), total,
         )
-    return records
+    return _dedupe(records)
 
 
 def _aggregate(records: list[dict]) -> pd.DataFrame:
@@ -175,6 +244,13 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
 
     Returns the ``clean_india_domestic``/``save_india_domestic`` shape:
     Date (ISO), Open/High/Low/Close (INR/MT), Volume (mandi count), Unit.
+    Open/High/Low are NaN by design — see the module docstring; only the
+    median modal is a defensible daily number.
+
+    Raises ScraperShapeError if a day's median lands outside the
+    ₹/quintal plausibility band, which is the only way a silent change of
+    the source's price unit becomes visible: every unit reads as a valid
+    float and 100× wrong is still a number.
     """
     parsed: list[dict[str, object]] = []
     malformed = 0
@@ -182,21 +258,13 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
         try:
             arrival = datetime.strptime(str(rec["arrival_date"]), "%d/%m/%Y").date()
             modal = float(rec["modal_price"])
-            low = float(rec.get("min_price") or 0)
-            high = float(rec.get("max_price") or 0)
         except (KeyError, TypeError, ValueError):
             malformed += 1
             continue
         if modal <= 0:
             malformed += 1
             continue
-        # Thin-arrival days report min/max of "0" — fall back to modal so a
-        # single mandi can't drag the day's Low/High band to zero.
-        if low <= 0:
-            low = modal
-        if high <= 0:
-            high = modal
-        parsed.append({"date": arrival, "modal": modal, "min": low, "max": high})
+        parsed.append({"date": arrival, "modal": modal})
 
     if records and not parsed:
         raise ScraperShapeError(
@@ -211,16 +279,27 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
         return raw
 
     agg = raw.groupby("date").agg(
-        high=("max", "max"),
-        low=("min", "min"),
         close=("modal", "median"),
         volume=("modal", "size"),
     ).reset_index()
+
+    for date, median in zip(agg["date"], agg["close"], strict=True):
+        if not MANDI_MODAL_MIN_INR_QUINTAL <= median <= MANDI_MODAL_MAX_INR_QUINTAL:
+            raise ScraperShapeError(
+                f"Mandi API: {date} median modal_price ₹{median:,.0f}/quintal is "
+                f"outside the plausible band ₹{MANDI_MODAL_MIN_INR_QUINTAL:,}–"
+                f"₹{MANDI_MODAL_MAX_INR_QUINTAL:,} — the source's price unit "
+                "likely changed (see #206)"
+            )
+
     df = pd.DataFrame({
         "Date": agg["date"].map(lambda d: d.isoformat()),
+        # Open/High/Low: a cross-sectional median has no range. Agmarknet's
+        # per-mandi min/max are lot extremes (₹800/qtl against a ₹6,750
+        # modal) and stored a ₹1,010/MT "low" on a ₹67,250/MT day (#206).
         "Open": float("nan"),
-        "High": agg["high"] * _QUINTAL_TO_MT,
-        "Low": agg["low"] * _QUINTAL_TO_MT,
+        "High": float("nan"),
+        "Low": float("nan"),
         "Close": agg["close"] * _QUINTAL_TO_MT,
         "Volume": agg["volume"].astype(float),
         "Unit": "INR/MT",

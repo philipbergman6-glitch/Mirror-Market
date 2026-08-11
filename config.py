@@ -7,6 +7,7 @@ module can import them from one place.
 
 import logging
 import os
+from datetime import date as _date
 
 
 # ---------------------------------------------------------------------------
@@ -653,6 +654,21 @@ MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
 MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
 MANDI_PAGE_LIMIT_PERSONAL = 100   # personal keys allow bigger pages → fewer throttle hits
 MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any single-state daily set
+# Elasticsearch-style offset paging over an *unsorted* index is not stable:
+# without this the same mandi comes back on two pages while another is never
+# served at all (verified 2026-08-12: 115 MP rows fetched, only 95 distinct,
+# so ~20 real mandis were silently missing and Volume over-counted by 21%).
+# ``market.keyword`` is an exposed keyword field — see the resource's
+# ``field_exposed`` block — and gives a total order across pages.
+MANDI_SORT_FIELD = "market.keyword"
+# Unit guard, ₹/quintal. ``modal_price`` is quoted per quintal (100 kg) and
+# multiplied by 10 into INR/MT; a source that switched to ₹/kg (~67) or
+# ₹/MT (~67,000) would still parse cleanly and silently restate the level
+# 10–100×. Validated 2026-08-11 at ₹6,725/qtl MP against three independent
+# quotes (#206), and the band is wide enough for any real market: India's
+# 2021 record was ~₹10,000/qtl and the 2008 low ~₹2,200/qtl.
+MANDI_MODAL_MIN_INR_QUINTAL = 1_000
+MANDI_MODAL_MAX_INR_QUINTAL = 20_000
 # Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
 MANDI_SERIES = "Soybean (Mandi MP)"     # headline: Indore is the crush-industry pricing hub
@@ -828,6 +844,60 @@ SAGIS_SMD_COMMODITIES = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 25 — Crop Estimates Committee (CEC), South Africa (free, no API key)
+#
+# South Africa's official area/production estimate, revised monthly through
+# the season. Structurally the SA analogue of Layer 15 (CONAB) — but *not* an
+# independent second opinion: USDA's PSD carries the CEC's final figure
+# verbatim at PSD year = CEC year − 1 (2,770,000 / 1,848,000 / 2,800,000 t for
+# the 2023 / 2024 / 2025 crops are exact ties). What the layer buys is the
+# in-season revision path and the lead on the PSD number, not a divergence
+# between two agencies, so nothing here renders as "CEC vs USDA" (#204).
+#
+# Issuer: the Crop Estimates Committee of the national Department of
+# Agriculture. Fetched from the SAGIS mirror because the issuer is the weaker
+# host — dalrrd.gov.za no longer resolves (2026-08-12) and its replacement,
+# nda.gov.za, publishes no parseable CEC listing. A mirror that silently
+# stops updating is caught by the recency budget below, since every release
+# carries its own date.
+#
+# Licence: no copyright notice on the releases (an official government
+# statistic), reproduced under SAGIS's "may be reproduced with the
+# acknowledgement of the source". CEC_ATTRIBUTION names both.
+# ---------------------------------------------------------------------------
+CEC_REPORTS_URL = "https://www.sagis.org.za/crop-estimates-committee-2/"
+CEC_ATTRIBUTION = (
+    "Source: Crop Estimates Committee, Department of Agriculture (South "
+    "Africa), via SAGIS"
+)
+# Crop label as printed in the CEC summary table → the stored commodity key.
+# Renaming a key here forks the series wherever it is already stored.
+CEC_CROPS = {
+    "Soybeans": "Soybeans (CEC)",
+    "Sunflower seed": "Sunflower Seed (CEC)",
+}
+# Releases before this date are legacy binary .doc files (2013–2024) or
+# layouts from a different decade. Inside the window every PDF must parse.
+CEC_HISTORY_START = _date(2025, 1, 1)
+# CEC commodity → the PSD commodity holding USDA's view of the same crop,
+# and the year offset between the two calendars. The CEC dates a crop by the
+# calendar year it is harvested in (2026 = the 2025/26 season); PSD keys the
+# same crop to the marketing year that starts in the *previous* calendar year,
+# so PSD year = CEC season − 1. Verified on three exact ties of the CEC final
+# crop against PSD Production (2,770,000 / 1,848,000 / 2,800,000 t for the
+# 2023 / 2024 / 2025 crops).
+#
+# Sunflower seed has no PSD counterpart in PSD_TARGET_COMMODITIES, so it
+# carries no USDA comparison — which is correct rather than a gap: the line
+# only exists where both agencies publish the same crop.
+CEC_PSD_COUNTERPARTS = {"Soybeans (CEC)": "Soybeans"}
+CEC_PSD_YEAR_OFFSET = -1
+# Implied-yield sanity band (t/ha) for the tracked crops. Observed 2024–2026:
+# soybeans 1.57–2.51, sunflower seed 1.28–1.53. Wide enough not to fire on a
+# drought or a record, tight enough to catch a column mix-up.
+CEC_YIELD_BAND_T_HA = (0.3, 5.0)
+
+# ---------------------------------------------------------------------------
 # Analysis thresholds — configurable per-commodity where appropriate
 # ---------------------------------------------------------------------------
 
@@ -895,6 +965,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "wasde": 42,
     "psd": 42,
     "conab": 42,
+    "cec": 42,
     "worldbank": 42,
     "eia": 42,
     "usda": 400,  # annual NASS crop data
@@ -979,6 +1050,12 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # and fails on two — and the cadence has never actually missed one:
     # all 397 gaps across 2018-12-26 → 2026-08-05 are exactly 7 days.
     "ec_oilseeds": 21,
+    # The CEC publishes monthly, but only Jan-Nov carry a summer-crop table:
+    # the December release covers winter cereals alone, so the soybean series
+    # has one legitimate ~61-day gap a year (27 Nov 2025 -> 27 Jan 2026). 70
+    # days is that gap with a little slack; anything tighter would fail the
+    # layer every January for a source behaving exactly as it should.
+    "cec": 70,
     # Monthly publication. 100 days matches the identical guard inside
     # fetchers/worldbank.py — the CMO deep link rotates yearly and the old
     # GUID keeps serving a frozen file with HTTP 200. One number, one

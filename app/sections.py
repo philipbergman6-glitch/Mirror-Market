@@ -667,7 +667,54 @@ def _south_africa_groups(info: dict) -> list[dict | None]:
             f"SAGIS monthly supply & demand — {month}", cards,
             note=(smd.get("attribution") or "") if not flows else "",
         ))
+
+    # CEC official crop estimates (Layer 25, #204). A *revision* series: the
+    # headline is the standing forecast, and the two deltas are the in-season
+    # revision and the year-on-year crop. The USDA line is labelled a lag, not
+    # a divergence — PSD has carried the CEC's own final number exactly for
+    # three seasons, so calling the gap disagreement would be wrong.
+    cec = info.get("south_africa_estimates") or {}
+    for key, label in (("soybeans", "Soybeans"), ("sunflower", "Sunflower seed")):
+        view = cec.get(key)
+        if not view:
+            continue
+        revision = view.get("revision_pct")
+        yoy = view.get("yoy_pct")
+        stage = view.get("forecast_label", "")
+        released = view.get("release_date", "")
+        groups.append(_group(
+            f"CEC official crop estimates — {label}",
+            [
+                _card(f"{view.get('season_year', '')} crop", view.get("production_t"),
+                      caption=f"MT · {stage}" + (f" · {released}" if released else "")),
+                _card("Revision", revision, places=2, suffix="%",
+                      value_class="" if revision == 0 else _direction(revision),
+                      caption=f"vs {view.get('prev_release_date', '')}"),
+                _card("YoY", yoy, places=1, suffix="%", value_class=_direction(yoy),
+                      caption=f"vs {view.get('prior_season_year', '')} final"),
+            ],
+            note=" · ".join(_cec_notes(view) + ([cec["attribution"]] if cec.get("attribution") else [])),
+        ))
     return groups
+
+
+def _cec_notes(view: dict) -> list[str]:
+    notes = []
+    if view.get("area_ha"):
+        notes.append(f"Area {view['area_ha']:,.0f} ha")
+    if view.get("yield_t_ha"):
+        notes.append(f"implied yield {view['yield_t_ha']:.2f} t/ha")
+    usda = view.get("usda_psd_t")
+    if usda is not None:
+        gap = view.get("vs_usda_pct")
+        year = view.get("usda_psd_year")
+        notes.append(
+            f"USDA PSD carries {usda:,.0f} MT for {year}/{str(year + 1)[-2:]}"
+            + (f" (CEC {gap:+.1f}%)" if gap is not None else "")
+            + " — PSD has matched the CEC's final crop exactly for three seasons, "
+              "so this is lag, not disagreement"
+        )
+    return notes
 
 
 __all__ = [

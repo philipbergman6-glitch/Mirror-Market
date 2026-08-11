@@ -425,3 +425,30 @@ def test_a_board_in_native_units_has_no_home_currency_margin(seeded, registry):
     crush = _block(_build("cbot", seeded, registry), "crush")
     assert crush.data["margin_usd_mt"] is not None
     assert crush.data["margin_home"] is None
+
+
+def test_the_cec_estimates_panel_survived_the_port():
+    """Layer 25's panel landed on main mid-build (#204) — it must not vanish.
+
+    It is a revision series, so all three numbers matter, and the USDA line is
+    a *lag* not a divergence: PSD has carried the CEC's own final crop exactly
+    for three seasons.
+    """
+    result = emerging_markets_section({"countries": {"South Africa": {
+        "south_africa_estimates": {
+            "attribution": "Source: Crop Estimates Committee (CEC)",
+            "soybeans": {
+                "season_year": 2026, "production_t": 2_500_000.0, "revision_pct": 1.25,
+                "yoy_pct": -3.4, "forecast_label": "7th forecast",
+                "release_date": "2026-07-28", "prev_release_date": "2026-06-25",
+                "prior_season_year": 2025, "area_ha": 1_200_000.0, "yield_t_ha": 2.08,
+                "usda_psd_t": 2_400_000.0, "usda_psd_year": 2025, "vs_usda_pct": 4.2,
+            },
+        },
+    }}})
+    group = next(g for g in result["data"]["countries"][0]["groups"]
+                 if g["title"].startswith("CEC official"))
+    assert [c["label"] for c in group["cards"]] == ["2026 crop", "Revision", "YoY"]
+    assert "implied yield 2.08 t/ha" in group["note"]
+    assert "lag, not disagreement" in group["note"]
+    assert "Crop Estimates Committee" in group["note"]
