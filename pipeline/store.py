@@ -706,6 +706,34 @@ def save_sagis_deliveries(commodity: str, df: pd.DataFrame):
           ["commodity", "season_year", "week_number"], f"sagis/{commodity}")
 
 
+_CEC_COLUMNS = [
+    "commodity", "season_year", "release_date", "estimate_kind",
+    "forecast_seq", "forecast_label", "area_ha", "production_t", "unit",
+    "source_url",
+]
+
+
+def save_cec_estimates(commodity: str, df: pd.DataFrame):
+    """Write CEC South Africa crop estimates → 'cec_estimates'.
+
+    One row per release per season, so the revision path is kept rather than
+    collapsed to a current estimate. The upsert key includes release_date:
+    re-reading the same PDF rewrites the same row, and a *new* release adds
+    one — a report is never edited in place upstream.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "unit" not in df.columns:
+        df["unit"] = "MT"
+    missing = [c for c in _CEC_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_cec_estimates: frame missing columns {missing}")
+    _save("cec_estimates", df[_CEC_COLUMNS],
+          ["commodity", "season_year", "release_date"], f"cec/{commodity}")
+
+
 # --- Briefing archive -------------------------------------------------------
 
 

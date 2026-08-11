@@ -308,6 +308,36 @@ CREATE TABLE IF NOT EXISTS sagis_deliveries (
 );
 """
 
+# CEC South Africa official crop estimates (Layer 25). A *revision series*,
+# not a current-value table: the committee re-forecasts the same season nine
+# times and the CELC then finalises it, so every release is kept and keyed by
+# (commodity, season_year, release_date). Overwriting to one current estimate
+# would throw away the month-on-month path, which is the whole point of the
+# layer — USDA's PSD carries the same final number (#204).
+#
+# season_year is the CEC's own calendar-year convention: 2026 is the crop
+# harvested in 2026, i.e. the 2025/26 production season. area_ha and
+# production_t are the two components; yield is derived at read time, never
+# stored. production_t is NULL where a release carries no production number
+# at all — January's preliminary area estimate and October's intentions to
+# plant are area-only, which is different from a production of zero.
+_CREATE_CEC_ESTIMATES = """
+CREATE TABLE IF NOT EXISTS cec_estimates (
+    commodity      TEXT NOT NULL,
+    season_year    INTEGER NOT NULL,   -- calendar year of the harvest
+    release_date   TEXT NOT NULL,      -- ISO date printed on the release
+    estimate_kind  TEXT NOT NULL,      -- intentions | preliminary_area |
+                                       -- forecast | final_estimate | final_crop
+    forecast_seq   INTEGER,            -- 1..9 for forecasts, else NULL
+    forecast_label TEXT,               -- the release's own wording
+    area_ha        REAL,
+    production_t   REAL,               -- NULL on area-only releases
+    unit           TEXT,
+    source_url     TEXT,
+    PRIMARY KEY (commodity, season_year, release_date)
+);
+"""
+
 _CREATE_SAFEX = """
 CREATE TABLE IF NOT EXISTS safex_prices (
     Date        TEXT NOT NULL,
@@ -384,6 +414,7 @@ ALL_SCHEMAS = (
     _CREATE_BRAZIL_SPOT,
     _CREATE_SAFEX,
     _CREATE_SAGIS_DELIVERIES,
+    _CREATE_CEC_ESTIMATES,
     _CREATE_BRIEFINGS,
 )
 
@@ -437,6 +468,10 @@ UNIQUE_INDEXES = (
     "ON sagis_deliveries (commodity, season_year, week_number);",
     "CREATE INDEX IF NOT EXISTS ix_sagis_week_end "
     "ON sagis_deliveries (week_end);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cec_commodity_season_release "
+    "ON cec_estimates (commodity, season_year, release_date);",
+    "CREATE INDEX IF NOT EXISTS ix_cec_release_date "
+    "ON cec_estimates (release_date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
     "ON briefings (briefing_date);",
 )

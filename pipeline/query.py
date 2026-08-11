@@ -249,6 +249,19 @@ def read_sagis_deliveries(commodity: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_cec_estimates(commodity: str | None = None) -> pd.DataFrame:
+    """Read CEC South Africa official crop estimates from SQLite.
+
+    A revision series: one row per release per season, so a caller wanting
+    "the current estimate" takes the newest `release_date` for the season.
+    Yield is not stored — it is `production_t / area_ha` where both are
+    present. Any surface rendering these must carry `config.CEC_ATTRIBUTION`.
+    """
+    return _read_table(
+        "cec_estimates", "commodity", commodity, date_cols=("release_date",)
+    )
+
+
 def read_freshness() -> pd.DataFrame:
     """
     Read data freshness timestamps for all layers.

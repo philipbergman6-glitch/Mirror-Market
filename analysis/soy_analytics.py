@@ -40,6 +40,9 @@ from analysis.spreads import (
 )
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
 from config import (
+    CEC_ATTRIBUTION,
+    CEC_PSD_COUNTERPARTS,
+    CEC_PSD_YEAR_OFFSET,
     CONAB_FARMGATE_SERIES,
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
@@ -53,6 +56,7 @@ from config import (
 from pipeline.query import (
     read_brazil_estimates,
     read_brazil_spot,
+    read_cec_estimates,
     read_cot,
     read_crop_progress,
     read_dce_futures,
@@ -228,6 +232,109 @@ def _sagis_delivery_pace(df: pd.DataFrame) -> dict[str, Any]:
         out["avg3_progressive_mt"] = round(avg, 1)
         out["vs_avg3_pct"] = round((progressive - avg) / abs(avg) * 100, 1)
         out["avg3_seasons"] = [int(s) for s in recent.index]
+
+    return out
+
+
+# The CEC's own ordering of a season's releases: intentions and the
+# preliminary area estimate come before any production number, and the CELC's
+# recalculated final crop supersedes November's final estimate.
+_CEC_FINAL_KINDS = ("final_crop", "final_estimate")
+
+
+def _cec_estimate_view(df: pd.DataFrame, psd: pd.DataFrame | None) -> dict[str, Any]:
+    """Latest CEC estimate for one commodity, with its revision context.
+
+    Three comparisons, each against a different thing:
+
+      * **vs the previous release** — the in-season revision, which is what a
+        monthly forecast series is for. Computed from the stored history
+        rather than from the report's own change column, so it is a
+        like-for-like production-to-production step.
+      * **vs the prior season's final** — the year-on-year crop.
+      * **vs USDA's PSD** — a *lag* check, not a divergence: USDA carries the
+        CEC's final figure verbatim once a season closes (#204), so a gap
+        here means PSD has not caught up with the newest forecast yet, never
+        that two agencies disagree. Rendered as such, or not at all.
+
+    Yield is derived here (`production / area`) and never stored. Returns {}
+    when the frame holds no estimate at all.
+    """
+    if df is None or df.empty:
+        return {}
+
+    frame = df.copy()
+    frame["season_year"] = frame["season_year"].astype(int)
+    frame = frame.sort_values(["season_year", "release_date"])
+
+    season = int(frame["season_year"].max())
+    season_rows = frame[frame["season_year"] == season]
+    latest = season_rows.iloc[-1]
+
+    out: dict[str, Any] = {
+        "season_year": season,
+        "release_date": _asof(latest["release_date"]),
+        "estimate_kind": str(latest["estimate_kind"]),
+        "forecast_label": str(latest.get("forecast_label") or ""),
+        "forecast_seq": (
+            int(latest["forecast_seq"]) if pd.notna(latest.get("forecast_seq")) else None
+        ),
+        "area_ha": (
+            round(float(latest["area_ha"]), 0) if pd.notna(latest.get("area_ha")) else None
+        ),
+        "production_t": (
+            round(float(latest["production_t"]), 0)
+            if pd.notna(latest.get("production_t")) else None
+        ),
+    }
+    if out["area_ha"] and out["production_t"]:
+        out["yield_t_ha"] = round(out["production_t"] / out["area_ha"], 2)
+
+    # Revision against the previous release that carried a production number.
+    priced = season_rows[season_rows["production_t"].notna()]
+    if out["production_t"] is not None and len(priced) >= 2:
+        previous = priced.iloc[-2]
+        prev_value = float(previous["production_t"])
+        out["prev_release_date"] = _asof(previous["release_date"])
+        out["prev_production_t"] = round(prev_value, 0)
+        if prev_value:
+            out["revision_pct"] = round(
+                (out["production_t"] - prev_value) / abs(prev_value) * 100, 2
+            )
+
+    # Prior season's final crop, preferring the CELC recalculation.
+    prior_rows = frame[
+        (frame["season_year"] == season - 1) & frame["production_t"].notna()
+    ]
+    finals = prior_rows[prior_rows["estimate_kind"].isin(_CEC_FINAL_KINDS)]
+    prior = (finals if not finals.empty else prior_rows)
+    if not prior.empty:
+        prior_row = prior.iloc[-1]
+        prior_value = float(prior_row["production_t"])
+        out["prior_season_year"] = season - 1
+        out["prior_season_t"] = round(prior_value, 0)
+        out["prior_season_kind"] = str(prior_row["estimate_kind"])
+        if out["production_t"] is not None and prior_value:
+            out["yoy_pct"] = round(
+                (out["production_t"] - prior_value) / abs(prior_value) * 100, 1
+            )
+
+    if psd is not None and not psd.empty and out["production_t"] is not None:
+        psd_year = season + CEC_PSD_YEAR_OFFSET
+        rows = psd[
+            (psd["country"] == "South Africa")
+            & (psd["attribute"] == "Production")
+            & (psd["year"].astype(int) == psd_year)
+        ]
+        if not rows.empty:
+            # PSD publishes in 1000 MT; the CEC in tons.
+            usda_t = float(rows.iloc[-1]["value"]) * 1000
+            out["usda_psd_year"] = psd_year
+            out["usda_psd_t"] = round(usda_t, 0)
+            if usda_t:
+                out["vs_usda_pct"] = round(
+                    (out["production_t"] - usda_t) / abs(usda_t) * 100, 1
+                )
 
     return out
 
@@ -1570,6 +1677,31 @@ def emerging_markets_analysis() -> dict:
                         entry["south_africa_deliveries"] = sagis_entry
             except Exception as exc:
                 logger.warning("South Africa SAGIS deliveries analytics failed: %s", exc)
+
+            # --- CEC official crop estimates (Layer 25) ---
+            # Its own try for the same reason as the flow block above: the
+            # official estimate stands on its own even if a price or flow
+            # leg is dark.
+            try:
+                cec_df = read_cec_estimates()
+                if not cec_df.empty:
+                    psd_soy = read_psd("Soybeans")
+                    cec_entry: dict[str, Any] = {}
+                    for key, label in (
+                        ("Soybeans (CEC)", "soybeans"),
+                        ("Sunflower Seed (CEC)", "sunflower"),
+                    ):
+                        view = _cec_estimate_view(
+                            cec_df[cec_df["commodity"] == key],
+                            psd_soy if CEC_PSD_COUNTERPARTS.get(key) else None,
+                        )
+                        if view:
+                            cec_entry[label] = view
+                    if cec_entry:
+                        cec_entry["attribution"] = CEC_ATTRIBUTION
+                        entry["south_africa_estimates"] = cec_entry
+            except Exception as exc:
+                logger.warning("South Africa CEC estimates analytics failed: %s", exc)
 
             if sa_domestic_entry:
                 entry["south_africa_domestic"] = sa_domestic_entry
