@@ -29,6 +29,7 @@ from trust.domain import (
     Correction,
     DatasetResult,
     Edition,
+    EditionStatus,
     Finding,
     ObservationIdentity,
     ObservationRevision,
@@ -36,6 +37,7 @@ from trust.domain import (
     QualityState,
     RawArtifact,
     Run,
+    RunStatus,
 )
 from trust.registry import DatasetContract, RawRetention, RightsAction
 
@@ -65,6 +67,10 @@ class ImmutableRecordConflict(TrustRepositoryError):
 
 class CurrentEditionConflict(TrustRepositoryError):
     """A pointer update was based on a different current edition."""
+
+
+class EditionPromotionError(TrustRepositoryError):
+    """An edition or its originating run is not eligible for promotion."""
 
 
 class ArtifactRetentionError(TrustRepositoryError):
@@ -188,6 +194,21 @@ class _DirectoryTrustRepository:
         layout = _RECORD_LAYOUTS[record_type]
         record_id = self._record_id(payload, layout)
         contents = self._serialize(payload)
+        if isinstance(canonical_record, Finding):
+            with self._exclusive_lock():
+                existing = self._read_finding(record_id)
+                if existing is not None:
+                    if self._serialize(existing.to_dict()) != contents:
+                        raise ImmutableRecordConflict(
+                            f"immutable record {record_id} already exists with different data"
+                        )
+                    return
+                self._store_immutable(
+                    self._finding_path(canonical_record),
+                    contents,
+                    f"immutable record {record_id}",
+                )
+            return
         destination = self._record_path(layout, record_id)
 
         with self._exclusive_lock():
@@ -204,14 +225,12 @@ class _DirectoryTrustRepository:
             if revision is None:
                 return None
             return self._observation_ledger(revision.identity).get(record_id)  # type: ignore[return-value]
+        if record_type == "finding":
+            return self._read_finding(record_id)  # type: ignore[return-value]
         path = self._record_path(layout, record_id)
         if not path.exists():
             return None
-        payload = self._read_payload(path)
-        if payload.get("record_type") != record_type:
-            raise RepositoryFormatError(f"record {record_id} is not a {record_type}")
-        if payload.get(layout.id_field) != record_id:
-            raise RepositoryFormatError(f"record {record_id} contradicts its durable identifier")
+        payload = self._read_identified_payload(path, record_type, layout.id_field)
         try:
             return decoder.from_dict(payload)
         except (KeyError, TypeError, ValueError) as exc:
@@ -343,6 +362,20 @@ class _DirectoryTrustRepository:
                     "current edition changed before pointer replacement: "
                     f"expected {promotion.previous_edition_id!r}, found {current_edition_id!r}"
                 )
+            edition = self.read(Edition, promotion.edition_id)
+            if edition is None:
+                raise EditionPromotionError(f"edition {promotion.edition_id} is not durable")
+            if edition.status not in {EditionStatus.VERIFIED, EditionStatus.PROMOTED}:
+                raise EditionPromotionError(
+                    f"edition {promotion.edition_id} has ineligible {edition.status.value} status"
+                )
+            run = self.read(Run, edition.run_id)
+            if run is None:
+                raise EditionPromotionError(f"edition {promotion.edition_id} has no durable run")
+            if run.status is not RunStatus.SUCCEEDED:
+                raise EditionPromotionError(
+                    f"edition {promotion.edition_id} belongs to {run.status.value} run {run.run_id}"
+                )
             self._atomic_replace(destination, contents)
 
     def current_edition(self) -> Promotion | None:
@@ -365,6 +398,27 @@ class _DirectoryTrustRepository:
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{record_id}.json"
 
+    def _finding_path(self, finding: Finding) -> Path:
+        directory = self._durable_root / "findings" / finding.run_id
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / f"{finding.finding_id}.json"
+
+    def _read_finding(self, finding_id: str) -> Finding | None:
+        path = self._fixed_id_path("findings", finding_id, partition_depth=1, record_label="finding")
+        if path is None:
+            return None
+        payload = self._read_identified_payload(path, "finding", "finding_id")
+        try:
+            finding = Finding.from_dict(payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RepositoryFormatError(f"invalid durable finding record {path.name}") from exc
+        findings_root = self._durable_root / "findings"
+        if path.parent != findings_root and (
+            path.parent.parent != findings_root or path.parent.name != finding.run_id
+        ):
+            raise RepositoryFormatError(f"finding {finding.finding_id} contradicts its durable partition")
+        return finding
+
     def _observation_partition(self, identity: ObservationIdentity) -> Path:
         return self._durable_root / "observations" / identity.dataset_id / str(identity.effective_date.year)
 
@@ -373,25 +427,16 @@ class _DirectoryTrustRepository:
         directory.mkdir(parents=True, exist_ok=True)
         return directory / f"{revision.revision_id}.json"
 
-    def _observation_revision_paths(self, revision_id: str) -> tuple[Path, ...]:
-        observations_root = self._durable_root / "observations"
-        legacy_path = observations_root / f"{revision_id}.json"
-        paths = [legacy_path] if legacy_path.exists() else []
-        paths.extend(observations_root.glob(f"*/*/{revision_id}.json"))
-        return tuple(sorted(paths))
-
     def _read_observation_revision(self, revision_id: str) -> ObservationRevision | None:
-        paths = self._observation_revision_paths(revision_id)
-        if not paths:
+        path = self._fixed_id_path(
+            "observations",
+            revision_id,
+            partition_depth=2,
+            record_label="observation revision",
+        )
+        if path is None:
             return None
-        if len(paths) > 1:
-            raise RepositoryFormatError(f"duplicate durable observation revision {revision_id}")
-        path = paths[0]
-        payload = self._read_payload(path)
-        if payload.get("record_type") != "observation-revision":
-            raise RepositoryFormatError(f"record {path.name} is not an observation-revision")
-        if payload.get("revision_id") != path.stem:
-            raise RepositoryFormatError(f"record {path.name} contradicts its durable identifier")
+        payload = self._read_identified_payload(path, "observation-revision", "revision_id")
         revision = self._decode_observation_revision(path, payload)
         self._validate_observation_partition(path, revision)
         return revision
@@ -576,6 +621,25 @@ class _DirectoryTrustRepository:
         directory.mkdir(parents=True, exist_ok=True)
         return directory / content_hash
 
+    def _fixed_id_path(
+        self,
+        collection: str,
+        record_id: str,
+        *,
+        partition_depth: int,
+        record_label: str,
+    ) -> Path | None:
+        collection_root = self._durable_root / collection
+        legacy_path = collection_root / f"{record_id}.json"
+        paths = [legacy_path] if legacy_path.exists() else []
+        partition_glob = "/".join((*(["*"] * partition_depth), f"{record_id}.json"))
+        paths.extend(collection_root.glob(partition_glob))
+        if not paths:
+            return None
+        if len(paths) > 1:
+            raise RepositoryFormatError(f"duplicate durable {record_label} {record_id}")
+        return paths[0]
+
     def _store_immutable(self, destination: Path, contents: bytes, label: str) -> None:
         if destination.exists():
             if destination.read_bytes() == contents:
@@ -628,6 +692,19 @@ class _DirectoryTrustRepository:
         if not isinstance(payload, dict):
             raise RepositoryFormatError(f"durable record {path.name} must contain a JSON object")
         self._validate_schema_version(payload)
+        return payload
+
+    def _read_identified_payload(
+        self,
+        path: Path,
+        record_type: str,
+        id_field: str,
+    ) -> dict[str, Any]:
+        payload = self._read_payload(path)
+        if payload.get("record_type") != record_type:
+            raise RepositoryFormatError(f"record {path.name} is not a {record_type}")
+        if payload.get(id_field) != path.stem:
+            raise RepositoryFormatError(f"record {path.name} contradicts its durable identifier")
         return payload
 
     def _read_promotion(self, path: Path) -> Promotion | None:
@@ -687,6 +764,7 @@ def _sync_directory(directory: Path) -> None:
 __all__ = [
     "ArtifactRetentionError",
     "CurrentEditionConflict",
+    "EditionPromotionError",
     "GitDirectoryTrustRepository",
     "ImmutableRecordConflict",
     "RepositoryFormatError",
