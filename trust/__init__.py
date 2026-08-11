@@ -28,6 +28,12 @@ from trust.domain import (
     evaluate_run_status,
 )
 from trust.legacy_importer import LegacyImportSummary, import_v1_history
+from trust.query_cache import (
+    QueryCacheBuild,
+    TrustQueryCacheError,
+    TrustQueryCacheSelectionError,
+    build_query_cache,
+)
 from trust.registry import (
     FX_CONTRACTS,
     MAGYP_FOB_CONTRACT,
@@ -97,6 +103,7 @@ __all__ = [
     "ObservationRevision",
     "Promotion",
     "PILOT_REGISTRY",
+    "QueryCacheBuild",
     "QualityState",
     "RawArtifact",
     "RawRetention",
@@ -115,8 +122,11 @@ __all__ = [
     "TemporaryDirectoryTrustRepository",
     "TrustRepository",
     "TrustRepositoryError",
+    "TrustQueryCacheError",
+    "TrustQueryCacheSelectionError",
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
+    "build_query_cache",
     "evaluate_run_status",
     "import_v1_history",
 ]
