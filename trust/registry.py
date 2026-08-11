@@ -765,6 +765,7 @@ FX_CONTRACTS = tuple(
             "price_type",
             "currency",
             "unit",
+            "fx_pair",
             "effective_date",
         ),
         fixed_fields={
