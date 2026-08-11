@@ -451,15 +451,23 @@ def test_critical_layer_ignores_an_empty_fails_override(freshness_calls):
 
 def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers():
     """Overriding the derived rule is a per-layer judgement call — keep the
-    exception list explicit rather than incidental. Both entries are layers
-    with no floor whose upstream always carries history."""
+    exception list explicit rather than incidental. Every entry is a layer
+    with no floor whose upstream always carries history:
+
+      worldbank    — the Pink Sheet workbook, 60+ years of monthly rows
+      wasde        — every monthly workbook carries 12+ months
+      ec_oilseeds  — a single series, so nothing to derive a floor from; the
+                     EC workbook ships ~400 weekly rows back to 2018 and has
+                     not missed a Wednesday since, so empty means the fetch,
+                     the parse or the stale-file guard broke (#163)
+    """
     opted_in = {
         layer.key
         for layer in main._build_dict_layers()
         if layer.empty_fails is not None
     }
 
-    assert opted_in == {"worldbank", "wasde"}
+    assert opted_in == {"worldbank", "wasde", "ec_oilseeds"}
     assert not opted_in & set(LAYER_MIN_KEYS)  # nothing floored needs an override
 
 
