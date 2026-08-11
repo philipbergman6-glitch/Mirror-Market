@@ -10,6 +10,7 @@ from decimal import Decimal
 import pytest
 
 from trust import (
+    ContractIdentity,
     Dataset,
     FindingSeverity,
     NumericValidationPolicy,
@@ -20,6 +21,7 @@ from trust import (
     RuleFinding,
     Run,
     RunStatus,
+    SettlementState,
     Source,
     generic_candidate_quality_rules,
 )
@@ -250,6 +252,7 @@ def test_generic_validators_accept_pilot_contract_identity_minimums(contract) ->
         subject={
             "identity": identity,
             "value": "1.25",
+            "settlement_state": "settled",
             "parsed_at": NOW,
             "source_published_at": {"value": NOW - timedelta(hours=1), "inferred": False},
             "observed_at": {"value": datetime(2026, 8, 9, 23, 30, tzinfo=timezone(timedelta(hours=-5))), "inferred": False},
@@ -298,7 +301,7 @@ def test_generic_unit_and_currency_validators_reject_contract_mismatches() -> No
         "price_type": "settlement",
         "currency": "brl",
         "unit": "usd-mt",
-        "contract": "ZSX26",
+        "contract": {"exchange": "cme", "code": "ZSX26", "delivery_month": "2026-11"},
         "effective_date": date(2026, 8, 10),
     }
 
@@ -306,11 +309,89 @@ def test_generic_unit_and_currency_validators_reject_contract_mismatches() -> No
         run_id=_ids()[0],
         dataset_id=contract.dataset.dataset_id,
         subject_id="row-1",
-        subject={"identity": identity, "value": "1000", "parsed_at": NOW},
+        subject={"identity": identity, "value": "1000", "settlement_state": "settled", "parsed_at": NOW},
     )
 
     assert result.disposition is QualityState.REJECTED
     assert {"unit.recognized", "currency.recognized"} <= {finding.rule_id for finding in result.findings}
+
+
+def test_named_contract_validator_rejects_ambiguous_front_month_labels() -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+    identity = {**_minimal_identity(contract), "contract": "front-month"}
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id="row-1",
+        subject={"identity": identity, "value": "1025.5", "settlement_state": "settled", "parsed_at": NOW},
+    )
+
+    assert result.disposition is QualityState.REJECTED
+    assert any(finding.rule_id == "contract.named" for finding in result.findings)
+
+
+@pytest.mark.parametrize("state", ["open", "estimated", "pre-open", None])
+def test_settlement_validator_rejects_unfinished_current_session_bars(state: str | None) -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id="row-1",
+        subject={
+            "identity": _minimal_identity(contract),
+            "value": "1025.5",
+            "settlement_state": state,
+            "parsed_at": NOW,
+        },
+    )
+
+    assert result.disposition is QualityState.REJECTED
+    assert any(finding.rule_id == "settlement.confirmed" for finding in result.findings)
+
+
+def test_ohlc_validator_rejects_impossible_candles() -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id="row-1",
+        subject={
+            "identity": _minimal_identity(contract),
+            "value": "1025.5",
+            "open_value": "1020",
+            "high_value": "1024",
+            "low_value": "1018",
+            "close_value": "1025.5",
+            "settlement_state": SettlementState.SETTLED,
+            "parsed_at": NOW,
+        },
+    )
+
+    assert result.disposition is QualityState.REJECTED
+    assert any(finding.rule_id == "ohlc.relationship" for finding in result.findings)
+
+
+def test_price_daily_move_validator_quarantines_extreme_moves() -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id="row-1",
+        subject={
+            "identity": _minimal_identity(contract),
+            "value": "1400",
+            "settlement_state": "settled",
+            "parsed_at": NOW,
+        },
+        dataset_context={"previous_value": "1000", "daily_move_quarantine_threshold": "0.20"},
+    )
+
+    assert result.disposition is QualityState.QUARANTINED
+    assert any(finding.rule_id == "price.daily-move" for finding in result.findings)
 
 
 def test_generic_temporal_validator_requires_distinct_inference_labels_and_timezone() -> None:
@@ -439,7 +520,7 @@ def _identity_value(field_name: str) -> object:
     if field_name == "unit":
         return "usd-mt"
     if field_name == "contract":
-        return "ZSX26"
+        return ContractIdentity("cme", "ZSX26", "2026-11")
     if field_name == "delivery_window":
         return {"start": date(2026, 8, 1), "end": date(2026, 8, 31)}
     if field_name == "source_record_id":
