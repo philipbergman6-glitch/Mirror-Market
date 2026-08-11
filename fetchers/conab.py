@@ -20,14 +20,16 @@ from __future__ import annotations
 
 import io
 import logging
-from collections.abc import Sequence
-from datetime import datetime, timezone
+from collections.abc import Mapping, Sequence
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 
 import pandas as pd
 import requests
 
 from config import CONAB_URL, MAX_RETRIES, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
+from pipeline.results import ScraperShapeError
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,47 @@ _COMMODITY_MAP: dict[str, str] = {
 }
 
 
+# Core producing states that must be present (with output) in the newest
+# crop year of every tracked commodity. Mato Grosso alone is ~29% of the
+# national soybean crop and ~40% of corn — dropping it silently understates
+# the national total by tens of millions of tonnes, which is exactly the
+# CONAB-vs-USDA divergence the briefing reads. Verified against the live
+# file (2026-08-11): every listed UF reports positive production in each of
+# the last three crop years of its commodity.
+_REQUIRED_UFS: dict[str, frozenset[str]] = {
+    "soja": frozenset({"MT", "PR", "RS", "GO", "MS"}),
+    "milho": frozenset({"MT", "PR", "GO", "MS"}),
+    "trigo": frozenset({"PR", "RS"}),
+    "algodao em pluma": frozenset({"MT", "BA"}),
+}
+
+
+def _report_date_from_headers(headers: Mapping[str, str]) -> str:
+    """Publication date of the survey file, taken from ``Last-Modified``.
+
+    The historical series is a monthly survey, not a daily stream. Stamping
+    it with ``now()`` writes one identical-valued row per pipeline run and
+    turns the revision history into phantom revisions. There is no date
+    column inside the file, so the response's ``Last-Modified`` is the only
+    real publication date available — no header, no row.
+    """
+    raw = headers.get("Last-Modified") or headers.get("last-modified")
+    if not raw:
+        raise ScraperShapeError(
+            "CONAB response carries no Last-Modified header — refusing to "
+            "stamp the monthly survey with today's date."
+        )
+    try:
+        published = parsedate_to_datetime(raw)
+    except (TypeError, ValueError) as exc:
+        raise ScraperShapeError(
+            f"CONAB Last-Modified header unparseable: {raw!r}"
+        ) from exc
+    if published.tzinfo is None:
+        published = published.replace(tzinfo=timezone.utc)
+    return published.astimezone(timezone.utc).strftime("%Y-%m-%d")
+
+
 def _parse_csv(text: str) -> pd.DataFrame:
     """Parse the CONAB semicolon-separated text into a DataFrame."""
     return pd.read_csv(
@@ -59,6 +102,33 @@ def _parse_csv(text: str) -> pd.DataFrame:
         on_bad_lines="skip",
         dtype=str,
     )
+
+
+def _assert_states_present(df: pd.DataFrame) -> None:
+    """Abort if a core producing state is missing from the newest crop year.
+
+    ``df`` is the tracked-commodity subset, already stripped and numeric.
+    Only the newest crop year per commodity is checked — that is the year
+    the briefing compares against USDA, and it is also the tail of the file
+    a truncated download would lose first. Older years are left alone
+    because state coverage genuinely varies back through the 1970s.
+    """
+    for produto_norm, required in _REQUIRED_UFS.items():
+        rows = df[df["produto_norm"] == produto_norm]
+        if rows.empty:
+            continue
+        latest = max(rows["ano_agricola"])
+        year_rows = rows[rows["ano_agricola"] == latest]
+        present = set(
+            year_rows.loc[year_rows["producao_mil_t"] > 0, "uf"].astype(str)
+        )
+        missing = sorted(required - present)
+        if missing:
+            raise ScraperShapeError(
+                f"CONAB {produto_norm!r} {latest}: core producing state(s) "
+                f"{missing} missing or zero — refusing to publish a national "
+                f"total that silently omits them."
+            )
 
 
 def _aggregate_national(df: pd.DataFrame) -> pd.DataFrame:
@@ -81,9 +151,22 @@ def _aggregate_national(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # Numeric conversion — CONAB uses '.' decimal in the new format
+    # Numeric conversion — CONAB uses '.' decimal in the new format.
+    # A cell we cannot read is NOT a zero: coercing it to 0.0 subtracts a
+    # whole state from the national sum without a trace.
     for col in ("area_plantada_mil_ha", "producao_mil_t"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+        numeric = pd.to_numeric(df[col], errors="coerce")
+        bad = numeric.isna()
+        if bad.any():
+            sample = df.loc[bad, ["ano_agricola", "uf", "produto", col]].head(5)
+            raise ScraperShapeError(
+                f"CONAB column {col!r} has {int(bad.sum())} non-numeric "
+                f"cell(s) — refusing to zero them into the national sum. "
+                f"Sample:\n{sample.to_string(index=False)}"
+            )
+        df[col] = numeric
+
+    _assert_states_present(df)
 
     grouped = (
         df.groupby(["ano_agricola", "produto_norm"], as_index=False)
@@ -136,7 +219,17 @@ def fetch_conab_estimates() -> pd.DataFrame:
     Returns a DataFrame with columns:
         source, commodity, crop_year, attribute, value, unit, report_date
 
+    ``report_date`` is the file's publication date (HTTP ``Last-Modified``),
+    not the run date — the series is a monthly survey.
+
     Empty DataFrame if the download fails or the file schema is unrecognized.
+
+    Raises:
+        ScraperShapeError: the payload parsed but is not trustworthy — a
+            core producing state missing from the newest crop year, a
+            non-numeric area/production cell, or no publication date on the
+            response. Layer 15 in ``main.py`` records the layer as failed
+            rather than storing a poisoned national total.
     """
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -179,11 +272,12 @@ def fetch_conab_estimates() -> pd.DataFrame:
                 )
                 return pd.DataFrame()
 
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            result = _melt_to_long(grouped, report_date=today)
+            report_date = _report_date_from_headers(resp.headers)
+            result = _melt_to_long(grouped, report_date=report_date)
             logger.info(
-                "Parsed %d CONAB estimate rows across %d (year, commodity) pairs.",
-                len(result), len(grouped),
+                "Parsed %d CONAB estimate rows across %d (year, commodity) "
+                "pairs, published %s.",
+                len(result), len(grouped), report_date,
             )
             return result
 

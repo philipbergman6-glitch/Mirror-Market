@@ -158,13 +158,13 @@ details .det-content { padding: 0 16px 16px; }
   <h1>Mirror<br><em>Market</em></h1>
   <div class="mast-meta">
     <div class="day">{{ masthead.day_line }}</div>
-    <div>Generated {{ generated_at }} · {{ masthead.fresh_count }}/{{ masthead.total_layers }} layers fresh{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
+    <div>Generated {{ generated_at }} · {{ masthead.on_schedule_count }}/{{ masthead.total_layers }} layers on schedule{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
     <div>Soy complex + competing crops · all prices USD/MT</div>
   </div>
 </header>
-{% if masthead.stale_layers %}
+{% if masthead.late_layers %}
 <div class="stale-note"><b>Stale:</b>
-  {%- for s in masthead.stale_layers %} {{ s.name }} ({{ s.age }}){{ "," if not loop.last }}{% endfor %} — everything else current.
+  {%- for s in masthead.late_layers %} {{ s.name }} ({{ s.age }}){{ "," if not loop.last }}{% endfor %} — everything else current.
 </div>
 {% endif %}
 
@@ -452,7 +452,7 @@ details .det-content { padding: 0 16px 16px; }
 
   {% if freshness_items %}
   <details>
-    <summary>Layer Freshness ({{ masthead.fresh_count }}/{{ masthead.total_layers }} fresh)</summary>
+    <summary>Layer Freshness ({{ masthead.on_schedule_count }}/{{ masthead.total_layers }} on schedule)</summary>
     <div class="det-content">
     <table class="dtable">
       <thead>

@@ -1,0 +1,17 @@
+HTTP/1.1 200 OK
+Date: Tue, 11 Aug 2026 18:25:37 GMT
+Server: Apache/2.2.22 (Debian)
+Access-Control-Allow-Headers: content-type, authorization, login_usuario, token_info, x-frame-banoc, auth, x-auth-token, x-csrf-token, x-livewire, baggage, sentry-trace, x-user-identificador
+Access-Control-Allow-Methods: PUT, DELETE, OPTIONS, POST, GET
+Access-Control-Max-Age: 86400
+Strict-Transport-Security: max-age=31536000; includeSubdomains;
+Last-Modified: Tue, 11 Aug 2026 11:00:16 GMT
+ETag: "7a7bbf1d-298c11-658c3603caa35"
+Accept-Ranges: bytes
+Content-Length: 2722833
+Vary: Accept-Encoding,Origin
+Access-Control-Allow-Origin: *
+Content-Type: text/plain
+Content-Security-Policy: frame-ancestors 'self' http://*.conab.gov.br https://*.conab.gov.br http://*.ceasa.gov.br https://*.ceasa.gov.br https://www.gov.br;
+Access-Control-Allow-Credentials: true
+
