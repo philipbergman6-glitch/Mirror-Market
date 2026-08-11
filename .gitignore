@@ -23,6 +23,11 @@ data/storage/*.db
 data/storage/*.csv
 data/storage/*.json
 
+# Trusted-path reconciliation reports (scripts/reconcile_magyp_fob.py).
+# Kept as a CI artifact for the evaluation window, not as repo history —
+# a daily JSON commit would be pure noise in data/.
+data/reconciliation/
+
 # Environment / secrets
 .env
 

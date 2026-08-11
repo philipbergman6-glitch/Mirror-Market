@@ -475,6 +475,66 @@ details .det-content { padding: 0 16px 16px; }
   </details>
   {% endif %}
 
+  {% if public_trust %}
+  <details>
+    <summary>Public Trust Metadata</summary>
+    <div class="det-content">
+    <table class="dtable">
+      <tbody>
+        <tr><th>Edition ID</th><td class="num">{{ public_trust.edition_id|e }}</td></tr>
+        <tr><th>Generated</th><td class="num">{{ public_trust.generated_at|e }}</td></tr>
+      </tbody>
+    </table>
+
+    <div class="subhdr" style="font-size:13px; margin-top:16px;">Critical Freshness</div>
+    <table class="dtable">
+      <thead><tr><th>Dataset</th><th>Freshness</th></tr></thead>
+      <tbody>
+        {% for item in public_trust.critical_freshness %}
+        <tr>
+          <td class="num">{{ item.dataset_id|e }}</td>
+          <td>{{ item.freshness|e }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="subhdr" style="font-size:13px; margin-top:16px;">Degraded Datasets</div>
+    {% if public_trust.degraded_dataset_ids %}
+    <table class="dtable">
+      <tbody>
+        {% for dataset_id in public_trust.degraded_dataset_ids %}
+        <tr><td class="num">{{ dataset_id|e }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="alert alert-ok">No degraded public datasets.</div>
+    {% endif %}
+
+    <div class="subhdr" style="font-size:13px; margin-top:16px;">Critical Number Provenance</div>
+    <table class="dtable">
+      <thead>
+        <tr><th>Label</th><th>Source</th><th>Dataset</th><th>As Of</th><th>Quality</th><th>Observation</th><th>Revision</th></tr>
+      </thead>
+      <tbody>
+        {% for item in public_trust.critical_numbers %}
+        <tr>
+          <td>{{ item.label|e }}</td>
+          <td>{{ item.source_id|e }}</td>
+          <td>{{ item.dataset_key|e }}</td>
+          <td class="num">{{ item.as_of_date|e }}</td>
+          <td>{{ item.quality_state|e }}</td>
+          <td class="num">{{ item.observation_id|e }}</td>
+          <td class="num">{{ item.revision_id|e }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+  {% endif %}
+
   <details>
     <summary>Analysis Methodology</summary>
     <div class="det-content">

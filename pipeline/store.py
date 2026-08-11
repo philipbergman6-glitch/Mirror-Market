@@ -15,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 from config import DB_PATH, STORAGE_DIR
-from pipeline.connection import get_connection, is_cloud, maybe_sync
+from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
 from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
 logger = logging.getLogger(__name__)
@@ -195,7 +195,7 @@ def _migrate_forward_curve_pk(conn) -> None:
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for ddl in ALL_SCHEMAS:
             conn.execute(ddl)
         _migrate_usda_pk(conn)
@@ -224,7 +224,7 @@ def clear_database():
         "commodity_freshness", "india_domestic_prices",
         "brazil_spot_prices", "safex_prices", "briefings",
     ]
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for table in tables:
             conn.execute(f"DROP TABLE IF EXISTS {table}")
     logger.info("Database cleared.")
@@ -261,7 +261,7 @@ def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
     """Open a connection and run a transactional upsert. Logs result."""
     if df.empty:
         return 0
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         conn.execute("BEGIN")
         try:
             n = upsert_dataframe(conn, table, df, key_cols)
@@ -315,7 +315,7 @@ def save_fred_data(name: str, series: pd.Series):
     if series.empty:
         return
     if name in _ECONOMIC_SERIES_RESET:
-        with get_connection() as conn:
+        with managed_connection(get_connection()) as conn:
             conn.execute("BEGIN")
             try:
                 conn.execute("DELETE FROM economic WHERE series_name = ?", (name,))
@@ -695,7 +695,7 @@ def save_briefing(
     signals_json = json.dumps(signals or [], default=str)
     snapshot_json = json.dumps(snapshot or {}, default=str)
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         conn.execute(
             """INSERT OR REPLACE INTO briefings
                (briefing_date, text, signals_json, snapshot_json, generated_at)
@@ -733,7 +733,7 @@ def save_freshness(
             f"status must be 'success', 'failed' or 'disabled', got {status!r}"
         )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         prior_success: str | None
         if status == "success":
             prior_success = now
@@ -770,7 +770,7 @@ def update_commodity_freshness():
         ("worldbank_prices", "commodity", "Date"),
         ("forward_curve", "commodity", "fetched_date"),
     ]
-    with get_connection() as conn:
+    with managed_connection(get_connection()) as conn:
         for table, key_col, date_col in table_specs:
             try:
                 rows = conn.execute(
