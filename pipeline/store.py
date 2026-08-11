@@ -116,6 +116,27 @@ def _migrate_gulf_bids_price_change(conn) -> None:
             logger.warning("Could not add price_change column to gulf_bids: %s", exc)
 
 
+def _migrate_gulf_bids_futures_month_high(conn) -> None:
+    """Add the futures_month_high column to gulf_bids if absent. Idempotent.
+
+    A ranged basis quote can span two CBOT contracts ("95.00Q to 100.00X");
+    storing only the low leg's month labelled the high leg with the wrong
+    futures contract (#196). Rows predating this column keep NULL, which
+    readers treat as "same contract as the low leg".
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(gulf_bids)").fetchall()}
+    except Exception:
+        return
+    if cols and "futures_month_high" not in cols:
+        try:
+            conn.execute("ALTER TABLE gulf_bids ADD COLUMN futures_month_high INTEGER")
+        except Exception as exc:
+            logger.warning(
+                "Could not add futures_month_high column to gulf_bids: %s", exc
+            )
+
+
 def _migrate_usda_pk(conn) -> None:
     """Rebuild the usda table with reference_period_desc in the PK. Idempotent.
 
@@ -209,6 +230,7 @@ def init_database():
         _migrate_weather_is_forecast(conn)
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
+        _migrate_gulf_bids_futures_month_high(conn)
         for index_sql in UNIQUE_INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -604,11 +626,16 @@ def save_gulf_bids(df: pd.DataFrame):
         if col not in df.columns:
             df[col] = None
         df[col] = df[col].where(df[col].notna(), None)
+    # A frame predating the split-contract column (#196) quotes both legs
+    # against the same contract by construction — carry the low leg across.
+    if "futures_month_high" not in df.columns:
+        df["futures_month_high"] = df.get("futures_month")
     _save(
         "gulf_bids",
         df[[
             "report_date", "commodity", "location", "delivery", "sale_type",
-            "basis_low", "basis_high", "futures_month", "basis_change",
+            "basis_low", "basis_high", "futures_month", "futures_month_high",
+            "basis_change",
             "price_change", "price_low", "price_high", "average", "year_ago",
             "freight",
         ]],

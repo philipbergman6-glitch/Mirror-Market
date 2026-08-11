@@ -145,6 +145,12 @@ def _num(val: Any) -> float | None:
     return None if math.isnan(f) else f
 
 
+def _int(val: Any) -> int | None:
+    """Coerce a scalar to a plain int, mapping NaN/None/unparseable to None."""
+    num = _num(val)
+    return None if num is None else int(num)
+
+
 def _date_str(val: Any) -> str | None:
     """Render a date-like value as an ISO string, None if missing/invalid."""
     if val is None or (isinstance(val, float) and math.isnan(val)):
@@ -479,6 +485,8 @@ def _gulf_bids_block() -> dict[str, Any]:
                 "basis_low_cents_bu": _num(row["basis_low"]),
                 "basis_high_cents_bu": _num(row["basis_high"]),
                 "futures_month": int(row["futures_month"]),
+                # Both legs' contracts — a ranged quote can span two (#196).
+                "futures_month_high": _int(row.get("futures_month_high")),
                 "avg_price_usd_bu": _num(row["average"]),
                 "year_ago_usd_bu": _num(row["year_ago"]),
             }

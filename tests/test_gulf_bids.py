@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from analysis.briefing.sections.gulf_basis import _basis_phrase
 from fetchers.gulf_bids import _extract_text, _parse_gulf_bids
 from fetchers.usda import _parse_destinations, _parse_port_flows
 from pipeline.results import ScraperShapeError
@@ -46,6 +47,7 @@ def test_gulf_bids_parses_all_sections() -> None:
     assert soy["basis_low"] == 120.0
     assert soy["basis_high"] == 122.0
     assert soy["futures_month"] == 8  # Q = August
+    assert soy["futures_month_high"] == 8  # both legs on the same contract
     assert soy["price_high"] == 13.0
     assert soy["year_ago"] == 10.5275
 
@@ -139,6 +141,51 @@ def test_gulf_bids_live_pdf_keeps_headline_soybean_current_row() -> None:
     assert row["average"] == 12.5563
     assert row["year_ago"] == 10.9775
     assert row["freight"] == "CIF-B"
+
+
+def test_gulf_bids_live_pdf_keeps_both_contract_months() -> None:
+    """The live headline row quotes 95.00Q to 100.00X — two contracts (#196)."""
+    df = _parse_gulf_bids(_live_gulf_text(), today=date(2026, 8, 11))
+    row = df[(df["commodity"] == "Soybeans") & (df["delivery"] == "Current")].iloc[0]
+    assert row["futures_month"] == 8  # Q = August, the +95 leg
+    assert row["futures_month_high"] == 11  # X = November, the +100 leg
+
+
+def test_gulf_bids_wheat_single_quote_repeats_its_month() -> None:
+    """An unranged quote carries the same contract on both legs."""
+    df = _parse_gulf_bids(_GULF_TEXT, today=_TODAY)
+    wheat = df[df["commodity"] == "Wheat"].iloc[0]
+    assert wheat["futures_month"] == wheat["futures_month_high"] == 9  # U = Sep
+
+
+# ── Briefing render of a split-contract quote (#196) ─────────────────────────
+
+
+def _row(**over) -> pd.Series:
+    base = {
+        "basis_low": 95.0, "basis_high": 100.0,
+        "futures_month": 8, "futures_month_high": 11,
+    }
+    return pd.Series({**base, **over})
+
+
+def test_basis_phrase_labels_each_leg_when_contracts_differ() -> None:
+    assert _basis_phrase(_row()) == "+95¢/bu over Aug / +100¢/bu over Nov"
+
+
+def test_basis_phrase_stays_single_month_when_contracts_match() -> None:
+    """~97% of cells don't split — no visual churn on those."""
+    assert _basis_phrase(_row(futures_month_high=8)) == "+95/+100¢/bu over Aug"
+
+
+def test_basis_phrase_unranged_quote_keeps_one_figure() -> None:
+    phrase = _basis_phrase(_row(basis_high=95.0, futures_month_high=8))
+    assert phrase == "+95¢/bu over Aug"
+
+
+def test_basis_phrase_treats_missing_high_month_as_same_contract() -> None:
+    """Rows stored before the column existed carry NULL, not a second month."""
+    assert _basis_phrase(_row(futures_month_high=None)) == "+95/+100¢/bu over Aug"
 
 
 def test_gulf_bids_live_pdf_keeps_every_bid_row() -> None:
