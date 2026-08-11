@@ -13,19 +13,35 @@ logger = logging.getLogger(__name__)
 _MAX_DELIVERIES = 3  # Current + two forward slots keeps the section tight
 
 
+def _basis_phrase(row: pd.Series) -> str:
+    """Basis quote with its contract month(s).
+
+    A ranged quote can span two CBOT contracts ("95.00Q to 100.00X"), in
+    which case each leg is labelled with its own month — pricing the high
+    leg against the low leg's contract is simply the wrong futures (#196).
+    Rows stored before the column existed carry NULL and read as one month.
+    """
+    month_low = calendar.month_abbr[int(row["futures_month"])]
+    high = row.get("futures_month_high")
+    month_high = calendar.month_abbr[int(high)] if pd.notna(high) else month_low
+
+    if row["basis_low"] == row["basis_high"]:
+        return f"{row['basis_low']:+.0f}¢/bu over {month_low}"
+    if month_high != month_low:
+        return (
+            f"{row['basis_low']:+.0f}¢/bu over {month_low} / "
+            f"{row['basis_high']:+.0f}¢/bu over {month_high}"
+        )
+    return f"{row['basis_low']:+.0f}/{row['basis_high']:+.0f}¢/bu over {month_low}"
+
+
 def _format_row(row: pd.Series) -> str:
-    month_abbr = calendar.month_abbr[int(row["futures_month"])]
-    basis = (
-        f"{row['basis_low']:+.0f}¢"
-        if row["basis_low"] == row["basis_high"]
-        else f"{row['basis_low']:+.0f}/{row['basis_high']:+.0f}¢"
-    )
     # AMS leaves the change column blank on some deliveries (#190).
     change = (
         f" ({row['basis_change']})" if pd.notna(row.get("basis_change")) else ""
     )
     line = (
-        f"  {row['delivery']}: {basis}/bu over {month_abbr}{change} | "
+        f"  {row['delivery']}: {_basis_phrase(row)}{change} | "
         f"${row['average']:.2f}/bu"
     )
     usd_mt = to_metric_tons(row["average"] * 100.0, "Soybeans")
