@@ -1,6 +1,12 @@
 """Dependency-free domain vocabulary for Mirror Market's trusted data path."""
 
 from trust.dataset_health import DatasetHealthInput, evaluate_dataset_health, last_expected_publication_date
+from trust.derived import (
+    DerivedCalculation,
+    DerivedInputRequirement,
+    DerivedObservationResult,
+    derive_observation,
+)
 from trust.domain import (
     ArtifactReference,
     CandidateObservation,
@@ -23,6 +29,7 @@ from trust.domain import (
     RawArtifact,
     Run,
     RunStatus,
+    SettlementState,
     Source,
     Timestamp,
     ValidationPolicy,
@@ -97,6 +104,9 @@ __all__ = [
     "DatasetHealthInput",
     "DatasetResult",
     "DatasetResultStatus",
+    "DerivedCalculation",
+    "DerivedInputRequirement",
+    "DerivedObservationResult",
     "DeliveryWindow",
     "Edition",
     "EditionPromotionError",
@@ -133,6 +143,7 @@ __all__ = [
     "RightsPolicy",
     "Run",
     "RunStatus",
+    "SettlementState",
     "RuleFinding",
     "Source",
     "SOY_BENCHMARK_CONTRACTS",
@@ -146,6 +157,7 @@ __all__ = [
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
     "build_query_cache",
+    "derive_observation",
     "evaluate_dataset_health",
     "evaluate_run_status",
     "generic_candidate_quality_rules",

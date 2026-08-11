@@ -82,6 +82,13 @@ class CorrectionDecision(str, Enum):
     REJECT = "reject"
 
 
+class SettlementState(str, Enum):
+    PRE_OPEN = "pre-open"
+    OPEN = "open"
+    ESTIMATED = "estimated"
+    SETTLED = "settled"
+
+
 def _enum(enum_type: type[_EnumT], value: _EnumT | str) -> _EnumT:
     return value if isinstance(value, enum_type) else enum_type(value)
 
@@ -670,6 +677,7 @@ class CandidateObservation:
     source_published_at: Timestamp | None = None
     observed_at: Timestamp | None = None
     effective_date_inferred: bool = False
+    settlement_state: SettlementState | None = None
     candidate_id: str = field(init=False)
     schema_version: ClassVar[int] = SCHEMA_VERSION
 
@@ -684,6 +692,8 @@ class CandidateObservation:
             raise ValueError("candidate identity and artifact must reference the same source and dataset")
         object.__setattr__(self, "parser_version", _text(self.parser_version, "candidate.parser_version"))
         object.__setattr__(self, "parsed_at", _utc(self.parsed_at, "candidate.parsed_at"))
+        if self.settlement_state is not None:
+            object.__setattr__(self, "settlement_state", _enum(SettlementState, self.settlement_state))
         object.__setattr__(
             self,
             "candidate_id",
@@ -698,6 +708,7 @@ class CandidateObservation:
                     "source_published_at": (self.source_published_at.to_dict() if self.source_published_at else None),
                     "observed_at": self.observed_at.to_dict() if self.observed_at else None,
                     "effective_date_inferred": self.effective_date_inferred,
+                    "settlement_state": self.settlement_state.value if self.settlement_state else None,
                 },
             ),
         )
@@ -715,6 +726,7 @@ class CandidateObservation:
             "source_published_at": (self.source_published_at.to_dict() if self.source_published_at else None),
             "observed_at": self.observed_at.to_dict() if self.observed_at else None,
             "effective_date_inferred": self.effective_date_inferred,
+            "settlement_state": self.settlement_state.value if self.settlement_state else None,
         }
 
     @classmethod
@@ -733,6 +745,9 @@ class CandidateObservation:
             ),
             observed_at=(Timestamp.from_dict(observed) if isinstance(observed, Mapping) else None),
             effective_date_inferred=bool(data["effective_date_inferred"]),
+            settlement_state=(
+                SettlementState(str(data["settlement_state"])) if data.get("settlement_state") is not None else None
+            ),
         )
         _check_serialized_id(data, "candidate_id", result.candidate_id)
         return result
@@ -750,12 +765,16 @@ class ObservationRevision:
     source_published_at: Timestamp | None = None
     observed_at: Timestamp | None = None
     effective_date_inferred: bool = False
+    settlement_state: SettlementState | None = None
     open_value: Decimal | int | str | None = None
     high_value: Decimal | int | str | None = None
     low_value: Decimal | int | str | None = None
     close_value: Decimal | int | str | None = None
     volume: Decimal | int | str | None = None
     finding_ids: tuple[str, ...] = ()
+    calculation_id: str | None = None
+    calculation_version: str | None = None
+    input_revision_ids: tuple[str, ...] = ()
     supersedes_revision_id: str | None = None
     correction_type: str | None = None
     correction_reason: str | None = None
@@ -766,8 +785,19 @@ class ObservationRevision:
         object.__setattr__(self, "value", _decimal(self.value, "revision.value"))
         object.__setattr__(self, "ingested_at", _utc(self.ingested_at, "revision.ingested_at"))
         object.__setattr__(self, "quality_state", _enum(QualityState, self.quality_state))
-        if self.quality_state is not QualityState.LEGACY and (self.artifact is None or self.parser_version is None):
-            raise ValueError("non-legacy revisions require an artifact and parser version")
+        if (self.calculation_id is None) != (self.calculation_version is None):
+            raise ValueError("derived revisions require calculation id and version together")
+        is_derived = self.calculation_id is not None
+        if self.quality_state is not QualityState.LEGACY and not is_derived and (
+            self.artifact is None or self.parser_version is None
+        ):
+            raise ValueError("non-legacy source revisions require an artifact and parser version")
+        if is_derived and self.artifact is not None:
+            raise ValueError("derived revisions cannot reference a raw artifact")
+        if is_derived and not self.input_revision_ids:
+            raise ValueError("derived revisions require input revision ids")
+        if not is_derived and self.input_revision_ids:
+            raise ValueError("source revisions cannot record derived input revision ids")
         if self.artifact is not None and (
             self.artifact.source_id != self.identity.source_id
             or self.artifact.dataset_id != self.identity.dataset_id
@@ -776,6 +806,24 @@ class ObservationRevision:
             raise ValueError("revision identity and artifact must reference the same source and dataset")
         if self.parser_version is not None:
             object.__setattr__(self, "parser_version", _text(self.parser_version, "revision.parser_version"))
+        if self.settlement_state is not None:
+            object.__setattr__(self, "settlement_state", _enum(SettlementState, self.settlement_state))
+        if self.calculation_id is not None:
+            object.__setattr__(self, "calculation_id", _key(self.calculation_id, "revision.calculation_id"))
+            object.__setattr__(
+                self,
+                "calculation_version",
+                _text(cast(str, self.calculation_version), "revision.calculation_version"),
+            )
+        object.__setattr__(
+            self,
+            "input_revision_ids",
+            _sorted_identifiers(
+                self.input_revision_ids,
+                "revision.input_revision_ids",
+                "rev",
+            ),
+        )
         for field_name in ("open_value", "high_value", "low_value", "close_value", "volume"):
             value = getattr(self, field_name)
             if value is not None:
@@ -811,11 +859,16 @@ class ObservationRevision:
             "source_published_at": self.source_published_at.to_dict() if self.source_published_at else None,
             "observed_at": self.observed_at.to_dict() if self.observed_at else None,
             "effective_date_inferred": self.effective_date_inferred,
+            "settlement_state": self.settlement_state.value if self.settlement_state else None,
             "finding_ids": list(self.finding_ids),
             "supersedes_revision_id": self.supersedes_revision_id,
             "correction_type": self.correction_type,
             "correction_reason": self.correction_reason,
         }
+        if self.calculation_id is not None:
+            result["calculation_id"] = self.calculation_id
+            result["calculation_version"] = self.calculation_version
+            result["input_revision_ids"] = list(self.input_revision_ids)
         for field_name in decimal_fields:
             value = getattr(self, field_name)
             result[field_name] = _decimal_text(value) if value is not None else None
@@ -850,12 +903,18 @@ class ObservationRevision:
             else None,
             observed_at=Timestamp.from_dict(observed) if isinstance(observed, Mapping) else None,
             effective_date_inferred=bool(data.get("effective_date_inferred", False)),
+            settlement_state=(
+                SettlementState(str(data["settlement_state"])) if data.get("settlement_state") is not None else None
+            ),
             open_value=data.get("open_value"),
             high_value=data.get("high_value"),
             low_value=data.get("low_value"),
             close_value=data.get("close_value"),
             volume=data.get("volume"),
             finding_ids=tuple(data.get("finding_ids", ())),
+            calculation_id=data.get("calculation_id"),
+            calculation_version=data.get("calculation_version"),
+            input_revision_ids=tuple(data.get("input_revision_ids", ())),
             supersedes_revision_id=data.get("supersedes_revision_id"),
             correction_type=data.get("correction_type"),
             correction_reason=data.get("correction_reason"),
