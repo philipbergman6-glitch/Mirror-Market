@@ -243,7 +243,14 @@ def _two_oil_panel(data: dict | None, *, left: tuple[str, str], right: tuple[str
             "as_of": data.get(f"{key}_as_of"),
             "native": data.get(f"{key}_cny") and f"CNY {data[f'{key}_cny']:,.0f}/MT",
         })
-    return {"legs": legs} if legs else None
+    if not legs:
+        return None
+    # Every oil panel renders through the same template loop, which asks for
+    # a spread; only the rapeseed panel has one. Absent keys are a hard
+    # UndefinedError under StrictUndefined — that is what tombstoned the
+    # headline page and with it the whole deploy (#226). None means "no
+    # spread on this pair"; the template skips the block.
+    return {"legs": legs, "spread_usd_mt": None, "spread_note": None}
 
 
 # ---------------------------------------------------------------------------
