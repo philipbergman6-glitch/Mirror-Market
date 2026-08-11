@@ -25,6 +25,7 @@ from trust import (
     Finding,
     FindingSeverity,
     FreshnessState,
+    FxPairIdentity,
     ObservationIdentity,
     ObservationRevision,
     Promotion,
@@ -193,10 +194,48 @@ def test_nested_value_objects_round_trip() -> None:
     timestamp = Timestamp(NOW, inferred=True)
     window = DeliveryWindow(date(2026, 8, 1), date(2026, 8, 31), "August")
     contract = ContractIdentity("cme", "zsx26", "2026-11")
+    fx_pair = FxPairIdentity("brl", "usd")
 
     assert Timestamp.from_dict(timestamp.to_dict()) == timestamp
     assert DeliveryWindow.from_dict(window.to_dict()) == window
     assert ContractIdentity.from_dict(contract.to_dict()) == contract
+    assert FxPairIdentity.from_dict(fx_pair.to_dict()) == fx_pair
+    assert fx_pair.pair == "BRL/USD"
+    assert fx_pair.unit == "usd-per-brl"
+
+
+def test_fx_pair_orientation_is_part_of_observation_identity(values: dict[str, object]) -> None:
+    dataset = Dataset(source_id=values["source"].source_id, key="fx-brl-usd", name="BRL/USD daily rate")
+    correct = ObservationIdentity(
+        source_id=values["source"].source_id,
+        dataset_id=dataset.dataset_id,
+        dataset_key=dataset.key,
+        commodity="foreign-exchange",
+        product_form="brl-usd",
+        venue="yahoo-finance",
+        price_type="market-close",
+        currency="USD",
+        unit="usd-per-brl",
+        fx_pair=FxPairIdentity("BRL", "USD"),
+        effective_date=date(2026, 8, 10),
+    )
+    inverted = ObservationIdentity(
+        source_id=values["source"].source_id,
+        dataset_id=dataset.dataset_id,
+        dataset_key=dataset.key,
+        commodity="foreign-exchange",
+        product_form="usd-brl",
+        venue="yahoo-finance",
+        price_type="market-close",
+        currency="BRL",
+        unit="brl-per-usd",
+        fx_pair=FxPairIdentity("USD", "BRL"),
+        effective_date=date(2026, 8, 10),
+    )
+
+    assert correct.observation_id != inverted.observation_id
+    with pytest.raises(ValueError, match="unit"):
+        replace(correct, unit="brl-per-usd")
 
 
 @pytest.mark.parametrize(

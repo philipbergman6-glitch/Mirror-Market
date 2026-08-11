@@ -364,6 +364,52 @@ class ContractIdentity:
 
 
 @dataclass(frozen=True)
+class FxPairIdentity:
+    base_currency: str
+    quote_currency: str
+    quote_convention: str = "quote-per-base"
+
+    def __post_init__(self) -> None:
+        for field_name in ("base_currency", "quote_currency"):
+            currency = _text(getattr(self, field_name), f"fx_pair.{field_name}").upper()
+            if not re.fullmatch(r"[A-Z]{3}", currency):
+                raise ValueError(f"fx_pair.{field_name} must be a three-letter code")
+            object.__setattr__(self, field_name, currency)
+        if self.base_currency == self.quote_currency:
+            raise ValueError("fx_pair currencies must be distinct")
+        object.__setattr__(self, "quote_convention", _key(self.quote_convention, "fx_pair.quote_convention"))
+        if self.quote_convention != "quote-per-base":
+            raise ValueError("fx_pair.quote_convention must be quote-per-base")
+
+    @property
+    def pair(self) -> str:
+        return f"{self.base_currency}/{self.quote_currency}"
+
+    @property
+    def product_form(self) -> str:
+        return f"{self.base_currency.lower()}-{self.quote_currency.lower()}"
+
+    @property
+    def unit(self) -> str:
+        return f"{self.quote_currency.lower()}-per-{self.base_currency.lower()}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "base_currency": self.base_currency,
+            "quote_currency": self.quote_currency,
+            "quote_convention": self.quote_convention,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> FxPairIdentity:
+        return cls(
+            base_currency=str(data["base_currency"]),
+            quote_currency=str(data["quote_currency"]),
+            quote_convention=str(data.get("quote_convention", "quote-per-base")),
+        )
+
+
+@dataclass(frozen=True)
 class Source:
     key: str
     name: str
@@ -578,6 +624,7 @@ class ObservationIdentity:
     venue: str | None = None
     location: str | None = None
     contract: ContractIdentity | None = None
+    fx_pair: FxPairIdentity | None = None
     delivery_window: DeliveryWindow | None = None
     source_record_id: str | None = None
     observation_id: str = field(init=False)
@@ -605,8 +652,18 @@ class ObservationIdentity:
             object.__setattr__(self, "venue", _key(self.venue, "observation.venue"))
         if self.location is not None:
             object.__setattr__(self, "location", _key(self.location, "observation.location"))
-        if self.contract is not None and self.delivery_window is not None:
-            raise ValueError("observation identity cannot combine a contract and delivery window")
+        exclusive_markers = sum(marker is not None for marker in (self.contract, self.fx_pair, self.delivery_window))
+        if exclusive_markers > 1:
+            raise ValueError(
+                "observation identity cannot combine a contract and delivery window, or combine them with an FX pair"
+            )
+        if self.fx_pair is not None:
+            if self.currency != self.fx_pair.quote_currency:
+                raise ValueError("FX observation currency must match the pair quote currency")
+            if self.product_form != self.fx_pair.product_form:
+                raise ValueError("FX observation product_form must match the pair orientation")
+            if self.unit != self.fx_pair.unit:
+                raise ValueError("FX observation unit must match the pair quote convention")
         if self.source_record_id is not None:
             object.__setattr__(self, "source_record_id", _text(self.source_record_id, "observation.source_record_id"))
         identity = self.identity_dict()
@@ -627,6 +684,7 @@ class ObservationIdentity:
             "currency": self.currency,
             "unit": self.unit,
             "contract": self.contract.to_dict() if self.contract else None,
+            "fx_pair": self.fx_pair.to_dict() if self.fx_pair else None,
             "delivery_window": self.delivery_window.to_dict() if self.delivery_window else None,
             "effective_date": self.effective_date.isoformat(),
             "source_record_id": self.source_record_id,
@@ -644,6 +702,7 @@ class ObservationIdentity:
     def from_dict(cls, data: Mapping[str, Any]) -> ObservationIdentity:
         _envelope(data, "observation-identity")
         contract = data.get("contract")
+        fx_pair = data.get("fx_pair")
         delivery_window = data.get("delivery_window")
         result = cls(
             source_id=str(data["source_id"]),
@@ -658,6 +717,7 @@ class ObservationIdentity:
             venue=data.get("venue"),
             location=data.get("location"),
             contract=ContractIdentity.from_dict(contract) if isinstance(contract, Mapping) else None,
+            fx_pair=FxPairIdentity.from_dict(fx_pair) if isinstance(fx_pair, Mapping) else None,
             delivery_window=DeliveryWindow.from_dict(delivery_window) if isinstance(delivery_window, Mapping) else None,
             source_record_id=data.get("source_record_id"),
         )

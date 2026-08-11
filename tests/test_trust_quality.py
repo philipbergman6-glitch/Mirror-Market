@@ -13,6 +13,7 @@ from trust import (
     ContractIdentity,
     Dataset,
     FindingSeverity,
+    FxPairIdentity,
     NumericValidationPolicy,
     QualityRule,
     QualityRuleContext,
@@ -243,7 +244,7 @@ def test_generic_validators_accept_pilot_contract_identity_minimums(contract) ->
         **dict(contract.identity.fixed_fields),
     }
     for field_name in contract.identity.required_fields:
-        identity.setdefault(field_name, _identity_value(field_name))
+        identity.setdefault(field_name, _identity_value(field_name, identity))
 
     result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
         run_id=_ids()[0],
@@ -251,7 +252,7 @@ def test_generic_validators_accept_pilot_contract_identity_minimums(contract) ->
         subject_id="row-1",
         subject={
             "identity": identity,
-            "value": "1.25",
+            "value": _valid_value(contract),
             "settlement_state": "settled",
             "parsed_at": NOW,
             "source_published_at": {"value": NOW - timedelta(hours=1), "inferred": False},
@@ -404,6 +405,7 @@ def test_generic_temporal_validator_requires_distinct_inference_labels_and_timez
         "effective_date": date(2026, 8, 10),
         **dict(contract.identity.fixed_fields),
     }
+    identity["fx_pair"] = FxPairIdentity("BRL", "USD")
 
     result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
         run_id=_ids()[0],
@@ -467,6 +469,74 @@ def test_generic_numeric_validator_rejects_impossible_sign_and_quarantines_confi
     assert out_of_range.findings[0].rule_id == "value.range"
 
 
+def test_fx_orientation_rejects_inverted_pair_examples() -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "fx-brl-usd")
+    identity = {
+        **_minimal_identity(contract),
+        "product_form": "usd-brl",
+        "currency": "BRL",
+        "unit": "brl-per-usd",
+        "fx_pair": {"base_currency": "USD", "quote_currency": "BRL", "quote_convention": "quote-per-base"},
+    }
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id="row-1",
+        subject={"identity": identity, "value": "5.40", "parsed_at": NOW},
+    )
+
+    assert result.disposition is QualityState.REJECTED
+    assert any(finding.rule_id == "fx.orientation" for finding in result.findings)
+
+
+@pytest.mark.parametrize(
+    ("pair", "bad_value"),
+    [
+        ("NGN/USD", "1500"),
+        ("IDR/USD", "16000"),
+        ("ARS/USD", "900"),
+        ("ZAR/USD", "18"),
+    ],
+)
+def test_fx_historical_anomaly_fixtures_cannot_be_accepted_silently(pair: str, bad_value: str) -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "fx-zar-usd")
+    base, quote = pair.split("/")
+    identity = {
+        **_minimal_identity(contract),
+        "product_form": f"{base.lower()}-{quote.lower()}",
+        "currency": quote,
+        "unit": f"{quote.lower()}-per-{base.lower()}",
+        "fx_pair": {"base_currency": base, "quote_currency": quote, "quote_convention": "quote-per-base"},
+    }
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id=pair,
+        subject={"identity": identity, "value": bad_value, "parsed_at": NOW},
+    )
+
+    assert result.disposition in (QualityState.QUARANTINED, QualityState.REJECTED)
+    assert any(finding.rule_id == "fx.plausible" for finding in result.findings)
+
+
+def test_fx_daily_move_uses_last_known_good_rate() -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "fx-inr-usd")
+    identity = _minimal_identity(contract)
+
+    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+        run_id=_ids()[0],
+        dataset_id=contract.dataset.dataset_id,
+        subject_id="row-1",
+        subject={"identity": identity, "value": "0.018", "parsed_at": NOW},
+        dataset_context={"previous_value": "0.012", "daily_move_quarantine_threshold": "0.20"},
+    )
+
+    assert result.disposition is QualityState.QUARANTINED
+    assert any(finding.rule_id == "fx.daily-move" for finding in result.findings)
+
+
 def test_generic_identity_validator_rejects_unknown_extra_identity_fields() -> None:
     contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "fx-zar-usd")
     identity = {**_minimal_identity(contract), "basis": "close"}
@@ -500,11 +570,11 @@ def _minimal_identity(contract) -> dict[str, object]:
         **dict(contract.identity.fixed_fields),
     }
     for field_name in contract.identity.required_fields:
-        identity.setdefault(field_name, _identity_value(field_name))
+        identity.setdefault(field_name, _identity_value(field_name, identity))
     return identity
 
 
-def _identity_value(field_name: str) -> object:
+def _identity_value(field_name: str, identity: dict[str, object] | None = None) -> object:
     if field_name == "commodity":
         return "soybean"
     if field_name == "product_form":
@@ -521,6 +591,10 @@ def _identity_value(field_name: str) -> object:
         return "usd-mt"
     if field_name == "contract":
         return ContractIdentity("cme", "ZSX26", "2026-11")
+    if field_name == "fx_pair":
+        product_form = str((identity or {}).get("product_form", "brl-usd"))
+        base, quote = product_form.upper().split("-", maxsplit=1)
+        return FxPairIdentity(base, quote)
     if field_name == "delivery_window":
         return {"start": date(2026, 8, 1), "end": date(2026, 8, 31)}
     if field_name == "source_record_id":
@@ -528,3 +602,16 @@ def _identity_value(field_name: str) -> object:
     if field_name == "effective_date":
         return date(2026, 8, 10)
     raise AssertionError(field_name)
+
+
+def _valid_value(contract) -> str:
+    key = contract.dataset.key
+    if key == "fx-brl-usd":
+        return "0.184"
+    if key == "fx-cny-usd":
+        return "0.139"
+    if key == "fx-inr-usd":
+        return "0.012"
+    if key == "fx-zar-usd":
+        return "0.056"
+    return "1.25"

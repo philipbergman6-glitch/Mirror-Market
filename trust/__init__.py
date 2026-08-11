@@ -22,6 +22,7 @@ from trust.domain import (
     Finding,
     FindingSeverity,
     FreshnessState,
+    FxPairIdentity,
     ObservationIdentity,
     ObservationRevision,
     Promotion,
@@ -34,6 +35,13 @@ from trust.domain import (
     Timestamp,
     ValidationPolicy,
     evaluate_run_status,
+)
+from trust.fx import (
+    RequiredFxCoverage,
+    decimal_fx_rate,
+    evaluate_required_fx_coverage,
+    fx_pair_from_required_pair,
+    trusted_fx_frame,
 )
 from trust.legacy_importer import LegacyImportSummary, import_v1_history
 from trust.quality import (
@@ -116,6 +124,7 @@ __all__ = [
     "FX_CONTRACTS",
     "FreshnessState",
     "FreshnessContract",
+    "FxPairIdentity",
     "GitDirectoryTrustRepository",
     "IdentityContract",
     "ImmutableRecordConflict",
@@ -135,6 +144,7 @@ __all__ = [
     "QualityRuleEngine",
     "RawArtifact",
     "RawRetention",
+    "RequiredFxCoverage",
     "RepositoryFormatError",
     "RegistryValidationError",
     "REQUIRED_FX_PAIRS",
@@ -157,10 +167,14 @@ __all__ = [
     "ValidationPolicy",
     "YAHOO_FINANCE_SOURCE",
     "build_query_cache",
+    "decimal_fx_rate",
     "derive_observation",
     "evaluate_dataset_health",
+    "evaluate_required_fx_coverage",
     "evaluate_run_status",
+    "fx_pair_from_required_pair",
     "generic_candidate_quality_rules",
     "import_v1_history",
     "last_expected_publication_date",
+    "trusted_fx_frame",
 ]

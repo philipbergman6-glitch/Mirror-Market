@@ -16,6 +16,7 @@ from trust.domain import (
     ContractIdentity,
     Finding,
     FindingSeverity,
+    FxPairIdentity,
     ObservationIdentity,
     ObservationRevision,
     QualityState,
@@ -224,6 +225,13 @@ def generic_candidate_quality_rules(
         rules.append(
             QualityRule("price.daily-move", version, "candidate", FindingSeverity.QUARANTINE, _price_daily_move)
         )
+    if "fx.orientation" in requested_rules:
+        rules.append(
+            QualityRule("fx.orientation", version, "candidate", FindingSeverity.REJECT, _fx_orientation(contract))
+        )
+        rules.append(QualityRule("fx.plausible", version, "candidate", FindingSeverity.QUARANTINE, _fx_plausible))
+    if "fx.daily-move" in requested_rules:
+        rules.append(QualityRule("fx.daily-move", version, "candidate", FindingSeverity.QUARANTINE, _price_daily_move))
     return tuple(rules)
 
 
@@ -249,6 +257,7 @@ _IDENTITY_FIELDS = {
     "venue",
     "location",
     "contract",
+    "fx_pair",
     "delivery_window",
     "source_record_id",
 }
@@ -294,6 +303,7 @@ def _identity_from_object(identity: ObservationIdentity) -> Mapping[str, Any]:
         "venue": identity.venue,
         "location": identity.location,
         "contract": identity.contract,
+        "fx_pair": identity.fx_pair,
         "delivery_window": identity.delivery_window,
         "source_record_id": identity.source_record_id,
     }
@@ -623,6 +633,99 @@ def _price_daily_move(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
             ),
         )
     return ()
+
+
+def _fx_orientation(contract: DatasetContract) -> RuleEvaluator:
+    fixed = dict(contract.identity.fixed_fields) if contract.identity is not None else {}
+
+    def evaluate(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+        identity = _identity_mapping(context.subject)
+        pair = _fx_pair(identity.get("fx_pair"))
+        if pair is None:
+            return (RuleFinding(evidence={"field": "fx_pair"}, message="FX pair identity is required"),)
+        expected = {
+            "product_form": fixed.get("product_form", pair.product_form),
+            "unit": fixed.get("unit", pair.unit),
+            "currency": fixed.get("currency", pair.quote_currency.lower()),
+        }
+        pair_implied = {
+            "product_form": pair.product_form,
+            "unit": pair.unit,
+            "currency": pair.quote_currency.lower(),
+        }
+        observed = {
+            "product_form": _normalized_text_value(identity.get("product_form")),
+            "unit": _normalized_text_value(identity.get("unit")),
+            "currency": _normalized_text_value(identity.get("currency")),
+        }
+        mismatches = {
+            field_name: observed_value
+            for field_name, observed_value in observed.items()
+            if observed_value is not None
+            and (observed_value != expected[field_name] or pair_implied[field_name] != expected[field_name])
+        }
+        if mismatches:
+            return (
+                RuleFinding(
+                    evidence={
+                        "pair": pair.pair,
+                        "quote_convention": pair.quote_convention,
+                        "expected": expected,
+                        "pair_implied": pair_implied,
+                        "observed": mismatches,
+                    },
+                    message="FX observation orientation does not match its dataset pair and quote convention",
+                ),
+            )
+        return ()
+
+    return evaluate
+
+
+def _fx_plausible(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    value = _candidate_decimal(context)
+    pair = _fx_pair(_identity_mapping(context.subject).get("fx_pair"))
+    if value is None or pair is None:
+        return ()
+    bounds = _FX_PLAUSIBLE_BOUNDS.get(pair.pair)
+    if bounds is None:
+        return ()
+    minimum, maximum = bounds
+    if minimum <= value <= maximum:
+        return ()
+    return (
+        RuleFinding(
+            evidence={
+                "pair": pair.pair,
+                "observed": str(value),
+                "minimum": str(minimum),
+                "maximum": str(maximum),
+            },
+            message="FX rate is outside the pair plausibility range",
+        ),
+    )
+
+
+_FX_PLAUSIBLE_BOUNDS: Mapping[str, tuple[Decimal, Decimal]] = {
+    "ARS/USD": (Decimal("0.0005"), Decimal("0.02")),
+    "BRL/USD": (Decimal("0.10"), Decimal("0.35")),
+    "CNY/USD": (Decimal("0.10"), Decimal("0.20")),
+    "IDR/USD": (Decimal("0.00003"), Decimal("0.00012")),
+    "INR/USD": (Decimal("0.005"), Decimal("0.025")),
+    "NGN/USD": (Decimal("0.0001"), Decimal("0.01")),
+    "ZAR/USD": (Decimal("0.03"), Decimal("0.10")),
+}
+
+
+def _fx_pair(value: Any) -> FxPairIdentity | None:
+    if isinstance(value, FxPairIdentity):
+        return value
+    if not isinstance(value, Mapping):
+        return None
+    try:
+        return FxPairIdentity.from_dict(value)
+    except (KeyError, ValueError):
+        return None
 
 
 def _previous_value(context: QualityRuleContext) -> Decimal | None:
