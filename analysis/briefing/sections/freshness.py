@@ -22,22 +22,40 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
 
         for _, row in freshness.iterrows():
             layer = row["layer_name"]
+            status = row.get("status")
+            status = status if isinstance(status, str) else "success"
+            last = row["last_success"]
+
+            # An intentionally disabled layer is neither fresh nor an outage.
+            # The dashboard gives it its own bucket and excludes it from the
+            # counts; the briefing stays silent about it for the same reason —
+            # warning every day about a layer we chose to switch off trains
+            # the reader to skip this whole block.
+            if status == "disabled":
+                continue
+
             # A failed latest attempt means the briefing is showing whatever
             # the last good fetch left behind — flag it even if that data is
             # still inside the staleness window (dashboard path already does).
-            status = row.get("status")
-            if isinstance(status, str) and status == "failed":
-                layer_warnings.append(
-                    f"  WARNING: {layer} last fetch FAILED — showing older data"
-                )
+            if status == "failed":
+                if pd.notna(last):
+                    days_old = (now - last).days
+                    layer_warnings.append(
+                        f"  WARNING: {layer} last fetch FAILED — "
+                        f"showing data from {days_old} days ago"
+                    )
+                else:
+                    layer_warnings.append(
+                        f"  WARNING: {layer} last fetch FAILED — never succeeded"
+                    )
                 continue
+
             # Layers publish on different cadences — weekly COT being 6 days
             # old is by design, not an outage.
             limit_days = FRESHNESS_WARNING_DAYS_BY_LAYER.get(
                 layer, FRESHNESS_WARNING_DAYS
             )
             threshold = timedelta(days=limit_days)
-            last = row["last_success"]
             if pd.notna(last):
                 age = now - last
                 if age > threshold:
@@ -45,6 +63,13 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
                     layer_warnings.append(
                         f"  WARNING: {layer} data is {days_old} days old"
                     )
+            else:
+                # No successful fetch on record and the last attempt did not
+                # fail — an empty layer that never produced data. Silent
+                # before; it is the one case the dashboard also renders "never".
+                layer_warnings.append(
+                    f"  WARNING: {layer} has never fetched successfully"
+                )
 
     if layer_warnings:
         sections.append("DATA FRESHNESS WARNINGS:\n" + "\n".join(layer_warnings))
