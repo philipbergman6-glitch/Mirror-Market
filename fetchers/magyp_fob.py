@@ -13,20 +13,39 @@ Why it matters:
     (Rosario/San Lorenzo) export market a physical buyer would compare
     against Paranaguá FOB and Gulf CIF.
 
+    The same circular carries **crude sunflower oil** (#162), which is
+    Argentina's contribution to the four-oil veg-oil board: no exchange
+    anywhere lists a sunflower contract on a free feed, so this
+    administered FOB is the only daily sunflower benchmark the stack can
+    have. Sunflower enters on the oil leg only — the seed and meal
+    positions are administered step-functions that render as levels, not
+    lines (#147).
+
 Series construction:
     One request per date (``?Fecha=dd/mm/yyyy``, business days only —
     the fetcher walks back up to ``MAGYP_FOB_LOOKBACK_DAYS`` calendar
     days to find the latest circular). Each response carries one row
     per NCM tariff position per shipment window; only the bulk
-    ("granel") soy-complex positions in ``MAGYP_FOB_POSITIONS`` are
-    stored, in USD/MT as published (no unit conversion needed).
+    ("granel") positions in ``MAGYP_FOB_POSITIONS`` are stored, in
+    USD/MT as published (no unit conversion needed).
+
+    The service publishes **no description field** — a position is a
+    bare NCM code — so every mapping is cross-checked numerically
+    against the labelled datos.gob.ar mirror rather than read off the
+    nomenclature. See ``MAGYP_FOB_POSITIONS`` in config.py for the
+    method and the result.
 
 Parser strategy:
-    A response missing the ``posts`` key, or a published day where none
-    of the mapped positions appear, raises ScraperShapeError — the
-    nomenclature or schema changed and silence would be worse than a
-    crash. An empty ``posts`` list is a normal holiday/weekend outcome
-    and just walks back one more day.
+    Three shape errors, each a way this layer could otherwise go quietly
+    wrong. A response missing the ``posts`` key, or a published day
+    where *no* mapped position appears, means the schema or nomenclature
+    changed. A published day missing *one* product means that product's
+    SIM line moved — the case that would otherwise go silently dark,
+    since the surviving positions keep the layer green. And crude
+    sunflower oil's three SIM lines quoting different prices means the
+    one line we store has stopped standing for the others. An empty
+    ``posts`` list is a normal holiday/weekend outcome and just walks
+    back one more day.
 """
 
 from __future__ import annotations
@@ -42,6 +61,7 @@ from config import (
     MAGYP_FOB_LOOKBACK_DAYS,
     MAGYP_FOB_POSITIONS,
     MAGYP_FOB_URL,
+    MAGYP_SUNFLOWER_OIL_SIBLINGS,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
 )
@@ -132,9 +152,75 @@ def _parse_posts(posts: list[dict]) -> pd.DataFrame:
     if posts and not rows:
         raise ScraperShapeError(
             f"MAGyP FOB: {len(posts)} posts published but none matched the "
-            "configured soy positions — NCM nomenclature changed"
+            "configured positions — NCM nomenclature changed"
         )
+
+    if posts:
+        _check_sunflower_siblings_agree(posts, rows)
     return pd.DataFrame(rows)
+
+
+def _check_every_product_present(df: pd.DataFrame) -> None:
+    """Every configured product must appear in the day's circular.
+
+    Without this, a single retired SIM line goes *silently dark*: the other
+    positions still match, so ``_parse_posts``' "none matched" guard never
+    fires and the layer keeps reporting success while one leg quietly stops
+    updating. Verified safe to demand — all four products printed on every
+    one of the 66 circulars published 2026-05-01 -> 2026-08-11.
+
+    This lives on the fetch path rather than in ``_parse_posts`` because it
+    is a statement about *the day's accepted circular*, not about parsing:
+    the trust adapter and the reconcile script parse deliberately partial
+    fixtures, and the trust path polices the same completeness through its
+    own contract (``MAGYP_FOB_CONTRACT.coverage``, minimum_coverage=1).
+    """
+    expected = set(MAGYP_FOB_POSITIONS.values())
+    missing = expected - set(df["product"].astype(str))
+    if missing:
+        raise ScraperShapeError(
+            "MAGyP FOB: circular published without "
+            f"{sorted(missing)} — the position code(s) for those products "
+            "changed, or the product was withdrawn"
+        )
+
+
+def _check_sunflower_siblings_agree(
+    posts: list[dict], rows: list[dict[str, object]]
+) -> None:
+    """Crude sunflower oil's three SIM lines must still carry one price.
+
+    Only 15121110310E is stored (see MAGYP_FOB_POSITIONS). That is only
+    honest while the siblings agree with it — if MAGyP ever prices them
+    apart, the one we store stops being "the" crude sunflower oil FOB and
+    somebody has to choose deliberately. Crash rather than pick silently.
+    """
+    stored = {
+        (str(r["ship_from"]), str(r["ship_to"])): r["price_usd_mt"]
+        for r in rows
+        if r["product"] == "Sunflower Oil"
+    }
+    if not stored:
+        return
+    for post in posts:
+        if str(post.get("posicion", "")) not in MAGYP_SUNFLOWER_OIL_SIBLINGS:
+            continue
+        try:
+            window = (
+                f"{int(post['añoDesde']):04d}-{int(post['mesDesde']):02d}",
+                f"{int(post['añoHasta']):04d}-{int(post['mesHasta']):02d}",
+            )
+            price = float(post["precio"])
+        except (KeyError, TypeError, ValueError):
+            continue  # a malformed sibling is not evidence of a split
+        ours = stored.get(window)
+        if ours is not None and abs(float(ours) - price) > 0.005:
+            raise ScraperShapeError(
+                "MAGyP FOB: crude sunflower oil SIM lines disagree for "
+                f"shipment {window[0]}/{window[1]} — stored 15121110310E "
+                f"${ours}/MT vs {post['posicion']} ${price}/MT. They have "
+                "carried one price until now; pick the leg deliberately."
+            )
 
 
 def fetch_magyp_fob() -> FetchResult:
@@ -158,6 +244,7 @@ def fetch_magyp_fob() -> FetchResult:
             df = _parse_posts(posts)
             if df.empty:
                 continue
+            _check_every_product_present(df)
             logger.info(
                 "MAGyP FOB: circular %s — %d soy rows, bean spot $%.0f/MT",
                 day, len(df),

@@ -688,7 +688,10 @@ def _pilot_contract(
 MAGYP_FOB_CONTRACT = _pilot_contract(
     source=MAGYP_SOURCE,
     key="official-soy-fob",
-    name="Official soy-complex FOB prices",
+    # Dataset *key* is deliberately unchanged though the contents widened to
+    # sunflower (#162): the key is this dataset's stored identity, and
+    # renaming it would orphan every observation already recorded under it.
+    name="Official soy-complex and sunflower oil FOB prices",
     cadence=_BUSINESS_DAILY_ARGENTINA,
     required_fields=(
         "commodity",
@@ -707,7 +710,10 @@ MAGYP_FOB_CONTRACT = _pilot_contract(
         "currency": "usd",
         "unit": "usd-mt",
     },
-    expected_keys=("soybean:beans", "soybean:meal", "soybean:oil"),
+    # Full coverage is demanded of sunflower too: crude sunflower oil printed
+    # on all 66 circulars published 2026-05-01 -> 2026-08-11, so a missing
+    # sunflower key is an outage, not an off-day (#162).
+    expected_keys=("soybean:beans", "soybean:meal", "soybean:oil", "sunflower:oil"),
     coverage_key_fields=("commodity", "product_form"),
     unit="usd-mt",
     criticality=Criticality.SUPPORTING,

@@ -38,10 +38,14 @@ PARSER_VERSION = "magyp-fob/trusted-v1"
 RUN_CODE_REVISION = "mirror-market-magyp-fob-trusted-v1"
 MEDIA_TYPE = "application/json"
 
-_PRODUCT_FORMS = {
-    "Soybeans": "beans",
-    "Soybean Meal": "meal",
-    "Soybean Oil": "oil",
+# product -> (commodity, product_form). The commodity was a hard-coded
+# "soybean" until #162 put crude sunflower oil on the same circular; a
+# second commodity under one dataset makes it a lookup, not a constant.
+_PRODUCT_IDENTITY = {
+    "Soybeans": ("soybean", "beans"),
+    "Soybean Meal": ("soybean", "meal"),
+    "Soybean Oil": ("soybean", "oil"),
+    "Sunflower Oil": ("sunflower", "oil"),
 }
 
 
@@ -280,7 +284,7 @@ def trusted_magyp_fob_frame(repository: TrustRepository) -> pd.DataFrame:
         rows.append(
             {
                 "date": identity.effective_date.isoformat(),
-                "product": _legacy_product(identity.product_form),
+                "product": _legacy_product(identity.commodity, identity.product_form),
                 "position": identity.source_record_id,
                 "ship_from": identity.delivery_window.start.strftime("%Y-%m"),
                 "ship_to": identity.delivery_window.end.strftime("%Y-%m"),
@@ -367,12 +371,13 @@ def _candidate_from_row(
 ) -> CandidateObservation:
     product = str(row["product"])
     effective_date = date.fromisoformat(str(row["date"]))
+    commodity, product_form = _PRODUCT_IDENTITY[product]
     identity = ObservationIdentity(
         source_id=artifact.source_id,
         dataset_id=artifact.dataset_id,
         dataset_key=artifact.dataset_key,
-        commodity="soybean",
-        product_form=_PRODUCT_FORMS[product],
+        commodity=commodity,
+        product_form=product_form,
         location="argentina-up-river",
         price_type="official-fob",
         currency="USD",
@@ -422,11 +427,21 @@ def _public_eligible() -> bool:
     return bool(rights and rights.publication_eligible)
 
 
-def _legacy_product(product_form: str) -> str:
-    for product, form in _PRODUCT_FORMS.items():
-        if form == product_form:
+def _legacy_product(commodity: str, product_form: str) -> str:
+    """Reverse the identity back to the legacy product label.
+
+    Keyed on the *pair*: since #162 the dataset carries two commodities and
+    "oil" alone is ambiguous. Reversing on the form alone would silently
+    relabel every sunflower row "Soybean Oil", and the reconciler compares
+    on that label — so the bug would surface as phantom row differences
+    rather than as an error.
+    """
+    for product, identity in _PRODUCT_IDENTITY.items():
+        if identity == (commodity, product_form):
             return product
-    raise ValueError(f"unknown MAGyP product form: {product_form}")
+    raise ValueError(
+        f"unknown MAGyP product identity: {commodity}/{product_form}"
+    )
 
 
 def _frame_map(frame: pd.DataFrame, key_cols: Sequence[str]) -> dict[tuple[object, ...], Mapping[str, object]]:

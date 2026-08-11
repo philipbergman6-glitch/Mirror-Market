@@ -15,6 +15,7 @@ What these pin, in order of how expensive the bug would be:
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -241,10 +242,44 @@ def test_crush_with_no_shared_session_is_empty(seeded, registry):
     assert crush.reason
 
 
-def test_a_provisional_crush_carries_its_caveat_into_the_block(registry):
-    # Argentina's meal position code is inferred, not cross-checked (M5 #147),
-    # and that has to travel with the number rather than living in a comment.
-    assert registry["argentina"].crush.provisional is True
+def test_no_market_ships_a_provisional_crush_today(registry):
+    """Argentina was the only one, and its meal leg is now cross-checked.
+
+    23040010100B was the inferred code M5 #147 / M7 #149 flagged; #162
+    matched it against dataset 358's labelled "Harina de soja, Pellets, de
+    harina de extracción" on 52 of 52 business days, so the caveat would now
+    be a false warning on a verified number.
+    """
+    assert registry["argentina"].crush.provisional is False
+    assert [m.slug for m in registry.values() if m.crush and m.crush.provisional] == []
+
+
+def test_a_provisional_crush_still_carries_its_caveat_into_the_block(seeded, registry):
+    """The mechanism outlives its first user.
+
+    Pinned against a synthetic descriptor rather than Argentina, so that
+    verifying a market's codes can never quietly delete this coverage.
+    """
+    for product, price in (("Soybeans", 449.0), ("Soybean Oil", 1201.0), ("Soybean Meal", 345.0)):
+        seeded.conn.execute(
+            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
+            "VALUES (?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", price),
+        )
+    seeded.conn.commit()
+
+    argentina = registry["argentina"]
+    verified = _block(_build("argentina", seeded, registry), "crush")
+    assert verified.state == "ok"
+    assert verified.data["provisional"] is False
+    assert verified.data["provisional_note"] is None
+
+    caveated = dict(registry, argentina=replace(
+        argentina, crush=replace(argentina.crush, provisional=True)))
+    block = _block(
+        build_blocks(caveated["argentina"], None, seeded, markets=caveated), "crush")
+    assert block.data["provisional"] is True
+    assert "not cross-checked" in block.data["provisional_note"]
 
 
 # ---------------------------------------------------------------------------

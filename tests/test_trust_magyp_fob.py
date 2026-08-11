@@ -296,3 +296,54 @@ def test_non_empty_array_root_is_still_a_schema_change() -> None:
 
     with pytest.raises(ScraperShapeError, match="non-empty JSON array"):
         posts_from_replay(replay)
+
+
+# ── Two commodities on one circular (#162) ──────────────────────────────────
+
+def test_sunflower_oil_carries_its_own_commodity_not_soybean() -> None:
+    """Crude sunflower oil shares the dataset with soy but not the commodity.
+
+    ``commodity`` was a hard-coded "soybean" before #162; a sunflower row
+    inheriting it would file the fourth veg-oil under the soy complex in
+    every trusted query.
+    """
+    replay = artifact_from_response(
+        content=_content([
+            _post("12019000190C", 450),
+            _post("15121110310E", 1376),
+        ]),
+        retrieved_at=NOW,
+    )
+
+    candidates = parse_magyp_candidates(replay, parsed_at=NOW)
+
+    sun = next(item for item in candidates if item.identity.commodity == "sunflower")
+    assert sun.identity.product_form == "oil"
+    assert sun.identity.source_record_id == "15121110310E"
+    assert sun.value == Decimal("1376.0")
+    # ...and soy oil keeps its own identity under the same product_form.
+    assert {(c.identity.commodity, c.identity.product_form) for c in candidates} == {
+        ("soybean", "beans"),
+        ("sunflower", "oil"),
+    }
+
+
+def test_coverage_contract_expects_the_sunflower_key() -> None:
+    """A missing sunflower leg is an outage: it printed on 66 of 66
+    circulars sampled 2026-05-01 -> 2026-08-11."""
+    assert "sunflower:oil" in MAGYP_FOB_CONTRACT.coverage.expected_keys
+
+
+def test_legacy_frame_round_trips_sunflower_without_relabelling_it_soy() -> None:
+    """product_form "oil" is ambiguous across two commodities.
+
+    Reversing identity -> legacy label on the form alone would silently
+    rename every sunflower row "Soybean Oil", which the reconciler would
+    then report as phantom row differences rather than as an error.
+    """
+    from trust.magyp_fob import _legacy_product
+
+    assert _legacy_product("sunflower", "oil") == "Sunflower Oil"
+    assert _legacy_product("soybean", "oil") == "Soybean Oil"
+    with pytest.raises(ValueError, match="unknown MAGyP product identity"):
+        _legacy_product("rapeseed", "oil")

@@ -87,7 +87,8 @@ def test_real_pilot_registry_is_complete_and_round_trips() -> None:
     assert magyp.identity is not None
     assert magyp.units == ("usd-mt",)
     assert magyp.coverage == CoverageContract(
-        expected_keys=("soybean:beans", "soybean:meal", "soybean:oil"),
+        # Sunflower oil rides the same circular under its own commodity (#162).
+        expected_keys=("soybean:beans", "soybean:meal", "soybean:oil", "sunflower:oil"),
         key_fields=("commodity", "product_form"),
         minimum_coverage="1",
     )

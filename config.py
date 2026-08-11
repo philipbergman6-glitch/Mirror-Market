@@ -724,21 +724,68 @@ AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 # NCM tariff position with shipment-window columns. Business days only; the
 # ?Fecha=dd/mm/yyyy parameter also serves historical dates (backfill-capable).
 #
-# Position → product mapping cross-verified 2026-08-07 against the labelled
-# datos.gob.ar series (sspm dataset 358, "precios-fob-oficiales"): values for
-# 2025-01-20 matched exactly (beans granel 412, crude oil granel 1044, meal
-# pellets 322). Bulk ("granel") positions are the benchmark legs; the bagged
-# ("embolsado") sub-positions run ~$20 over and are not stored.
+# POSITION → PRODUCT MAPPING IS CROSS-CHECKED NUMERICALLY, NEVER INFERRED.
+# The service publishes no `descripcion` field — only the NCM code — and 3 of
+# 4 meal codes inferred from the nomenclature were wrong the first time this
+# was checked (#147), which invalidated part of M7. Every code below is
+# verified against the *labelled* datos.gob.ar mirror of the same circular
+# (sspm dataset 358, "Precios FOB oficiales"), which carries a Spanish
+# description per series.
+#
+# Verification method (2026-08-12, re-run over 2024-11-01 → 2025-01-21, the
+# window before the mirror stops at 2025-01-21):
+#   For each of 52 business days, the labelled value must equal one of the
+#   *shipment-window* prices this position published that day. Result: 312 of
+#   312 product-days matched exactly, zero exceptions.
+#
+# THE MIRROR IS NOT WINDOW-ALIGNED WITH US, so a naive "labelled == nearest
+# window" test under-reports badly and must not be used: the mirror tracks a
+# campaign window, which is the nearest one only in-season. On 2024-11-04 the
+# labelled bean price 390 was the 2025-03/2025-10 window while the nearest
+# window printed 416; that test scores beans 15/52 and looks like a bad code.
+# Membership in the day's window set is the honest check — hence 312/312.
+#
+# Bulk ("granel") positions are the benchmark legs; the bagged ("embolsado")
+# sub-positions run ~$20 over and are not stored.
 # ---------------------------------------------------------------------------
 MAGYP_FOB_URL = (
     "https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios"
     "/ws/ssma/precios_fob.php"
 )
+# Verified against these labelled dataset-358 series:
+#   12019000190C → 358.1_HABAS_SOJAADO__52 "Habas de soja ... A granel"
+#   15071000100Q → 358.1_ACEITE_SOJNEL__18 "Aceite de soja, a granel"
+#   23040010100B → 358.1_TORTAS_EXPXTR__56 "... Harina de soja, Pellets, de
+#                  harina de extracción"  (was the open unverified code; the
+#                  Argentina crush is no longer provisional — see MARKETS)
+#   15121110310E → 358.1_ACEITE_GIRNEL__21 "Aceite de Girasol, a granel"
+#
+# Sunflower enters on the OIL LEG ONLY (#147): the seed (1206.00.90) and meal
+# (2306.30) positions are administered step-functions that sat unchanged for
+# months, so they render as levels, not lines, and are deliberately absent.
+# Refined sunflower oil (1512.19) is a different good and is not the veg-oil
+# board's leg — 15121919110H (refined granel) ran ~$170/MT over crude and
+# maps to a separate labelled series, 358.1_ACEITE_GIRNEL__36.
+#
+# CRUDE SUNFLOWER OIL IS PUBLISHED UNDER THREE SIM LINES CARRYING ONE PRICE:
+# 15121110310E, 15121110911P and 15121110919G were byte-identical on all 66
+# published circulars 2026-05-01 → 2026-08-11 and on the 2024-11 → 2025-01
+# window. Only 310E is mapped, so one economic number stores one row (the
+# `position` column is part of both the primary key and the git-committed
+# history CSV — mapping all three would triple the row and a later change of
+# canonical code would fork the series). `_parse_posts` guards both halves of
+# that assumption: it hard-fails if a mapped product goes missing from a
+# published circular, and if the unmapped siblings ever quote a *different*
+# price than the mapped line.
 MAGYP_FOB_POSITIONS = {
     "12019000190C": "Soybeans",      # habas de soja, las demás — granel
     "15071000100Q": "Soybean Oil",   # aceite de soja en bruto — granel
-    "23040010100B": "Soybean Meal",  # pellets de soja
+    "23040010100B": "Soybean Meal",  # pellets de soja, harina de extracción
+    "15121110310E": "Sunflower Oil",  # aceite de girasol en bruto — granel
 }
+# The other two SIM lines carrying the crude-sunflower-oil price. Not stored;
+# watched, so a split between them cannot pass silently as agreement.
+MAGYP_SUNFLOWER_OIL_SIBLINGS = ("15121110911P", "15121110919G")
 # Walk back this many calendar days to find the latest published circular
 # (weekends + Argentine holidays publish nothing).
 MAGYP_FOB_LOOKBACK_DAYS = 7
@@ -1353,7 +1400,10 @@ MARKETS = {
             "table": "argentina_fob",
             "date_column": "date",
             "key_column": "product",
-            "keys": ["Soybeans", "Soybean Oil", "Soybean Meal"],
+            # Sunflower oil is an Argentine leg like the other three, not a
+            # complex page of its own (#151) — it renders here, and feeds the
+            # headline veg-oil board as the fourth oil.
+            "keys": ["Soybeans", "Soybean Oil", "Soybean Meal", "Sunflower Oil"],
             "headline_key": "Soybeans",
             "cadence": "daily",
             "quote_kind": "administered",
@@ -1370,11 +1420,11 @@ MARKETS = {
             "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
             "value_column": "price_usd_mt",
             "unit": "usd_per_mt",
-            # M7 #149 / M5 #147: the meal position 23040010100B is inferred,
-            # not cross-checked against datos.gob.ar series 358, and 3 of 4
-            # inferred meal codes were wrong last time this was checked. The
-            # margin is provisional until that check lands.
-            "provisional": True,
+            # No longer provisional (#162). The meal position 23040010100B was
+            # the inferred leg M7 #149 flagged; it is now cross-checked against
+            # dataset 358's labelled "Harina de soja, Pellets, de harina de
+            # extracción" — 52 of 52 business days matched exactly. All three
+            # crush legs are verified, so the margin is no longer caveated.
         },
         "basis": {
             "layer": "magyp_fob",
