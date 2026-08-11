@@ -21,6 +21,11 @@
     <div class="mc-delta muted">USD/MT · same session</div>
   </div>
 </div>
+{# M19 #222: where no trade route connects the two legs, the spread cannot be
+   worked and the page must say so beside the number — not below the fold. #}
+{% if d.caveat %}
+<div class="alert alert-warn">{{ d.caveat }}</div>
+{% endif %}
 {% if d.avg is not none %}
 <div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}</div>
 {% else %}

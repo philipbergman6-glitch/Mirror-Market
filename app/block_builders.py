@@ -497,6 +497,12 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
         "n_obs": len(history),
+        # M19 #222: a spread no cargo can close is not a basis a trader can
+        # work, and the difference is invisible in the number. India's mandi
+        # bean prints ~+66% over CBOT behind a GM import ban; the caveat rides
+        # with the figure rather than living in a comment nobody renders.
+        "arbitrage": source.arbitrage,
+        "caveat": source.caveat,
         # A level with no range behind it can mislead; where there is too
         # little history to say, the block says that instead of inventing one.
         "avg": sum(spreads) / len(spreads) if len(spreads) >= 20 else None,

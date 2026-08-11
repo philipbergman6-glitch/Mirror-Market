@@ -194,6 +194,8 @@ Key files:
 
 **The ledger block (02) is deliberately unbuilt.** M3 #145 settled what a ledger row *is*; which 3–4 counterpart legs sit under a given market's own leg is [M12 #161](https://github.com/philipbergman6-glitch/Mirror-Market/issues/161) and still open, so the block renders a reasoned empty state naming that dependency rather than a set chosen inside a build ticket.
 
+**A basis must say whether trade connects its two legs** (M19 #222). Every `basis` descriptor declares `arbitrage`: `open` (cargoes move, so freight/quality/duty bound the spread — Gulf, Paranaguá, Argentina FOB, DCE import parity) or `policy_blocked`, which additionally **requires a `caveat`** and fails the build without one. India is the only `policy_blocked` leg: its mandi bean prints ~+66% over CBOT because GM imports are banned behind a tariff wall, it reached ~2× in 2021, and nothing closes it — rendered with the same treatment as Paranaguá FOB it would invite a trade that cannot be taken. That basis line is also what makes India a `page` rather than a `brief`: mandi is bean-only, so ledger + basis + weather is the whole of its three.
+
 **Failure isolation, three levels.** A block that raises renders as an empty state with reason `generation error` — the same *shape* as a missing source, a deliberately different *reason*. A page that fails is replaced by a **tombstone carrying the error, never left as yesterday's file**: Pages ships the whole `docs/` artifact, so a silently retained page is the same stale-serving failure #157 caught in the SAFEX scraper. The headline failing fails the run outright. Any tombstone reds CI *after* the upload, so the site stays usefully up while the failure is loud.
 
 ```bash

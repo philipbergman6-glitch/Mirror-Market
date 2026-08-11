@@ -141,6 +141,52 @@ def test_unknown_weather_region_fails_the_build(monkeypatch: pytest.MonkeyPatch)
         markets_mod.load_markets()
 
 
+def test_every_basis_says_whether_arbitrage_connects_its_two_legs():
+    """M19 #222: a spread no cargo can close must not read like a workable basis."""
+    markets = markets_mod.load_markets()
+    for market in markets.values():
+        if market.basis is None:
+            continue
+        assert market.basis.arbitrage in markets_mod.ARBITRAGE_KINDS, market.slug
+        if market.basis.arbitrage == "policy_blocked":
+            assert market.basis.caveat.strip(), market.slug
+
+
+def test_unknown_arbitrage_kind_fails_the_build(monkeypatch: pytest.MonkeyPatch):
+    raw = config.MARKETS["cbot"]
+    broken = {"cbot": dict(raw, basis=dict(raw["basis"], arbitrage="probably fine"))}
+    monkeypatch.setattr(config, "MARKETS", broken)
+    with pytest.raises(ValueError, match="arbitrage"):
+        markets_mod.load_markets()
+
+
+def test_basis_without_an_arbitrage_verdict_fails_the_build(monkeypatch: pytest.MonkeyPatch):
+    """Omission must not default to 'open' — that is the unlabelled-spread ship."""
+    raw = config.MARKETS["cbot"]
+    basis = {k: v for k, v in raw["basis"].items() if k != "arbitrage"}
+    monkeypatch.setattr(config, "MARKETS", {"cbot": dict(raw, basis=basis)})
+    with pytest.raises(ValueError, match="must declare arbitrage"):
+        markets_mod.load_markets()
+
+
+def test_policy_blocked_basis_without_a_caveat_fails_the_build(monkeypatch: pytest.MonkeyPatch):
+    raw = config.MARKETS["india"]
+    broken = {"india": dict(raw, basis=dict(raw["basis"], caveat="  "))}
+    monkeypatch.setattr(config, "MARKETS", broken)
+    with pytest.raises(ValueError, match="must carry a caveat"):
+        markets_mod.load_markets()
+
+
+def test_india_basis_is_labelled_a_policy_spread():
+    """#206 validated the level; #222 decided it renders only with its framing."""
+    india = markets_mod.load_markets()["india"]
+    assert india.basis is not None
+    assert india.basis.arbitrage == "policy_blocked"
+    assert "policy spread" in india.basis.label.lower()
+    # Struck on the MP median alone — the price block's own headline key.
+    assert india.basis.keys == ("Soybean (Mandi MP)",)
+
+
 def test_unknown_quote_kind_fails_the_build(monkeypatch: pytest.MonkeyPatch):
     raw = config.MARKETS["cbot"]
     broken = {"cbot": dict(raw, price=dict(raw["price"], quote_kind="vibes"))}
@@ -192,6 +238,53 @@ def test_a_stale_leg_does_not_count_as_present(site_db):
     assert not stale["cbot"].has_daily_leg
     assert "crush" not in stale["cbot"].present
     assert stale["cbot"].tier == "brief"  # basis + weather still current
+
+
+def _seed_india(conn, *, days_ago: int = 0) -> None:
+    """India's whole stack: one mandi leg (which is also its basis) + weather."""
+    _seed_prices(
+        conn,
+        ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+        days_ago=days_ago,
+        table="india_domestic_prices",
+    )
+    _seed_prices(
+        conn,
+        ["India Madhya Pradesh", "India Maharashtra"],
+        days_ago=days_ago,
+        table="weather",
+        key_col="region",
+    )
+
+
+def test_india_is_a_page_once_its_basis_line_is_restored(site_db):
+    """M19 #222: ledger + basis + weather is three, and M1 forecast India a page.
+
+    India has no crush (mandi is bean-only), so the basis line #206 unblocked is
+    the difference between a brief and a page.
+    """
+    _seed_india(site_db)
+    # `today` is pinned to the same clock the seed used: compute_tiers defaults
+    # to the UTC date, which is a day behind local for part of every day, and a
+    # tier test that swings on the tester's timezone is a flake.
+    tier = markets_mod.compute_tiers(today=date.today())["india"]
+    assert tier.tier == "page"
+    assert set(tier.present) == {"ledger", "basis", "weather"}
+
+
+def test_india_demotes_when_the_mandi_feed_goes_quiet(site_db):
+    """8 days > the 7-day india_domestic budget: two of three blocks are the leg.
+
+    The tier is computed from the DB every run (M1 constraint 3), so a dark
+    scraper takes the page down to a stub at the same URL — it does not leave a
+    full page standing on a stale number. Pinned at 8 days because the 14-day
+    default would still call this a page.
+    """
+    _seed_india(site_db, days_ago=8)
+    tier = markets_mod.compute_tiers(today=date.today())["india"]
+    assert not tier.has_daily_leg
+    assert tier.present == ("weather",)
+    assert tier.tier == "stub"
 
 
 def test_weekly_cadence_is_never_a_daily_leg(site_db):
