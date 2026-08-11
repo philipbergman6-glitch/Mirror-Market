@@ -75,6 +75,30 @@ python -c "from analysis.briefing import generate_briefing; print(generate_brief
 
 GitHub Actions runs the whole thing unattended: every weekday at 12:00 UTC (and on every push to `main`) it collects the data, rebuilds the dashboard, and republishes it to GitHub Pages. API keys live in repository secrets. Storage is a local SQLite file by default; set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` for cloud storage instead.
 
+### Trusted Static Preview
+
+To preview a verified or candidate trust edition without changing the public dashboard, render it into a candidate directory first:
+
+```bash
+.venv/bin/python scripts/publish_trusted_static.py \
+  --trust-repository data/v2 \
+  --edition-id edn_... \
+  --candidate-root build/trusted-static-candidates
+```
+
+By default this writes `build/trusted-static-candidates/<edition-id>/` and prints a JSON summary. It does not mutate `docs/`.
+
+Only publish the rendered candidate explicitly:
+
+```bash
+.venv/bin/python scripts/publish_trusted_static.py \
+  --trust-repository data/v2 \
+  --edition-id edn_... \
+  --candidate-root build/trusted-static-candidates \
+  --deploy \
+  --public-dir docs
+```
+
 ## How the Code Is Organized
 
 ```
