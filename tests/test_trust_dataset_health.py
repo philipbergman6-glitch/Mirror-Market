@@ -50,20 +50,25 @@ def _artifact() -> ArtifactReference:
     )
 
 
-def _revision(product_form: str, *, effective_date: date = date(2026, 8, 10)) -> ObservationRevision:
+def _revision(
+    product_form: str,
+    *,
+    effective_date: date = date(2026, 8, 10),
+    commodity: str = "soybean",
+) -> ObservationRevision:
     dataset = MAGYP_FOB_CONTRACT.dataset
     identity = ObservationIdentity(
         source_id=dataset.source_id,
         dataset_id=dataset.dataset_id,
         dataset_key=dataset.key,
-        commodity="soybean",
+        commodity=commodity,
         product_form=product_form,
         location="argentina-up-river",
         price_type="official-fob",
         currency="USD",
         unit="usd-mt",
         effective_date=effective_date,
-        source_record_id=f"{effective_date.isoformat()}-{product_form}",
+        source_record_id=f"{effective_date.isoformat()}-{commodity}-{product_form}",
     )
     return ObservationRevision(
         identity=identity,
@@ -74,6 +79,15 @@ def _revision(product_form: str, *, effective_date: date = date(2026, 8, 10)) ->
         artifact=_artifact(),
         parser_version="magyp-fob/1.0.0",
     )
+
+
+def _sunflower(*, effective_date: date = date(2026, 8, 10)) -> ObservationRevision:
+    """The fourth expected key since #162 — crude sunflower oil.
+
+    Same circular, different commodity, so a fixture that omits it is now a
+    *partial* dataset rather than a complete one.
+    """
+    return _revision("oil", effective_date=effective_date, commodity="sunflower")
 
 
 def _health_input(
@@ -97,7 +111,7 @@ def _health_input(
 
 
 def test_complete_dataset_is_current_and_edition_eligible() -> None:
-    revisions = (_revision("beans"), _revision("meal"), _revision("oil"))
+    revisions = (_revision("beans"), _revision("meal"), _revision("oil"), _sunflower())
 
     result = evaluate_dataset_health(_health_input(revisions=revisions))
 
@@ -113,12 +127,25 @@ def test_partial_dataset_fails_coverage_before_revisions_can_leak_to_edition() -
     result = evaluate_dataset_health(_health_input(revisions=(_revision("beans"), _revision("meal"))))
 
     assert result.status is DatasetResultStatus.CONTRACT_FAILURE
-    assert result.coverage == Decimal("0.6666666666666666666666666667")
+    assert result.coverage == Decimal("0.5")
     assert result.eligible is False
     assert result.accepted_revision_ids == ()
     assert result.findings[0].rule_id == "coverage.minimum"
     assert result.findings[0].severity is FindingSeverity.REJECT
-    assert result.findings[0].evidence["missing_keys"] == ("soybean:oil",)
+    assert result.findings[0].evidence["missing_keys"] == ("soybean:oil", "sunflower:oil")
+
+
+def test_a_missing_sunflower_leg_alone_fails_coverage() -> None:
+    """The soy complex being whole is no longer the dataset being whole.
+
+    Crude sunflower oil printed on all 66 circulars sampled 2026-05-01 ->
+    2026-08-11, so its absence is an outage, not an off-day (#162).
+    """
+    result = evaluate_dataset_health(_health_input(revisions=(
+        _revision("beans"), _revision("meal"), _revision("oil"))))
+
+    assert result.status is DatasetResultStatus.CONTRACT_FAILURE
+    assert result.findings[0].evidence["missing_keys"] == ("sunflower:oil",)
 
 
 def test_stale_dataset_returns_last_known_good_as_of_without_exposing_revisions() -> None:
@@ -127,6 +154,7 @@ def test_stale_dataset_returns_last_known_good_as_of_without_exposing_revisions(
         _revision("beans", effective_date=stale_date),
         _revision("meal", effective_date=stale_date),
         _revision("oil", effective_date=stale_date),
+        _sunflower(effective_date=stale_date),
     )
 
     result = evaluate_dataset_health(_health_input(revisions=revisions))
@@ -210,9 +238,11 @@ def test_forecast_rows_cannot_make_observed_history_look_current() -> None:
         _revision("beans", effective_date=old_date),
         _revision("meal", effective_date=old_date),
         _revision("oil", effective_date=old_date),
+        _sunflower(effective_date=old_date),
         _revision("beans", effective_date=future_date),
         _revision("meal", effective_date=future_date),
         _revision("oil", effective_date=future_date),
+        _sunflower(effective_date=future_date),
     )
 
     result = evaluate_dataset_health(_health_input(revisions=revisions))
