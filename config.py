@@ -604,6 +604,21 @@ MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
 MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
 MANDI_PAGE_LIMIT_PERSONAL = 100   # personal keys allow bigger pages → fewer throttle hits
 MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any single-state daily set
+# Elasticsearch-style offset paging over an *unsorted* index is not stable:
+# without this the same mandi comes back on two pages while another is never
+# served at all (verified 2026-08-12: 115 MP rows fetched, only 95 distinct,
+# so ~20 real mandis were silently missing and Volume over-counted by 21%).
+# ``market.keyword`` is an exposed keyword field — see the resource's
+# ``field_exposed`` block — and gives a total order across pages.
+MANDI_SORT_FIELD = "market.keyword"
+# Unit guard, ₹/quintal. ``modal_price`` is quoted per quintal (100 kg) and
+# multiplied by 10 into INR/MT; a source that switched to ₹/kg (~67) or
+# ₹/MT (~67,000) would still parse cleanly and silently restate the level
+# 10–100×. Validated 2026-08-11 at ₹6,725/qtl MP against three independent
+# quotes (#206), and the band is wide enough for any real market: India's
+# 2021 record was ~₹10,000/qtl and the 2008 low ~₹2,200/qtl.
+MANDI_MODAL_MIN_INR_QUINTAL = 1_000
+MANDI_MODAL_MAX_INR_QUINTAL = 20_000
 # Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
 MANDI_SERIES = "Soybean (Mandi MP)"     # headline: Indore is the crush-industry pricing hub
