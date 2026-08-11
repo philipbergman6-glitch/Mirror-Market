@@ -1,0 +1,109 @@
+{# 03 Crush & relative value. `s` is the section's data (app/sections.py). #}
+{% import 'sections/_cards.html.j2' as c %}
+{% if s.crush %}
+<div class="subhdr">Crush Spread</div>
+<div class="grid grid-2">
+  <div class="mc">
+    <div class="mc-label">Current (USD/MT)</div>
+    <div class="mc-val {{ 'up' if s.crush.profitable else 'down' }}">{{ c.money(s.crush.current_usd_mt) }}</div>
+    <div class="mc-delta {{ 'up' if s.crush.profitable else 'down' }}">{{ 'Profitable' if s.crush.profitable else 'Negative' }}</div>
+    {{ c.asof(s.crush.as_of) }}
+  </div>
+  <div class="chart-box">{{ s.crush.chart_html | safe }}</div>
+</div>
+<hr class="divider">
+{% endif %}
+
+{% if s.basis %}
+<div class="subhdr">{{ s.basis.title }}</div>
+<div class="grid grid-2">
+  <div>
+    <div class="mc">
+      <div class="mc-label">{{ s.basis.primary.label }} (USD/MT)</div>
+      <div class="mc-val {{ s.basis.primary.class }}">{{ c.signed(s.basis.primary.current_usd_mt) }}</div>
+      <div class="mc-delta {{ s.basis.primary.class }}">Brazilian {{ s.basis.primary.direction }}</div>
+      <div class="caption">{% if s.basis.primary.as_of %}as of {{ s.basis.primary.as_of }} · {% endif %}{{ s.basis.primary.stats }}</div>
+    </div>
+    {% if s.basis.secondary %}
+    <div class="mc">
+      <div class="mc-label">{{ s.basis.secondary.label }} (USD/MT)</div>
+      <div class="mc-val {{ s.basis.secondary.class }}">{{ c.signed(s.basis.secondary.current_usd_mt) }}</div>
+      <div class="mc-delta {{ s.basis.secondary.class }}">Brazilian {{ s.basis.secondary.direction }}</div>
+      {{ c.asof(s.basis.secondary.as_of) }}
+    </div>
+    {% endif %}
+    {% if s.basis.wedge_usd_mt is not none %}
+    <div class="mc">
+      <div class="mc-label">Port − farm wedge</div>
+      <div class="mc-val {{ 'up' if s.basis.wedge_usd_mt > 0 else 'down' }}">{{ c.signed(s.basis.wedge_usd_mt) }}</div>
+      <div class="mc-delta muted">Paranaguá minus CEPEA</div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="chart-box">{{ s.basis.chart_html | safe }}</div>
+</div>
+<hr class="divider">
+{% endif %}
+
+{% if s.oil_meal %}
+<div class="subhdr">Oil/Meal Ratio</div>
+<div class="grid grid-2">
+  <div class="mc">
+    <div class="mc-label">Current</div>
+    <div class="mc-val">{{ '%.3f'|format(s.oil_meal.current) }}</div>
+    <div class="mc-delta muted">60d avg: {{ '%.3f'|format(s.oil_meal.avg_60d) }}</div>
+    {{ c.asof(s.oil_meal.as_of) }}
+  </div>
+  <div class="chart-box">{{ s.oil_meal.chart_html | safe }}</div>
+</div>
+{% endif %}
+
+{% if s.soy_oil_share %}
+<div class="mc" style="margin-bottom:24px;">
+  <div class="mc-label">Soy oil share of crush</div>
+  <div class="mc-val">{{ '%.1f'|format(s.soy_oil_share.value) }}%</div>
+  <div class="caption">Higher = biodiesel demand pulling oil; lower = feed demand pulling meal{% if s.soy_oil_share.as_of %} · as of {{ s.soy_oil_share.as_of }}{% endif %}</div>
+</div>
+{% endif %}
+
+{% for panel, title in [(s.oil_vs_palm, 'Soy Oil vs Palm Oil'), (s.oil_vs_rapeseed, 'Soy Oil vs CZCE Rapeseed Oil')] %}
+{% if panel %}
+<hr class="divider"><div class="subhdr">{{ title }}</div>
+<div class="grid grid-2">
+  {% for leg in panel.legs %}
+  <div class="mc">
+    <div class="mc-label">{{ leg.label }}</div>
+    <div class="mc-val">{{ '{:,.2f}'.format(leg.value) }}</div>
+    <div class="mc-delta {{ leg.class }}">{{ c.pct(leg.weekly_chg) }}</div>
+    <div class="caption">{% if leg.native %}{{ leg.native }}{% if leg.as_of %} · {% endif %}{% endif %}{% if leg.as_of %}as of {{ leg.as_of }}{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+{% if panel.spread_usd_mt is not none %}
+<div class="mc" style="margin-bottom:24px;">
+  <div class="mc-label">Rapeseed − soy oil spread</div>
+  <div class="mc-val {{ 'up' if panel.spread_usd_mt > 0 else 'down' }}">{{ c.signed(panel.spread_usd_mt) }}</div>
+  <div class="caption">{{ panel.spread_note }}</div>
+</div>
+{% endif %}
+{% endif %}
+{% endfor %}
+
+{% if s.bean_corn %}
+<hr class="divider"><div class="subhdr">Soybean/Corn Ratio (acreage signal)</div>
+<div class="grid grid-2">
+  <div>
+    <div class="mc" style="margin-bottom:16px;">
+      <div class="mc-label">Current</div>
+      <div class="mc-val">{{ '%.2f'|format(s.bean_corn.current) }}</div>
+      {{ c.asof(s.bean_corn.as_of) }}
+    </div>
+    <div class="mc">
+      <div class="mc-label">1Y average</div>
+      <div class="mc-val">{{ '%.2f'|format(s.bean_corn.avg_1y) }}</div>
+      <div class="caption">{{ s.bean_corn.reading }}</div>
+    </div>
+  </div>
+  <div class="chart-box">{{ s.bean_corn.chart_html | safe }}</div>
+</div>
+{% endif %}

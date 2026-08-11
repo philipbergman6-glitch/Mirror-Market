@@ -38,6 +38,7 @@ from datetime import date, datetime, timezone
 import config
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 from pipeline.connection import get_connection, is_cloud, managed_connection
+from pipeline.units import to_metric_tons
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +83,31 @@ QUOTE_KINDS = frozenset({
 
 CADENCES = frozenset({"daily", "weekly", "monthly"})
 
+# How the stored number relates to USD/MT. Closed like QUOTE_KINDS, and for the
+# same reason: a block builder that guessed would silently publish a price out
+# by a factor of 36.7 (cents/bu) or by the exchange rate. The registry states
+# it, `Source.to_usd_mt` applies it, and nothing else in the site converts.
+#
+#   native_exchange  the CBOT/CME native unit for that key — cents/bu, cents/lb
+#                    or USD/short ton, per pipeline.units.CONVERSION_FACTORS
+#   usd_per_bushel   USD per bushel (AMS 3147 prints flat CIF bids in $/bu)
+#   home_per_mt      the market's home currency per MT — needs the FX leg
+#   usd_per_mt       already USD/MT — no conversion at all
+#   tonnes           a volume, not a price; never converted, never dual-quoted
+#   observation      a non-price reading (a temperature) the tier probe only
+#                    ever asks the date of
+UNITS = frozenset({
+    "native_exchange",
+    "usd_per_bushel",
+    "home_per_mt",
+    "usd_per_mt",
+    "tonnes",
+    "observation",
+})
+
+# Units that are a price and therefore have a USD/MT rendering.
+PRICE_UNITS = frozenset({"native_exchange", "usd_per_bushel", "home_per_mt", "usd_per_mt"})
+
 
 # ---------------------------------------------------------------------------
 # Descriptor types
@@ -100,6 +126,8 @@ class Source:
     date_column: str
     key_column: str
     keys: tuple[str, ...]
+    value_column: str
+    unit: str
     cadence: str = "daily"
     quote_kind: str | None = None
     headline_key: str | None = None
@@ -110,6 +138,35 @@ class Source:
     def max_age_days(self) -> int:
         """The layer's own recency budget — the same one the pipeline grades on."""
         return config.LAYER_MAX_DATA_AGE_DAYS.get(self.layer, DEFAULT_MAX_AGE_DAYS)
+
+    @property
+    def is_price(self) -> bool:
+        return self.unit in PRICE_UNITS
+
+    def to_usd_mt(self, value: float | None, key: str, fx: float | None) -> float | None:
+        """Convert one stored number to USD/MT, or None when it cannot be.
+
+        The single conversion site for the whole site. ``fx`` is USD per unit
+        of home currency (the ``<CCY>/USD`` series' own convention — the stack
+        multiplies, see analysis.soy_analytics._latest_aligned_usd) and is only
+        consulted for ``home_per_mt``; passing it elsewhere is ignored rather
+        than silently double-converting.
+        """
+        if value is None:
+            return None
+        if self.unit == "usd_per_mt":
+            return float(value)
+        if self.unit == "native_exchange":
+            return to_metric_tons(float(value), key)
+        if self.unit == "usd_per_bushel":
+            # $/bu -> cents/bu, then the same bushels-per-MT factor the rest of
+            # the stack uses, so there is one table of grain densities.
+            return to_metric_tons(float(value) * 100.0, key)
+        if self.unit == "home_per_mt":
+            if not fx:
+                return None
+            return float(value) * float(fx)
+        return None  # tonnes / observation — no USD/MT rendering exists
 
 
 @dataclass(frozen=True)
@@ -122,6 +179,8 @@ class Crush:
     date_column: str
     key_column: str
     legs: dict[str, str]
+    value_column: str
+    unit: str
     provisional: bool = False
 
     @property
@@ -135,6 +194,8 @@ class Crush:
             date_column=self.date_column,
             key_column=self.key_column,
             keys=tuple(self.legs.values()),
+            value_column=self.value_column,
+            unit=self.unit,
         )
 
 
@@ -187,7 +248,7 @@ _LAYER_BY_TABLE = {
 # Loading and validation
 # ---------------------------------------------------------------------------
 def _source(raw: dict, *, slug: str, block: str) -> Source:
-    missing = {"layer", "table", "date_column", "key_column", "keys"} - raw.keys()
+    missing = {"layer", "table", "date_column", "key_column", "keys", "value_column", "unit"} - raw.keys()
     if missing:
         raise ValueError(f"market {slug!r} {block} source missing key(s): {sorted(missing)}")
     keys = tuple(raw["keys"])
@@ -204,12 +265,16 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
     headline = raw.get("headline_key")
     if headline is not None and headline not in keys:
         raise ValueError(f"market {slug!r} {block} headline_key {headline!r} is not one of its keys")
+    if raw["unit"] not in UNITS:
+        raise ValueError(f"market {slug!r} {block} unit {raw['unit']!r} not in {sorted(UNITS)}")
     return Source(
         layer=raw["layer"],
         table=raw["table"],
         date_column=raw["date_column"],
         key_column=raw["key_column"],
         keys=keys,
+        value_column=raw["value_column"],
+        unit=raw["unit"],
         cadence=cadence,
         quote_kind=quote_kind,
         headline_key=headline,
@@ -219,9 +284,17 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
 
 
 def _crush(raw: dict, *, slug: str) -> Crush:
-    missing = {"kind", "yield_set", "table", "date_column", "key_column", "legs"} - raw.keys()
+    missing = {
+        "kind", "yield_set", "table", "date_column", "key_column", "legs",
+        "value_column", "unit",
+    } - raw.keys()
     if missing:
         raise ValueError(f"market {slug!r} crush missing key(s): {sorted(missing)}")
+    if raw["unit"] not in PRICE_UNITS:
+        raise ValueError(
+            f"market {slug!r} crush unit {raw['unit']!r} is not a price unit "
+            f"({sorted(PRICE_UNITS)}) — a margin cannot be built from a volume"
+        )
     if raw["yield_set"] not in CRUSH_YIELD_SETS:
         raise ValueError(
             f"market {slug!r} crush yield_set {raw['yield_set']!r} "
@@ -237,6 +310,8 @@ def _crush(raw: dict, *, slug: str) -> Crush:
         date_column=raw["date_column"],
         key_column=raw["key_column"],
         legs=legs,
+        value_column=raw["value_column"],
+        unit=raw["unit"],
         provisional=bool(raw.get("provisional", False)),
     )
 
@@ -372,6 +447,8 @@ def _weather_source(market: Market) -> Source | None:
         date_column="Date",
         key_column="region",
         keys=market.weather_regions,
+        value_column="temp_max",
+        unit="observation",
     )
 
 

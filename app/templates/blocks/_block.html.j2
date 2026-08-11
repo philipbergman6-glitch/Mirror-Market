@@ -15,7 +15,7 @@
     <span class="why">{{ block.why }}</span>
   </div>
   {% if block.state == 'ok' %}
-  {% include 'blocks/' ~ block.id ~ '.html.j2' ignore missing %}
+  {% include 'blocks/' ~ block.no ~ '_' ~ block.id ~ '.html.j2' %}
   {% else %}
   <div class="empty-state state-{{ block.state }}">
     <span class="es-label">{% if block.state == 'absent' %}no source{% else %}no data{% endif %}</span>

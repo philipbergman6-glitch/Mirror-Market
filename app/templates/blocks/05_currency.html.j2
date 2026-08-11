@@ -1,0 +1,22 @@
+{# 05 Currency — the rate every USD figure on this page is struck at, stated
+   rather than buried, because the conversion is ours and not the venue's. #}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set d = block.data %}
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">{{ d.pair }}</div>
+    <div class="mc-val">{{ '%.4f'|format(d.usd_per_home) }}</div>
+    <div class="mc-delta muted">USD per {{ d.home_currency }}</div>
+    {{ f.asof(d.as_of, d.age_days) }}
+  </div>
+  <div class="mc">
+    <div class="mc-label">{{ d.home_currency }} per USD</div>
+    <div class="mc-val">{{ f.num(d.home_per_usd, 2) }}</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Move</div>
+    <div class="mc-val">{{ f.pct(d.chg_5_pct) }}</div>
+    <div class="mc-delta muted">5 obs · 21 obs {{ f.pct(d.chg_21_pct) }}</div>
+  </div>
+</div>
+<div class="caption">{{ d.conversion_note }}</div>

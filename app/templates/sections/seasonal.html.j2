@@ -1,0 +1,26 @@
+{# 07 Seasonal — this month's price against its own historical norm. #}
+{% import 'sections/_cards.html.j2' as c %}
+{% for leg in s.legs %}
+<div class="subhdr">{{ leg.name }}</div>
+{% if leg.has_stats %}
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">Current ({{ leg.unit }})</div>
+    <div class="mc-val">{{ '{:,.1f}'.format(leg.current_price) }}</div>
+    {{ c.asof(leg.as_of) }}
+  </div>
+  <div class="mc">
+    <div class="mc-label">Seasonal average</div>
+    <div class="mc-val">{{ '{:,.1f}'.format(leg.seasonal_avg) }}</div>
+  </div>
+  <div class="mc">
+    {# Detrended and raw are different claims; the label says which. #}
+    <div class="mc-label">{{ leg.delta_label }}</div>
+    <div class="mc-val {{ 'up' if leg.delta_pct > 0 else 'down' }}">{{ c.pct(leg.delta_pct) }}</div>
+    <div class="mc-delta {{ 'up' if leg.delta_pct > 0 else 'down' }}">{{ leg.delta_note }}</div>
+  </div>
+</div>
+{% endif %}
+{% if leg.chart_html %}<div class="chart-box">{{ leg.chart_html | safe }}</div>{% endif %}
+<hr class="divider">
+{% endfor %}

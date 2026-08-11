@@ -40,7 +40,8 @@ from jinja2 import Environment, FileSystemLoader
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.blocks import BLOCK_IDS, BRIEF_BLOCK_IDS, skeleton_blocks  # noqa: E402
+from app.block_builders import SiteContext, build_blocks  # noqa: E402
+from app.blocks import BLOCK_IDS, BRIEF_BLOCK_IDS  # noqa: E402
 from app.markets import (  # noqa: E402
     TIER_BRIEF,
     TIER_PAGE,
@@ -134,14 +135,14 @@ def _render_players(output_dir: Path, nav: list[dict], **_) -> Path:
     return generate_players_page(output_dir / "players.html", market_nav=nav)
 
 
-def _render_market(output_dir: Path, nav: list[dict], *, slug: str, markets, tiers, now) -> Path:
+def _render_market(output_dir: Path, nav: list[dict], *, slug: str, markets, tiers, ctx, now) -> Path:
     market = markets[slug]
     tier = tiers[slug]
     relpath = market.url
     root = relative_root(relpath)
 
     block_ids = BLOCK_IDS if tier.tier == TIER_PAGE else BRIEF_BLOCK_IDS
-    blocks = skeleton_blocks(market, tier, block_ids=block_ids)
+    blocks = build_blocks(market, tier, ctx, markets=markets, block_ids=block_ids)
 
     html = _env().get_template(TEMPLATE_BY_TIER[tier.tier]).render(
         market=market,
@@ -176,6 +177,9 @@ def generate_site(
     markets = load_markets()
     tiers = compute_tiers(markets)
     nav = nav_items(tiers, markets=markets)
+    # One connection and one cache for every market page: eight pages x nine
+    # blocks would otherwise re-read the CBOT reference leg eight times.
+    ctx = SiteContext.open(today=now.date())
 
     pages: list[tuple[str, str, callable, dict]] = [
         ("headline", "index.html", _render_headline, {}),
@@ -186,7 +190,7 @@ def generate_site(
             f"market:{slug}",
             market.url,
             _render_market,
-            {"slug": slug, "markets": markets, "tiers": tiers, "now": now},
+            {"slug": slug, "markets": markets, "tiers": tiers, "ctx": ctx, "now": now},
         ))
 
     if only:
@@ -211,6 +215,8 @@ def generate_site(
             log.error("%s failed: %s", name, detail, exc_info=True)
             path = _tombstone(output_dir, relpath, name, detail, nav, now)
             results.append(PageResult(name, relpath, path, ok=False, error=detail))
+
+    ctx.close()
 
     failed = [r for r in results if not r.ok]
     log.info("generated %d page(s), %d tombstone(s)", len(results) - len(failed), len(failed))

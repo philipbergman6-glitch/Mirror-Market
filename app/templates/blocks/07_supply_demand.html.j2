@@ -1,0 +1,32 @@
+{# 07 Supply & demand — annual, and stamped as annual. M10 #151: a non-daily
+   series rendered beside daily ones without its cadence reads as an outage. #}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set d = block.data %}
+{% if d.lines %}
+<div class="grid grid-4">
+  {% for line in d.lines %}
+  <div class="mc">
+    <div class="mc-label">{{ line.attribute }} ({{ d.marketing_year }})</div>
+    <div class="mc-val">{{ f.num(line.value) }}</div>
+    <div class="mc-delta">{{ f.pct(line.yoy_pct) }} <span class="muted">YoY · {{ line.unit }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+<div class="caption">{{ d.country }} · {{ d.cadence_note }}</div>
+{% endif %}
+{% if d.flows %}
+{# The physical-flow leg, where the registry names one. South Africa is the
+   case it exists for: the price leg is licence-capped, the tonnage is not. #}
+<div class="subhdr">{{ d.flows.label }} — {{ d.flows.cadence }}</div>
+<div class="grid grid-{{ [d.flows.lines|length, 3]|min }}">
+  {% for line in d.flows.lines %}
+  <div class="mc">
+    <div class="mc-label">{{ line.key }}</div>
+    <div class="mc-val">{{ f.num(line.value) }}</div>
+    <div class="mc-delta muted">{{ d.flows.unit }}</div>
+    {{ f.asof(line.as_of, line.age_days) }}
+  </div>
+  {% endfor %}
+</div>
+{% if d.flows.attribution %}<div class="caption">{{ d.flows.attribution }}</div>{% endif %}
+{% endif %}
