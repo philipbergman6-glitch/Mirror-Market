@@ -20,8 +20,12 @@ def _format_row(row: pd.Series) -> str:
         if row["basis_low"] == row["basis_high"]
         else f"{row['basis_low']:+.0f}/{row['basis_high']:+.0f}¢"
     )
+    # AMS leaves the change column blank on some deliveries (#190).
+    change = (
+        f" ({row['basis_change']})" if pd.notna(row.get("basis_change")) else ""
+    )
     line = (
-        f"  {row['delivery']}: {basis}/bu over {month_abbr} ({row['basis_change']}) | "
+        f"  {row['delivery']}: {basis}/bu over {month_abbr}{change} | "
         f"${row['average']:.2f}/bu"
     )
     usd_mt = to_metric_tons(row["average"] * 100.0, "Soybeans")

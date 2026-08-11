@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS gulf_bids (
     basis_high    REAL,
     futures_month INTEGER,
     basis_change  TEXT,
+    price_change  TEXT,
     price_low     REAL,
     price_high    REAL,
     average       REAL,
