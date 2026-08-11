@@ -35,8 +35,12 @@ def format(  # noqa: A001
             if pd.notna(rate) and rate > 0:
                 cny_usd = float(rate)
 
+    # No.1 (A0) has deliberately no CBOT counterpart: it is the domestic
+    # non-GMO food bean, so a premium over CBOT would price a food-grade
+    # spread, not import parity. No.2 (B0) is the imported/GMO bean and is
+    # the only honest vs-CBOT comparison (#152).
     dce_to_cbot = {
-        "DCE Soybean": "Soybeans",
+        "DCE Soybean No.2": "Soybeans",
         "DCE Soybean Meal": "Soybean Meal",
         "DCE Soybean Oil": "Soybean Oil",
     }
@@ -79,7 +83,7 @@ def format(  # noqa: A001
 
 
 def _board_crush_lines(dce_data: pd.DataFrame, cny_usd: float | None) -> list[str]:
-    """China board crush margin from the A0/M0/Y0 continuous series.
+    """China board crush margin from the B0/M0/Y0 continuous series.
 
     Continuous-series caveat: the three legs need not roll the underlying
     contract on the same day, so near-roll prints may embed roll gaps —

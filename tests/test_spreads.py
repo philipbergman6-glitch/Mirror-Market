@@ -103,7 +103,7 @@ def test_compute_dce_crush_margin_formula():
     # crush = oil*(11/60) + meal*(44/60) - beans, all CNY/MT
     # 8000*(11/60) + 3000*(44/60) - 4000 = 1466.67 + 2200 - 4000 = -333.33
     df = _dce_long_df([
-        ("DCE Soybean", "2026-08-06", 4000.0),
+        ("DCE Soybean No.2", "2026-08-06", 4000.0),
         ("DCE Soybean Oil", "2026-08-06", 8000.0),
         ("DCE Soybean Meal", "2026-08-06", 3000.0),
     ])
@@ -120,10 +120,42 @@ def test_compute_dce_crush_margin_formula():
     assert 0 <= out.iloc[0]["oil_value_share"] <= 1
 
 
+def test_compute_dce_crush_margin_uses_no2_bean_not_no1():
+    """Regression for #152 — the crush bean is B0 (imported/GMO), not A0.
+
+    A0 carries a ~1,000 CNY/MT non-GMO food premium; using it drove the
+    margin ~1,000 CNY/MT negative, which is not economically possible.
+    """
+    df = _dce_long_df([
+        ("DCE Soybean No.1", "2026-08-06", 4875.0),   # food bean — must be ignored
+        ("DCE Soybean No.2", "2026-08-06", 3820.0),   # crush bean
+        ("DCE Soybean Oil", "2026-08-06", 8443.0),
+        ("DCE Soybean Meal", "2026-08-06", 3154.0),
+    ])
+
+    out = compute_dce_crush_margin(df)
+
+    assert len(out) == 1
+    assert out.iloc[0]["bean_close_cny"] == 3820.0
+    expected = 8443.0 * (11 / 60) + 3154.0 * (44 / 60) - 3820.0
+    assert out.iloc[0]["crush_cny_mt"] == pytest.approx(expected)
+    assert out.iloc[0]["crush_cny_mt"] > 0
+
+
+def test_compute_dce_crush_margin_no1_alone_is_not_a_bean_leg():
+    """No.1 alone must read as a missing leg, never as a substitute."""
+    df = _dce_long_df([
+        ("DCE Soybean No.1", "2026-08-06", 4875.0),
+        ("DCE Soybean Oil", "2026-08-06", 8443.0),
+        ("DCE Soybean Meal", "2026-08-06", 3154.0),
+    ])
+    assert compute_dce_crush_margin(df).empty
+
+
 def test_compute_dce_crush_margin_aligns_on_intersection():
     df = _dce_long_df([
-        ("DCE Soybean", "2026-08-05", 4000.0),
-        ("DCE Soybean", "2026-08-06", 4100.0),
+        ("DCE Soybean No.2", "2026-08-05", 4000.0),
+        ("DCE Soybean No.2", "2026-08-06", 4100.0),
         ("DCE Soybean Oil", "2026-08-06", 8000.0),
         ("DCE Soybean Meal", "2026-08-06", 3000.0),
         ("DCE Soybean Meal", "2026-08-07", 3050.0),
@@ -137,7 +169,7 @@ def test_compute_dce_crush_margin_aligns_on_intersection():
 
 def test_compute_dce_crush_margin_missing_leg_returns_empty():
     df = _dce_long_df([
-        ("DCE Soybean", "2026-08-06", 4000.0),
+        ("DCE Soybean No.2", "2026-08-06", 4000.0),
         ("DCE Soybean Oil", "2026-08-06", 8000.0),
     ])
     assert compute_dce_crush_margin(df).empty
@@ -151,4 +183,4 @@ def test_compute_dce_crush_margin_empty_input_returns_empty():
 
 def test_compute_dce_crush_margin_missing_columns_raises():
     with pytest.raises(KeyError):
-        compute_dce_crush_margin(pd.DataFrame({"commodity": ["DCE Soybean"]}))
+        compute_dce_crush_margin(pd.DataFrame({"commodity": ["DCE Soybean No.2"]}))

@@ -89,8 +89,12 @@ _BASIS_SOURCES = {
     "cepea_parana": "Soybean (CEPEA)",
 }
 
+# No.2 (B0) is the imported/GMO crush bean; No.1 (A0) is the domestic
+# non-GMO food bean and has no CBOT counterpart by design (#152). Snapshot
+# rows written before 2026-08-10 carry the old "DCE Soybean" key (= A0)
+# with cbot_commodity "Soybeans" — that pairing was the bug.
 _DCE_TO_CBOT = {
-    "DCE Soybean": "Soybeans",
+    "DCE Soybean No.2": "Soybeans",
     "DCE Soybean Meal": "Soybean Meal",
     "DCE Soybean Oil": "Soybean Oil",
 }

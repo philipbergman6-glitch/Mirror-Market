@@ -406,7 +406,7 @@ def _seed_dce(db: Path, rows: list[tuple]) -> None:
 
 
 _DCE_ROWS = [
-    ("DCE Soybean", "2026-08-06", 4000.0),
+    ("DCE Soybean No.2", "2026-08-06", 4000.0),
     ("DCE Soybean Oil", "2026-08-06", 8000.0),
     ("DCE Soybean Meal", "2026-08-06", 3000.0),
 ]

@@ -34,7 +34,8 @@ def fetch_one(symbol: str) -> pd.DataFrame:
     Parameters
     ----------
     symbol : str
-        AKShare symbol, e.g. "A0" for Soybean No.1 continuous.
+        AKShare symbol, e.g. "B0" for Soybean No.2 continuous (the
+        imported/GMO bean Chinese crushers actually crush).
 
     Returns
     -------
@@ -76,7 +77,7 @@ def fetch_dce_futures() -> dict[str, pd.DataFrame]:
     Returns
     -------
     dict
-        {contract_name: DataFrame} — e.g. {"DCE Soybean": DataFrame}
+        {contract_name: DataFrame} — e.g. {"DCE Soybean No.2": DataFrame}
     """
     results = {}
 

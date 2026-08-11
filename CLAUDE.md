@@ -63,7 +63,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 6. **PSD global supply/demand** — `fetchers/psd.py` (10 commodities x 28 countries incl. rapeseed complex + Canada, oilseeds + grains + cotton)
 7. **Currencies** — `fetchers/yfinance.py` (10 pairs: BRL, ARS, PYG, CNY, IDR, MYR, INR, THB, ZAR, NGN)
 8. **World Bank monthly prices** — `fetchers/worldbank.py` (Palm Oil, Rapeseed Oil, Sunflower Oil, etc. — current xlsx link resolved from the CMO landing page each run; the GUID deep link rotates yearly and stale links serve frozen data with HTTP 200)
-9. **Chinese futures** — `fetchers/akshare.py` (7 contracts: 5 DCE incl. Corn + CZCE Rapeseed Oil/Meal — the only free daily rapeseed benchmark)
+9. **Chinese futures** — `fetchers/akshare.py` (8 contracts: 6 DCE incl. Corn + CZCE Rapeseed Oil/Meal — the only free daily rapeseed benchmark). Two bean contracts, not interchangeable: **No.1 (`A0`)** is the domestic non-GMO food bean (tofu/soymilk, ~700–1,100 CNY/MT premium, never crushed) and **No.2 (`B0`)** is the imported/GMO crush bean. The board crush and the vs-CBOT import-parity premium both key off No.2; No.1 is carried as a standalone China food-demand level with no CBOT counterpart (#152).
 10. **Export sales** — `fetchers/export_sales.py` (weekly USDA FAS demand data — requires `FAS_API_KEY`)
 11. **Forward curves** — `fetchers/forward_curve.py` (individual contract months via yfinance — contango/backwardation)
 12. **WASDE monthly estimates** — `fetchers/wasde.py` (USDA OCE monthly XLS — `wasdeMMYY.xls`, no API key required)
