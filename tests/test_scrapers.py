@@ -21,6 +21,7 @@ import pandas as pd
 import pytest
 from bs4 import BeautifulSoup
 
+from config import MANDI_SORT_FIELD
 from fetchers.agrural import _parse_agrural_table, fetch_agrural
 from fetchers.cepea import _parse_cepea_tables
 from fetchers.conab_precos import _parse_farmgate, _validate_download, _week_end_date
@@ -512,10 +513,50 @@ def test_mandi_aggregate_takes_median_modal_in_inr_mt() -> None:
     row = df.iloc[0]
     assert row["Date"] == "2026-08-02"
     assert row["Close"] == 70_000.0   # median 7000 × 10
-    assert row["Low"] == 65_000.0     # min of min_price × 10
-    assert row["High"] == 73_000.0    # max of max_price × 10
     assert row["Volume"] == 3.0       # reporting mandis
     assert row["Unit"] == "INR/MT"
+
+
+def test_mandi_aggregate_stores_no_high_low_band(monkeypatch) -> None:
+    """Agmarknet min/max are lot extremes, not a trading range (#206).
+
+    Indore APMC reported min ₹1,475/qtl against a ₹6,750 modal on
+    2026-08-11, and the cross-mandi min of those minima was stored as a
+    ₹1,010/MT "low" on a ₹67,250/MT day. There is no daily range in a
+    cross-sectional median, so none is invented.
+    """
+    records = [
+        _mandi_record(market="A", modal_price="6750", min_price="1475", max_price="6940"),
+        _mandi_record(market="B", modal_price="6800", min_price="800", max_price="6860"),
+    ]
+    row = _mandi_aggregate(records).iloc[0]
+    assert pd.isna(row["Open"])
+    assert pd.isna(row["High"])
+    assert pd.isna(row["Low"])
+    assert row["Close"] == 67_750.0
+
+
+@pytest.mark.parametrize(
+    "modal, unit",
+    [("67", "₹/kg"), ("670000", "₹/MT")],
+)
+def test_mandi_aggregate_hard_fails_when_the_price_unit_changes(
+    modal: str, unit: str
+) -> None:
+    """A unit switch parses cleanly and is silently 10–100× wrong (#206).
+
+    The band is the only thing standing between a re-denominated feed and
+    a published India basis line that is off by an order of magnitude.
+    """
+    records = [_mandi_record(modal_price=modal)]
+    with pytest.raises(ScraperShapeError, match="outside the plausible band"):
+        _mandi_aggregate(records)
+
+
+def test_mandi_aggregate_accepts_the_validated_live_level() -> None:
+    """₹6,736/qtl — the MP median on 2026-08-11, cross-checked in #206."""
+    row = _mandi_aggregate([_mandi_record(modal_price="6736")]).iloc[0]
+    assert row["Close"] == 67_360.0
 
 
 def test_mandi_aggregate_groups_by_arrival_date() -> None:
@@ -539,17 +580,6 @@ def test_mandi_aggregate_skips_malformed_rows_but_keeps_good_ones() -> None:
     assert df.iloc[0]["Volume"] == 1.0
 
 
-def test_mandi_aggregate_zero_min_max_falls_back_to_modal() -> None:
-    """Thin-arrival mandis report min/max of "0" — must not drag Low/High to 0."""
-    records = [
-        _mandi_record(market="A", modal_price="7000", min_price="0", max_price="0"),
-        _mandi_record(market="B", modal_price="7100", min_price="6900", max_price="7200"),
-    ]
-    df = _mandi_aggregate(records)
-    assert df.iloc[0]["Low"] == 69_000.0   # min(7000, 6900) × 10 — not 0
-    assert df.iloc[0]["High"] == 72_000.0  # max(7000, 7200) × 10
-
-
 def test_mandi_aggregate_raises_when_no_record_is_parseable() -> None:
     """All-malformed records mean the API's field names/formats changed."""
     records = [_mandi_record(arrival_date="2026-08-02")]  # wrong date format
@@ -563,10 +593,11 @@ def test_mandi_aggregate_empty_records_returns_empty_frame() -> None:
 
 
 def test_mandi_collect_paginates_until_total(monkeypatch) -> None:
+    markets = iter(f"market-{i}" for i in range(25))
     pages = [
-        {"total": 25, "records": [_mandi_record()] * 10},
-        {"total": 25, "records": [_mandi_record()] * 10},
-        {"total": 25, "records": [_mandi_record()] * 5},
+        {"total": 25, "records": [_mandi_record(market=next(markets)) for _ in range(10)]},
+        {"total": 25, "records": [_mandi_record(market=next(markets)) for _ in range(10)]},
+        {"total": 25, "records": [_mandi_record(market=next(markets)) for _ in range(5)]},
     ]
     calls: list[int] = []
 
@@ -578,6 +609,80 @@ def test_mandi_collect_paginates_until_total(monkeypatch) -> None:
     records = _mandi_collect("Madhya Pradesh")
     assert len(records) == 25
     assert calls == [0, 10, 20]
+
+
+def test_mandi_collect_drops_rows_repeated_across_pages(monkeypatch) -> None:
+    """Unsorted offset paging served ~20 of 115 MP rows twice (#206).
+
+    The duplicates left the median alone but inflated Volume — the
+    reporting-mandi count — by 21%, and each repeat stands for a real
+    mandi the walk never served at all.
+    """
+    dupe = _mandi_record(market="Mandsaur", modal_price="6600")
+    pages = [
+        {"total": 3, "records": [dupe, _mandi_record(market="Indore")]},
+        {"total": 3, "records": [dupe]},
+    ]
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page", lambda offset, state: pages[offset // 10]
+    )
+    records = _mandi_collect("Madhya Pradesh")
+    assert len(records) == 2
+    assert _mandi_aggregate(records).iloc[0]["Volume"] == 2.0
+
+
+def test_mandi_page_request_is_sorted(monkeypatch) -> None:
+    """A stable sort is what makes offset paging total-ordered here."""
+    seen: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict:
+            return {"total": 0, "records": []}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        seen.update(params or {})
+        return _Resp()
+
+    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
+    _mandi_fetch_page(0, "Madhya Pradesh")
+    assert seen[f"sort[{MANDI_SORT_FIELD}]"] == "asc"
+
+
+def test_mandi_rate_limit_envelope_is_retried_not_a_schema_error(monkeypatch) -> None:
+    """The shared sample key answers HTTP 200 ``{"error": "Rate limit exceeded"}``.
+
+    Handed on to ``_collect_records`` that reads as a missing ``records``
+    key — "the schema changed" — and hard-fails the whole layer over a
+    throttle that clears in seconds (observed twice live, 2026-08-12).
+    """
+    payloads = [
+        {"error": "Rate limit exceeded"},
+        {"total": 1, "records": [_mandi_record()]},
+    ]
+
+    class _Resp:
+        status_code = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+
+        def json(self) -> dict:
+            return self._payload
+
+    calls: list[int] = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(1)
+        return _Resp(payloads[len(calls) - 1])
+
+    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
+    monkeypatch.setattr("fetchers.mandi.retry_sleep", lambda attempt: None)
+    payload = _mandi_fetch_page(0, "Madhya Pradesh")
+    assert payload["total"] == 1
+    assert len(calls) == 2
 
 
 def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
