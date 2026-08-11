@@ -222,7 +222,7 @@ def clear_database():
         "argentina_fob",
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
-        "brazil_spot_prices", "safex_prices", "briefings",
+        "brazil_spot_prices", "safex_prices", "sagis_deliveries", "briefings",
     ]
     with managed_connection(get_connection()) as conn:
         for table in tables:
@@ -674,6 +674,36 @@ def save_safex(commodity: str, df: pd.DataFrame):
         df["contract"] = None
     _save("safex_prices", df[["Date", "commodity", "Close", "Volume", "unit", "contract"]],
           ["Date", "commodity"], f"safex/{commodity}")
+
+
+_SAGIS_COLUMNS = [
+    "commodity", "season_year", "week_number", "week_end", "season_status",
+    "first_published", "adjustments", "week_total", "unit",
+]
+
+
+def save_sagis_deliveries(commodity: str, df: pd.DataFrame):
+    """Write SAGIS weekly producer deliveries (MT) → 'sagis_deliveries'.
+
+    INSERT OR REPLACE on (commodity, season_year, week_number) is load-
+    bearing here, not just re-run safety: SAGIS revises past weeks for
+    months — a closed season's `adjustments` keep moving — so every run
+    legitimately rewrites rows it has already stored.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    if "unit" not in df.columns:
+        df["unit"] = "MT"
+    if "week_end" in df.columns:
+        # The cleaner hands back a Timestamp column; SQLite takes ISO text.
+        df["week_end"] = _date(df["week_end"])
+    missing = [c for c in _SAGIS_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_sagis_deliveries: frame missing columns {missing}")
+    _save("sagis_deliveries", df[_SAGIS_COLUMNS],
+          ["commodity", "season_year", "week_number"], f"sagis/{commodity}")
 
 
 # --- Briefing archive -------------------------------------------------------

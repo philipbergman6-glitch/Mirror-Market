@@ -237,6 +237,18 @@ def read_safex(commodity: str | None = None) -> pd.DataFrame:
     return _read_table("safex_prices", "commodity", commodity)
 
 
+def read_sagis_deliveries(commodity: str | None = None) -> pd.DataFrame:
+    """Read SAGIS South Africa weekly producer deliveries (MT) from SQLite.
+
+    `week_end` is parsed to datetime; `season_year` is the *start* year of
+    the March–February marketing season. Rows are physical flow, not price.
+    Any surface rendering these must carry `config.SAGIS_ATTRIBUTION`.
+    """
+    return _read_table(
+        "sagis_deliveries", "commodity", commodity, date_cols=("week_end",)
+    )
+
+
 def read_freshness() -> pd.DataFrame:
     """
     Read data freshness timestamps for all layers.

@@ -769,6 +769,57 @@ def _build_emerging_markets(data: dict) -> str:
             cards.append('</div>')
             parts.append("\n".join(cards))
 
+        # South Africa SAGIS weekly producer deliveries (physical flow).
+        # The SA leg is a flow story, not a price story: SAFEX above is
+        # licence-capped, while SAGIS grants reproduction with attribution,
+        # which is rendered here and must not be dropped (#202).
+        sa_flow = info.get("south_africa_deliveries", {})
+        if sa_flow:
+            parts.append(
+                '<div class="subhdr" style="font-size:14px;">'
+                'SAGIS Weekly Producer Deliveries</div>'
+            )
+            for key, label in (
+                ("soybeans", "Soybeans"),
+                ("sunflower", "Sunflower Seed"),
+            ):
+                pace = sa_flow.get(key)
+                if not pace:
+                    continue
+                flow_cards = ['<div class="grid grid-3">']
+                week_end = pace.get("week_end")
+                wk = pace.get("week_number")
+                sub = f"MT · wk {wk}" + (f" ending {_esc(week_end)}" if week_end else "")
+                flow_cards.append(
+                    f'<div class="mc"><div class="mc-label">{label} — Latest Week</div>'
+                    f'<div class="mc-val">{pace["week_total_mt"]:,.0f}</div>'
+                    f'<div class="mc-delta muted">{sub}</div></div>'
+                )
+                season = _esc(pace.get("season_label", ""))
+                yoy = pace.get("yoy_pct")
+                yoy_str = f"{yoy:+.1f}% YoY" if yoy is not None else "season-to-date"
+                yoy_cls = "" if yoy is None else ("up" if yoy > 0 else "down")
+                flow_cards.append(
+                    f'<div class="mc"><div class="mc-label">{label} — Season {season}</div>'
+                    f'<div class="mc-val">{pace["progressive_mt"]:,.0f}</div>'
+                    f'<div class="mc-delta {yoy_cls}">{yoy_str}</div></div>'
+                )
+                vs_avg = pace.get("vs_avg3_pct")
+                if vs_avg is not None:
+                    avg_cls = "up" if vs_avg > 0 else "down"
+                    flow_cards.append(
+                        f'<div class="mc"><div class="mc-label">{label} — vs 3y Avg</div>'
+                        f'<div class="mc-val {avg_cls}">{vs_avg:+.1f}%</div>'
+                        f'<div class="mc-delta muted">same week number</div></div>'
+                    )
+                flow_cards.append('</div>')
+                parts.append("\n".join(flow_cards))
+            attribution = sa_flow.get("attribution")
+            if attribution:
+                parts.append(
+                    f'<div class="muted" style="font-size:12px;">{_esc(attribution)}</div>'
+                )
+
         parts.append('<hr class="divider">')
 
     return "\n".join(parts)

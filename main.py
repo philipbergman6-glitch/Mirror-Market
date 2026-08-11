@@ -52,6 +52,7 @@ from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
 from fetchers.safex import fetch_safex
+from fetchers.sagis import fetch_sagis_deliveries
 from fetchers.usda import (
     fetch_all_crop_progress,
     fetch_crush_data,
@@ -77,6 +78,7 @@ from pipeline.clean import (
     clean_ohlcv,
     clean_psd,
     clean_safex,
+    clean_sagis_deliveries,
     clean_wasde,
     clean_weather,
     clean_worldbank,
@@ -106,6 +108,7 @@ from pipeline.store import (
     save_price_data,
     save_psd_data,
     save_safex,
+    save_sagis_deliveries,
     save_usda_data,
     save_wasde,
     save_weather_data,
@@ -210,7 +213,7 @@ def _mark_stale(
 # Column names that carry the observation date across the layers. The frames
 # reaching _finalize_layer are post-clean, so these are the cleaners' own
 # conventions (pipeline/clean.py), not the raw upstream ones.
-_DATE_COLUMNS = ("Date", "date", "week_ending", "report_date")
+_DATE_COLUMNS = ("Date", "date", "week_ending", "week_end", "report_date")
 
 
 def _latest_observation_date(data: dict) -> pd.Timestamp | None:
@@ -796,6 +799,16 @@ def run() -> int:
         "magyp_fob", "Layer 21", "Argentina MAGyP official FOB prices",
         fetch=lambda: fetch_magyp_fob(),
         save=lambda n, d: save_argentina_fob(d),
+    )
+    # Layer 23: South Africa's physical flow leg. The DT-SWP export carries
+    # every season in one file, so it is never legitimately empty — an empty
+    # return means the source broke, and empty_fails stays on (the default).
+    # Layer 22 is reserved for the Nigeria AFEX leg (PR #166, in flight).
+    results["sagis"] = _run_scraper_layer(
+        "sagis", "Layer 23", "SAGIS South Africa weekly producer deliveries",
+        fetch=lambda: fetch_sagis_deliveries(),
+        save=lambda n, d: save_sagis_deliveries(n, d),
+        clean=lambda d: clean_sagis_deliveries(d),
     )
 
     # ── Export snapshot-only history back to git-committed CSVs ──

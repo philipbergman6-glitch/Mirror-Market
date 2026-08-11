@@ -45,6 +45,7 @@ from config import (
     CRUSH_OIL_FACTOR,
     MANDI_SERIES,
     MANDI_SERIES_MH,
+    SAGIS_ATTRIBUTION,
     WEATHER_DRY_THRESHOLD_MM,
     WEATHER_EXTREME_HEAT_C,
     WEATHER_HEAVY_RAIN_MM,
@@ -63,6 +64,7 @@ from pipeline.query import (
     read_inspections,
     read_psd,
     read_safex,
+    read_sagis_deliveries,
     read_wasde,
     read_weather,
 )
@@ -152,6 +154,82 @@ def _pct_chg(series: pd.Series, sessions: int) -> float | None:
     if pd.isna(prev) or prev == 0:
         return None
     return float((series.iloc[-1] - prev) / prev * 100)
+
+
+_SAGIS_YOY_AVERAGE_SEASONS = 3
+
+
+def _sagis_delivery_pace(df: pd.DataFrame) -> dict[str, Any]:
+    """Season-to-date delivery pace for one SAGIS commodity.
+
+    Comparisons are made **at the same week number**, which is SAGIS's own
+    convention and the only honest one here: a season's week 1 can start in
+    late February or early March, so the calendar dates behind week 12 differ
+    by up to a week between seasons. Matching on dates would compare
+    different points of the same harvest.
+
+    Returns {} when the frame is empty or carries no active season. Every
+    figure is a component or a ratio of components — the progressive total
+    is summed here rather than stored, since the source's own `Prog. Total`
+    column is derived and Layer 23 keeps components only.
+    """
+    if df is None or df.empty:
+        return {}
+
+    frame = df.dropna(subset=["week_total"]).copy()
+    if frame.empty:
+        return {}
+
+    frame["season_year"] = frame["season_year"].astype(int)
+    frame["week_number"] = frame["week_number"].astype(int)
+
+    current_season = int(frame["season_year"].max())
+    current = frame[frame["season_year"] == current_season].sort_values("week_number")
+    if current.empty:
+        return {}
+
+    latest = current.iloc[-1]
+    week = int(latest["week_number"])
+    progressive = float(current["week_total"].sum())
+
+    out: dict[str, Any] = {
+        "season_year": current_season,
+        "season_label": f"{current_season}/{current_season + 1}",
+        "season_status": str(latest.get("season_status") or ""),
+        "week_number": week,
+        "week_end": _asof(latest.get("week_end")),
+        "week_total_mt": round(float(latest["week_total"]), 1),
+        "week_first_published_mt": (
+            round(float(latest["first_published"]), 1)
+            if pd.notna(latest.get("first_published")) else None
+        ),
+        "week_adjustments_mt": (
+            round(float(latest["adjustments"]), 1)
+            if pd.notna(latest.get("adjustments")) else None
+        ),
+        "progressive_mt": round(progressive, 1),
+    }
+
+    # Progressive total of each prior season, truncated at the same week.
+    prior = frame[
+        (frame["season_year"] < current_season) & (frame["week_number"] <= week)
+    ]
+    by_season = prior.groupby("season_year")["week_total"].sum()
+
+    last_season = current_season - 1
+    if last_season in by_season.index and by_season[last_season] != 0:
+        last_prog = float(by_season[last_season])
+        out["prev_season_progressive_mt"] = round(last_prog, 1)
+        out["yoy_pct"] = round((progressive - last_prog) / abs(last_prog) * 100, 1)
+
+    recent = by_season.tail(_SAGIS_YOY_AVERAGE_SEASONS)
+    if len(recent) == _SAGIS_YOY_AVERAGE_SEASONS and recent.mean() != 0:
+        avg = float(recent.mean())
+        out["avg3_progressive_mt"] = round(avg, 1)
+        out["vs_avg3_pct"] = round((progressive - avg) / abs(avg) * 100, 1)
+        out["avg3_seasons"] = [int(s) for s in recent.index]
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1468,6 +1546,30 @@ def emerging_markets_analysis() -> dict:
 
             except Exception as exc:
                 logger.warning("South Africa SAFEX analytics failed: %s", exc)
+
+            # --- SAGIS weekly producer deliveries (physical flow) ---
+            # Independent of the SAFEX block above and deliberately outside
+            # its try: the price leg is licence-capped and can be absent,
+            # but the flow leg is what the SA page is actually built on
+            # (#202), so one must not take the other down.
+            try:
+                sagis_df = read_sagis_deliveries()
+                if not sagis_df.empty:
+                    sagis_entry: dict[str, Any] = {}
+                    for key, label in (
+                        ("Soybeans (SAGIS)", "soybeans"),
+                        ("Sunflower Seed (SAGIS)", "sunflower"),
+                    ):
+                        pace = _sagis_delivery_pace(
+                            sagis_df[sagis_df["commodity"] == key]
+                        )
+                        if pace:
+                            sagis_entry[label] = pace
+                    if sagis_entry:
+                        sagis_entry["attribution"] = SAGIS_ATTRIBUTION
+                        entry["south_africa_deliveries"] = sagis_entry
+            except Exception as exc:
+                logger.warning("South Africa SAGIS deliveries analytics failed: %s", exc)
 
             if sa_domestic_entry:
                 entry["south_africa_domestic"] = sa_domestic_entry

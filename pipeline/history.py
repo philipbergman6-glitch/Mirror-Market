@@ -69,6 +69,18 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # re-requested. At each MY rollover (Sep 1 for soybeans) the outgoing
     # year's weekly series would vanish from an ephemeral DB.
     "export_sales": ("commodity", "week_ending", "country"),
+    # SAGIS's DT-SWP export does serve history — 9 seasons (2018–2026) in
+    # one file — so this layer self-heals for the window the file happens to
+    # carry. That window is the catch: it is fixed-width, and nothing
+    # upstream promises it grows. When 2018 rolls off, an ephemeral CI DB
+    # loses that season permanently, because the only copy we ever had came
+    # from the file that just dropped it. ~104 rows/year is cheap insurance
+    # against a silent truncation we could not otherwise detect.
+    #
+    # Import is INSERT OR IGNORE and the fetch that follows is INSERT OR
+    # REPLACE, so SAGIS's ongoing revisions to closed seasons still land:
+    # the CSV seeds, the live file overwrites, the export re-writes.
+    "sagis_deliveries": ("commodity", "season_year", "week_number"),
 }
 
 

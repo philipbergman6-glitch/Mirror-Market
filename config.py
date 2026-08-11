@@ -704,6 +704,37 @@ AGRURAL_URL = "https://agrural.com.br/precossojaemilho/"
 AGRURAL_COMMODITIES = ["Soybean (AgRural Paranaguá FOB)"]
 
 # ---------------------------------------------------------------------------
+# Layer 23 — SAGIS weekly producer deliveries (free, no API key)
+#
+# South Africa's first *physical flow* series: tonnage delivered by producers
+# into commercial storage each week — the SA analogue of USDA export
+# inspections (Layer 14), and a better fit for a physical-buyer product than
+# the licence-capped SAFEX price leg (#157 → #202).
+#
+# Licence: "SAGIS' information may be reproduced with the acknowledgement of
+# the source." An explicit reproduction grant, materially better than SAFEX
+# (RED). SAGIS_ATTRIBUTION below is the string every surface must render.
+#
+# We take the machine-readable `DT-SWP-<Commodity>_<year>_<week>.xlsx` export,
+# not the `ProdProgressive-*` presentation workbook: the DT file is a flat
+# 9-column table needing no header sniffing, and it carries *all* seasons
+# (2018–2026 as of week 22/2026, 440 rows) rather than one season per file.
+#
+# The URL is week-stamped, never rolling, so it MUST be resolved from the
+# listing page on every run. A hardcoded deep link would serve a frozen week
+# at HTTP 200 forever — the same trap as the World Bank CMO GUID in Layer 8.
+# ---------------------------------------------------------------------------
+SAGIS_WEEKLY_DATA_URL = "https://www.sagis.org.za/sagis-weekly-data/"
+SAGIS_ATTRIBUTION = "Source: SAGIS (South African Grain Information Service)"
+# Filename commodity token → the commodity key stored in `sagis_deliveries`.
+# Renaming a key here forks the series in data/history/sagis_deliveries.csv,
+# where the old key would be re-seeded forever — treat these as frozen.
+SAGIS_COMMODITIES = {
+    "Soybeans": "Soybeans (SAGIS)",
+    "Sunflower": "Sunflower Seed (SAGIS)",
+}
+
+# ---------------------------------------------------------------------------
 # Analysis thresholds — configurable per-commodity where appropriate
 # ---------------------------------------------------------------------------
 
@@ -764,6 +795,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "export_sales": 12,
     "crop_progress": 12,
     "crush_inspections": 12,
+    "sagis": 12,
     # Monthly publications — allow ~6 weeks.
     "wasde": 42,
     "psd": 42,
@@ -832,6 +864,15 @@ LAYER_MAX_DATA_AGE_DAYS = {
     "cot": 18,         # Friday release reports the *previous Tuesday*
     "export_sales": 21,
     "eia": 21,
+    # SAGIS publishes producer deliveries at 12:00 on the 3rd working day of
+    # each week, and the observation it stamps is the *previous* week's end
+    # date — so the newest week_end is already ~5 days old the moment it
+    # lands, and ~12 days old the day before the next release. 21 days is
+    # that normal worst case plus one missed publication; anything tighter
+    # fires on an ordinary public-holiday week. The DT export is also a
+    # candidate for freezing (a week-stamped URL that keeps resolving), which
+    # is exactly what this budget is here to catch.
+    "sagis": 21,
     # Monthly publication. 100 days matches the identical guard inside
     # fetchers/worldbank.py — the CMO deep link rotates yearly and the old
     # GUID keeps serving a frozen file with HTTP 200. One number, one
