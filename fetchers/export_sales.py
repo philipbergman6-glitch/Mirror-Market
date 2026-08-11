@@ -150,6 +150,7 @@ _FIELD_SOURCES = {
 
 
 def _exports_endpoint(commodity_code: str, market_year: int) -> str:
+    """Build the ESR weekly-exports endpoint for one commodity and one year."""
     return f"/exports/commodityCode/{commodity_code}/allCountries/marketYear/{market_year}"
 
 
@@ -204,7 +205,7 @@ def fetch_export_sales(
         # marketing years is a real problem and should surface as one.
         prior_year = market_year - 1
         logger.warning(
-            "ESR returned no rows for code %s in MY %d — falling back to MY %d",
+            "ESR returned no rows for code %s in MY %d — retrying against MY %d",
             commodity_code, market_year, prior_year,
         )
         data = _fas_get(_exports_endpoint(commodity_code, prior_year))

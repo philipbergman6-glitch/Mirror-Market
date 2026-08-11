@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from config import EXPORT_SALES_COMMODITIES
+from config import EXPORT_SALES_COMMODITIES, LAYER_MIN_KEYS
 from fetchers import export_sales
 
 # Real field names as returned by the ESR API (verified against the
@@ -163,8 +163,10 @@ def test_populated_market_year_issues_one_request(mock_get):
 def test_september_rollover_keeps_all_commodities_populated(mock_get):
     """1 September: the four Sep-start commodities have no report weeks in
     the new MY yet.  With the fallback, all six still clear the floor."""
-    sep_start_codes = {
-        EXPORT_SALES_COMMODITIES[name]
+    # Endpoints built through the module's own helper, so a change to the
+    # URL shape breaks this test loudly instead of silently matching nothing.
+    empty_endpoints = {
+        export_sales._exports_endpoint(EXPORT_SALES_COMMODITIES[name], 2027)
         for name in ("Soybeans", "Soybean Oil", "Soybean Meal", "Corn")
     }
 
@@ -173,11 +175,7 @@ def test_september_rollover_keeps_all_commodities_populated(mock_get):
             return ESR_COUNTRIES
         if endpoint == "/unitsOfMeasure":
             return [{"unitId": 1, "unitNames": "Metric Tons"}]
-        parts = endpoint.split("/")
-        code, year = parts[3], int(parts[-1])
-        if code in sep_start_codes and year == 2027:
-            return []
-        return [ESR_EXPORT_ROW]
+        return [] if endpoint in empty_endpoints else [ESR_EXPORT_ROW]
 
     mock_get.side_effect = fake_get
 
@@ -187,3 +185,40 @@ def test_september_rollover_keeps_all_commodities_populated(mock_get):
 
     assert set(results) == set(EXPORT_SALES_COMMODITIES)
     assert all(not df.empty for df in results.values())
+    # The shape gate is what used to page CI: non-empty keys vs the floor.
+    non_empty = sum(1 for df in results.values() if not df.empty)
+    assert non_empty >= LAYER_MIN_KEYS["export_sales"]
+
+
+@patch.object(export_sales, "FAS_API_KEY", "test-key")
+@patch.object(export_sales, "_fas_get")
+def test_september_rollover_without_fallback_would_trip_the_floor(mock_get):
+    """Guards the premise: without the fallback the same 1 September state
+    leaves 2 of 6 commodities populated, below the floor of 4."""
+    sep_start = ("Soybeans", "Soybean Oil", "Soybean Meal", "Corn")
+    empty_endpoints = {
+        export_sales._exports_endpoint(EXPORT_SALES_COMMODITIES[name], 2027)
+        for name in sep_start
+    }
+    # Prior year empty too, so the fallback cannot rescue these four.
+    empty_endpoints |= {
+        export_sales._exports_endpoint(EXPORT_SALES_COMMODITIES[name], 2026)
+        for name in sep_start
+    }
+
+    def fake_get(endpoint):
+        if endpoint == "/countries":
+            return ESR_COUNTRIES
+        if endpoint == "/unitsOfMeasure":
+            return [{"unitId": 1, "unitNames": "Metric Tons"}]
+        return [] if endpoint in empty_endpoints else [ESR_EXPORT_ROW]
+
+    mock_get.side_effect = fake_get
+
+    with patch.object(export_sales, "date") as mock_date:
+        mock_date.today.return_value = date(2026, 9, 1)
+        results = export_sales.fetch_all_export_sales()
+
+    non_empty = sum(1 for df in results.values() if not df.empty)
+    assert non_empty == 2
+    assert non_empty < LAYER_MIN_KEYS["export_sales"]
