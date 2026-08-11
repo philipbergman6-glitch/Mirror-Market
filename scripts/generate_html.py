@@ -110,6 +110,22 @@ def _esc(text) -> str:
 # ---------------------------------------------------------------------------
 # Freshness indicators
 # ---------------------------------------------------------------------------
+def _coverage_label(row) -> str | None:
+    """Render "14/19" when a layer ran below full key coverage, else None (#182).
+
+    Its own field, deliberately not appended to the age string: that string
+    already carries status prose ("failed · last good 3d ago", "never",
+    "disabled"), and overloading it further is how the per-layer-cadence bug
+    arose. Full-coverage layers render nothing — a badge shown every day on
+    every healthy layer stops being read.
+    """
+    returned, expected = row.get("keys_returned"), row.get("keys_expected")
+    if pd.isna(returned) or pd.isna(expected) or not expected:
+        return None
+    returned, expected = int(returned), int(expected)
+    return f"{returned}/{expected}" if returned < expected else None
+
+
 def _build_freshness_items() -> list[dict]:
     """Build data freshness sidebar items."""
     try:
@@ -131,8 +147,11 @@ def _build_freshness_items() -> list[dict]:
         # An intentionally disabled layer must not read as fresh or as an
         # outage — it gets its own bucket and is excluded from counts.
         if row_status == "disabled":
-            items.append({"name": layer, "status": "disabled", "age": "disabled"})
+            items.append({"name": layer, "status": "disabled", "age": "disabled",
+                          "coverage": None})
             continue
+
+        coverage = _coverage_label(row)
 
         if pd.notna(last):
             last_dt = pd.to_datetime(last, utc=True)
@@ -159,7 +178,8 @@ def _build_freshness_items() -> list[dict]:
         else:
             status = "old"
             age_str = "failed · never succeeded" if row_status == "failed" else "never"
-        items.append({"name": layer, "status": status, "age": age_str})
+        items.append({"name": layer, "status": status, "age": age_str,
+                      "coverage": coverage})
     return items
 
 

@@ -37,6 +37,15 @@ logger = logging.getLogger(__name__)
 _AUTH_HEADER = "X-Api-Key"
 
 
+def is_configured() -> bool:
+    """Is this layer configured to run at all? (DictLayer.run_if, #180.)
+
+    Reads the module global at call time, so this and the fetch functions'
+    own key checks below can never disagree.
+    """
+    return bool(FAS_API_KEY)
+
+
 def _current_market_year(start_month: int = EXPORT_SALES_DEFAULT_MY_START) -> int:
     """
     Return the current USDA marketing year for a given MY start month.
@@ -55,7 +64,12 @@ def _fas_get(endpoint: str) -> dict | list | None:
     """
     Make an authenticated GET request to the FAS API with retry logic.
 
-    Returns the parsed JSON or None on failure.
+    Returns the parsed JSON, or ``None`` if the request failed.
+
+    The two are distinct and callers must not collapse them: ``None`` means
+    every retry failed (network, auth, unparseable body), while an empty
+    list means the request *succeeded* and the server has nothing for that
+    query.  fetch_export_sales() branches on exactly this distinction.
     """
     if not FAS_API_KEY:
         return None
@@ -144,6 +158,11 @@ _FIELD_SOURCES = {
 }
 
 
+def _exports_endpoint(commodity_code: str, market_year: int) -> str:
+    """Build the ESR weekly-exports endpoint for one commodity and one year."""
+    return f"/exports/commodityCode/{commodity_code}/allCountries/marketYear/{market_year}"
+
+
 def fetch_export_sales(
     commodity_code: str,
     market_year: int | None = None,
@@ -159,6 +178,8 @@ def fetch_export_sales(
         ESR commodity code (e.g. "801" for soybeans — see /api/esr/commodities).
     market_year : int or None
         Marketing year to fetch. Defaults to current marketing year.
+        If that year comes back successfully empty (a not-yet-started
+        marketing year), the prior year is fetched once instead.
     country_map : dict or None
         {countryCode: countryName} from fetch_country_map(). Fetched on
         demand if not supplied.
@@ -177,8 +198,26 @@ def fetch_export_sales(
     if market_year is None:
         market_year = _current_market_year()
 
-    endpoint = f"/exports/commodityCode/{commodity_code}/allCountries/marketYear/{market_year}"
-    data = _fas_get(endpoint)
+    data = _fas_get(_exports_endpoint(commodity_code, market_year))
+
+    if data is None:
+        # The request failed. Do NOT fall back — re-serving last year's rows
+        # during a genuine FAS outage would keep the layer green while it is
+        # blind. An empty frame lets the shape gate hard-fail as intended.
+        return pd.DataFrame()
+
+    if isinstance(data, list) and not data:
+        # HTTP 200 with an empty array: the marketing year is real but has no
+        # report weeks filed yet. On 1 September the soy complex and corn roll
+        # together, emptying 4 of 6 commodities at once (#181). Retry once
+        # against the prior year — never chain, two consecutive empty
+        # marketing years is a real problem and should surface as one.
+        prior_year = market_year - 1
+        logger.warning(
+            "ESR returned no rows for code %s in MY %d — retrying against MY %d",
+            commodity_code, market_year, prior_year,
+        )
+        data = _fas_get(_exports_endpoint(commodity_code, prior_year))
 
     if not data:
         return pd.DataFrame()

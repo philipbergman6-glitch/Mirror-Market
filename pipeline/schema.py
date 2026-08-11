@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS gulf_bids (
     basis_high    REAL,
     futures_month INTEGER,
     basis_change  TEXT,
+    price_change  TEXT,
     price_low     REAL,
     price_high    REAL,
     average       REAL,
@@ -304,7 +305,11 @@ CREATE TABLE IF NOT EXISTS data_freshness (
     last_success    TEXT,                              -- null if never succeeded
     last_attempt    TEXT,                              -- timestamp of most recent run
     rows_fetched    INTEGER,
-    status          TEXT    NOT NULL DEFAULT 'success' -- 'success' | 'failed'
+    status          TEXT    NOT NULL DEFAULT 'success', -- 'success' | 'failed'
+    -- Key coverage (#182). NULL = never learned (transport failure, or a
+    -- layer with no key catalog); 0 = asked and got nothing back.
+    keys_returned   INTEGER,
+    keys_expected   INTEGER
 );
 """
 

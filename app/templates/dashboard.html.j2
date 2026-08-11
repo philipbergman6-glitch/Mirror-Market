@@ -456,13 +456,16 @@ details .det-content { padding: 0 16px 16px; }
     <div class="det-content">
     <table class="dtable">
       <thead>
-        <tr><th>Layer</th><th>Status</th><th>Last Success</th></tr>
+        <tr><th>Layer</th><th>Status</th><th>Keys</th><th>Last Success</th></tr>
       </thead>
       <tbody>
         {% for item in freshness_items %}
         <tr>
           <td>{{ item.name }}</td>
           <td><span class="{% if item.status == 'fresh' %}up{% elif item.status in ('old', 'degraded') %}down{% else %}muted{% endif %}">{{ item.status }}</span></td>
+          {# Coverage is rendered only below full: a badge on every healthy
+             layer every day is the badge-blindness #176 removed (#182). #}
+          <td class="num">{% if item.coverage %}<span class="muted">{{ item.coverage }}</span>{% endif %}</td>
           <td class="num">{{ item.age }}</td>
         </tr>
         {% endfor %}

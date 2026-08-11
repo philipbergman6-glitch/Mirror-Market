@@ -21,8 +21,9 @@ prices are $/bu ranges. We store the native units — USD/MT conversion
 happens at the display layer via ``pipeline/units.py``.
 
 Parser strategy: hard-fail with ``ScraperShapeError`` when the soybean
-section, its bid rows, or a fresh report date can't be found. Transport
-failures return ``FetchResult.failed``.
+section, its bid rows, or a fresh report date can't be found — and when
+a line that *is* a bid row doesn't fit the column shape, rather than
+skipping it. Transport failures return ``FetchResult.failed``.
 """
 
 from __future__ import annotations
@@ -56,24 +57,36 @@ _SECTIONS = {
     "Wheat": re.compile(r"US\s+#\d\s+Soft\s+Red\s+Winter\s+Wheat\s+\(Bulk\)"),
 }
 
-# One bid row (location wraps to a continuation line handled separately).
-# Wheat rows carry an extra Protein column ("Ordinary") and sometimes quote
-# a single basis/price value instead of a range — both optional here.
-_BID_ROW_RE = re.compile(
-    r"^\s*(?P<location>[A-Za-z][A-Za-z .]*?(?:Ports|Elevators)?\s*-?)\s+"
-    r"(?P<sale_type>Bid|Offer)\s+"
-    r"(?:(?P<protein>Ordinary|[\d.]+%)\s+)?"
-    r"(?P<basis_low>-?\d+\.\d+)(?P<code_low>[FGHJKMNQUVXZ])"
-    r"(?:\s+to\s+(?P<basis_high>-?\d+\.\d+)(?P<code_high>[FGHJKMNQUVXZ]))?\s+"
-    r"(?P<basis_change>UNCH|UP\s+[\d.]+|DN\s+[\d.]+)\s+"
-    r"(?P<price_low>\d+\.\d+)(?:-(?P<price_high>\d+\.\d+))?\s+"
-    r"(?P<price_change>UNCH|UP\s+[\d.]+|DN\s+[\d.]+)\s+"
-    r"(?P<average>\d+\.\d+)"
-    r"(?:\s+(?P<year_ago>\d+\.\d+))?\s+"
-    r"(?P<freight>\S+)\s+"
-    r"(?P<delivery>\S+)\s*$",
-    re.MULTILINE,
+# A bid row is read as typed *fields* split on the 2+-space column gutters
+# of the layout extraction, not as one monolithic regex. AMS prints ranged
+# change columns ("DN 0.1225-DN 0.1325", "UP 1.00-DN 4.00", "UNCH-DN 2.00")
+# and leaves the change and Year Ago columns blank on some deliveries; a
+# fixed-token regex matched none of those and dropped the row silently —
+# including, on 2026-08-11, the headline soybean Current row (#190).
+#
+# Column sequence (Protein present in the wheat section only):
+#   Location  SaleType  [Protein]  Basis  [BasisChange]  Price
+#   [PriceChange]  Average  [YearAgo]  Freight  Delivery
+_FIELD_SPLIT_RE = re.compile(r"\s{2,}")
+
+# 120.00Q  |  95.00Q to 100.00X
+_BASIS_RE = re.compile(
+    r"^(?P<low>-?\d+(?:\.\d+)?)(?P<code_low>[FGHJKMNQUVXZ])"
+    r"(?:\s+to\s+(?P<high>-?\d+(?:\.\d+)?)(?P<code_high>[FGHJKMNQUVXZ]))?$"
 )
+
+# 12.9800  |  12.4250-12.6875
+_PRICE_RE = re.compile(r"^(?P<low>\d+(?:\.\d+)?)(?:-(?P<high>\d+(?:\.\d+)?))?$")
+
+_DECIMAL_RE = re.compile(r"^\d+(?:\.\d+)?$")
+
+_PROTEIN_RE = re.compile(r"^(?:Ordinary|[\d.]+%)$")
+
+# UNCH | UP 1.00 | DN 0.1075, optionally a range of two such tokens.
+_CHANGE_TOKEN = r"(?:UNCH|(?:UP|DN)\s+[\d.]+)"
+_CHANGE_RE = re.compile(rf"^{_CHANGE_TOKEN}(?:\s*-\s*{_CHANGE_TOKEN})?$")
+
+_SALE_TYPES = {"Bid", "Offer"}
 
 _DATE_RE = re.compile(r"([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})")
 
@@ -110,6 +123,112 @@ def _parse_report_date(text: str, today: date | None = None) -> str:
     return parsed.isoformat()
 
 
+def _is_bid_row(line: str) -> bool:
+    """A data row is any line whose second column is Bid/Offer.
+
+    Deliberately loose: identification and parsing are separate so that a
+    line that *is* a bid row but no longer fits the column shape raises
+    instead of falling through as unrecognised text.
+    """
+    fields = _FIELD_SPLIT_RE.split(line.strip())
+    return len(fields) > 1 and fields[1] in _SALE_TYPES
+
+
+def _parse_bid_row(line: str) -> dict[str, object]:
+    """Parse one bid row into typed fields, or raise ``ScraperShapeError``.
+
+    Every column that AMS may leave blank (Basis Change, Price Change,
+    Year Ago) is optional and resolves to ``None``; everything else is
+    required. A row that does not fit this shape is drift, not noise —
+    it raises rather than being skipped, so the layer fails loudly
+    instead of stamping a fresh ``last_success`` over a short table.
+    """
+    fields = _FIELD_SPLIT_RE.split(line.strip())
+    pos = 0
+
+    def peek() -> str | None:
+        return fields[pos] if pos < len(fields) else None
+
+    def take(what: str) -> str:
+        nonlocal pos
+        value = peek()
+        if value is None:
+            raise ScraperShapeError(
+                f"AMS 3147: unparseable bid row — {what} missing: {line.strip()!r}"
+            )
+        pos += 1
+        return value
+
+    location = take("location")
+    sale_type = take("sale type")
+    if sale_type not in _SALE_TYPES:
+        raise ScraperShapeError(
+            f"AMS 3147: unparseable bid row — sale type {sale_type!r}: {line.strip()!r}"
+        )
+
+    if (nxt := peek()) is not None and _PROTEIN_RE.match(nxt):
+        take("protein")  # wheat-only column, not stored
+
+    basis = _BASIS_RE.match(take("basis"))
+    if not basis:
+        raise ScraperShapeError(
+            f"AMS 3147: unparseable bid row — basis column: {line.strip()!r}"
+        )
+
+    basis_change = None
+    if (nxt := peek()) is not None and _CHANGE_RE.match(nxt):
+        basis_change = take("basis change")
+
+    price = _PRICE_RE.match(take("price"))
+    if not price:
+        raise ScraperShapeError(
+            f"AMS 3147: unparseable bid row — price column: {line.strip()!r}"
+        )
+
+    price_change = None
+    if (nxt := peek()) is not None and _CHANGE_RE.match(nxt):
+        price_change = take("price change")
+
+    average = take("average")
+    if not _DECIMAL_RE.match(average):
+        raise ScraperShapeError(
+            f"AMS 3147: unparseable bid row — average {average!r}: {line.strip()!r}"
+        )
+
+    year_ago = None
+    if (nxt := peek()) is not None and _DECIMAL_RE.match(nxt):
+        year_ago = take("year ago")
+
+    freight = take("freight")
+    delivery = take("delivery")
+    if pos != len(fields):
+        raise ScraperShapeError(
+            f"AMS 3147: unparseable bid row — {len(fields) - pos} trailing "
+            f"column(s): {line.strip()!r}"
+        )
+
+    return {
+        "location": re.sub(r"\s*-\s*$", "", location).strip(),
+        "delivery": delivery,
+        "sale_type": sale_type,
+        "basis_low": float(basis["low"]),
+        "basis_high": float(basis["high"] or basis["low"]),
+        "futures_month": MONTH_CODES[basis["code_low"]],
+        "basis_change": _normalise_change(basis_change),
+        "price_low": float(price["low"]),
+        "price_high": float(price["high"] or price["low"]),
+        "price_change": _normalise_change(price_change),
+        "average": float(average),
+        "year_ago": float(year_ago) if year_ago else None,
+        "freight": freight,
+    }
+
+
+def _normalise_change(value: str | None) -> str | None:
+    """Collapse internal whitespace; keep both endpoints of a ranged change."""
+    return re.sub(r"\s*-\s*", "-", re.sub(r"\s+", " ", value)) if value else None
+
+
 def _parse_gulf_bids(text: str, today: date | None = None) -> pd.DataFrame:
     """Parse every commodity section's bid rows out of the report text.
 
@@ -135,23 +254,13 @@ def _parse_gulf_bids(text: str, today: date | None = None) -> pd.DataFrame:
     for idx, (start, commodity) in enumerate(positions):
         end = positions[idx + 1][0] if idx + 1 < len(positions) else len(text)
         section = text[start:end]
-        for m in _BID_ROW_RE.finditer(section):
-            d = m.groupdict()
+        for line in section.splitlines():
+            if not _is_bid_row(line):
+                continue
             rows.append({
                 "report_date": report_date,
                 "commodity": commodity,
-                "location": re.sub(r"\s*-\s*$", "", d["location"]).strip(),
-                "delivery": d["delivery"],
-                "sale_type": d["sale_type"],
-                "basis_low": float(d["basis_low"]),
-                "basis_high": float(d["basis_high"] or d["basis_low"]),
-                "futures_month": MONTH_CODES[d["code_low"]],
-                "basis_change": re.sub(r"\s+", " ", d["basis_change"]),
-                "price_low": float(d["price_low"]),
-                "price_high": float(d["price_high"] or d["price_low"]),
-                "average": float(d["average"]),
-                "year_ago": float(d["year_ago"]) if d["year_ago"] else None,
-                "freight": d["freight"],
+                **_parse_bid_row(line),
             })
 
     if not any(r["commodity"] == "Soybeans" for r in rows):
