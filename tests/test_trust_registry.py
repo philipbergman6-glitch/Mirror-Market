@@ -11,6 +11,7 @@ import pytest
 
 from trust import Dataset, Source
 from trust.registry import (
+    AGRURAL_PARANAGUA_CONTRACT,
     PILOT_REGISTRY,
     REQUIRED_FX_PAIRS,
     CadenceContract,
@@ -79,8 +80,8 @@ def test_real_pilot_registry_is_complete_and_round_trips() -> None:
 
     assert round_tripped == PILOT_REGISTRY
     assert serialized["schema_version"] == 1
-    assert len(PILOT_REGISTRY.sources) == 2
-    assert len(PILOT_REGISTRY.datasets) == 8
+    assert len(PILOT_REGISTRY.sources) == 3
+    assert len(PILOT_REGISTRY.datasets) == 9
 
     magyp = PILOT_REGISTRY.dataset_by_key("magyp", "official-soy-fob")
     assert magyp.identity is not None
@@ -92,6 +93,12 @@ def test_real_pilot_registry_is_complete_and_round_trips() -> None:
     )
     assert "delivery_window" in magyp.identity.required_fields
     assert magyp.criticality is Criticality.SUPPORTING
+
+    agrural = PILOT_REGISTRY.dataset_by_key("agrural", "paranagua-soybean-fob")
+    assert agrural == AGRURAL_PARANAGUA_CONTRACT
+    assert agrural.identity is not None
+    assert agrural.identity.fixed_fields["location"] == "paranagua"
+    assert agrural.criticality is Criticality.CRITICAL
 
     benchmark_contracts = [contract for contract in PILOT_REGISTRY.datasets if contract.dataset.key.startswith("cbot-")]
     assert len(benchmark_contracts) == 3
