@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -102,6 +103,42 @@ def test_publish_trusted_static_rejects_non_candidate_or_verified_editions(tmp_p
             edition_id=edition.edition_id,
             candidate_root=tmp_path / "candidates",
         )
+
+
+def test_publish_trusted_static_main_prints_non_deploy_json_contract(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repository_path = tmp_path / "trust"
+    candidate_root = tmp_path / "candidates"
+    edition = _seed_trusted_edition(repository_path, EditionStatus.VERIFIED)
+
+    monkeypatch.setattr(publish_trusted_static, "static_site_candidate_renderer", _renderer_factory([]))
+
+    exit_code = publish_trusted_static.main(
+        [
+            "--trust-repository",
+            str(repository_path),
+            "--edition-id",
+            edition.edition_id,
+            "--candidate-root",
+            str(candidate_root),
+        ]
+    )
+
+    candidate_output_dir = candidate_root / edition.edition_id
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "cache_path": str(candidate_output_dir / "trusted-query-cache.sqlite"),
+        "candidate_output_dir": str(candidate_output_dir),
+        "deployed": False,
+        "deployment_evidence": [],
+        "edition_id": edition.edition_id,
+        "generated_artifact_paths": {
+            "dashboard": str(candidate_output_dir / "index.html"),
+        },
+    }
 
 
 def _seed_trusted_edition(repository_path: Path, status: EditionStatus) -> Edition:
