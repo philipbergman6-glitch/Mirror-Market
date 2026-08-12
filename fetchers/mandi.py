@@ -65,6 +65,15 @@ Parser strategy:
     than a crash. Zero records for the filter is a normal holiday/Sunday
     outcome (mandis closed), not an error.
 
+    That last sentence is what makes a *field* rename dangerous rather
+    than loud: filtering on a field this resource no longer exposes
+    returns HTTP 200 with zero rows, which is indistinguishable from a
+    closed mandi day. Every response also carries the resource's own
+    field catalog, empty ones included, so ``_assert_fields_exist``
+    checks the catalog on every page — the only check that can see a
+    rename on a day with no records. ``_assert_filters_honoured``
+    covers the opposite failure, rows arriving that we never asked for.
+
 User-Agent:
     api.data.gov.in **blackholes** any request whose User-Agent names
     Python — the connection is accepted and then never answered, so it
@@ -214,8 +223,105 @@ def _dedupe(records: list[dict]) -> list[dict]:
     return unique
 
 
+# The field ids this module filters on and parses. Deliberately narrower
+# than the resource's catalog — see _assert_fields_exist.
+_REQUIRED_FIELD_IDS = frozenset({"state", "commodity", "arrival_date", "modal_price"})
+
+
+def _assert_fields_exist(payload: dict) -> None:
+    """Check the resource still exposes the field ids we filter and parse on.
+
+    The failure mode this exists for is **silent emptiness**, and it is
+    only visible here. Verified live 2026-08-12: an unrecognised filter
+    field is not rejected and does not degrade to unfiltered — the API
+    answers HTTP 200, ``message: "Resource lists ok"``, ``total: 0``,
+    ``records: []``. ``filters[commodity_name]``, ``filters[Commodity]``
+    and ``filters[state_name]`` each returned 0 against a resource
+    holding 6,421 rows that second. So the day data.gov.in renames
+    ``state`` or ``commodity``, this layer does not break — it goes
+    quiet, and a quiet mandi day is an ordinary one (Sunday, holiday,
+    pre-arrival hours), which is why ``india_domestic`` grades empty as
+    a success. The 7-day ``LAYER_MAX_DATA_AGE_DAYS`` budget would
+    eventually notice, a week of dark data later, and would blame
+    staleness rather than a rename.
+
+    Every response carries the resource's own field catalog — including
+    the zero-record ones (verified on the same probe) — so the rename is
+    detectable on an empty day at no extra request. That is the whole
+    point: a check that only fires when rows come back cannot see this.
+
+    Only the ids the code actually depends on are required. Extra fields
+    appearing is not a break, and ``variety``/``grade``/``district`` are
+    carried by the records but never read.
+    """
+    catalog = payload.get("field")
+    if not isinstance(catalog, list):
+        raise ScraperShapeError(
+            "Mandi API: response carries no 'field' catalog — envelope changed "
+            f"(keys: {sorted(payload)[:12]})"
+        )
+    ids = {f.get("id") for f in catalog if isinstance(f, dict)}
+    missing = sorted(_REQUIRED_FIELD_IDS - ids)
+    if missing:
+        raise ScraperShapeError(
+            f"Mandi API: resource no longer exposes field(s) {missing} — renamed "
+            f"or dropped (exposed: {sorted(i for i in ids if i)}). Filters on a "
+            "renamed field return 0 rows at HTTP 200, so this would otherwise "
+            "read as a closed-mandi day"
+        )
+
+
+def _assert_filters_honoured(records: list[dict], state: str) -> None:
+    """Check the rows we were handed are the rows we asked for.
+
+    Complements ``_assert_fields_exist`` from the other side. The
+    probe above found this API answers an unknown filter with nothing
+    rather than with everything, so today a filter that stops being
+    applied cannot reach ``_aggregate``. That is a behaviour of the
+    upstream, not a guarantee from it, and the consequence if it ever
+    changes is not an outage but a **wrong number**: a median over every
+    commodity in every state, stored under ``Soybean (Mandi MP)``,
+    indistinguishable in shape from a real one. Cheap to pin, so pinned.
+
+    Raises rather than filtering the offending rows out. A response that
+    mixes states is not a response with some bad rows in it — it means
+    the request no longer means what the code thinks it means, and the
+    rows that *did* match are then a partial set of unknown size.
+    """
+    for rec in records:
+        got_state = str(rec.get("state", "")).strip()
+        got_commodity = str(rec.get("commodity", "")).strip()
+        if got_state.casefold() != state.casefold():
+            raise ScraperShapeError(
+                f"Mandi API: asked for state {state!r}, got a row for "
+                f"{got_state!r} — the state filter is no longer applied"
+            )
+        if got_commodity.casefold() != MANDI_COMMODITY.casefold():
+            raise ScraperShapeError(
+                f"Mandi API: asked for commodity {MANDI_COMMODITY!r}, got a row "
+                f"for {got_commodity!r} — the commodity filter is no longer applied"
+            )
+
+
 def _collect_records(state: str) -> list[dict]:
-    """Paginate through the state-filtered resource until ``total`` rows are in hand."""
+    """Paginate through the state-filtered resource until ``total`` rows are in hand.
+
+    A walk that ends short of the resource's own ``total`` raises. The
+    daily number this feeds is a **median across the reporting mandis**,
+    so a truncated walk does not produce a missing number — it produces a
+    *plausible wrong one*, computed over whichever pages happened to
+    survive, with nothing in its shape to mark it as partial. That is the
+    failure mode #206 traced: three different closes for MP on the same
+    date (₹67,430 / ₹67,250 / ₹67,360) were three different surviving
+    subsets, not three different markets.
+
+    Two ways the walk can end short, both previously silent:
+      * the page cap (``MANDI_MAX_PAGES``) — logged a warning and returned
+        the truncated set;
+      * a page answering zero records before ``total`` is reached, which
+        broke the loop as if the set were complete.
+    Both now raise. A truncated median is worse than no row at all.
+    """
     records: list[dict] = []
     total: int | None = None
 
@@ -226,16 +332,27 @@ def _collect_records(state: str) -> list[dict]:
                 "Mandi API: response missing 'records'/'total' — schema changed "
                 f"(keys: {sorted(payload)[:10]})"
             )
+        _assert_fields_exist(payload)
         total = int(payload["total"])
         page_records = payload["records"]
         records.extend(page_records)
         if len(records) >= total or not page_records:
             break
-    else:
-        logger.warning(
-            "Mandi API: %s stopped at page cap %d with %d/%s records",
-            state, MANDI_MAX_PAGES, len(records), total,
+
+    # Measured before _dedupe: a shortfall here means pages we never
+    # received, which is the truncation that corrupts the median. Paging
+    # *overlap* (raw ≥ total, distinct < total) is a different and much
+    # milder defect — it inflates the mandi count without moving the
+    # median — and _dedupe keeps warning about it rather than raising,
+    # because a source that legitimately repeats an identical row would
+    # otherwise hard-fail the layer every day.
+    if total is not None and len(records) < total:
+        raise requests.RequestException(
+            f"Mandi API: {state} walk truncated at {len(records)}/{total} records "
+            f"after {page + 1} page(s) of {_page_limit()} — a median over a "
+            "partial mandi set is a wrong number, not a missing one (#206)"
         )
+    _assert_filters_honoured(records, state)
     return _dedupe(records)
 
 
@@ -313,9 +430,32 @@ def fetch_mandi_prices() -> FetchResult:
     Returns one series per state in ``MANDI_STATES``. A schema change
     (ScraperShapeError) in any state is ``failed`` — the resource is
     shared, so a shape break in one state means the source changed for
-    all. Transport exhaustion on one state degrades to a partial result
-    if another state succeeded. Zero matching records everywhere is
-    ``empty`` (mandis closed — Sunday/holiday).
+    all. Zero matching records everywhere is ``empty`` (mandis closed —
+    Sunday/holiday).
+
+    Transport exhaustion on **any** state is ``failed``, even when another
+    state returned a full set. Why the whole layer and not just that
+    state:
+
+      * States are never pooled (see ``MANDI_STATES``), so a missing state
+        does not corrupt the surviving state's number. The rows that did
+        arrive are therefore still worth storing — hence
+        ``FetchResult.partial``, which saves them and grades the run
+        failed, rather than ``FetchResult.failed``, which would discard
+        them. The resource serves the current day only, so a discarded
+        day is a permanent hole.
+      * But the *verdict* has to be the failure. ``india_domestic`` has no
+        ``LAYER_MIN_KEYS`` floor, so nothing downstream would notice half
+        the layer going dark; it would stamp a fresh ``last_success``
+        against a state that was never asked. That is precisely the
+        empty-success inversion CLAUDE.md's "Success requires rows"
+        section exists to prevent.
+      * An empty state and a failed state are not the same thing and are
+        not treated the same here. Empty means asked and answered with
+        nothing (a state holiday — MP and MH keep different local
+        calendars, so one-state-empty is an ordinary day) and does not
+        contribute an error. Failed means never answered, so its absence
+        carries no information about whether data existed.
     """
     data: dict[str, pd.DataFrame] = {}
     errors: list[str] = []
@@ -344,12 +484,17 @@ def fetch_mandi_prices() -> FetchResult:
         )
         data[series] = df
 
-    if data:
-        if errors:
-            logger.warning("Mandi API: partial result — %s", "; ".join(errors))
-        return FetchResult.ok(data)
     if errors:
-        return FetchResult.failed("; ".join(errors))
+        reason = "; ".join(errors)
+        if data:
+            logger.error(
+                "Mandi API: partial result — %s of %d state(s) failed: %s",
+                len(errors), len(MANDI_STATES), reason,
+            )
+            return FetchResult.partial(data, reason)
+        return FetchResult.failed(reason)
+    if data:
+        return FetchResult.ok(data)
     return FetchResult.empty(
         f"no {MANDI_COMMODITY} rows for any of {', '.join(MANDI_STATES)} today"
     )
