@@ -687,16 +687,51 @@ def _latest_observation(conn, source: Source) -> date | None:
         return None
 
 
+def _ingest_status(conn, layer: str) -> str | None:
+    """"our last run of ``layer`` failed" as a printable clause, else None.
+
+    A block can be missing for two very different reasons, and the page
+    prints the reason: **no source exists** for this market (nobody
+    publishes an Indian soy crush; the JSE meal contract is cash-settled
+    CBOT) versus **our ingest broke** (data.gov.in rate-limited us, #212).
+    The first is a fact about the market and belongs on the page as such.
+    The second is a fact about us, and printing it as the first libels the
+    market for our own outage.
+
+    Age alone cannot tell them apart — a rate-limited layer and a market
+    with no source both surface as "no rows". ``data_freshness`` can: it
+    records status='failed' with ``last_success`` held back, which is
+    exactly the state a partial or failed run leaves behind.
+    """
+    try:
+        row = conn.execute(
+            "SELECT status, last_success FROM data_freshness WHERE layer_name = ?",
+            (layer,),
+        ).fetchone()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+        log.debug("tier probe: data_freshness unavailable (%s)", exc)
+        return None
+    if not row or row[0] != "failed":
+        return None
+    last_success = row[1]
+    if last_success:
+        return f"our {layer} ingest failed; last good run {str(last_success)[:10]}"
+    return f"our {layer} ingest failed and has never succeeded"
+
+
 def _is_current(conn, source: Source | None, today: date) -> tuple[bool, str]:
     if source is None:
         return False, "no source configured"
     latest = _latest_observation(conn, source)
+    ingest = _ingest_status(conn, source.layer)
     if latest is None:
-        return False, "no rows"
+        # Never blame the market for our own outage — see _ingest_status.
+        return False, f"no rows — {ingest}" if ingest else "no rows"
     age = (today - latest).days
     budget = source.max_age_days
     if age > budget:
-        return False, f"newest observation {latest.isoformat()} is {age}d old (budget {budget}d)"
+        stale = f"newest observation {latest.isoformat()} is {age}d old (budget {budget}d)"
+        return False, f"{stale} — {ingest}" if ingest else stale
     return True, f"current to {latest.isoformat()}"
 
 

@@ -512,6 +512,15 @@ def _run_scraper_layer(
                 # what is there), and only the freshness verdict changes.
                 save(name, df)
 
+            # A partial result (FetchResult.partial) reaches here with rows
+            # *and* status='failed'. Its rows are saved above like any
+            # other — but the verdict is the failure, so last_success does
+            # not advance off a run where some keys never answered.
+            if result.status == "failed":
+                logger.error("[%s] %s partial: %s", label, desc, result.error)
+                _mark_failed(key, rows_fetched=result.total_rows)
+                return False
+
             if not _check_layer_recency(key, cleaned, rows_fetched=result.total_rows):
                 return False
 

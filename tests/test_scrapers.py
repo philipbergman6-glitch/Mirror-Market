@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import requests
 from bs4 import BeautifulSoup
 
 from config import MANDI_SORT_FIELD
@@ -29,6 +30,7 @@ from fetchers.india_domestic import _extract_soy_prices
 from fetchers.mandi import _aggregate as _mandi_aggregate
 from fetchers.mandi import _collect_records as _mandi_collect
 from fetchers.mandi import _fetch_page as _mandi_fetch_page
+from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import _parse_indicator_page
 from fetchers.safex import _parse_safex_table
 from fetchers.usda import _parse_inspections
@@ -933,3 +935,109 @@ def test_noticias_kg_quote_raises() -> None:
     html = _load_noticias_html().replace("137,50", "2,29")
     with pytest.raises(ScraperShapeError, match="plausibility band"):
         _parse_indicator_page(html)
+
+
+# ── #212: a partial mandi walk is a wrong number, not a missing one ─────────
+#
+# The daily India price is a *median across the reporting mandis*. That makes
+# truncation uniquely dangerous here: a walk that ends early still produces a
+# well-formed, plausible price — computed over whichever pages survived, with
+# nothing in its shape marking it partial. #206 traced three different closes
+# for MP on the same date (Rs 67,430 / 67,250 / 67,360) to exactly this.
+
+
+def test_mandi_collect_hard_fails_when_the_page_cap_truncates(monkeypatch) -> None:
+    """MANDI_MAX_PAGES used to log a warning and return the truncated set."""
+    monkeypatch.setattr("fetchers.mandi.MANDI_MAX_PAGES", 2)
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page",
+        lambda offset, state: {
+            "total": 100,
+            "records": [_mandi_record(market=f"m-{offset}-{i}") for i in range(10)],
+        },
+    )
+    with pytest.raises(requests.RequestException, match=r"truncated at 20/100"):
+        _mandi_collect("Madhya Pradesh")
+
+
+def test_mandi_collect_hard_fails_when_a_page_empties_early(monkeypatch) -> None:
+    """A zero-record page before ``total`` broke the loop as if complete."""
+    pages = [
+        {"total": 30, "records": [_mandi_record(market=f"m{i}") for i in range(10)]},
+        {"total": 30, "records": []},
+    ]
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page", lambda offset, state: pages[offset // 10]
+    )
+    with pytest.raises(requests.RequestException, match=r"truncated at 10/30"):
+        _mandi_collect("Madhya Pradesh")
+
+
+def test_mandi_collect_accepts_a_complete_walk(monkeypatch) -> None:
+    """The guard must not fire on the ordinary case."""
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page",
+        lambda offset, state: {
+            "total": 15,
+            "records": [
+                _mandi_record(market=f"m-{offset}-{i}")
+                for i in range(10 if offset == 0 else 5)
+            ],
+        },
+    )
+    assert len(_mandi_collect("Madhya Pradesh")) == 15
+
+
+def test_mandi_one_state_failing_grades_the_layer_failed_but_keeps_its_rows(
+    monkeypatch,
+) -> None:
+    """A state that failed transport was never answered — not "absent".
+
+    ``india_domestic`` carries no LAYER_MIN_KEYS floor, so a plain
+    ``FetchResult.ok`` here would stamp a fresh ``last_success`` with half
+    the layer dark and nothing downstream to notice (#212). The rows that
+    did arrive are still returned: the resource serves the current day
+    only, so discarding them punches a permanent hole in history.
+    """
+
+    def fake_collect(state: str) -> list[dict]:
+        if state == "Maharashtra":
+            raise requests.RequestException("offset 60 failed after 3 attempts (HTTP 429)")
+        return [_mandi_record(market="Indore", modal_price="6725")]
+
+    monkeypatch.setattr("fetchers.mandi._collect_records", fake_collect)
+    result = fetch_mandi_prices()
+
+    assert result.status == "failed"
+    assert result.has_rows                      # rows survive the failed verdict
+    assert set(result.data) == {"Soybean (Mandi MP)"}
+    assert "Maharashtra" in (result.error or "")
+
+
+def test_mandi_one_state_empty_is_still_a_success(monkeypatch) -> None:
+    """Empty is asked-and-answered (a state holiday); failed is never-answered.
+
+    MP and MH keep different local calendars, so one-state-empty is an
+    ordinary day and must not be graded like a 429.
+    """
+
+    def fake_collect(state: str) -> list[dict]:
+        if state == "Maharashtra":
+            return []
+        return [_mandi_record(market="Indore", modal_price="6725")]
+
+    monkeypatch.setattr("fetchers.mandi._collect_records", fake_collect)
+    result = fetch_mandi_prices()
+
+    assert result.status == "ok"
+    assert set(result.data) == {"Soybean (Mandi MP)"}
+
+
+def test_mandi_all_states_failing_is_failed_with_no_rows(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "fetchers.mandi._collect_records",
+        lambda state: (_ for _ in ()).throw(requests.RequestException("HTTP 429")),
+    )
+    result = fetch_mandi_prices()
+    assert result.status == "failed"
+    assert not result.has_rows
