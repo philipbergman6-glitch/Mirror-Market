@@ -1,0 +1,888 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mirror Market — CBOT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+
+<style>
+:root {
+  --paper: #FAFAF7;
+  --card: #FFFFFF;
+  --rule: #D8DCD8;
+  --rule-heavy: #191C1A;
+  --ink: #191C1A;
+  --green: #2D6A4F;
+  --green-light: #2D6A4F;
+  --text: #191C1A;
+  --text-muted: #5D6660;
+  --text-dim: #9BA39E;
+  --bullish: #1F7A3D;
+  --bearish: #C23B2E;
+  --warning: #A8730A;
+  --info: #2F5D8F;
+  --soybean: #8B6914;
+  --soy-oil: #B05E10;
+  --soy-meal: #8A5A2B;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: 'Archivo', sans-serif;
+  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--bullish); }
+.down { color: var(--bearish); }
+.muted { color: var(--text-muted); }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
+
+/* ---- masthead ---- */
+.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
+.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
+.masthead h1 em { font-style: normal; color: var(--green); }
+.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
+.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.mast-meta a { color: var(--green); text-decoration: none; font-weight: 500; }
+.mast-meta a:hover { text-decoration: underline; }
+.mast-critical { color: var(--bearish); font-weight: 600; }
+.stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; }
+.stale-note b { font-weight: 600; }
+
+/* ---- market nav ----
+   DESIGN.md :63/:66 — a second thin bar in the masthead, above the page's own
+   section-anchor bar, two bars in the same visual family. Explicitly NOT a
+   sidebar: that is what the 2026-07-28 redesign removed.
+   Order is registry key order = role in the trade, and it is the same
+   declaration M2's headline ledger reads, so nav and ledger cannot disagree.
+   Stubs are dimmed; pages and briefs render identically. Every market appears
+   in every tier, or the reader cannot tell the market exists. */
+.market-nav { display: flex; gap: 18px; padding: 9px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; white-space: nowrap; align-items: baseline; }
+.market-nav .mn-label { font-family: var(--display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.market-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; font-weight: 500; transition: color 0.1s; }
+.market-nav a:hover { color: var(--ink); }
+.market-nav a.current { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--green); padding-bottom: 2px; }
+.market-nav a.stub { color: var(--text-dim); }
+.market-nav .mn-end { margin-left: auto; color: var(--green); font-weight: 500; }
+
+/* ---- index nav (per-page section anchors) ---- */
+.index-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 20px; padding: 10px 0; overflow-x: auto; white-space: nowrap; }
+.index-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; transition: color 0.1s; }
+.index-nav a:hover { color: var(--ink); }
+.index-nav a .no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 4px; }
+
+/* ---- footer ---- */
+.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
+.footer a { color: var(--green); text-decoration: none; font-weight: 500; }
+.footer a:hover { text-decoration: underline; }
+
+
+/* ---- shared components (M18 #214) ----
+   Cards, alerts, signal badges and sub-headers are rendered by BOTH the
+   headline sections and the nine market blocks, so they live with the palette
+   in the one <head> owner. They were dashboard-only while the dashboard was
+   the only page that had components; a second copy in _market_css.html.j2 is
+   exactly the drift _base exists to prevent. */
+.grid { display: grid; gap: 16px; margin-bottom: 16px; align-items: start; }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+.mc { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; }
+.mc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+.mc-val { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.2; }
+.mc-delta { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+.sig { display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px dotted var(--rule); align-items: baseline; font-size: 14px; }
+.sig:last-child { border-bottom: none; }
+.badge { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; min-width: 52px; text-align: center; flex-shrink: 0; }
+.badge-alert { background: var(--bearish); color: #fff; }
+.badge-warning { background: #E8C983; color: #4A3608; }
+.badge-info { background: #E4E8E4; color: var(--text-muted); }
+.sig-commodity { color: var(--text-muted); min-width: 96px; font-size: 13px; flex-shrink: 0; }
+
+.chart-box { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+.chart-empty { height: 160px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 13px; }
+.subhdr { font-family: var(--display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 12px; }
+.divider { border: none; border-top: 1px dotted var(--rule); margin: 20px 0; }
+.caption { font-size: 12px; color: var(--text-muted); margin-top: 4px; margin-bottom: 12px; }
+
+.alert { padding: 10px 16px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; border-left: 3px solid; }
+.alert-ok { background: rgba(31,122,61,0.07); border-color: var(--bullish); color: var(--bullish); }
+.alert-warn { background: rgba(168,115,10,0.08); border-color: var(--warning); color: var(--warning); }
+.alert-err { background: rgba(194,59,46,0.07); border-color: var(--bearish); color: var(--bearish); }
+.alert-info { background: rgba(47,93,143,0.07); border-color: var(--info); color: var(--info); }
+
+.dtable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dtable th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--rule-heavy); }
+.dtable td { padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+.dtable th.num, .dtable td.num { text-align: right; }
+.dtable td.strong { font-weight: 600; }
+
+/* ---- quote-kind label (M3 #145 constraint 4) ----
+   Board settlements, physical assessments, administered minimums and weekly
+   assessments are different animals; collapsing them into one "price" label is
+   the easiest way to make the product dishonest. Rendered by the market blocks
+   AND by the ledger on both surfaces, so it belongs with the palette. */
+.kind { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+
+/* ---- propagation ledger (M3 #145 / M12 #161) ----
+   The state pill is the point of the surface: a market that has not printed
+   must never read as a market that printed unchanged. `repriced` is the only
+   affirmative colour; `no print since` is deliberately quiet unless it is past
+   the gap that is normal for that leg, and `dark` is loud. `out of cadence`
+   (Europe on the headline) is neither an outage nor a print, so it is outlined
+   rather than filled — it carries no value at all. */
+.ledger .lrow.own td { background: rgba(45,106,79,0.045); }
+.ledger .lrow.ref td { color: var(--text-muted); }
+.ledger .caption { margin: 2px 0 0; font-size: 11px; }
+.pill { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.pill-repriced { background: rgba(45,106,79,0.12); color: var(--green); }
+.pill-no_print_since { background: #E4E8E4; color: var(--text-muted); }
+.pill-no_print_since.overdue { background: #E8C983; color: #4A3608; }
+.pill-dark { background: var(--bearish); color: #fff; }
+.pill-out_of_cadence { background: transparent; border: 1px solid var(--rule-heavy); color: var(--text-dim); }
+.fx-tag { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: rgba(47,93,143,0.12); color: var(--info); cursor: help; }
+.ledger-rule { display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; flex-wrap: wrap; }
+.rule-tag { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.ledger-good { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.ledger-note { font-size: 12px; color: var(--text-muted); border-left: 2px solid var(--rule-heavy); padding-left: 12px; margin-top: 12px; }
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .page { padding: 20px 16px 48px; }
+  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .mast-meta { margin-left: 0; text-align: left; }
+}
+
+
+/* ---- tier stamp ---- */
+.tier-stamp { display: flex; align-items: baseline; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.tier-pill { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.tier-pill.brief { background: #E4E8E4; color: var(--text-muted); }
+.tier-pill.stub { background: transparent; border: 1px solid var(--rule); color: var(--text-dim); }
+.tier-why { color: var(--text-dim); }
+.venue { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+
+
+
+/* ---- blocks ---- */
+.block { padding: 22px 0; border-bottom: 1px solid var(--rule); }
+.block:last-of-type { border-bottom: none; }
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.block-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+.block-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.block-head .why { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+
+/* An empty state is a labelled statement, never a blank. `absent` reads calm
+   (no source exists, by structure); `empty` reads warm (a source exists and
+   gave us nothing) — M1 constraint 2's distinction, made visible. */
+.empty-state { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--text-muted); }
+.empty-state .es-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.empty-state.state-empty { border-left: 3px solid var(--warning); }
+.empty-state.state-empty .es-label { color: var(--warning); }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <h1>Mirror<br><em>CBOT</em></h1>
+  <div class="mast-meta">
+    
+    <div class="day">WEDNESDAY 12 AUGUST 2026</div>
+    <div>Generated 2026-08-12 05:06 UTC</div>
+    <div>CME Group / CBOT (Chicago) · all prices USD/MT</div>
+
+  </div>
+</header>
+
+
+<nav class="market-nav">
+  <span class="mn-label">Markets</span>
+  <a href="../index.html">Headline</a>
+  
+  <a href="../markets/cbot.html" class="current">CBOT</a>
+  
+  <a href="../markets/dalian.html">Dalian</a>
+  
+  <a href="../markets/brazil.html">Brazil</a>
+  
+  <a href="../markets/argentina.html">Argentina</a>
+  
+  <a href="../markets/india.html">India</a>
+  
+  <a href="../markets/europe.html" class="stub">Europe</a>
+  
+  <a href="../markets/south_africa.html">South Africa</a>
+  
+  <a href="../markets/nigeria.html" class="stub">Nigeria</a>
+  
+  <a href="../players.html" class="mn-end">Players &rarr;</a>
+</nav>
+
+
+<div class="tier-stamp">
+  <span class="tier-pill">page</span>
+  <span class="venue">CBOT</span>
+  <span class="tier-why">daily leg present · 3 of 4 supporting blocks (ledger · crush · basis)</span>
+</div>
+<nav class="index-nav">
+  
+  <a href="#block-price"><span class="no">01</span>Local price</a>
+  
+  <a href="#block-ledger"><span class="no">02</span>Propagation ledger</a>
+  
+  <a href="#block-crush"><span class="no">03</span>Crush margin</a>
+  
+  <a href="#block-basis"><span class="no">04</span>Basis vs the board</a>
+  
+  <a href="#block-currency"><span class="no">05</span>Currency</a>
+  
+  <a href="#block-weather"><span class="no">06</span>Weather</a>
+  
+  <a href="#block-supply_demand"><span class="no">07</span>Supply & demand</a>
+  
+  <a href="#block-news"><span class="no">08</span>News</a>
+  
+  <a href="#block-players"><span class="no">09</span>Players</a>
+  
+</nav>
+
+
+
+
+
+<section class="block" id="block-price">
+  <div class="block-head">
+    <span class="block-no">01</span>
+    <h2>Local price</h2>
+    <span class="kind">board</span>
+    <span class="why">the decision number, USD/MT over home currency</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-3">
+  
+  <div class="mc">
+    <div class="mc-label">Soybeans · headline</div>
+    <div class="mc-val">$421.6<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="down">-0.9%</span> <span class="muted">session</span> · <span class="down">-4.5%</span> <span class="muted">21 obs</span>
+    </div>
+    <div class="mc-delta muted">USD 1,147.50/MT</div>
+    <div class="caption">as of 2026-08-11</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Soybean Oil</div>
+    <div class="mc-val">$1,509.1<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="down">-1.5%</span> <span class="muted">session</span> · <span class="down">-6.3%</span> <span class="muted">21 obs</span>
+    </div>
+    <div class="mc-delta muted">USD 68.45/MT</div>
+    <div class="caption">as of 2026-08-11</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Soybean Meal</div>
+    <div class="mc-val">$334.4<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="down">-0.1%</span> <span class="muted">session</span> · <span class="down">-4.2%</span> <span class="muted">21 obs</span>
+    </div>
+    <div class="mc-delta muted">USD 303.40/MT</div>
+    <div class="caption">as of 2026-08-11</div>
+  </div>
+  
+</div>
+
+<div class="caption">CME Group / CBOT (Chicago) · daily · dates only — this stack stores no time of day</div>
+  
+</section>
+
+
+<section class="block" id="block-ledger">
+  <div class="block-head">
+    <span class="block-no">02</span>
+    <h2>Propagation ledger</h2>
+    
+    <span class="why">who has repriced, and who has not printed</span>
+  </div>
+  
+  
+
+<div class="ledger-rule">
+  <span class="rule-tag">origin</span>
+  <span>Origin page — who else is offering this cargo. These are competing physical offers, so the spread is an arbitrage a cargo can close.</span>
+</div>
+<div class="ledger-good">All rows: <strong>Soybean</strong> · Every row is the soybean. Meal and oil are a different good and would be a second ledger, not more rows here.</div>
+
+
+<table class="dtable ledger">
+  <thead>
+    <tr>
+      <th>Leg</th>
+      <th>Kind</th>
+      <th class="num">USD/MT</th>
+      <th class="num">Home print</th>
+      <th class="num">Move · USD</th>
+      <th class="num">Move · home</th>
+      <th class="num">Spread</th>
+      <th>State</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr data-leg="cbot:board" class="lrow own"><td>
+        
+        <a href="../markets/cbot.html">CBOT board (ZS front)</a>
+        <div class="caption">on the CBOT page · pinned</div>
+        
+      </td>
+      <td><span class="kind">board</span></td>
+      <td class="num strong">$421.6</td>
+      <td class="num">1,147.50 <span class="muted">cents/bu</span></td>
+      <td class="num"><span class="down">-0.9%</span></td>
+      <td class="num"><span class="down">-0.9%</span></td>
+      
+      <td class="num"><span class="muted">pinned</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-08-11, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr data-leg="us_gulf:cif" class="lrow"><td>
+        
+        <a href="../markets/cbot.html">US Gulf CIF (NOLA barge)</a>
+        <div class="caption">on the CBOT page</div>
+        
+      </td>
+      <td><span class="kind">physical</span></td>
+      <td class="num strong">$468.4</td>
+      <td class="num">12.75 <span class="muted">USD/bu</span><div class="caption">mean of 7 quotes</div></td>
+      <td class="num"><span class="down">-1.1%</span></td>
+      <td class="num"><span class="down">-1.1%</span></td>
+      
+      <td class="num"><span class="up">+46.8</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-08-11, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr data-leg="brazil:paranagua" class="lrow"><td>
+        
+        <a href="../markets/brazil.html">Brazil Paranaguá FOB</a>
+        <div class="caption">on the Brazil page</div>
+        
+      </td>
+      <td><span class="kind">physical</span></td>
+      <td class="num strong">$476.6</td>
+      <td class="num">2,433.33 <span class="muted">BRL/MT</span></td>
+      <td class="num"><span class="down">-0.1%</span></td>
+      <td class="num"><span class="up">+0.3%</span> <span class="fx-tag" title="BRL/USD moved between prints — the USD and BRL moves are not the same number">FX</span></td>
+      
+      <td class="num"><span class="up">+54.9</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-08-11, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr data-leg="argentina:fob" class="lrow"><td>
+        
+        <a href="../markets/argentina.html">Argentina official FOB</a>
+        <div class="caption">on the Argentina page</div>
+        
+      </td>
+      <td><span class="kind">administered</span></td>
+      <td class="num strong">$451.7</td>
+      <td class="num"><span class="muted">—</span></td>
+      <td class="num"><span class="down">-0.8%</span></td>
+      <td class="num"><span class="muted">—</span></td>
+      
+      <td class="num"><span class="up">+30.0</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-08-11, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr data-leg="dalian:board" class="lrow"><td>
+        
+        <a href="../markets/dalian.html">Dalian No.2 (crush bean)</a>
+        <div class="caption">on the Dalian page</div>
+        
+      </td>
+      <td><span class="kind">board</span></td>
+      <td class="num strong">$563.6</td>
+      <td class="num">3,803.00 <span class="muted">CNY/MT</span></td>
+      <td class="num"><span class="down">-0.1%</span></td>
+      <td class="num"><span class="down">-0.1%</span></td>
+      
+      <td class="num"><span class="up">+142.0</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-08-11, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+  </tbody>
+</table>
+<div class="caption">ordered by print date — this stack stores no time of day, so two legs sharing a date are not ordered against each other. Newest print on this ledger: 2026-08-11.</div>
+<div class="ledger-note">The board against its own physical — the Gulf basis, made visible as a row — then the two competing origins, and the buyer whose bid ultimately clears the cargo.</div>
+  
+</section>
+
+
+<section class="block" id="block-crush">
+  <div class="block-head">
+    <span class="block-no">03</span>
+    <h2>Crush margin</h2>
+    <span class="kind">board</span>
+    <span class="why">processor economics — board, physical or administered</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-4">
+  <div class="mc">
+    <div class="mc-label">Margin</div>
+    <div class="mc-val up"><span class="up">+100.3</span><small class="muted"> /MT</small></div>
+    
+    
+    <div class="caption">as of 2026-08-11</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">bean — Soybeans</div>
+    <div class="mc-val">$421.6</div>
+    <div class="mc-delta muted">USD/MT</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">oil — Soybean Oil</div>
+    <div class="mc-val">$1,509.1</div>
+    <div class="mc-delta muted">USD/MT · yield 0.183 MT/MT</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">meal — Soybean Meal</div>
+    <div class="mc-val">$334.4</div>
+    <div class="mc-delta muted">USD/MT · yield 0.733 MT/MT</div>
+  </div>
+  
+</div>
+
+  
+</section>
+
+
+<section class="block" id="block-basis">
+  <div class="block-head">
+    <span class="block-no">04</span>
+    <h2>Basis vs the board</h2>
+    
+    <span class="why">local minus reference, USD/MT</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">US Gulf CIF over CBOT</div>
+    <div class="mc-val up"><span class="up">+46.8</span></div>
+    <div class="mc-delta muted">USD/MT · premium to the board</div>
+    <div class="caption">as of 2026-08-11</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Local <span class="kind">physical</span></div>
+    <div class="mc-val">$468.4</div>
+    <div class="mc-delta muted">USD/MT</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">CBOT board <span class="kind">board</span></div>
+    <div class="mc-val">$421.6</div>
+    <div class="mc-delta muted">USD/MT · same session</div>
+  </div>
+</div>
+
+
+
+
+<div class="caption">history building — 9 common session(s); range shown at 20</div>
+
+  
+</section>
+
+
+<section class="block" id="block-currency">
+  <div class="block-head">
+    <span class="block-no">05</span>
+    <h2>Currency</h2>
+    
+    <span class="why">the rate every USD figure here is struck at</span>
+  </div>
+  
+  <div class="empty-state state-absent">
+    <span class="es-label">no source</span>
+    CBOT quotes in USD, the site numeraire — no conversion applies
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-weather">
+  <div class="block-head">
+    <span class="block-no">06</span>
+    <h2>Weather</h2>
+    
+    <span class="why">this market's growing regions</span>
+  </div>
+  
+  <div class="empty-state state-empty">
+    <span class="es-label">no data</span>
+    the weather layer holds no rows for US Midwest (Iowa), US Illinois
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-supply_demand">
+  <div class="block-head">
+    <span class="block-no">07</span>
+    <h2>Supply & demand</h2>
+    
+    <span class="why">annual balance sheet — does not move daily</span>
+  </div>
+  
+  <div class="empty-state state-empty">
+    <span class="es-label">no data</span>
+    the PSD layer holds no soybean balance sheet for United States
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-news">
+  <div class="block-head">
+    <span class="block-no">08</span>
+    <h2>News</h2>
+    
+    <span class="why">reserved — no text layer is ingested yet</span>
+  </div>
+  
+  <div class="empty-state state-absent">
+    <span class="es-label">no source</span>
+    reserved — no news layer is ingested (out of scope for map #142)
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-players">
+  <div class="block-head">
+    <span class="block-no">09</span>
+    <h2>Players</h2>
+    
+    <span class="why">counterparties active in this market</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-2">
+  <div class="mc">
+    <div class="mc-label">US entries</div>
+    <div class="mc-val">15</div>
+    <div class="mc-delta muted">exporter 14 · terminal-operator 12 · originator 10 · crusher 7</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Names</div>
+    <div class="mc-delta">Ag Processing Inc (AGP) · Archer Daniels Midland (ADM) — US export operations · Bunge Global SA — US export operations · CGB Enterprises (Consolidated Grain and Barge) · CHS Inc. · COFCO International — US operations · Cargill — US export operations · Columbia Grain International · EGT, LLC · Louis Dreyfus Company — US export operations · Pacificor, LLC · Perdue AgriBusiness · TEMCO, LLC · United Grain Corporation · Zen-Noh Grain Corporation</div>
+    <div class="caption"><a href="../players.html">Full counterparty map &rarr;</a></div>
+  </div>
+</div>
+  
+</section>
+
+
+<div class="footer">
+  All prices in <strong>USD per metric ton (USD/MT)</strong>; native exchange units are converted at the display layer.
+  CBOT quotes in USD. Data delayed and provided as-is; not financial advice.
+  <br><br>
+  <a href="../index.html">&larr; Daily read</a> ·
+  <a href="../players.html">Players</a> ·
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
+</div>
+
+
+</div>
+
+
+<style>
+/* ---- PROTOTYPE ONLY (M11 #160) ---- */
+.lrow { cursor: pointer; }
+.lrow:hover td { background: rgba(45,106,79,0.09); }
+.lrow td:first-child::after { content: " ›"; color: var(--text-muted); }
+.dd-row td { padding: 0 !important; background: #fbfaf7; }
+.dd-pane { padding: 14px 16px 18px; border-left: 3px solid var(--rule-heavy); }
+.dd-head { display: flex; justify-content: space-between; align-items: baseline;
+           gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.dd-title { font-weight: 600; font-size: 13px; }
+.dd-sub { font-size: 11px; color: var(--text-muted); }
+.dd-warn { font-size: 11px; color: #8a5a00; background: #fdf6e6;
+           border-left: 2px solid #c98a00; padding: 6px 9px; margin: 8px 0; }
+.dd-thin { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.dd-btns { display: flex; gap: 6px; }
+.dd-btn { font: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer;
+          border: 1px solid var(--rule-heavy); background: #fff; border-radius: 2px; }
+.dd-btn.on { background: var(--text); color: #fff; }
+.dd-stats { display: flex; gap: 18px; font-size: 11px; color: var(--text-muted);
+            margin-top: 6px; flex-wrap: wrap; }
+.dd-stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+#dd-modal { position: fixed; inset: 0; background: rgba(20,20,18,0.45);
+            display: none; align-items: center; justify-content: center; z-index: 900; }
+#dd-modal.on { display: flex; }
+.dd-card { background: #fff; width: min(760px, 92vw); max-height: 88vh; overflow: auto;
+           padding: 20px 22px; box-shadow: 0 18px 50px rgba(0,0,0,0.28); }
+.dd-x { float: right; cursor: pointer; border: 0; background: none; font-size: 20px; }
+.dd-since { font-size: 11px; color: var(--text-muted); }
+.dd-bar { display: inline-block; height: 5px; background: var(--rule-heavy); vertical-align: middle; }
+.dd-dot { fill: var(--text); }
+#pv-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px;
+          background: #141412; color: #fff; border-radius: 999px; padding: 8px 10px;
+          display: flex; gap: 12px; align-items: center; z-index: 1000;
+          box-shadow: 0 6px 22px rgba(0,0,0,0.35); font-size: 12px; }
+#pv-bar button { background: #333; color: #fff; border: 0; width: 26px; height: 26px;
+                 border-radius: 50%; cursor: pointer; font-size: 14px; }
+#pv-bar .pv-label { font-weight: 600; letter-spacing: 0.02em; }
+</style>
+<div id="dd-modal"><div class="dd-card"><button class="dd-x">×</button><div id="dd-card-body"></div></div></div>
+<div id="pv-bar"><button id="pv-prev">‹</button><span class="pv-label"></span><button id="pv-next">›</button></div>
+<script>
+const D = {"legs": {"cbot:board": {"id": "cbot:board", "label": "CBOT board (ZS front)", "market": "CBOT", "href": "markets/cbot.html", "unit": "native_exchange", "home_unit": "cents/bu", "has_home": false, "fx_pair": null, "max_age": 7, "expected_gap": 4, "points": [{"d": "2025-07-08", "usd": 376.35, "home": 1024.25, "fx": null, "n": 1}, {"d": "2025-07-09", "usd": 371.94, "home": 1012.25, "fx": null, "n": 1}, {"d": "2025-07-10", "usd": 372.03, "home": 1012.5, "fx": null, "n": 1}, {"d": "2025-07-11", "usd": 368.91, "home": 1004.0, "fx": null, "n": 1}, {"d": "2025-07-14", "usd": 366.33, "home": 997.0, "fx": null, "n": 1}, {"d": "2025-07-15", "usd": 365.6, "home": 995.0, "fx": null, "n": 1}, {"d": "2025-07-16", "usd": 372.4, "home": 1013.5, "fx": null, "n": 1}, {"d": "2025-07-17", "usd": 375.34, "home": 1021.5, "fx": null, "n": 1}, {"d": "2025-07-18", "usd": 377.63, "home": 1027.75, "fx": null, "n": 1}, {"d": "2025-07-21", "usd": 372.95, "home": 1015.0, "fx": null, "n": 1}, {"d": "2025-07-22", "usd": 371.2, "home": 1010.25, "fx": null, "n": 1}, {"d": "2025-07-23", "usd": 369.55, "home": 1005.75, "fx": null, "n": 1}, {"d": "2025-07-24", "usd": 369.0, "home": 1004.25, "fx": null, "n": 1}, {"d": "2025-07-25", "usd": 366.98, "home": 998.75, "fx": null, "n": 1}, {"d": "2025-07-28", "usd": 363.3, "home": 988.75, "fx": null, "n": 1}, {"d": "2025-07-29", "usd": 360.73, "home": 981.75, "fx": null, "n": 1}, {"d": "2025-07-30", "usd": 355.59, "home": 967.75, "fx": null, "n": 1}, {"d": "2025-07-31", "usd": 353.38, "home": 961.75, "fx": null, "n": 1}, {"d": "2025-08-01", "usd": 353.38, "home": 961.75, "fx": null, "n": 1}, {"d": "2025-08-04", "usd": 356.05, "home": 969.0, "fx": null, "n": 1}, {"d": "2025-08-05", "usd": 356.05, "home": 969.0, "fx": null, "n": 1}, {"d": "2025-08-06", "usd": 353.29, "home": 961.5, "fx": null, "n": 1}, {"d": "2025-08-07", "usd": 357.06, "home": 971.75, "fx": null, "n": 1}, {"d": "2025-08-08", "usd": 355.22, "home": 966.75, "fx": null, "n": 1}, {"d": "2025-08-11", "usd": 363.58, "home": 989.5, "fx": null, "n": 1}, {"d": "2025-08-12", "usd": 371.75, "home": 1011.75, "fx": null, "n": 1}, {"d": "2025-08-13", "usd": 376.07, "home": 1023.5, "fx": null, "n": 1}, {"d": "2025-08-14", "usd": 370.56, "home": 1008.5, "fx": null, "n": 1}, {"d": "2025-08-15", "usd": 375.61, "home": 1022.25, "fx": null, "n": 1}, {"d": "2025-08-18", "usd": 375.06, "home": 1020.75, "fx": null, "n": 1}, {"d": "2025-08-19", "usd": 372.21, "home": 1013.0, "fx": null, "n": 1}, {"d": "2025-08-20", "usd": 372.95, "home": 1015.0, "fx": null, "n": 1}, {"d": "2025-08-21", "usd": 380.11, "home": 1034.5, "fx": null, "n": 1}, {"d": "2025-08-22", "usd": 380.85, "home": 1036.5, "fx": null, "n": 1}, {"d": "2025-08-25", "usd": 376.81, "home": 1025.5, "fx": null, "n": 1}, {"d": "2025-08-26", "usd": 378.0, "home": 1028.75, "fx": null, "n": 1}, {"d": "2025-08-27", "usd": 377.45, "home": 1027.25, "fx": null, "n": 1}, {"d": "2025-08-28", "usd": 377.82, "home": 1028.25, "fx": null, "n": 1}, {"d": "2025-09-02", "usd": 376.9, "home": 1025.75, "fx": null, "n": 1}, {"d": "2025-09-03", "usd": 373.32, "home": 1016.0, "fx": null, "n": 1}, {"d": "2025-09-04", "usd": 371.85, "home": 1012.0, "fx": null, "n": 1}, {"d": "2025-09-05", "usd": 369.83, "home": 1006.5, "fx": null, "n": 1}, {"d": "2025-09-08", "usd": 372.4, "home": 1013.5, "fx": null, "n": 1}, {"d": "2025-09-09", "usd": 371.66, "home": 1011.5, "fx": null, "n": 1}, {"d": "2025-09-10", "usd": 369.46, "home": 1005.5, "fx": null, "n": 1}, {"d": "2025-09-11", "usd": 373.04, "home": 1015.25, "fx": null, "n": 1}, {"d": "2025-09-12", "usd": 376.9, "home": 1025.75, "fx": null, "n": 1}, {"d": "2025-09-15", "usd": 383.14, "home": 1042.75, "fx": null, "n": 1}, {"d": "2025-09-16", "usd": 385.72, "home": 1049.75, "fx": null, "n": 1}, {"d": "2025-09-17", "usd": 383.51, "home": 1043.75, "fx": null, "n": 1}, {"d": "2025-09-18", "usd": 381.22, "home": 1037.5, "fx": null, "n": 1}, {"d": "2025-09-19", "usd": 376.81, "home": 1025.5, "fx": null, "n": 1}, {"d": "2025-09-22", "usd": 371.48, "home": 1011.0, "fx": null, "n": 1}, {"d": "2025-09-23", "usd": 371.85, "home": 1012.0, "fx": null, "n": 1}, {"d": "2025-09-24", "usd": 370.74, "home": 1009.0, "fx": null, "n": 1}, {"d": "2025-09-25", "usd": 371.94, "home": 1012.25, "fx": null, "n": 1}, {"d": "2025-09-26", "usd": 372.49, "home": 1013.75, "fx": null, "n": 1}, {"d": "2025-09-29", "usd": 371.3, "home": 1010.5, "fx": null, "n": 1}, {"d": "2025-09-30", "usd": 368.08, "home": 1001.75, "fx": null, "n": 1}, {"d": "2025-10-01", "usd": 372.21, "home": 1013.0, "fx": null, "n": 1}, {"d": "2025-10-02", "usd": 376.16, "home": 1023.75, "fx": null, "n": 1}, {"d": "2025-10-03", "usd": 374.05, "home": 1018.0, "fx": null, "n": 1}, {"d": "2025-10-06", "usd": 373.96, "home": 1017.75, "fx": null, "n": 1}, {"d": "2025-10-07", "usd": 375.52, "home": 1022.0, "fx": null, "n": 1}, {"d": "2025-10-08", "usd": 378.28, "home": 1029.5, "fx": null, "n": 1}, {"d": "2025-10-09", "usd": 375.61, "home": 1022.25, "fx": null, "n": 1}, {"d": "2025-10-10", "usd": 369.92, "home": 1006.75, "fx": null, "n": 1}, {"d": "2025-10-13", "usd": 370.28, "home": 1007.75, "fx": null, "n": 1}, {"d": "2025-10-14", "usd": 369.83, "home": 1006.5, "fx": null, "n": 1}, {"d": "2025-10-15", "usd": 369.83, "home": 1006.5, "fx": null, "n": 1}, {"d": "2025-10-16", "usd": 371.39, "home": 1010.75, "fx": null, "n": 1}, {"d": "2025-10-17", "usd": 374.6, "home": 1019.5, "fx": null, "n": 1}, {"d": "2025-10-20", "usd": 379.1, "home": 1031.75, "fx": null, "n": 1}, {"d": "2025-10-21", "usd": 378.74, "home": 1030.75, "fx": null, "n": 1}, {"d": "2025-10-22", "usd": 380.21, "home": 1034.75, "fx": null, "n": 1}, {"d": "2025-10-23", "usd": 383.88, "home": 1044.75, "fx": null, "n": 1}, {"d": "2025-10-24", "usd": 382.78, "home": 1041.75, "fx": null, "n": 1}, {"d": "2025-10-27", "usd": 392.15, "home": 1067.25, "fx": null, "n": 1}, {"d": "2025-10-28", "usd": 396.19, "home": 1078.25, "fx": null, "n": 1}, {"d": "2025-10-29", "usd": 396.92, "home": 1080.25, "fx": null, "n": 1}, {"d": "2025-10-30", "usd": 400.97, "home": 1091.25, "fx": null, "n": 1}, {"d": "2025-10-31", "usd": 404.09, "home": 1099.75, "fx": null, "n": 1}, {"d": "2025-11-04", "usd": 407.21, "home": 1108.25, "fx": null, "n": 1}, {"d": "2025-11-05", "usd": 411.44, "home": 1119.75, "fx": null, "n": 1}, {"d": "2025-11-06", "usd": 401.15, "home": 1091.75, "fx": null, "n": 1}, {"d": "2025-11-07", "usd": 404.82, "home": 1101.75, "fx": null, "n": 1}, {"d": "2025-11-10", "usd": 410.06, "home": 1116.0, "fx": null, "n": 1}, {"d": "2025-11-11", "usd": 409.05, "home": 1113.25, "fx": null, "n": 1}, {"d": "2025-11-12", "usd": 411.71, "home": 1120.5, "fx": null, "n": 1}, {"d": "2025-11-13", "usd": 415.94, "home": 1132.0, "fx": null, "n": 1}, {"d": "2025-11-14", "usd": 408.87, "home": 1112.75, "fx": null, "n": 1}, {"d": "2025-11-17", "usd": 425.22, "home": 1157.25, "fx": null, "n": 1}, {"d": "2025-11-18", "usd": 423.84, "home": 1153.5, "fx": null, "n": 1}, {"d": "2025-11-19", "usd": 417.5, "home": 1136.25, "fx": null, "n": 1}, {"d": "2025-11-20", "usd": 412.45, "home": 1122.5, "fx": null, "n": 1}, {"d": "2025-11-21", "usd": 413.37, "home": 1125.0, "fx": null, "n": 1}, {"d": "2025-11-24", "usd": 412.72, "home": 1123.25, "fx": null, "n": 1}, {"d": "2025-11-25", "usd": 413.27, "home": 1124.75, "fx": null, "n": 1}, {"d": "2025-11-26", "usd": 415.75, "home": 1131.5, "fx": null, "n": 1}, {"d": "2025-11-28", "usd": 418.05, "home": 1137.75, "fx": null, "n": 1}, {"d": "2025-12-01", "usd": 414.47, "home": 1128.0, "fx": null, "n": 1}, {"d": "2025-12-02", "usd": 413.27, "home": 1124.75, "fx": null, "n": 1}, {"d": "2025-12-03", "usd": 409.97, "home": 1115.75, "fx": null, "n": 1}, {"d": "2025-12-04", "usd": 411.35, "home": 1119.5, "fx": null, "n": 1}, {"d": "2025-12-05", "usd": 406.11, "home": 1105.25, "fx": null, "n": 1}, {"d": "2025-12-08", "usd": 401.88, "home": 1093.75, "fx": null, "n": 1}, {"d": "2025-12-09", "usd": 399.5, "home": 1087.25, "fx": null, "n": 1}, {"d": "2025-12-10", "usd": 400.97, "home": 1091.25, "fx": null, "n": 1}, {"d": "2025-12-11", "usd": 401.79, "home": 1093.5, "fx": null, "n": 1}, {"d": "2025-12-12", "usd": 395.64, "home": 1076.75, "fx": null, "n": 1}, {"d": "2025-12-15", "usd": 393.8, "home": 1071.75, "fx": null, "n": 1}, {"d": "2025-12-16", "usd": 390.49, "home": 1062.75, "fx": null, "n": 1}, {"d": "2025-12-17", "usd": 388.84, "home": 1058.25, "fx": null, "n": 1}, {"d": "2025-12-18", "usd": 386.64, "home": 1052.25, "fx": null, "n": 1}, {"d": "2025-12-19", "usd": 385.53, "home": 1049.25, "fx": null, "n": 1}, {"d": "2025-12-22", "usd": 387.0, "home": 1053.25, "fx": null, "n": 1}, {"d": "2025-12-23", "usd": 386.36, "home": 1051.5, "fx": null, "n": 1}, {"d": "2025-12-24", "usd": 390.68, "home": 1063.25, "fx": null, "n": 1}, {"d": "2025-12-26", "usd": 389.02, "home": 1058.75, "fx": null, "n": 1}, {"d": "2025-12-29", "usd": 385.63, "home": 1049.5, "fx": null, "n": 1}, {"d": "2025-12-30", "usd": 384.43, "home": 1046.25, "fx": null, "n": 1}, {"d": "2025-12-31", "usd": 378.64, "home": 1030.5, "fx": null, "n": 1}, {"d": "2026-01-02", "usd": 378.28, "home": 1029.5, "fx": null, "n": 1}, {"d": "2026-01-05", "usd": 384.8, "home": 1047.25, "fx": null, "n": 1}, {"d": "2026-01-06", "usd": 382.87, "home": 1042.0, "fx": null, "n": 1}, {"d": "2026-01-07", "usd": 386.82, "home": 1052.75, "fx": null, "n": 1}, {"d": "2026-01-08", "usd": 384.71, "home": 1047.0, "fx": null, "n": 1}, {"d": "2026-01-09", "usd": 385.26, "home": 1048.5, "fx": null, "n": 1}, {"d": "2026-01-12", "usd": 379.56, "home": 1033.0, "fx": null, "n": 1}, {"d": "2026-01-13", "usd": 375.98, "home": 1023.25, "fx": null, "n": 1}, {"d": "2026-01-14", "usd": 378.64, "home": 1030.5, "fx": null, "n": 1}, {"d": "2026-01-15", "usd": 386.91, "home": 1053.0, "fx": null, "n": 1}, {"d": "2026-01-16", "usd": 388.66, "home": 1057.75, "fx": null, "n": 1}, {"d": "2026-01-20", "usd": 386.91, "home": 1053.0, "fx": null, "n": 1}, {"d": "2026-01-21", "usd": 391.14, "home": 1064.5, "fx": null, "n": 1}, {"d": "2026-01-22", "usd": 390.95, "home": 1064.0, "fx": null, "n": 1}, {"d": "2026-01-23", "usd": 392.33, "home": 1067.75, "fx": null, "n": 1}, {"d": "2026-01-26", "usd": 390.13, "home": 1061.75, "fx": null, "n": 1}, {"d": "2026-01-27", "usd": 392.15, "home": 1067.25, "fx": null, "n": 1}, {"d": "2026-01-28", "usd": 394.99, "home": 1075.0, "fx": null, "n": 1}, {"d": "2026-01-29", "usd": 393.98, "home": 1072.25, "fx": null, "n": 1}, {"d": "2026-01-30", "usd": 391.04, "home": 1064.25, "fx": null, "n": 1}, {"d": "2026-02-02", "usd": 389.58, "home": 1060.25, "fx": null, "n": 1}, {"d": "2026-02-03", "usd": 391.6, "home": 1065.75, "fx": null, "n": 1}, {"d": "2026-02-04", "usd": 401.33, "home": 1092.25, "fx": null, "n": 1}, {"d": "2026-02-05", "usd": 408.68, "home": 1112.25, "fx": null, "n": 1}, {"d": "2026-02-06", "usd": 409.78, "home": 1115.25, "fx": null, "n": 1}, {"d": "2026-02-09", "usd": 408.13, "home": 1110.75, "fx": null, "n": 1}, {"d": "2026-02-10", "usd": 412.45, "home": 1122.5, "fx": null, "n": 1}, {"d": "2026-02-11", "usd": 413.0, "home": 1124.0, "fx": null, "n": 1}, {"d": "2026-02-12", "usd": 417.87, "home": 1137.25, "fx": null, "n": 1}, {"d": "2026-02-13", "usd": 416.31, "home": 1133.0, "fx": null, "n": 1}, {"d": "2026-02-17", "usd": 416.67, "home": 1134.0, "fx": null, "n": 1}, {"d": "2026-02-18", "usd": 416.49, "home": 1133.5, "fx": null, "n": 1}, {"d": "2026-02-19", "usd": 419.25, "home": 1141.0, "fx": null, "n": 1}, {"d": "2026-02-20", "usd": 417.96, "home": 1137.5, "fx": null, "n": 1}, {"d": "2026-02-23", "usd": 416.77, "home": 1134.25, "fx": null, "n": 1}, {"d": "2026-02-24", "usd": 418.69, "home": 1139.5, "fx": null, "n": 1}, {"d": "2026-02-25", "usd": 421.91, "home": 1148.25, "fx": null, "n": 1}, {"d": "2026-02-26", "usd": 421.73, "home": 1147.75, "fx": null, "n": 1}, {"d": "2026-02-27", "usd": 425.22, "home": 1157.25, "fx": null, "n": 1}, {"d": "2026-03-02", "usd": 422.55, "home": 1150.0, "fx": null, "n": 1}, {"d": "2026-03-03", "usd": 424.67, "home": 1155.75, "fx": null, "n": 1}, {"d": "2026-03-04", "usd": 424.21, "home": 1154.5, "fx": null, "n": 1}, {"d": "2026-03-05", "usd": 427.6, "home": 1163.75, "fx": null, "n": 1}, {"d": "2026-03-06", "usd": 435.41, "home": 1185.0, "fx": null, "n": 1}, {"d": "2026-03-09", "usd": 433.76, "home": 1180.5, "fx": null, "n": 1}, {"d": "2026-03-10", "usd": 436.24, "home": 1187.25, "fx": null, "n": 1}, {"d": "2026-03-11", "usd": 441.11, "home": 1200.5, "fx": null, "n": 1}, {"d": "2026-03-12", "usd": 445.7, "home": 1213.0, "fx": null, "n": 1}, {"d": "2026-03-13", "usd": 444.97, "home": 1211.0, "fx": null, "n": 1}, {"d": "2026-03-16", "usd": 424.48, "home": 1155.25, "fx": null, "n": 1}, {"d": "2026-03-17", "usd": 425.12, "home": 1157.0, "fx": null, "n": 1}, {"d": "2026-03-18", "usd": 426.87, "home": 1161.75, "fx": null, "n": 1}, {"d": "2026-03-19", "usd": 429.35, "home": 1168.5, "fx": null, "n": 1}, {"d": "2026-03-20", "usd": 426.69, "home": 1161.25, "fx": null, "n": 1}, {"d": "2026-03-23", "usd": 427.51, "home": 1163.5, "fx": null, "n": 1}, {"d": "2026-03-24", "usd": 424.39, "home": 1155.0, "fx": null, "n": 1}, {"d": "2026-03-25", "usd": 430.54, "home": 1171.75, "fx": null, "n": 1}, {"d": "2026-03-26", "usd": 431.28, "home": 1173.75, "fx": null, "n": 1}, {"d": "2026-03-27", "usd": 425.95, "home": 1159.25, "fx": null, "n": 1}, {"d": "2026-03-30", "usd": 426.14, "home": 1159.75, "fx": null, "n": 1}, {"d": "2026-03-31", "usd": 430.27, "home": 1171.0, "fx": null, "n": 1}, {"d": "2026-04-01", "usd": 429.35, "home": 1168.5, "fx": null, "n": 1}, {"d": "2026-04-06", "usd": 428.71, "home": 1166.75, "fx": null, "n": 1}, {"d": "2026-04-07", "usd": 425.58, "home": 1158.25, "fx": null, "n": 1}, {"d": "2026-04-08", "usd": 426.96, "home": 1162.0, "fx": null, "n": 1}, {"d": "2026-04-09", "usd": 428.16, "home": 1165.25, "fx": null, "n": 1}, {"d": "2026-04-10", "usd": 432.01, "home": 1175.75, "fx": null, "n": 1}, {"d": "2026-04-13", "usd": 427.05, "home": 1162.25, "fx": null, "n": 1}, {"d": "2026-04-14", "usd": 425.49, "home": 1158.0, "fx": null, "n": 1}, {"d": "2026-04-15", "usd": 428.8, "home": 1167.0, "fx": null, "n": 1}, {"d": "2026-04-16", "usd": 427.6, "home": 1163.75, "fx": null, "n": 1}, {"d": "2026-04-17", "usd": 428.89, "home": 1167.25, "fx": null, "n": 1}, {"d": "2026-04-20", "usd": 428.34, "home": 1165.75, "fx": null, "n": 1}, {"d": "2026-04-21", "usd": 431.55, "home": 1174.5, "fx": null, "n": 1}, {"d": "2026-04-22", "usd": 427.88, "home": 1164.5, "fx": null, "n": 1}, {"d": "2026-04-23", "usd": 426.14, "home": 1159.75, "fx": null, "n": 1}, {"d": "2026-04-24", "usd": 427.6, "home": 1163.75, "fx": null, "n": 1}, {"d": "2026-04-27", "usd": 432.57, "home": 1177.25, "fx": null, "n": 1}, {"d": "2026-04-28", "usd": 431.0, "home": 1173.0, "fx": null, "n": 1}, {"d": "2026-04-29", "usd": 434.4, "home": 1182.25, "fx": null, "n": 1}, {"d": "2026-04-30", "usd": 434.31, "home": 1182.0, "fx": null, "n": 1}, {"d": "2026-05-01", "usd": 436.42, "home": 1187.75, "fx": null, "n": 1}, {"d": "2026-05-04", "usd": 443.68, "home": 1207.5, "fx": null, "n": 1}, {"d": "2026-05-05", "usd": 439.36, "home": 1195.75, "fx": null, "n": 1}, {"d": "2026-05-06", "usd": 433.21, "home": 1179.0, "fx": null, "n": 1}, {"d": "2026-05-07", "usd": 432.47, "home": 1177.0, "fx": null, "n": 1}, {"d": "2026-05-08", "usd": 438.81, "home": 1194.25, "fx": null, "n": 1}, {"d": "2026-05-11", "usd": 440.83, "home": 1199.75, "fx": null, "n": 1}, {"d": "2026-05-12", "usd": 445.88, "home": 1213.5, "fx": null, "n": 1}, {"d": "2026-05-13", "usd": 446.53, "home": 1215.25, "fx": null, "n": 1}, {"d": "2026-05-14", "usd": 431.55, "home": 1174.5, "fx": null, "n": 1}, {"d": "2026-05-15", "usd": 432.47, "home": 1177.0, "fx": null, "n": 1}, {"d": "2026-05-18", "usd": 445.7, "home": 1213.0, "fx": null, "n": 1}, {"d": "2026-05-19", "usd": 444.42, "home": 1209.5, "fx": null, "n": 1}, {"d": "2026-05-20", "usd": 440.83, "home": 1199.75, "fx": null, "n": 1}, {"d": "2026-05-21", "usd": 438.81, "home": 1194.25, "fx": null, "n": 1}, {"d": "2026-05-22", "usd": 439.64, "home": 1196.5, "fx": null, "n": 1}, {"d": "2026-05-26", "usd": 435.78, "home": 1186.0, "fx": null, "n": 1}, {"d": "2026-05-27", "usd": 435.5, "home": 1185.25, "fx": null, "n": 1}, {"d": "2026-05-28", "usd": 438.9, "home": 1194.5, "fx": null, "n": 1}, {"d": "2026-05-29", "usd": 436.06, "home": 1186.75, "fx": null, "n": 1}, {"d": "2026-06-01", "usd": 433.85, "home": 1180.75, "fx": null, "n": 1}, {"d": "2026-06-02", "usd": 428.16, "home": 1165.25, "fx": null, "n": 1}, {"d": "2026-06-03", "usd": 424.02, "home": 1154.0, "fx": null, "n": 1}, {"d": "2026-06-04", "usd": 415.02, "home": 1129.5, "fx": null, "n": 1}, {"d": "2026-06-05", "usd": 412.08, "home": 1121.5, "fx": null, "n": 1}, {"d": "2026-06-08", "usd": 409.97, "home": 1115.75, "fx": null, "n": 1}, {"d": "2026-06-09", "usd": 409.23, "home": 1113.75, "fx": null, "n": 1}, {"d": "2026-06-10", "usd": 412.63, "home": 1123.0, "fx": null, "n": 1}, {"d": "2026-06-11", "usd": 409.69, "home": 1115.0, "fx": null, "n": 1}, {"d": "2026-06-12", "usd": 409.14, "home": 1113.5, "fx": null, "n": 1}, {"d": "2026-06-15", "usd": 411.25, "home": 1119.25, "fx": null, "n": 1}, {"d": "2026-06-16", "usd": 415.2, "home": 1130.0, "fx": null, "n": 1}, {"d": "2026-06-17", "usd": 415.94, "home": 1132.0, "fx": null, "n": 1}, {"d": "2026-06-18", "usd": 412.54, "home": 1122.75, "fx": null, "n": 1}, {"d": "2026-06-22", "usd": 409.97, "home": 1115.75, "fx": null, "n": 1}, {"d": "2026-06-23", "usd": 410.43, "home": 1117.0, "fx": null, "n": 1}, {"d": "2026-06-24", "usd": 407.4, "home": 1108.75, "fx": null, "n": 1}, {"d": "2026-06-25", "usd": 414.29, "home": 1127.5, "fx": null, "n": 1}, {"d": "2026-06-26", "usd": 413.83, "home": 1126.25, "fx": null, "n": 1}, {"d": "2026-06-29", "usd": 407.4, "home": 1108.75, "fx": null, "n": 1}, {"d": "2026-06-30", "usd": 410.34, "home": 1116.75, "fx": null, "n": 1}, {"d": "2026-07-01", "usd": 413.83, "home": 1126.25, "fx": null, "n": 1}, {"d": "2026-07-02", "usd": 415.85, "home": 1131.75, "fx": null, "n": 1}, {"d": "2026-07-06", "usd": 434.4, "home": 1182.25, "fx": null, "n": 1}, {"d": "2026-07-07", "usd": 439.73, "home": 1196.75, "fx": null, "n": 1}, {"d": "2026-07-08", "usd": 439.09, "home": 1195.0, "fx": null, "n": 1}, {"d": "2026-07-09", "usd": 433.48, "home": 1179.75, "fx": null, "n": 1}, {"d": "2026-07-10", "usd": 439.64, "home": 1196.5, "fx": null, "n": 1}, {"d": "2026-07-13", "usd": 441.66, "home": 1202.0, "fx": null, "n": 1}, {"d": "2026-07-14", "usd": 443.59, "home": 1207.25, "fx": null, "n": 1}, {"d": "2026-07-15", "usd": 441.75, "home": 1202.25, "fx": null, "n": 1}, {"d": "2026-07-16", "usd": 439.09, "home": 1195.0, "fx": null, "n": 1}, {"d": "2026-07-17", "usd": 442.58, "home": 1204.5, "fx": null, "n": 1}, {"d": "2026-07-20", "usd": 450.48, "home": 1226.0, "fx": null, "n": 1}, {"d": "2026-07-21", "usd": 448.09, "home": 1219.5, "fx": null, "n": 1}, {"d": "2026-07-22", "usd": 453.05, "home": 1233.0, "fx": null, "n": 1}, {"d": "2026-07-23", "usd": 454.7, "home": 1237.5, "fx": null, "n": 1}, {"d": "2026-07-24", "usd": 458.56, "home": 1248.0, "fx": null, "n": 1}, {"d": "2026-07-27", "usd": 444.05, "home": 1208.5, "fx": null, "n": 1}, {"d": "2026-07-28", "usd": 445.33, "home": 1212.0, "fx": null, "n": 1}, {"d": "2026-07-29", "usd": 432.84, "home": 1178.0, "fx": null, "n": 1}, {"d": "2026-07-30", "usd": 432.57, "home": 1177.25, "fx": null, "n": 1}, {"d": "2026-07-31", "usd": 430.64, "home": 1172.0, "fx": null, "n": 1}, {"d": "2026-08-03", "usd": 429.44, "home": 1168.75, "fx": null, "n": 1}, {"d": "2026-08-04", "usd": 424.39, "home": 1155.0, "fx": null, "n": 1}, {"d": "2026-08-05", "usd": 423.1, "home": 1151.5, "fx": null, "n": 1}, {"d": "2026-08-06", "usd": 425.22, "home": 1157.25, "fx": null, "n": 1}, {"d": "2026-08-07", "usd": 424.94, "home": 1156.5, "fx": null, "n": 1}, {"d": "2026-08-10", "usd": 425.4, "home": 1157.75, "fx": null, "n": 1}, {"d": "2026-08-11", "usd": 421.63, "home": 1147.5, "fx": null, "n": 1}]}, "us_gulf:cif": {"id": "us_gulf:cif", "label": "US Gulf CIF (NOLA barge)", "market": "CBOT", "href": "markets/cbot.html", "unit": "usd_per_bushel", "home_unit": "USD/bu", "has_home": false, "fx_pair": null, "max_age": 14, "expected_gap": 4, "points": [{"d": "2026-07-29", "usd": 477.61, "home": 12.9985, "fx": null, "n": 5}, {"d": "2026-07-30", "usd": 476.57, "home": 12.97, "fx": null, "n": 1}, {"d": "2026-07-31", "usd": 475.83, "home": 12.95, "fx": null, "n": 5}, {"d": "2026-08-03", "usd": 477.03, "home": 12.9825, "fx": null, "n": 4}, {"d": "2026-08-04", "usd": 472.49, "home": 12.859, "fx": null, "n": 5}, {"d": "2026-08-06", "usd": 472.83, "home": 12.8683, "fx": null, "n": 6}, {"d": "2026-08-07", "usd": 472.28, "home": 12.8533, "fx": null, "n": 6}, {"d": "2026-08-10", "usd": 473.49, "home": 12.8862, "fx": null, "n": 6}, {"d": "2026-08-11", "usd": 468.38, "home": 12.7473, "fx": null, "n": 7}]}, "brazil:paranagua": {"id": "brazil:paranagua", "label": "Brazil Paranagu\u00e1 FOB", "market": "Brazil", "href": "markets/brazil.html", "unit": "home_per_mt", "home_unit": "BRL/MT", "has_home": true, "fx_pair": "BRL/USD", "max_age": 14, "expected_gap": 4, "points": [{"d": "2026-07-27", "usd": 482.05, "home": 2450.0, "fx": 0.196754, "n": 1}, {"d": "2026-07-29", "usd": 470.43, "home": 2416.67, "fx": 0.194662, "n": 1}, {"d": "2026-07-30", "usd": 477.85, "home": 2450.0, "fx": 0.195042, "n": 1}, {"d": "2026-07-31", "usd": 474.26, "home": 2408.33, "fx": 0.196924, "n": 1}, {"d": "2026-08-03", "usd": 473.12, "home": 2400.0, "fx": 0.197134, "n": 1}, {"d": "2026-08-05", "usd": 469.83, "home": 2416.67, "fx": 0.194413, "n": 1}, {"d": "2026-08-06", "usd": 470.31, "home": 2416.67, "fx": 0.194609, "n": 1}, {"d": "2026-08-07", "usd": 475.09, "home": 2433.33, "fx": 0.195244, "n": 1}, {"d": "2026-08-10", "usd": 477.12, "home": 2425.0, "fx": 0.19675, "n": 1}, {"d": "2026-08-11", "usd": 476.56, "home": 2433.33, "fx": 0.195848, "n": 1}]}, "argentina:fob": {"id": "argentina:fob", "label": "Argentina official FOB", "market": "Argentina", "href": "markets/argentina.html", "unit": "usd_per_mt", "home_unit": "USD/MT", "has_home": false, "fx_pair": "ARS/USD", "max_age": 14, "expected_gap": 4, "points": [{"d": "2026-08-06", "usd": 454.25, "home": 454.25, "fx": 0.000668, "n": 4}, {"d": "2026-08-07", "usd": 454.0, "home": 454.0, "fx": 0.000667, "n": 3}, {"d": "2026-08-10", "usd": 455.33, "home": 455.3333, "fx": 0.00067, "n": 3}, {"d": "2026-08-11", "usd": 451.67, "home": 451.6667, "fx": 0.000667, "n": 3}]}, "dalian:board": {"id": "dalian:board", "label": "Dalian No.2 (crush bean)", "market": "Dalian", "href": "markets/dalian.html", "unit": "home_per_mt", "home_unit": "CNY/MT", "has_home": true, "fx_pair": "CNY/USD", "max_age": 21, "expected_gap": 4, "points": [{"d": "2025-07-08", "usd": 499.28, "home": 3582.0, "fx": 0.139384, "n": 1}, {"d": "2025-07-09", "usd": 499.32, "home": 3582.0, "fx": 0.139396, "n": 1}, {"d": "2025-07-10", "usd": 500.97, "home": 3597.0, "fx": 0.139276, "n": 1}, {"d": "2025-07-11", "usd": 504.4, "home": 3619.0, "fx": 0.139377, "n": 1}, {"d": "2025-07-14", "usd": 507.39, "home": 3637.0, "fx": 0.139507, "n": 1}, {"d": "2025-07-15", "usd": 506.21, "home": 3628.0, "fx": 0.139528, "n": 1}, {"d": "2025-07-16", "usd": 506.07, "home": 3630.0, "fx": 0.139414, "n": 1}, {"d": "2025-07-17", "usd": 513.34, "home": 3685.0, "fx": 0.139305, "n": 1}, {"d": "2025-07-18", "usd": 518.71, "home": 3726.0, "fx": 0.139214, "n": 1}, {"d": "2025-07-21", "usd": 517.99, "home": 3718.0, "fx": 0.13932, "n": 1}, {"d": "2025-07-22", "usd": 518.85, "home": 3723.0, "fx": 0.139363, "n": 1}, {"d": "2025-07-23", "usd": 519.08, "home": 3724.0, "fx": 0.139386, "n": 1}, {"d": "2025-07-24", "usd": 512.75, "home": 3671.0, "fx": 0.139675, "n": 1}, {"d": "2025-07-25", "usd": 511.78, "home": 3661.0, "fx": 0.139792, "n": 1}, {"d": "2025-07-28", "usd": 506.05, "home": 3620.0, "fx": 0.139792, "n": 1}, {"d": "2025-07-29", "usd": 507.82, "home": 3645.0, "fx": 0.139318, "n": 1}, {"d": "2025-07-30", "usd": 511.54, "home": 3671.0, "fx": 0.139346, "n": 1}, {"d": "2025-07-31", "usd": 509.73, "home": 3658.0, "fx": 0.139346, "n": 1}, {"d": "2025-08-01", "usd": 512.21, "home": 3688.0, "fx": 0.138885, "n": 1}, {"d": "2025-08-04", "usd": 511.12, "home": 3686.0, "fx": 0.138665, "n": 1}, {"d": "2025-08-05", "usd": 516.44, "home": 3707.0, "fx": 0.139315, "n": 1}, {"d": "2025-08-06", "usd": 519.11, "home": 3729.0, "fx": 0.13921, "n": 1}, {"d": "2025-08-07", "usd": 520.83, "home": 3741.0, "fx": 0.139221, "n": 1}, {"d": "2025-08-08", "usd": 522.07, "home": 3749.0, "fx": 0.139256, "n": 1}, {"d": "2025-08-11", "usd": 518.87, "home": 3726.0, "fx": 0.139256, "n": 1}, {"d": "2025-08-12", "usd": 522.28, "home": 3754.0, "fx": 0.139127, "n": 1}, {"d": "2025-08-13", "usd": 533.4, "home": 3829.0, "fx": 0.139305, "n": 1}, {"d": "2025-08-14", "usd": 530.64, "home": 3807.0, "fx": 0.139386, "n": 1}, {"d": "2025-08-15", "usd": 540.43, "home": 3880.0, "fx": 0.139285, "n": 1}, {"d": "2025-08-18", "usd": 540.82, "home": 3884.0, "fx": 0.139243, "n": 1}, {"d": "2025-08-19", "usd": 543.11, "home": 3902.0, "fx": 0.139187, "n": 1}, {"d": "2025-08-20", "usd": 538.16, "home": 3865.0, "fx": 0.139239, "n": 1}, {"d": "2025-08-21", "usd": 531.38, "home": 3813.0, "fx": 0.139359, "n": 1}, {"d": "2025-08-22", "usd": 528.98, "home": 3798.0, "fx": 0.139278, "n": 1}, {"d": "2025-08-25", "usd": 532.68, "home": 3818.0, "fx": 0.139519, "n": 1}, {"d": "2025-08-26", "usd": 529.44, "home": 3786.0, "fx": 0.139841, "n": 1}, {"d": "2025-08-27", "usd": 521.67, "home": 3731.0, "fx": 0.139821, "n": 1}, {"d": "2025-08-28", "usd": 519.78, "home": 3718.0, "fx": 0.139801, "n": 1}, {"d": "2025-08-29", "usd": 522.02, "home": 3734.0, "fx": 0.139801, "n": 1}, {"d": "2025-09-01", "usd": 522.27, "home": 3724.0, "fx": 0.140245, "n": 1}, {"d": "2025-09-02", "usd": 521.99, "home": 3722.0, "fx": 0.140245, "n": 1}, {"d": "2025-09-03", "usd": 522.9, "home": 3733.0, "fx": 0.140076, "n": 1}, {"d": "2025-09-04", "usd": 520.21, "home": 3715.0, "fx": 0.140029, "n": 1}, {"d": "2025-09-05", "usd": 526.09, "home": 3757.0, "fx": 0.140029, "n": 1}, {"d": "2025-09-08", "usd": 527.3, "home": 3761.0, "fx": 0.140203, "n": 1}, {"d": "2025-09-09", "usd": 525.58, "home": 3747.0, "fx": 0.140266, "n": 1}, {"d": "2025-09-10", "usd": 519.32, "home": 3698.0, "fx": 0.140432, "n": 1}, {"d": "2025-09-11", "usd": 527.34, "home": 3755.0, "fx": 0.140436, "n": 1}, {"d": "2025-09-12", "usd": 528.07, "home": 3759.0, "fx": 0.140481, "n": 1}, {"d": "2025-09-15", "usd": 523.29, "home": 3728.0, "fx": 0.140367, "n": 1}, {"d": "2025-09-16", "usd": 523.85, "home": 3729.0, "fx": 0.140479, "n": 1}, {"d": "2025-09-17", "usd": 517.13, "home": 3679.0, "fx": 0.140564, "n": 1}, {"d": "2025-09-18", "usd": 515.25, "home": 3660.0, "fx": 0.14078, "n": 1}, {"d": "2025-09-19", "usd": 520.04, "home": 3699.0, "fx": 0.14059, "n": 1}, {"d": "2025-09-22", "usd": 523.98, "home": 3727.0, "fx": 0.14059, "n": 1}, {"d": "2025-09-23", "usd": 502.81, "home": 3577.0, "fx": 0.140568, "n": 1}, {"d": "2025-09-24", "usd": 506.07, "home": 3599.0, "fx": 0.140615, "n": 1}, {"d": "2025-09-25", "usd": 511.11, "home": 3645.0, "fx": 0.140223, "n": 1}, {"d": "2025-09-26", "usd": 505.9, "home": 3609.0, "fx": 0.140178, "n": 1}, {"d": "2025-09-29", "usd": 504.71, "home": 3600.0, "fx": 0.140197, "n": 1}, {"d": "2025-09-30", "usd": 505.8, "home": 3601.0, "fx": 0.140461, "n": 1}, {"d": "2025-10-09", "usd": 510.22, "home": 3632.0, "fx": 0.140479, "n": 1}, {"d": "2025-10-10", "usd": 507.47, "home": 3617.0, "fx": 0.140302, "n": 1}, {"d": "2025-10-13", "usd": 511.55, "home": 3632.0, "fx": 0.140845, "n": 1}, {"d": "2025-10-14", "usd": 506.06, "home": 3593.0, "fx": 0.140845, "n": 1}, {"d": "2025-10-15", "usd": 506.28, "home": 3614.0, "fx": 0.140087, "n": 1}, {"d": "2025-10-16", "usd": 508.55, "home": 3624.0, "fx": 0.140327, "n": 1}, {"d": "2025-10-17", "usd": 503.58, "home": 3587.0, "fx": 0.14039, "n": 1}, {"d": "2025-10-20", "usd": 508.53, "home": 3624.0, "fx": 0.140323, "n": 1}, {"d": "2025-10-21", "usd": 507.9, "home": 3616.0, "fx": 0.140459, "n": 1}, {"d": "2025-10-22", "usd": 505.91, "home": 3603.0, "fx": 0.140414, "n": 1}, {"d": "2025-10-23", "usd": 510.97, "home": 3641.0, "fx": 0.140337, "n": 1}, {"d": "2025-10-24", "usd": 511.95, "home": 3648.0, "fx": 0.140337, "n": 1}, {"d": "2025-10-27", "usd": 512.98, "home": 3653.0, "fx": 0.140428, "n": 1}, {"d": "2025-10-28", "usd": 517.99, "home": 3683.0, "fx": 0.140643, "n": 1}, {"d": "2025-10-29", "usd": 517.13, "home": 3671.0, "fx": 0.140869, "n": 1}, {"d": "2025-10-30", "usd": 521.76, "home": 3704.0, "fx": 0.140865, "n": 1}, {"d": "2025-10-31", "usd": 523.22, "home": 3720.0, "fx": 0.140651, "n": 1}, {"d": "2025-11-03", "usd": 525.23, "home": 3738.0, "fx": 0.140511, "n": 1}, {"d": "2025-11-04", "usd": 519.4, "home": 3725.0, "fx": 0.139435, "n": 1}, {"d": "2025-11-05", "usd": 531.17, "home": 3787.0, "fx": 0.140262, "n": 1}, {"d": "2025-11-06", "usd": 530.59, "home": 3781.0, "fx": 0.140331, "n": 1}, {"d": "2025-11-07", "usd": 527.91, "home": 3758.0, "fx": 0.140477, "n": 1}, {"d": "2025-11-10", "usd": 529.74, "home": 3771.0, "fx": 0.140477, "n": 1}, {"d": "2025-11-11", "usd": 528.7, "home": 3764.0, "fx": 0.140463, "n": 1}, {"d": "2025-11-12", "usd": 529.55, "home": 3770.0, "fx": 0.140463, "n": 1}, {"d": "2025-11-13", "usd": 532.22, "home": 3789.0, "fx": 0.140463, "n": 1}, {"d": "2025-11-14", "usd": 534.73, "home": 3803.0, "fx": 0.140607, "n": 1}, {"d": "2025-11-17", "usd": 528.93, "home": 3755.0, "fx": 0.140861, "n": 1}, {"d": "2025-11-18", "usd": 528.32, "home": 3755.0, "fx": 0.140696, "n": 1}, {"d": "2025-11-19", "usd": 527.33, "home": 3748.0, "fx": 0.140696, "n": 1}, {"d": "2025-11-20", "usd": 522.12, "home": 3711.0, "fx": 0.140696, "n": 1}, {"d": "2025-11-21", "usd": 519.87, "home": 3695.0, "fx": 0.140696, "n": 1}, {"d": "2025-11-24", "usd": 519.38, "home": 3691.0, "fx": 0.140714, "n": 1}, {"d": "2025-11-25", "usd": 521.81, "home": 3706.0, "fx": 0.140801, "n": 1}, {"d": "2025-11-26", "usd": 524.1, "home": 3713.0, "fx": 0.141153, "n": 1}, {"d": "2025-11-27", "usd": 532.38, "home": 3767.0, "fx": 0.141327, "n": 1}, {"d": "2025-11-28", "usd": 531.39, "home": 3760.0, "fx": 0.141327, "n": 1}, {"d": "2025-12-01", "usd": 532.29, "home": 3766.0, "fx": 0.141341, "n": 1}, {"d": "2025-12-02", "usd": 532.4, "home": 3765.0, "fx": 0.141409, "n": 1}, {"d": "2025-12-03", "usd": 533.24, "home": 3770.0, "fx": 0.141443, "n": 1}, {"d": "2025-12-04", "usd": 532.02, "home": 3758.0, "fx": 0.141571, "n": 1}, {"d": "2025-12-05", "usd": 531.44, "home": 3758.0, "fx": 0.141415, "n": 1}, {"d": "2025-12-08", "usd": 529.45, "home": 3743.0, "fx": 0.141451, "n": 1}, {"d": "2025-12-09", "usd": 523.69, "home": 3703.0, "fx": 0.141423, "n": 1}, {"d": "2025-12-10", "usd": 534.17, "home": 3773.0, "fx": 0.141577, "n": 1}, {"d": "2025-12-11", "usd": 540.06, "home": 3815.0, "fx": 0.141563, "n": 1}, {"d": "2025-12-12", "usd": 539.11, "home": 3805.0, "fx": 0.141685, "n": 1}, {"d": "2025-12-15", "usd": 539.69, "home": 3807.0, "fx": 0.141764, "n": 1}, {"d": "2025-12-16", "usd": 536.82, "home": 3783.0, "fx": 0.141904, "n": 1}, {"d": "2025-12-17", "usd": 530.98, "home": 3739.0, "fx": 0.142011, "n": 1}, {"d": "2025-12-18", "usd": 488.71, "home": 3442.0, "fx": 0.141985, "n": 1}, {"d": "2025-12-19", "usd": 484.91, "home": 3414.0, "fx": 0.142035, "n": 1}, {"d": "2025-12-22", "usd": 487.01, "home": 3429.0, "fx": 0.142027, "n": 1}, {"d": "2025-12-23", "usd": 488.15, "home": 3437.0, "fx": 0.142027, "n": 1}, {"d": "2025-12-24", "usd": 486.77, "home": 3421.0, "fx": 0.142288, "n": 1}, {"d": "2025-12-25", "usd": 492.32, "home": 3460.0, "fx": 0.142288, "n": 1}, {"d": "2025-12-26", "usd": 496.73, "home": 3491.0, "fx": 0.142288, "n": 1}, {"d": "2025-12-29", "usd": 495.59, "home": 3483.0, "fx": 0.142288, "n": 1}, {"d": "2025-12-30", "usd": 498.46, "home": 3492.0, "fx": 0.142743, "n": 1}, {"d": "2025-12-31", "usd": 494.42, "home": 3459.0, "fx": 0.142937, "n": 1}, {"d": "2026-01-05", "usd": 494.63, "home": 3459.0, "fx": 0.142998, "n": 1}, {"d": "2026-01-06", "usd": 500.43, "home": 3497.0, "fx": 0.143102, "n": 1}, {"d": "2026-01-07", "usd": 506.34, "home": 3536.0, "fx": 0.143197, "n": 1}, {"d": "2026-01-08", "usd": 501.68, "home": 3510.0, "fx": 0.142929, "n": 1}, {"d": "2026-01-09", "usd": 503.9, "home": 3519.0, "fx": 0.143195, "n": 1}, {"d": "2026-01-12", "usd": 504.79, "home": 3522.0, "fx": 0.143324, "n": 1}, {"d": "2026-01-13", "usd": 500.78, "home": 3492.0, "fx": 0.143408, "n": 1}, {"d": "2026-01-14", "usd": 497.74, "home": 3473.0, "fx": 0.143318, "n": 1}, {"d": "2026-01-15", "usd": 493.47, "home": 3441.0, "fx": 0.14341, "n": 1}, {"d": "2026-01-16", "usd": 494.26, "home": 3443.0, "fx": 0.143554, "n": 1}, {"d": "2026-01-19", "usd": 493.39, "home": 3438.0, "fx": 0.143511, "n": 1}, {"d": "2026-01-20", "usd": 497.12, "home": 3464.0, "fx": 0.143511, "n": 1}, {"d": "2026-01-21", "usd": 496.13, "home": 3453.0, "fx": 0.14368, "n": 1}, {"d": "2026-01-22", "usd": 502.75, "home": 3501.0, "fx": 0.143602, "n": 1}, {"d": "2026-01-23", "usd": 500.96, "home": 3493.0, "fx": 0.143419, "n": 1}, {"d": "2026-01-26", "usd": 506.98, "home": 3535.0, "fx": 0.143419, "n": 1}, {"d": "2026-01-27", "usd": 508.33, "home": 3535.0, "fx": 0.143798, "n": 1}, {"d": "2026-01-28", "usd": 513.48, "home": 3571.0, "fx": 0.143792, "n": 1}, {"d": "2026-01-29", "usd": 517.08, "home": 3596.0, "fx": 0.143792, "n": 1}, {"d": "2026-01-30", "usd": 511.08, "home": 3551.0, "fx": 0.143926, "n": 1}, {"d": "2026-02-02", "usd": 502.23, "home": 3491.0, "fx": 0.143864, "n": 1}, {"d": "2026-02-03", "usd": 499.26, "home": 3468.0, "fx": 0.143962, "n": 1}, {"d": "2026-02-04", "usd": 500.6, "home": 3473.0, "fx": 0.14414, "n": 1}, {"d": "2026-02-05", "usd": 499.88, "home": 3468.0, "fx": 0.14414, "n": 1}, {"d": "2026-02-06", "usd": 499.87, "home": 3468.0, "fx": 0.144138, "n": 1}, {"d": "2026-02-09", "usd": 500.23, "home": 3471.0, "fx": 0.144117, "n": 1}, {"d": "2026-02-10", "usd": 501.01, "home": 3468.0, "fx": 0.144467, "n": 1}, {"d": "2026-02-11", "usd": 507.34, "home": 3506.0, "fx": 0.144705, "n": 1}, {"d": "2026-02-12", "usd": 509.95, "home": 3525.0, "fx": 0.144665, "n": 1}, {"d": "2026-02-13", "usd": 510.57, "home": 3523.0, "fx": 0.144925, "n": 1}, {"d": "2026-02-24", "usd": 510.42, "home": 3526.0, "fx": 0.14476, "n": 1}, {"d": "2026-02-25", "usd": 521.42, "home": 3589.0, "fx": 0.145283, "n": 1}, {"d": "2026-02-26", "usd": 521.89, "home": 3585.0, "fx": 0.145577, "n": 1}, {"d": "2026-02-27", "usd": 523.18, "home": 3579.0, "fx": 0.14618, "n": 1}, {"d": "2026-03-02", "usd": 522.32, "home": 3582.0, "fx": 0.145817, "n": 1}, {"d": "2026-03-03", "usd": 524.56, "home": 3610.0, "fx": 0.145307, "n": 1}, {"d": "2026-03-04", "usd": 523.07, "home": 3609.0, "fx": 0.144934, "n": 1}, {"d": "2026-03-05", "usd": 525.45, "home": 3624.0, "fx": 0.144991, "n": 1}, {"d": "2026-03-06", "usd": 533.86, "home": 3682.0, "fx": 0.144991, "n": 1}, {"d": "2026-03-09", "usd": 549.84, "home": 3792.0, "fx": 0.145001, "n": 1}, {"d": "2026-03-10", "usd": 540.73, "home": 3737.0, "fx": 0.144697, "n": 1}, {"d": "2026-03-11", "usd": 558.86, "home": 3843.0, "fx": 0.145423, "n": 1}, {"d": "2026-03-12", "usd": 559.03, "home": 3838.0, "fx": 0.145656, "n": 1}, {"d": "2026-03-13", "usd": 571.12, "home": 3923.0, "fx": 0.145584, "n": 1}, {"d": "2026-03-16", "usd": 562.2, "home": 3877.0, "fx": 0.14501, "n": 1}, {"d": "2026-03-17", "usd": 554.67, "home": 3858.0, "fx": 0.143771, "n": 1}, {"d": "2026-03-18", "usd": 552.84, "home": 3807.0, "fx": 0.145216, "n": 1}, {"d": "2026-03-19", "usd": 557.14, "home": 3829.0, "fx": 0.145505, "n": 1}, {"d": "2026-03-20", "usd": 552.62, "home": 3813.0, "fx": 0.144932, "n": 1}, {"d": "2026-03-23", "usd": 553.76, "home": 3813.0, "fx": 0.145229, "n": 1}, {"d": "2026-03-24", "usd": 544.04, "home": 3743.0, "fx": 0.145349, "n": 1}, {"d": "2026-03-25", "usd": 538.03, "home": 3708.0, "fx": 0.1451, "n": 1}, {"d": "2026-03-26", "usd": 542.82, "home": 3746.0, "fx": 0.144907, "n": 1}, {"d": "2026-03-27", "usd": 540.47, "home": 3735.0, "fx": 0.144703, "n": 1}, {"d": "2026-03-30", "usd": 541.84, "home": 3745.0, "fx": 0.144684, "n": 1}, {"d": "2026-03-31", "usd": 537.94, "home": 3718.0, "fx": 0.144684, "n": 1}, {"d": "2026-04-01", "usd": 532.33, "home": 3670.0, "fx": 0.145049, "n": 1}, {"d": "2026-04-02", "usd": 537.08, "home": 3690.0, "fx": 0.14555, "n": 1}, {"d": "2026-04-03", "usd": 532.74, "home": 3668.0, "fx": 0.145241, "n": 1}, {"d": "2026-04-07", "usd": 534.56, "home": 3679.0, "fx": 0.1453, "n": 1}, {"d": "2026-04-08", "usd": 526.93, "home": 3613.0, "fx": 0.145843, "n": 1}, {"d": "2026-04-09", "usd": 532.02, "home": 3633.0, "fx": 0.146441, "n": 1}, {"d": "2026-04-10", "usd": 530.2, "home": 3622.0, "fx": 0.146383, "n": 1}, {"d": "2026-04-13", "usd": 530.19, "home": 3620.0, "fx": 0.14646, "n": 1}, {"d": "2026-04-14", "usd": 527.36, "home": 3602.0, "fx": 0.146406, "n": 1}, {"d": "2026-04-15", "usd": 530.1, "home": 3613.0, "fx": 0.14672, "n": 1}, {"d": "2026-04-16", "usd": 532.85, "home": 3633.0, "fx": 0.146671, "n": 1}, {"d": "2026-04-17", "usd": 528.36, "home": 3604.0, "fx": 0.146604, "n": 1}, {"d": "2026-04-20", "usd": 529.27, "home": 3608.0, "fx": 0.146692, "n": 1}, {"d": "2026-04-21", "usd": 536.27, "home": 3656.0, "fx": 0.146683, "n": 1}, {"d": "2026-04-22", "usd": 542.46, "home": 3700.0, "fx": 0.14661, "n": 1}, {"d": "2026-04-23", "usd": 536.33, "home": 3660.0, "fx": 0.146537, "n": 1}, {"d": "2026-04-24", "usd": 530.18, "home": 3619.0, "fx": 0.146499, "n": 1}, {"d": "2026-04-27", "usd": 530.29, "home": 3625.0, "fx": 0.146287, "n": 1}, {"d": "2026-04-28", "usd": 535.12, "home": 3651.0, "fx": 0.146567, "n": 1}, {"d": "2026-04-29", "usd": 537.19, "home": 3673.0, "fx": 0.146254, "n": 1}, {"d": "2026-04-30", "usd": 536.6, "home": 3669.0, "fx": 0.146252, "n": 1}, {"d": "2026-05-06", "usd": 534.11, "home": 3648.0, "fx": 0.146411, "n": 1}, {"d": "2026-05-07", "usd": 528.85, "home": 3602.0, "fx": 0.146821, "n": 1}, {"d": "2026-05-08", "usd": 525.63, "home": 3575.0, "fx": 0.147029, "n": 1}, {"d": "2026-05-11", "usd": 535.99, "home": 3645.0, "fx": 0.147048, "n": 1}, {"d": "2026-05-12", "usd": 536.44, "home": 3645.0, "fx": 0.147171, "n": 1}, {"d": "2026-05-13", "usd": 537.25, "home": 3649.0, "fx": 0.147232, "n": 1}, {"d": "2026-05-14", "usd": 532.93, "home": 3619.0, "fx": 0.147258, "n": 1}, {"d": "2026-05-15", "usd": 521.73, "home": 3540.0, "fx": 0.147382, "n": 1}, {"d": "2026-05-18", "usd": 523.12, "home": 3562.0, "fx": 0.14686, "n": 1}, {"d": "2026-05-19", "usd": 536.62, "home": 3649.0, "fx": 0.147059, "n": 1}, {"d": "2026-05-20", "usd": 534.3, "home": 3641.0, "fx": 0.146746, "n": 1}, {"d": "2026-05-21", "usd": 529.81, "home": 3603.0, "fx": 0.147048, "n": 1}, {"d": "2026-05-22", "usd": 526.13, "home": 3579.0, "fx": 0.147005, "n": 1}, {"d": "2026-05-25", "usd": 521.01, "home": 3540.0, "fx": 0.147178, "n": 1}, {"d": "2026-05-26", "usd": 522.63, "home": 3551.0, "fx": 0.147178, "n": 1}, {"d": "2026-05-27", "usd": 523.73, "home": 3554.0, "fx": 0.147362, "n": 1}, {"d": "2026-05-28", "usd": 529.59, "home": 3590.0, "fx": 0.147519, "n": 1}, {"d": "2026-05-29", "usd": 528.36, "home": 3582.0, "fx": 0.147504, "n": 1}, {"d": "2026-06-01", "usd": 531.47, "home": 3596.0, "fx": 0.147793, "n": 1}, {"d": "2026-06-02", "usd": 528.31, "home": 3574.0, "fx": 0.14782, "n": 1}, {"d": "2026-06-03", "usd": 530.45, "home": 3587.0, "fx": 0.147881, "n": 1}, {"d": "2026-06-04", "usd": 521.92, "home": 3533.0, "fx": 0.147728, "n": 1}, {"d": "2026-06-05", "usd": 518.2, "home": 3510.0, "fx": 0.147634, "n": 1}, {"d": "2026-06-08", "usd": 515.56, "home": 3488.0, "fx": 0.147809, "n": 1}, {"d": "2026-06-09", "usd": 511.27, "home": 3459.0, "fx": 0.147809, "n": 1}, {"d": "2026-06-10", "usd": 514.14, "home": 3482.0, "fx": 0.147656, "n": 1}, {"d": "2026-06-11", "usd": 519.6, "home": 3519.0, "fx": 0.147656, "n": 1}, {"d": "2026-06-12", "usd": 518.78, "home": 3515.0, "fx": 0.147591, "n": 1}, {"d": "2026-06-15", "usd": 518.18, "home": 3506.0, "fx": 0.147798, "n": 1}, {"d": "2026-06-16", "usd": 520.79, "home": 3519.0, "fx": 0.147995, "n": 1}, {"d": "2026-06-17", "usd": 524.18, "home": 3542.0, "fx": 0.14799, "n": 1}, {"d": "2026-06-18", "usd": 541.64, "home": 3660.0, "fx": 0.14799, "n": 1}, {"d": "2026-06-22", "usd": 540.14, "home": 3656.0, "fx": 0.147741, "n": 1}, {"d": "2026-06-23", "usd": 541.74, "home": 3670.0, "fx": 0.147612, "n": 1}, {"d": "2026-06-24", "usd": 543.45, "home": 3690.0, "fx": 0.147275, "n": 1}, {"d": "2026-06-25", "usd": 542.56, "home": 3684.0, "fx": 0.147275, "n": 1}, {"d": "2026-06-26", "usd": 548.01, "home": 3721.0, "fx": 0.147275, "n": 1}, {"d": "2026-06-29", "usd": 547.07, "home": 3719.0, "fx": 0.147102, "n": 1}, {"d": "2026-06-30", "usd": 542.86, "home": 3688.0, "fx": 0.147197, "n": 1}, {"d": "2026-07-01", "usd": 545.22, "home": 3704.0, "fx": 0.147197, "n": 1}, {"d": "2026-07-02", "usd": 545.47, "home": 3706.0, "fx": 0.147184, "n": 1}, {"d": "2026-07-03", "usd": 543.12, "home": 3687.0, "fx": 0.147306, "n": 1}, {"d": "2026-07-06", "usd": 553.58, "home": 3758.0, "fx": 0.147306, "n": 1}, {"d": "2026-07-07", "usd": 557.7, "home": 3790.0, "fx": 0.14715, "n": 1}, {"d": "2026-07-08", "usd": 559.96, "home": 3804.0, "fx": 0.147202, "n": 1}, {"d": "2026-07-09", "usd": 558.91, "home": 3802.0, "fx": 0.147005, "n": 1}, {"d": "2026-07-10", "usd": 557.27, "home": 3785.0, "fx": 0.14723, "n": 1}, {"d": "2026-07-13", "usd": 558.1, "home": 3782.0, "fx": 0.147567, "n": 1}, {"d": "2026-07-14", "usd": 558.3, "home": 3785.0, "fx": 0.147504, "n": 1}, {"d": "2026-07-15", "usd": 561.15, "home": 3799.0, "fx": 0.14771, "n": 1}, {"d": "2026-07-16", "usd": 560.86, "home": 3796.0, "fx": 0.14775, "n": 1}, {"d": "2026-07-17", "usd": 558.43, "home": 3782.0, "fx": 0.147656, "n": 1}, {"d": "2026-07-20", "usd": 569.66, "home": 3858.0, "fx": 0.147656, "n": 1}, {"d": "2026-07-21", "usd": 569.36, "home": 3856.0, "fx": 0.147656, "n": 1}, {"d": "2026-07-22", "usd": 566.69, "home": 3834.0, "fx": 0.147807, "n": 1}, {"d": "2026-07-23", "usd": 572.17, "home": 3875.0, "fx": 0.147656, "n": 1}, {"d": "2026-07-24", "usd": 580.73, "home": 3933.0, "fx": 0.147656, "n": 1}, {"d": "2026-07-27", "usd": 567.8, "home": 3845.0, "fx": 0.147671, "n": 1}, {"d": "2026-07-28", "usd": 559.29, "home": 3784.0, "fx": 0.147804, "n": 1}, {"d": "2026-07-29", "usd": 560.48, "home": 3795.0, "fx": 0.147689, "n": 1}, {"d": "2026-07-30", "usd": 557.93, "home": 3775.0, "fx": 0.147796, "n": 1}, {"d": "2026-07-31", "usd": 557.51, "home": 3766.0, "fx": 0.148038, "n": 1}, {"d": "2026-08-03", "usd": 556.96, "home": 3760.0, "fx": 0.148128, "n": 1}, {"d": "2026-08-04", "usd": 560.11, "home": 3782.0, "fx": 0.148098, "n": 1}, {"d": "2026-08-05", "usd": 559.29, "home": 3777.0, "fx": 0.148078, "n": 1}, {"d": "2026-08-06", "usd": 564.03, "home": 3807.0, "fx": 0.148155, "n": 1}, {"d": "2026-08-07", "usd": 566.03, "home": 3820.0, "fx": 0.148174, "n": 1}, {"d": "2026-08-10", "usd": 563.92, "home": 3805.0, "fx": 0.148205, "n": 1}, {"d": "2026-08-11", "usd": 563.62, "home": 3803.0, "fx": 0.148205, "n": 1}]}}, "order": ["cbot:board", "us_gulf:cif", "brazil:paranagua", "argentina:fob", "dalian:board"], "reference": [{"d": "2025-07-08", "usd": 376.35}, {"d": "2025-07-09", "usd": 371.94}, {"d": "2025-07-10", "usd": 372.03}, {"d": "2025-07-11", "usd": 368.91}, {"d": "2025-07-14", "usd": 366.33}, {"d": "2025-07-15", "usd": 365.6}, {"d": "2025-07-16", "usd": 372.4}, {"d": "2025-07-17", "usd": 375.34}, {"d": "2025-07-18", "usd": 377.63}, {"d": "2025-07-21", "usd": 372.95}, {"d": "2025-07-22", "usd": 371.2}, {"d": "2025-07-23", "usd": 369.55}, {"d": "2025-07-24", "usd": 369.0}, {"d": "2025-07-25", "usd": 366.98}, {"d": "2025-07-28", "usd": 363.3}, {"d": "2025-07-29", "usd": 360.73}, {"d": "2025-07-30", "usd": 355.59}, {"d": "2025-07-31", "usd": 353.38}, {"d": "2025-08-01", "usd": 353.38}, {"d": "2025-08-04", "usd": 356.05}, {"d": "2025-08-05", "usd": 356.05}, {"d": "2025-08-06", "usd": 353.29}, {"d": "2025-08-07", "usd": 357.06}, {"d": "2025-08-08", "usd": 355.22}, {"d": "2025-08-11", "usd": 363.58}, {"d": "2025-08-12", "usd": 371.75}, {"d": "2025-08-13", "usd": 376.07}, {"d": "2025-08-14", "usd": 370.56}, {"d": "2025-08-15", "usd": 375.61}, {"d": "2025-08-18", "usd": 375.06}, {"d": "2025-08-19", "usd": 372.21}, {"d": "2025-08-20", "usd": 372.95}, {"d": "2025-08-21", "usd": 380.11}, {"d": "2025-08-22", "usd": 380.85}, {"d": "2025-08-25", "usd": 376.81}, {"d": "2025-08-26", "usd": 378.0}, {"d": "2025-08-27", "usd": 377.45}, {"d": "2025-08-28", "usd": 377.82}, {"d": "2025-08-29", "usd": 380.94}, {"d": "2025-09-02", "usd": 376.9}, {"d": "2025-09-03", "usd": 373.32}, {"d": "2025-09-04", "usd": 371.85}, {"d": "2025-09-05", "usd": 369.83}, {"d": "2025-09-08", "usd": 372.4}, {"d": "2025-09-09", "usd": 371.66}, {"d": "2025-09-10", "usd": 369.46}, {"d": "2025-09-11", "usd": 373.04}, {"d": "2025-09-12", "usd": 376.9}, {"d": "2025-09-15", "usd": 383.14}, {"d": "2025-09-16", "usd": 385.72}, {"d": "2025-09-17", "usd": 383.51}, {"d": "2025-09-18", "usd": 381.22}, {"d": "2025-09-19", "usd": 376.81}, {"d": "2025-09-22", "usd": 371.48}, {"d": "2025-09-23", "usd": 371.85}, {"d": "2025-09-24", "usd": 370.74}, {"d": "2025-09-25", "usd": 371.94}, {"d": "2025-09-26", "usd": 372.49}, {"d": "2025-09-29", "usd": 371.3}, {"d": "2025-09-30", "usd": 368.08}, {"d": "2025-10-01", "usd": 372.21}, {"d": "2025-10-02", "usd": 376.16}, {"d": "2025-10-03", "usd": 374.05}, {"d": "2025-10-06", "usd": 373.96}, {"d": "2025-10-07", "usd": 375.52}, {"d": "2025-10-08", "usd": 378.28}, {"d": "2025-10-09", "usd": 375.61}, {"d": "2025-10-10", "usd": 369.92}, {"d": "2025-10-13", "usd": 370.28}, {"d": "2025-10-14", "usd": 369.83}, {"d": "2025-10-15", "usd": 369.83}, {"d": "2025-10-16", "usd": 371.39}, {"d": "2025-10-17", "usd": 374.6}, {"d": "2025-10-20", "usd": 379.1}, {"d": "2025-10-21", "usd": 378.74}, {"d": "2025-10-22", "usd": 380.21}, {"d": "2025-10-23", "usd": 383.88}, {"d": "2025-10-24", "usd": 382.78}, {"d": "2025-10-27", "usd": 392.15}, {"d": "2025-10-28", "usd": 396.19}, {"d": "2025-10-29", "usd": 396.92}, {"d": "2025-10-30", "usd": 400.97}, {"d": "2025-10-31", "usd": 404.09}, {"d": "2025-11-03", "usd": 411.44}, {"d": "2025-11-04", "usd": 407.21}, {"d": "2025-11-05", "usd": 411.44}, {"d": "2025-11-06", "usd": 401.15}, {"d": "2025-11-07", "usd": 404.82}, {"d": "2025-11-10", "usd": 410.06}, {"d": "2025-11-11", "usd": 409.05}, {"d": "2025-11-12", "usd": 411.71}, {"d": "2025-11-13", "usd": 415.94}, {"d": "2025-11-14", "usd": 408.87}, {"d": "2025-11-17", "usd": 425.22}, {"d": "2025-11-18", "usd": 423.84}, {"d": "2025-11-19", "usd": 417.5}, {"d": "2025-11-20", "usd": 412.45}, {"d": "2025-11-21", "usd": 413.37}, {"d": "2025-11-24", "usd": 412.72}, {"d": "2025-11-25", "usd": 413.27}, {"d": "2025-11-26", "usd": 415.75}, {"d": "2025-11-28", "usd": 418.05}, {"d": "2025-12-01", "usd": 414.47}, {"d": "2025-12-02", "usd": 413.27}, {"d": "2025-12-03", "usd": 409.97}, {"d": "2025-12-04", "usd": 411.35}, {"d": "2025-12-05", "usd": 406.11}, {"d": "2025-12-08", "usd": 401.88}, {"d": "2025-12-09", "usd": 399.5}, {"d": "2025-12-10", "usd": 400.97}, {"d": "2025-12-11", "usd": 401.79}, {"d": "2025-12-12", "usd": 395.64}, {"d": "2025-12-15", "usd": 393.8}, {"d": "2025-12-16", "usd": 390.49}, {"d": "2025-12-17", "usd": 388.84}, {"d": "2025-12-18", "usd": 386.64}, {"d": "2025-12-19", "usd": 385.53}, {"d": "2025-12-22", "usd": 387.0}, {"d": "2025-12-23", "usd": 386.36}, {"d": "2025-12-24", "usd": 390.68}, {"d": "2025-12-26", "usd": 389.02}, {"d": "2025-12-29", "usd": 385.63}, {"d": "2025-12-30", "usd": 384.43}, {"d": "2025-12-31", "usd": 378.64}, {"d": "2026-01-02", "usd": 378.28}, {"d": "2026-01-05", "usd": 384.8}, {"d": "2026-01-06", "usd": 382.87}, {"d": "2026-01-07", "usd": 386.82}, {"d": "2026-01-08", "usd": 384.71}, {"d": "2026-01-09", "usd": 385.26}, {"d": "2026-01-12", "usd": 379.56}, {"d": "2026-01-13", "usd": 375.98}, {"d": "2026-01-14", "usd": 378.64}, {"d": "2026-01-15", "usd": 386.91}, {"d": "2026-01-16", "usd": 388.66}, {"d": "2026-01-20", "usd": 386.91}, {"d": "2026-01-21", "usd": 391.14}, {"d": "2026-01-22", "usd": 390.95}, {"d": "2026-01-23", "usd": 392.33}, {"d": "2026-01-26", "usd": 390.13}, {"d": "2026-01-27", "usd": 392.15}, {"d": "2026-01-28", "usd": 394.99}, {"d": "2026-01-29", "usd": 393.98}, {"d": "2026-01-30", "usd": 391.04}, {"d": "2026-02-02", "usd": 389.58}, {"d": "2026-02-03", "usd": 391.6}, {"d": "2026-02-04", "usd": 401.33}, {"d": "2026-02-05", "usd": 408.68}, {"d": "2026-02-06", "usd": 409.78}, {"d": "2026-02-09", "usd": 408.13}, {"d": "2026-02-10", "usd": 412.45}, {"d": "2026-02-11", "usd": 413.0}, {"d": "2026-02-12", "usd": 417.87}, {"d": "2026-02-13", "usd": 416.31}, {"d": "2026-02-17", "usd": 416.67}, {"d": "2026-02-18", "usd": 416.49}, {"d": "2026-02-19", "usd": 419.25}, {"d": "2026-02-20", "usd": 417.96}, {"d": "2026-02-23", "usd": 416.77}, {"d": "2026-02-24", "usd": 418.69}, {"d": "2026-02-25", "usd": 421.91}, {"d": "2026-02-26", "usd": 421.73}, {"d": "2026-02-27", "usd": 425.22}, {"d": "2026-03-02", "usd": 422.55}, {"d": "2026-03-03", "usd": 424.67}, {"d": "2026-03-04", "usd": 424.21}, {"d": "2026-03-05", "usd": 427.6}, {"d": "2026-03-06", "usd": 435.41}, {"d": "2026-03-09", "usd": 433.76}, {"d": "2026-03-10", "usd": 436.24}, {"d": "2026-03-11", "usd": 441.11}, {"d": "2026-03-12", "usd": 445.7}, {"d": "2026-03-13", "usd": 444.97}, {"d": "2026-03-16", "usd": 424.48}, {"d": "2026-03-17", "usd": 425.12}, {"d": "2026-03-18", "usd": 426.87}, {"d": "2026-03-19", "usd": 429.35}, {"d": "2026-03-20", "usd": 426.69}, {"d": "2026-03-23", "usd": 427.51}, {"d": "2026-03-24", "usd": 424.39}, {"d": "2026-03-25", "usd": 430.54}, {"d": "2026-03-26", "usd": 431.28}, {"d": "2026-03-27", "usd": 425.95}, {"d": "2026-03-30", "usd": 426.14}, {"d": "2026-03-31", "usd": 430.27}, {"d": "2026-04-01", "usd": 429.35}, {"d": "2026-04-02", "usd": 427.51}, {"d": "2026-04-06", "usd": 428.71}, {"d": "2026-04-07", "usd": 425.58}, {"d": "2026-04-08", "usd": 426.96}, {"d": "2026-04-09", "usd": 428.16}, {"d": "2026-04-10", "usd": 432.01}, {"d": "2026-04-13", "usd": 427.05}, {"d": "2026-04-14", "usd": 425.49}, {"d": "2026-04-15", "usd": 428.8}, {"d": "2026-04-16", "usd": 427.6}, {"d": "2026-04-17", "usd": 428.89}, {"d": "2026-04-20", "usd": 428.34}, {"d": "2026-04-21", "usd": 431.55}, {"d": "2026-04-22", "usd": 427.88}, {"d": "2026-04-23", "usd": 426.14}, {"d": "2026-04-24", "usd": 427.6}, {"d": "2026-04-27", "usd": 432.57}, {"d": "2026-04-28", "usd": 431.0}, {"d": "2026-04-29", "usd": 434.4}, {"d": "2026-04-30", "usd": 434.31}, {"d": "2026-05-01", "usd": 436.42}, {"d": "2026-05-04", "usd": 443.68}, {"d": "2026-05-05", "usd": 439.36}, {"d": "2026-05-06", "usd": 433.21}, {"d": "2026-05-07", "usd": 432.47}, {"d": "2026-05-08", "usd": 438.81}, {"d": "2026-05-11", "usd": 440.83}, {"d": "2026-05-12", "usd": 445.88}, {"d": "2026-05-13", "usd": 446.53}, {"d": "2026-05-14", "usd": 431.55}, {"d": "2026-05-15", "usd": 432.47}, {"d": "2026-05-18", "usd": 445.7}, {"d": "2026-05-19", "usd": 444.42}, {"d": "2026-05-20", "usd": 440.83}, {"d": "2026-05-21", "usd": 438.81}, {"d": "2026-05-22", "usd": 439.64}, {"d": "2026-05-26", "usd": 435.78}, {"d": "2026-05-27", "usd": 435.5}, {"d": "2026-05-28", "usd": 438.9}, {"d": "2026-05-29", "usd": 436.06}, {"d": "2026-06-01", "usd": 433.85}, {"d": "2026-06-02", "usd": 428.16}, {"d": "2026-06-03", "usd": 424.02}, {"d": "2026-06-04", "usd": 415.02}, {"d": "2026-06-05", "usd": 412.08}, {"d": "2026-06-08", "usd": 409.97}, {"d": "2026-06-09", "usd": 409.23}, {"d": "2026-06-10", "usd": 412.63}, {"d": "2026-06-11", "usd": 409.69}, {"d": "2026-06-12", "usd": 409.14}, {"d": "2026-06-15", "usd": 411.25}, {"d": "2026-06-16", "usd": 415.2}, {"d": "2026-06-17", "usd": 415.94}, {"d": "2026-06-18", "usd": 412.54}, {"d": "2026-06-22", "usd": 409.97}, {"d": "2026-06-23", "usd": 410.43}, {"d": "2026-06-24", "usd": 407.4}, {"d": "2026-06-25", "usd": 414.29}, {"d": "2026-06-26", "usd": 413.83}, {"d": "2026-06-29", "usd": 407.4}, {"d": "2026-06-30", "usd": 410.34}, {"d": "2026-07-01", "usd": 413.83}, {"d": "2026-07-02", "usd": 415.85}, {"d": "2026-07-06", "usd": 434.4}, {"d": "2026-07-07", "usd": 439.73}, {"d": "2026-07-08", "usd": 439.09}, {"d": "2026-07-09", "usd": 433.48}, {"d": "2026-07-10", "usd": 439.64}, {"d": "2026-07-13", "usd": 441.66}, {"d": "2026-07-14", "usd": 443.59}, {"d": "2026-07-15", "usd": 441.75}, {"d": "2026-07-16", "usd": 439.09}, {"d": "2026-07-17", "usd": 442.58}, {"d": "2026-07-20", "usd": 450.48}, {"d": "2026-07-21", "usd": 448.09}, {"d": "2026-07-22", "usd": 453.05}, {"d": "2026-07-23", "usd": 454.7}, {"d": "2026-07-24", "usd": 458.56}, {"d": "2026-07-27", "usd": 444.05}, {"d": "2026-07-28", "usd": 445.33}, {"d": "2026-07-29", "usd": 432.84}, {"d": "2026-07-30", "usd": 432.57}, {"d": "2026-07-31", "usd": 430.64}, {"d": "2026-08-03", "usd": 429.44}, {"d": "2026-08-04", "usd": 424.39}, {"d": "2026-08-05", "usd": 423.1}, {"d": "2026-08-06", "usd": 425.22}, {"d": "2026-08-07", "usd": 424.94}, {"d": "2026-08-10", "usd": 425.4}, {"d": "2026-08-11", "usd": 421.63}], "today": "2026-08-12"};
+const NAMES = {
+  A: "A — inline expansion, one leg alone",
+  B: "B — modal, leg vs CBOT + FX component",
+  C: "C — no chart: range band + jump to the page"
+};
+const params = new URLSearchParams(location.search);
+let VARIANT = (params.get('variant') || 'A').toUpperCase();
+if (!NAMES[VARIANT]) VARIANT = 'A';
+const MIN_POINTS = 8;              // the honesty threshold this prototype is testing
+
+const fmt = (n, dp=2) => n == null ? "—" : n.toLocaleString('en-US',
+  {minimumFractionDigits: dp, maximumFractionDigits: dp});
+const clip = (pts, days) => {
+  if (!days) return pts;
+  const cut = new Date(D.today); cut.setDate(cut.getDate() - days);
+  return pts.filter(p => new Date(p.d) >= cut);
+};
+
+function path(pts, pick, w, h, pad=6) {
+  const vals = pts.map(pick).filter(v => v != null);
+  if (!vals.length) return {d: "", dots: [], lo: null, hi: null};
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
+  const t0 = new Date(pts[0].d).getTime();
+  const t1 = new Date(pts[pts.length-1].d).getTime();
+  const tspan = (t1 - t0) || 1;
+  const xy = pts.filter(p => pick(p) != null).map(p => [
+    pad + (w - 2*pad) * (new Date(p.d).getTime() - t0) / tspan,
+    pad + (h - 2*pad) * (1 - (pick(p) - lo) / span)
+  ]);
+  return {d: xy.map(([x,y],i) => (i?'L':'M') + x.toFixed(1) + ' ' + y.toFixed(1)).join(' '),
+          dots: xy, lo, hi};
+}
+
+function chart(pts, opts={}) {
+  const w = opts.w || 660, h = opts.h || 150;
+  const main = path(pts, p => p.usd, w, h);
+  let svg = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px">`;
+  svg += `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff" stroke="#e7e3da"/>`;
+  if (opts.ref && opts.ref.length > 1) {
+    const r = path(opts.ref, p => p.usd, w, h);
+    svg += `<path d="${r.d}" fill="none" stroke="#b9b2a4" stroke-width="1" stroke-dasharray="3 3"/>`;
+  }
+  svg += `<path d="${main.d}" fill="none" stroke="#2d6a4f" stroke-width="1.8"/>`;
+  // Every observation is a dot — a sparse series must LOOK sparse.
+  main.dots.forEach(([x,y]) => svg += `<circle class="dd-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4"/>`);
+  svg += `<text x="6" y="12" font-size="10" fill="#8c8577">${fmt(main.hi)}</text>`;
+  svg += `<text x="6" y="${h-4}" font-size="10" fill="#8c8577">${fmt(main.lo)}</text>`;
+  svg += `</svg>`;
+  return svg;
+}
+
+function stats(leg, pts) {
+  const usd = pts.map(p => p.usd).filter(v => v != null);
+  if (!usd.length) return "";
+  const first = usd[0], last = usd[usd.length-1];
+  const chg = first ? ((last-first)/first*100) : null;
+  return `<div class="dd-stats">
+    <span>observations <b>${pts.length}</b></span>
+    <span>history starts <b>${pts[0].d}</b></span>
+    <span>range <b>${fmt(Math.min(...usd))} – ${fmt(Math.max(...usd))}</b></span>
+    <span>over window <b>${chg==null?'—':(chg>0?'+':'')+fmt(chg,1)+'%'}</b></span>
+  </div>`;
+}
+
+function thinNote(leg, pts) {
+  if (pts.length >= MIN_POINTS) return "";
+  return `<div class="dd-warn"><b>Not a history — ${pts.length} observation${pts.length===1?'':'s'}.</b>
+    ${leg.label} is a snapshot-only source: the venue publishes today's number and no archive,
+    so this series exists only from the day we started keeping it (${pts.length ? pts[0].d : '—'}).
+    A line through ${pts.length} point${pts.length===1?'':'s'} would draw a trend that has not been observed.</div>`;
+}
+
+function paneHTML(leg, days) {
+  const pts = clip(leg.points, days);
+  const thin = pts.length < MIN_POINTS;
+  return `<div class="dd-pane">
+    <div class="dd-head">
+      <div>
+        <div class="dd-title">${leg.label} — USD/MT</div>
+        <div class="dd-sub">${leg.has_home ? leg.home_unit + ' converted at each row\'s own ' + leg.fx_pair + ' rate' : 'quoted in USD/MT at source'}
+          · every dot is one observation</div>
+      </div>
+      <div class="dd-btns">
+        ${[[30,'30d'],[90,'90d'],[0,'all']].map(([n,l]) =>
+          `<button class="dd-btn ${n===days?'on':''}" data-days="${n}" data-leg="${leg.id}">${l}</button>`).join('')}
+      </div>
+    </div>
+    ${thinNote(leg, pts)}
+    ${thin && pts.length < 3 ? '' : chart(pts, {h: 130})}
+    ${stats(leg, pts)}
+  </div>`;
+}
+
+/* ---------- A: inline expansion under the row ---------- */
+function openA(tr, leg, days=90) {
+  document.querySelectorAll('.dd-row').forEach(r => r.remove());
+  if (tr.dataset.open === '1' && days === 90) { tr.dataset.open = '0'; return; }
+  tr.dataset.open = '1';
+  const cols = tr.children.length;
+  const row = document.createElement('tr');
+  row.className = 'dd-row';
+  row.innerHTML = `<td colspan="${cols}">${paneHTML(leg, days)}</td>`;
+  tr.after(row);
+}
+
+/* ---------- B: modal, leg against CBOT, FX broken out ---------- */
+function openB(tr, leg, days=90) {
+  const pts = clip(leg.points, days);
+  const ref = clip(D.reference, days);
+  const fxpts = leg.has_home ? pts.map(p => ({d: p.d, usd: p.fx})) : [];
+  document.getElementById('dd-card-body').innerHTML = `
+    <div class="dd-title">${leg.label}</div>
+    <div class="dd-sub">${leg.market} · vs CBOT board (dashed) · USD/MT</div>
+    ${thinNote(leg, pts)}
+    ${chart(pts, {ref, h: 190})}
+    ${stats(leg, pts)}
+    <div class="dd-btns" style="margin:12px 0">
+      ${[[30,'30d'],[90,'90d'],[0,'all']].map(([n,l]) =>
+        `<button class="dd-btn ${n===days?'on':''}" data-days="${n}" data-leg="${leg.id}">${l}</button>`).join('')}
+    </div>
+    ${leg.has_home ? `
+      <div class="dd-title" style="margin-top:14px">Currency component — ${leg.fx_pair}</div>
+      <div class="dd-sub">the USD line above moves when the venue moves OR when this does;
+        separating them is the only way "+0.03% local, +0.44% USD" is legible</div>
+      ${chart(fxpts, {h: 90})}
+      <div class="dd-stats"><span>home print <b>${fmt(pts.length?pts[pts.length-1].home:null)} ${leg.home_unit}</b></span>
+        <span>rate <b>${fmt(pts.length?pts[pts.length-1].fx:null, 5)}</b></span></div>`
+    : `<div class="dd-thin" style="margin-top:14px">Quoted in USD/MT at source — there is no second
+        currency here, and restating the same figure would not be a second view of it.</div>`}
+    <div class="dd-sub" style="margin-top:16px">
+      <a href="${leg.href}">Open the ${leg.market} page →</a></div>`;
+  document.getElementById('dd-modal').classList.add('on');
+}
+
+/* ---------- C: no chart in the ledger — a range band + a jump ---------- */
+function decorateC() {
+  document.querySelectorAll('tr.lrow').forEach(tr => {
+    const leg = D.legs[tr.dataset.leg];
+    if (!leg || tr.querySelector('.dd-since')) return;
+    const usd = leg.points.map(p => p.usd).filter(v => v != null);
+    const cell = tr.children[2];
+    if (!usd.length) return;
+    const lo = Math.min(...usd), hi = Math.max(...usd), last = usd[usd.length-1];
+    const pos = hi === lo ? 50 : (last - lo) / (hi - lo) * 100;
+    cell.insertAdjacentHTML('beforeend', `
+      <div class="dd-since" title="range of every observation we hold">
+        <span class="dd-bar" style="width:52px;position:relative">
+          <span style="position:absolute;left:${pos.toFixed(0)}%;top:-3px;width:2px;height:11px;background:#2d6a4f"></span>
+        </span>
+        ${usd.length >= MIN_POINTS
+          ? `${fmt(lo,0)}–${fmt(hi,0)} since ${leg.points[0].d}`
+          : `<span style="color:#8a5a00">${usd.length} obs since ${leg.points[0].d} — no range yet</span>`}
+      </div>`);
+  });
+}
+function openC(tr, leg) { location.href = leg.href + '#block-price'; }
+
+/* ---------- wiring ---------- */
+function bind() {
+  document.querySelectorAll('tr.lrow').forEach(tr => {
+    tr.onclick = (e) => {
+      if (e.target.closest('a')) return;
+      const leg = D.legs[tr.dataset.leg];
+      if (!leg) return;
+      if (VARIANT === 'A') openA(tr, leg);
+      else if (VARIANT === 'B') openB(tr, leg);
+      else openC(tr, leg);
+    };
+  });
+  document.body.addEventListener('click', (e) => {
+    const b = e.target.closest('.dd-btn');
+    if (!b) return;
+    e.stopPropagation();
+    const leg = D.legs[b.dataset.leg], days = +b.dataset.days;
+    const tr = document.querySelector(`tr.lrow[data-leg="${leg.id}"]`);
+    if (VARIANT === 'A') openA(tr, leg, days); else openB(tr, leg, days);
+  });
+  document.querySelector('.dd-x').onclick = () => document.getElementById('dd-modal').classList.remove('on');
+  document.getElementById('dd-modal').onclick = (e) => {
+    if (e.target.id === 'dd-modal') e.currentTarget.classList.remove('on');
+  };
+  if (VARIANT === 'C') decorateC();
+}
+
+function go(next) {
+  const keys = Object.keys(NAMES);
+  const i = (keys.indexOf(VARIANT) + next + keys.length) % keys.length;
+  params.set('variant', keys[i]);
+  location.search = params.toString();
+}
+document.querySelector('#pv-bar .pv-label').textContent = NAMES[VARIANT];
+document.getElementById('pv-prev').onclick = () => go(-1);
+document.getElementById('pv-next').onclick = () => go(1);
+document.addEventListener('keydown', (e) => {
+  if (/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
+});
+bind();
+</script>
+
+</body>
+</html>
