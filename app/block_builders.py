@@ -331,7 +331,16 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             "key": key,
             "is_headline": key == (source.headline_key or ordered[0]),
             "home_value": value,
-            "home_currency": market.home_currency,
+            # The venue's own number carries the venue's own unit, which is what
+            # `unit` states — never the market's home currency, which describes
+            # the market and only coincides under `home_per_mt`. Labelling a
+            # MAGyP USD/MT quote "ARS" is wrong by the exchange rate (#230); a
+            # CBOT cents/bu close labelled "USD/MT" is wrong by 2.7x.
+            "home_unit": _home_unit(source, key, market.home_currency),
+            # M3 #145's rule, applied to block 01: a dual quote needs two
+            # observations. A `usd_per_mt` leg has one, so it prints the USD/MT
+            # figure once and says nothing more.
+            "has_home_quote": source.unit != "usd_per_mt",
             "usd_mt": source.to_usd_mt(value, key, fx),
             "as_of": when.isoformat(),
             "age_days": _age_days(ctx.today, when),

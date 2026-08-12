@@ -46,7 +46,12 @@
 
 <div class="footer">
   All prices in <strong>USD per metric ton (USD/MT)</strong>; native exchange units are converted at the display layer.
-  {{ market.name }} quotes in {{ market.home_currency }}. Data delayed and provided as-is; not financial advice.
+  {# Only claim a home-currency quote where the venue actually publishes one —
+     Argentina's MAGyP FOB and the EC's rapeseed assessment are USD-native, and
+     naming ARS/EUR here says the page holds a number it does not (#230). #}
+  {%- if market.price and market.price.unit == 'home_per_mt' %}
+  {{ market.name }} quotes in {{ market.home_currency }}.
+  {%- endif %} Data delayed and provided as-is; not financial advice.
   <br><br>
   <a href="{{ root }}index.html">&larr; Daily read</a> ·
   <a href="{{ root }}players.html">Players</a> ·
