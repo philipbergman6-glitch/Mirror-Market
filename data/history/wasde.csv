@@ -130,6 +130,7 @@ CORN,2024/25,Area Harvested,83.0,Million Acres,2026-04-15
 CORN,2024/25,Area Harvested,83.0,Million Acres,2026-05-15
 CORN,2024/25,Area Harvested,83.0,Million Acres,2026-06-15
 CORN,2024/25,Area Harvested,83.0,Million Acres,2026-07-15
+CORN,2024/25,Area Harvested,83.0,Million Acres,2026-08-15
 CORN,2024/25,Area Planted,90.6,Million Acres,2025-08-15
 CORN,2024/25,Area Planted,90.6,Million Acres,2025-09-15
 CORN,2024/25,Area Planted,90.9,Million Acres,2025-11-15
@@ -141,6 +142,7 @@ CORN,2024/25,Area Planted,90.9,Million Acres,2026-04-15
 CORN,2024/25,Area Planted,90.9,Million Acres,2026-05-15
 CORN,2024/25,Area Planted,90.9,Million Acres,2026-06-15
 CORN,2024/25,Area Planted,90.9,Million Acres,2026-07-15
+CORN,2024/25,Area Planted,90.9,Million Acres,2026-08-15
 CORN,2024/25,Avg. Farm Price ($/bu),4.3,$/bu,2025-08-15
 CORN,2024/25,Avg. Farm Price ($/bu),4.3,$/bu,2025-09-15
 CORN,2024/25,Avg. Farm Price ($/bu),4.24,$/bu,2025-11-15
@@ -152,6 +154,7 @@ CORN,2024/25,Avg. Farm Price ($/bu),4.24,$/bu,2026-04-15
 CORN,2024/25,Avg. Farm Price ($/bu),4.24,$/bu,2026-05-15
 CORN,2024/25,Avg. Farm Price ($/bu),4.24,$/bu,2026-06-15
 CORN,2024/25,Avg. Farm Price ($/bu),4.24,$/bu,2026-07-15
+CORN,2024/25,Avg. Farm Price ($/bu),4.24,$/bu,2026-08-15
 CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2025-08-15
 CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2025-09-15
 CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2025-11-15
@@ -163,6 +166,7 @@ CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2026-04-15
 CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2026-05-15
 CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2026-06-15
 CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2026-07-15
+CORN,2024/25,Beginning Stocks,1763.0,Million Bushels,2026-08-15
 CORN,2024/25,"Domestic, Total",12530.0,Million Bushels,2025-08-15
 CORN,2024/25,"Domestic, Total",12495.0,Million Bushels,2025-09-15
 CORN,2024/25,"Domestic, Total",12314.0,Million Bushels,2025-11-15
@@ -174,6 +178,7 @@ CORN,2024/25,"Domestic, Total",12267.0,Million Bushels,2026-04-15
 CORN,2024/25,"Domestic, Total",12267.0,Million Bushels,2026-05-15
 CORN,2024/25,"Domestic, Total",12267.0,Million Bushels,2026-06-15
 CORN,2024/25,"Domestic, Total",12253.0,Million Bushels,2026-07-15
+CORN,2024/25,"Domestic, Total",12253.0,Million Bushels,2026-08-15
 CORN,2024/25,Ending Stocks,1305.0,Million Bushels,2025-08-15
 CORN,2024/25,Ending Stocks,1325.0,Million Bushels,2025-09-15
 CORN,2024/25,Ending Stocks,1532.0,Million Bushels,2025-11-15
@@ -185,6 +190,7 @@ CORN,2024/25,Ending Stocks,1551.0,Million Bushels,2026-04-15
 CORN,2024/25,Ending Stocks,1551.0,Million Bushels,2026-05-15
 CORN,2024/25,Ending Stocks,1551.0,Million Bushels,2026-06-15
 CORN,2024/25,Ending Stocks,1551.0,Million Bushels,2026-07-15
+CORN,2024/25,Ending Stocks,1551.0,Million Bushels,2026-08-15
 CORN,2024/25,Ethanol & by-products,5470.0,Million Bushels,2025-08-15
 CORN,2024/25,Ethanol & by-products,5435.0,Million Bushels,2025-09-15
 CORN,2024/25,Ethanol & by-products,5436.0,Million Bushels,2025-11-15
@@ -196,6 +202,7 @@ CORN,2024/25,Ethanol & by-products,5436.0,Million Bushels,2026-04-15
 CORN,2024/25,Ethanol & by-products,5436.0,Million Bushels,2026-05-15
 CORN,2024/25,Ethanol & by-products,5436.0,Million Bushels,2026-06-15
 CORN,2024/25,Ethanol & by-products,5436.0,Million Bushels,2026-07-15
+CORN,2024/25,Ethanol & by-products,5436.0,Million Bushels,2026-08-15
 CORN,2024/25,Exports,2820.0,Million Bushels,2025-08-15
 CORN,2024/25,Exports,2830.0,Million Bushels,2025-09-15
 CORN,2024/25,Exports,2830.0,Million Bushels,2025-11-15
@@ -207,6 +214,7 @@ CORN,2024/25,Exports,2858.0,Million Bushels,2026-04-15
 CORN,2024/25,Exports,2858.0,Million Bushels,2026-05-15
 CORN,2024/25,Exports,2858.0,Million Bushels,2026-06-15
 CORN,2024/25,Exports,2873.0,Million Bushels,2026-07-15
+CORN,2024/25,Exports,2873.0,Million Bushels,2026-08-15
 CORN,2024/25,Feed and Residual,5675.0,Million Bushels,2025-08-15
 CORN,2024/25,Feed and Residual,5675.0,Million Bushels,2025-09-15
 CORN,2024/25,Feed and Residual,5492.0,Million Bushels,2025-11-15
@@ -218,6 +226,7 @@ CORN,2024/25,Feed and Residual,5454.0,Million Bushels,2026-04-15
 CORN,2024/25,Feed and Residual,5454.0,Million Bushels,2026-05-15
 CORN,2024/25,Feed and Residual,5454.0,Million Bushels,2026-06-15
 CORN,2024/25,Feed and Residual,5438.0,Million Bushels,2026-07-15
+CORN,2024/25,Feed and Residual,5438.0,Million Bushels,2026-08-15
 CORN,2024/25,"Food, Seed & Industrial",6855.0,Million Bushels,2025-08-15
 CORN,2024/25,"Food, Seed & Industrial",6820.0,Million Bushels,2025-09-15
 CORN,2024/25,"Food, Seed & Industrial",6821.0,Million Bushels,2025-11-15
@@ -229,6 +238,7 @@ CORN,2024/25,"Food, Seed & Industrial",6813.0,Million Bushels,2026-04-15
 CORN,2024/25,"Food, Seed & Industrial",6814.0,Million Bushels,2026-05-15
 CORN,2024/25,"Food, Seed & Industrial",6814.0,Million Bushels,2026-06-15
 CORN,2024/25,"Food, Seed & Industrial",6815.0,Million Bushels,2026-07-15
+CORN,2024/25,"Food, Seed & Industrial",6815.0,Million Bushels,2026-08-15
 CORN,2024/25,Imports,25.0,Million Bushels,2025-08-15
 CORN,2024/25,Imports,20.0,Million Bushels,2025-09-15
 CORN,2024/25,Imports,20.0,Million Bushels,2025-11-15
@@ -240,6 +250,7 @@ CORN,2024/25,Imports,22.0,Million Bushels,2026-04-15
 CORN,2024/25,Imports,22.0,Million Bushels,2026-05-15
 CORN,2024/25,Imports,22.0,Million Bushels,2026-06-15
 CORN,2024/25,Imports,22.0,Million Bushels,2026-07-15
+CORN,2024/25,Imports,22.0,Million Bushels,2026-08-15
 CORN,2024/25,Production,14867.0,Million Bushels,2025-08-15
 CORN,2024/25,Production,14867.0,Million Bushels,2025-09-15
 CORN,2024/25,Production,14892.0,Million Bushels,2025-11-15
@@ -251,6 +262,7 @@ CORN,2024/25,Production,14892.0,Million Bushels,2026-04-15
 CORN,2024/25,Production,14892.0,Million Bushels,2026-05-15
 CORN,2024/25,Production,14892.0,Million Bushels,2026-06-15
 CORN,2024/25,Production,14892.0,Million Bushels,2026-07-15
+CORN,2024/25,Production,14892.0,Million Bushels,2026-08-15
 CORN,2024/25,"Supply, Total",16655.0,Million Bushels,2025-08-15
 CORN,2024/25,"Supply, Total",16650.0,Million Bushels,2025-09-15
 CORN,2024/25,"Supply, Total",16675.0,Million Bushels,2025-11-15
@@ -262,6 +274,7 @@ CORN,2024/25,"Supply, Total",16677.0,Million Bushels,2026-04-15
 CORN,2024/25,"Supply, Total",16677.0,Million Bushels,2026-05-15
 CORN,2024/25,"Supply, Total",16677.0,Million Bushels,2026-06-15
 CORN,2024/25,"Supply, Total",16677.0,Million Bushels,2026-07-15
+CORN,2024/25,"Supply, Total",16677.0,Million Bushels,2026-08-15
 CORN,2024/25,"Use, Total",15350.0,Million Bushels,2025-08-15
 CORN,2024/25,"Use, Total",15325.0,Million Bushels,2025-09-15
 CORN,2024/25,"Use, Total",15144.0,Million Bushels,2025-11-15
@@ -273,6 +286,7 @@ CORN,2024/25,"Use, Total",15126.0,Million Bushels,2026-04-15
 CORN,2024/25,"Use, Total",15126.0,Million Bushels,2026-05-15
 CORN,2024/25,"Use, Total",15126.0,Million Bushels,2026-06-15
 CORN,2024/25,"Use, Total",15126.0,Million Bushels,2026-07-15
+CORN,2024/25,"Use, Total",15126.0,Million Bushels,2026-08-15
 CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2025-08-15
 CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2025-09-15
 CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2025-11-15
@@ -284,6 +298,7 @@ CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2026-04-15
 CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2026-05-15
 CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2026-06-15
 CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2026-07-15
+CORN,2024/25,Yield per Harvested Acre,179.3,Bushels,2026-08-15
 CORN,2025/26,Area Harvested,88.7,Million Acres,2025-08-15
 CORN,2025/26,Area Harvested,90.0,Million Acres,2025-09-15
 CORN,2025/26,Area Harvested,90.0,Million Acres,2025-10-15
@@ -296,6 +311,7 @@ CORN,2025/26,Area Harvested,91.3,Million Acres,2026-04-15
 CORN,2025/26,Area Harvested,91.3,Million Acres,2026-05-15
 CORN,2025/26,Area Harvested,91.3,Million Acres,2026-06-15
 CORN,2025/26,Area Harvested,91.3,Million Acres,2026-07-15
+CORN,2025/26,Area Harvested,91.3,Million Acres,2026-08-15
 CORN,2025/26,Area Planted,97.3,Million Acres,2025-08-15
 CORN,2025/26,Area Planted,98.7,Million Acres,2025-09-15
 CORN,2025/26,Area Planted,98.7,Million Acres,2025-10-15
@@ -308,6 +324,7 @@ CORN,2025/26,Area Planted,98.8,Million Acres,2026-04-15
 CORN,2025/26,Area Planted,98.8,Million Acres,2026-05-15
 CORN,2025/26,Area Planted,98.8,Million Acres,2026-06-15
 CORN,2025/26,Area Planted,98.8,Million Acres,2026-07-15
+CORN,2025/26,Area Planted,98.8,Million Acres,2026-08-15
 CORN,2025/26,Avg. Farm Price ($/bu),4.2,$/bu,2025-07-15
 CORN,2025/26,Avg. Farm Price ($/bu),3.9,$/bu,2025-08-15
 CORN,2025/26,Avg. Farm Price ($/bu),3.9,$/bu,2025-09-15
@@ -321,6 +338,7 @@ CORN,2025/26,Avg. Farm Price ($/bu),4.15,$/bu,2026-04-15
 CORN,2025/26,Avg. Farm Price ($/bu),4.15,$/bu,2026-05-15
 CORN,2025/26,Avg. Farm Price ($/bu),4.15,$/bu,2026-06-15
 CORN,2025/26,Avg. Farm Price ($/bu),4.15,$/bu,2026-07-15
+CORN,2025/26,Avg. Farm Price ($/bu),4.15,$/bu,2026-08-15
 CORN,2025/26,Beginning Stocks,1340.0,Million Bushels,2025-07-15
 CORN,2025/26,Beginning Stocks,1305.0,Million Bushels,2025-08-15
 CORN,2025/26,Beginning Stocks,1325.0,Million Bushels,2025-09-15
@@ -334,6 +352,7 @@ CORN,2025/26,Beginning Stocks,1551.0,Million Bushels,2026-04-15
 CORN,2025/26,Beginning Stocks,1551.0,Million Bushels,2026-05-15
 CORN,2025/26,Beginning Stocks,1551.0,Million Bushels,2026-06-15
 CORN,2025/26,Beginning Stocks,1551.0,Million Bushels,2026-07-15
+CORN,2025/26,Beginning Stocks,1551.0,Million Bushels,2026-08-15
 CORN,2025/26,"Domestic, Total",12735.0,Million Bushels,2025-07-15
 CORN,2025/26,"Domestic, Total",13080.0,Million Bushels,2025-08-15
 CORN,2025/26,"Domestic, Total",13080.0,Million Bushels,2025-09-15
@@ -347,6 +366,7 @@ CORN,2025/26,"Domestic, Total",13170.0,Million Bushels,2026-04-15
 CORN,2025/26,"Domestic, Total",13155.0,Million Bushels,2026-05-15
 CORN,2025/26,"Domestic, Total",13130.0,Million Bushels,2026-06-15
 CORN,2025/26,"Domestic, Total",13255.0,Million Bushels,2026-07-15
+CORN,2025/26,"Domestic, Total",13255.0,Million Bushels,2026-08-15
 CORN,2025/26,Ending Stocks,1660.0,Million Bushels,2025-07-15
 CORN,2025/26,Ending Stocks,2117.0,Million Bushels,2025-08-15
 CORN,2025/26,Ending Stocks,2110.0,Million Bushels,2025-09-15
@@ -360,6 +380,7 @@ CORN,2025/26,Ending Stocks,2127.0,Million Bushels,2026-04-15
 CORN,2025/26,Ending Stocks,2142.0,Million Bushels,2026-05-15
 CORN,2025/26,Ending Stocks,2145.0,Million Bushels,2026-06-15
 CORN,2025/26,Ending Stocks,2020.0,Million Bushels,2026-07-15
+CORN,2025/26,Ending Stocks,1945.0,Million Bushels,2026-08-15
 CORN,2025/26,Ethanol & by-products,5500.0,Million Bushels,2025-07-15
 CORN,2025/26,Ethanol & by-products,5600.0,Million Bushels,2025-08-15
 CORN,2025/26,Ethanol & by-products,5600.0,Million Bushels,2025-09-15
@@ -373,6 +394,7 @@ CORN,2025/26,Ethanol & by-products,5600.0,Million Bushels,2026-04-15
 CORN,2025/26,Ethanol & by-products,5600.0,Million Bushels,2026-05-15
 CORN,2025/26,Ethanol & by-products,5575.0,Million Bushels,2026-06-15
 CORN,2025/26,Ethanol & by-products,5550.0,Million Bushels,2026-07-15
+CORN,2025/26,Ethanol & by-products,5550.0,Million Bushels,2026-08-15
 CORN,2025/26,Exports,2675.0,Million Bushels,2025-07-15
 CORN,2025/26,Exports,2875.0,Million Bushels,2025-08-15
 CORN,2025/26,Exports,2975.0,Million Bushels,2025-09-15
@@ -386,6 +408,7 @@ CORN,2025/26,Exports,3300.0,Million Bushels,2026-04-15
 CORN,2025/26,Exports,3300.0,Million Bushels,2026-05-15
 CORN,2025/26,Exports,3325.0,Million Bushels,2026-06-15
 CORN,2025/26,Exports,3325.0,Million Bushels,2026-07-15
+CORN,2025/26,Exports,3400.0,Million Bushels,2026-08-15
 CORN,2025/26,Feed and Residual,5850.0,Million Bushels,2025-07-15
 CORN,2025/26,Feed and Residual,6100.0,Million Bushels,2025-08-15
 CORN,2025/26,Feed and Residual,6100.0,Million Bushels,2025-09-15
@@ -399,6 +422,7 @@ CORN,2025/26,Feed and Residual,6200.0,Million Bushels,2026-04-15
 CORN,2025/26,Feed and Residual,6200.0,Million Bushels,2026-05-15
 CORN,2025/26,Feed and Residual,6200.0,Million Bushels,2026-06-15
 CORN,2025/26,Feed and Residual,6350.0,Million Bushels,2026-07-15
+CORN,2025/26,Feed and Residual,6350.0,Million Bushels,2026-08-15
 CORN,2025/26,"Food, Seed & Industrial",6885.0,Million Bushels,2025-07-15
 CORN,2025/26,"Food, Seed & Industrial",6980.0,Million Bushels,2025-08-15
 CORN,2025/26,"Food, Seed & Industrial",6980.0,Million Bushels,2025-09-15
@@ -412,6 +436,7 @@ CORN,2025/26,"Food, Seed & Industrial",6970.0,Million Bushels,2026-04-15
 CORN,2025/26,"Food, Seed & Industrial",6955.0,Million Bushels,2026-05-15
 CORN,2025/26,"Food, Seed & Industrial",6930.0,Million Bushels,2026-06-15
 CORN,2025/26,"Food, Seed & Industrial",6905.0,Million Bushels,2026-07-15
+CORN,2025/26,"Food, Seed & Industrial",6905.0,Million Bushels,2026-08-15
 CORN,2025/26,Imports,25.0,Million Bushels,2025-07-15
 CORN,2025/26,Imports,25.0,Million Bushels,2025-08-15
 CORN,2025/26,Imports,25.0,Million Bushels,2025-09-15
@@ -425,6 +450,7 @@ CORN,2025/26,Imports,25.0,Million Bushels,2026-04-15
 CORN,2025/26,Imports,25.0,Million Bushels,2026-05-15
 CORN,2025/26,Imports,28.0,Million Bushels,2026-06-15
 CORN,2025/26,Imports,28.0,Million Bushels,2026-07-15
+CORN,2025/26,Imports,28.0,Million Bushels,2026-08-15
 CORN,2025/26,Production,15705.0,Million Bushels,2025-07-15
 CORN,2025/26,Production,16742.0,Million Bushels,2025-08-15
 CORN,2025/26,Production,16814.0,Million Bushels,2025-09-15
@@ -438,6 +464,7 @@ CORN,2025/26,Production,17021.0,Million Bushels,2026-04-15
 CORN,2025/26,Production,17021.0,Million Bushels,2026-05-15
 CORN,2025/26,Production,17021.0,Million Bushels,2026-06-15
 CORN,2025/26,Production,17021.0,Million Bushels,2026-07-15
+CORN,2025/26,Production,17021.0,Million Bushels,2026-08-15
 CORN,2025/26,"Supply, Total",17070.0,Million Bushels,2025-07-15
 CORN,2025/26,"Supply, Total",18072.0,Million Bushels,2025-08-15
 CORN,2025/26,"Supply, Total",18165.0,Million Bushels,2025-09-15
@@ -451,6 +478,7 @@ CORN,2025/26,"Supply, Total",18597.0,Million Bushels,2026-04-15
 CORN,2025/26,"Supply, Total",18597.0,Million Bushels,2026-05-15
 CORN,2025/26,"Supply, Total",18600.0,Million Bushels,2026-06-15
 CORN,2025/26,"Supply, Total",18600.0,Million Bushels,2026-07-15
+CORN,2025/26,"Supply, Total",18600.0,Million Bushels,2026-08-15
 CORN,2025/26,"Use, Total",15410.0,Million Bushels,2025-07-15
 CORN,2025/26,"Use, Total",15955.0,Million Bushels,2025-08-15
 CORN,2025/26,"Use, Total",16055.0,Million Bushels,2025-09-15
@@ -464,6 +492,7 @@ CORN,2025/26,"Use, Total",16470.0,Million Bushels,2026-04-15
 CORN,2025/26,"Use, Total",16455.0,Million Bushels,2026-05-15
 CORN,2025/26,"Use, Total",16455.0,Million Bushels,2026-06-15
 CORN,2025/26,"Use, Total",16580.0,Million Bushels,2026-07-15
+CORN,2025/26,"Use, Total",16655.0,Million Bushels,2026-08-15
 CORN,2025/26,Yield per Harvested Acre,188.8,Bushels,2025-08-15
 CORN,2025/26,Yield per Harvested Acre,186.7,Bushels,2025-09-15
 CORN,2025/26,Yield per Harvested Acre,186.7,Bushels,2025-10-15
@@ -476,42 +505,58 @@ CORN,2025/26,Yield per Harvested Acre,186.5,Bushels,2026-04-15
 CORN,2025/26,Yield per Harvested Acre,186.5,Bushels,2026-05-15
 CORN,2025/26,Yield per Harvested Acre,186.5,Bushels,2026-06-15
 CORN,2025/26,Yield per Harvested Acre,186.5,Bushels,2026-07-15
+CORN,2025/26,Yield per Harvested Acre,186.5,Bushels,2026-08-15
+CORN,2026/27,Area Harvested,88.6,Million Acres,2026-08-15
+CORN,2026/27,Area Planted,96.7,Million Acres,2026-08-15
 CORN,2026/27,Avg. Farm Price ($/bu),4.4,$/bu,2026-05-15
 CORN,2026/27,Avg. Farm Price ($/bu),4.4,$/bu,2026-06-15
 CORN,2026/27,Avg. Farm Price ($/bu),4.4,$/bu,2026-07-15
+CORN,2026/27,Avg. Farm Price ($/bu),4.5,$/bu,2026-08-15
 CORN,2026/27,Beginning Stocks,2142.0,Million Bushels,2026-05-15
 CORN,2026/27,Beginning Stocks,2145.0,Million Bushels,2026-06-15
 CORN,2026/27,Beginning Stocks,2020.0,Million Bushels,2026-07-15
+CORN,2026/27,Beginning Stocks,1945.0,Million Bushels,2026-08-15
 CORN,2026/27,"Domestic, Total",13055.0,Million Bushels,2026-05-15
 CORN,2026/27,"Domestic, Total",13055.0,Million Bushels,2026-06-15
 CORN,2026/27,"Domestic, Total",13055.0,Million Bushels,2026-07-15
+CORN,2026/27,"Domestic, Total",13055.0,Million Bushels,2026-08-15
 CORN,2026/27,Ending Stocks,1957.0,Million Bushels,2026-05-15
 CORN,2026/27,Ending Stocks,1960.0,Million Bushels,2026-06-15
 CORN,2026/27,Ending Stocks,1790.0,Million Bushels,2026-07-15
+CORN,2026/27,Ending Stocks,1653.0,Million Bushels,2026-08-15
 CORN,2026/27,Ethanol & by-products,5600.0,Million Bushels,2026-05-15
 CORN,2026/27,Ethanol & by-products,5600.0,Million Bushels,2026-06-15
 CORN,2026/27,Ethanol & by-products,5600.0,Million Bushels,2026-07-15
+CORN,2026/27,Ethanol & by-products,5600.0,Million Bushels,2026-08-15
 CORN,2026/27,Exports,3150.0,Million Bushels,2026-05-15
 CORN,2026/27,Exports,3150.0,Million Bushels,2026-06-15
 CORN,2026/27,Exports,3200.0,Million Bushels,2026-07-15
+CORN,2026/27,Exports,3275.0,Million Bushels,2026-08-15
 CORN,2026/27,Feed and Residual,6100.0,Million Bushels,2026-05-15
 CORN,2026/27,Feed and Residual,6100.0,Million Bushels,2026-06-15
 CORN,2026/27,Feed and Residual,6100.0,Million Bushels,2026-07-15
+CORN,2026/27,Feed and Residual,6100.0,Million Bushels,2026-08-15
 CORN,2026/27,"Food, Seed & Industrial",6955.0,Million Bushels,2026-05-15
 CORN,2026/27,"Food, Seed & Industrial",6955.0,Million Bushels,2026-06-15
 CORN,2026/27,"Food, Seed & Industrial",6955.0,Million Bushels,2026-07-15
+CORN,2026/27,"Food, Seed & Industrial",6955.0,Million Bushels,2026-08-15
 CORN,2026/27,Imports,25.0,Million Bushels,2026-05-15
 CORN,2026/27,Imports,25.0,Million Bushels,2026-06-15
 CORN,2026/27,Imports,25.0,Million Bushels,2026-07-15
+CORN,2026/27,Imports,25.0,Million Bushels,2026-08-15
 CORN,2026/27,Production,15995.0,Million Bushels,2026-05-15
 CORN,2026/27,Production,15995.0,Million Bushels,2026-06-15
 CORN,2026/27,Production,16000.0,Million Bushels,2026-07-15
+CORN,2026/27,Production,16013.0,Million Bushels,2026-08-15
 CORN,2026/27,"Supply, Total",18162.0,Million Bushels,2026-05-15
 CORN,2026/27,"Supply, Total",18165.0,Million Bushels,2026-06-15
 CORN,2026/27,"Supply, Total",18045.0,Million Bushels,2026-07-15
+CORN,2026/27,"Supply, Total",17983.0,Million Bushels,2026-08-15
 CORN,2026/27,"Use, Total",16205.0,Million Bushels,2026-05-15
 CORN,2026/27,"Use, Total",16205.0,Million Bushels,2026-06-15
 CORN,2026/27,"Use, Total",16255.0,Million Bushels,2026-07-15
+CORN,2026/27,"Use, Total",16330.0,Million Bushels,2026-08-15
+CORN,2026/27,Yield per Harvested Acre,180.7,Bushels,2026-08-15
 COTTON,2023/24,Avg. Farm Price,76.1,,2025-08-15
 COTTON,2023/24,Avg. Farm Price,76.1,,2025-09-15
 COTTON,2023/24,Avg. Farm Price,76.1,,2025-11-15
@@ -627,6 +672,7 @@ COTTON,2024/25,Avg. Farm Price,63.2,,2026-04-15
 COTTON,2024/25,Avg. Farm Price,63.2,,2026-05-15
 COTTON,2024/25,Avg. Farm Price,63.2,,2026-06-15
 COTTON,2024/25,Avg. Farm Price,63.2,,2026-07-15
+COTTON,2024/25,Avg. Farm Price,63.2,,2026-08-15
 COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2025-11-15
@@ -638,6 +684,7 @@ COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,Beginning Stocks,3.15,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2025-11-15
@@ -649,6 +696,7 @@ COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,Domestic Use,1.7,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2025-11-15
@@ -660,6 +708,7 @@ COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,Ending Stocks,4.0,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2025-11-15
@@ -671,6 +720,7 @@ COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,"Exports, Total",11.9,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,Harvested,7.81,Million Acres,2025-08-15
 COTTON,2024/25,Harvested,7.81,Million Acres,2025-09-15
 COTTON,2024/25,Harvested,7.81,Million Acres,2025-11-15
@@ -682,6 +732,7 @@ COTTON,2024/25,Harvested,7.81,Million Acres,2026-04-15
 COTTON,2024/25,Harvested,7.76,Million Acres,2026-05-15
 COTTON,2024/25,Harvested,7.76,Million Acres,2026-06-15
 COTTON,2024/25,Harvested,7.76,Million Acres,2026-07-15
+COTTON,2024/25,Harvested,7.76,Million Acres,2026-08-15
 COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2025-11-15
@@ -693,6 +744,7 @@ COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,Imports,0.0,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,Planted,11.18,Million Acres,2025-08-15
 COTTON,2024/25,Planted,11.18,Million Acres,2025-09-15
 COTTON,2024/25,Planted,11.18,Million Acres,2025-11-15
@@ -704,6 +756,7 @@ COTTON,2024/25,Planted,11.18,Million Acres,2026-04-15
 COTTON,2024/25,Planted,11.18,Million Acres,2026-05-15
 COTTON,2024/25,Planted,11.18,Million Acres,2026-06-15
 COTTON,2024/25,Planted,11.18,Million Acres,2026-07-15
+COTTON,2024/25,Planted,11.18,Million Acres,2026-08-15
 COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2025-11-15
@@ -715,6 +768,7 @@ COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,Production,14.41,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,"Supply, Total",17.57,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,"Supply, Total",17.57,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,"Supply, Total",17.57,Million 480 Pound Bales,2025-11-15
@@ -726,6 +780,7 @@ COTTON,2024/25,"Supply, Total",17.57,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,"Supply, Total",17.56,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,"Supply, Total",17.56,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,"Supply, Total",17.56,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,"Supply, Total",17.56,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,Unaccounted,-0.03,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,Unaccounted,-0.03,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,Unaccounted,-0.03,Million 480 Pound Bales,2025-11-15
@@ -737,6 +792,7 @@ COTTON,2024/25,Unaccounted,-0.03,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,Unaccounted,-0.04,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,Unaccounted,-0.04,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,Unaccounted,-0.04,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,Unaccounted,-0.04,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2025-08-15
 COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2025-09-15
 COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2025-11-15
@@ -748,6 +804,7 @@ COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2026-04-15
 COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2026-05-15
 COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2026-06-15
 COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2026-07-15
+COTTON,2024/25,"Use, Total",13.6,Million 480 Pound Bales,2026-08-15
 COTTON,2024/25,Yield per Harvested Acre,886.0,Pounds,2025-08-15
 COTTON,2024/25,Yield per Harvested Acre,886.0,Pounds,2025-09-15
 COTTON,2024/25,Yield per Harvested Acre,886.0,Pounds,2025-11-15
@@ -759,6 +816,7 @@ COTTON,2024/25,Yield per Harvested Acre,886.0,Pounds,2026-04-15
 COTTON,2024/25,Yield per Harvested Acre,892.0,Pounds,2026-05-15
 COTTON,2024/25,Yield per Harvested Acre,892.0,Pounds,2026-06-15
 COTTON,2024/25,Yield per Harvested Acre,892.0,Pounds,2026-07-15
+COTTON,2024/25,Yield per Harvested Acre,892.0,Pounds,2026-08-15
 COTTON,2025/26,Avg. Farm Price,62.0,,2025-07-15
 COTTON,2025/26,Avg. Farm Price,64.0,,2025-08-15
 COTTON,2025/26,Avg. Farm Price,64.0,,2025-09-15
@@ -772,6 +830,7 @@ COTTON,2025/26,Avg. Farm Price,61.0,,2026-04-15
 COTTON,2025/26,Avg. Farm Price,63.0,,2026-05-15
 COTTON,2025/26,Avg. Farm Price,63.0,,2026-06-15
 COTTON,2025/26,Avg. Farm Price,62.5,,2026-07-15
+COTTON,2025/26,Avg. Farm Price,61.5,,2026-08-15
 COTTON,2025/26,Beginning Stocks,4.1,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2025-09-15
@@ -785,6 +844,7 @@ COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,Beginning Stocks,4.0,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,Domestic Use,1.7,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,Domestic Use,1.7,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,Domestic Use,1.7,Million 480 Pound Bales,2025-09-15
@@ -798,6 +858,7 @@ COTTON,2025/26,Domestic Use,1.6,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,Domestic Use,1.6,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,Domestic Use,1.55,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,Domestic Use,1.55,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,Domestic Use,1.55,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,Ending Stocks,4.6,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,Ending Stocks,3.6,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,Ending Stocks,3.6,Million 480 Pound Bales,2025-09-15
@@ -811,6 +872,7 @@ COTTON,2025/26,Ending Stocks,4.4,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,Ending Stocks,4.4,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,Ending Stocks,4.2,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,Ending Stocks,4.2,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,Ending Stocks,4.2,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,"Exports, Total",12.5,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,"Exports, Total",12.0,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,"Exports, Total",12.0,Million 480 Pound Bales,2025-09-15
@@ -824,6 +886,7 @@ COTTON,2025/26,"Exports, Total",12.0,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,"Exports, Total",12.0,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,"Exports, Total",12.2,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,"Exports, Total",12.2,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,"Exports, Total",12.2,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,Harvested,7.36,Million Acres,2025-08-15
 COTTON,2025/26,Harvested,7.37,Million Acres,2025-09-15
 COTTON,2025/26,Harvested,7.37,Million Acres,2025-10-15
@@ -836,6 +899,7 @@ COTTON,2025/26,Harvested,7.8,Million Acres,2026-04-15
 COTTON,2025/26,Harvested,7.83,Million Acres,2026-05-15
 COTTON,2025/26,Harvested,7.83,Million Acres,2026-06-15
 COTTON,2025/26,Harvested,7.83,Million Acres,2026-07-15
+COTTON,2025/26,Harvested,7.83,Million Acres,2026-08-15
 COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2025-09-15
@@ -849,6 +913,7 @@ COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,Imports,0.01,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,Planted,9.28,Million Acres,2025-08-15
 COTTON,2025/26,Planted,9.3,Million Acres,2025-09-15
 COTTON,2025/26,Planted,9.3,Million Acres,2025-10-15
@@ -861,6 +926,7 @@ COTTON,2025/26,Planted,9.28,Million Acres,2026-04-15
 COTTON,2025/26,Planted,9.28,Million Acres,2026-05-15
 COTTON,2025/26,Planted,9.28,Million Acres,2026-06-15
 COTTON,2025/26,Planted,9.28,Million Acres,2026-07-15
+COTTON,2025/26,Planted,9.28,Million Acres,2026-08-15
 COTTON,2025/26,Production,14.6,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,Production,13.21,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,Production,13.22,Million 480 Pound Bales,2025-09-15
@@ -874,6 +940,7 @@ COTTON,2025/26,Production,13.92,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,Production,13.9,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,Production,13.9,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,Production,13.9,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,Production,13.9,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,"Supply, Total",18.71,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,"Supply, Total",17.22,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,"Supply, Total",17.23,Million 480 Pound Bales,2025-09-15
@@ -887,6 +954,7 @@ COTTON,2025/26,"Supply, Total",17.92,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,"Supply, Total",17.9,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,"Supply, Total",17.9,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,"Supply, Total",17.9,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,"Supply, Total",17.9,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,Unaccounted,-0.1,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,Unaccounted,-0.08,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,Unaccounted,-0.07,Million 480 Pound Bales,2025-09-15
@@ -900,6 +968,7 @@ COTTON,2025/26,Unaccounted,-0.08,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,Unaccounted,-0.1,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,Unaccounted,-0.05,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,Unaccounted,-0.05,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,Unaccounted,-0.05,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,"Use, Total",14.2,Million 480 Pound Bales,2025-07-15
 COTTON,2025/26,"Use, Total",13.7,Million 480 Pound Bales,2025-08-15
 COTTON,2025/26,"Use, Total",13.7,Million 480 Pound Bales,2025-09-15
@@ -913,6 +982,7 @@ COTTON,2025/26,"Use, Total",13.6,Million 480 Pound Bales,2026-04-15
 COTTON,2025/26,"Use, Total",13.6,Million 480 Pound Bales,2026-05-15
 COTTON,2025/26,"Use, Total",13.75,Million 480 Pound Bales,2026-06-15
 COTTON,2025/26,"Use, Total",13.75,Million 480 Pound Bales,2026-07-15
+COTTON,2025/26,"Use, Total",13.75,Million 480 Pound Bales,2026-08-15
 COTTON,2025/26,Yield per Harvested Acre,862.0,Pounds,2025-08-15
 COTTON,2025/26,Yield per Harvested Acre,861.0,Pounds,2025-09-15
 COTTON,2025/26,Yield per Harvested Acre,861.0,Pounds,2025-10-15
@@ -925,36 +995,47 @@ COTTON,2025/26,Yield per Harvested Acre,856.0,Pounds,2026-04-15
 COTTON,2025/26,Yield per Harvested Acre,852.0,Pounds,2026-05-15
 COTTON,2025/26,Yield per Harvested Acre,852.0,Pounds,2026-06-15
 COTTON,2025/26,Yield per Harvested Acre,852.0,Pounds,2026-07-15
+COTTON,2025/26,Yield per Harvested Acre,852.0,Pounds,2026-08-15
 COTTON,2026/27,Avg. Farm Price,73.0,,2026-05-15
 COTTON,2026/27,Avg. Farm Price,73.0,,2026-06-15
 COTTON,2026/27,Avg. Farm Price,73.0,,2026-07-15
+COTTON,2026/27,Avg. Farm Price,75.0,,2026-08-15
 COTTON,2026/27,Beginning Stocks,4.4,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,Beginning Stocks,4.2,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,Beginning Stocks,4.2,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,Beginning Stocks,4.2,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,Domestic Use,1.6,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,Domestic Use,1.6,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,Domestic Use,1.6,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,Domestic Use,1.6,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,Ending Stocks,3.9,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,Ending Stocks,3.7,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,Ending Stocks,4.1,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,Ending Stocks,4.0,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,"Exports, Total",12.3,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,"Exports, Total",12.3,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,"Exports, Total",12.3,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,"Exports, Total",12.3,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,Imports,0.01,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,Imports,0.01,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,Imports,0.01,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,Imports,0.01,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,Production,13.3,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,Production,13.3,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,Production,13.7,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,Production,13.61,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,"Supply, Total",17.71,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,"Supply, Total",17.51,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,"Supply, Total",17.91,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,"Supply, Total",17.81,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,Unaccounted,-0.1,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,Unaccounted,-0.1,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,Unaccounted,-0.1,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,Unaccounted,-0.09,Million 480 Pound Bales,2026-08-15
 COTTON,2026/27,"Use, Total",13.9,Million 480 Pound Bales,2026-05-15
 COTTON,2026/27,"Use, Total",13.9,Million 480 Pound Bales,2026-06-15
 COTTON,2026/27,"Use, Total",13.9,Million 480 Pound Bales,2026-07-15
+COTTON,2026/27,"Use, Total",13.9,Million 480 Pound Bales,2026-08-15
 SOYBEANS,2023/24,Area Harvested,82.3,Million Acres,2025-08-15
 SOYBEANS,2023/24,Area Harvested,82.3,Million Acres,2025-09-15
 SOYBEANS,2023/24,Area Harvested,82.3,Million Acres,2025-11-15
@@ -1078,6 +1159,7 @@ SOYBEANS,2024/25,Area Harvested,86.2,Million Acres,2026-04-15
 SOYBEANS,2024/25,Area Harvested,86.2,Million Acres,2026-05-15
 SOYBEANS,2024/25,Area Harvested,86.2,Million Acres,2026-06-15
 SOYBEANS,2024/25,Area Harvested,86.2,Million Acres,2026-07-15
+SOYBEANS,2024/25,Area Harvested,86.2,Million Acres,2026-08-15
 SOYBEANS,2024/25,Area Planted,87.1,Million Acres,2025-08-15
 SOYBEANS,2024/25,Area Planted,87.1,Million Acres,2025-09-15
 SOYBEANS,2024/25,Area Planted,87.3,Million Acres,2025-11-15
@@ -1089,6 +1171,7 @@ SOYBEANS,2024/25,Area Planted,87.3,Million Acres,2026-04-15
 SOYBEANS,2024/25,Area Planted,87.3,Million Acres,2026-05-15
 SOYBEANS,2024/25,Area Planted,87.3,Million Acres,2026-06-15
 SOYBEANS,2024/25,Area Planted,87.3,Million Acres,2026-07-15
+SOYBEANS,2024/25,Area Planted,87.3,Million Acres,2026-08-15
 SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2025-08-15
 SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2025-09-15
 SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2025-11-15
@@ -1100,6 +1183,7 @@ SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2026-04-15
 SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2026-05-15
 SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2026-06-15
 SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2026-07-15
+SOYBEANS,2024/25,Avg. Farm Price ($/bu),10.0,$/bu,2026-08-15
 SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2025-11-15
@@ -1111,6 +1195,7 @@ SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Beginning Stocks,342.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Crushings,2430.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Crushings,2430.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Crushings,2445.0,Million Bushels,2025-11-15
@@ -1122,6 +1207,7 @@ SOYBEANS,2024/25,Crushings,2445.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Crushings,2445.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Crushings,2445.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Crushings,2445.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Crushings,2445.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Ending Stocks,330.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Ending Stocks,330.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Ending Stocks,316.0,Million Bushels,2025-11-15
@@ -1133,6 +1219,7 @@ SOYBEANS,2024/25,Ending Stocks,325.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Ending Stocks,325.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Ending Stocks,325.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Ending Stocks,325.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Ending Stocks,325.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Exports,1875.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Exports,1875.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Exports,1875.0,Million Bushels,2025-11-15
@@ -1144,6 +1231,7 @@ SOYBEANS,2024/25,Exports,1882.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Exports,1882.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Exports,1882.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Exports,1892.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Exports,1892.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Imports,25.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Imports,27.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Imports,27.0,Million Bushels,2025-11-15
@@ -1155,6 +1243,7 @@ SOYBEANS,2024/25,Imports,29.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Imports,29.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Imports,29.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Imports,30.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Imports,30.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Production,4366.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Production,4366.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Production,4374.0,Million Bushels,2025-11-15
@@ -1166,6 +1255,7 @@ SOYBEANS,2024/25,Production,4374.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Production,4374.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Production,4374.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Production,4374.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Production,4374.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Residual,29.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Residual,31.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Residual,37.0,Million Bushels,2025-11-15
@@ -1177,6 +1267,7 @@ SOYBEANS,2024/25,Residual,23.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Residual,23.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Residual,23.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Residual,14.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Residual,14.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Seed,70.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,Seed,70.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,Seed,70.0,Million Bushels,2025-11-15
@@ -1188,6 +1279,7 @@ SOYBEANS,2024/25,Seed,70.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,Seed,70.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,Seed,70.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,Seed,70.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,Seed,70.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,"Supply, Total",4734.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,"Supply, Total",4736.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,"Supply, Total",4744.0,Million Bushels,2025-11-15
@@ -1199,6 +1291,7 @@ SOYBEANS,2024/25,"Supply, Total",4746.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,"Supply, Total",4746.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,"Supply, Total",4746.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,"Supply, Total",4746.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,"Supply, Total",4746.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,"Use, Total",4404.0,Million Bushels,2025-08-15
 SOYBEANS,2024/25,"Use, Total",4406.0,Million Bushels,2025-09-15
 SOYBEANS,2024/25,"Use, Total",4427.0,Million Bushels,2025-11-15
@@ -1210,6 +1303,7 @@ SOYBEANS,2024/25,"Use, Total",4421.0,Million Bushels,2026-04-15
 SOYBEANS,2024/25,"Use, Total",4421.0,Million Bushels,2026-05-15
 SOYBEANS,2024/25,"Use, Total",4421.0,Million Bushels,2026-06-15
 SOYBEANS,2024/25,"Use, Total",4421.0,Million Bushels,2026-07-15
+SOYBEANS,2024/25,"Use, Total",4421.0,Million Bushels,2026-08-15
 SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2025-08-15
 SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2025-09-15
 SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2025-11-15
@@ -1221,6 +1315,7 @@ SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2026-04-15
 SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2026-05-15
 SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2026-06-15
 SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2026-07-15
+SOYBEANS,2024/25,Yield per Harvested Acre,50.7,Bushels,2026-08-15
 SOYBEANS,2025/26,Area Harvested,80.1,Million Acres,2025-08-15
 SOYBEANS,2025/26,Area Harvested,80.3,Million Acres,2025-09-15
 SOYBEANS,2025/26,Area Harvested,80.3,Million Acres,2025-10-15
@@ -1233,6 +1328,7 @@ SOYBEANS,2025/26,Area Harvested,80.4,Million Acres,2026-04-15
 SOYBEANS,2025/26,Area Harvested,80.4,Million Acres,2026-05-15
 SOYBEANS,2025/26,Area Harvested,80.4,Million Acres,2026-06-15
 SOYBEANS,2025/26,Area Harvested,80.4,Million Acres,2026-07-15
+SOYBEANS,2025/26,Area Harvested,80.4,Million Acres,2026-08-15
 SOYBEANS,2025/26,Area Planted,80.9,Million Acres,2025-08-15
 SOYBEANS,2025/26,Area Planted,81.1,Million Acres,2025-09-15
 SOYBEANS,2025/26,Area Planted,81.1,Million Acres,2025-10-15
@@ -1245,6 +1341,7 @@ SOYBEANS,2025/26,Area Planted,81.2,Million Acres,2026-04-15
 SOYBEANS,2025/26,Area Planted,81.2,Million Acres,2026-05-15
 SOYBEANS,2025/26,Area Planted,81.2,Million Acres,2026-06-15
 SOYBEANS,2025/26,Area Planted,81.2,Million Acres,2026-07-15
+SOYBEANS,2025/26,Area Planted,81.2,Million Acres,2026-08-15
 SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.1,$/bu,2025-07-15
 SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.1,$/bu,2025-08-15
 SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.0,$/bu,2025-09-15
@@ -1258,6 +1355,7 @@ SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.3,$/bu,2026-04-15
 SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.4,$/bu,2026-05-15
 SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.4,$/bu,2026-06-15
 SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.4,$/bu,2026-07-15
+SOYBEANS,2025/26,Avg. Farm Price ($/bu),10.4,$/bu,2026-08-15
 SOYBEANS,2025/26,Beginning Stocks,350.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Beginning Stocks,330.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Beginning Stocks,330.0,Million Bushels,2025-09-15
@@ -1271,6 +1369,7 @@ SOYBEANS,2025/26,Beginning Stocks,325.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Beginning Stocks,325.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Beginning Stocks,325.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Beginning Stocks,325.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Beginning Stocks,325.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Crushings,2540.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Crushings,2540.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Crushings,2555.0,Million Bushels,2025-09-15
@@ -1284,6 +1383,7 @@ SOYBEANS,2025/26,Crushings,2610.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Crushings,2630.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Crushings,2650.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Crushings,2650.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Crushings,2655.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Ending Stocks,310.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Ending Stocks,290.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Ending Stocks,300.0,Million Bushels,2025-09-15
@@ -1297,6 +1397,7 @@ SOYBEANS,2025/26,Ending Stocks,350.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Ending Stocks,340.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Ending Stocks,340.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Ending Stocks,330.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Ending Stocks,325.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Exports,1745.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Exports,1705.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Exports,1685.0,Million Bushels,2025-09-15
@@ -1310,6 +1411,7 @@ SOYBEANS,2025/26,Exports,1540.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Exports,1530.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Exports,1510.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Exports,1520.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Exports,1520.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Imports,20.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Imports,20.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Imports,20.0,Million Bushels,2025-09-15
@@ -1323,6 +1425,7 @@ SOYBEANS,2025/26,Imports,25.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Imports,25.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Imports,25.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Imports,25.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Imports,25.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Production,4335.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Production,4292.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Production,4301.0,Million Bushels,2025-09-15
@@ -1336,6 +1439,7 @@ SOYBEANS,2025/26,Production,4262.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Production,4262.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Production,4262.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Production,4262.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Production,4262.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Residual,37.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Residual,34.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Residual,37.0,Million Bushels,2025-09-15
@@ -1349,6 +1453,7 @@ SOYBEANS,2025/26,Residual,39.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Residual,39.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Residual,39.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Residual,38.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Residual,37.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Seed,73.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,Seed,73.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,Seed,73.0,Million Bushels,2025-09-15
@@ -1362,6 +1467,7 @@ SOYBEANS,2025/26,Seed,73.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,Seed,73.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,Seed,73.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,Seed,74.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,Seed,75.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,"Supply, Total",4705.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,"Supply, Total",4642.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,"Supply, Total",4651.0,Million Bushels,2025-09-15
@@ -1375,6 +1481,7 @@ SOYBEANS,2025/26,"Supply, Total",4612.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,"Supply, Total",4612.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,"Supply, Total",4612.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,"Supply, Total",4612.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,"Supply, Total",4612.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,"Use, Total",4395.0,Million Bushels,2025-07-15
 SOYBEANS,2025/26,"Use, Total",4352.0,Million Bushels,2025-08-15
 SOYBEANS,2025/26,"Use, Total",4351.0,Million Bushels,2025-09-15
@@ -1388,6 +1495,7 @@ SOYBEANS,2025/26,"Use, Total",4262.0,Million Bushels,2026-04-15
 SOYBEANS,2025/26,"Use, Total",4272.0,Million Bushels,2026-05-15
 SOYBEANS,2025/26,"Use, Total",4272.0,Million Bushels,2026-06-15
 SOYBEANS,2025/26,"Use, Total",4282.0,Million Bushels,2026-07-15
+SOYBEANS,2025/26,"Use, Total",4287.0,Million Bushels,2026-08-15
 SOYBEANS,2025/26,Yield per Harvested Acre,53.6,Bushels,2025-08-15
 SOYBEANS,2025/26,Yield per Harvested Acre,53.5,Bushels,2025-09-15
 SOYBEANS,2025/26,Yield per Harvested Acre,53.5,Bushels,2025-10-15
@@ -1400,39 +1508,54 @@ SOYBEANS,2025/26,Yield per Harvested Acre,53.0,Bushels,2026-04-15
 SOYBEANS,2025/26,Yield per Harvested Acre,53.0,Bushels,2026-05-15
 SOYBEANS,2025/26,Yield per Harvested Acre,53.0,Bushels,2026-06-15
 SOYBEANS,2025/26,Yield per Harvested Acre,53.0,Bushels,2026-07-15
+SOYBEANS,2025/26,Yield per Harvested Acre,53.0,Bushels,2026-08-15
+SOYBEANS,2026/27,Area Harvested,85.8,Million Acres,2026-08-15
+SOYBEANS,2026/27,Area Planted,86.8,Million Acres,2026-08-15
 SOYBEANS,2026/27,Avg. Farm Price ($/bu),11.4,$/bu,2026-05-15
 SOYBEANS,2026/27,Avg. Farm Price ($/bu),11.4,$/bu,2026-06-15
 SOYBEANS,2026/27,Avg. Farm Price ($/bu),11.4,$/bu,2026-07-15
+SOYBEANS,2026/27,Avg. Farm Price ($/bu),11.4,$/bu,2026-08-15
 SOYBEANS,2026/27,Beginning Stocks,340.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Beginning Stocks,340.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Beginning Stocks,330.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Beginning Stocks,325.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Crushings,2750.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Crushings,2750.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Crushings,2750.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Crushings,2780.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Ending Stocks,310.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Ending Stocks,310.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Ending Stocks,310.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Ending Stocks,320.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Exports,1630.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Exports,1630.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Exports,1660.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Exports,1660.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Imports,25.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Imports,25.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Imports,25.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Imports,25.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Production,4435.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Production,4435.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Production,4475.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Production,4519.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Residual,38.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Residual,38.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Residual,38.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Residual,37.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,Seed,72.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,Seed,72.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,Seed,72.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,Seed,73.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,"Supply, Total",4800.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,"Supply, Total",4800.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,"Supply, Total",4830.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,"Supply, Total",4869.0,Million Bushels,2026-08-15
 SOYBEANS,2026/27,"Use, Total",4490.0,Million Bushels,2026-05-15
 SOYBEANS,2026/27,"Use, Total",4490.0,Million Bushels,2026-06-15
 SOYBEANS,2026/27,"Use, Total",4520.0,Million Bushels,2026-07-15
+SOYBEANS,2026/27,"Use, Total",4549.0,Million Bushels,2026-08-15
+SOYBEANS,2026/27,Yield per Harvested Acre,52.7,Bushels,2026-08-15
 SOYBEAN_MEAL,2023/24,Avg. Price ($/s.t.),384.11,$/s.t.,2025-08-15
 SOYBEAN_MEAL,2023/24,Avg. Price ($/s.t.),384.11,$/s.t.,2025-09-15
 SOYBEAN_MEAL,2023/24,Avg. Price ($/s.t.),384.11,$/s.t.,2025-11-15
@@ -1516,6 +1639,7 @@ SOYBEAN_MEAL,2024/25,Avg. Price ($/s.t.),299.77,$/s.t.,2026-04-15
 SOYBEAN_MEAL,2024/25,Avg. Price ($/s.t.),299.77,$/s.t.,2026-05-15
 SOYBEAN_MEAL,2024/25,Avg. Price ($/s.t.),299.77,$/s.t.,2026-06-15
 SOYBEAN_MEAL,2024/25,Avg. Price ($/s.t.),299.77,$/s.t.,2026-07-15
+SOYBEAN_MEAL,2024/25,Avg. Price ($/s.t.),299.77,$/s.t.,2026-08-15
 SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2025-11-15
@@ -1527,6 +1651,7 @@ SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,Beginning Stocks,453.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,Domestic Disappearance,40625.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,Domestic Disappearance,40575.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,Domestic Disappearance,40775.0,Thousand Short Tons,2025-11-15
@@ -1538,6 +1663,7 @@ SOYBEAN_MEAL,2024/25,Domestic Disappearance,41041.0,Thousand Short Tons,2026-04-
 SOYBEAN_MEAL,2024/25,Domestic Disappearance,41041.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,Domestic Disappearance,41041.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,Domestic Disappearance,41232.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,Domestic Disappearance,41232.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,Ending Stocks,450.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,Ending Stocks,450.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,Ending Stocks,450.0,Thousand Short Tons,2025-11-15
@@ -1549,6 +1675,7 @@ SOYBEAN_MEAL,2024/25,Ending Stocks,398.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,Ending Stocks,398.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,Ending Stocks,398.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,Ending Stocks,398.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,Ending Stocks,398.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,Exports,17900.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,Exports,18100.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,Exports,18300.0,Thousand Short Tons,2025-11-15
@@ -1560,6 +1687,7 @@ SOYBEAN_MEAL,2024/25,Exports,18265.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,Exports,18265.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,Exports,18265.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,Exports,18073.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,Exports,18073.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,Imports,725.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,Imports,760.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,Imports,760.0,Thousand Short Tons,2025-11-15
@@ -1571,6 +1699,7 @@ SOYBEAN_MEAL,2024/25,Imports,807.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,Imports,807.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,Imports,807.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,Imports,806.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,Imports,806.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,Production,57797.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,Production,57912.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,Production,58312.0,Thousand Short Tons,2025-11-15
@@ -1582,6 +1711,7 @@ SOYBEAN_MEAL,2024/25,Production,58443.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,Production,58443.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,Production,58443.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,Production,58443.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,Production,58443.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,"Supply, Total",58975.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,"Supply, Total",59125.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,"Supply, Total",59525.0,Thousand Short Tons,2025-11-15
@@ -1593,6 +1723,7 @@ SOYBEAN_MEAL,2024/25,"Supply, Total",59704.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,"Supply, Total",59704.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,"Supply, Total",59704.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,"Supply, Total",59703.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,"Supply, Total",59703.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2024/25,"Use, Total",58525.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2024/25,"Use, Total",58675.0,Thousand Short Tons,2025-09-15
 SOYBEAN_MEAL,2024/25,"Use, Total",59075.0,Thousand Short Tons,2025-11-15
@@ -1604,6 +1735,7 @@ SOYBEAN_MEAL,2024/25,"Use, Total",59305.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2024/25,"Use, Total",59305.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2024/25,"Use, Total",59305.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2024/25,"Use, Total",59305.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2024/25,"Use, Total",59305.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),290.0,$/s.t.,2025-07-15
 SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),280.0,$/s.t.,2025-08-15
 SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),280.0,$/s.t.,2025-09-15
@@ -1617,6 +1749,7 @@ SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),310.0,$/s.t.,2026-04-15
 SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),315.0,$/s.t.,2026-05-15
 SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),315.0,$/s.t.,2026-06-15
 SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),315.0,$/s.t.,2026-07-15
+SOYBEAN_MEAL,2025/26,Avg. Price ($/s.t.),320.0,$/s.t.,2026-08-15
 SOYBEAN_MEAL,2025/26,Beginning Stocks,450.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,Beginning Stocks,450.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,Beginning Stocks,450.0,Thousand Short Tons,2025-09-15
@@ -1630,6 +1763,7 @@ SOYBEAN_MEAL,2025/26,Beginning Stocks,398.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,Beginning Stocks,398.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,Beginning Stocks,398.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,Beginning Stocks,398.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,Beginning Stocks,398.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,Domestic Disappearance,41775.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,Domestic Disappearance,41775.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,Domestic Disappearance,41675.0,Thousand Short Tons,2025-09-15
@@ -1643,6 +1777,7 @@ SOYBEAN_MEAL,2025/26,Domestic Disappearance,43225.0,Thousand Short Tons,2026-04-
 SOYBEAN_MEAL,2025/26,Domestic Disappearance,43575.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,Domestic Disappearance,43825.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,Domestic Disappearance,43525.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,Domestic Disappearance,43650.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,Ending Stocks,475.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,Ending Stocks,475.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,Ending Stocks,475.0,Thousand Short Tons,2025-09-15
@@ -1656,6 +1791,7 @@ SOYBEAN_MEAL,2025/26,Ending Stocks,450.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,Ending Stocks,450.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,Ending Stocks,450.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,Ending Stocks,450.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,Ending Stocks,450.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,Exports,18700.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,Exports,18700.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,Exports,19200.0,Thousand Short Tons,2025-09-15
@@ -1669,6 +1805,7 @@ SOYBEAN_MEAL,2025/26,Exports,19400.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,Exports,19800.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,Exports,20000.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,Exports,20300.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,Exports,20500.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,Imports,650.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,Imports,650.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,Imports,675.0,Thousand Short Tons,2025-09-15
@@ -1682,6 +1819,7 @@ SOYBEAN_MEAL,2025/26,Imports,800.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,Imports,800.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,Imports,825.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,Imports,840.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,Imports,900.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,Production,59850.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,Production,59850.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,Production,60225.0,Thousand Short Tons,2025-09-15
@@ -1695,6 +1833,7 @@ SOYBEAN_MEAL,2025/26,Production,61877.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,Production,62627.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,Production,63052.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,Production,63037.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,Production,63302.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,"Supply, Total",60950.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,"Supply, Total",60950.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,"Supply, Total",61350.0,Thousand Short Tons,2025-09-15
@@ -1708,6 +1847,7 @@ SOYBEAN_MEAL,2025/26,"Supply, Total",63075.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,"Supply, Total",63825.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,"Supply, Total",64275.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,"Supply, Total",64275.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,"Supply, Total",64600.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2025/26,"Use, Total",60475.0,Thousand Short Tons,2025-07-15
 SOYBEAN_MEAL,2025/26,"Use, Total",60475.0,Thousand Short Tons,2025-08-15
 SOYBEAN_MEAL,2025/26,"Use, Total",60875.0,Thousand Short Tons,2025-09-15
@@ -1721,33 +1861,43 @@ SOYBEAN_MEAL,2025/26,"Use, Total",62625.0,Thousand Short Tons,2026-04-15
 SOYBEAN_MEAL,2025/26,"Use, Total",63375.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2025/26,"Use, Total",63825.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2025/26,"Use, Total",63825.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2025/26,"Use, Total",64150.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,Avg. Price ($/s.t.),310.0,$/s.t.,2026-05-15
 SOYBEAN_MEAL,2026/27,Avg. Price ($/s.t.),310.0,$/s.t.,2026-06-15
 SOYBEAN_MEAL,2026/27,Avg. Price ($/s.t.),310.0,$/s.t.,2026-07-15
+SOYBEAN_MEAL,2026/27,Avg. Price ($/s.t.),310.0,$/s.t.,2026-08-15
 SOYBEAN_MEAL,2026/27,Beginning Stocks,450.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,Beginning Stocks,450.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,Beginning Stocks,450.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,Beginning Stocks,450.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,Domestic Disappearance,44125.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,Domestic Disappearance,44125.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,Domestic Disappearance,43825.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,Domestic Disappearance,43975.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,Ending Stocks,450.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,Ending Stocks,450.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,Ending Stocks,450.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,Ending Stocks,450.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,Exports,21700.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,Exports,21700.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,Exports,22000.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,Exports,22700.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,Imports,800.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,Imports,800.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,Imports,840.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,Imports,875.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,Production,65025.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,Production,65025.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,Production,64985.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,Production,65800.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,"Supply, Total",66275.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,"Supply, Total",66275.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,"Supply, Total",66275.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,"Supply, Total",67125.0,Thousand Short Tons,2026-08-15
 SOYBEAN_MEAL,2026/27,"Use, Total",65825.0,Thousand Short Tons,2026-05-15
 SOYBEAN_MEAL,2026/27,"Use, Total",65825.0,Thousand Short Tons,2026-06-15
 SOYBEAN_MEAL,2026/27,"Use, Total",65825.0,Thousand Short Tons,2026-07-15
+SOYBEAN_MEAL,2026/27,"Use, Total",66675.0,Thousand Short Tons,2026-08-15
 SOYBEAN_OIL,2023/24,Avg. Price (c/lb),47.28,c/lb,2025-08-15
 SOYBEAN_OIL,2023/24,Avg. Price (c/lb),47.28,c/lb,2025-09-15
 SOYBEAN_OIL,2023/24,Avg. Price (c/lb),47.28,c/lb,2025-11-15
@@ -1847,6 +1997,7 @@ SOYBEAN_OIL,2024/25,Avg. Price (c/lb),47.59,c/lb,2026-04-15
 SOYBEAN_OIL,2024/25,Avg. Price (c/lb),47.59,c/lb,2026-05-15
 SOYBEAN_OIL,2024/25,Avg. Price (c/lb),47.59,c/lb,2026-06-15
 SOYBEAN_OIL,2024/25,Avg. Price (c/lb),47.59,c/lb,2026-07-15
+SOYBEAN_OIL,2024/25,Avg. Price (c/lb),47.59,c/lb,2026-08-15
 SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2025-11-15
@@ -1858,6 +2009,7 @@ SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Beginning Stocks,1551.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,Biofuel,12250.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Biofuel,12250.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Biofuel,11900.0,Million Pounds,2025-11-15
@@ -1869,6 +2021,7 @@ SOYBEAN_OIL,2024/25,Biofuel,11758.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Biofuel,11758.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Biofuel,11758.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Biofuel,11758.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Biofuel,11758.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,Domestic Disappearance,26850.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Domestic Disappearance,26850.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Domestic Disappearance,26900.0,Million Pounds,2025-11-15
@@ -1880,6 +2033,7 @@ SOYBEAN_OIL,2024/25,Domestic Disappearance,26891.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Domestic Disappearance,26891.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Domestic Disappearance,26891.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Domestic Disappearance,26912.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Domestic Disappearance,26912.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,Ending stocks,1501.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Ending stocks,1561.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Ending stocks,1751.0,Million Pounds,2025-11-15
@@ -1891,6 +2045,7 @@ SOYBEAN_OIL,2024/25,Ending stocks,1747.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Ending stocks,1747.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Ending stocks,1747.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Ending stocks,1747.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Ending stocks,1747.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,Exports,2550.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Exports,2500.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Exports,2500.0,Million Pounds,2025-11-15
@@ -1902,6 +2057,7 @@ SOYBEAN_OIL,2024/25,Exports,2492.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Exports,2492.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Exports,2492.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Exports,2472.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Exports,2472.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",14600.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",14600.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",15000.0,Million Pounds,2025-11-15
@@ -1913,6 +2069,7 @@ SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",15133.0,Million Pounds,2026-
 SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",15133.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",15133.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",15154.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,"Food, Feed & other Industrial",15154.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,Imports,375.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Imports,375.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Imports,375.0,Million Pounds,2025-11-15
@@ -1924,6 +2081,7 @@ SOYBEAN_OIL,2024/25,Imports,362.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Imports,362.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Imports,362.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Imports,362.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Imports,362.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,Production,28975.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,Production,28985.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,Production,29225.0,Million Pounds,2025-11-15
@@ -1935,6 +2093,7 @@ SOYBEAN_OIL,2024/25,Production,29218.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,Production,29218.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,Production,29218.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,Production,29218.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,Production,29218.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,"Supply, Total",30901.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,"Supply, Total",30911.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,"Supply, Total",31151.0,Million Pounds,2025-11-15
@@ -1946,6 +2105,7 @@ SOYBEAN_OIL,2024/25,"Supply, Total",31131.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,"Supply, Total",31131.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,"Supply, Total",31131.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,"Supply, Total",31131.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,"Supply, Total",31131.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2024/25,"Use, Total",29400.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2024/25,"Use, Total",29350.0,Million Pounds,2025-09-15
 SOYBEAN_OIL,2024/25,"Use, Total",29400.0,Million Pounds,2025-11-15
@@ -1957,6 +2117,7 @@ SOYBEAN_OIL,2024/25,"Use, Total",29384.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2024/25,"Use, Total",29384.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2024/25,"Use, Total",29384.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2024/25,"Use, Total",29384.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2024/25,"Use, Total",29384.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Avg. Price (c/lb),53.0,c/lb,2025-07-15
 SOYBEAN_OIL,2025/26,Avg. Price (c/lb),53.0,c/lb,2025-08-15
 SOYBEAN_OIL,2025/26,Avg. Price (c/lb),53.0,c/lb,2025-09-15
@@ -1970,6 +2131,7 @@ SOYBEAN_OIL,2025/26,Avg. Price (c/lb),59.0,c/lb,2026-04-15
 SOYBEAN_OIL,2025/26,Avg. Price (c/lb),63.0,c/lb,2026-05-15
 SOYBEAN_OIL,2025/26,Avg. Price (c/lb),64.0,c/lb,2026-06-15
 SOYBEAN_OIL,2025/26,Avg. Price (c/lb),64.0,c/lb,2026-07-15
+SOYBEAN_OIL,2025/26,Avg. Price (c/lb),64.0,c/lb,2026-08-15
 SOYBEAN_OIL,2025/26,Beginning Stocks,1451.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Beginning Stocks,1501.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Beginning Stocks,1561.0,Million Pounds,2025-09-15
@@ -1983,6 +2145,7 @@ SOYBEAN_OIL,2025/26,Beginning Stocks,1747.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Beginning Stocks,1747.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Beginning Stocks,1747.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Beginning Stocks,1747.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Beginning Stocks,1747.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Biofuel,15500.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Biofuel,15500.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Biofuel,15500.0,Million Pounds,2025-09-15
@@ -1996,6 +2159,7 @@ SOYBEAN_OIL,2025/26,Biofuel,14000.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Biofuel,14200.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Biofuel,14550.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Biofuel,14550.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Biofuel,14700.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Domestic Disappearance,29500.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Domestic Disappearance,29500.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Domestic Disappearance,29650.0,Million Pounds,2025-09-15
@@ -2009,6 +2173,7 @@ SOYBEAN_OIL,2025/26,Domestic Disappearance,29350.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Domestic Disappearance,29680.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Domestic Disappearance,30030.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Domestic Disappearance,30095.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Domestic Disappearance,30305.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Ending stocks,1671.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Ending stocks,1721.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Ending stocks,1736.0,Million Pounds,2025-09-15
@@ -2022,6 +2187,7 @@ SOYBEAN_OIL,2025/26,Ending stocks,1842.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Ending stocks,1857.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Ending stocks,1837.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Ending stocks,1837.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Ending stocks,1837.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Exports,700.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Exports,700.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Exports,700.0,Million Pounds,2025-09-15
@@ -2035,6 +2201,7 @@ SOYBEAN_OIL,2025/26,Exports,1200.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Exports,1200.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Exports,1050.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Exports,1000.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Exports,975.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",14000.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",14000.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",14150.0,Million Pounds,2025-09-15
@@ -2048,6 +2215,7 @@ SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",15350.0,Million Pounds,2026-
 SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",15480.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",15480.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",15545.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,"Food, Feed & other Industrial",15605.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Imports,450.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Imports,450.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Imports,375.0,Million Pounds,2025-09-15
@@ -2061,6 +2229,7 @@ SOYBEAN_OIL,2025/26,Imports,315.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Imports,315.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Imports,315.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Imports,330.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Imports,400.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,Production,29970.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,Production,29970.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,Production,30150.0,Million Pounds,2025-09-15
@@ -2074,6 +2243,7 @@ SOYBEAN_OIL,2025/26,Production,30330.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,Production,30675.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,Production,30855.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,Production,30855.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,Production,30970.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,"Supply, Total",31871.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,"Supply, Total",31921.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,"Supply, Total",32086.0,Million Pounds,2025-09-15
@@ -2087,6 +2257,7 @@ SOYBEAN_OIL,2025/26,"Supply, Total",32392.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,"Supply, Total",32737.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,"Supply, Total",32917.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,"Supply, Total",32932.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,"Supply, Total",33117.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2025/26,"Use, Total",30200.0,Million Pounds,2025-07-15
 SOYBEAN_OIL,2025/26,"Use, Total",30200.0,Million Pounds,2025-08-15
 SOYBEAN_OIL,2025/26,"Use, Total",30350.0,Million Pounds,2025-09-15
@@ -2100,39 +2271,51 @@ SOYBEAN_OIL,2025/26,"Use, Total",30550.0,Million Pounds,2026-04-15
 SOYBEAN_OIL,2025/26,"Use, Total",30880.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2025/26,"Use, Total",31080.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2025/26,"Use, Total",31095.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2025/26,"Use, Total",31280.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Avg. Price (c/lb),70.0,c/lb,2026-05-15
 SOYBEAN_OIL,2026/27,Avg. Price (c/lb),70.0,c/lb,2026-06-15
 SOYBEAN_OIL,2026/27,Avg. Price (c/lb),70.0,c/lb,2026-07-15
+SOYBEAN_OIL,2026/27,Avg. Price (c/lb),70.0,c/lb,2026-08-15
 SOYBEAN_OIL,2026/27,Beginning Stocks,1857.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Beginning Stocks,1837.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Beginning Stocks,1837.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Beginning Stocks,1837.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Biofuel,17800.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Biofuel,17800.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Biofuel,17800.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Biofuel,17800.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Domestic Disappearance,32750.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Domestic Disappearance,32750.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Domestic Disappearance,32750.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Domestic Disappearance,33105.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Ending stocks,1897.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Ending stocks,1877.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Ending stocks,1877.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Ending stocks,1877.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Exports,400.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Exports,400.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Exports,400.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Exports,400.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,"Food, Feed & other Industrial",14950.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,"Food, Feed & other Industrial",14950.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,"Food, Feed & other Industrial",14950.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,"Food, Feed & other Industrial",15305.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Imports,600.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Imports,600.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Imports,600.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Imports,600.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,Production,32590.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,Production,32590.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,Production,32590.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,Production,32945.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,"Supply, Total",35047.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,"Supply, Total",35027.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,"Supply, Total",35027.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,"Supply, Total",35382.0,Million Pounds,2026-08-15
 SOYBEAN_OIL,2026/27,"Use, Total",33150.0,Million Pounds,2026-05-15
 SOYBEAN_OIL,2026/27,"Use, Total",33150.0,Million Pounds,2026-06-15
 SOYBEAN_OIL,2026/27,"Use, Total",33150.0,Million Pounds,2026-07-15
+SOYBEAN_OIL,2026/27,"Use, Total",33505.0,Million Pounds,2026-08-15
 WHEAT,2023/24,Area Harvested,37.1,Million Acres,2025-08-15
 WHEAT,2023/24,Area Harvested,37.1,Million Acres,2025-09-15
 WHEAT,2023/24,Area Harvested,37.1,Million Acres,2025-11-15
@@ -2264,6 +2447,7 @@ WHEAT,2024/25,Area Harvested,38.6,Million Acres,2026-04-15
 WHEAT,2024/25,Area Harvested,38.6,Million Acres,2026-05-15
 WHEAT,2024/25,Area Harvested,38.6,Million Acres,2026-06-15
 WHEAT,2024/25,Area Harvested,38.6,Million Acres,2026-07-15
+WHEAT,2024/25,Area Harvested,38.6,Million Acres,2026-08-15
 WHEAT,2024/25,Area Planted,46.1,Million Acres,2025-08-15
 WHEAT,2024/25,Area Planted,46.1,Million Acres,2025-09-15
 WHEAT,2024/25,Area Planted,46.3,Million Acres,2025-11-15
@@ -2275,6 +2459,7 @@ WHEAT,2024/25,Area Planted,46.3,Million Acres,2026-04-15
 WHEAT,2024/25,Area Planted,46.3,Million Acres,2026-05-15
 WHEAT,2024/25,Area Planted,46.3,Million Acres,2026-06-15
 WHEAT,2024/25,Area Planted,46.3,Million Acres,2026-07-15
+WHEAT,2024/25,Area Planted,46.3,Million Acres,2026-08-15
 WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2025-08-15
 WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2025-09-15
 WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2025-11-15
@@ -2286,6 +2471,7 @@ WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2026-04-15
 WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2026-05-15
 WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2026-06-15
 WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2026-07-15
+WHEAT,2024/25,Avg. Farm Price ($/bu),5.52,$/bu,2026-08-15
 WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2025-11-15
@@ -2297,6 +2483,7 @@ WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Beginning Stocks,696.0,Million Bushels,2026-08-15
 WHEAT,2024/25,"Domestic, Total",1140.0,Million Bushels,2025-08-15
 WHEAT,2024/25,"Domestic, Total",1140.0,Million Bushels,2025-09-15
 WHEAT,2024/25,"Domestic, Total",1148.0,Million Bushels,2025-11-15
@@ -2308,6 +2495,7 @@ WHEAT,2024/25,"Domestic, Total",1143.0,Million Bushels,2026-04-15
 WHEAT,2024/25,"Domestic, Total",1143.0,Million Bushels,2026-05-15
 WHEAT,2024/25,"Domestic, Total",1143.0,Million Bushels,2026-06-15
 WHEAT,2024/25,"Domestic, Total",1141.0,Million Bushels,2026-07-15
+WHEAT,2024/25,"Domestic, Total",1141.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Ending Stocks,851.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Ending Stocks,851.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Ending Stocks,851.0,Million Bushels,2025-11-15
@@ -2319,6 +2507,7 @@ WHEAT,2024/25,Ending Stocks,855.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Ending Stocks,855.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Ending Stocks,855.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Ending Stocks,855.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Ending Stocks,855.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Exports,826.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Exports,826.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Exports,826.0,Million Bushels,2025-11-15
@@ -2330,6 +2519,7 @@ WHEAT,2024/25,Exports,826.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Exports,826.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Exports,826.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Exports,829.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Exports,829.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Feed and Residual,109.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Feed and Residual,109.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Feed and Residual,117.0,Million Bushels,2025-11-15
@@ -2341,6 +2531,7 @@ WHEAT,2024/25,Feed and Residual,113.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Feed and Residual,113.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Feed and Residual,113.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Feed and Residual,111.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Feed and Residual,111.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Food,969.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Food,969.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Food,969.0,Million Bushels,2025-11-15
@@ -2352,6 +2543,7 @@ WHEAT,2024/25,Food,969.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Food,969.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Food,969.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Food,969.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Food,969.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Imports,149.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Imports,149.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Imports,149.0,Million Bushels,2025-11-15
@@ -2363,6 +2555,7 @@ WHEAT,2024/25,Imports,149.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Imports,149.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Imports,149.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Imports,150.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Imports,150.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Production,1971.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Production,1971.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Production,1979.0,Million Bushels,2025-11-15
@@ -2374,6 +2567,7 @@ WHEAT,2024/25,Production,1979.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Production,1979.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Production,1979.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Production,1979.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Production,1979.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Seed,62.0,Million Bushels,2025-08-15
 WHEAT,2024/25,Seed,62.0,Million Bushels,2025-09-15
 WHEAT,2024/25,Seed,62.0,Million Bushels,2025-11-15
@@ -2385,6 +2579,7 @@ WHEAT,2024/25,Seed,61.0,Million Bushels,2026-04-15
 WHEAT,2024/25,Seed,61.0,Million Bushels,2026-05-15
 WHEAT,2024/25,Seed,61.0,Million Bushels,2026-06-15
 WHEAT,2024/25,Seed,61.0,Million Bushels,2026-07-15
+WHEAT,2024/25,Seed,61.0,Million Bushels,2026-08-15
 WHEAT,2024/25,"Supply, Total",2817.0,Million Bushels,2025-08-15
 WHEAT,2024/25,"Supply, Total",2817.0,Million Bushels,2025-09-15
 WHEAT,2024/25,"Supply, Total",2824.0,Million Bushels,2025-11-15
@@ -2396,6 +2591,7 @@ WHEAT,2024/25,"Supply, Total",2824.0,Million Bushels,2026-04-15
 WHEAT,2024/25,"Supply, Total",2824.0,Million Bushels,2026-05-15
 WHEAT,2024/25,"Supply, Total",2824.0,Million Bushels,2026-06-15
 WHEAT,2024/25,"Supply, Total",2825.0,Million Bushels,2026-07-15
+WHEAT,2024/25,"Supply, Total",2825.0,Million Bushels,2026-08-15
 WHEAT,2024/25,"Use, Total",1966.0,Million Bushels,2025-08-15
 WHEAT,2024/25,"Use, Total",1966.0,Million Bushels,2025-09-15
 WHEAT,2024/25,"Use, Total",1974.0,Million Bushels,2025-11-15
@@ -2407,6 +2603,7 @@ WHEAT,2024/25,"Use, Total",1969.0,Million Bushels,2026-04-15
 WHEAT,2024/25,"Use, Total",1969.0,Million Bushels,2026-05-15
 WHEAT,2024/25,"Use, Total",1969.0,Million Bushels,2026-06-15
 WHEAT,2024/25,"Use, Total",1970.0,Million Bushels,2026-07-15
+WHEAT,2024/25,"Use, Total",1970.0,Million Bushels,2026-08-15
 WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2025-08-15
 WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2025-09-15
 WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2025-11-15
@@ -2418,6 +2615,7 @@ WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2026-04-15
 WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2026-05-15
 WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2026-06-15
 WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2026-07-15
+WHEAT,2024/25,Yield per Harvested Acre,51.2,Bushels,2026-08-15
 WHEAT,2025/26,Area Harvested,36.6,Million Acres,2025-07-15
 WHEAT,2025/26,Area Harvested,36.6,Million Acres,2025-08-15
 WHEAT,2025/26,Area Harvested,36.6,Million Acres,2025-09-15
@@ -2431,6 +2629,7 @@ WHEAT,2025/26,Area Harvested,37.2,Million Acres,2026-04-15
 WHEAT,2025/26,Area Harvested,37.2,Million Acres,2026-05-15
 WHEAT,2025/26,Area Harvested,37.2,Million Acres,2026-06-15
 WHEAT,2025/26,Area Harvested,37.2,Million Acres,2026-07-15
+WHEAT,2025/26,Area Harvested,37.2,Million Acres,2026-08-15
 WHEAT,2025/26,Area Planted,45.5,Million Acres,2025-07-15
 WHEAT,2025/26,Area Planted,45.4,Million Acres,2025-08-15
 WHEAT,2025/26,Area Planted,45.4,Million Acres,2025-09-15
@@ -2444,6 +2643,7 @@ WHEAT,2025/26,Area Planted,45.3,Million Acres,2026-04-15
 WHEAT,2025/26,Area Planted,45.3,Million Acres,2026-05-15
 WHEAT,2025/26,Area Planted,45.3,Million Acres,2026-06-15
 WHEAT,2025/26,Area Planted,45.3,Million Acres,2026-07-15
+WHEAT,2025/26,Area Planted,45.3,Million Acres,2026-08-15
 WHEAT,2025/26,Avg. Farm Price ($/bu),5.4,$/bu,2025-07-15
 WHEAT,2025/26,Avg. Farm Price ($/bu),5.3,$/bu,2025-08-15
 WHEAT,2025/26,Avg. Farm Price ($/bu),5.1,$/bu,2025-09-15
@@ -2457,6 +2657,7 @@ WHEAT,2025/26,Avg. Farm Price ($/bu),5.0,$/bu,2026-04-15
 WHEAT,2025/26,Avg. Farm Price ($/bu),5.0,$/bu,2026-05-15
 WHEAT,2025/26,Avg. Farm Price ($/bu),5.05,$/bu,2026-06-15
 WHEAT,2025/26,Avg. Farm Price ($/bu),5.06,$/bu,2026-07-15
+WHEAT,2025/26,Avg. Farm Price ($/bu),5.06,$/bu,2026-08-15
 WHEAT,2025/26,Beginning Stocks,851.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Beginning Stocks,851.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Beginning Stocks,851.0,Million Bushels,2025-09-15
@@ -2470,6 +2671,7 @@ WHEAT,2025/26,Beginning Stocks,855.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Beginning Stocks,855.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Beginning Stocks,855.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Beginning Stocks,855.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Beginning Stocks,855.0,Million Bushels,2026-08-15
 WHEAT,2025/26,"Domestic, Total",1159.0,Million Bushels,2025-07-15
 WHEAT,2025/26,"Domestic, Total",1154.0,Million Bushels,2025-08-15
 WHEAT,2025/26,"Domestic, Total",1154.0,Million Bushels,2025-09-15
@@ -2483,6 +2685,7 @@ WHEAT,2025/26,"Domestic, Total",1127.0,Million Bushels,2026-04-15
 WHEAT,2025/26,"Domestic, Total",1120.0,Million Bushels,2026-05-15
 WHEAT,2025/26,"Domestic, Total",1120.0,Million Bushels,2026-06-15
 WHEAT,2025/26,"Domestic, Total",1136.0,Million Bushels,2026-07-15
+WHEAT,2025/26,"Domestic, Total",1136.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Ending Stocks,890.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Ending Stocks,869.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Ending Stocks,844.0,Million Bushels,2025-09-15
@@ -2496,6 +2699,7 @@ WHEAT,2025/26,Ending Stocks,938.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Ending Stocks,935.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Ending Stocks,935.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Ending Stocks,920.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Ending Stocks,920.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Exports,850.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Exports,875.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Exports,900.0,Million Bushels,2025-09-15
@@ -2509,6 +2713,7 @@ WHEAT,2025/26,Exports,900.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Exports,910.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Exports,910.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Exports,908.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Exports,908.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Feed and Residual,120.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Feed and Residual,120.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Feed and Residual,120.0,Million Bushels,2025-09-15
@@ -2522,6 +2727,7 @@ WHEAT,2025/26,Feed and Residual,100.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Feed and Residual,100.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Feed and Residual,100.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Feed and Residual,118.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Feed and Residual,119.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Food,977.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Food,972.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Food,972.0,Million Bushels,2025-09-15
@@ -2535,6 +2741,7 @@ WHEAT,2025/26,Food,967.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Food,960.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Food,960.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Food,960.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Food,959.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Imports,120.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Imports,120.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Imports,120.0,Million Bushels,2025-09-15
@@ -2548,6 +2755,7 @@ WHEAT,2025/26,Imports,125.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Imports,125.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Imports,125.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Imports,125.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Imports,125.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Production,1929.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Production,1927.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Production,1927.0,Million Bushels,2025-09-15
@@ -2561,6 +2769,7 @@ WHEAT,2025/26,Production,1985.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Production,1985.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Production,1985.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Production,1985.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Production,1985.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Seed,62.0,Million Bushels,2025-07-15
 WHEAT,2025/26,Seed,62.0,Million Bushels,2025-08-15
 WHEAT,2025/26,Seed,62.0,Million Bushels,2025-09-15
@@ -2574,6 +2783,7 @@ WHEAT,2025/26,Seed,60.0,Million Bushels,2026-04-15
 WHEAT,2025/26,Seed,60.0,Million Bushels,2026-05-15
 WHEAT,2025/26,Seed,60.0,Million Bushels,2026-06-15
 WHEAT,2025/26,Seed,58.0,Million Bushels,2026-07-15
+WHEAT,2025/26,Seed,58.0,Million Bushels,2026-08-15
 WHEAT,2025/26,"Supply, Total",2899.0,Million Bushels,2025-07-15
 WHEAT,2025/26,"Supply, Total",2898.0,Million Bushels,2025-08-15
 WHEAT,2025/26,"Supply, Total",2898.0,Million Bushels,2025-09-15
@@ -2587,6 +2797,7 @@ WHEAT,2025/26,"Supply, Total",2964.0,Million Bushels,2026-04-15
 WHEAT,2025/26,"Supply, Total",2964.0,Million Bushels,2026-05-15
 WHEAT,2025/26,"Supply, Total",2964.0,Million Bushels,2026-06-15
 WHEAT,2025/26,"Supply, Total",2964.0,Million Bushels,2026-07-15
+WHEAT,2025/26,"Supply, Total",2964.0,Million Bushels,2026-08-15
 WHEAT,2025/26,"Use, Total",2009.0,Million Bushels,2025-07-15
 WHEAT,2025/26,"Use, Total",2029.0,Million Bushels,2025-08-15
 WHEAT,2025/26,"Use, Total",2054.0,Million Bushels,2025-09-15
@@ -2600,6 +2811,7 @@ WHEAT,2025/26,"Use, Total",2027.0,Million Bushels,2026-04-15
 WHEAT,2025/26,"Use, Total",2030.0,Million Bushels,2026-05-15
 WHEAT,2025/26,"Use, Total",2030.0,Million Bushels,2026-06-15
 WHEAT,2025/26,"Use, Total",2044.0,Million Bushels,2026-07-15
+WHEAT,2025/26,"Use, Total",2044.0,Million Bushels,2026-08-15
 WHEAT,2025/26,Yield per Harvested Acre,52.6,Bushels,2025-07-15
 WHEAT,2025/26,Yield per Harvested Acre,52.7,Bushels,2025-08-15
 WHEAT,2025/26,Yield per Harvested Acre,52.7,Bushels,2025-09-15
@@ -2613,42 +2825,58 @@ WHEAT,2025/26,Yield per Harvested Acre,53.3,Bushels,2026-04-15
 WHEAT,2025/26,Yield per Harvested Acre,53.3,Bushels,2026-05-15
 WHEAT,2025/26,Yield per Harvested Acre,53.3,Bushels,2026-06-15
 WHEAT,2025/26,Yield per Harvested Acre,53.3,Bushels,2026-07-15
+WHEAT,2025/26,Yield per Harvested Acre,53.3,Bushels,2026-08-15
 WHEAT,2026/27,Area Harvested,32.1,Million Acres,2026-07-15
+WHEAT,2026/27,Area Harvested,32.1,Million Acres,2026-08-15
 WHEAT,2026/27,Area Planted,42.7,Million Acres,2026-07-15
+WHEAT,2026/27,Area Planted,42.7,Million Acres,2026-08-15
 WHEAT,2026/27,Avg. Farm Price ($/bu),6.5,$/bu,2026-05-15
 WHEAT,2026/27,Avg. Farm Price ($/bu),6.0,$/bu,2026-06-15
 WHEAT,2026/27,Avg. Farm Price ($/bu),6.0,$/bu,2026-07-15
+WHEAT,2026/27,Avg. Farm Price ($/bu),6.2,$/bu,2026-08-15
 WHEAT,2026/27,Beginning Stocks,935.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Beginning Stocks,935.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Beginning Stocks,920.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Beginning Stocks,920.0,Million Bushels,2026-08-15
 WHEAT,2026/27,"Domestic, Total",1099.0,Million Bushels,2026-05-15
 WHEAT,2026/27,"Domestic, Total",1099.0,Million Bushels,2026-06-15
 WHEAT,2026/27,"Domestic, Total",1099.0,Million Bushels,2026-07-15
+WHEAT,2026/27,"Domestic, Total",1099.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Ending Stocks,762.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Ending Stocks,744.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Ending Stocks,722.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Ending Stocks,717.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Exports,775.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Exports,775.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Exports,775.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Exports,775.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Feed and Residual,80.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Feed and Residual,80.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Feed and Residual,80.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Feed and Residual,80.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Food,960.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Food,960.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Food,960.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Food,960.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Imports,140.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Imports,140.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Imports,140.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Imports,140.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Production,1561.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Production,1543.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Production,1536.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Production,1531.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Seed,59.0,Million Bushels,2026-05-15
 WHEAT,2026/27,Seed,59.0,Million Bushels,2026-06-15
 WHEAT,2026/27,Seed,59.0,Million Bushels,2026-07-15
+WHEAT,2026/27,Seed,59.0,Million Bushels,2026-08-15
 WHEAT,2026/27,"Supply, Total",2636.0,Million Bushels,2026-05-15
 WHEAT,2026/27,"Supply, Total",2618.0,Million Bushels,2026-06-15
 WHEAT,2026/27,"Supply, Total",2596.0,Million Bushels,2026-07-15
+WHEAT,2026/27,"Supply, Total",2591.0,Million Bushels,2026-08-15
 WHEAT,2026/27,"Use, Total",1874.0,Million Bushels,2026-05-15
 WHEAT,2026/27,"Use, Total",1874.0,Million Bushels,2026-06-15
 WHEAT,2026/27,"Use, Total",1874.0,Million Bushels,2026-07-15
+WHEAT,2026/27,"Use, Total",1874.0,Million Bushels,2026-08-15
 WHEAT,2026/27,Yield per Harvested Acre,47.9,Bushels,2026-07-15
+WHEAT,2026/27,Yield per Harvested Acre,47.8,Bushels,2026-08-15
