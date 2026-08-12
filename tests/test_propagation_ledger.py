@@ -425,7 +425,14 @@ def test_a_new_market_must_declare_a_ledger(monkeypatch):
 
 
 def test_a_leg_with_no_quote_kind_fails_the_build(monkeypatch):
-    """M3 constraint 4: an unlabelled quote reads as whatever its neighbours are."""
+    """M3 constraint 4: an unlabelled quote reads as whatever its neighbours are.
+
+    `_source` now rejects any price leg with no kind, so this trips at the
+    descriptor rather than at the ledger and `_ledger_leg`'s own check has
+    become the second line. Both are kept: the ledger states the requirement it
+    depends on, and a leg that ever points at a non-price source would still
+    need it.
+    """
     markets = {
         **config.MARKETS,
         "cbot": {

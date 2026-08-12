@@ -853,6 +853,8 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
     if source.reference != REFERENCE_MARKET:
         return STATE_EMPTY, f"unknown basis reference {source.reference!r}", {}
 
+    board_market = markets.get(REFERENCE_MARKET)
+    board_kind = board_market.price.quote_kind if board_market and board_market.price else None
     reference = dict(ctx.reference_series(markets))
     if not reference:
         return STATE_EMPTY, "the CBOT reference leg has no rows to strike a basis against", {}
@@ -882,6 +884,13 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         "basis_usd_mt": basis,
         "local_usd_mt": local,
         "board_usd_mt": board,
+        # Both legs name their kind, like the ledger's Kind column. This is the
+        # other block that prints two USD/MT figures side by side, and they are
+        # rarely the same animal — an AMS cash bid or an Argentine decreed
+        # minimum against a CBOT settlement. The block header stamps one kind
+        # (block 01's case) and cannot label two, so each card carries its own.
+        "local_quote_kind": source.quote_kind,
+        "board_quote_kind": board_kind,
         "direction": "premium" if basis > 0 else "discount",
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
