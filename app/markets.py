@@ -359,6 +359,22 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         raise ValueError(
             f"market {slug!r} {block} quote_kind {quote_kind!r} not in {sorted(QUOTE_KINDS)}"
         )
+    # Required on EVERY price leg, and enforced here rather than per consumer.
+    # It was optional while block 01 was the only reader — one number, one
+    # kind, stamped in the block header — so the basis legs shipped without
+    # one; the ledger (M12 #161) then put those same descriptors in a shared
+    # USD/MT column and had to demand it again in `_ledger_leg`, and block 04
+    # prints its local leg beside the CBOT board with the same exposure. The
+    # general shape: a descriptor reused by a second consumer may be missing
+    # labels the first never needed, so the label belongs to the descriptor.
+    # Volumes and observations have no kind and must not invent one.
+    if quote_kind is None and raw["unit"] in PRICE_UNITS:
+        raise ValueError(
+            f"market {slug!r} {block} is a price leg (unit {raw['unit']!r}) and declares no "
+            "quote_kind — a board settlement, a physical bid and an administered minimum "
+            "are different animals and every surface that renders one must be able to say "
+            "which (M3 #145 constraint 4)"
+        )
     headline = raw.get("headline_key")
     if headline is not None and headline not in keys:
         raise ValueError(f"market {slug!r} {block} headline_key {headline!r} is not one of its keys")

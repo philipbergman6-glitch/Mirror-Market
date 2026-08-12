@@ -1342,6 +1342,9 @@ MARKETS = {
             "keys": ["DCE Soybean No.2"],
             "reference": "cbot",
             "label": "DCE No.2 over CBOT (import parity)",
+            # Board against board — the one basis on the map whose two legs are
+            # the same animal, and it is stated for exactly that reason.
+            "quote_kind": "board",
             "value_column": "Close",
             "unit": "home_per_mt",
             # China imports the bean this contract deliveries against, so the
@@ -1440,6 +1443,11 @@ MARKETS = {
             "keys": ["Soybeans"],
             "reference": "cbot",
             "label": "Argentina official FOB over CBOT",
+            # The sharpest case on the map for naming the kind: a Ley 21.453
+            # minimum export value is set by decree. Beside the CBOT board on
+            # block 04 an unlabelled one reads as a traded Argentine price,
+            # which does not exist.
+            "quote_kind": "administered",
             "value_column": "price_usd_mt",
             "unit": "usd_per_mt",
             # Administered minimum, but on physical cargoes that do move —
@@ -1488,6 +1496,8 @@ MARKETS = {
             "headline_key": "Soybean (Mandi MP)",
             "reference": "cbot",
             "label": "Mandi MP over CBOT (policy spread)",
+            # An Agmarknet cash median, like the price leg it is struck on.
+            "quote_kind": "physical",
             # Same stored column and unit as the price leg it is struck on —
             # INR/MT through the INR/USD rate, converted only by to_usd_mt.
             "value_column": "Close",

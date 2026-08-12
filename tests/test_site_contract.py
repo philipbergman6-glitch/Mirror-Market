@@ -195,6 +195,42 @@ def test_unknown_quote_kind_fails_the_build(monkeypatch: pytest.MonkeyPatch):
         markets_mod.load_markets()
 
 
+def test_every_price_leg_names_its_quote_kind():
+    """Basis legs as much as price legs (M3 #145 constraint 4).
+
+    The basis legs shipped unkinded because block 01, the only reader at the
+    time, renders one number of one animal and stamps it in the block header.
+    Two later consumers put the same descriptor beside a board price — the
+    ledger's shared USD/MT column and block 04's Local-vs-CBOT pair — and each
+    had to discover the omission again.
+    """
+    for market in markets_mod.load_markets().values():
+        for block in ("price", "basis", "flows"):
+            source = getattr(market, block)
+            if source is not None and source.is_price:
+                assert source.quote_kind in markets_mod.QUOTE_KINDS, (
+                    f"{market.slug} {block} is a price leg with no quote_kind"
+                )
+
+
+def test_a_price_leg_with_no_quote_kind_fails_at_the_descriptor(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Enforced on the descriptor, not once per consumer that renders it."""
+    raw = config.MARKETS["argentina"]
+    stripped = {k: v for k, v in raw["basis"].items() if k != "quote_kind"}
+    monkeypatch.setattr(config, "MARKETS", {"argentina": dict(raw, basis=stripped)})
+    with pytest.raises(ValueError, match="declares no quote_kind"):
+        markets_mod.load_markets()
+
+
+def test_a_volume_leg_needs_no_quote_kind():
+    """`tonnes` and `observation` are not prices and must not invent a kind."""
+    flows = markets_mod.load_markets()["south_africa"].flows
+    assert flows is not None and not flows.is_price
+    assert flows.quote_kind is None
+
+
 # ---------------------------------------------------------------------------
 # Tier rule — computed from the DB, never hard-coded (M1 constraint 3)
 # ---------------------------------------------------------------------------

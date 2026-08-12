@@ -167,6 +167,18 @@ def test_basis_is_struck_on_a_session_both_legs_printed(seeded, registry):
         basis.data["local_usd_mt"] - basis.data["board_usd_mt"], 1)
 
 
+def test_both_basis_legs_carry_their_quote_kind(seeded, registry):
+    """Two prices side by side, each naming its animal — the ledger's Kind rule.
+
+    The Gulf leg is an AMS cash bid for barge-delivered beans and the leg it is
+    struck against is a CBOT settlement. The block header stamps one kind and
+    cannot label two, so the pair goes in the data.
+    """
+    basis = _block(_build("cbot", seeded, registry), "basis")
+    assert basis.data["local_quote_kind"] == "physical"
+    assert basis.data["board_quote_kind"] == "board"
+
+
 def test_a_basis_with_no_shared_session_is_empty_not_a_cross_day_subtraction(
     seeded, registry
 ):
