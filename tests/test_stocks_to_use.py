@@ -12,10 +12,13 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import config
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
+    PSD_CONSUMPTION_ATTRIBUTE,
     compute_stocks_to_use,
+    consumption_attribute,
     detect_tight_supply,
 )
 
@@ -138,6 +141,98 @@ def test_compute_ignores_unrelated_attributes():
     out = compute_stocks_to_use(pd.concat([df, extra], ignore_index=True))
     assert len(out) == 1
     assert out.iloc[0]["ratio"] == pytest.approx(0.1)
+
+
+# ---------------------------------------------------------------------------
+# Per-commodity consumption attribute (#238)
+#
+# PSD does not name every commodity's consumption line the same way: cotton's
+# is "Domestic Use" (attribute 142), everything else's is "Domestic
+# Consumption". The old single constant dropped cotton silently.
+# ---------------------------------------------------------------------------
+
+
+def test_consumption_attribute_map_covers_every_psd_commodity():
+    assert set(PSD_CONSUMPTION_ATTRIBUTE) == set(config.PSD_TARGET_COMMODITIES)
+
+
+def test_cotton_consumption_attribute_is_domestic_use():
+    # Pinned so a future PSD rename fails loudly rather than reverting to the
+    # "Cotton: No data" line this ticket removed.
+    assert consumption_attribute("Cotton") == "Domestic Use"
+    assert consumption_attribute("Soybeans") == "Domestic Consumption"
+
+
+def test_consumption_attribute_raises_on_unknown_commodity():
+    with pytest.raises(KeyError):
+        consumption_attribute("Sorghum")
+
+
+def test_both_consumption_attributes_are_fetched():
+    # The fetcher's isin filter drops any attribute not listed here, so the
+    # map above is only reachable if config asks PSD for both names.
+    for attr in set(PSD_CONSUMPTION_ATTRIBUTE.values()):
+        assert attr in config.PSD_TARGET_ATTRIBUTES
+
+
+def test_compute_uses_domestic_use_for_cotton():
+    rows = [
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Ending Stocks", value=4_300.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Domestic Use", value=1_700.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Exports", value=12_000.0),
+    ]
+    out = compute_stocks_to_use(pd.DataFrame(rows))
+
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["commodity"] == "Cotton"
+    assert row["total_use"] == pytest.approx(13_700.0)
+    assert row["ratio"] == pytest.approx(4_300.0 / 13_700.0)
+
+
+def test_compute_ignores_domestic_use_for_a_domestic_consumption_commodity():
+    # An explicit per-commodity map, not a coalesce: soybeans read only
+    # "Domestic Consumption", so a stray "Domestic Use" row cannot stand in.
+    rows = [
+        _psd_row(commodity="Soybeans", country="United States", year=2026,
+                 attribute="Ending Stocks", value=100.0),
+        _psd_row(commodity="Soybeans", country="United States", year=2026,
+                 attribute="Domestic Use", value=800.0),
+        _psd_row(commodity="Soybeans", country="United States", year=2026,
+                 attribute="Exports", value=200.0),
+    ]
+    assert compute_stocks_to_use(pd.DataFrame(rows)).empty
+
+
+def test_compute_raises_on_unknown_commodity():
+    rows = [
+        _psd_row(commodity="Sorghum", country="United States", year=2026,
+                 attribute="Ending Stocks", value=100.0),
+        _psd_row(commodity="Sorghum", country="United States", year=2026,
+                 attribute="Domestic Consumption", value=800.0),
+        _psd_row(commodity="Sorghum", country="United States", year=2026,
+                 attribute="Exports", value=200.0),
+    ]
+    with pytest.raises(KeyError):
+        compute_stocks_to_use(pd.DataFrame(rows))
+
+
+def test_compute_mixes_cotton_with_the_mt_commodities():
+    cotton = pd.DataFrame([
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Ending Stocks", value=4_300.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Domestic Use", value=1_700.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Exports", value=12_000.0),
+    ])
+    beans = _psd_frame(pairs=[(2026, 100.0, 1000.0)])
+    out = compute_stocks_to_use(pd.concat([cotton, beans], ignore_index=True))
+
+    assert sorted(out["commodity"]) == ["Cotton", "Soybeans"]
 
 
 # ---------------------------------------------------------------------------

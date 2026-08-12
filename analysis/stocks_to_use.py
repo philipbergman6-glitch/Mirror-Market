@@ -17,12 +17,52 @@ from datetime import date
 import pandas as pd
 
 # PSD attribute strings — see config.PSD_TARGET_ATTRIBUTES.
-# Total use is Domestic Consumption + Exports. PSD's "Total Distribution"
+# Total use is the domestic consumption leg + Exports. PSD's "Total Distribution"
 # is NOT usable here: it equals Total Supply (Beginning Stocks + Production
 # + Imports), which understates the ratio's denominator meaning.
 _ENDING_STOCKS = "Ending Stocks"
 _DOMESTIC_CONSUMPTION = "Domestic Consumption"
+_DOMESTIC_USE = "Domestic Use"
 _EXPORTS = "Exports"
+
+# The consumption leg is **named per commodity**, not once (#238). PSD calls
+# cotton's line "Domestic Use" (attribute 142) and publishes no "Domestic
+# Consumption" row for it at all, so the single old constant dropped cotton
+# from the ratio frame entirely while the briefing kept advertising a cotton
+# balance sheet it could never print. An explicit map rather than a coalesce
+# over whichever column happens to exist: a coalesce would quietly absorb a
+# PSD rename, which is the failure this ticket is.
+PSD_CONSUMPTION_ATTRIBUTE = {
+    "Soybeans":      _DOMESTIC_CONSUMPTION,
+    "Soybean Oil":   _DOMESTIC_CONSUMPTION,
+    "Soybean Meal":  _DOMESTIC_CONSUMPTION,
+    "Palm Oil":      _DOMESTIC_CONSUMPTION,
+    "Corn":          _DOMESTIC_CONSUMPTION,
+    "Wheat":         _DOMESTIC_CONSUMPTION,
+    "Cotton":        _DOMESTIC_USE,
+    "Rapeseed":      _DOMESTIC_CONSUMPTION,
+    "Rapeseed Oil":  _DOMESTIC_CONSUMPTION,
+    "Rapeseed Meal": _DOMESTIC_CONSUMPTION,
+}
+
+
+def consumption_attribute(commodity: str) -> str:
+    """Return the PSD attribute holding `commodity`'s domestic consumption.
+
+    Raises `KeyError` for an unmapped commodity rather than defaulting: a
+    default would silently sum the wrong (or no) demand leg, which is exactly
+    how cotton's ratio went missing.
+    """
+    try:
+        return PSD_CONSUMPTION_ATTRIBUTE[commodity]
+    except KeyError:
+        raise KeyError(
+            f"No PSD consumption attribute mapped for commodity {commodity!r} — "
+            "add it to analysis.stocks_to_use.PSD_CONSUMPTION_ATTRIBUTE "
+            "(PSD names cotton's line 'Domestic Use', everything else's "
+            "'Domestic Consumption')"
+        ) from None
+
 
 # Sample-size guard mirrors the SEASONAL_MIN_YEARS_PER_MONTH pattern in
 # analysis/seasonal.py: we won't fire an alert without at least this
@@ -59,12 +99,18 @@ def compute_stocks_to_use(
     if psd_df.empty:
         return pd.DataFrame(columns=empty_cols)
 
+    consumption_names = set(PSD_CONSUMPTION_ATTRIBUTE.values())
     df = psd_df[
         (psd_df["country"] == country)
-        & (psd_df["attribute"].isin([_ENDING_STOCKS, _DOMESTIC_CONSUMPTION, _EXPORTS]))
+        & (psd_df["attribute"].isin({_ENDING_STOCKS, _EXPORTS} | consumption_names))
     ]
     if df.empty:
         return pd.DataFrame(columns=empty_cols)
+
+    # Hard-fail on a commodity we have no consumption attribute for, rather
+    # than dropping it — a missing balance sheet is invisible downstream.
+    for commodity in sorted(df["commodity"].dropna().unique()):
+        consumption_attribute(commodity)
 
     wide = df.pivot_table(
         index=["commodity", "year"],
@@ -75,12 +121,18 @@ def compute_stocks_to_use(
     wide.columns.name = None
     wide = wide.rename(columns={_ENDING_STOCKS: "ending_stocks"})
 
-    for col in ("ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS):
+    for col in {"ending_stocks", _EXPORTS} | consumption_names:
         if col not in wide.columns:
             wide[col] = pd.NA
 
-    wide = wide.dropna(subset=["ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS])
-    wide["total_use"] = wide[_DOMESTIC_CONSUMPTION] + wide[_EXPORTS]
+    # Each row reads only *its own* commodity's consumption attribute.
+    wide["consumption"] = [
+        wide.at[i, consumption_attribute(str(wide.at[i, "commodity"]))]
+        for i in wide.index
+    ]
+
+    wide = wide.dropna(subset=["ending_stocks", "consumption", _EXPORTS])
+    wide["total_use"] = wide["consumption"] + wide[_EXPORTS]
     wide = wide[wide["total_use"] > 0]
     if wide.empty:
         return pd.DataFrame(columns=empty_cols)
