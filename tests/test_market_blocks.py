@@ -148,6 +148,55 @@ def test_a_missing_fx_rate_empties_the_block_rather_than_printing_the_local_numb
     assert price.data["headline"]["home_value"] == 2000.0
 
 
+def test_the_second_line_labels_the_venues_own_unit_not_the_home_currency(seeded, registry):
+    """#230. Block 01's second line quotes the venue's *own* print.
+
+    ``home_currency`` describes the market and coincides with that print's unit
+    only under ``home_per_mt``. CBOT's three legs are one table in three native
+    units, so this is where a wrong label is cheapest to make and dearest to
+    read: 1050 cents/bu under a "USD/MT" label is a plausible price 2.7x out.
+    """
+    legs = {leg["key"]: leg for leg in _block(_build("cbot", seeded, registry), "price").data["legs"]}
+    assert [legs[k]["home_unit"] for k in ("Soybeans", "Soybean Oil", "Soybean Meal")] == [
+        "cents/bu", "cents/lb", "$/short ton"]
+    assert all(leg["has_home_quote"] for leg in legs.values())
+
+    brazil = _block(_build("brazil", seeded, registry), "price").data["headline"]
+    assert (brazil["has_home_quote"], brazil["home_unit"]) == (True, "BRL/MT")
+
+
+def test_a_usd_native_leg_prints_no_second_currency(seeded, registry):
+    """#230, and M3 #145's rule from the other side: a dual quote needs two
+    observations. MAGyP publishes USD/MT, so ARS is a number this stack never
+    received — printing 454.25 under an "ARS" label is out by ~1,400x and reads
+    as an ordinary dual quote.
+    """
+    from jinja2 import Environment, FileSystemLoader
+
+    for product, price in (("Soybeans", 454.25), ("Soybean Oil", 1182.50)):
+        seeded.conn.execute(
+            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
+            "VALUES (?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", price),
+        )
+    seeded.conn.commit()
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    price = _block(build_blocks(registry["argentina"], None, ctx, markets=registry), "price")
+
+    headline = price.data["headline"]
+    assert headline["has_home_quote"] is False
+    assert headline["home_unit"] == "USD/MT"
+    assert round(headline["usd_mt"], 2) == 454.25
+
+    env = Environment(loader=FileSystemLoader("app/templates"), autoescape=True)
+    html = env.get_template("blocks/01_price.html.j2").render(block=price)
+    assert "ARS" not in html
+    # The USD/MT figure is stated once, by the headline number — never restated
+    # under a second label as though a second venue had said it.
+    assert html.count("454.25") == 0
+    assert "$454.2" in html
+
+
 def test_several_quotes_on_one_date_are_averaged_and_say_so(seeded, registry):
     basis = _block(_build("cbot", seeded, registry), "basis")
     assert basis.state == "ok"

@@ -13,7 +13,13 @@
       {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>
       {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">21 obs</span>{% endif %}
     </div>
-    <div class="mc-delta muted">{{ d.home_currency }} {{ f.num(leg.home_value, 2) }}/MT{% if leg.quotes > 1 %} · mean of {{ leg.quotes }} quotes{% endif %}</div>
+    {# The venue's own print, in the venue's own unit — and only where that is a
+       second observation. A leg already published in USD/MT has one number, so
+       restating it under the home currency would invent a quote (#230). #}
+    <div class="mc-delta muted">
+      {%- if leg.has_home_quote %}{{ f.num(leg.home_value, 2) }} {{ leg.home_unit }}{% if leg.quotes > 1 %} · {% endif %}{% endif -%}
+      {%- if leg.quotes > 1 %}mean of {{ leg.quotes }} quotes{% endif -%}
+    </div>
     {{ f.asof(leg.as_of, leg.age_days) }}
   </div>
   {% endfor %}
