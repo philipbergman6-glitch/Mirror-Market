@@ -502,6 +502,36 @@ def _mandi_record(**overrides) -> dict:
     return rec
 
 
+# The live envelope ships the resource's own field catalog on every
+# response, empty ones included (probed 2026-08-12) — that catalog is what
+# _assert_fields_exist reads, so a payload fixture without it is not a
+# payload the API ever returns.
+_MANDI_FIELD_CATALOG = [
+    {"name": "State", "id": "state", "type": "keyword"},
+    {"name": "District", "id": "district", "type": "keyword"},
+    {"name": "Market", "id": "market", "type": "keyword"},
+    {"name": "Commodity", "id": "commodity", "type": "keyword"},
+    {"name": "Variety", "id": "variety", "type": "keyword"},
+    {"name": "Grade", "id": "grade", "type": "keyword"},
+    {"name": "Arrival_Date", "id": "arrival_date", "type": "date"},
+    {"name": "Min_x0020_Price", "id": "min_price", "type": "double"},
+    {"name": "Max_x0020_Price", "id": "max_price", "type": "double"},
+    {"name": "Modal_x0020_Price", "id": "modal_price", "type": "double"},
+]
+
+
+def _mandi_payload(records: list[dict], total: int | None = None, **overrides) -> dict:
+    payload = {
+        "total": len(records) if total is None else total,
+        "count": len(records),
+        "message": "Resource lists ok",
+        "records": records,
+        "field": [dict(f) for f in _MANDI_FIELD_CATALOG],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_mandi_aggregate_takes_median_modal_in_inr_mt() -> None:
     """Median of modal prices across mandis, converted INR/quintal → INR/MT."""
     records = [
@@ -597,9 +627,9 @@ def test_mandi_aggregate_empty_records_returns_empty_frame() -> None:
 def test_mandi_collect_paginates_until_total(monkeypatch) -> None:
     markets = iter(f"market-{i}" for i in range(25))
     pages = [
-        {"total": 25, "records": [_mandi_record(market=next(markets)) for _ in range(10)]},
-        {"total": 25, "records": [_mandi_record(market=next(markets)) for _ in range(10)]},
-        {"total": 25, "records": [_mandi_record(market=next(markets)) for _ in range(5)]},
+        _mandi_payload([_mandi_record(market=next(markets)) for _ in range(10)], total=25),
+        _mandi_payload([_mandi_record(market=next(markets)) for _ in range(10)], total=25),
+        _mandi_payload([_mandi_record(market=next(markets)) for _ in range(5)], total=25),
     ]
     calls: list[int] = []
 
@@ -622,8 +652,8 @@ def test_mandi_collect_drops_rows_repeated_across_pages(monkeypatch) -> None:
     """
     dupe = _mandi_record(market="Mandsaur", modal_price="6600")
     pages = [
-        {"total": 3, "records": [dupe, _mandi_record(market="Indore")]},
-        {"total": 3, "records": [dupe]},
+        _mandi_payload([dupe, _mandi_record(market="Indore")], total=3),
+        _mandi_payload([dupe], total=3),
     ]
     monkeypatch.setattr(
         "fetchers.mandi._fetch_page", lambda offset, state: pages[offset // 10]
@@ -694,6 +724,100 @@ def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
     )
     with pytest.raises(ScraperShapeError, match="records"):
         _mandi_collect("Madhya Pradesh")
+
+
+@pytest.mark.parametrize("renamed", ["state", "commodity", "arrival_date", "modal_price"])
+def test_mandi_collect_rejects_a_renamed_field_on_an_empty_day(
+    monkeypatch, renamed: str
+) -> None:
+    """A renamed filter field is answered with 0 rows, not with an error.
+
+    Probed live 2026-08-12: ``filters[commodity_name]=Soyabean``,
+    ``filters[Commodity]=Soyabean`` and ``filters[state_name]=Tamil Nadu``
+    each returned HTTP 200, ``message: "Resource lists ok"``, ``total: 0``
+    against a resource holding 6,421 rows that second — the unknown field
+    is neither rejected nor ignored-and-unfiltered. So a rename reads as a
+    closed-mandi day, which ``india_domestic`` grades as a success.
+
+    The empty payload is the whole point of the fixture: this is the case
+    a record-level check cannot see, because there are no records.
+    """
+    catalog = [f for f in _MANDI_FIELD_CATALOG if f["id"] != renamed]
+    catalog.append({"name": renamed, "id": f"{renamed}_name", "type": "keyword"})
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page",
+        lambda offset, state: _mandi_payload([], total=0, field=catalog),
+    )
+    with pytest.raises(ScraperShapeError, match=f"no longer exposes field.*{renamed}"):
+        _mandi_collect("Madhya Pradesh")
+
+
+def test_mandi_collect_accepts_an_empty_day_with_the_catalog_intact() -> None:
+    """Sunday, holiday, or pre-arrival hours — empty is not a shape error.
+
+    Guards the check above from over-firing: the whole reason the layer
+    grades empty as a success is that most of a mandi week legitimately
+    looks like this.
+    """
+    import fetchers.mandi as mandi_mod
+
+    mandi_mod._assert_fields_exist(_mandi_payload([], total=0))
+
+
+def test_mandi_collect_ignores_extra_fields_appearing_in_the_catalog() -> None:
+    """A field the resource adds is not a break; only a missing one is."""
+    import fetchers.mandi as mandi_mod
+
+    extra = [*_MANDI_FIELD_CATALOG, {"name": "Tehsil", "id": "tehsil", "type": "keyword"}]
+    mandi_mod._assert_fields_exist(_mandi_payload([], total=0, field=extra))
+
+
+def test_mandi_collect_raises_when_the_envelope_drops_the_field_catalog(
+    monkeypatch,
+) -> None:
+    """No catalog means the rename check is blind — fail rather than trust."""
+    monkeypatch.setattr(
+        "fetchers.mandi._fetch_page",
+        lambda offset, state: {"total": 0, "count": 0, "records": []},
+    )
+    with pytest.raises(ScraperShapeError, match="no 'field' catalog"):
+        _mandi_collect("Madhya Pradesh")
+
+
+@pytest.mark.parametrize(
+    "stray, match",
+    [
+        ({"state": "Tamil Nadu"}, "state filter is no longer applied"),
+        ({"commodity": "Paddy(Common)"}, "commodity filter is no longer applied"),
+    ],
+)
+def test_mandi_collect_rejects_rows_outside_the_requested_filters(
+    monkeypatch, stray: dict, match: str
+) -> None:
+    """The other half of the defence: rows we did not ask for.
+
+    Today this API answers an unknown filter with nothing rather than with
+    everything (see the rename test), so this path is unreachable live —
+    which is exactly why it is pinned. If the filter ever stops being
+    applied, the result is not an outage but a median over every commodity
+    in every state, stored under ``Soybean (Mandi MP)`` and shaped like a
+    real number.
+    """
+    pages = [_mandi_payload([_mandi_record(), _mandi_record(**stray)], total=2)]
+    monkeypatch.setattr("fetchers.mandi._fetch_page", lambda offset, state: pages[0])
+    with pytest.raises(ScraperShapeError, match=match):
+        _mandi_collect("Madhya Pradesh")
+
+
+def test_mandi_collect_accepts_filter_values_differing_only_in_case() -> None:
+    """The API matches filter values case-insensitively (``soyabean`` → 9 rows,
+    probed 2026-08-12), so the returned casing is not a contract."""
+    import fetchers.mandi as mandi_mod
+
+    mandi_mod._assert_filters_honoured(
+        [_mandi_record(state="madhya pradesh", commodity="SOYABEAN")],
+        "Madhya Pradesh",
+    )
 
 
 def test_mandi_never_sends_a_python_user_agent(monkeypatch) -> None:
