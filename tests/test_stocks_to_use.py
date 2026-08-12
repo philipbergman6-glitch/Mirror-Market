@@ -80,7 +80,7 @@ def test_compute_returns_empty_for_empty_input():
     out = compute_stocks_to_use(pd.DataFrame())
     assert out.empty
     assert list(out.columns) == [
-        "commodity", "year", "ending_stocks", "total_use", "ratio",
+        "commodity", "year", "unit", "ending_stocks", "total_use", "ratio",
     ]
 
 
@@ -193,9 +193,11 @@ def test_compute_uses_domestic_use_for_cotton():
     assert row["ratio"] == pytest.approx(4_300.0 / 13_700.0)
 
 
-def test_compute_ignores_domestic_use_for_a_domestic_consumption_commodity():
+def test_compute_does_not_coalesce_domestic_use_into_soybeans():
     # An explicit per-commodity map, not a coalesce: soybeans read only
-    # "Domestic Consumption", so a stray "Domestic Use" row cannot stand in.
+    # "Domestic Consumption", so a stray "Domestic Use" row cannot stand in —
+    # and because the mapped attribute is then absent, it is a loud break
+    # rather than a quiet drop.
     rows = [
         _psd_row(commodity="Soybeans", country="United States", year=2026,
                  attribute="Ending Stocks", value=100.0),
@@ -204,7 +206,8 @@ def test_compute_ignores_domestic_use_for_a_domestic_consumption_commodity():
         _psd_row(commodity="Soybeans", country="United States", year=2026,
                  attribute="Exports", value=200.0),
     ]
-    assert compute_stocks_to_use(pd.DataFrame(rows)).empty
+    with pytest.raises(ValueError, match="Domestic Consumption"):
+        compute_stocks_to_use(pd.DataFrame(rows))
 
 
 def test_compute_raises_on_unknown_commodity():
@@ -220,19 +223,81 @@ def test_compute_raises_on_unknown_commodity():
         compute_stocks_to_use(pd.DataFrame(rows))
 
 
-def test_compute_mixes_cotton_with_the_mt_commodities():
-    cotton = pd.DataFrame([
+def test_compute_raises_when_the_consumption_attribute_disappears():
+    # The upstream-rename case. PSD keeps publishing the commodity but under a
+    # different consumption label; the old code dropped it on the dropna and
+    # the briefing quietly printed "No data" (that is the whole of #238).
+    rows = [
         _psd_row(commodity="Cotton", country="United States", year=2026,
                  attribute="Ending Stocks", value=4_300.0),
         _psd_row(commodity="Cotton", country="United States", year=2026,
-                 attribute="Domestic Use", value=1_700.0),
+                 attribute="Domestic Consumption", value=1_700.0),  # renamed
         _psd_row(commodity="Cotton", country="United States", year=2026,
                  attribute="Exports", value=12_000.0),
-    ])
-    beans = _psd_frame(pairs=[(2026, 100.0, 1000.0)])
-    out = compute_stocks_to_use(pd.concat([cotton, beans], ignore_index=True))
+    ]
+    with pytest.raises(ValueError, match="Domestic Use"):
+        compute_stocks_to_use(pd.DataFrame(rows))
 
-    assert sorted(out["commodity"]) == ["Cotton", "Soybeans"]
+
+def test_compute_tolerates_a_single_missing_year():
+    # A per-year gap is an ordinary dropped row, not a rename — only a
+    # commodity-wide absence of the attribute is a break.
+    rows = [
+        _psd_row(commodity="Cotton", country="United States", year=2025,
+                 attribute="Ending Stocks", value=4_200.0),
+        _psd_row(commodity="Cotton", country="United States", year=2025,
+                 attribute="Domestic Use", value=1_700.0),
+        _psd_row(commodity="Cotton", country="United States", year=2025,
+                 attribute="Exports", value=12_000.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Ending Stocks", value=4_300.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Exports", value=12_300.0),
+    ]
+    out = compute_stocks_to_use(pd.DataFrame(rows))
+    assert list(out["year"]) == [2025]
+
+
+# ---------------------------------------------------------------------------
+# Units travel with the levels (#238)
+#
+# The ratio is unitless and cancels, but ending_stocks/total_use are levels and
+# cotton is in 1000 480-lb bales while every other commodity is in 1000 MT.
+# ---------------------------------------------------------------------------
+
+
+def _cotton_frame(year: int = 2026) -> pd.DataFrame:
+    rows = [
+        {"commodity": "Cotton", "country": "United States", "year": year,
+         "attribute": attr, "value": value, "unit": "(1000 480 lb. Bales)"}
+        for attr, value in [
+            ("Ending Stocks", 4_300.0),
+            ("Domestic Use", 1_700.0),
+            ("Exports", 12_000.0),
+        ]
+    ]
+    return pd.DataFrame(rows)
+
+
+def test_compute_carries_psd_unit_per_commodity():
+    out = compute_stocks_to_use(
+        pd.concat([_cotton_frame(), _psd_frame(pairs=[(2026, 100.0, 1000.0)])],
+                  ignore_index=True)
+    )
+    units = dict(zip(out["commodity"], out["unit"], strict=True))
+    assert units == {
+        "Cotton": "(1000 480 lb. Bales)",
+        "Soybeans": "(1000 MT)",
+    }
+
+
+def test_compute_refuses_a_frame_with_no_unit_column():
+    # Levels returned unlabelled is the pooling the ticket forbids, so this is
+    # a crash rather than a guess — same rule as fetchers/psd.py's
+    # Unit_Description check.
+    frame = _cotton_frame().drop(columns=["unit"])
+    with pytest.raises(ValueError, match="unit"):
+        compute_stocks_to_use(frame)
 
 
 # ---------------------------------------------------------------------------

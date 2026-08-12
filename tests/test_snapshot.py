@@ -162,6 +162,40 @@ def test_export_sales_block_aggregates_china_share(patched_db: Path) -> None:
     assert len(row["top_buyers"]) == 3
 
 
+def test_stocks_to_use_block_labels_each_commodity_unit(patched_db: Path) -> None:
+    """Archived levels carry PSD's unit — cotton is bales, soybeans 1000 MT.
+
+    `ending_stocks`/`total_use` are levels, and this block is written to the
+    briefings archive, so an unlabelled cotton row would sit beside five
+    1000-MT rows forever with nothing marking the difference (#238).
+    """
+    conn = sqlite3.connect(str(patched_db))
+    rows = [
+        ("Soybeans", "United States", 2026, "Ending Stocks", 8_435.0, "(1000 MT)"),
+        ("Soybeans", "United States", 2026, "Domestic Consumption", 66_000.0, "(1000 MT)"),
+        ("Soybeans", "United States", 2026, "Exports", 50_000.0, "(1000 MT)"),
+        ("Cotton", "United States", 2026, "Ending Stocks", 4_100.0,
+         "(1000 480 lb. Bales)"),
+        ("Cotton", "United States", 2026, "Domestic Use", 1_600.0,
+         "(1000 480 lb. Bales)"),
+        ("Cotton", "United States", 2026, "Exports", 12_300.0,
+         "(1000 480 lb. Bales)"),
+    ]
+    conn.executemany(
+        "INSERT INTO psd (commodity, country, year, attribute, value, unit)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+    block = build_snapshot(_empty_briefing())["stocks_to_use"]
+
+    assert block["Cotton"]["unit"] == "(1000 480 lb. Bales)"
+    assert block["Soybeans"]["unit"] == "(1000 MT)"
+    assert block["Cotton"]["ratio"] == pytest.approx(4_100.0 / 13_900.0)
+
+
 def test_export_sales_block_soy_pace_fields(patched_db: Path) -> None:
     conn = sqlite3.connect(str(patched_db))
     conn.executemany(
