@@ -10,17 +10,21 @@ Answering it properly means checking dozens of places — futures prices, USDA r
 
 It is three things stacked on top of each other:
 
-1. **A data collector** — a Python script that pulls from 19 free public sources every weekday and saves everything into one database.
+1. **A data collector** — a Python script that pulls from 25 free public sources every weekday and saves everything into one database.
 2. **An analysis engine** — code that turns that raw data into plain conclusions: "prices are overbought," "Brazil is undercutting US beans," "funds are crowded into this trade."
-3. **A morning dashboard** — a single scrolling web page, rebuilt daily and published free on GitHub Pages, that presents it all in the order a trader would scan it.
+3. **A morning site** — a headline page plus one page per market, rebuilt daily and published free on GitHub Pages, presented in the order a trader would scan it.
 
 The focus is the **soy complex** — soybeans and the two products they're crushed into, soybean oil and soybean meal — plus the crops that compete with them (corn, palm oil, wheat). All prices are converted to **US dollars per metric ton** so a Chicago price, a Brazilian price, and a South African price can sit on the same chart.
 
-## The Dashboard
+## The Site
 
-One page, in the order you'd scan it each morning, every section collapsible:
+**The headline page**, in the order you'd scan it each morning:
 
-**01 Overnight** — what prices did · **02 Signals** — anything unusual, ranked by urgency · **03 Crush & Relative Value** — is processing beans profitable, and how does soy compare to rivals · **04 Supply & Demand** — how much the world is growing, buying, and holding · **05 Risk** — currencies, fund positioning, weather · **06 Forward Curves** — what future months cost vs today · **07 Seasonal** — how this year compares to a normal year · **08 Technicals** — chart indicators · **09 Full Briefing** — the whole text report · **10 About**
+**01 Overnight** — what prices did · **02 Signals** — anything unusual, ranked by urgency · **03 Propagation ledger** — who has repriced, and who has not printed · **04 Crush & Relative Value** — is processing beans profitable, and how does soy compare to rivals · **05 Supply & Demand** — how much the world is growing, buying, and holding · **06 Risk** — currencies, fund positioning, weather · **07 Forward Curves** — what future months cost vs today · **08 Seasonal** — how this year compares to a normal year · **09 Full Briefing** — the whole text report
+
+**One page per market** — CBOT, Dalian, Brazil, Argentina, India, Europe, South Africa, Nigeria — each built from the same nine blocks (prices, propagation ledger, crush, basis, weather, supply & demand, flows, positioning, data health). The market is a parameter, not a code path: a new market is a registry entry, not new code.
+
+Each market page is **tiered from the data every run** — a full page, a brief, or a stub — so a market whose source went dark demotes itself and says so, rather than publishing a confident-looking empty page. The URL never changes with the tier, so yesterday's link never 404s.
 
 ## Where the Data Comes From (all free)
 
@@ -30,8 +34,8 @@ One page, in the order you'd scan it each morning, every section collapsible:
 | 2 | USDA NASS* | US harvest sizes, yields, weekly crop health ratings |
 | 3 | FRED* | The economic backdrop: dollar strength, inflation, interest rates |
 | 4 | CFTC | What big speculators are betting (published weekly) |
-| 5 | Open-Meteo | Weather in 24 growing regions across 6 continents |
-| 6 | USDA PSD | Global supply and demand, 8 commodities × 27 countries |
+| 5 | Open-Meteo | Weather in 19 growing regions across 6 continents |
+| 6 | USDA PSD | Global supply and demand, 10 commodities × 28 countries |
 | 7 | Yahoo Finance | 10 currency pairs (a weak Brazilian real makes Brazilian beans cheaper) |
 | 8 | World Bank | Monthly benchmark prices (palm oil, rapeseed oil) |
 | 9 | AKShare | Chinese futures prices — what the biggest soy buyer is paying |
@@ -41,12 +45,18 @@ One page, in the order you'd scan it each morning, every section collapsible:
 | 13 | EIA* | Ethanol, biodiesel, diesel — fuel demand for crops |
 | 14 | USDA* | How many beans got crushed, how many got shipped |
 | 15 | CONAB | Brazil's official crop estimates (their version of the USDA) |
-| 16 | NCDEX | India domestic soy *(disabled — site blocks scrapers)* |
-| 17 | CEPEA | Brazil farm-gate soy *(disabled — site blocks scrapers)* |
-| 18 | JSE SAFEX | South Africa's soy futures exchange |
+| 16 | data.gov.in / Agmarknet | India domestic bean prices at the mandis (Madhya Pradesh + Maharashtra) |
+| 17 | CEPEA via Notícias Agrícolas | Brazil farm-gate and Paranaguá soy indicators |
+| 18 | JSE SAFEX via Grain SA | South Africa's soy futures exchange |
 | 19 | AgRural | Soy prices at Brazil's main export port |
+| 20 | USDA AMS | Daily US Gulf export bids (CIF NOLA barge) |
+| 21 | Argentina MAGyP | Official daily FOB export values, incl. the only free daily sunflower oil benchmark |
+| 22 | European Commission | Weekly EU rapeseed FOB assessment |
+| 23 | SAGIS | South Africa weekly producer deliveries — the country's physical flow series |
+| 24 | SAGIS | South Africa monthly soybean supply & demand balance (incl. crush volume) |
+| 25 | Crop Estimates Committee (SA) | South Africa's official monthly crop estimate, with its in-season revision path |
 
-\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`). **14 of 19 sources need no key at all**, and if any one source fails, the rest still run.
+\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, and optionally `DATA_GOV_IN_API_KEY`). **20 of 25 sources need no key at all**, and if any one source fails, the rest still run.
 
 ## What the Analysis Actually Tells You
 
@@ -66,14 +76,26 @@ In plain terms, each piece answers a question a trader would ask:
 ```bash
 pip install -r requirements.txt
 
-python main.py                      # collect all 19 data sources into the database
-python scripts/generate_html.py     # build the dashboard → docs/index.html
+python main.py                      # collect all 25 data sources into the database
+python scripts/generate_site.py     # build the whole site → docs/
+python scripts/generate_site.py --only india    # or one page, for the dev loop
 python -c "from analysis.briefing import generate_briefing; print(generate_briefing())"   # print today's briefing
 ```
 
+## Trust — how the numbers are kept honest
+
+Free public data fails in quiet ways. Most of the engineering here is about refusing to publish a wrong number:
+
+- **"Success" requires new rows, not just a 200 OK.** A source that serves last month's file every day is recorded as *failed*, ages out of its freshness window, and says so on every page. Same for a source that answers with nothing, or that answers for only half the keys it was asked for.
+- **Half a walk is a wrong number, not a missing one.** India's daily price is a median across ~115 reporting markets — a truncated fetch yields a plausible wrong figure with nothing in its shape marking it partial, so it hard-fails instead.
+- **Unsettled prices are dropped, not stored.** A run landing mid-session would otherwise save an unfinished bar as the day's close. The site prints a gap rather than a wrong close.
+- **Our outage never reads as the market's silence.** When a page is thin because *our* ingest broke, it says so, with the date of the last good run.
+- **A basis says whether trade can actually close it.** India's bean trades ~+66% over Chicago and nothing arbitrages it — GM imports are banned behind a tariff wall — so it renders as a labelled policy spread, never as a tradeable one.
+- **A failure is isolated three ways**: a broken block renders an empty state with its reason, a broken page is replaced by a tombstone carrying the error (never yesterday's stale file), and a broken headline fails the run.
+
 ## Deployment
 
-GitHub Actions runs the whole thing unattended: every weekday at 12:00 UTC (and on every push to `main`) it collects the data, rebuilds the dashboard, and republishes it to GitHub Pages. API keys live in repository secrets. Storage is a local SQLite file by default; set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` for cloud storage instead.
+GitHub Actions runs the whole thing unattended: daily (and on every push to `main`) it collects the data, rebuilds the site, and republishes to GitHub Pages. The schedule targets a landing window after Chicago settlement — but correctness never depends on the cron, only on the settlement guard. API keys live in repository secrets. Storage is a local SQLite file; snapshot-only sources (which cannot be re-downloaded) round-trip through CSVs committed to git, so an ephemeral CI runner keeps its history without a cloud database.
 
 ### Trusted Static Preview
 
@@ -106,9 +128,9 @@ main.py            runs the whole collection pipeline, source by source
 fetchers/          one module per data source (the "collectors")
 pipeline/          cleaning, validation, unit conversion, database read/write
 analysis/          turns stored data into indicators, signals, and the briefing
-app/               chart builders + the dashboard's HTML template
-scripts/           the script that assembles the dashboard page
-docs/index.html    the finished dashboard that GitHub Pages serves
+app/               the market registry, the nine block builders, and the HTML templates
+scripts/           generate_site.py — the orchestrator that renders every page
+docs/              the finished site that GitHub Pages serves
 ```
 
 Design system in `DESIGN.md` · architecture details in `ARCHITECTURE.md` and `CLAUDE.md`.
