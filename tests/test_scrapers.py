@@ -1075,10 +1075,9 @@ def test_mandi_collect_hard_fails_when_the_page_cap_truncates(monkeypatch) -> No
     monkeypatch.setattr("fetchers.mandi.MANDI_MAX_PAGES", 2)
     monkeypatch.setattr(
         "fetchers.mandi._fetch_page",
-        lambda offset, state: {
-            "total": 100,
-            "records": [_mandi_record(market=f"m-{offset}-{i}") for i in range(10)],
-        },
+        lambda offset, state: _mandi_payload(
+            [_mandi_record(market=f"m-{offset}-{i}") for i in range(10)], total=100
+        ),
     )
     with pytest.raises(requests.RequestException, match=r"truncated at 20/100"):
         _mandi_collect("Madhya Pradesh")
@@ -1087,8 +1086,10 @@ def test_mandi_collect_hard_fails_when_the_page_cap_truncates(monkeypatch) -> No
 def test_mandi_collect_hard_fails_when_a_page_empties_early(monkeypatch) -> None:
     """A zero-record page before ``total`` broke the loop as if complete."""
     pages = [
-        {"total": 30, "records": [_mandi_record(market=f"m{i}") for i in range(10)]},
-        {"total": 30, "records": []},
+        _mandi_payload(
+            [_mandi_record(market=f"m{i}") for i in range(10)], total=30
+        ),
+        _mandi_payload([], total=30),
     ]
     monkeypatch.setattr(
         "fetchers.mandi._fetch_page", lambda offset, state: pages[offset // 10]
@@ -1101,13 +1102,13 @@ def test_mandi_collect_accepts_a_complete_walk(monkeypatch) -> None:
     """The guard must not fire on the ordinary case."""
     monkeypatch.setattr(
         "fetchers.mandi._fetch_page",
-        lambda offset, state: {
-            "total": 15,
-            "records": [
+        lambda offset, state: _mandi_payload(
+            [
                 _mandi_record(market=f"m-{offset}-{i}")
                 for i in range(10 if offset == 0 else 5)
             ],
-        },
+            total=15,
+        ),
     )
     assert len(_mandi_collect("Madhya Pradesh")) == 15
 
