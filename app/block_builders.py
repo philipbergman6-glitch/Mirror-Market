@@ -329,6 +329,7 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             changes[f"chg_{back}_pct"] = _pct_change(value, prior[1] if prior else None)
         legs.append({
             "key": key,
+            "label": source.key_label(key),
             "is_headline": key == (source.headline_key or ordered[0]),
             "home_value": value,
             "home_currency": market.home_currency,

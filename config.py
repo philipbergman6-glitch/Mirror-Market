@@ -1323,8 +1323,20 @@ MARKETS = {
             "table": "dce_futures",
             "date_column": "Date",
             "key_column": "commodity",
-            "keys": ["DCE Soybean No.2", "DCE Soybean Oil", "DCE Soybean Meal"],
+            # No.1 last (M13a #249): the crush triplet stays contiguous and the
+            # standalone food bean wraps onto its own grid row. It gets no
+            # ledger row and no A0−B0 spread — a China food-demand level only.
+            "keys": [
+                "DCE Soybean No.2",
+                "DCE Soybean Oil",
+                "DCE Soybean Meal",
+                "DCE Soybean No.1",
+            ],
             "headline_key": "DCE Soybean No.2",
+            "key_labels": {
+                "DCE Soybean No.2": "imported/GMO crush bean",
+                "DCE Soybean No.1": "domestic non-GMO food bean",
+            },
             "cadence": "daily",
             "quote_kind": "board",
             "value_column": "Close",
