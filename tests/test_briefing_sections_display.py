@@ -338,6 +338,38 @@ def test_stocks_to_use_section_includes_meal_and_oil(patched_db: Path) -> None:
     assert signals == []  # single year -> no tight-supply detection
 
 
+def test_stocks_to_use_section_prints_cotton_from_domestic_use(patched_db: Path) -> None:
+    """Cotton's consumption line is "Domestic Use", not "Domestic Consumption".
+
+    Before #238 the section listed Cotton but could only ever print
+    "Cotton: No data" — the attribute it summed does not exist for cotton.
+    Cotton is in (1000 480-lb bales); the ratio is unitless so it cancels.
+    """
+    rows = []
+    for year, stocks, use in [
+        (2022, 4_200.0, 15_000.0),
+        (2023, 4_400.0, 14_800.0),
+        (2024, 4_100.0, 14_500.0),
+        (2025, 4_300.0, 14_000.0),
+        (2026, 4_300.0, 13_700.0),
+    ]:
+        rows.extend([
+            ("Cotton", "United States", year, "Ending Stocks", stocks,
+             "(1000 480 lb. Bales)"),
+            ("Cotton", "United States", year, "Domestic Use", use * 0.15,
+             "(1000 480 lb. Bales)"),
+            ("Cotton", "United States", year, "Exports", use * 0.85,
+             "(1000 480 lb. Bales)"),
+        ])
+    _seed_psd(patched_db, rows)
+
+    text, _ = stocks_to_use.format()
+
+    assert "Cotton: No data" not in text
+    assert "Cotton: 31.4% (MY 2026)" in text
+    assert "prior 4-yr range: 28.0%–30.7%" in text
+
+
 # ---------------------------------------------------------------------------
 # Inspections China share (X2 #132)
 # ---------------------------------------------------------------------------

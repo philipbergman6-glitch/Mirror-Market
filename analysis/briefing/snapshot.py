@@ -412,6 +412,9 @@ def _stocks_to_use_block() -> dict[str, dict[str, Any]]:
             "ratio": _num(current["ratio"]),
             "ending_stocks": _num(current["ending_stocks"]),
             "total_use": _num(current["total_use"]),
+            # Levels, so they carry PSD's unit: cotton is in bales, the rest
+            # in 1000 MT, and this block is archived (#238).
+            "unit": str(current["unit"]) if pd.notna(current["unit"]) else None,
             "marketing_year": int(current["year"]) if pd.notna(current["year"]) else None,
             "prior_5y_low": prior_low,
             "prior_5y_high": prior_high,

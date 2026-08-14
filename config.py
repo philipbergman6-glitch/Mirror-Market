@@ -306,9 +306,15 @@ PSD_TARGET_COUNTRIES = [
     "Australia",
 ]
 
+# PSD does not name every commodity's consumption line the same way: cotton's
+# is "Domestic Use" (attribute 142) and it has no "Domestic Consumption" row at
+# all, so asking only for the latter dropped cotton's demand leg silently and
+# the US cotton stocks-to-use could never print (#238). Which name belongs to
+# which commodity is `analysis.stocks_to_use.PSD_CONSUMPTION_ATTRIBUTE`; the
+# fetcher's `isin` filter only has to let both through.
 PSD_TARGET_ATTRIBUTES = [
     "Production", "Imports", "Exports", "Crush",
-    "Ending Stocks", "Domestic Consumption",
+    "Ending Stocks", "Domestic Consumption", "Domestic Use",
     "Beginning Stocks", "Total Supply", "Total Distribution",
 ]
 

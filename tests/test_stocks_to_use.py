@@ -12,10 +12,13 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import config
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
+    PSD_CONSUMPTION_ATTRIBUTE,
     compute_stocks_to_use,
+    consumption_attribute,
     detect_tight_supply,
 )
 
@@ -77,7 +80,7 @@ def test_compute_returns_empty_for_empty_input():
     out = compute_stocks_to_use(pd.DataFrame())
     assert out.empty
     assert list(out.columns) == [
-        "commodity", "year", "ending_stocks", "total_use", "ratio",
+        "commodity", "year", "unit", "ending_stocks", "total_use", "ratio",
     ]
 
 
@@ -138,6 +141,163 @@ def test_compute_ignores_unrelated_attributes():
     out = compute_stocks_to_use(pd.concat([df, extra], ignore_index=True))
     assert len(out) == 1
     assert out.iloc[0]["ratio"] == pytest.approx(0.1)
+
+
+# ---------------------------------------------------------------------------
+# Per-commodity consumption attribute (#238)
+#
+# PSD does not name every commodity's consumption line the same way: cotton's
+# is "Domestic Use" (attribute 142), everything else's is "Domestic
+# Consumption". The old single constant dropped cotton silently.
+# ---------------------------------------------------------------------------
+
+
+def test_consumption_attribute_map_covers_every_psd_commodity():
+    assert set(PSD_CONSUMPTION_ATTRIBUTE) == set(config.PSD_TARGET_COMMODITIES)
+
+
+def test_cotton_consumption_attribute_is_domestic_use():
+    # Pinned so a future PSD rename fails loudly rather than reverting to the
+    # "Cotton: No data" line this ticket removed.
+    assert consumption_attribute("Cotton") == "Domestic Use"
+    assert consumption_attribute("Soybeans") == "Domestic Consumption"
+
+
+def test_consumption_attribute_raises_on_unknown_commodity():
+    with pytest.raises(KeyError):
+        consumption_attribute("Sorghum")
+
+
+def test_both_consumption_attributes_are_fetched():
+    # The fetcher's isin filter drops any attribute not listed here, so the
+    # map above is only reachable if config asks PSD for both names.
+    for attr in set(PSD_CONSUMPTION_ATTRIBUTE.values()):
+        assert attr in config.PSD_TARGET_ATTRIBUTES
+
+
+def test_compute_uses_domestic_use_for_cotton():
+    rows = [
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Ending Stocks", value=4_300.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Domestic Use", value=1_700.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Exports", value=12_000.0),
+    ]
+    out = compute_stocks_to_use(pd.DataFrame(rows))
+
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["commodity"] == "Cotton"
+    assert row["total_use"] == pytest.approx(13_700.0)
+    assert row["ratio"] == pytest.approx(4_300.0 / 13_700.0)
+
+
+def test_compute_does_not_coalesce_domestic_use_into_soybeans():
+    # An explicit per-commodity map, not a coalesce: soybeans read only
+    # "Domestic Consumption", so a stray "Domestic Use" row cannot stand in —
+    # and because the mapped attribute is then absent, it is a loud break
+    # rather than a quiet drop.
+    rows = [
+        _psd_row(commodity="Soybeans", country="United States", year=2026,
+                 attribute="Ending Stocks", value=100.0),
+        _psd_row(commodity="Soybeans", country="United States", year=2026,
+                 attribute="Domestic Use", value=800.0),
+        _psd_row(commodity="Soybeans", country="United States", year=2026,
+                 attribute="Exports", value=200.0),
+    ]
+    with pytest.raises(ValueError, match="Domestic Consumption"):
+        compute_stocks_to_use(pd.DataFrame(rows))
+
+
+def test_compute_raises_on_unknown_commodity():
+    rows = [
+        _psd_row(commodity="Sorghum", country="United States", year=2026,
+                 attribute="Ending Stocks", value=100.0),
+        _psd_row(commodity="Sorghum", country="United States", year=2026,
+                 attribute="Domestic Consumption", value=800.0),
+        _psd_row(commodity="Sorghum", country="United States", year=2026,
+                 attribute="Exports", value=200.0),
+    ]
+    with pytest.raises(KeyError):
+        compute_stocks_to_use(pd.DataFrame(rows))
+
+
+def test_compute_raises_when_the_consumption_attribute_disappears():
+    # The upstream-rename case. PSD keeps publishing the commodity but under a
+    # different consumption label; the old code dropped it on the dropna and
+    # the briefing quietly printed "No data" (that is the whole of #238).
+    rows = [
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Ending Stocks", value=4_300.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Domestic Consumption", value=1_700.0),  # renamed
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Exports", value=12_000.0),
+    ]
+    with pytest.raises(ValueError, match="Domestic Use"):
+        compute_stocks_to_use(pd.DataFrame(rows))
+
+
+def test_compute_tolerates_a_single_missing_year():
+    # A per-year gap is an ordinary dropped row, not a rename — only a
+    # commodity-wide absence of the attribute is a break.
+    rows = [
+        _psd_row(commodity="Cotton", country="United States", year=2025,
+                 attribute="Ending Stocks", value=4_200.0),
+        _psd_row(commodity="Cotton", country="United States", year=2025,
+                 attribute="Domestic Use", value=1_700.0),
+        _psd_row(commodity="Cotton", country="United States", year=2025,
+                 attribute="Exports", value=12_000.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Ending Stocks", value=4_300.0),
+        _psd_row(commodity="Cotton", country="United States", year=2026,
+                 attribute="Exports", value=12_300.0),
+    ]
+    out = compute_stocks_to_use(pd.DataFrame(rows))
+    assert list(out["year"]) == [2025]
+
+
+# ---------------------------------------------------------------------------
+# Units travel with the levels (#238)
+#
+# The ratio is unitless and cancels, but ending_stocks/total_use are levels and
+# cotton is in 1000 480-lb bales while every other commodity is in 1000 MT.
+# ---------------------------------------------------------------------------
+
+
+def _cotton_frame(year: int = 2026) -> pd.DataFrame:
+    rows = [
+        {"commodity": "Cotton", "country": "United States", "year": year,
+         "attribute": attr, "value": value, "unit": "(1000 480 lb. Bales)"}
+        for attr, value in [
+            ("Ending Stocks", 4_300.0),
+            ("Domestic Use", 1_700.0),
+            ("Exports", 12_000.0),
+        ]
+    ]
+    return pd.DataFrame(rows)
+
+
+def test_compute_carries_psd_unit_per_commodity():
+    out = compute_stocks_to_use(
+        pd.concat([_cotton_frame(), _psd_frame(pairs=[(2026, 100.0, 1000.0)])],
+                  ignore_index=True)
+    )
+    units = dict(zip(out["commodity"], out["unit"], strict=True))
+    assert units == {
+        "Cotton": "(1000 480 lb. Bales)",
+        "Soybeans": "(1000 MT)",
+    }
+
+
+def test_compute_refuses_a_frame_with_no_unit_column():
+    # Levels returned unlabelled is the pooling the ticket forbids, so this is
+    # a crash rather than a guess — same rule as fetchers/psd.py's
+    # Unit_Description check.
+    frame = _cotton_frame().drop(columns=["unit"])
+    with pytest.raises(ValueError, match="unit"):
+        compute_stocks_to_use(frame)
 
 
 # ---------------------------------------------------------------------------
