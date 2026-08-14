@@ -1,0 +1,82 @@
+# One-shot, manually dispatched backfill of Argentina MAGyP FOB history
+# (#252). This workflow exists because data/history/*.csv is written only
+# by CI (the history-guard hook blocks it in PRs): the backfill has to run
+# on a runner, store into a DB seeded from the committed CSVs, and let
+# export_history + the snapshot commit persist what it fetched. A local run
+# of scripts/backfill_magyp_fob.py fills a local DB and persists nothing.
+name: Backfill MAGyP FOB
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: 'Start date (ISO). Floored at 2024-11-01 — the #147 mapping-validation window.'
+        default: '2024-11-01'
+        required: true
+      end:
+        description: 'End date (ISO). Empty = today.'
+        default: ''
+        required: false
+
+permissions:
+  contents: write
+
+# Same group as the deploy workflow: both commit data/history back to main,
+# so they queue rather than race. Never cancels a deploy in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    # ~460 business days at a 1s polite delay plus request time is ~20 min;
+    # leave room for MAGyP having a slow day.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Seed the empty runner DB from the committed CSVs first, so
+      # export_history below sees existing rows + backfill, never a shrink.
+      - name: Seed DB from committed history
+        run: |
+          python -c "
+          from pipeline.store import init_database
+          from pipeline.history import import_history
+          init_database()
+          import_history()
+          "
+
+      - name: Run backfill
+        run: python scripts/backfill_magyp_fob.py "${{ inputs.start }}" ${{ inputs.end }}
+
+      - name: Export history
+        run: python -c "from pipeline.history import export_history; export_history()"
+
+      - name: Commit history snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/history
+          if git diff --staged --quiet; then
+            echo "No history changes — nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(data): backfill Argentina MAGyP FOB history [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — rebasing onto moved main."
+            git pull --rebase -X theirs --autostash origin main
+          done
+          echo "::error::backfill history push failed after 3 attempts"
+          exit 1
