@@ -163,6 +163,15 @@ class Source:
     headline_key: str | None = None
     reference: str | None = None
     label: str | None = None
+    # Per-key annotations for block 01 (M13a #249) — a key string like
+    # "DCE Soybean No.1" is precise but not self-explanatory, and the two DCE
+    # beans are different animals (food vs crush). Validated against `keys`
+    # at load; keys without one render bare. A tuple of pairs, not a dict:
+    # Source is a cache key (SiteContext.cached) and must stay hashable.
+    key_labels: tuple[tuple[str, str], ...] = ()
+
+    def key_label(self, key: str) -> str | None:
+        return dict(self.key_labels).get(key)
     # Basis sources only. See ARBITRAGE_KINDS; `caveat` is mandatory when the
     # arbitrage is blocked and rides onto the block with the number.
     arbitrage: str | None = None
@@ -378,6 +387,13 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
     headline = raw.get("headline_key")
     if headline is not None and headline not in keys:
         raise ValueError(f"market {slug!r} {block} headline_key {headline!r} is not one of its keys")
+    key_labels = dict(raw.get("key_labels") or {})
+    unknown = set(key_labels) - set(keys)
+    if unknown:
+        raise ValueError(
+            f"market {slug!r} {block} key_labels name keys that are not the source's: "
+            f"{sorted(unknown)} — a mislabelled key would render an unlabelled row, silently"
+        )
     if raw["unit"] not in UNITS:
         raise ValueError(f"market {slug!r} {block} unit {raw['unit']!r} not in {sorted(UNITS)}")
     arbitrage = raw.get("arbitrage")
@@ -410,6 +426,7 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         headline_key=headline,
         reference=raw.get("reference"),
         label=raw.get("label"),
+        key_labels=tuple(sorted(key_labels.items())),
         arbitrage=arbitrage,
         caveat=caveat,
     )

@@ -8,6 +8,7 @@
   {% for leg in d.legs %}
   <div class="mc">
     <div class="mc-label">{{ leg.key }}{% if leg.is_headline %} · headline{% endif %}</div>
+    {% if leg.label %}<div class="mc-delta muted">{{ leg.label }}</div>{% endif %}
     <div class="mc-val">{{ f.usd(leg.usd_mt) }}<small class="muted"> /MT</small></div>
     <div class="mc-delta">
       {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>

@@ -84,6 +84,18 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         )
     conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
                  ("BRL/USD", _day(0), 0.20))
+    # Dalian: four price keys — the crush triplet plus the standalone No.1
+    # food bean (M13a #249). CNY/MT, converted at CNY/USD.
+    conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                 ("CNY/USD", _day(0), 0.14))
+    for key, close in (
+        ("DCE Soybean No.2", 3600.0),
+        ("DCE Soybean Oil", 8000.0),
+        ("DCE Soybean Meal", 3000.0),
+        ("DCE Soybean No.1", 4900.0),
+    ):
+        conn.execute("INSERT INTO dce_futures (commodity, Date, Close) VALUES (?,?,?)",
+                     (key, _day(0), close))
     conn.execute("INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
                  (_day(0), "Soybean (CEPEA)", 2000.0))
     conn.execute("INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
@@ -155,6 +167,61 @@ def test_several_quotes_on_one_date_are_averaged_and_say_so(seeded, registry):
     assert round(basis.data["local_usd_mt"], 1) == 418.9
     price_rows = seeded.series(registry["cbot"].basis)["Soybeans"]
     assert price_rows[-1][2] == 2  # the count travels with the mean
+
+
+def test_dalian_renders_four_price_keys_with_no1_last_and_labelled(seeded, registry):
+    """M13a #249: DCE Soybean No.1 is a fourth price key, never the headline.
+
+    The two beans are different animals — No.2 is the imported/GMO crush bean
+    the crush and the vs-CBOT premium key off, No.1 the domestic non-GMO food
+    bean with no CBOT counterpart — so the key alone cannot carry that and
+    both beans state their animal via `key_labels`.
+    """
+    price = _block(_build("dalian", seeded, registry), "price")
+    assert price.state == "ok"
+    keys = [leg["key"] for leg in price.data["legs"]]
+    assert keys == [
+        "DCE Soybean No.2",  # headline, hoisted first
+        "DCE Soybean Oil",
+        "DCE Soybean Meal",
+        "DCE Soybean No.1",  # last: the crush triplet stays contiguous
+    ]
+    legs = {leg["key"]: leg for leg in price.data["legs"]}
+    assert legs["DCE Soybean No.2"]["is_headline"]
+    assert not legs["DCE Soybean No.1"]["is_headline"]
+    assert legs["DCE Soybean No.1"]["label"] == "domestic non-GMO food bean"
+    assert legs["DCE Soybean No.2"]["label"] == "imported/GMO crush bean"
+    assert legs["DCE Soybean Oil"]["label"] is None  # unlabelled keys render bare
+    # CNY 4,900/MT at 0.14 USD per CNY — converted like any home_per_mt leg.
+    assert round(legs["DCE Soybean No.1"]["usd_mt"], 1) == 686.0
+
+
+def test_no1_is_absent_from_crush_legs_and_the_dalian_ledger(registry):
+    """M13 #165: No.1 gets no ledger row and no place in the crush arithmetic."""
+    dalian = registry["dalian"]
+    assert "DCE Soybean No.1" not in dalian.crush.legs.values()
+    assert "DCE Soybean No.1" not in (dalian.basis.keys if dalian.basis else ())
+    no1_legs = [
+        leg_id for leg_id, leg in config.LEDGER_LEGS.items()
+        if leg.get("key") == "DCE Soybean No.1"
+    ]
+    assert no1_legs == []
+
+
+def test_key_labels_naming_an_unknown_key_fail_at_load(registry):
+    raw = {
+        "layer": "dce",
+        "table": "dce_futures",
+        "date_column": "Date",
+        "key_column": "commodity",
+        "keys": ["DCE Soybean No.2"],
+        "value_column": "Close",
+        "unit": "home_per_mt",
+        "quote_kind": "board",
+        "key_labels": {"DCE Soybean No.1 ": "typo key"},
+    }
+    with pytest.raises(ValueError, match="key_labels"):
+        markets_mod._source(raw, slug="dalian", block="price")
 
 
 # ---------------------------------------------------------------------------
