@@ -61,6 +61,10 @@ import sqlite3
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
+
+# Run as a script, `pipeline` is only importable from the project root.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 logger = logging.getLogger("prune_curve_snapshots")
 
