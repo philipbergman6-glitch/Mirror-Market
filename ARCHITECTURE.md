@@ -158,6 +158,62 @@ test rather than by convention:
 The unit rule below still holds: native units in the DB, converted through
 `ContractSpec` — whose factors are pinned against `pipeline/units.py` by test.
 
+### Screen (`analysis/opportunities/` + `app/opportunities_page.py`)
+
+The third consumer layer. Where the briefing says *what moved* and the
+workstation says *how to hedge it*, this one asks a commercial question: who
+might buy or sell what, where, in which window, why now, how strong is the
+evidence, and what should the desk do next. It **originates no data** — every
+detector reads tables other layers already fill, and the counterparties come
+from the players base as researched, never invented.
+
+```
+analysis/opportunities/domain.py   vocabulary — Ladder, Opportunity, Blocker,
+                                   Evidence, ScoreCard, the audience split
+                                   (stdlib only, no SQL)
+              ▲
+              │
+analysis/opportunities/signals.py  the only SQL-aware module here; six
+                                   detectors over landed cost, destination
+                                   flows, commitments, stocks-to-use, crush
+                                   and FX → Detection + per-detector coverage
+              ▲
+        rules.py  (blockers, counterparties, ladder rung, next action)
+              ▲
+       scoring.py  (five components, declared weights, rank)
+              ▲
+   ┌──────────┴───────────┬────────────────┬──────────────────┐
+registry.py          workflow.py       sensitivity.py         │
+(identity, dupes,   (the private       (threshold headroom,   │
+ expiry, archive)    desk file)         score swings,         │
+                                        landed scenarios)     │
+   └──────────┬───────────┴────────────────┴──────────────────┘
+              ▼
+          engine.py  →  EngineResult(public, private, expired, coverage, …)
+              ▼
+   app/opportunities_page.py  ──▶ docs/opportunities.html          (public)
+                              └─▶ data/workspace/opportunities.html (private,
+                                                              gitignored)
+```
+
+Four invariants, each enforced by a type or a test:
+
+* **A price difference is not an opportunity.** Policy, freight, quality,
+  window and liquidity blockers are carried on the row; a hard blocker forces
+  feasibility to zero and caps the rung below `actionable`, so a blocked spread
+  cannot out-rank a workable one however large it is.
+* **Unknown stays unknown.** `Volume` requires a stated `basis`, a total with no
+  volume raises, and every load-bearing gap becomes a `Blocker` with a remedy
+  rather than an assumption.
+* **The privacy boundary is structural, not a template condition.** Desk notes,
+  owner, contacts and feedback live only on `Opportunity.workflow`; the public
+  serialiser never builds that key, `EngineResult.public` excludes any row that
+  has one, `save_opportunity_detections` rejects those column names, and the
+  private edition is written outside `docs/`.
+* **Nothing here learns.** Feedback is counted and reported; it never re-weights
+  a rule. A screen that silently retuned itself is a model nobody trained,
+  evaluated, or can turn off.
+
 ## Module dependency graph
 
 ```
@@ -230,4 +286,6 @@ that's the bug — back it out and convert at render instead.
 | A new hedgeable product                  | `CONTRACT_SPECS` entry in `analysis/futures/domain.py` (with its expiry rule, or `None` to leave it un-encoded) + its `config.FORWARD_CURVE_CONTRACTS` months |
 | A new exposure alert                     | A check function in `analysis/futures/alerts.py` + wire into `build_alerts` |
 | A new scheduled release on the calendar  | `EVENT_SOURCES` entry in `analysis/futures/events.py` — only if a layer here ingests it |
+| A new opportunity rule                   | Detector in `analysis/opportunities/signals.py` + its `config.OPPORTUNITY_RULES` entry (threshold, validity, question) + wire into `DETECTORS`; blockers/next action in `rules.py` |
+| A new blocker reason                     | `BlockerCode` member in `analysis/opportunities/domain.py` (+ `HARD_BLOCKERS` if it stops the trade) + the check that raises it in `rules.py` |
 | A hand-entered option quote              | A `*.yml` document in `data/reference/options/` — see its README; never code |

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It has 27 operational layers arranged in 25 numbered source groups (the split groups are 2b and 15b), covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 19 weather regions including SA/Nigeria, 28 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, Argentina MAGyP official FOB, SAGIS South Africa weekly producer deliveries plus its monthly soybean supply & demand balance, and EU rapeseed from the European Commission. Data is stored in SQLite (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The static site has 10 pages: the headline, players map, and eight market pages.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It has 27 operational layers arranged in 25 numbered source groups (the split groups are 2b and 15b), covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 19 weather regions including SA/Nigeria, 28 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, Argentina MAGyP official FOB, SAGIS South Africa weekly producer deliveries plus its monthly soybean supply & demand balance, and EU rapeseed from the European Commission. Data is stored in SQLite (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The public static site has 13 pages: the headline, the players map, the origin-comparison page, the futures workstation, the opportunity board, and eight market pages. A fourteenth, private edition of the opportunity board is written outside `docs/` and is never published.
 
 ## Commands
 
@@ -219,9 +219,13 @@ Sets are **fixed, never seasonal**; every ledger is **one good** (the soybean �
 ```bash
 # Generate the whole site locally
 python scripts/generate_site.py
-# One page, for the dev loop (headline | players | origins | workstation | <market slug>)
+# One page, for the dev loop
+# (headline | players | origins | workstation | opportunities | <market slug>)
 python scripts/generate_site.py --only cbot
-# Output: docs/index.html, docs/players.html, docs/workstation.html, docs/markets/<slug>.html
+# Output: docs/index.html, docs/players.html, docs/workstation.html,
+#         docs/opportunities.html, docs/markets/<slug>.html
+#         plus data/workspace/opportunities.html — the private desk edition,
+#         gitignored and never in the promotion contract
 ```
 
 ## Futures Workstation (`analysis/futures/`, Phase 3)
@@ -349,6 +353,87 @@ user, and a *present but malformed* file raises rather than rendering as an
 empty book. With no book entered the hedge section shows a labelled 1,000 MT
 **reference calculation** so the arithmetic stays inspectable; it says on the
 row that it is not a position.
+
+## Opportunity engine (`analysis/opportunities/`, Phase 4)
+
+The commercial surface: `docs/opportunities.html`, built by
+`app/opportunities_page.py` from the `analysis/opportunities/` package. It
+turns the players base and the market layers into ranked, blocked, evidenced
+leads. It **originates no data**: every detector reads a table another layer
+already fills, and every counterparty comes from `data/reference/players/` as
+researched. Nothing is invented — not a name, not a volume, not a trade.
+
+- `domain.py` — the vocabulary, standard library only: `Ladder`,
+  `OpportunityStatus`, `BlockerCode`/`HARD_BLOCKERS`, `Evidence`,
+  `MarketSignal`, `Counterparty`, `Volume`, `Economics`, `ScoreCard`,
+  `Feedback`, `WorkflowRecord`, `Opportunity`, and the identity/id functions.
+- `signals.py` — the **only** SQL-aware module here, and the substitution seam.
+  Six detectors, each reusing an existing analysis module rather than
+  recomputing it: landed advantage (`analysis.origins.comparison`), destination
+  flow shift (`inspection_destinations`), commitment shift
+  (`export_sales.outstanding_sales`), buyer-region tight stocks
+  (`analysis.stocks_to_use`), crush margin (`analysis.origins.crush`), and an
+  origin-competitiveness FX move (`currencies`). Each is isolated: one
+  detector raising is reported in `coverage`, never a blank page.
+- `rules.py` / `scoring.py` / `registry.py` / `workflow.py` / `sensitivity.py`
+  / `engine.py` — blockers and counterparty match, the five scores, identity
+  and expiry, the private desk file, calculation lineage, and the run.
+
+Six rules are load-bearing, each enforced by a type or a test:
+
+- **A price difference is not an opportunity.** `rules.py` attaches policy,
+  freight, quality, window, liquidity, staleness, ingest-outage and
+  no-counterparty blockers. A **hard** blocker sets `feasibility = 0` and caps
+  the rung below `actionable`; `rank()` sorts by rung *before* composite, so
+  the India mandi row — a real +284 USD/MT over CBOT, and uncloseable behind
+  the GM import ban — can never head a board titled "what to work today". Its
+  `policy_blocked` caveat is reused verbatim from the market registry's own
+  `basis` descriptor, not restated here.
+- **Unknown stays unknown.** `Volume` requires a stated `basis`; a total with
+  no volume raises. A missing ocean freight is a *hard* blocker (there is no
+  landed number without it); a missing quality adjustment is soft. Absence
+  never becomes an assumption.
+- **Five components, shown separately.** Economic, evidence, freshness,
+  counterparty and feasibility are each 0–100 with a note a reader can
+  reproduce from the numbers printed beside it; the composite is only a sort
+  key. `evidence` reads the *evidence's* confidence, not the row's — the row's
+  is already dragged down by `inferred` counterparty research, which has its
+  own component, and scoring it twice pinned this component at 40 for nearly
+  every row. Freshness is judged per item against its own layer's
+  `LAYER_MAX_DATA_AGE_DAYS` — the number `main.py` grades on — so a weekly
+  source is not punished for being four days old.
+- **The privacy boundary is structural.** Desk status, owner, contact dates,
+  notes, feedback and audit live only on `Opportunity.workflow`, loaded from
+  gitignored YAML under `data/reference/opportunities/`. Four independent
+  guards: the public serialiser never builds the `workflow` key,
+  `EngineResult.public` excludes any opportunity that has one,
+  `save_opportunity_detections` raises on those column names, and the private
+  edition is written to `data/workspace/` — outside `docs/` and deliberately
+  absent from `trust.site_promotion.expected_site_paths()`, so it can never be
+  uploaded to Pages. A *present but malformed* desk file raises rather than
+  rendering as an empty book, on the same terms `data/reference/positions/`
+  uses.
+- **Identity excludes every number.** `identity_key` is
+  `(rule_id, product, origin, destination, window_start)` — no price, no edge,
+  no score — so today's re-detection of yesterday's lane is the *same*
+  opportunity with its original id and first-seen date, not a new one. Ids
+  survive an ephemeral CI database because `opportunity_detections` archives
+  the public projection and round-trips through `data/history/`. Expiry is the
+  signal's own validity plus `OPPORTUNITY_EXPIRY_GRACE_DAYS`; a lapsed row is
+  re-stamped `expired` and demoted, and past the grace it is listed from the
+  archive as a row, never re-rendered with stale numbers.
+- **Nothing here learns.** Feedback (`dismissed`, `false_signal`,
+  `no_interest`, `progressed`, `won`, `lost`) is counted and reported;
+  it never re-weights a rule. Retuning on five dismissals would be a model
+  nobody trained, evaluated or can turn off.
+
+The ladder is stated on the page and is the reason the board is honest about
+what it is: **market signal** (something moved) → **lead** (a lane, but
+something is missing or blocked) → **actionable** (workable today) →
+**proposed trade** → **completed business**. Only the first three are ever
+detected; the last two require a human and are therefore private by
+construction. There is **no routing and no contact channel** — the output is a
+next action for a person to take.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
