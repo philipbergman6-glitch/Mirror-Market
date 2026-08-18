@@ -1966,6 +1966,27 @@ ASSUMPTIONS_DIR = os.getenv("MIRROR_ASSUMPTIONS_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "reference", "assumptions"
 )
 
+# Hand-entered or imported positions for the Phase 3 workstation. See
+# analysis/futures/positions.py — this project ingests no account, broker
+# statement or clearing feed, so a position can only come from the user, and a
+# missing directory is a legitimately empty book rather than a fault.
+#
+# MIRROR_POSITIONS_DIR overrides the location, for the same dev-loop and test
+# reason ASSUMPTIONS_DIR does, and is likewise never set in CI: a fixture
+# position must not be able to reach a published page.
+POSITIONS_DIR = os.getenv("MIRROR_POSITIONS_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "positions"
+)
+
+# Hand-entered option quotes, on exactly the same terms as POSITIONS_DIR above
+# and for exactly the same reason: no layer here publishes an option chain
+# (verified against the incumbent provider — see data/reference/options/
+# README.md), so a premium or an implied volatility can only come from the
+# user's own broker screen.
+OPTIONS_DIR = os.getenv("MIRROR_OPTIONS_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "options"
+)
+
 # Bumped whenever the arithmetic or the component order changes. Stored on every
 # ranking, so a historical row can be read against the method that produced it
 # rather than against today's.

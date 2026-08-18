@@ -177,10 +177,18 @@ CREATE TABLE IF NOT EXISTS forward_curve (
     ticker           TEXT,
     close            REAL,
     observation_date TEXT,
+    volume           REAL,
+    open_interest    REAL,
     fetched_date     TEXT    NOT NULL,
     PRIMARY KEY (commodity, contract_month, fetched_date)
 );
 """
+# volume is per-contract and the provider publishes it; open_interest is
+# published by no source this project ingests and is therefore always NULL.
+# The column exists so an authoritative provider can fill it without a
+# migration, and so consumers can distinguish "never learned" (NULL) from
+# "none" (0) — which is the difference the whole Phase 3 workstation refuses
+# to blur.
 
 _CREATE_WASDE = """
 CREATE TABLE IF NOT EXISTS wasde (

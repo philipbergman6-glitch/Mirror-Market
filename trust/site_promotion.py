@@ -29,6 +29,9 @@ def expected_site_paths() -> tuple[str, ...]:
         # every page, so a run that failed to build it would ship a site whose
         # nav 404s.
         "origins.html",
+        # The Phase 3 futures workstation, in the contract for exactly the same
+        # reason as origins above: the masthead links to it from every page.
+        "workstation.html",
         *(market.url for market in load_markets().values()),
     )
 

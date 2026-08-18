@@ -219,10 +219,136 @@ Sets are **fixed, never seasonal**; every ledger is **one good** (the soybean �
 ```bash
 # Generate the whole site locally
 python scripts/generate_site.py
-# One page, for the dev loop (headline | players | <market slug>)
+# One page, for the dev loop (headline | players | origins | workstation | <market slug>)
 python scripts/generate_site.py --only cbot
-# Output: docs/index.html, docs/players.html, docs/markets/<slug>.html
+# Output: docs/index.html, docs/players.html, docs/workstation.html, docs/markets/<slug>.html
 ```
+
+## Futures Workstation (`analysis/futures/`, Phase 3)
+
+The hedging surface: `docs/workstation.html`, built by `app/workstation_page.py`
+from the `analysis/futures/` package. It is the only part of this repo that
+speaks in **named contracts** — everything else works on the continuous
+front-month series `prices` holds, which no hedge can be placed on.
+
+- `domain.py` — the vocabulary, standard library only: `CONTRACT_SPECS` (size,
+  native unit, tick, published expiry rule, first notice rule) for nine
+  products, `NamedContract`, `ContractQuote`, `ContinuousSeries`, the exchange
+  holiday calendar and the business-day arithmetic. Its MT factors are pinned
+  against `pipeline/units.py` by test — one table of densities, not two.
+- `providers.py` — the **only** SQL-aware module here, and the substitution
+  seam: `QuoteProvider` is a Protocol and `SqliteQuoteProvider` its one
+  implementation. An authoritative feed replaces this class and nothing else.
+- `curve.py` / `continuous.py` / `hedge.py` / `scenarios.py` / `ticket.py` /
+  `positions.py` / `events.py` / `options.py` / `alerts.py` — term structure,
+  stitched series, sizing, shocks, the proposal, the entered book, the release
+  calendar, Black-76, and exposure alerts.
+
+Five rules are load-bearing, each enforced by a type or a test rather than by
+reviewer memory:
+
+- **A named contract is not a continuous series.** Different types, neither
+  accepted where the other is expected; `ContinuousSeries.is_hedgeable` is
+  always `False`. Where the stored named-contract history is shorter than
+  `MIN_SESSIONS`, a stitched series is **withheld** rather than padded with the
+  provider's own front month — the silent substitution this phase exists to
+  prevent. The provider series is still shown, labelled `provider_front_month`
+  and carrying "the provider does not publish its roll dates".
+- **Nothing here is a settlement.** Every quote is `PriceType.DELAYED_CLOSE`
+  and `is_settlement_proven` is `False` on all of them. `PriceType.SETTLEMENT`
+  exists for the day an authoritative provider is substituted and is never
+  constructed today. The word "settlement" appears on the page only in denials.
+- **Expiry is a published rule or it is absent.** ZS/ZM/ZL/ZC/ZW use the CBOT
+  grain rule (business day before the 15th), LE the last business day, HE the
+  10th business day. The two ICE softs were `NOT_ENCODED` until their rules
+  were read off the **rulebook** rather than a summary page: Sugar No. 11 Rule
+  11.06(a) — the last full trading day of the month preceding delivery, plus a
+  January carve-out that no listed month reaches — and Cotton No. 2 Rule
+  10.02(a), where Last Trading Day is the 10th business day before Last
+  Delivery Day and Last Delivery Day is the 7th-last business day of the month.
+  10 + 7 is exactly the "seventeen business days from end of spot month" the
+  contract summary states, and it is the *pair* of statements that proves the
+  counting convention (last business day = 1); one alone would have left an
+  off-by-one nobody could see. Both are checked against dated examples in the
+  tests — CTZ24 last trades 6 Dec 2024. The `NOT_ENCODED` machinery stays and
+  stays tested (on a spec built for it, `tests.test_futures_hedge.
+  unencoded_contract`) because the next product added may arrive without a
+  rule: no days-to-expiry, no annualised carry, no roll window, no expiry
+  alert, `hedge_month_candidates` returns nothing, the hedge reports
+  `no_hedge_month`, and a leg named by hand reports `expiry_not_encoded`
+  because silence there would read as safety.
+- **A missing first notice day has two different reasons, and they are
+  different states.** `first_notice_rule = None` means *this project* has not
+  encoded the rule (Live Cattle, Lean Hogs). `NO_NOTICE_DAY` means the
+  contract runs no notice-day mechanism at all — Sugar No. 11 is the one such
+  product here, where Rule 11.06(b) attaches the delivery obligation to the
+  close of the **last trading day itself**. That is stricter than an FND, not
+  looser, so rendering it as "not encoded" would send a hedger looking for a
+  date that does not exist and imply room they do not have. Cotton is the
+  opposite edge: its FND (5 business days before the first business day of the
+  delivery month) falls a fortnight *before* its last trade, which is the whole
+  reason this package keys roll alerts on FND.
+- **A curve is one session, re-checked at read time.** `forward_curve` is keyed
+  `(commodity, contract_month, fetched_date)` and, until this phase, nothing
+  deleted from it — so two runs on one day left the earlier run's legs standing
+  (2026-08-11: seven Soybean legs, six stamped that session and `ZSN27.CBT`
+  undated). Fixed at write time (`_replace_curve_snapshot`) *and* at read time
+  (`_coherence`), because a leftover leg has a valid key and a plausible price.
+  Legs off the newest observation date are dropped and named; the verdict rides
+  on the analysis, and an incoherent curve suppresses the inversion reading in
+  favour of a data alert. Neither fix cleans up rows already written, and the
+  committed history holds some — `scripts/prune_curve_snapshots.py` is the
+  operator tool for that, dry-run by default. It cannot run in a PR: the
+  `history-guard` CI job fails any PR touching `data/history/`, so the cleanup
+  is a deliberate action against a database followed by an ordinary export
+  under `MIRROR_HISTORY_ALLOW_SHRINK=1`. The rule it applies is narrow on
+  purpose — within one `(commodity, fetched_date)` group it keeps the legs on
+  the newest *non-null* observation date, and a group where **every** leg is
+  null is left entirely alone. Those are legacy rows predating the column, not
+  duplicates, and a curve leg is unrecoverable once deleted.
+- **First notice day, not last trade, is the hedger's date.** A merchant long
+  past FND is exposed to delivery, so `roll_alerts` fires on FND and
+  `fnd_inside_pricing_window` warns when the pricing period runs past it.
+
+Volume is captured from yfinance and is `None` — never `0.0` — when absent.
+**Per-contract open interest is always NULL**, because no source publishes it
+per delivery month and a zero reads as "nothing open". A *whole-product* figure
+does exist and is now shown beside the curve: `cot.total_open_interest`, the
+CFTC's weekly all-months-combined number, carried as its own type
+(`AggregateOpenInterest`) with its own report Tuesday rather than as a field on
+a quote. Putting it on a contract row would assert two false things at once —
+that one month holds the product's whole open interest, and that a Tuesday
+figure belongs to the price session. The join is by name and needs no mapping
+table: `config.COT_COMMODITIES` keys are the same nine strings
+`CONTRACT_SPECS` uses, which a test pins.
+
+There is still **no options chain**, and that is a measured fact rather than an
+assumption — `yfinance.Ticker(t).options` returns `()` for every ticker here
+including named contracts, and no layer carries a strike, premium or implied
+volatility. So `fetch_chain` returns `ChainUnavailable` with its reason rather
+than an empty ladder. What was missing was the other half of that sentence: the
+manual workflow was described and had no entry point. `data/reference/options/`
+is now a directory of YAML documents on exactly the terms
+`data/reference/positions/` uses — missing directory is an empty ladder, a
+present but malformed one raises — where each row carries a mandatory `source`
+naming who quoted it and **exactly one** of `premium` or `implied_volatility`,
+the other being derived (bisection one way, Black-76 the other). Supplying both
+is refused, because two inconsistent numbers on one row leave nothing saying
+which was believed. An option whose underlying has no board price that session
+is reported unvalued with its reason rather than priced against an invented
+forward, and every valued row is stamped `PriceType.MANUAL` with the American
+early-exercise caveat riding on it. The discount rate is a stated page constant
+(`OPTION_DISCOUNT_RATE`), not a number lifted from the `economic` layer — rho
+is reported per rate point so the choice stays visible.
+
+**No routing, and no seam for one.** Every ticket carries
+`PROPOSAL — NOT ROUTED` in text, JSON and HTML. Positions come only from a
+YAML document under `data/reference/positions/` or a CSV import — this project
+ingests no account, broker or clearing feed, so a book can only come from the
+user, and a *present but malformed* file raises rather than rendering as an
+empty book. With no book entered the hedge section shows a labelled 1,000 MT
+**reference calculation** so the arithmetic stays inspectable; it says on the
+row that it is not a position.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.

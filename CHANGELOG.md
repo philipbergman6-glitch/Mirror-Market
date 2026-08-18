@@ -4,6 +4,122 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — Phase 3 follow-up: closing four stated gaps (2026-08-18)
+
+The Phase 3 write-up listed what the workstation could not do. Four of those
+turned out to be fixable without inventing anything, and this run fixes them.
+The fifth — a stitched continuous series below 10 sessions of stored
+named-contract history — is only time passing and is left alone.
+
+* **ICE Sugar No. 11 and Cotton No. 2 now have documented expiry rules.** They
+  were `NOT_ENCODED` because this project had not read the rules, not because
+  none are published. Encoded off the **rulebook**, not a summary page: Sugar
+  Rule 11.06(a) (last full trading day of the month preceding delivery, plus a
+  January carve-out no listed month reaches) and Cotton Rule 10.02(a) (last
+  trading day = 10 business days before last delivery day; last delivery day =
+  the 7th-last business day of the month). Cotton's summary page states the
+  same rule as "seventeen business days from end of spot month" — 10 + 7 — and
+  it is the *pair* that proves the counting convention runs from the last
+  business day as 1. Pinned to dated examples: CTZ24 last trades 6 Dec 2024,
+  first notice 22 Nov 2024. All nine products are now `DOCUMENTED`, and the
+  `NOT_ENCODED` degradation keeps its tests against a purpose-built spec.
+* **A contract with no notice day is now distinguishable from one we have not
+  encoded.** Sugar No. 11 has no notice-day mechanism at all — Rule 11.06(b)
+  attaches the delivery obligation to the close of the last trading day, which
+  is *stricter* than an FND. Rendering that as "not encoded" would send a
+  hedger looking for a date that does not exist. New `NO_NOTICE_DAY` sentinel,
+  rendered with its own explanation.
+* **Whole-product open interest is now shown.** Per-contract open interest
+  remains NULL and is still never inferred — nothing publishes it per delivery
+  month. But `cot.total_open_interest` has been stored all along: the CFTC's
+  weekly all-months-combined figure. It is surfaced as its own type
+  (`AggregateOpenInterest`) beside the curve, carrying its own report Tuesday,
+  never as a field on a quote — that would claim one month holds the product's
+  whole open interest, and would date a Tuesday number to the price session.
+* **The manual options workflow now has an entry point.** The module has always
+  described "type in your broker's quote"; nothing could be typed in.
+  `data/reference/options/*.yml` now loads on the same terms as the position
+  book (missing directory = empty, malformed = raises). Each row needs a
+  `source` naming who quoted it and exactly one of `premium` /
+  `implied_volatility`; the other is derived. Also records the measurement
+  behind the absent chain: `yfinance.Ticker(t).options` returns `()` for all
+  seven tickers checked, including named contracts.
+* **`scripts/prune_curve_snapshots.py`** — the operator cleanup for
+  forward-curve legs left by a same-day re-run. Dry-run by default. It cannot
+  be a PR change: the `history-guard` CI job fails any PR touching
+  `data/history/`, so the committed CSV is rewritten by the ordinary export
+  under `MIRROR_HISTORY_ALLOW_SHRINK=1` afterwards. The rule is deliberately
+  narrow — a group whose legs are *all* undated is legacy pre-column history,
+  not duplicates, and is left untouched, because a curve leg cannot be
+  re-fetched once deleted.
+
+Tests: 2014 passed, 5 skipped; coverage 85.27% (gate 70%). `ruff` and `mypy`
+clean on the changed files.
+
+## Unreleased — Phase 3: futures workstation for delayed-data hedging (2026-08-18)
+
+Turns the futures side of the stack from a price display into something a
+physical trader can model a hedge with. New package `analysis/futures/`
+(11 modules), new page `docs/workstation.html`, ~180 new tests.
+
+### The gap this closes
+
+The stack had prices but no **contract**. `prices` stores a continuous
+front-month series under the label "Soybeans" with no contract column at all;
+`forward_curve` stored a Yahoo ticker string and a close. Neither said which
+contract a number belonged to, when it stopped trading, or whether it was a
+settlement — so nothing downstream could size a hedge, and
+`analysis.signals.is_near_roll` existed only to demote indicators a silent
+provider roll may have faked.
+
+### What was built
+
+* **Contract identity** (`domain.py`) — exchange, root, month/year, contract
+  size, native unit, tick, published expiry rule, first notice day, price type,
+  observation date, provider, freshness. Named contracts and continuous series
+  are different types and neither substitutes for the other.
+* **Curve analytics** (`curve.py`) — calendar spreads, carry annualised on
+  business days between *last trade dates* (not month labels), structure,
+  spread history with percentiles above a 20-observation floor, hedge-month
+  candidates.
+* **Hedge calculator** (`hedge.py`) — long/short physical, unit and contract-size
+  conversion, hedge ratio, rounding policy, residual exposure, basis and FX
+  exposure, meal/oil crush cross-hedge at metric-native yields, and ten warning
+  codes including `fnd_inside_pricing_window` and `expiry_not_encoded`.
+* **Scenarios** (`scenarios.py`) — futures, basis, FX, crush-yield and
+  value-share shocks, combined and attributed separately.
+* **Ticket** (`ticket.py`), **positions and P&L** (`positions.py`), **release
+  calendar** (`events.py`), **options** (`options.py`), **exposure alerts**
+  (`alerts.py`).
+
+### Two data-integrity fixes
+
+* **`forward_curve` accumulated legs across runs on one `fetched_date`.** The PK
+  is `(commodity, contract_month, fetched_date)` and nothing deleted, so a
+  second run the same day left the earlier run's legs standing beside the new
+  ones. Visible in committed history: seven Soybean legs on 2026-08-11, six
+  stamped that session and `ZSN27.CBT` undated. Fixed at write time
+  (`_replace_curve_snapshot` clears the day's rows before rewriting them) *and*
+  re-checked at read time, because the stale leg has a valid key and a plausible
+  price.
+* **`volume` and `open_interest` columns** added to `forward_curve`. Volume is
+  now captured from yfinance and is `None` — not `0.0` — when absent; open
+  interest is always NULL, because no ingested source publishes it and a zero
+  would read as "nothing open".
+* A position document naming an unsizable commodity raised `UnknownContract`,
+  which the page's loader did not catch as a position error and rendered as an
+  **empty book** — "nothing entered" standing in for "entered wrongly". It now
+  raises `PositionError` and fails the page.
+
+### Deliberately not built
+
+No order routing, and no seam for one. No invented settlement, volume, open
+interest or option values: the options chain reports *unavailable* with its
+reason rather than rendering an empty ladder, and Black-76 refuses to run
+without a named human source for its volatility. Sugar and Cotton expiry rules
+are left un-encoded. Licensing was out of scope; provider substitution is a
+single class behind `QuoteProvider`.
+
 ## Unreleased — History persistence: briefings, export sales, regression guards (2026-08-10)
 
 Audit of what actually survives the ephemeral CI runner. `HISTORY_TABLES`

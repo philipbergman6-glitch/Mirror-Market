@@ -1,0 +1,529 @@
+{% extends "_base.html.j2" %}
+{#
+  Futures Workstation — the Phase 3 page.
+
+  Markup only. Every number, label, warning and reason comes from
+  app/workstation_page.py; this template never decides whether a price is a
+  settlement, whether a curve is coherent, or whether a hedge is sound.
+
+  Two treatments are load-bearing and must not be softened:
+
+  * the NOT ROUTED banner on the ticket, which is the difference between a
+    proposal and something that could be mistaken for an order;
+  * the "delayed close" label on every price. There is no CSS state in this
+    file that renders a delayed reference price the way a settlement would be
+    rendered, because there is no settlement here to render.
+#}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set v = workstation %}
+
+{% block title %}Mirror Market — Futures Workstation{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>Workstation</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+    <div>Hedge method {{ v.method_version }} · as of {{ v.as_of }}</div>
+    <div>delayed reference data — no routing</div>
+{% endblock %}
+
+{% block page_css %}
+{% include '_market_css.html.j2' %}
+
+/* ---- the standing banner ----
+   Repeated at the top of the page and again on the ticket. A single banner at
+   the top is scrolled past; the one that matters is beside the thing it
+   qualifies. */
+.routing-note { background: rgba(194,59,46,0.07); border: 1px solid var(--bearish); border-left-width: 3px; border-radius: 4px; padding: 10px 16px; margin: 14px 0 4px; font-size: 13px; color: var(--bearish); }
+.routing-note strong { font-family: var(--display); letter-spacing: 0.04em; }
+
+.ref-note { background: #E8C983; color: #4A3608; border-radius: 4px; padding: 9px 14px; font-size: 12px; margin-bottom: 12px; }
+
+/* ---- alerts ---- */
+.al { display: grid; grid-template-columns: auto auto 1fr; gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; }
+.al:last-child { border-bottom: none; }
+.al > * { min-width: 0; overflow-wrap: anywhere; }
+.al-kind { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+.sev { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.sev-alert { background: var(--bearish); color: #fff; }
+.sev-warning { background: #E8C983; color: #4A3608; }
+.sev-info { background: #E4E8E4; color: var(--text-muted); }
+
+/* ---- contract cards ---- */
+.contract-card { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.contract-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+.contract-head h3 { font-family: var(--display); font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+.spec-line { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; overflow-wrap: anywhere; }
+.sym { font-family: var(--mono); font-weight: 500; }
+.ptype { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); white-space: nowrap; }
+.incoherent { background: rgba(194,59,46,0.07); border-left: 3px solid var(--bearish); padding: 8px 12px; font-size: 12px; color: var(--bearish); margin-bottom: 10px; overflow-wrap: anywhere; }
+
+/* ---- hedge ---- */
+.hedge-card { background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--green); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+.hedge-lead { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; line-height: 1.2; overflow-wrap: anywhere; }
+.hedge-lead .unit { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; align-items: baseline; }
+.kv:last-child { border-bottom: none; }
+.kv .lbl { color: var(--text-muted); min-width: 0; overflow-wrap: anywhere; }
+.kv .val { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ---- ticket ---- */
+.ticket { background: #FFFFFF; border: 1px solid var(--rule-heavy); border-radius: 8px; padding: 0; overflow: hidden; margin-bottom: 16px; }
+.ticket-banner { background: var(--bearish); color: #fff; font-family: var(--display); font-weight: 800; font-size: 13px; letter-spacing: 0.08em; padding: 8px 16px; }
+.ticket pre { margin: 0; padding: 14px 16px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; white-space: pre; overflow-x: auto; }
+
+.note-block { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 10px 0; overflow-wrap: anywhere; }
+.assump { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.assump li { margin-bottom: 3px; overflow-wrap: anywhere; }
+
+@media (max-width: 768px) {
+  .hedge-lead { font-size: 20px; }
+  .al { grid-template-columns: auto 1fr; }
+  .al-kind { display: none; }
+}
+{% endblock %}
+
+{% block subnav %}
+<nav class="index-nav">
+  {% for s in v.sections %}
+  <a href="#section-{{ s.id }}"><span class="no">{{ s.no }}</span>{{ s.title }}</a>
+  {% endfor %}
+</nav>
+{% endblock %}
+
+{% block content %}
+
+<div class="routing-note">
+  <strong>NOT ROUTED.</strong>
+  Nothing on this page reaches a venue, a broker or an execution system, and this software has no
+  capability to send one. Prices are delayed daily closes, not proven exchange settlements.
+</div>
+
+{% for s in v.sections %}
+<section class="block" id="section-{{ s.id }}">
+  <div class="block-head">
+    <span class="block-no">{{ s.no }}</span>
+    <h2>{{ s.title }}</h2>
+    <span class="why">{{ s.why }}</span>
+  </div>
+
+  {% if s.state != 'ok' %}
+  <div class="empty-state state-{{ s.state }}">
+    <span class="es-label">{% if s.state == 'absent' %}no source{% else %}nothing to show{% endif %}</span>
+    {{ s.reason }}
+  </div>
+
+  {#- ------------------------------------------------------------------ 01 -#}
+  {% elif s.id == 'alerts' %}
+  <div class="caption">
+    {{ s.data.counts.alert }} alert · {{ s.data.counts.warning }} warning · {{ s.data.counts.info }} info
+  </div>
+  {% for a in s.data.alerts %}
+  <div class="al">
+    <span class="sev sev-{{ a.severity }}">{{ a.severity }}</span>
+    <span class="al-kind">{{ a.kind }}</span>
+    <span>{{ a.message }}</span>
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 02 -#}
+  {% elif s.id == 'contracts' %}
+  {% for c in s.data.commodities %}
+  {% if c.state != 'ok' %}
+  <div class="empty-state state-empty"><span class="es-label">no data</span>{{ c.commodity }} — {{ c.reason }}</div>
+  {% else %}
+  <div class="contract-card">
+    <div class="contract-head">
+      <h3>{{ c.display }}</h3>
+      <span class="ptype">{{ c.native_unit|replace('_', ' ') }}</span>
+      <span class="ptype">expiry rule {{ c.expiry_confidence|replace('_', ' ') }}</span>
+    </div>
+    <div class="spec-line">
+      {{ f.num(c.contract_size) }} {{ c.size_unit|replace('_', ' ') }} per contract
+      = {{ '%.4f'|format(c.mt_per_contract) }} MT ·
+      tick {{ c.tick_size }} = {{ f.usd(c.tick_value_usd, 2) }} ·
+      observed {{ c.observation_date or 'never' }}{% if c.age_days is not none %} ({{ c.age_days }}d){% endif %} ·
+      {{ c.freshness }}
+    </div>
+    {% if not c.coherent %}
+    <div class="incoherent">Curve is not a single session — {{ c.coherence_note }}</div>
+    {% endif %}
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>Contract</th><th>Month</th><th class="num">Price</th><th class="num">USD/MT</th>
+          <th class="num">Sessions to LTD</th><th>Last trade</th><th>First notice</th>
+          <th class="num">Volume</th><th class="num">Open interest</th><th>Price type</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for leg in c.legs %}
+        <tr>
+          <td class="sym strong">{{ leg.symbol }}</td>
+          <td>{{ leg.label }}</td>
+          <td class="num">{{ '{:,.2f}'.format(leg.price) }}</td>
+          <td class="num">{{ '{:,.2f}'.format(leg.usd_per_mt) }}</td>
+          <td class="num">{% if leg.days_to_expiry is none %}<span class="muted">rule not encoded</span>{% else %}{{ leg.days_to_expiry }}{% endif %}</td>
+          <td>{{ leg.last_trade or '—' }}</td>
+          <td>{{ leg.first_notice or '—' }}</td>
+          <td class="num">{% if leg.volume is none %}<span class="muted">not published</span>{% else %}{{ f.num(leg.volume) }}{% endif %}</td>
+          <td class="num"><span class="muted">not published</span></td>
+          <td><span class="ptype">{{ leg.price_label }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 03 -#}
+  {% elif s.id == 'curve' %}
+  {% for c in s.data.commodities %}
+  <div class="contract-card">
+    <div class="contract-head">
+      <h3>{{ c.display }}</h3>
+      <span class="ptype">{{ c.structure }}</span>
+      {% if c.slope_usd_mt_per_month is not none %}
+      <span class="ptype">{{ '{:+.2f}'.format(c.slope_usd_mt_per_month) }} USD/MT per month</span>
+      {% endif %}
+    </div>
+    <div class="spec-line">{{ c.implication }}</div>
+    {% if not c.coherent %}
+    <div class="incoherent">
+      Spreads below are struck across legs that are not one session — {{ c.coherence_note }}
+    </div>
+    {% endif %}
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>Spread</th><th class="num">Native</th><th class="num">USD/MT</th>
+          <th class="num">USD/MT per month</th><th class="num">Annualised</th>
+          <th class="num">Business days</th><th>Same session</th>
+          <th class="num">Percentile</th><th class="num">Sessions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for sp in c.spreads %}
+      {% set hist = (c.histories | selectattr('symbols', 'equalto', sp.near ~ '-' ~ sp.far) | list | first) %}
+        <tr>
+          <td class="sym">{{ sp.near }}–{{ sp.far }}</td>
+          <td class="num">{{ '{:+,.2f}'.format(sp.value) }}</td>
+          <td class="num">{{ '{:+,.2f}'.format(sp.usd_per_mt) }}</td>
+          <td class="num">{% if sp.usd_per_mt_per_month is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.2f}'.format(sp.usd_per_mt_per_month) }}{% endif %}</td>
+          <td class="num">{% if sp.annualised_pct is none %}<span class="muted">expiry rule not encoded</span>{% else %}{{ '{:+.2f}'.format(sp.annualised_pct) }}%{% endif %}</td>
+          <td class="num">{{ sp.business_days if sp.business_days is not none else '—' }}</td>
+          <td>{% if sp.same_session %}{{ sp.observation_date }}{% else %}<span class="down">no</span>{% endif %}</td>
+          <td class="num">{% if hist and hist.percentile is not none %}{{ '{:.0f}'.format(hist.percentile) }}{% else %}<span class="muted">withheld</span>{% endif %}</td>
+          <td class="num">{{ hist.sample_size if hist else 0 }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% for hist in c.histories %}{% if hist.withheld_reason %}
+    <div class="note-block">{{ hist.symbols }}: {{ hist.withheld_reason }}</div>
+    {% endif %}{% endfor %}
+    {% if c.aggregate_open_interest %}
+    <div class="note-block">
+      Open interest, all months combined:
+      <strong>{{ '{:,.0f}'.format(c.aggregate_open_interest.contracts) }}</strong> contracts
+      as of {{ c.aggregate_open_interest.report_date }}
+      ({{ c.aggregate_open_interest.source }}). Not a per-month figure.
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  <div class="note-block">{{ s.data.open_interest_note }}</div>
+  <div class="note-block">{{ s.data.aggregate_open_interest_note }}</div>
+
+  {#- ------------------------------------------------------------------ 04 -#}
+  {% elif s.id == 'hedge' %}
+  {% if s.data.is_reference %}
+  <div class="ref-note">{{ s.data.reference_label }}</div>
+  {% endif %}
+  {% for p in s.data.proposals %}
+  <div class="hedge-card">
+    <div class="hedge-lead">
+      {% if p.legs %}
+      {{ p.legs[0].side|upper }} {{ p.legs[0].contracts }} × <span class="sym">{{ p.legs[0].symbol }}</span>
+      <span class="unit">against {{ f.num(p.exposure.quantity_mt, 1) }} MT {{ p.exposure.side }} {{ p.exposure.commodity }}</span>
+      {% else %}
+      No hedge could be sized
+      {% endif %}
+    </div>
+    <div class="caption">
+      pricing {{ p.exposure.pricing_start }} → {{ p.exposure.pricing_end }} ·
+      basis convention {{ p.exposure.basis_convention|replace('_', ' ') }} ·
+      proposal {{ p.id }}
+    </div>
+    {% for leg in p.legs %}
+    <div class="kv"><span class="lbl">{{ leg.symbol }} — {{ leg.side }} {{ leg.contracts }} at {{ '{:,.2f}'.format(leg.reference_price) }} ({{ leg.reference_price_label }}, {{ leg.observation_date }})</span><span class="val">{{ f.usd(leg.notional_usd, 0) }}</span></div>
+    <div class="kv"><span class="lbl">&nbsp;&nbsp;hedge ratio {{ '%.4f'|format(leg.hedge_ratio) }} — {{ leg.hedge_ratio_source }}</span><span class="val">{{ f.num(leg.futures_mt, 1) }} MT</span></div>
+    {% if leg.cross_hedge_note %}<div class="note-block">&nbsp;&nbsp;{{ leg.cross_hedge_note }}</div>{% endif %}
+    {% endfor %}
+    <div class="kv"><span class="lbl">Expected hedge coverage</span><span class="val">{{ '%.2f'|format(p.coverage_pct) }}%</span></div>
+    <div class="kv"><span class="lbl">Residual exposure ({{ 'over-hedged' if p.over_hedged else 'unhedged' }})</span><span class="val">{{ '{:+,.1f}'.format(p.residual_mt) }} MT</span></div>
+    <div class="kv"><span class="lbl">Basis risk — USD per 1 USD/MT of basis move</span><span class="val">{{ f.usd(p.basis_risk_usd_per_mt_move, 0) }}</span></div>
+    <div class="kv"><span class="lbl">FX exposure{% if p.fx.pair %} ({{ p.fx.pair }}{% if p.fx.rate %} at {{ '%.6f'|format(p.fx.rate) }}, {{ p.fx.rate_date }}{% endif %}){% endif %}</span><span class="val">{% if p.fx.amount_usd is none %}<span class="muted">none</span>{% else %}{{ f.usd(p.fx.amount_usd, 0) }}{% endif %}</span></div>
+    <div class="note-block">{{ p.fx.note }}</div>
+    {% for w in p.warnings %}
+    <div class="alert alert-{{ 'err' if w.severity == 'alert' else 'warn' if w.severity == 'warning' else 'info' }}">{{ w.message }}</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {% if s.data.crush %}
+  <div class="hedge-card">
+    <div class="hedge-lead">Crush structure <span class="unit">— short the beans, long the products</span></div>
+    <div class="note-block">{{ s.data.crush_note }}</div>
+    {% for leg in s.data.crush.legs %}
+    <div class="kv"><span class="lbl">{{ leg.symbol }} — {{ leg.side }} {{ leg.contracts }} ({{ '%.4f'|format(leg.hedge_ratio) }} MT/MT)</span><span class="val">{{ f.usd(leg.notional_usd, 0) }}</span></div>
+    {% endfor %}
+    <div class="kv"><span class="lbl">Coverage (bean leg)</span><span class="val">{{ '%.2f'|format(s.data.crush.coverage_pct) }}%</span></div>
+  </div>
+  {% endif %}
+
+  {#- ------------------------------------------------------------------ 05 -#}
+  {% elif s.id == 'scenarios' %}
+  {% if s.data.is_reference %}<div class="ref-note">{{ v.reference_label }}</div>{% endif %}
+  {% for panel in s.data.panels %}
+  <div class="contract-card">
+    <div class="contract-head"><h3>{{ panel.commodity }} — {{ f.num(panel.quantity_mt, 1) }} MT</h3></div>
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>Scenario</th><th class="num">Physical</th><th class="num">Futures</th>
+          <th class="num">of which basis</th><th class="num">FX</th><th class="num">Net</th>
+          <th class="num">Unhedged</th><th class="num">Effectiveness</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in panel.results %}
+        <tr>
+          <td>{{ r.scenario.name }}</td>
+          <td class="num">{{ '{:+,.0f}'.format(r.physical_pnl_usd) }}</td>
+          <td class="num">{{ '{:+,.0f}'.format(r.futures_pnl_usd) }}</td>
+          <td class="num">{{ '{:+,.0f}'.format(r.basis_pnl_usd) }}</td>
+          <td class="num">{{ '{:+,.0f}'.format(r.fx_pnl_usd) }}</td>
+          <td class="num strong">{{ '{:+,.0f}'.format(r.net_pnl_usd) }}</td>
+          <td class="num">{{ '{:+,.0f}'.format(r.unhedged_pnl_usd) }}</td>
+          <td class="num">{% if r.hedge_effectiveness_pct is none %}<span class="muted">undefined</span>{% else %}{{ '%.1f'|format(r.hedge_effectiveness_pct) }}%{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% for r in panel.results %}{% for n in r.notes %}
+    <div class="note-block">{{ r.scenario.name }}: {{ n }}</div>
+    {% endfor %}{% endfor %}
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 06 -#}
+  {% elif s.id == 'ticket' %}
+  {% if s.data.is_reference %}<div class="ref-note">{{ v.reference_label }}</div>{% endif %}
+  {% for t in s.data.tickets %}
+  <div class="ticket">
+    <div class="ticket-banner">{{ s.data.banner }}</div>
+    <pre>{{ t.text }}</pre>
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 07 -#}
+  {% elif s.id == 'book' %}
+  {% set val = s.data.valuation %}
+  <div class="caption">
+    entered from {{ s.data.loaded_from | join(', ') }} · marked {{ val.as_of }}
+  </div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Position</th><th>Kind</th><th class="num">Net</th><th class="num">Net MT</th>
+        <th class="num">Avg cost</th><th class="num">Mark</th><th>Mark type</th>
+        <th class="num">Unrealised</th><th class="num">Realised</th>
+        <th class="num">Futures</th><th class="num">Basis</th><th class="num">FX</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in val.positions %}
+      <tr>
+        <td class="sym strong">{{ p.key }}</td>
+        <td>{{ p.kind }}</td>
+        <td class="num">{{ '{:+,.2f}'.format(p.net_quantity) }}</td>
+        <td class="num">{{ '{:+,.1f}'.format(p.net_mt) }}</td>
+        <td class="num">{% if p.average_cost is none %}<span class="muted">n/a</span>{% else %}{{ '{:,.2f}'.format(p.average_cost) }}{% endif %}</td>
+        <td class="num">{% if p.mark is none %}<span class="muted">unmarked</span>{% else %}{{ '{:,.2f}'.format(p.mark) }}{% endif %}</td>
+        <td><span class="ptype">{{ p.mark_label }}</span></td>
+        <td class="num">{% if p.unrealised_usd is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.0f}'.format(p.unrealised_usd) }}{% endif %}</td>
+        <td class="num">{{ '{:+,.0f}'.format(p.realised_usd) }}</td>
+        <td class="num">{% if p.attribution.futures is none %}<span class="muted">—</span>{% else %}{{ '{:+,.0f}'.format(p.attribution.futures) }}{% endif %}</td>
+        <td class="num">{% if p.attribution.basis is none %}<span class="muted">—</span>{% else %}{{ '{:+,.0f}'.format(p.attribution.basis) }}{% endif %}</td>
+        <td class="num">{% if p.attribution.fx is none %}<span class="muted">—</span>{% else %}{{ '{:+,.0f}'.format(p.attribution.fx) }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="kv"><span class="lbl">Total unrealised</span><span class="val">{{ '{:+,.0f}'.format(val.total_unrealised_usd) }} USD</span></div>
+  <div class="kv"><span class="lbl">Total realised</span><span class="val">{{ '{:+,.0f}'.format(val.total_realised_usd) }} USD</span></div>
+  {% for b in val.breaches %}
+  <div class="alert alert-err">Limit breach — {{ b.key }} for {{ b.scope }}: limit {{ f.num(b.maximum) }}, observed {{ f.num(b.observed) }}</div>
+  {% endfor %}
+  {% for p in val.positions %}{% for w in p.warnings %}
+  <div class="note-block">{{ p.key }}: {{ w }}</div>
+  {% endfor %}{% endfor %}
+  <div class="note-block">{{ val.mark_note }}</div>
+
+  {#- ------------------------------------------------------------------ 08 -#}
+  {% elif s.id == 'calendar' %}
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Release</th><th>Agency</th><th>Expected</th><th class="num">Days</th>
+        <th>Cadence rule</th><th>Our newest observation</th><th>Why it matters</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for e in s.data.events %}
+      <tr>
+        <td class="strong">{{ e.name }}</td>
+        <td>{{ e.agency }}</td>
+        <td>{{ e.expected_date }}</td>
+        <td class="num">{{ e.days_away }}</td>
+        <td>{{ e.cadence }}</td>
+        <td>{% if e.last_observed %}{{ e.last_observed }}{% if e.stale %} <span class="sev sev-warning">stale</span>{% endif %}{% else %}<span class="muted">not tracked</span>{% endif %}</td>
+        <td>{{ e.what_moves }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% for e in s.data.events %}{% if e.note %}<div class="note-block">{{ e.name }}: {{ e.note }}</div>{% endif %}{% endfor %}
+  <div class="note-block">{{ s.data.scope_note }}</div>
+
+  {#- ------------------------------------------------------------------ 09 -#}
+  {% elif s.id == 'options' %}
+  <div class="empty-state state-empty">
+    <span class="es-label">no chain</span>
+    {{ s.data.reason }}
+  </div>
+  <div class="note-block"><strong>Manual workflow.</strong> {{ s.data.manual_workflow }}</div>
+  <div class="note-block"><strong>Model.</strong> {{ s.data.model }} — assumptions, all of which bite:</div>
+  <ul class="assump">
+    {% for a in s.data.model_assumptions %}<li>{{ a }}</li>{% endfor %}
+  </ul>
+
+  <h3 style="font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px">Entered options</h3>
+  {% if s.data.empty_note %}
+  <div class="note-block">{{ s.data.empty_note }}</div>
+  {% else %}
+  <div class="note-block">{{ s.data.rate_note }}</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Option</th><th class="num">Strike</th><th>Expiry</th>
+        <th class="num">Forward</th><th class="num">Vol</th><th class="num">Premium</th>
+        <th class="num">USD/contract</th><th class="num">Delta</th><th class="num">Vega</th>
+        <th class="num">Theta</th><th>Source</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in s.data.entered %}
+      {% if row.valued %}
+      <tr>
+        <td class="sym">{{ row.contract.symbol }}</td>
+        <td class="num">{{ '{:g}'.format(row.contract.strike) }}</td>
+        <td>{{ row.contract.expiry }}</td>
+        <td class="num">{{ '{:,.2f}'.format(row.forward) }}</td>
+        <td class="num">{{ '{:.1f}'.format(row.volatility * 100) }}%</td>
+        <td class="num">{{ '{:,.3f}'.format(row.premium) }}</td>
+        <td class="num">{{ '{:,.0f}'.format(row.premium_usd) }}</td>
+        <td class="num">{{ '{:+.3f}'.format(row.greeks.delta) }}</td>
+        <td class="num">{{ '{:+.3f}'.format(row.greeks.vega_per_vol_point) }}</td>
+        <td class="num">{{ '{:+.3f}'.format(row.greeks.theta_per_day) }}</td>
+        <td>{{ row.volatility_source }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td class="sym">{{ row.contract.symbol }}</td>
+        <td class="num">{{ '{:g}'.format(row.contract.strike) }}</td>
+        <td>{{ row.contract.expiry }}</td>
+        <td colspan="7" class="muted">not valued — {{ row.reason }}</td>
+        <td>{{ row.source }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="note-block">
+    Every row above is a <strong>model value</strong> from an input you supplied, not a market
+    price. Entered from: {{ s.data.entered_from|join(', ') }}.
+  </div>
+  {% endif %}
+
+  {#- ------------------------------------------------------------------ 10 -#}
+  {% elif s.id == 'provider' %}
+  <div class="kv"><span class="lbl">Provider</span><span class="val">{{ s.data.provider.display }}</span></div>
+  <div class="kv"><span class="lbl">Price type</span><span class="val">{{ s.data.price_type|replace('_', ' ') }}</span></div>
+  <div class="kv"><span class="lbl">Settlement authoritative</span><span class="val">{{ 'yes' if s.data.provider.settlement_authoritative else 'no' }}</span></div>
+  <div class="kv"><span class="lbl">Method version</span><span class="val">{{ s.data.method_version }}</span></div>
+  <div class="note-block">{{ s.data.provider.note }}</div>
+  <div class="note-block">{{ s.data.no_routing_note }}</div>
+
+  <h3 style="font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px">Continuous series and how they were rolled</h3>
+  {% for commodity, series in s.data.continuous.items() %}
+  <div class="kv">
+    <span class="lbl">{{ commodity }} — stitched from named contracts</span>
+    <span class="val">{% if series.available %}{{ series.roll_method }}{% else %}<span class="muted">unavailable</span>{% endif %}</span>
+  </div>
+  <div class="note-block">
+    {% if series.available %}{{ series.method_description }} {{ series.adjustment_note }}{% else %}{{ series.reason }}{% endif %}
+  </div>
+  <div class="kv">
+    <span class="lbl">{{ commodity }} — the stored front-month series</span>
+    <span class="val">{{ series.provider_series.roll_method if series.provider_series.available else 'unavailable' }}</span>
+  </div>
+  <div class="note-block">
+    {% if series.provider_series.available %}{{ series.provider_series.method_description }}{% else %}{{ series.provider_series.reason }}{% endif %}
+  </div>
+  {% endfor %}
+
+  <h3 style="font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px">Contract termination rules</h3>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Commodity</th><th>Root</th><th>Exchange</th><th>Last trade rule</th><th>First notice rule</th><th>Confidence</th></tr></thead>
+    <tbody>
+    {% for r in s.data.expiry_rules %}
+      <tr>
+        <td>{{ r.commodity }}</td><td class="sym">{{ r.root }}</td><td>{{ r.exchange }}</td>
+        <td>{{ r.rule|replace('_', ' ') }}</td>
+        <td>{% if r.first_notice_note %}<span title="{{ r.first_notice_note }}">none — {{ r.first_notice_note }}</span>{% else %}{{ r.first_notice_rule|replace('_', ' ') }}{% endif %}</td>
+        <td><span class="ptype">{{ r.confidence|replace('_', ' ') }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if s.data.not_encoded %}
+  <div class="note-block">
+    No termination rule is encoded for {{ s.data.not_encoded | join(', ') }}. Those products carry no
+    days-to-expiry, no roll window, no annualised carry and no expiry alert — an absence rather than
+    an estimate.
+  </div>
+  {% endif %}
+
+  {% endif %}
+</section>
+{% endfor %}
+
+{% endblock %}
