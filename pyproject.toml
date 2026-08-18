@@ -50,3 +50,43 @@ exclude = [
     "^data/",
     "^scripts/",
 ]
+
+# The checked surface is `analysis` and `pipeline` — what CI passes on the
+# command line. `exclude` above does not bound it: it only applies to files mypy
+# discovers by crawling directories, and an imported module is followed
+# regardless. So the checked set has always been "analysis and pipeline, plus
+# whatever they happened to import", and the modules below were outside it by
+# accident of nobody importing them rather than by anyone deciding they were
+# clean. Phase 5 imports the promotion contract (`trust.site_promotion`, for the
+# feature-coverage denominator and the deployment drill) and the real tombstone
+# path (`scripts.generate_site`, so the page-generation drill rehearses against
+# the artifact the daily build actually writes) — which drags their whole
+# transitive graph in and surfaces 89 pre-existing errors in code this phase
+# does not touch.
+#
+# `ignore_errors` rather than `follow_imports = "skip"` deliberately: skipping
+# would make every symbol imported from these modules `Any` and quietly stop
+# type-checking the Phase 5 code that calls them, which is the opposite of what
+# is wanted. This suppresses errors *inside* the unchecked modules while keeping
+# their signatures, so the checked surface is unchanged and the new code is
+# still checked against real types.
+#
+# Removing an entry here is how one of these modules gets adopted into the
+# checked set. That is a deliberate piece of work, not a side effect of an
+# unrelated import.
+[[tool.mypy.overrides]]
+module = [
+    "app.block_builders",
+    "app.markets",
+    "app.sections",
+    "fetchers.*",
+    "generate_site",
+    "scripts.generate_site",
+    "trust.dataset_health",
+    "trust.derived",
+    "trust.quality",
+    "trust.query_cache",
+    "trust.registry",
+    "trust.site_promotion",
+]
+ignore_errors = true
