@@ -24,6 +24,11 @@ def expected_site_paths() -> tuple[str, ...]:
     return (
         "index.html",
         "players.html",
+        # The Phase 2 origin comparison. In the contract rather than optional
+        # for the same reason every market URL is: the masthead links to it from
+        # every page, so a run that failed to build it would ship a site whose
+        # nav 404s.
+        "origins.html",
         *(market.url for market in load_markets().values()),
     )
 

@@ -439,6 +439,48 @@ CREATE TABLE IF NOT EXISTS commodity_freshness (
 );
 """
 
+# Origin-comparison rankings (Phase 2). One row per (run, destination, window,
+# origin) — the answer this stack published on a given day, not a re-derivable
+# view of it.
+#
+# It has to be stored for the same reason `briefings` is: the ranking is
+# computed from that run's DB *and* from the assumption file as it stood that
+# morning, and neither is recoverable later. An expired freight number is gone
+# from the working set by design, so "what did we say on 12 September, and what
+# did we say it on" cannot be reconstructed from any source.
+#
+# `rank` is NULL for a row that was rendered but not rankable — which is a
+# result, not a gap: "Argentina was quoting November, so it was not ranked" is
+# exactly the history a reader needs to interpret a gap in the series.
+# `input_digest` fingerprints the row's own waterfall, so an input change and a
+# market move can be told apart without diffing two JSON blobs by eye.
+_CREATE_ORIGIN_RANKINGS = """
+CREATE TABLE IF NOT EXISTS origin_rankings (
+    run_date          TEXT NOT NULL,
+    destination       TEXT NOT NULL,
+    window_start      TEXT NOT NULL,
+    window_end        TEXT NOT NULL,
+    origin            TEXT NOT NULL,
+    rank              INTEGER,
+    landed_usd_mt     REAL,
+    fob_usd_mt        REAL,
+    origin_usd_mt     REAL,
+    comparability     TEXT NOT NULL,
+    confidence        TEXT NOT NULL,
+    freshness         TEXT NOT NULL,
+    observation_date  TEXT,
+    shipment_window   TEXT,
+    incoterm          TEXT,
+    quote_kind        TEXT,
+    method_version    TEXT NOT NULL,
+    assumption_set_id TEXT NOT NULL,
+    input_digest      TEXT NOT NULL,
+    snapshot_json     TEXT,
+    generated_at      TEXT NOT NULL,
+    PRIMARY KEY (run_date, destination, window_start, origin)
+);
+"""
+
 _CREATE_BRIEFINGS = """
 CREATE TABLE IF NOT EXISTS briefings (
     briefing_date   TEXT    NOT NULL PRIMARY KEY,
@@ -481,6 +523,7 @@ ALL_SCHEMAS = (
     _CREATE_SAGIS_DELIVERIES,
     _CREATE_SAGIS_SUPPLY_DEMAND,
     _CREATE_CEC_ESTIMATES,
+    _CREATE_ORIGIN_RANKINGS,
     _CREATE_BRIEFINGS,
 )
 
@@ -546,4 +589,8 @@ UNIQUE_INDEXES = (
     "ON cec_estimates (release_date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
     "ON briefings (briefing_date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_origin_rankings_keys "
+    "ON origin_rankings (run_date, destination, window_start, origin);",
+    "CREATE INDEX IF NOT EXISTS ix_origin_rankings_run_date "
+    "ON origin_rankings (run_date);",
 )

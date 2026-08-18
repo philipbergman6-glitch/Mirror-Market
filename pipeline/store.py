@@ -888,6 +888,59 @@ def save_briefing(
     logger.info("Archived briefing for %s (%d signals)", briefing_date, len(signals or []))
 
 
+def save_origin_ranking(rows: list[dict[str, Any]]) -> int:
+    """Archive one origin comparison, one row per origin. Returns rows written.
+
+    Stored rather than re-derived for the same reason the briefing is: the
+    ranking is a function of that morning's database *and* of the assumption
+    file as it stood at the time, and an expired freight assumption leaves the
+    working set by design. "What did we say on the 12th, and what did we say it
+    on" is unanswerable from any source once the day has passed.
+
+    Unrankable rows are written with ``rank = NULL``. That is a result — an
+    origin quoted for the wrong window is a fact about that day's market — and
+    dropping them would leave the history claiming an origin was silent when it
+    was merely offering something else.
+    """
+    if not rows:
+        return 0
+    required = {
+        "run_date", "destination", "window_start", "window_end", "origin",
+        "comparability", "confidence", "freshness", "method_version",
+        "assumption_set_id", "input_digest",
+    }
+    for row in rows:
+        missing = required - row.keys()
+        if missing:
+            raise ValueError(f"origin ranking row missing {sorted(missing)}")
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    columns = (
+        "run_date", "destination", "window_start", "window_end", "origin", "rank",
+        "landed_usd_mt", "fob_usd_mt", "origin_usd_mt", "comparability", "confidence",
+        "freshness", "observation_date", "shipment_window", "incoterm", "quote_kind",
+        "method_version", "assumption_set_id", "input_digest", "snapshot_json",
+        "generated_at",
+    )
+    payload = [
+        tuple(
+            json.dumps(row[column], default=str)
+            if column == "snapshot_json" and not isinstance(row.get(column), (str, type(None)))
+            else (generated_at if column == "generated_at" else row.get(column))
+            for column in columns
+        )
+        for row in rows
+    ]
+    with managed_connection(get_connection()) as conn:
+        conn.executemany(
+            f"INSERT OR REPLACE INTO origin_rankings ({','.join(columns)}) "  # noqa: S608 - fixed column list
+            f"VALUES ({','.join('?' * len(columns))})",
+            payload,
+        )
+        maybe_sync(conn)
+    logger.info("Archived origin ranking: %d row(s)", len(payload))
+    return len(payload)
+
+
 # --- Freshness tracking (special-case: bespoke SQL) -------------------------
 
 

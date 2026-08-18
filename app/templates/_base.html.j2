@@ -220,7 +220,10 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
   {%- set cls = ('current' if current_market == m.slug else '') ~ (' stub' if m.tier == 'stub' else '') %}
   <a href="{{ m.href }}"{% if cls.strip() %} class="{{ cls.strip() }}"{% endif %}>{{ m.name }}</a>
   {% endfor %}
-  <a href="{{ root }}players.html" class="mn-end{% if current_page == 'players' %} current{% endif %}">Players &rarr;</a>
+  {# Origins and Players are cross-market surfaces rather than markets, so they
+     sit after the market list, pushed right. #}
+  <a href="{{ root }}origins.html" class="mn-end{% if current_page == 'origins' %} current{% endif %}">Origins &rarr;</a>
+  <a href="{{ root }}players.html"{% if current_page == 'players' %} class="current"{% endif %}>Players &rarr;</a>
 </nav>
 {% block subnav %}{% endblock %}
 

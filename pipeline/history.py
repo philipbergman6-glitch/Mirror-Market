@@ -67,6 +67,14 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # day's text + snapshot_json cannot be reconstructed from any source, so
     # without this the CI runner writes one every day and deletes it.
     "briefings": ("briefing_date",),
+    # The origin comparison this run published. Snapshot-only for the same
+    # reason the briefing is, and one reason more: a ranking is a function of
+    # that morning's prices AND of the assumption file as it stood at the time,
+    # and an assumption leaves the working set the moment it expires. Nothing
+    # upstream can reproduce "what did we say on the 12th, and what did we say
+    # it on" once the day has passed — which is exactly the question section 08
+    # of the origins page exists to answer.
+    "origin_rankings": ("run_date", "destination", "window_start", "origin"),
     # ESR is fetched for the *current* marketing year only
     # (fetchers/export_sales._current_market_year), so the prior year is never
     # re-requested. At each MY rollover (Sep 1 for soybeans) the outgoing

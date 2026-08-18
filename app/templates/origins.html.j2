@@ -1,0 +1,646 @@
+{% extends "_base.html.j2" %}
+{#
+  Origin Comparison — the Phase 2 page.
+
+  Markup only. Every number, label and reason comes from app/origins_page.py;
+  this template never decides whether something is comparable, and it must not
+  be able to soften a blocked state into a hopeful one.
+
+  The selectors are a class toggle over pre-rendered sections: the site is
+  static, so every offered window was costed at build time. Sections that vary
+  with the window carry `data-window`; sections that do not (crush,
+  counterparties, inputs) are rendered once.
+#}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set v = origins %}
+
+{% block title %}Mirror Market — Origin Comparison{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>Origins</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+    <div>Landed cost method v{{ v.method_version }} · assumptions {{ v.assumption_set_id }}</div>
+    <div>all figures USD/MT</div>
+{% endblock %}
+
+{% block page_css %}
+{% include '_market_css.html.j2' %}
+
+/* ---- selector bar ----
+   Two controls, and the page states what they can and cannot offer. A static
+   page with a selector that silently does nothing is worse than no selector. */
+.selectors { display: flex; gap: 22px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.sel-group { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.sel-label { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.win { font-family: var(--mono); font-size: 12px; padding: 3px 9px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); color: var(--text-muted); cursor: pointer; }
+.win:hover { color: var(--ink); }
+.win.active { background: var(--green); border-color: var(--green); color: #fff; font-weight: 500; }
+.sel-note { flex-basis: 100%; font-size: 11px; color: var(--text-dim); }
+.dest-fixed { font-family: var(--mono); font-size: 12px; padding: 3px 9px; border: 1px solid var(--rule-heavy); border-radius: 3px; }
+
+/* ---- the answer ---- */
+.verdict { background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--green); border-radius: 8px; padding: 18px 20px; margin-bottom: 16px; }
+.verdict.blocked { border-left-color: var(--warning); }
+.verdict-lead { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: -0.02em; line-height: 1.15; overflow-wrap: anywhere; }
+.verdict-lead .unit { font-size: 14px; color: var(--text-dim); font-weight: 500; }
+.verdict-sub { font-size: 13px; color: var(--text-muted); margin-top: 6px; overflow-wrap: anywhere; }
+.verdict-blocked-text { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* ---- comparability pills: the same grammar as the ledger's state pills ---- */
+.cmp { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.cmp-comparable { background: rgba(45,106,79,0.12); color: var(--green); }
+.cmp-window_mismatch, .cmp-window_unknown { background: transparent; border: 1px solid var(--rule-heavy); color: var(--text-dim); }
+.cmp-missing_input, .cmp-incoterm_unbridged { background: #E8C983; color: #4A3608; }
+.cmp-stale, .cmp-observation_spread { background: var(--bearish); color: #fff; }
+.conf { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+
+/* ---- waterfall ---- */
+.wf { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+.wf-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+.wf-head h3 { font-family: var(--display); font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+.wf-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 6px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; align-items: baseline; }
+.wf-row:last-child { border-bottom: none; }
+.wf-row .lbl { color: var(--text-muted); }
+.wf-row .amt, .wf-row .run { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; min-width: 84px; }
+.wf-row .run { color: var(--text-dim); }
+.wf-row.total { border-top: 1px solid var(--rule-heavy); border-bottom: none; padding-top: 8px; font-weight: 600; }
+.wf-row.total .lbl { color: var(--ink); }
+.wf-basis { grid-column: 1 / -1; font-size: 11px; color: var(--text-dim); margin: -2px 0 2px; overflow-wrap: anywhere; }
+.wf-missing { grid-column: 1 / -1; font-size: 12px; color: var(--warning); padding: 6px 0; border-bottom: 1px dotted var(--rule); }
+.wf-missing code { font-family: var(--mono); font-size: 11px; background: #F0F2F0; padding: 1px 4px; border-radius: 2px; overflow-wrap: anywhere; }
+
+/* ---- crush levels ---- */
+.crush-level { border-left: 3px solid var(--rule); padding-left: 14px; margin-bottom: 14px; }
+.crush-level.ok { border-left-color: var(--green); }
+.crush-level h4 { font-family: var(--display); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.crush-val { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+
+/* ---- counterparties ---- */
+.cp { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 7px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; align-items: baseline; }
+.cp:last-child { border-bottom: none; }
+.cp .meta { font-size: 11px; color: var(--text-dim); }
+.tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 3px; }
+.tag-lane { background: rgba(45,106,79,0.12); color: var(--green); }
+.tag-global { background: #E4E8E4; color: var(--text-muted); }
+.tag-stale { background: #E8C983; color: #4A3608; }
+
+.hidden { display: none; }
+
+/* The waterfall's own children must be allowed to shrink, or a long basis line
+   pushes the amount column past the card. `min-width: 0` is the grid default
+   nobody expects. */
+.wf-row > * { min-width: 0; }
+
+@media (max-width: 768px) {
+  /* One column, and the running total goes: a waterfall on a phone is read as
+     "what am I adding", not "where am I up to", and the running column is the
+     one that costs the amount its room. */
+  .verdict-lead { font-size: 22px; }
+  .verdict-lead .unit { display: block; font-size: 13px; margin-top: 4px; }
+  .wf-row { grid-template-columns: 1fr auto; }
+  .wf-row .run { display: none; }
+  .wf-row .amt { min-width: 72px; }
+  .cp { grid-template-columns: 1fr; }
+  .selectors { gap: 12px; }
+  .sel-group { gap: 6px; }
+}
+{% endblock %}
+
+{% block subnav %}
+<div class="selectors">
+  <div class="sel-group">
+    <span class="sel-label">Destination</span>
+    {% if v.destinations|length > 1 %}
+    {% for d in v.destinations %}<span class="dest-fixed">{{ d.name }}</span>{% endfor %}
+    {% else %}
+    <span class="dest-fixed">{{ v.destination.name }}</span>
+    {% endif %}
+  </div>
+  <div class="sel-group">
+    <span class="sel-label">Shipment window</span>
+    {% for w in v.windows %}
+    <button type="button" class="win{% if w.key == v.default_window %} active{% endif %}" data-select="{{ w.key }}">{{ w.label }}</button>
+    {% endfor %}
+  </div>
+  <div class="sel-note">
+    {{ v.selector_note }}{% if v.destination_note %} {{ v.destination_note }}{% endif %}
+  </div>
+</div>
+<nav class="index-nav">
+  {% for s in v.sections %}
+  <a href="#section-{{ s.id }}"><span class="no">{{ s.no }}</span>{{ s.title }}</a>
+  {% endfor %}
+</nav>
+{% endblock %}
+
+{% block content %}
+
+{% for s in v.sections %}
+<section class="block" id="section-{{ s.id }}">
+  <div class="block-head">
+    <span class="block-no">{{ s.no }}</span>
+    <h2>{{ s.title }}</h2>
+    <span class="why">{{ s.why }}</span>
+  </div>
+
+  {% if s.state != 'ok' %}
+  <div class="empty-state state-{{ s.state }}">
+    <span class="es-label">{% if s.state == 'absent' %}no source{% else %}no data{% endif %}</span>
+    {{ s.reason }}
+  </div>
+
+  {#- ------------------------------------------------------------------ 01 -#}
+  {% elif s.id == 'decision' %}
+  {% for view in v.views %}
+  {% set d = view.decision %}
+  <div class="win-scope{% if view.key != v.default_window %} hidden{% endif %}" data-window="{{ view.key }}">
+    {% if d.is_decisive %}
+    <div class="verdict">
+      <div class="verdict-lead">
+        {{ d.cheapest_origin }}
+        <span class="unit">— cheapest delivered {{ d.destination }}, {{ d.window }}</span>
+      </div>
+      <div class="verdict-sub">
+        Landed {{ f.usd(d.cheapest_landed) }}/MT · ahead of the next origin by
+        <strong>{{ f.usd(d.advantage_usd_mt) }}/MT</strong>
+        ({{ '%.2f'|format(d.advantage_pct) }}%) ·
+        <span class="conf">{{ d.confidence }}</span>
+        · {{ d.rankable_count }} of {{ d.rows|length }} origins comparable
+      </div>
+    </div>
+    {% else %}
+    <div class="verdict blocked">
+      <div class="verdict-lead">Not comparable</div>
+      <div class="verdict-blocked-text" style="margin-top:8px">{{ d.not_comparable_reason }}</div>
+    </div>
+    {% endif %}
+
+    {% for note in d.notes %}<div class="alert alert-warn">{{ note }}</div>{% endfor %}
+
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>#</th><th>Origin</th><th>Terms</th><th>Window</th>
+          <th class="num">Origin</th><th class="num">FOB eq.</th><th class="num">Landed</th>
+          <th>State</th><th>Observed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in d.rows %}
+        <tr>
+          <td class="strong">{{ r.rank if r.rank else '—' }}</td>
+          <td>
+            {% if r.href %}<a href="{{ root }}{{ r.href }}" style="color:var(--green);text-decoration:none">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}
+            <div class="caption" style="margin:0">{{ r.origin_name }} · <span class="kind">{{ r.quote_kind|replace('_',' ') }}</span></div>
+          </td>
+          <td>{{ r.incoterm }}</td>
+          <td>{{ r.shipment_window or '—' }}</td>
+          <td class="num">{{ f.usd(r.origin_usd_mt) }}</td>
+          <td class="num">{{ f.usd(r.fob_usd_mt) }}</td>
+          <td class="num strong">{{ f.usd(r.landed_usd_mt) }}</td>
+          <td><span class="cmp cmp-{{ r.comparability }}">{{ r.comparability_label }}</span></td>
+          <td class="num">{{ r.observation_date }}</td>
+        </tr>
+        {% if r.comparability_explanation %}
+        <tr><td></td><td colspan="8" class="caption" style="padding-top:0">{{ r.comparability_explanation }}</td></tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% if d.observation_spread_days is not none %}
+    <div class="caption">
+      Origins observed {{ d.observation_spread_days }} day(s) apart (limit {{ d.observation_spread_limit }}).
+    </div>
+    {% endif %}
+
+    {% for u in d.unavailable %}
+    <div class="empty-state state-absent" style="margin-top:10px">
+      <span class="es-label">no source · {{ u.label }}</span>
+      {{ u.reason }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 02 -#}
+  {% elif s.id == 'waterfall' %}
+  {% for view in v.views %}
+  <div class="win-scope{% if view.key != v.default_window %} hidden{% endif %}" data-window="{{ view.key }}">
+    {% for o in view.waterfall.origins %}
+    <div class="wf">
+      <div class="wf-head">
+        <h3>{{ o.label }}</h3>
+        <span class="kind">{{ o.incoterm }}</span>
+        <span class="cmp cmp-{{ o.comparability }}">{{ o.comparability_label }}</span>
+        <span class="conf">{{ o.confidence }}</span>
+        <span class="why">{{ o.grade or '' }}</span>
+      </div>
+      {% for step in o.steps %}
+      <div class="wf-row">
+        <span class="lbl">{{ step.label }}</span>
+        <span class="amt">{{ f.usd(step.amount_usd_mt, 2) }}</span>
+        <span class="run">{{ f.usd(step.running_total_usd_mt, 2) }}</span>
+        <span class="wf-basis">
+          {{ step.basis }}
+          {%- if step.assumption_id %} · entered by {{ step.entered_by }} on {{ step.entered_at }}, expires {{ step.expires_on }} ({{ step.assumption_id }}){% endif %}
+        </span>
+      </div>
+      {% endfor %}
+      {% for b in o.blockers %}
+      <div class="wf-missing">
+        <strong>blocked:</strong> {{ b.message }}
+        {% if b.remedy %}<br><code>{{ b.remedy }}</code>{% endif %}
+      </div>
+      {% endfor %}
+      {% if o.landed_usd_mt is not none %}
+      <div class="wf-row total">
+        <span class="lbl">Landed {{ view.decision.destination }}, duty paid</span>
+        <span class="amt">{{ f.usd(o.landed_usd_mt, 2) }}</span>
+        <span class="run"></span>
+      </div>
+      {% else %}
+      <div class="wf-row total">
+        <span class="lbl">Landed — not computed</span>
+        <span class="amt muted">n/a</span>
+        <span class="run"></span>
+        <span class="wf-basis">
+          A partial waterfall does not produce a partial total: it would be cheaper
+          than a complete one and would look like a finding.
+        </span>
+      </div>
+      {% endif %}
+      {% for note in o.notes %}<div class="caption">{{ note }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+    <div class="caption">
+      Method v{{ view.waterfall.method_version }} · assumption set {{ view.waterfall.assumption_set_id }}.
+      Duty is charged on the CIF value and VAT on the duty-paid value, so the order
+      of these rows is part of the calculation.
+    </div>
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 03 -#}
+  {% elif s.id == 'fob' %}
+  {% for view in v.views %}
+  {% set b = view.fob %}
+  <div class="win-scope{% if view.key != v.default_window %} hidden{% endif %}" data-window="{{ view.key }}">
+    <div class="alert alert-info">{{ b.caveat }}</div>
+    {% if b.rows %}
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead><tr><th>#</th><th>Origin</th><th>Terms</th><th>Window</th><th class="num">FOB equivalent</th><th>Kind</th><th>Observed</th></tr></thead>
+      <tbody>
+        {% for r in b.rows %}
+        <tr>
+          <td class="strong">{{ r.rank }}</td>
+          <td>{{ r.label }}</td>
+          <td>{{ r.incoterm }} → FOB vessel</td>
+          <td>{{ r.shipment_window or '—' }}</td>
+          <td class="num strong">{{ f.usd(r.fob_usd_mt) }}</td>
+          <td><span class="kind">{{ r.quote_kind|replace('_',' ') }}</span></td>
+          <td class="num">{{ r.observation_date }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if b.advantage_usd_mt is not none %}
+    <div class="caption">
+      Cheapest FOB-equivalent leads the next by {{ f.usd(b.advantage_usd_mt) }}/MT
+      ({{ '%.2f'|format(b.advantage_pct) }}%) — before any ocean leg.
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state state-empty">
+      <span class="es-label">no data</span>
+      No origin can be stated FOB-vessel for {{ view.decision.window }}: each one either
+      publishes no shipment window, is quoting a different one, or has no costed path
+      from its own delivery term to FOB vessel.
+    </div>
+    {% endif %}
+
+    {% if b.excluded %}
+    <div class="caption" style="margin-top:12px"><strong>Not on this board:</strong></div>
+    {% for r in b.excluded %}
+    <div class="caption">
+      {{ r.label }} — <span class="cmp cmp-{{ r.comparability }}">{{ r.comparability_label }}</span>
+      {{ r.comparability_explanation or '' }}
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 04 -#}
+  {% elif s.id == 'sensitivity' %}
+  {% for view in v.views %}
+  {% set sv = view.sensitivity %}
+  <div class="win-scope{% if view.key != v.default_window %} hidden{% endif %}" data-window="{{ view.key }}">
+    {% if sv.breakeven %}
+    <div class="verdict">
+      <div class="verdict-lead">
+        {{ f.usd(sv.breakeven.move_usd_mt) }}<span class="unit">/MT of freight</span>
+      </div>
+      <div class="verdict-sub">
+        is what it would take for <strong>{{ sv.breakeven.origin }}</strong> to lose first
+        place to <strong>{{ sv.breakeven.challenger }}</strong>, against a current landed
+        advantage of {{ f.usd(sv.breakeven.current_advantage_usd_mt) }}/MT.
+      </div>
+      <div class="caption">{{ sv.breakeven_note }}</div>
+    </div>
+    {% endif %}
+
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead><tr><th>Scenario</th><th>Cheapest</th><th class="num">Advantage</th><th>Effect</th><th>Why this one</th></tr></thead>
+      <tbody>
+        {% for sc in sv.scenarios %}
+        <tr>
+          <td class="strong">{{ sc.scenario.label }}</td>
+          <td>{{ sc.cheapest_name or '—' }}</td>
+          <td class="num">{{ f.usd(sc.advantage_usd_mt) }}</td>
+          <td>
+            {% if not sc.is_decisive %}<span class="cmp cmp-missing_input">no ranking</span>
+            {% elif sc.flips_the_answer %}<span class="cmp cmp-stale">flips</span>
+            {% else %}<span class="cmp cmp-comparable">holds</span>{% endif %}
+          </td>
+          <td class="caption" style="margin:0">{{ sc.scenario.rationale }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if sv.flips %}
+    <div class="alert alert-warn">
+      The answer changes under: {{ sv.flips|join('; ') }}. An origin preference that
+      one ordinary freight or FX move reverses is not a preference — it is a coin toss
+      with a decimal point.
+    </div>
+    {% else %}
+    <div class="caption">
+      Every scenario in the panel is re-run from shocked <em>inputs</em> through the full
+      waterfall, never by adjusting a landed total — a freight rise also raises duty and
+      the VAT charged on top of it.
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 05 -#}
+  {% elif s.id == 'crush' %}
+  <div class="caption">
+    Yields: {{ '%.4f'|format(s.data.yields.oil) }} MT oil and
+    {{ '%.4f'|format(s.data.yields.meal) }} MT meal per MT of beans.
+    {{ s.data.yield_note }}
+  </div>
+  {% for stack in s.data.stacks %}
+  <div class="wf">
+    <div class="wf-head">
+      <h3><a href="{{ root }}{{ stack.href }}" style="color:var(--green);text-decoration:none">{{ stack.market_name }}</a></h3>
+    </div>
+    {% for lv in stack.levels %}
+    <div class="crush-level{% if lv.margin_usd_mt is not none %} ok{% endif %}">
+      <h4>{{ lv.label }}</h4>
+      {% if lv.margin_usd_mt is not none %}
+      <div class="crush-val {{ 'up' if lv.margin_usd_mt > 0 else 'down' }}">{{ f.signed(lv.margin_usd_mt, 2) }} <span style="font-size:12px;color:var(--text-dim)">USD/MT</span></div>
+      <div class="caption">
+        revenue {{ f.usd(lv.revenue_usd_mt, 2) }} − bean {{ f.usd(lv.bean_cost_usd_mt, 2) }}
+        · {{ lv.as_of }}{% if lv.shipment_window %} · shipment {{ lv.shipment_window }}{% endif %}
+        · <span class="conf">{{ lv.confidence }}</span>
+      </div>
+      {% for step in lv.steps %}
+      <div class="wf-row">
+        <span class="lbl">{{ step.label }}</span>
+        <span class="amt">{{ f.usd(step.amount_usd_mt, 2) }}</span>
+        <span class="run">{{ f.usd(step.running_total_usd_mt, 2) }}</span>
+        <span class="wf-basis">{{ step.basis }}{% if step.assumption_id %} · {{ step.assumption_id }}, entered by {{ step.entered_by }}, expires {{ step.expires_on }}{% endif %}</span>
+      </div>
+      {% endfor %}
+      {% if lv.note %}<div class="caption">{{ lv.note }}</div>{% endif %}
+      {% else %}
+      <div class="caption">{{ lv.meaning }}</div>
+      {% for b in lv.blockers %}
+      <div class="empty-state state-empty" style="margin-top:6px">
+        <span class="es-label">not computed</span>
+        {{ b.message }}
+        {% if b.remedy %}<br><code style="font-family:var(--mono);font-size:11px">{{ b.remedy }}</code>{% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 06 -#}
+  {% elif s.id == 'counterparties' %}
+  <div class="caption">{{ s.data.note }} Verification older than {{ s.data.stale_after_days }} days is flagged.</div>
+  <div class="grid grid-3">
+  {% for lane in s.data.lanes %}
+    <div class="mc">
+      <div class="mc-label">{{ lane.origin_iso }} → {{ s.data.destination_iso }}</div>
+      <div class="subhdr" style="margin-top:8px">Sellers at origin</div>
+      {% for c in lane.sellers %}
+      <div class="cp">
+        <div>
+          {{ c.name }}
+          <div class="meta">{{ c.roles|join(' · ') }}{% if c.last_verified %} · verified {{ c.last_verified }}{% endif %}</div>
+        </div>
+        <div>
+          {% if c.lane_evidenced %}<span class="tag tag-lane">lane</span>{% endif %}
+          {% if c.scope == 'global' %}<span class="tag tag-global">global</span>{% endif %}
+          {% if c.stale %}<span class="tag tag-stale">stale</span>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="caption">no entry in the knowledge base for this origin</div>
+      {% endfor %}
+
+      <div class="subhdr" style="margin-top:12px">Terminals</div>
+      {% for c in lane.terminals %}
+      <div class="cp"><div>{{ c.name }}<div class="meta">{{ (c.footprint or '')[:150] }}{% if c.footprint and c.footprint|length > 150 %}…{% endif %}</div></div><div></div></div>
+      {% else %}
+      <div class="caption">no terminal operator recorded for this lane</div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  </div>
+
+  {% if s.data.lanes %}
+  <div class="subhdr" style="margin-top:16px">Buyers at {{ s.data.destination }}</div>
+  {% for c in s.data.lanes[0].buyers %}
+  <div class="cp">
+    <div>{{ c.name }}<div class="meta">{{ c.roles|join(' · ') }}{% if c.last_verified %} · verified {{ c.last_verified }}{% endif %}{% if c.ownership %} · {{ c.ownership[:110] }}{% endif %}</div></div>
+    <div>{% if c.stale %}<span class="tag tag-stale">stale</span>{% endif %}</div>
+  </div>
+  {% else %}
+  <div class="caption">no importer or crusher entry for this destination</div>
+  {% endfor %}
+  {% endif %}
+  <div class="caption" style="margin-top:10px">
+    Full profiles, citations and contacts: <a href="{{ root }}players.html" style="color:var(--green)">Players &rarr;</a>
+  </div>
+
+  {#- ------------------------------------------------------------------ 07 -#}
+  {% elif s.id == 'inputs' %}
+  <div class="grid grid-3">
+    <div class="mc">
+      <div class="mc-label">Assumption set</div>
+      <div class="mc-val" style="font-size:16px;font-family:var(--mono)">{{ s.data.set_id }}</div>
+      <div class="mc-delta muted">{{ s.data.live|length }} live · {{ s.data.expired|length }} expired</div>
+    </div>
+    <div class="mc">
+      <div class="mc-label">Method version</div>
+      <div class="mc-val" style="font-size:16px;font-family:var(--mono)">v{{ s.data.method_version }}</div>
+      <div class="mc-delta muted">component order is part of the arithmetic</div>
+    </div>
+    <div class="mc">
+      <div class="mc-label">Missing inputs</div>
+      <div class="mc-val" style="font-size:16px">{{ s.data.missing_components|length }}</div>
+      <div class="mc-delta muted">{{ s.data.missing_labels|join(', ') or 'none' }}</div>
+    </div>
+  </div>
+
+  {% if s.data.live %}
+  <div class="subhdr">Entered assumptions</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Id</th><th>Component</th><th class="num">Value</th><th>Route</th><th>Window</th><th>Entered by</th><th>Expires</th><th>Confidence</th></tr></thead>
+    <tbody>
+      {% for a in s.data.live %}
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px">{{ a.id }}{% if a.id in s.data.used_ids %} <span class="tag tag-lane">used</span>{% endif %}</td>
+        <td>{{ a.component }}</td>
+        <td class="num">{{ a.value }} {{ a.unit }}{% if a.days %} × {{ a.days }}d{% endif %}</td>
+        <td>{{ a.origin or '*' }} → {{ a.destination or '*' }}</td>
+        <td>{% if a.window %}{{ a.window.start }}..{{ a.window.end }}{% else %}any{% endif %}</td>
+        <td class="caption" style="margin:0">{{ a.entered_by }}</td>
+        <td class="num">{{ a.expires_on }}</td>
+        <td><span class="conf">{{ a.confidence }}</span></td>
+      </tr>
+      <tr><td></td><td colspan="7" class="caption" style="padding-top:0">{{ a.basis }} — source: {{ a.source }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+
+  {% if s.data.lapsing %}
+  <div class="alert alert-warn">
+    Lapsing within 30 days: {{ s.data.lapsing|map(attribute='id')|join(', ') }}.
+    An expired assumption is not replaced by a wider one — the row blocks instead.
+  </div>
+  {% endif %}
+  {% if s.data.expired %}
+  <div class="alert alert-err">
+    Expired and no longer used: {{ s.data.expired|map(attribute='id')|join(', ') }}.
+  </div>
+  {% endif %}
+
+  {% if s.data.missing_components %}
+  <div class="empty-state state-empty">
+    <span class="es-label">not entered</span>
+    {{ s.data.missing_labels|join(', ') }} are absent for this route and window, so every
+    landed total that needs them is blocked. Nothing in this stack can source them for
+    free; entering one is <code style="font-family:var(--mono);font-size:11px">python scripts/enter_assumption.py</code>
+    and the contract is documented in <code style="font-family:var(--mono);font-size:11px">{{ s.data.directory }}README.md</code>.
+  </div>
+  {% endif %}
+
+  <div class="subhdr" style="margin-top:16px">Price lineage</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Origin</th><th>Layer</th><th>Table · key</th><th>Kind</th><th>Observed</th><th>FX</th></tr></thead>
+    <tbody>
+      {% for l in s.data.lineage %}
+      <tr>
+        <td>{% if l.href %}<a href="{{ root }}{{ l.href }}" style="color:var(--green);text-decoration:none">{{ l.origin }}</a>{% else %}{{ l.origin }}{% endif %}</td>
+        <td style="font-family:var(--mono);font-size:11px">{{ l.layer }}</td>
+        <td style="font-family:var(--mono);font-size:11px">{{ l.table }} · {{ l.key }}</td>
+        <td><span class="kind">{{ l.quote_kind|replace('_',' ') }}</span></td>
+        <td class="num">{{ l.observation_date }}</td>
+        <td class="num">{% if l.fx %}{{ l.fx.pair }} {{ '%.6g'|format(l.fx.usd_per_unit) }} ({{ l.fx.observed_on }}){% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="caption">
+    Every local-currency price is converted at that row's <em>own</em> observation date,
+    never at today's rate. Files read: {{ s.data.files|join(', ') }}.
+  </div>
+
+  {#- ------------------------------------------------------------------ 08 -#}
+  {% elif s.id == 'changes' %}
+  <div class="caption">Against the run of {{ s.data.previous_run }}. {{ s.data.note }}</div>
+  {% if s.data.rank_changes %}
+  <div class="subhdr">Ranking</div>
+  {% for c in s.data.rank_changes %}
+  <div class="sig"><span class="badge badge-info">rank</span><span>{{ c.description }}</span></div>
+  {% endfor %}
+  {% else %}
+  <div class="caption">No origin changed position.</div>
+  {% endif %}
+  {% if s.data.input_changes %}
+  <div class="subhdr" style="margin-top:14px">Inputs moved more than {{ f.usd(s.data.threshold, 2) }}/MT</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Origin</th><th>Component</th><th class="num">Was</th><th class="num">Now</th><th class="num">Δ</th><th>Kind</th></tr></thead>
+    <tbody>
+      {% for c in s.data.input_changes %}
+      <tr>
+        <td>{{ c.origin }}</td><td>{{ c.component }}</td>
+        <td class="num">{{ f.usd(c.previous, 2) }}</td>
+        <td class="num">{{ f.usd(c.current, 2) }}</td>
+        <td class="num">{{ f.signed(c.delta, 2) }}</td>
+        <td><span class="cmp {{ 'cmp-comparable' if c.kind == 'market' else 'cmp-window_unknown' }}">{{ c.kind }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="caption">No input moved materially.</div>
+  {% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+
+<div class="footer">
+  All figures in <strong>USD per metric ton</strong>. Landed cost is delivered
+  {{ v.destination.name }}, duty paid, computed by method v{{ v.method_version }} from
+  assumption set {{ v.assumption_set_id }}.
+  Ocean freight and other logistics inputs are <strong>hand-entered</strong>, with an
+  owner and an expiry, and a row blocks rather than defaulting one to zero.
+  Data delayed and provided as-is; not financial advice, and not an offer.
+  <br><br>
+  <a href="{{ root }}index.html">&larr; Daily read</a> ·
+  <a href="{{ root }}players.html">Players</a> ·
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Window selector. Every window was costed at build time (static page), so this
+// is a pure show/hide over pre-rendered sections — never a fetch, and never a
+// control that silently does nothing.
+(() => {
+  const buttons = document.querySelectorAll('.win[data-select]');
+  const scopes = document.querySelectorAll('.win-scope[data-window]');
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const wanted = button.dataset.select;
+      buttons.forEach((other) => other.classList.toggle('active', other === button));
+      scopes.forEach((scope) => scope.classList.toggle('hidden', scope.dataset.window !== wanted));
+    });
+  });
+})();
+</script>
+{% endblock %}

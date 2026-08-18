@@ -8,6 +8,7 @@ module can import them from one place.
 import logging
 import os
 from datetime import date as _date
+from typing import Any
 
 
 # ---------------------------------------------------------------------------
@@ -1292,7 +1293,7 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
 # taken. `policy_blocked` therefore *requires* a `caveat` — enforced at load in
 # app/markets.py, so the spread cannot ship unlabelled.
 # ---------------------------------------------------------------------------
-MARKETS = {
+MARKETS: dict[str, dict[str, Any]] = {
     "cbot": {
         "name": "CBOT",
         "venue": "CME Group / CBOT (Chicago)",
@@ -1926,4 +1927,300 @@ LEDGER_ABSENT_REASONS = {
         "no Nigerian price leg of any kind is ingested, and rows of markets "
         "Nigeria has no trade relationship with would imply one (M12 #161)"
     ),
+}
+
+
+# ---------------------------------------------------------------------------
+# ORIGIN COMPARISON — landed-cost economics (Phase 2)
+#
+# The trader question this registry serves: "for a named shipment window, which
+# origin — United States, Brazil or Argentina — is economically preferable for
+# delivery to a named destination?"
+#
+# Same three rules as MARKETS above, and one more that only applies here:
+#
+# 4. AN ORIGIN LEG NAMES ITS INCOTERM AND ITS CARRIER. Two export offers are
+#    comparable numbers only when they are the same delivery term at the same
+#    kind of loading point. AMS report 3147 quotes CIF onto a *barge* in the
+#    New Orleans area; AgRural and MAGyP quote FOB into a *vessel*. Treating
+#    those as one number understates the US origin by the elevation spread —
+#    always in the same direction, and invisibly. So the term rides on the leg
+#    and `analysis/origins/landed_cost.py` bridges it explicitly, at a cost
+#    somebody entered and signed for.
+#
+# Everything else about a leg — table, date column, value column, unit,
+# quote_kind, FX pair — is READ FROM THE OWNING MARKET'S DESCRIPTOR, exactly as
+# LEDGER_LEGS does. A leg entry carries only what MARKETS cannot say.
+# ---------------------------------------------------------------------------
+
+# Hand-entered cost inputs (ocean freight, elevation, port charges, processing).
+# See analysis/origins/assumptions.py — an entered number with an owner and an
+# expiry beats a fabricated one with neither.
+#
+# MIRROR_ASSUMPTIONS_DIR overrides the location. It exists for the dev loop and
+# for tests — rendering the page against a populated fixture set is the only way
+# to look at the success path on a clone whose real assumptions are (correctly)
+# empty. It is deliberately NOT set anywhere in CI: production reads the
+# committed directory, so a fixture freight number cannot reach a published page.
+ASSUMPTIONS_DIR = os.getenv("MIRROR_ASSUMPTIONS_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "assumptions"
+)
+
+# Bumped whenever the arithmetic or the component order changes. Stored on every
+# ranking, so a historical row can be read against the method that produced it
+# rather than against today's.
+LANDED_COST_METHOD_VERSION = "1.0.0"
+
+# How many days apart the origin quotes in one ranking may be observed before
+# the comparison is refused. Three clears a weekend: Argentina's circular lands
+# same-day, AgRural is same-day, AMS is same-day, but any one of them can miss
+# a session. Beyond that the spread between two origins is measuring the
+# calendar, and the ranking says so instead of publishing it.
+ORIGIN_MAX_OBSERVATION_SPREAD_DAYS = 3
+
+# Pricing locations. `key` is the id used by every assumption's `origin` and
+# `destination` field, so a typo in a freight entry fails to match rather than
+# matching the wrong route.
+ORIGIN_PORTS: dict[str, dict[str, Any]] = {
+    "us_gulf": {
+        "name": "US Gulf (NOLA / Mississippi)",
+        "country": "United States",
+        "country_iso": "US",
+    },
+    "us_pnw": {
+        "name": "US Pacific Northwest (Columbia River)",
+        "country": "United States",
+        "country_iso": "US",
+    },
+    "br_paranagua": {
+        "name": "Paranaguá",
+        "country": "Brazil",
+        "country_iso": "BR",
+    },
+    "ar_up_river": {
+        "name": "Up-river (Rosario / San Lorenzo)",
+        "country": "Argentina",
+        "country_iso": "AR",
+    },
+}
+
+DESTINATION_PORTS: dict[str, dict[str, Any]] = {
+    "cn_north": {
+        "name": "North China (Qingdao / Rizhao / Dalian range)",
+        "country": "China",
+        "country_iso": "CN",
+        "market": "dalian",          # the destination's own market page
+        "players_country": "CN",
+        "note": (
+            "One discharge range, not one berth: Chinese crush capacity is "
+            "concentrated on the northern coast and freight is quoted to the "
+            "range rather than to a named terminal."
+        ),
+    },
+}
+
+# Which origin legs exist, and which are declared-but-unavailable. PNW is
+# listed with no source on purpose: it is a real origin a trader compares
+# against, this stack ingests no PNW price, and the honest rendering of that is
+# a named unavailable row rather than a silently three-origin board.
+ORIGIN_LEGS: dict[str, dict[str, Any]] = {
+    "us_gulf": {
+        "port": "us_gulf",
+        "label": "US Gulf CIF (NOLA barge)",
+        # AMS 3147 is a cash bid for barge-delivered beans at the NOLA area —
+        # one elevation short of being on a vessel. See rule 4 above.
+        "incoterm": "CIF",
+        "carrier": "barge",
+        "market": "cbot",
+        "block": "basis",
+        "key": "Soybeans",
+        # AMS quotes several barge locations and delivery slots on one report
+        # date; the slot IS the shipment window and must not be averaged across.
+        "window_column": "delivery",
+        "window_scheme": "ams_delivery",
+        "contract_column": "futures_month",
+        "grade": "US No. 2 Yellow Soybeans",
+        "hedge_exchange": "cbot",
+        "hedge_code": "ZS",
+    },
+    "us_pnw": {
+        "port": "us_pnw",
+        "label": "US PNW FOB (Columbia River)",
+        "incoterm": "FOB",
+        "carrier": "vessel",
+        "absent_reason": (
+            "no PNW price series is ingested — AMS report 3147 covers Louisiana "
+            "and Texas only, and the PNW export bid tables that exist are behind "
+            "paid feeds. The row is declared rather than dropped: a three-origin "
+            "board that silently omits the PNW reads as a complete comparison"
+        ),
+        "grade": "US No. 2 Yellow Soybeans",
+    },
+    "br_paranagua": {
+        "port": "br_paranagua",
+        "label": "Brazil Paranaguá FOB",
+        "incoterm": "FOB",
+        "carrier": "vessel",
+        "market": "brazil",
+        "block": "basis",
+        "key": "Soybean (AgRural Paranaguá FOB)",
+        # AgRural publishes a port-side FOB level with no shipment period
+        # attached. That absence is data: the row is priced, but it cannot be
+        # said to be priced FOR October, so it is never ranked against one.
+        "window_scheme": "none",
+        "grade": "Brazilian soybeans, contract standard",
+        "hedge_exchange": "cbot",
+        "hedge_code": "ZS",
+    },
+    "ar_up_river": {
+        "port": "ar_up_river",
+        "label": "Argentina official FOB (up-river)",
+        "incoterm": "FOB",
+        "carrier": "vessel",
+        "market": "argentina",
+        "block": "price",
+        "key": "Soybeans",
+        # MAGyP publishes a genuine shipment-window curve: each circular row
+        # carries ship_from/ship_to as YYYY-MM bounds. This is the only origin
+        # here that can answer "which window" from its own data.
+        "window_columns": ("ship_from", "ship_to"),
+        "window_scheme": "magyp_months",
+        "grade": "Argentine soybeans, Ley 21.453 reference quality",
+        "hedge_exchange": "cbot",
+        "hedge_code": "ZS",
+    },
+}
+
+# What has to be paid to turn a leg's own delivery term into FOB-vessel at its
+# own port — the common footing every landed cost is built from. An entry of ()
+# means the term already IS FOB vessel and nothing is owed.
+#
+# Keyed by (incoterm, carrier) rather than by origin: the bridge is a property
+# of the delivery term, so a second CIF-barge origin needs no new code and no
+# new entry.
+INCOTERM_BRIDGE_TO_FOB_VESSEL = {
+    ("FOB", "vessel"): (),
+    # Barge-delivered at NOLA -> loaded into an ocean vessel. The elevation
+    # spread is real, non-trivial (trade press puts it in the tens of dollars
+    # per tonne) and published nowhere free, so it is an entered assumption and
+    # its absence blocks the US row rather than defaulting to zero.
+    ("CIF", "barge"): ("elevation",),
+    ("FCA", "truck"): ("inland_transport", "origin_port_costs"),
+    ("FCA", "rail"): ("inland_transport", "origin_port_costs"),
+    ("EXW", "gate"): ("inland_transport", "origin_port_costs"),
+}
+
+# The landed stack applied after FOB vessel, in order. Ad-valorem rungs are
+# applied against the running total at their own position — duty on the CIF
+# value, VAT on the duty-paid value — which is why this is a sequence and not
+# a set. Components a route does not incur are entered as an explicit zero
+# assumption, never omitted: "no marine insurance on this route" is a decision
+# somebody made, and it should have their name on it.
+LANDED_STACK = (
+    "ocean_freight",
+    "marine_insurance",
+    "import_duty",
+    "import_vat",
+    "destination_port_costs",
+    "financing",
+    "quality_adjustment",
+)
+
+# Shipment windows the page offers. Generated relative to the run date rather
+# than hard-coded, so the selector never offers a window that has sailed; see
+# analysis/origins/comparison.py:offered_windows.
+ORIGIN_WINDOW_MONTHS_AHEAD = 6
+
+# Physical crush: what has to be entered before a net plant margin exists.
+# Board crush needs nothing (it is three board prices); gross physical crush
+# needs three physical legs; net plant margin needs the conversion cost of
+# actually running the plant, which no free source publishes for any origin.
+NET_PLANT_MARGIN_COMPONENTS = (
+    "processing_cost",
+    "energy_cost",
+    "plant_freight_in",
+    "working_capital",
+)
+
+
+# ---------------------------------------------------------------------------
+# PHYSICAL_CRUSH — the cash-market legs of a crush margin, per market (Phase 2)
+#
+# A board crush is three futures settlements and tells a processor what the
+# *paper* margin is. It is not what the plant earns. The plant buys a physical
+# bean delivered to its gate and sells physical oil and meal ex-works, and the
+# gap between those two margins is the whole reason a crusher has a trading
+# desk.
+#
+# So this is a second, deliberately separate descriptor set. It is NOT derived
+# from MARKETS[...]["crush"], because that entry answers a different question
+# for CBOT (three board legs) than it does for Argentina (three administered
+# FOB legs), and collapsing them would publish a board margin under a physical
+# label on six pages out of eight.
+#
+# Every leg that does not exist says so, by name. "No Brazilian cash oil quote
+# is ingested" is a fact a reader can act on; a crush block that quietly falls
+# back to the board is not.
+# ---------------------------------------------------------------------------
+PHYSICAL_CRUSH: dict[str, dict[str, Any]] = {
+    "argentina": {
+        "label": "Argentina up-river, official FOB legs",
+        # Ley 21.453 minimum export values for all three products on one
+        # circular — the only market on this map where a complete physical
+        # triplet is published daily and free. All three positions were
+        # cross-checked numerically against the labelled datos.gob.ar mirror
+        # (#162), so none of the legs is inferred.
+        "kind": "administered",
+        "table": "argentina_fob",
+        "date_column": "date",
+        "key_column": "product",
+        "value_column": "price_usd_mt",
+        "unit": "usd_per_mt",
+        "layer": "magyp_fob",
+        "quote_kind": "administered",
+        "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
+        # The circular quotes every product for several shipment bands at once,
+        # so the crush has to be struck on a band all three share. Averaging a
+        # product across its bands first produced a margin for a cargo nobody
+        # can ship — 21.2 USD/MT against the 24.1 an actual prompt August cargo
+        # earned on 2026-08-11, from the same rows on the same day.
+        "window_columns": ("ship_from", "ship_to"),
+        "yield_set": "soy_board",
+        "note": (
+            "An administered FOB triplet, not a plant's own buy and sell. It is a "
+            "physical margin in the sense that all three legs are physical goods at "
+            "one location on one day; it is not an offer anybody made."
+        ),
+    },
+    "cbot": {
+        "label": "US Gulf physical legs",
+        "kind": "physical",
+        "absent_reason": (
+            "only the bean leg is ingested. AMS report 3147 gives a CIF NOLA barge "
+            "soybean bid (Layer 20), but no free daily US cash soybean oil or meal "
+            "assessment is ingested by this stack, so the oil and meal legs of a US "
+            "physical crush do not exist here. The board crush above is a paper "
+            "margin and is labelled as one."
+        ),
+        "missing_legs": ("oil", "meal"),
+    },
+    "brazil": {
+        "label": "Paranaguá physical legs",
+        "kind": "physical",
+        "absent_reason": (
+            "the Paranaguá premium trio is an unbuilt scrape (M7 #149) — a bean FOB "
+            "level exists, the oil and meal cash quotes do not"
+        ),
+        "missing_legs": ("oil", "meal"),
+    },
+    "dalian": {
+        "label": "China cash legs",
+        "kind": "physical",
+        "absent_reason": (
+            "DCE settlements are a board, not a cash market. Chinese port-side cash "
+            "bean, oil and meal assessments are commercial products and none is "
+            "ingested here"
+        ),
+        "missing_legs": ("bean", "oil", "meal"),
+    },
 }

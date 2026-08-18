@@ -141,6 +141,56 @@ def _render_players(output_dir: Path, nav: list[dict], **_) -> Path:
     return generate_players_page(output_dir / "players.html", market_nav=nav)
 
 
+def _render_origins(output_dir: Path, nav: list[dict], *, ctx, now, **_) -> Path:
+    """The Phase 2 origin-comparison page.
+
+    Reuses the site context so the eight market pages and this one read one
+    database through one connection — and, more importantly, so a price this
+    page ranks on is the same row the owning market page renders.
+    """
+    from app.origins_page import build_view
+
+    relpath = "origins.html"
+    root = relative_root(relpath)
+    view = build_view(ctx.conn, today=now.date())
+    html = _env().get_template("origins.html.j2").render(
+        origins=view,
+        root=root,
+        market_nav=nav_items_at(nav, root),
+        current_page="origins",
+        current_market=None,
+        day_line=now.strftime("%A %d %B %Y").upper(),
+        generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at_iso=now.isoformat(),
+    )
+    path = _write(output_dir, relpath, html)
+    _archive_origin_rankings(view)
+    return path
+
+
+def _archive_origin_rankings(view: dict) -> None:
+    """Persist what this run published, without letting a write failure kill the page.
+
+    The archive is what makes "what changed since yesterday" possible at all,
+    and it is genuinely unrecoverable later — the assumption set that produced
+    a ranking expires out of the working files by design. But a page that
+    rendered correctly must still be published if the write fails, so this is
+    isolated rather than inline.
+    """
+    from analysis.origins.history import archive_ranking
+
+    for ranking in view.get("rankings", ()):
+        try:
+            archive_ranking(ranking)
+        except Exception:  # noqa: BLE001 — archiving must never fail a render
+            log.warning(
+                "could not archive the %s / %s origin ranking",
+                ranking.destination.key,
+                ranking.requested_window.describe(),
+                exc_info=True,
+            )
+
+
 def _render_market(output_dir: Path, nav: list[dict], *, slug: str, markets, tiers, ctx, now) -> Path:
     market = markets[slug]
     tier = tiers[slug]
@@ -182,8 +232,8 @@ def generate_site(
     markets = load_markets()
     tiers = compute_tiers(markets)
     nav = nav_items(tiers, markets=markets)
-    if only and only not in {"headline", "players", *markets}:
-        names = ["headline", "players", *markets]
+    if only and only not in {"headline", "players", "origins", *markets}:
+        names = ["headline", "players", "origins", *markets]
         raise SystemExit(f"--only {only!r} matches no page; known: {', '.join(names)}")
     # One connection and one cache for every market page: eight pages x nine
     # blocks would otherwise re-read the CBOT reference leg eight times.
@@ -192,6 +242,7 @@ def generate_site(
     pages: list[tuple[str, str, callable, dict]] = [
         ("headline", "index.html", _render_headline, {"public_trust_state": public_trust_state}),
         ("players", "players.html", _render_players, {}),
+        ("origins", "origins.html", _render_origins, {"ctx": ctx, "now": now}),
     ]
     for slug, market in markets.items():
         pages.append((
