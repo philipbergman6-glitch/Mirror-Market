@@ -2245,3 +2245,135 @@ PHYSICAL_CRUSH: dict[str, dict[str, Any]] = {
         "missing_legs": ("bean", "oil", "meal"),
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# OPPORTUNITY ENGINE (Phase 4)
+#
+# Turning the Players knowledge base and the ingested market layers into
+# candidate physical business. Every threshold that decides whether something is
+# worth a trader's attention lives here rather than in a rule body, so the
+# answer to "why did this fire" is a number a reader can look up and change.
+#
+# The rules themselves are in analysis/opportunities/rules.py. What is
+# configurable is the *sensitivity*, never the *logic*: a rule that could be
+# switched from "landed advantage" to "price difference" by a config edit would
+# put the one distinction this phase exists to keep behind a YAML key.
+# ---------------------------------------------------------------------------
+
+# Bumped whenever a rule's arithmetic, a score component's formula, or the
+# component weights change. Stored on every detection, so an archived
+# opportunity can be read against the method that produced it.
+OPPORTUNITY_METHOD_VERSION = "1.0.0"
+
+# Where the local, private trader workflow lives: status, owner, notes, contact
+# dates, outcomes. This directory is NEVER read by the public page builder and
+# is gitignored — see data/reference/opportunities/README.md.
+#
+# MIRROR_OPPORTUNITY_DIR overrides it, for the dev loop and for tests, the same
+# reason ASSUMPTIONS_DIR and POSITIONS_DIR carry an override. It is deliberately
+# not set in CI: a fixture note must not be able to reach a rendered page.
+OPPORTUNITY_WORKFLOW_DIR = os.getenv("MIRROR_OPPORTUNITY_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "opportunities"
+)
+
+# Where the *private* render goes. Outside docs/ on purpose: docs/ is what the
+# Pages deploy uploads, so anything carrying a trader's own notes must not be
+# able to land in it by a path mistake. Gitignored.
+OPPORTUNITY_PRIVATE_OUTPUT_DIR = os.getenv("MIRROR_PRIVATE_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "workspace"
+)
+
+# Score component weights. They sum to 1.0 (checked in ScoreCard.__post_init__).
+#
+# Economic attractiveness is deliberately NOT the largest weight. A big number
+# on stale evidence with no counterparty and an unbridged incoterm is the single
+# most common false positive in this domain, and weighting the money above
+# everything else is how a screen fills up with them.
+OPPORTUNITY_SCORE_WEIGHTS: dict[str, float] = {
+    "economic": 0.30,
+    "evidence": 0.20,
+    "freshness": 0.15,
+    "counterparty": 0.15,
+    "feasibility": 0.20,
+}
+
+# The edge, in USD/MT, that scores 100 on economic attractiveness. Above it the
+# component saturates rather than running away: the difference between a 40 and
+# an 80 dollar advantage is not twice as interesting, it is "both are enormous,
+# go and check the inputs".
+OPPORTUNITY_ECONOMIC_FULL_SCALE_USD_MT = 25.0
+
+# Per-rule thresholds and validity horizons. `validity_days` is how long the
+# observation stays meaningful, and it is a property of the SOURCE's cadence,
+# not of the rule's importance: a weekly inspections number is not stale in
+# three days just because prices are.
+OPPORTUNITY_RULES: dict[str, dict[str, Any]] = {
+    "landed_advantage": {
+        "label": "Origin landed advantage",
+        "min_advantage_usd_mt": 5.0,
+        "validity_days": 3,
+        "question": "which origin is cheapest delivered, and by enough to matter",
+    },
+    "destination_flow_shift": {
+        "label": "Destination flow shift",
+        # Share of a week's US inspections going to one destination, against its
+        # own trailing mean. Two sigma on a 26-week baseline: below that a
+        # single large vessel moves the number.
+        "min_z": 2.0,
+        "baseline_weeks": 26,
+        "min_weeks": 12,
+        "min_share": 0.05,
+        "validity_days": 10,
+        "question": "who has started taking cargo they were not taking",
+    },
+    "commitment_shift": {
+        "label": "Export commitment shift",
+        # Outstanding sales (sold, not yet shipped) to one destination against
+        # its own trailing mean. This is forward demand, which is why it is a
+        # separate rule from shipped inspections.
+        "min_z": 2.0,
+        "baseline_weeks": 26,
+        "min_weeks": 12,
+        "min_share": 0.05,
+        "validity_days": 10,
+        "question": "who has bought forward and not yet shipped",
+    },
+    "supply_deficit": {
+        "label": "Buyer-region tight stocks",
+        # Stocks-to-use below its own prior-window low, on PSD. Reuses
+        # analysis/stocks_to_use.py rather than restating the ratio.
+        "validity_days": 40,
+        "question": "which importing region is running its balance sheet thin",
+    },
+    "crush_margin": {
+        "label": "Favourable crush margin",
+        "min_margin_usd_mt": 15.0,
+        "validity_days": 5,
+        "question": "which crusher is earning enough to bid up for beans",
+    },
+    "currency_shift": {
+        "label": "Currency move changes origin competitiveness",
+        # A move in the origin's own currency against the dollar over the
+        # lookback. Five percent in twenty sessions is a real repricing of a
+        # local seller's incentive to ship, not noise.
+        "min_move_pct": 5.0,
+        "lookback_sessions": 20,
+        "validity_days": 5,
+        "question": "whose farmer just got paid more, or less, for the same cargo",
+    },
+}
+
+# How many days past its expiry an opportunity stays visible, marked expired,
+# before it drops off entirely. A screen that silently deletes yesterday's items
+# cannot be checked against yesterday's decisions.
+OPPORTUNITY_EXPIRY_GRACE_DAYS = 7
+
+# Two candidates on the same lane and product from different rules are not
+# duplicates — they are corroboration — but they should be linked rather than
+# read as two independent findings. This is the lane-level grouping key's scope.
+OPPORTUNITY_RELATED_ON = ("product", "origin", "destination")
+
+# Counterparty candidates carried per side. Six is what the origins page uses;
+# beyond that the list stops being a shortlist.
+OPPORTUNITY_COUNTERPARTY_LIMIT = 6

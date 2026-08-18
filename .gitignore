@@ -40,3 +40,15 @@ graphify-out/
 
 # Local pitch materials (public repo — never commit)
 pitch/
+
+# Phase 4 — the private trader workflow and the private page render.
+# The working file (status, owner, notes, contacts, outcomes) never leaves the
+# machine it was written on, and the private edition of the opportunity board is
+# rendered OUTSIDE docs/ so the Pages deploy cannot carry it. The README stays
+# tracked; nothing else here does.
+data/reference/opportunities/*.yml
+data/reference/opportunities/*.yaml
+data/workspace/
+
+# Concurrent-session git worktrees (each is its own checkout, never content)
+.worktrees/

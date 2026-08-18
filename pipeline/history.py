@@ -75,6 +75,14 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # it on" once the day has passed — which is exactly the question section 08
     # of the origins page exists to answer.
     "origin_rankings": ("run_date", "destination", "window_start", "origin"),
+    # Opportunity detections (Phase 4). Snapshot-only for the origin-ranking
+    # reason and one more that is specific to it: an opportunity's ID is derived
+    # from the date it was FIRST detected, so on an ephemeral CI runner without
+    # this CSV every opportunity would be reborn under a new id every morning,
+    # breaking the link to the trader's own workflow file, its age and its
+    # expiry clock. Nothing private is in this table by construction — see
+    # pipeline.store.save_opportunity_detections, which rejects it.
+    "opportunity_detections": ("run_date", "identity"),
     # ESR is fetched for the *current* marketing year only
     # (fetchers/export_sales._current_market_year), so the prior year is never
     # re-requested. At each MY rollover (Sep 1 for soybeans) the outgoing

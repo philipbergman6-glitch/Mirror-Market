@@ -489,6 +489,44 @@ CREATE TABLE IF NOT EXISTS origin_rankings (
 );
 """
 
+# One row per opportunity identity per run (Phase 4).
+#
+# `identity` — not `opportunity_id` — is the join key, and the distinction is
+# load-bearing. The identity is (rule, product, origin, destination, window) and
+# deliberately excludes every number, so the same lane on two consecutive days
+# is ONE opportunity that moved rather than two. The id is derived from the
+# identity plus the *first* date it was seen, which is why this table exists at
+# all: without it a fresh CI database would mint a new id every morning and
+# break the link to the trader's own workflow file, the age, and the expiry
+# clock in one go.
+#
+# Nothing a person typed is stored here. Status, owner, notes, contact dates
+# and outcomes live only in the local workflow directory — see
+# analysis/opportunities/workflow.py and data/reference/opportunities/README.md.
+_CREATE_OPPORTUNITY_DETECTIONS = """
+CREATE TABLE IF NOT EXISTS opportunity_detections (
+    run_date          TEXT NOT NULL,
+    identity          TEXT NOT NULL,
+    opportunity_id    TEXT NOT NULL,
+    rule_id           TEXT NOT NULL,
+    ladder            TEXT NOT NULL,
+    product           TEXT NOT NULL,
+    origin            TEXT,
+    destination       TEXT,
+    window_start      TEXT,
+    first_detected_on TEXT NOT NULL,
+    expires_on        TEXT NOT NULL,
+    confidence        TEXT NOT NULL,
+    composite_score   REAL,
+    blocker_codes     TEXT,
+    score_json        TEXT,
+    snapshot_json     TEXT,
+    method_version    TEXT NOT NULL,
+    generated_at      TEXT NOT NULL,
+    PRIMARY KEY (run_date, identity)
+);
+"""
+
 _CREATE_BRIEFINGS = """
 CREATE TABLE IF NOT EXISTS briefings (
     briefing_date   TEXT    NOT NULL PRIMARY KEY,
@@ -532,6 +570,7 @@ ALL_SCHEMAS = (
     _CREATE_SAGIS_SUPPLY_DEMAND,
     _CREATE_CEC_ESTIMATES,
     _CREATE_ORIGIN_RANKINGS,
+    _CREATE_OPPORTUNITY_DETECTIONS,
     _CREATE_BRIEFINGS,
 )
 
@@ -601,4 +640,10 @@ UNIQUE_INDEXES = (
     "ON origin_rankings (run_date, destination, window_start, origin);",
     "CREATE INDEX IF NOT EXISTS ix_origin_rankings_run_date "
     "ON origin_rankings (run_date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_opportunity_detections_keys "
+    "ON opportunity_detections (run_date, identity);",
+    # The lookup the engine makes once per run: every prior sighting of one
+    # identity, to recover its first-detected date and therefore its stable id.
+    "CREATE INDEX IF NOT EXISTS ix_opportunity_detections_identity "
+    "ON opportunity_detections (identity);",
 )

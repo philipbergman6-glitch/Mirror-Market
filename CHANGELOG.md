@@ -4,6 +4,70 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — Phase 4: opportunity and counterparty engine (2026-08-18)
+
+The players base was a reference document and the market layers were a
+briefing. This run joins them into a screen: `analysis/opportunities/` plus
+`docs/opportunities.html`, answering who might buy or sell what, where, in
+which window, why now, on what evidence, and what to do next. It originates no
+data — every detector reads a table another layer already fills, and every
+counterparty is a researched players-base entry. Nothing is invented.
+
+* **Six deterministic rules, each reusing an existing module.** Landed-origin
+  advantage over a configured threshold (Phase 2's `origins.comparison`), an
+  unusual destination share of inspections, an unusual share of outstanding
+  export commitments, a buyer region whose stocks-to-use has fallen below its
+  own history (`analysis.stocks_to_use`), a favourable origin crush
+  (`origins.crush`), and an FX move that changes an origin's competitiveness.
+  Every rule's threshold, validity window and stated question lives in
+  `config.OPPORTUNITY_RULES`; each detector is isolated, so one raising is
+  reported in the run's coverage rather than blanking the page.
+* **A price difference is not an arbitrage.** Policy, freight, quality, window,
+  liquidity, staleness, our-own-ingest-outage and no-counterparty blockers ride
+  on the row. A hard blocker zeroes feasibility *and* caps the rung, and
+  ranking sorts by rung before composite — so India's genuine +284 USD/MT mandi
+  premium, uncloseable behind the GM import ban, sits in the leads with its
+  caveat instead of heading the board. That caveat is reused verbatim from the
+  market registry's `basis` descriptor rather than restated.
+* **Five scores, shown separately, no single number.** Economic, evidence,
+  freshness, counterparty, feasibility — each 0–100 with a note reproducible
+  from the figures printed next to it, weighted by
+  `config.OPPORTUNITY_SCORE_WEIGHTS` (economics deliberately not on top). One
+  design fault was caught in the demo and fixed: the evidence component read
+  the *row's* confidence, which is already dragged to `provisional` by
+  `inferred` counterparty research — charging one weakness twice and pinning
+  the component at 40 almost everywhere. It now reads the evidence's own
+  confidences.
+* **Private desk workflow, structurally separated.** Status, owner, contact
+  dates, notes, feedback and audit come from gitignored YAML under
+  `data/reference/opportunities/` and render only into
+  `data/workspace/opportunities.html`. Four independent guards: the public
+  serialiser never builds the `workflow` key, `EngineResult.public` drops any
+  row that has one, `save_opportunity_detections` raises on those column names,
+  and the private file is written outside `docs/` and is absent from
+  `trust.site_promotion.expected_site_paths()`. Six sentinel strings in the
+  demo fixture appear in the private edition and in neither the public HTML nor
+  the archived table.
+* **Stable identity and expiry.** `identity_key` carries no number at all, so
+  re-detecting yesterday's lane keeps its id and first-seen date; the new
+  `opportunity_detections` table archives the public projection and
+  round-trips through `data/history/`, which is what makes ids survive CI's
+  empty database. Lapsed rows are re-stamped `expired` and demoted, then listed
+  from the archive as rows rather than re-rendered with stale numbers.
+* **A stated ladder.** market signal → lead → actionable → proposed trade →
+  completed business. Only the first three are detectable; the last two need a
+  human and are private by construction. No routing, no contact channel —
+  the output is a next action for a person.
+* **Feedback is counted, never learned from.** Dismissals and outcomes are
+  reported on the private edition and do not re-weight a rule.
+* Tests: 129 new (`tests/test_opportunity_{domain,signals,rules,scoring,`
+  `registry,workflow}.py`, `tests/test_opportunities_page.py`, shared
+  `tests/opportunity_fixtures.py`), including suppression cases for stale
+  evidence, a policy barrier, unknown freight and incompatible windows, and
+  end-to-end leak checks over both rendered editions. Suite: 2036 passed,
+  5 skipped, 85.6% coverage; ruff clean; the promotion contract passes at 13
+  URLs with the 1440/390 viewport pass.
+
 ## Unreleased — Phase 3 follow-up: closing four stated gaps (2026-08-18)
 
 The Phase 3 write-up listed what the workstation could not do. Four of those

@@ -304,6 +304,24 @@ def read_origin_rankings(destination: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_opportunity_detections(rule_id: str | None = None) -> pd.DataFrame:
+    """Read archived opportunity detections (Phase 4).
+
+    One row per identity per run. ``identity`` — not ``opportunity_id`` — is the
+    stable join key: the id is derived from the identity plus its first-seen
+    date, so grouping by identity is what recovers "when did we first see this".
+
+    The table holds no trader notes, owner, status or outcome by construction;
+    those live only in the local workflow directory.
+    """
+    return _read_table(
+        "opportunity_detections",
+        "rule_id",
+        rule_id,
+        date_cols=("run_date", "first_detected_on", "expires_on", "window_start"),
+    )
+
+
 def read_freshness() -> pd.DataFrame:
     """
     Read data freshness timestamps for all layers.
