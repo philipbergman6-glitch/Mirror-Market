@@ -123,6 +123,19 @@ def _observation_date(df: pd.DataFrame, ticker: str) -> str:
     return stamp.date().isoformat()
 
 
+def _latest_volume(df: pd.DataFrame) -> float | None:
+    """Volume on the leg's last bar, or None when the provider gave none.
+
+    None rather than 0.0: a deferred contract that genuinely did not trade and
+    a provider that simply omitted the field look identical at zero, and the
+    first is a fact about liquidity while the second is a fact about us.
+    """
+    if "Volume" not in df.columns:
+        return None
+    value = df["Volume"].iloc[-1]
+    return None if pd.isna(value) else float(value)
+
+
 def _enforce_single_observation_date(df: pd.DataFrame, commodity: str) -> pd.DataFrame:
     """Keep only the legs observed on the curve's newest observation date.
 
@@ -209,6 +222,15 @@ def fetch_forward_curve(commodity: str, today: date | None = None) -> pd.DataFra
                 "ticker": ticker,
                 "close": float(latest_close),
                 "observation_date": _observation_date(df, ticker),
+                # Per-contract session volume, where the provider gave one.
+                # It was previously discarded, which left the workstation
+                # unable to say anything about which month is liquid — the
+                # question a hedger asks before choosing a hedge month.
+                # Open interest is not published by any source this project
+                # ingests, so the column is written NULL rather than derived
+                # from volume (Phase 3).
+                "volume": _latest_volume(df),
+                "open_interest": None,
             })
 
     if not rows:

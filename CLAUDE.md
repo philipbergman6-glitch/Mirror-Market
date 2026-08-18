@@ -219,10 +219,81 @@ Sets are **fixed, never seasonal**; every ledger is **one good** (the soybean �
 ```bash
 # Generate the whole site locally
 python scripts/generate_site.py
-# One page, for the dev loop (headline | players | <market slug>)
+# One page, for the dev loop (headline | players | origins | workstation | <market slug>)
 python scripts/generate_site.py --only cbot
-# Output: docs/index.html, docs/players.html, docs/markets/<slug>.html
+# Output: docs/index.html, docs/players.html, docs/workstation.html, docs/markets/<slug>.html
 ```
+
+## Futures Workstation (`analysis/futures/`, Phase 3)
+
+The hedging surface: `docs/workstation.html`, built by `app/workstation_page.py`
+from the `analysis/futures/` package. It is the only part of this repo that
+speaks in **named contracts** — everything else works on the continuous
+front-month series `prices` holds, which no hedge can be placed on.
+
+- `domain.py` — the vocabulary, standard library only: `CONTRACT_SPECS` (size,
+  native unit, tick, published expiry rule, first notice rule) for nine
+  products, `NamedContract`, `ContractQuote`, `ContinuousSeries`, the exchange
+  holiday calendar and the business-day arithmetic. Its MT factors are pinned
+  against `pipeline/units.py` by test — one table of densities, not two.
+- `providers.py` — the **only** SQL-aware module here, and the substitution
+  seam: `QuoteProvider` is a Protocol and `SqliteQuoteProvider` its one
+  implementation. An authoritative feed replaces this class and nothing else.
+- `curve.py` / `continuous.py` / `hedge.py` / `scenarios.py` / `ticket.py` /
+  `positions.py` / `events.py` / `options.py` / `alerts.py` — term structure,
+  stitched series, sizing, shocks, the proposal, the entered book, the release
+  calendar, Black-76, and exposure alerts.
+
+Five rules are load-bearing, each enforced by a type or a test rather than by
+reviewer memory:
+
+- **A named contract is not a continuous series.** Different types, neither
+  accepted where the other is expected; `ContinuousSeries.is_hedgeable` is
+  always `False`. Where the stored named-contract history is shorter than
+  `MIN_SESSIONS`, a stitched series is **withheld** rather than padded with the
+  provider's own front month — the silent substitution this phase exists to
+  prevent. The provider series is still shown, labelled `provider_front_month`
+  and carrying "the provider does not publish its roll dates".
+- **Nothing here is a settlement.** Every quote is `PriceType.DELAYED_CLOSE`
+  and `is_settlement_proven` is `False` on all of them. `PriceType.SETTLEMENT`
+  exists for the day an authoritative provider is substituted and is never
+  constructed today. The word "settlement" appears on the page only in denials.
+- **Expiry is a published rule or it is absent.** ZS/ZM/ZL/ZC/ZW use the CBOT
+  grain rule (business day before the 15th), LE the last business day, HE the
+  10th business day. **ICE Sugar No. 11 and Cotton No. 2 are `NOT_ENCODED`** —
+  so they carry no days-to-expiry, no annualised carry, no roll window, no
+  expiry alert, and `hedge_month_candidates` returns nothing for them. The
+  hedge reports `no_hedge_month`; a leg named by hand reports
+  `expiry_not_encoded`, because silence there would read as safety.
+- **A curve is one session, re-checked at read time.** `forward_curve` is keyed
+  `(commodity, contract_month, fetched_date)` and, until this phase, nothing
+  deleted from it — so two runs on one day left the earlier run's legs standing
+  (2026-08-11: seven Soybean legs, six stamped that session and `ZSN27.CBT`
+  undated). Fixed at write time (`_replace_curve_snapshot`) *and* at read time
+  (`_coherence`), because a leftover leg has a valid key and a plausible price.
+  Legs off the newest observation date are dropped and named; the verdict rides
+  on the analysis, and an incoherent curve suppresses the inversion reading in
+  favour of a data alert.
+- **First notice day, not last trade, is the hedger's date.** A merchant long
+  past FND is exposed to delivery, so `roll_alerts` fires on FND and
+  `fnd_inside_pricing_window` warns when the pricing period runs past it.
+
+Volume is captured from yfinance and is `None` — never `0.0` — when absent;
+**open interest is always NULL**, because no ingested source publishes it and a
+zero reads as "nothing open". Likewise there is **no options chain**: no layer
+here carries a strike, a premium or an implied volatility, so `fetch_chain`
+returns `ChainUnavailable` with its reason rather than an empty ladder, and the
+manual Black-76 workflow refuses to run without a named human source for its
+volatility.
+
+**No routing, and no seam for one.** Every ticket carries
+`PROPOSAL — NOT ROUTED` in text, JSON and HTML. Positions come only from a
+YAML document under `data/reference/positions/` or a CSV import — this project
+ingests no account, broker or clearing feed, so a book can only come from the
+user, and a *present but malformed* file raises rather than rendering as an
+empty book. With no book entered the hedge section shows a labelled 1,000 MT
+**reference calculation** so the arithmetic stays inspectable; it says on the
+row that it is not a position.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.

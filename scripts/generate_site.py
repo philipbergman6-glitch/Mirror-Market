@@ -23,6 +23,7 @@ Usage:
     python scripts/generate_site.py                # every page
     python scripts/generate_site.py --only cbot    # one market, for the dev loop
     python scripts/generate_site.py --only headline
+    python scripts/generate_site.py --only workstation
 """
 
 from __future__ import annotations
@@ -191,6 +192,31 @@ def _archive_origin_rankings(view: dict) -> None:
             )
 
 
+def _render_workstation(output_dir: Path, nav: list[dict], *, ctx, now, **_) -> Path:
+    """The Phase 3 futures workstation.
+
+    Shares the site context for the same reason the origins page does: a hedge
+    sized on this page must be sized on the same curve row the CBOT market page
+    renders, and two connections are two snapshots.
+    """
+    from app.workstation_page import build_view
+
+    relpath = "workstation.html"
+    root = relative_root(relpath)
+    view = build_view(ctx.conn, today=now.date(), generated_at=now)
+    html = _env().get_template("workstation.html.j2").render(
+        workstation=view,
+        root=root,
+        market_nav=nav_items_at(nav, root),
+        current_page="workstation",
+        current_market=None,
+        day_line=now.strftime("%A %d %B %Y").upper(),
+        generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at_iso=now.isoformat(),
+    )
+    return _write(output_dir, relpath, html)
+
+
 def _render_market(output_dir: Path, nav: list[dict], *, slug: str, markets, tiers, ctx, now) -> Path:
     market = markets[slug]
     tier = tiers[slug]
@@ -232,8 +258,8 @@ def generate_site(
     markets = load_markets()
     tiers = compute_tiers(markets)
     nav = nav_items(tiers, markets=markets)
-    if only and only not in {"headline", "players", "origins", *markets}:
-        names = ["headline", "players", "origins", *markets]
+    if only and only not in {"headline", "players", "origins", "workstation", *markets}:
+        names = ["headline", "players", "origins", "workstation", *markets]
         raise SystemExit(f"--only {only!r} matches no page; known: {', '.join(names)}")
     # One connection and one cache for every market page: eight pages x nine
     # blocks would otherwise re-read the CBOT reference leg eight times.
@@ -243,6 +269,7 @@ def generate_site(
         ("headline", "index.html", _render_headline, {"public_trust_state": public_trust_state}),
         ("players", "players.html", _render_players, {}),
         ("origins", "origins.html", _render_origins, {"ctx": ctx, "now": now}),
+        ("workstation", "workstation.html", _render_workstation, {"ctx": ctx, "now": now}),
     ]
     for slug, market in markets.items():
         pages.append((

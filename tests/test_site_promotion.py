@@ -73,3 +73,27 @@ def test_contract_rejects_missing_urls_broken_links_and_count_drift():
     assert "missing expected URL: players.html" in verdict.failures
     assert "broken internal link: index.html -> players.html" in verdict.failures
     assert any("source/layer count mismatch" in failure for failure in verdict.failures)
+
+
+def test_every_page_the_masthead_links_to_is_in_the_promotion_contract():
+    """A nav link to a page outside the contract ships a site whose nav 404s.
+
+    The masthead is the authority: it is defined once in ``_base.html.j2`` and
+    every page extends it, so a page reachable from the nav must be verified
+    before upload or a failed build silently publishes a dead link.
+    """
+    import re
+    from pathlib import Path
+
+    base = Path("app/templates/_base.html.j2").read_text(encoding="utf-8")
+    linked = {
+        href.split("/")[-1]
+        for href in re.findall(r'href="\{\{ *nav\.(\w+) *\}\}"', base)
+    }
+    nav_targets = set(re.findall(r'href="(?:\{\{[^}]*\}\})?([\w./-]*\.html)"', base))
+    contract = set(expected_site_paths())
+    for target in nav_targets:
+        assert target.split("/")[-1] in {p.split("/")[-1] for p in contract}, target
+    assert "workstation.html" in contract
+    assert "origins.html" in contract
+    assert linked or nav_targets     # the masthead links to something at all

@@ -92,6 +92,65 @@ edition remains public. After deployment, the same smoke contract reads the
 real Pages URLs; alerting identifies page-generation, contract, deployment,
 and post-deployment failures separately.
 
+### Hedge (`analysis/futures/` + `app/workstation_page.py`)
+
+A second consumer layer beside the briefing and the analyst functions, and the
+only one that speaks in *named contracts*. Everything else in this repo works
+on the continuous front-month series `prices` holds; a hedge cannot, because
+ZSX26 and ZSF27 are different instruments with different termination dates.
+
+```
+analysis/futures/domain.py       vocabulary — specs, contract identity, expiry
+                                 rules, unit conversion (stdlib only, no SQL)
+              ▲
+              │
+analysis/futures/providers.py    the only SQL-aware module here; reads
+                                 forward_curve / prices / currencies and hands
+                                 back NamedContract quotes with a coherence
+                                 verdict and a freshness state
+              ▲
+   ┌──────────┼─────────────┬────────────────┬──────────────┐
+curve.py   continuous.py   hedge.py       positions.py    events.py
+(spreads,  (stitched      (sizing,        (entered book,  (release
+ carry,     series, roll   coverage,       marks, P&L,     calendar
+ percentile) method)       warnings)       limits)         from our
+              │              │                 │           own rows)
+              │        scenarios.py            │
+              │        (futures/basis/FX/      │
+              │         yield shocks)          │
+              │              │                 │
+              │        ticket.py           options.py
+              │        (proposal —         (Black-76 +
+              │         not routed)         no chain)
+              └──────────────┴─────────┬───────┴─────────────┘
+                                       ▼
+                              alerts.py (exposure alerts)
+                                       ▼
+                            app/workstation_page.py  →  docs/workstation.html
+```
+
+Four invariants hold the package together, and each is enforced by a type or a
+test rather than by convention:
+
+* **Named contract ≠ continuous series.** `NamedContract` and `ContinuousSeries`
+  are distinct types, `ContinuousSeries.is_hedgeable` is always `False`, and a
+  stitched series is withheld entirely (never padded with the provider's own
+  front month) when the stored named-contract history is too short.
+* **A price says what kind of price it is.** Everything this stack holds is
+  `PriceType.DELAYED_CLOSE`; `is_settlement_proven` is `False` everywhere, and
+  no surface may call it a settlement. `PriceType.SETTLEMENT` exists only for
+  the day an authoritative provider is substituted at `providers.py`.
+* **Expiry is a published rule or it is absent.** Sugar No. 11 and Cotton No. 2
+  carry `ExpiryConfidence.NOT_ENCODED`: no days-to-expiry, no annualised carry,
+  no roll window, no hedge month — an absence rather than an estimate.
+* **A curve is one session.** The same rule the fetcher applies, re-checked at
+  read time because `forward_curve` can hold legs the fetcher never saw
+  together; incoherent legs are dropped and named, and the verdict travels with
+  the analysis.
+
+The unit rule below still holds: native units in the DB, converted through
+`ContractSpec` — whose factors are pinned against `pipeline/units.py` by test.
+
 ## Module dependency graph
 
 ```
@@ -161,3 +220,6 @@ that's the bug — back it out and convert at render instead.
 | A new briefing section                   | `analysis/briefing/sections/<name>.py` with `format(...)`, then wire into `analysis/briefing/orchestrator.py` |
 | A new dashboard page                     | New analyst function in `analysis/soy_analytics.py` + chart in `app/charts.py` + block in `app/templates/dashboard.html.j2` |
 | A new threshold (RSI level, weather)     | Constant in `config.py` — never inline |
+| A new hedgeable product                  | `CONTRACT_SPECS` entry in `analysis/futures/domain.py` (with its expiry rule, or `None` to leave it un-encoded) + its `config.FORWARD_CURVE_CONTRACTS` months |
+| A new exposure alert                     | A check function in `analysis/futures/alerts.py` + wire into `build_alerts` |
+| A new scheduled release on the calendar  | `EVENT_SOURCES` entry in `analysis/futures/events.py` — only if a layer here ingests it |

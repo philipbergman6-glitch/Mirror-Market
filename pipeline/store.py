@@ -236,6 +236,26 @@ def _migrate_forward_curve_observation_date(conn) -> None:
             logger.warning("Could not add observation_date column to forward_curve: %s", exc)
 
 
+def _migrate_forward_curve_liquidity(conn) -> None:
+    """Add volume / open_interest to forward_curve if absent. Idempotent.
+
+    Both stay NULL on legacy rows. That is the honest backfill: the fetcher
+    discarded volume before Phase 3, and no source here has ever published open
+    interest, so there is nothing to fill them with and a zero would read as a
+    contract that did not trade.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(forward_curve)").fetchall()}
+    except Exception:
+        return
+    for column in ("volume", "open_interest"):
+        if cols and column not in cols:
+            try:
+                conn.execute(f"ALTER TABLE forward_curve ADD COLUMN {column} REAL")
+            except Exception as exc:
+                logger.warning("Could not add %s column to forward_curve: %s", column, exc)
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
@@ -245,6 +265,7 @@ def init_database():
         _migrate_usda_pk(conn)
         _migrate_forward_curve_pk(conn)
         _migrate_forward_curve_observation_date(conn)
+        _migrate_forward_curve_liquidity(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
         _migrate_safex_contract(conn)
@@ -519,12 +540,24 @@ def save_forward_curve(commodity: str, df: pd.DataFrame):
 
     observation_date is the fetcher's — the session the whole curve was read
     at — and is never derived from the clock here.
+
+    A curve **replaces** whatever this commodity already had under the same
+    fetched_date rather than merging into it. INSERT OR REPLACE alone leaves a
+    leg from an earlier run on the same day standing, because the key is
+    (commodity, contract_month, fetched_date) and a leg the newer run did not
+    fetch is never touched. That is not hypothetical: the committed history for
+    2026-08-11 carries seven Soybean legs, six stamped that session by the run
+    that added the current delivery month and ``ZSN27.CBT`` left over from the
+    earlier one, undated. A curve is a snapshot of one moment, so a partial
+    merge of two snapshots is not a curve — and the stale leg is invisible,
+    since it has the right key and a plausible price (Phase 3).
     """
     if df.empty:
         return
     df = df.copy()
     df["commodity"] = commodity
-    df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fetched_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    df["fetched_date"] = fetched_date
     df = _str_cols(df, "contract_month", "label", "ticker")
     # Kept nullable rather than "" — a curve stored without an observation
     # date must read as "never learned", not as a blank date.
@@ -532,13 +565,37 @@ def save_forward_curve(commodity: str, df: pd.DataFrame):
         df["observation_date"].map(lambda v: None if pd.isna(v) else str(v))
         if "observation_date" in df.columns else None
     )
+    # Volume is per-contract and the provider does give it; open interest is
+    # not published by any source this project ingests and is written NULL
+    # rather than zero — "never learned" and "none traded" are different facts.
+    for column in ("volume", "open_interest"):
+        if column not in df.columns:
+            df[column] = None
+    _replace_curve_snapshot(commodity, fetched_date)
     _save(
         "forward_curve",
         df[["commodity", "contract_month", "label", "ticker", "close",
-            "observation_date", "fetched_date"]],
+            "observation_date", "volume", "open_interest", "fetched_date"]],
         ["commodity", "contract_month", "fetched_date"],
         f"forward_curve/{commodity}",
     )
+
+
+def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
+    """Clear this commodity's rows for one fetched_date before rewriting them."""
+    with managed_connection(get_connection()) as conn:
+        cursor = conn.execute(
+            "DELETE FROM forward_curve WHERE commodity = ? AND fetched_date = ?",
+            (commodity, fetched_date),
+        )
+        removed = cursor.rowcount if cursor.rowcount is not None else 0
+        if removed:
+            logger.info(
+                "forward_curve/%s: cleared %d leg(s) already stored for %s before rewriting "
+                "this run's snapshot",
+                commodity, removed, fetched_date,
+            )
+        maybe_sync(conn)
 
 
 def save_dce_futures_data(commodity: str, df: pd.DataFrame):
