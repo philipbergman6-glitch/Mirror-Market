@@ -2377,3 +2377,143 @@ OPPORTUNITY_RELATED_ON = ("product", "origin", "destination")
 # Counterparty candidates carried per side. Six is what the origins page uses;
 # beyond that the list stops being a shortlist.
 OPPORTUNITY_COUNTERPARTY_LIMIT = 6
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — the trader validation trial
+#
+# A 30-trading-day shadow trial measuring one thing: does Mirror Market reduce
+# a professional soy trader's reliance on an external terminal, a broker call or
+# a spreadsheet, WITHOUT increasing decision risk. Both halves matter. A tool
+# that answers everything and is wrong twice is worse than one that answers half
+# and says so.
+#
+# What is configurable here is the *protocol*: the window, the thresholds a
+# go/no-go is read against, and where the records live. What is NOT configurable
+# is whether a record may be published — that is structural (analysis/trial/
+# sanitize.py) for the same reason the opportunity workflow's boundary is.
+# ---------------------------------------------------------------------------
+
+# Bumped whenever the session-record schema, a metric's formula, or a decision
+# threshold changes. Stamped on every captured session, so a result recorded in
+# week 1 can be read against the protocol that was in force when it was taken.
+TRIAL_PROTOCOL_VERSION = "1.0.0"
+
+# The trial window, in *trading* days — weekends and CBOT holidays do not count,
+# because a session on a day the board is shut measures nothing.
+TRIAL_WINDOW_TRADING_DAYS = 30
+
+# The minimum number of independent traders. Two is the floor stated in the
+# brief; one trader's preference is a taste, not a finding.
+TRIAL_MIN_TRADERS = 2
+
+# Where the private trial records live: trader ids, session notes, decisions,
+# counterparties, and every commercial judgement made during the window. This
+# directory is gitignored and is NEVER read by any builder that writes into
+# docs/ — see data/reference/trial/README.md.
+#
+# MIRROR_TRIAL_DIR overrides it, for the dev loop and for tests, the same reason
+# OPPORTUNITY_WORKFLOW_DIR and POSITIONS_DIR carry an override. It is
+# deliberately not set in CI: a fixture session must not be able to reach a
+# rendered page or a published metric.
+TRIAL_RECORD_DIR = os.getenv("MIRROR_TRIAL_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "trial"
+)
+
+# Where the private trial dashboard is rendered. Outside docs/ on purpose, and
+# for the same reason the private opportunity edition is: docs/ is what the
+# Pages deploy uploads, so anything carrying a trader's own words must not be
+# able to land in it by a path mistake. Gitignored.
+TRIAL_PRIVATE_OUTPUT_DIR = os.getenv("MIRROR_TRIAL_PRIVATE_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "workspace", "trial"
+)
+
+# Trader confidence is recorded on a 1-5 scale. It is an ordinal opinion, not a
+# measurement, and is reported as a median and a distribution — never a mean,
+# which would invent a precision the scale does not carry.
+TRIAL_CONFIDENCE_SCALE = (1, 2, 3, 4, 5)
+
+# Decision thresholds. These are read by analysis/trial/review.py to produce the
+# go / no-go recommendation, and they are stated here rather than in the rule
+# body so that the answer to "why did it say no-go" is a number a reader can
+# look up — and so that moving a goalpost is a visible diff.
+#
+# `go` is the bar for recommending broader use. `no_go` is the bar below which
+# broader use is recommended against. Between them is `hold` — extend the trial,
+# fix what the issues log names, and re-measure. Three outcomes, because a
+# binary forces a verdict the evidence may not support.
+TRIAL_DECISION_THRESHOLDS: dict[str, dict[str, float]] = {
+    # Share of started sessions that reached a decision or output.
+    "task_completion_rate": {"go": 0.90, "no_go": 0.70},
+    # External lookups per completed task. The headline number of the whole
+    # trial: it is the reduction in terminal reliance, measured.
+    "external_lookups_per_task": {"go": 1.0, "no_go": 2.5},
+    # Share of sessions in which the trader hit a number that was wrong or past
+    # its own cadence without the page saying so. This is the risk half, and its
+    # bar is deliberately the strictest on the board.
+    "wrong_or_stale_rate": {"go": 0.02, "no_go": 0.10},
+    # Alerts that fired on nothing, or failed to fire on something.
+    "false_alert_rate": {"go": 0.05, "no_go": 0.20},
+    "missed_alert_rate": {"go": 0.05, "no_go": 0.20},
+    # Would the trader act on the output, unaided.
+    "would_act_rate": {"go": 0.75, "no_go": 0.50},
+    # Median trader confidence, 1-5.
+    "median_confidence": {"go": 4.0, "no_go": 3.0},
+    # Share of the 30 windows in which the promoted edition was the day's, and
+    # every critical source was inside its own cadence budget.
+    "deployment_reliability": {"go": 0.95, "no_go": 0.85},
+    "critical_source_availability": {"go": 0.95, "no_go": 0.85},
+}
+
+# Metrics where a SMALLER number is the better one. Kept as its own set rather
+# than a flag inside the threshold dict, because the direction of a metric is a
+# property of the metric, not of the bar it is being read against — and a bar
+# can be moved without changing which way is good.
+TRIAL_LOWER_IS_BETTER = frozenset({
+    "external_lookups_per_task",
+    "wrong_or_stale_rate",
+    "false_alert_rate",
+    "missed_alert_rate",
+})
+
+# A metric with fewer than this many observations reports `insufficient` rather
+# than a rate. Three sessions do not make a completion rate, and a go/no-go read
+# off one is worse than no go/no-go at all.
+TRIAL_MIN_OBSERVATIONS = 10
+
+# The nine rubric dimensions of the final scorecard, each scored 0-5 against the
+# same strict professional rubric the earlier audits used. Order is the order a
+# trader would ask them in.
+TRIAL_SCORECARD_DIMENSIONS = (
+    "precision",
+    "accuracy",
+    "reliability",
+    "timeliness",
+    "physical_usefulness",
+    "futures_usefulness",
+    "opportunity_usefulness",
+    "ux",
+    "trader_trust",
+)
+
+
+# The layers a soy trader's daily decisions actually rest on. Availability is
+# measured against THIS set rather than all 27, because a CEC release slipping a
+# week is not the same event as the CBOT board going dark, and averaging them
+# produces an availability number that stays green through an outage that
+# matters. main.CRITICAL_LAYERS is a different and narrower list — it decides
+# the pipeline's exit code, not what a trader needs on screen.
+TRIAL_CRITICAL_LAYERS = (
+    "prices",         # the board itself
+    "currencies",     # every non-USD leg is unreadable without it
+    "fred",           # the dollar, and the macro frame
+    "forward_curve",  # nothing can be hedged off a continuous series
+    "export_sales",   # the demand side of every China question
+    "psd",            # the balance sheet behind stocks-to-use
+    "weather",        # the supply risk the board prices first
+    "dce",            # the destination market
+    "gulf_bids",      # US origin, physical
+    "agrural",        # Brazil origin, physical
+    "magyp_fob",      # Argentina origin, physical
+    "cepea",          # Brazil domestic, the basis leg
+)
