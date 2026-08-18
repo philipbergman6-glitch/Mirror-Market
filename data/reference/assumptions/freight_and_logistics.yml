@@ -1,0 +1,55 @@
+# Ocean freight, elevation, port costs, financing and quality differentials.
+#
+# DELIBERATELY EMPTY. Nothing in this stack can source these for free, and a
+# plausible default here would silently decide which origin the page
+# recommends — always in the same direction, and never looking like an error.
+#
+# The origin comparison therefore opens blocked on a fresh clone, names each
+# missing input, and prints the command that supplies it. That is the designed
+# behaviour: see data/reference/assumptions/README.md and ORIGINS.md.
+#
+# The five inputs this file is for, and why each is missing:
+#
+#   ocean_freight            Panamax/Supramax route assessments are Baltic and
+#                            Platts products. Per origin AND per destination —
+#                            US Gulf and Paranaguá to North China are different
+#                            voyages, and the difference between them is
+#                            routinely larger than the FOB spread the page is
+#                            comparing.
+#
+#   elevation                Barge-to-vessel at the NOLA area. Published
+#                            nowhere free, and required only by the US Gulf leg,
+#                            whose AMS bid is CIF onto a barge rather than FOB
+#                            into a vessel. Leaving it at zero would make the US
+#                            structurally cheapest every single day.
+#
+#   destination_port_costs   Discharge, handling and storage at the destination
+#                            range.
+#
+#   financing                Rate and carry days. Both depend on the buyer's own
+#                            credit and shipment terms, so there is no
+#                            market-wide number to enter — only yours.
+#
+#   quality_adjustment       Protein / FM / moisture differential against the
+#                            destination's contract specification. This stack
+#                            ingests no protein series, and the differential is
+#                            NOT zero — US No. 2 Yellow and Brazilian contract
+#                            standard are different specifications and a Chinese
+#                            crusher pays for protein. It is left absent rather
+#                            than entered as zero for exactly that reason: an
+#                            explicit zero here would be a fabricated number
+#                            wearing an assumption's clothes.
+#
+# To fill one:
+#
+#   python scripts/enter_assumption.py \
+#     --component ocean_freight --value 52.0 --unit usd_per_mt \
+#     --origin us_gulf --destination cn_north \
+#     --window 2026-10-01:2026-10-31 \
+#     --basis "Panamax 60kt USG–N.China, broker indication" \
+#     --entered-by you@example.com --expires 2026-09-17 \
+#     --confidence indicative
+#
+# Do not hand-edit this file to add a number you do not have.
+
+[]

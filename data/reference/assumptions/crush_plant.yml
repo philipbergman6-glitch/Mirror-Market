@@ -1,0 +1,40 @@
+# Crush-plant conversion costs — the inputs an estimated net plant margin needs.
+#
+# DELIBERATELY EMPTY, for the same reason freight_and_logistics.yml is: no free
+# source publishes any of these for any origin, and a net plant margin built on
+# invented processing costs is the most confidently wrong number this stack
+# could produce. A crusher reading "+18 USD/MT net" acts on it.
+#
+# `origin` here is a MARKET SLUG (argentina, cbot, brazil, dalian), not a port
+# key — a plant's cost stack belongs to the market whose physical legs it
+# crushes, not to a loading berth.
+#
+# The four rungs, applied to the gross physical crush in this order:
+#
+#   plant_freight_in   usd_per_mt   getting the bean from the pricing point to
+#                                   the plant gate. Zero only if the physical
+#                                   bean leg is already quoted at the gate.
+#   processing_cost    usd_per_mt   hexane, labour, maintenance, depreciation
+#                                   — everything but energy.
+#   energy_cost        usd_per_mt   steam and power, the line that moves with
+#                                   the gas curve and the one worth its own rung.
+#   working_capital    rate_per_annum + days
+#                                   charged on the BEAN COST, not on the margin
+#                                   — the plant is carrying beans, not margin.
+#
+# Only Argentina currently has a gross physical crush to net these against
+# (three administered FOB legs on one circular). The US, Brazil and China have
+# no complete physical triplet ingested, so a net plant margin there is blocked
+# one level further up and entering costs would not unblock it.
+#
+#   python scripts/enter_assumption.py \
+#     --component processing_cost --value 22.0 --unit usd_per_mt \
+#     --origin argentina --basis "own plant, USD/MT of beans crushed" \
+#     --entered-by you@example.com --expires 2026-11-30 --confidence indicative
+#
+#   python scripts/enter_assumption.py \
+#     --component working_capital --value 0.085 --unit rate_per_annum --days 30 \
+#     --origin argentina --basis "own facility cost, 30-day bean carry" \
+#     --entered-by you@example.com --expires 2026-11-30 --confidence indicative
+
+[]

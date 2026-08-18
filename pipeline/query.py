@@ -288,6 +288,22 @@ def read_cec_estimates(commodity: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_origin_rankings(destination: str | None = None) -> pd.DataFrame:
+    """Read archived origin comparisons.
+
+    A ``rank`` of NULL is meaningful: the row was rendered that day but was not
+    comparable (wrong shipment window, missing freight assumption, stale
+    quote). Callers wanting the published ordering filter on ``rank`` being
+    present; callers asking "was this origin offering at all" must not.
+    """
+    return _read_table(
+        "origin_rankings",
+        "destination",
+        destination,
+        date_cols=("run_date", "window_start", "window_end", "observation_date"),
+    )
+
+
 def read_freshness() -> pd.DataFrame:
     """
     Read data freshness timestamps for all layers.

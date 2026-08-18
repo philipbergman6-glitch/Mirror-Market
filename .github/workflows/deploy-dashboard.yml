@@ -31,6 +31,10 @@ on:
       - 'pipeline/**'
       - 'fetchers/**'
       - 'data/reference/players/**'
+      # Entering a freight or port-cost assumption is an *input* change with
+      # no code change behind it — without this, the origins page keeps
+      # rendering blocked until some unrelated commit happens to rebuild it.
+      - 'data/reference/assumptions/**'
       - 'config.py'
       - 'main.py'
 
