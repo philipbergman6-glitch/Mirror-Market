@@ -55,6 +55,24 @@ def _thresholds_table() -> list[str]:
     return lines
 
 
+def _repo_relative(path: str | Path) -> str:
+    """Render a configured directory relative to the checkout, where it is inside one.
+
+    ``config.TRIAL_RECORD_DIR`` is absolutised against the repository root, so
+    quoting it verbatim wrote the generating machine's home directory into a
+    committed document — one that then differed on every other checkout, which
+    is how the "the committed protocol matches what the code generates" check
+    found it. A path deliberately moved outside the repository (via
+    ``MIRROR_TRIAL_DIR``) is printed in full, because there the absolute
+    location *is* the instruction.
+    """
+    target = Path(path)
+    try:
+        return target.resolve().relative_to(Path(__file__).resolve().parents[2]).as_posix()
+    except ValueError:
+        return str(target)
+
+
 def protocol_markdown() -> str:
     """The whole protocol as one markdown document."""
     import config
@@ -64,8 +82,8 @@ def protocol_markdown() -> str:
     min_traders = getattr(config, "TRIAL_MIN_TRADERS", 2)
     min_obs = getattr(config, "TRIAL_MIN_OBSERVATIONS", 10)
     scale = getattr(config, "TRIAL_CONFIDENCE_SCALE", (1, 2, 3, 4, 5))
-    record_dir = getattr(config, "TRIAL_RECORD_DIR", "data/reference/trial")
-    private_dir = getattr(config, "TRIAL_PRIVATE_OUTPUT_DIR", "data/workspace/trial")
+    record_dir = _repo_relative(getattr(config, "TRIAL_RECORD_DIR", "data/reference/trial"))
+    private_dir = _repo_relative(getattr(config, "TRIAL_PRIVATE_OUTPUT_DIR", "data/workspace/trial"))
 
     lines: list[str] = [
         f"# Mirror Market — trader validation protocol v{version}",

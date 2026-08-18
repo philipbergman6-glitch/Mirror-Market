@@ -165,8 +165,8 @@ A correctness issue may not be filed as `minor`. The record type refuses it: if 
 
 - **Do not publish trader names, positions, counterparties, contact notes or commercial decisions.** Anywhere, in any form.
 - Use a **handle**, not a name, in the `trader` field. Three characters minimum. Pick something that is not a substring of ordinary English — the leak guard searches free text for it.
-- Trial records live in `/Users/philipbergman/Documents/Coding_Projects/Mirror-Market/data/reference/trial` and are **gitignored**. They are YAML files, not database rows, specifically because every table in this project round-trips through `data/history/*.csv`, which is committed to a public repository. A trial table would publish trader identity by construction.
-- Generated private output goes to `/Users/philipbergman/Documents/Coding_Projects/Mirror-Market/data/workspace/trial` — outside `docs/`, and absent from the site promotion contract, so it can never reach GitHub Pages.
+- Trial records live in `data/reference/trial` and are **gitignored**. They are YAML files, not database rows, specifically because every table in this project round-trips through `data/history/*.csv`, which is committed to a public repository. A trial table would publish trader identity by construction.
+- Generated private output goes to `data/workspace/trial` — outside `docs/`, and absent from the site promotion contract, so it can never reach GitHub Pages.
 - Anything shared outside the desk is the **aggregate** projection, which does not build the private fields at all and is checked by a recursive guard before it is written.
 - Do not put a position, a cargo, a price you were shown, or a counterparty name in a `summary` field. Those go in `notes` and `evidence`, which never leave the private record.
 

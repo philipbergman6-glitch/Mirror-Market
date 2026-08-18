@@ -86,6 +86,15 @@ def test_the_protocol_states_the_confidentiality_boundary_and_where_records_live
     assert "data/workspace" in DOC
 
 
+def test_the_protocol_quotes_no_path_from_the_machine_that_generated_it() -> None:
+    # The configured directories are absolutised against the repository root, so
+    # quoting them verbatim wrote a home directory into a committed document —
+    # which then differed on every other checkout.
+    assert str(REPO) not in DOC
+    for marker in ("/Users/", "/home/", "C:\\"):
+        assert marker not in DOC, f"{marker} appears in the generated protocol"
+
+
 def test_the_protocol_carries_no_trial_data_of_its_own() -> None:
     # It lives inside docs/, which is safe only because it is instructions. If it
     # ever quoted a session it would be a record inside the published directory.
