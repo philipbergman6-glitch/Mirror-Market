@@ -27,6 +27,7 @@ No network: the workbook bytes are built in-memory.
 from __future__ import annotations
 
 import io
+from contextlib import closing
 
 import pandas as pd
 import pytest
@@ -44,7 +45,9 @@ SERIES_COL = "Rapeseed - EU Moselle"
 SERIES_LABEL = EC_OILSEEDS_SERIES[SERIES_COL]
 
 
-def _workbook(rows: list[tuple], *, eur_block: bool = True) -> bytes:
+def _workbook(
+    rows: list[tuple], *, eur_block: bool = True, title_rows: int = 2
+) -> bytes:
     """Build a workbook shaped like the real one.
 
     Layout mirrors the published file: two title rows, a header row, then the
@@ -66,9 +69,7 @@ def _workbook(rows: list[tuple], *, eur_block: bool = True) -> bytes:
             row += [eur, 507.9]
         data.append(row)
 
-    frame = pd.DataFrame(
-        [[None] * len(header), [None] * len(header), header] + data
-    )
+    frame = pd.DataFrame([[None] * len(header)] * title_rows + [header] + data)
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         frame.to_excel(writer, sheet_name="Data", header=False, index=False)
@@ -144,6 +145,16 @@ def test_parses_usd_and_eur(no_network):
     assert len(df) == 4
     assert df["Date"].is_monotonic_increasing
     assert df["price_usd"].iloc[-1] == pytest.approx(605.52)
+
+
+@pytest.mark.parametrize("title_rows", [1, 2, 4])
+def test_finds_header_when_the_commission_moves_the_title_band(no_network, title_rows):
+    out = ec._parse_world_prices(
+        _workbook(_fresh_rows(), title_rows=title_rows)
+    )
+
+    assert SERIES_LABEL in out
+    assert len(out[SERIES_LABEL]) == 4
 
 
 @pytest.mark.parametrize("sentinel", ["n.q.", "-", ""])
@@ -289,7 +300,7 @@ def test_saved_rows_carry_cadence_and_quote_kind(tmp_path, monkeypatch):
         "price_eur": [530.37, 530.79],
     }))
 
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         rows = conn.execute(
             "SELECT series, Date, price_usd, price_eur, cadence, quote_kind "
             "FROM ec_oilseed_prices ORDER BY Date"
@@ -318,7 +329,7 @@ def test_null_eur_survives_the_round_trip(tmp_path, monkeypatch):
         "price_eur": [None],
     }))
 
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn:
         (eur,) = conn.execute(
             "SELECT price_eur FROM ec_oilseed_prices"
         ).fetchone()

@@ -118,6 +118,7 @@ from trust.repository import (
     TrustRepository,
     TrustRepositoryError,
 )
+from trust.site_promotion import SitePromotionVerdict, expected_site_paths, verify_site_candidate
 
 __all__ = [
     "ArtifactReference",
@@ -190,6 +191,7 @@ __all__ = [
     "Run",
     "RunStatus",
     "SettlementState",
+    "SitePromotionVerdict",
     "RuleFinding",
     "Source",
     "SOY_BENCHMARK_CONTRACTS",
@@ -219,6 +221,8 @@ __all__ = [
     "evaluate_run_status",
     "verify_candidate_edition",
     "verify_durable_candidate_edition",
+    "verify_site_candidate",
+    "expected_site_paths",
     "fx_pair_from_required_pair",
     "generic_candidate_quality_rules",
     "import_v1_history",

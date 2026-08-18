@@ -32,6 +32,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mirror-market-generated-at" content="{{ generated_at_iso|default('') }}">
+<meta name="mirror-market-layer-count" content="{{ production_layers|default([])|length }}">
+<meta name="qa-overflow" content="pending">
 <title>{% block title %}Mirror Market{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,18 +71,19 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .down { color: var(--bearish); }
 .muted { color: var(--text-muted); }
 
-.page { max-width: 1180px; margin: 0 auto; padding: 32px 32px 64px; }
+.page { max-width: 1180px; min-width: 0; margin: 0 auto; padding: 32px 32px 64px; }
 
 /* ---- masthead ---- */
 .masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
-.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; }
+.masthead > *, section, .mc, .chart-box { min-width: 0; }
+.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; overflow-wrap: anywhere; }
 .masthead h1 em { font-style: normal; color: var(--green); }
-.mast-meta { margin-left: auto; text-align: right; font-size: 12px; color: var(--text-muted); }
+.mast-meta { margin-left: auto; max-width: 100%; text-align: right; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
 .mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
 .mast-meta a { color: var(--green); text-decoration: none; font-weight: 500; }
 .mast-meta a:hover { text-decoration: underline; }
 .mast-critical { color: var(--bearish); font-weight: 600; }
-.stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; }
+.stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; overflow-wrap: anywhere; }
 .stale-note b { font-weight: 600; }
 
 /* ---- market nav ----
@@ -92,6 +96,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
    in every tier, or the reader cannot tell the market exists. */
 .market-nav { display: flex; gap: 18px; padding: 9px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; white-space: nowrap; align-items: baseline; }
 .market-nav .mn-label { font-family: var(--display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.market-nav > * { flex: 0 0 auto; }
 .market-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; font-weight: 500; transition: color 0.1s; }
 .market-nav a:hover { color: var(--ink); }
 .market-nav a.current { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--green); padding-bottom: 2px; }
@@ -100,7 +105,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 
 /* ---- index nav (per-page section anchors) ---- */
 .index-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 20px; padding: 10px 0; overflow-x: auto; white-space: nowrap; }
-.index-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; transition: color 0.1s; }
+.index-nav a { flex: 0 0 auto; text-decoration: none; color: var(--text-muted); font-size: 12px; transition: color 0.1s; }
 .index-nav a:hover { color: var(--ink); }
 .index-nav a .no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 4px; }
 
@@ -151,6 +156,8 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .dtable td { padding: 8px 12px; border-bottom: 1px solid var(--rule); }
 .dtable th.num, .dtable td.num { text-align: right; }
 .dtable td.strong { font-weight: 600; }
+.table-scroll { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll > .dtable { min-width: 760px; }
 
 /* ---- quote-kind label (M3 #145 constraint 4) ----
    Board settlements, physical assessments, administered minimums and weekly
@@ -188,7 +195,9 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 @media (max-width: 768px) {
   .page { padding: 20px 16px 48px; }
   .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .masthead h1 { font-size: clamp(32px, 11vw, 42px); }
   .mast-meta { margin-left: 0; text-align: left; }
+  .market-nav .mn-end { margin-left: 0; }
 }
 {% block page_css %}{% endblock %}
 </style>
@@ -219,5 +228,17 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 
 </div>
 {% block scripts %}{% endblock %}
+<script>
+(() => {
+  const report = () => {
+    const root = document.documentElement;
+    const meta = document.querySelector('meta[name="qa-overflow"]');
+    const overflow = Math.max(root.scrollWidth, document.body.scrollWidth) - root.clientWidth;
+    meta.content = overflow > 1 ? `overflow:${overflow}` : 'ok';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(report));
+  else requestAnimationFrame(report);
+})();
+</script>
 </body>
 </html>

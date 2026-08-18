@@ -96,6 +96,24 @@ def test_critical_failures_called_out_in_body(tmp_path, gh_calls):
     assert "Critical layers failed" in body
 
 
+def test_alert_body_distinguishes_failure_classes():
+    body = alerter.build_alert_body({
+        "hard_failures": ["psd", "prices", "weather"],
+        "critical_failures": [],
+        "classifications": {
+            "upstream_failure": ["psd"],
+            "no_publication": ["crop_progress"],
+            "stale_last_known_good": ["prices"],
+            "incomplete_key_coverage": ["weather"],
+        },
+    })
+
+    assert "Upstream or ingest failure" in body
+    assert "Legitimate no-publication" in body
+    assert "Stale last-known-good" in body
+    assert "Incomplete key coverage" in body
+
+
 def test_green_run_closes_open_alert(tmp_path, gh_calls):
     calls, state = gh_calls
     state["open_issue"] = 7

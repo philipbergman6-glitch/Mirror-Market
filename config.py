@@ -66,6 +66,41 @@ LAYER_MIN_KEYS = {
 MAX_FAILED_LAYERS = 5
 RETRY_DELAY = 2         # seconds between retries
 
+# Authoritative operational inventory. The public masthead, About Data table,
+# pipeline summary, and smoke contract all consume this catalog so their
+# denominator cannot drift. Numbered groups 2 and 15 each have an independently
+# runnable sub-layer, hence 27 operational layers across 25 numbered groups.
+PRODUCTION_LAYERS = (
+    ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
+    ("usda", "2", "USDA NASS QuickStats", "Annual", "US production, area and yield"),
+    ("crop_progress", "2b", "USDA NASS QuickStats", "Weekly/seasonal", "US crop progress and condition"),
+    ("fred", "3", "Federal Reserve (FRED)", "Daily/Monthly", "Dollar, CPI, rates and yields"),
+    ("cot", "4", "CFTC", "Weekly", "10 commodities positioning"),
+    ("weather", "5", "Open-Meteo", "Daily + forecast", "19 growing regions"),
+    ("psd", "6", "USDA FAS (PSD)", "Monthly", "10 commodities × 28 countries"),
+    ("currencies", "7", "Yahoo Finance (FX)", "Daily", "10 currency pairs"),
+    ("worldbank", "8", "World Bank Pink Sheet", "Monthly", "Palm and rapeseed oil benchmarks"),
+    ("dce", "9", "AKShare (DCE/CZCE)", "Daily", "Chinese oilseed futures"),
+    ("export_sales", "10", "USDA FAS (Export Sales)", "Weekly", "6 commodities and buyers"),
+    ("forward_curve", "11", "Yahoo Finance (Contracts)", "Daily", "9 commodity forward curves"),
+    ("wasde", "12", "USDA WASDE", "Monthly", "Supply and demand forecasts"),
+    ("eia", "13", "EIA", "Weekly/Monthly", "Ethanol, biodiesel and diesel"),
+    ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
+    ("conab", "15", "CONAB", "Monthly", "Brazil crop estimates"),
+    ("conab_precos", "15b", "CONAB", "Weekly", "Paraná farmgate prices"),
+    ("india_domestic", "16", "data.gov.in (Agmarknet)", "Daily", "MP and Maharashtra mandi soy"),
+    ("cepea", "17", "CEPEA via Notícias Agrícolas", "Daily", "Brazil soy indicators"),
+    ("safex", "18", "JSE SAFEX via Grain SA", "Daily", "South Africa soy futures"),
+    ("agrural", "19", "AgRural", "Daily", "Paranaguá FOB soy"),
+    ("gulf_bids", "20", "USDA AMS", "Daily", "CIF NOLA Gulf bids"),
+    ("magyp_fob", "21", "Argentina MAGyP", "Daily", "Official FOB beans, oil and meal"),
+    ("ec_oilseeds", "22", "European Commission", "Weekly", "EU Moselle rapeseed FOB"),
+    ("sagis", "23", "SAGIS", "Weekly", "South Africa producer deliveries"),
+    ("sagis_smd", "24", "SAGIS", "Monthly", "South Africa soy supply and demand"),
+    ("cec", "25", "Crop Estimates Committee (SA)", "Monthly", "Official crop estimates"),
+)
+PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
+
 # ---------------------------------------------------------------------------
 # Layer 1 — yfinance ticker symbols (data sourced from CME / ICE / CBOT)
 #

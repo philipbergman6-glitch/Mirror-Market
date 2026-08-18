@@ -564,6 +564,23 @@ def test_save_freshness_failed_with_no_prior_row_leaves_last_success_null(patche
     assert row[1] == "failed"
 
 
+@pytest.mark.parametrize("status", ["no_publication", "stale", "incomplete"])
+def test_non_success_freshness_states_preserve_prior_success(patched_db, status):
+    store.save_freshness("layer", rows_fetched=4, status="success")
+    prior = _fetchall(
+        patched_db,
+        "SELECT last_success FROM data_freshness WHERE layer_name = 'layer'",
+    )[0][0]
+
+    store.save_freshness("layer", rows_fetched=0, status=status)
+
+    row = _fetchall(
+        patched_db,
+        "SELECT last_success, status FROM data_freshness WHERE layer_name = 'layer'",
+    )[0]
+    assert row == (prior, status)
+
+
 def test_save_freshness_invalid_status_raises(patched_db):
     with pytest.raises(ValueError, match="status must be"):
         store.save_freshness("x", status="bogus")

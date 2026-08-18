@@ -32,6 +32,7 @@ from config import (
     LAYER_MAX_DATA_AGE_DAYS,
     LAYER_MIN_KEYS,
     MAX_FAILED_LAYERS,
+    PRODUCTION_LAYER_KEYS,
     layer_expected_keys,
     setup_logging,
 )
@@ -138,6 +139,9 @@ DISABLED_LAYERS: frozenset[str] = frozenset()
 # Layers hard-failed during the current run() — transport/parse/shape
 # failures, not quiet empties. Feeds the systemic-outage backstop.
 _HARD_FAILURES: set[str] = set()
+_NO_PUBLICATION: set[str] = set()
+_STALE_LAST_KNOWN_GOOD: set[str] = set()
+_INCOMPLETE_KEY_COVERAGE: set[str] = set()
 
 
 def _mark_failed(
@@ -177,9 +181,10 @@ def _mark_empty(layer: str) -> None:
     to be partial against (#182).
     """
     try:
-        save_freshness(layer, rows_fetched=0, status="success")
+        _NO_PUBLICATION.add(layer)
+        save_freshness(layer, rows_fetched=0, status="no_publication")
     except Exception:
-        logger.exception("Could not record empty-success freshness row for %s", layer)
+        logger.exception("Could not record no-publication freshness row for %s", layer)
 
 
 def _mark_stale(
@@ -193,7 +198,7 @@ def _mark_stale(
 ) -> None:
     """Record a layer that fetched fine but delivered stale data (audit F3).
 
-    Recorded as 'failed' rather than 'success' so last_success is preserved
+    Recorded as 'stale' rather than 'success' so last_success is preserved
     and stops advancing: the layer then ages out of its freshness window on
     its own, and every surface that already reads freshness reports it stale
     without needing to know about this check.
@@ -202,15 +207,16 @@ def _mark_stale(
     one, and the CI alerter should raise it like any other.
     """
     _HARD_FAILURES.add(layer)
+    _STALE_LAST_KNOWN_GOOD.add(layer)
     logger.error(
         "[%s] fetched OK but newest observation is %s (%d days old, budget %d) "
-        "— upstream looks frozen; recording as failed rather than stamping "
+        "— upstream looks frozen; recording stale last-known-good rather than stamping "
         "a fresh last_success",
         layer, latest.strftime("%Y-%m-%d"), age_days, budget,
     )
     try:
         save_freshness(
-            layer, rows_fetched=rows_fetched, status="failed",
+            layer, rows_fetched=rows_fetched, status="stale",
             keys_returned=keys_returned, keys_expected=keys_expected,
         )
     except Exception:
@@ -326,6 +332,27 @@ def _mark_disabled(layer: str) -> None:
         logger.exception("Could not record disabled freshness row for %s", layer)
 
 
+def _mark_incomplete(
+    layer: str,
+    rows_fetched: int = 0,
+    keys_returned: int | None = None,
+    keys_expected: int | None = None,
+) -> None:
+    """Record usable rows from a run that did not meet key coverage."""
+    _HARD_FAILURES.add(layer)
+    _INCOMPLETE_KEY_COVERAGE.add(layer)
+    try:
+        save_freshness(
+            layer,
+            rows_fetched=rows_fetched,
+            status="incomplete",
+            keys_returned=keys_returned,
+            keys_expected=keys_expected,
+        )
+    except Exception:
+        logger.exception("Could not record incomplete freshness row for %s", layer)
+
+
 def _write_pipeline_status(payload: dict) -> None:
     """Write the run summary JSON next to the DB (data/storage/ — gitignored).
 
@@ -368,7 +395,7 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> 
        layer where only 1 of 13 keys returned data is an outage, not a
        success, so below-floor runs are recorded as failed freshness (which
        preserves last_success for staleness display). All-empty is recorded
-       as empty-success only for layers that can legitimately publish
+       as no-publication only for layers that can legitimately publish
        nothing — see _empty_is_failure; critical layers never can.
     2. Recency — LAYER_MAX_DATA_AGE_DAYS (audit F3). Rows arriving is not
        the same as *new* rows arriving; a frozen upstream clears gate 1
@@ -396,10 +423,10 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> 
         return False
     if non_empty < floor:
         logger.warning(
-            "[%s] partial: only %d/%d keys returned data (floor %d) — recording as failed",
+            "[%s] partial: only %d/%d keys returned data (floor %d) — recording incomplete coverage",
             layer, non_empty, expected or len(data), floor,
         )
-        _mark_failed(layer, total_rows, returned, expected)
+        _mark_incomplete(layer, total_rows, returned, expected)
         return False
     if not _check_layer_recency(layer, data, total_rows, returned, expected):
         return False
@@ -484,7 +511,7 @@ def _run_scraper_layer(
 
     empty_fails: a daily quote source that returns zero rows is broken
     (CEPEA, AgRural, Gulf bids); SAFEX legitimately publishes nothing on
-    JSE holidays, so its empty result records as empty-success instead.
+    JSE holidays, so its empty result records as no-publication instead.
 
     Rows arriving is not the same as *new* rows arriving, so the success
     path runs the same LAYER_MAX_DATA_AGE_DAYS recency gate the dict layers
@@ -518,7 +545,7 @@ def _run_scraper_layer(
             # not advance off a run where some keys never answered.
             if result.status == "failed":
                 logger.error("[%s] %s partial: %s", label, desc, result.error)
-                _mark_failed(key, rows_fetched=result.total_rows)
+                _mark_incomplete(key, rows_fetched=result.total_rows)
                 return False
 
             if not _check_layer_recency(key, cleaned, rows_fetched=result.total_rows):
@@ -662,23 +689,16 @@ def _build_dict_layers() -> list[DictLayer]:
 def run() -> int:
     setup_logging()
     _HARD_FAILURES.clear()
+    _NO_PUBLICATION.clear()
+    _STALE_LAST_KNOWN_GOOD.clear()
+    _INCOMPLETE_KEY_COVERAGE.clear()
 
     logger.info("=" * 60)
     logger.info("  Mirror Market — Data Pipeline")
     logger.info("=" * 60)
 
     # Track which layers succeeded vs failed
-    results = {
-        "prices": False, "usda": False, "crop_progress": False,
-        "fred": False, "cot": False, "weather": False,
-        "psd": False, "currencies": False, "worldbank": False,
-        "dce": False, "export_sales": False, "forward_curve": False,
-        "wasde": False, "eia": False, "crush_inspections": False,
-        "conab": False, "conab_precos": False,
-        "india_domestic": False,
-        "cepea": False, "safex": False,
-        "agrural": False, "gulf_bids": False,
-    }
+    results = dict.fromkeys(PRODUCTION_LAYER_KEYS, False)
     # Layers intentionally short-circuited (upstream anti-bot walls) —
     # reported separately so the Failed list only carries real outages.
     disabled = sorted(DISABLED_LAYERS)
@@ -907,27 +927,60 @@ def run() -> int:
 
     # ── Final summary ────────────────────────────────────────────
     succeeded = [name for name, ok in results.items() if ok]
-    failed = [name for name, ok in results.items() if not ok]
+    no_publication = sorted(_NO_PUBLICATION)
+    stale_last_known_good = sorted(_STALE_LAST_KNOWN_GOOD)
+    incomplete_key_coverage = sorted(_INCOMPLETE_KEY_COVERAGE)
+    upstream_failures = sorted(
+        _HARD_FAILURES
+        - _STALE_LAST_KNOWN_GOOD
+        - _INCOMPLETE_KEY_COVERAGE
+        - DISABLED_LAYERS
+    )
+    degraded = sorted(
+        set(upstream_failures) | _STALE_LAST_KNOWN_GOOD | _INCOMPLETE_KEY_COVERAGE
+    )
 
     logger.info("-" * 60)
     if succeeded:
-        logger.info("Succeeded: %s", ", ".join(succeeded))
+        logger.info("Succeeded (%d/%d): %s", len(succeeded), len(results), ", ".join(succeeded))
     if disabled:
-        logger.info("Disabled:  %s", ", ".join(disabled))
-    if failed:
-        logger.warning("Failed:    %s", ", ".join(failed))
+        logger.info("Disabled (%d/%d): %s", len(disabled), len(results), ", ".join(disabled))
+    if no_publication:
+        logger.info("No publication (%d/%d): %s", len(no_publication), len(results), ", ".join(no_publication))
+    if upstream_failures:
+        logger.warning(
+            "Upstream/ingest failure (%d/%d): %s",
+            len(upstream_failures), len(results), ", ".join(upstream_failures),
+        )
+    if stale_last_known_good:
+        logger.warning(
+            "Stale last-known-good (%d/%d): %s",
+            len(stale_last_known_good), len(results), ", ".join(stale_last_known_good),
+        )
+    if incomplete_key_coverage:
+        logger.warning(
+            "Incomplete key coverage (%d/%d): %s",
+            len(incomplete_key_coverage), len(results), ", ".join(incomplete_key_coverage),
+        )
     logger.info("Database saved to: data/storage/mirror_market.db")
 
     # ── Machine-readable run summary ─────────────────────────────
-    # Consumed by scripts/ci_layer_alert.py in CI: hard failures there
-    # open/update a GitHub issue instead of vanishing into the logs.
+    # Consumed by scripts/ci_layer_alert.py in CI: distinct degradation
+    # classes open/update a GitHub issue instead of vanishing into the logs.
     critical_failures = [name for name in CRITICAL_LAYERS if not results.get(name)]
     _write_pipeline_status({
         "succeeded": succeeded,
-        "failed": failed,
+        "failed": degraded,
         "disabled": disabled,
         "hard_failures": sorted(_HARD_FAILURES - DISABLED_LAYERS),
         "critical_failures": critical_failures,
+        "operational_layer_count": len(results),
+        "classifications": {
+            "upstream_failure": upstream_failures,
+            "no_publication": no_publication,
+            "stale_last_known_good": stale_last_known_good,
+            "incomplete_key_coverage": incomplete_key_coverage,
+        },
     })
 
     # ── Exit code ────────────────────────────────────────────────
@@ -942,9 +995,8 @@ def run() -> int:
         return 1
 
     # Systemic-outage backstop: no single non-critical layer fails the run,
-    # but a broad sweep of hard failures (transport/parse — not quiet
-    # empties) means the environment itself is broken (network, DNS,
-    # expired keys) and the deploy should not look green.
+    # but a broad sweep of upstream or data-quality failures means the
+    # environment itself is broken and the deploy should not look green.
     active_failures = sorted(_HARD_FAILURES - DISABLED_LAYERS)
     if len(active_failures) > MAX_FAILED_LAYERS:
         logger.error(

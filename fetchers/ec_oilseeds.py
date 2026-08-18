@@ -66,9 +66,9 @@ _WORLD_PRICES_ANCHOR_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Row index of the header inside the `Data` sheet (0-based, as read with
-# header=None). Rows 0-1 are the title band; row 2 carries the series names.
-_HEADER_ROW = 2
+# The Commission changes the title band without notice. Search this many rows
+# for a configured series name instead of pinning the header to an index.
+_HEADER_SCAN_ROWS = 20
 
 # The workbook lays out the same series twice: a USD/t block, then a spacer,
 # an ECB rate column, another spacer, and an EUR/t block. pandas disambiguates
@@ -168,10 +168,31 @@ def _parse_world_prices(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
         absent — both are failures, never "nothing published this week".
     """
     try:
+        preview = pd.read_excel(
+            io.BytesIO(raw_bytes),
+            sheet_name="Data",
+            header=None,
+            nrows=_HEADER_SCAN_ROWS,
+            engine="openpyxl",
+        )
+        configured = set(EC_OILSEEDS_SERIES)
+        header_rows = [
+            int(index)
+            for index, row in preview.iterrows()
+            if configured.intersection(
+                str(value).strip() for value in row if pd.notna(value)
+            )
+        ]
+        if not header_rows:
+            logger.error(
+                "EC world prices header not found in first %d rows",
+                _HEADER_SCAN_ROWS,
+            )
+            return {}
         df = pd.read_excel(
             io.BytesIO(raw_bytes),
             sheet_name="Data",
-            header=_HEADER_ROW,
+            header=header_rows[0],
             engine="openpyxl",
         )
     except (ValueError, KeyError, OSError, zipfile.BadZipFile) as exc:

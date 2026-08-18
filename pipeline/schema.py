@@ -420,7 +420,7 @@ CREATE TABLE IF NOT EXISTS data_freshness (
     last_success    TEXT,                              -- null if never succeeded
     last_attempt    TEXT,                              -- timestamp of most recent run
     rows_fetched    INTEGER,
-    status          TEXT    NOT NULL DEFAULT 'success', -- 'success' | 'failed'
+    status          TEXT    NOT NULL DEFAULT 'success', -- run-state classification
     -- Key coverage (#182). NULL = never learned (transport failure, or a
     -- layer with no key catalog); 0 = asked and got nothing back.
     keys_returned   INTEGER,
@@ -547,4 +547,3 @@ UNIQUE_INDEXES = (
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
     "ON briefings (briefing_date);",
 )
-

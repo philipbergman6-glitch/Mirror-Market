@@ -75,7 +75,10 @@ def tmp_db(tmp_path: Path) -> sqlite3.Connection:
     for ddl in _SCHEMA_CONSTANTS:
         conn.execute(ddl)
     conn.commit()
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 @pytest.fixture

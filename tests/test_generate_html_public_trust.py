@@ -224,3 +224,9 @@ def _stub_static_generation_dependencies(monkeypatch) -> None:
         "_safe_call",
         lambda _fn, label: "" if label == "briefing" else None,
     )
+
+
+def test_safe_call_keeps_valid_briefing_that_mentions_failed_layers():
+    briefing = "Data freshness\n- PSD: fetch failed; using last known good data"
+
+    assert generate_html._safe_call(lambda: briefing, "briefing") == briefing

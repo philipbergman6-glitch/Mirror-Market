@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -94,7 +95,7 @@ def _run() -> Run:
 
 
 def _cache_rows(cache_path: Path) -> list[tuple[str, str, str]]:
-    with sqlite3.connect(cache_path) as conn:
+    with closing(sqlite3.connect(cache_path)) as conn:
         return conn.execute(
             "SELECT revision_id, value, quality_state FROM trusted_observations ORDER BY revision_id"
         ).fetchall()

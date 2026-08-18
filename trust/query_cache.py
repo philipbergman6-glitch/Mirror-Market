@@ -6,6 +6,7 @@ import os
 import sqlite3
 import tempfile
 from collections.abc import Iterable
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -168,69 +169,87 @@ def _write_cache(
     edition_id: str | None,
     include_legacy: bool,
 ) -> None:
-    with sqlite3.connect(cache_path) as conn:
-        conn.execute("PRAGMA journal_mode=DELETE")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute(
-            """CREATE TABLE cache_metadata (
-                   key TEXT PRIMARY KEY,
-                   value TEXT NOT NULL
-               )"""
+    with closing(sqlite3.connect(cache_path)) as conn, conn:
+        _populate_cache(
+            conn,
+            revisions,
+            mode=mode,
+            edition_id=edition_id,
+            include_legacy=include_legacy,
         )
-        conn.executemany(
-            "INSERT INTO cache_metadata (key, value) VALUES (?, ?)",
-            (
-                ("mode", mode),
-                ("edition_id", edition_id or ""),
-                ("include_legacy", "1" if include_legacy else "0"),
-                ("revision_count", str(len(revisions))),
-            ),
-        )
-        conn.execute(
-            """CREATE TABLE trusted_observations (
-                   revision_id TEXT PRIMARY KEY,
-                   observation_id TEXT NOT NULL,
-                   source_id TEXT NOT NULL,
-                   dataset_id TEXT NOT NULL,
-                   dataset_key TEXT NOT NULL,
-                   effective_date TEXT NOT NULL,
-                   commodity TEXT NOT NULL,
-                   product_form TEXT NOT NULL,
-                   venue TEXT,
-                   location TEXT,
-                   price_type TEXT NOT NULL,
-                   currency TEXT NOT NULL,
-                   unit TEXT NOT NULL,
-                   value TEXT NOT NULL,
-                   open_value TEXT,
-                   high_value TEXT,
-                   low_value TEXT,
-                   close_value TEXT,
-                   volume TEXT,
-                   quality_state TEXT NOT NULL,
-                   public_eligible INTEGER NOT NULL,
-                   ingested_at TEXT NOT NULL,
-                   artifact_id TEXT,
-                   parser_version TEXT,
-                   source_record_id TEXT,
-                   supersedes_revision_id TEXT
-               )"""
-        )
-        conn.executemany(
-            """INSERT INTO trusted_observations (
-                   revision_id, observation_id, source_id, dataset_id, dataset_key,
-                   effective_date, commodity, product_form, venue, location, price_type,
-                   currency, unit, value, open_value, high_value, low_value, close_value,
-                   volume, quality_state, public_eligible, ingested_at, artifact_id,
-                   parser_version, source_record_id, supersedes_revision_id
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            tuple(_revision_row(revision) for revision in revisions),
-        )
-        conn.execute("CREATE INDEX idx_trusted_observations_identity ON trusted_observations (observation_id)")
-        conn.execute(
-            "CREATE INDEX idx_trusted_observations_dataset_date "
-            "ON trusted_observations (dataset_id, effective_date)"
-        )
+
+
+def _populate_cache(
+    conn: sqlite3.Connection,
+    revisions: tuple[ObservationRevision, ...],
+    *,
+    mode: CacheMode,
+    edition_id: str | None,
+    include_legacy: bool,
+) -> None:
+    """Populate an already-owned cache connection inside its transaction."""
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute(
+        """CREATE TABLE cache_metadata (
+               key TEXT PRIMARY KEY,
+               value TEXT NOT NULL
+           )"""
+    )
+    conn.executemany(
+        "INSERT INTO cache_metadata (key, value) VALUES (?, ?)",
+        (
+            ("mode", mode),
+            ("edition_id", edition_id or ""),
+            ("include_legacy", "1" if include_legacy else "0"),
+            ("revision_count", str(len(revisions))),
+        ),
+    )
+    conn.execute(
+        """CREATE TABLE trusted_observations (
+               revision_id TEXT PRIMARY KEY,
+               observation_id TEXT NOT NULL,
+               source_id TEXT NOT NULL,
+               dataset_id TEXT NOT NULL,
+               dataset_key TEXT NOT NULL,
+               effective_date TEXT NOT NULL,
+               commodity TEXT NOT NULL,
+               product_form TEXT NOT NULL,
+               venue TEXT,
+               location TEXT,
+               price_type TEXT NOT NULL,
+               currency TEXT NOT NULL,
+               unit TEXT NOT NULL,
+               value TEXT NOT NULL,
+               open_value TEXT,
+               high_value TEXT,
+               low_value TEXT,
+               close_value TEXT,
+               volume TEXT,
+               quality_state TEXT NOT NULL,
+               public_eligible INTEGER NOT NULL,
+               ingested_at TEXT NOT NULL,
+               artifact_id TEXT,
+               parser_version TEXT,
+               source_record_id TEXT,
+               supersedes_revision_id TEXT
+           )"""
+    )
+    conn.executemany(
+        """INSERT INTO trusted_observations (
+               revision_id, observation_id, source_id, dataset_id, dataset_key,
+               effective_date, commodity, product_form, venue, location, price_type,
+               currency, unit, value, open_value, high_value, low_value, close_value,
+               volume, quality_state, public_eligible, ingested_at, artifact_id,
+               parser_version, source_record_id, supersedes_revision_id
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        tuple(_revision_row(revision) for revision in revisions),
+    )
+    conn.execute("CREATE INDEX idx_trusted_observations_identity ON trusted_observations (observation_id)")
+    conn.execute(
+        "CREATE INDEX idx_trusted_observations_dataset_date "
+        "ON trusted_observations (dataset_id, effective_date)"
+    )
 
 
 def _revision_row(revision: ObservationRevision) -> tuple[object, ...]:

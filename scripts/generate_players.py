@@ -430,6 +430,7 @@ def render_players_html(
     generated_at: str,
     day_line: str,
     market_nav: list[dict] | None = None,
+    generated_at_iso: str = "",
 ) -> str:
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     template = env.get_template("players.html.j2")
@@ -440,6 +441,7 @@ def render_players_html(
         filters=filters,
         contexts=contexts,
         generated_at=generated_at,
+        generated_at_iso=generated_at_iso,
         day_line=day_line,
         total_players=total,
         tier1_players=tier1,
@@ -479,6 +481,7 @@ def generate_players_page(
         filters=build_filter_options(cards),
         contexts=contexts,
         generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at_iso=now.isoformat(),
         day_line=now.strftime("%A · %-d %B %Y"),
         market_nav=market_nav,
     )

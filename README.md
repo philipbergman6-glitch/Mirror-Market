@@ -10,7 +10,7 @@ Answering it properly means checking dozens of places — futures prices, USDA r
 
 It is three things stacked on top of each other:
 
-1. **A data collector** — a Python script that pulls from 25 free public sources every weekday and saves everything into one database.
+1. **A data collector** — a Python script that runs 27 operational data layers (25 numbered source groups plus two independently graded sub-layers) every weekday and saves everything into one database.
 2. **An analysis engine** — code that turns that raw data into plain conclusions: "prices are overbought," "Brazil is undercutting US beans," "funds are crowded into this trade."
 3. **A morning site** — a headline page plus one page per market, rebuilt daily and published free on GitHub Pages, presented in the order a trader would scan it.
 
@@ -20,7 +20,7 @@ The focus is the **soy complex** — soybeans and the two products they're crush
 
 **The headline page**, in the order you'd scan it each morning:
 
-**01 Overnight** — what prices did · **02 Signals** — anything unusual, ranked by urgency · **03 Propagation ledger** — who has repriced, and who has not printed · **04 Crush & Relative Value** — is processing beans profitable, and how does soy compare to rivals · **05 Supply & Demand** — how much the world is growing, buying, and holding · **06 Risk** — currencies, fund positioning, weather · **07 Forward Curves** — what future months cost vs today · **08 Seasonal** — how this year compares to a normal year · **09 Full Briefing** — the whole text report
+**01 Overnight** — what prices did · **02 Signals** — anything unusual, ranked by urgency · **03 Propagation ledger** — who has repriced, and who has not printed · **04 Crush & Relative Value** — is processing beans profitable, and how does soy compare to rivals · **05 Supply & Demand** — how much the world is growing, buying, and holding · **06 Risk** — currencies, fund positioning, weather · **07 Forward Curves** — what future months cost vs today · **08 Seasonal** — how this year compares to a normal year · **09 Technicals** — deep charts · **10 Full Briefing** — the whole text report
 
 **One page per market** — CBOT, Dalian, Brazil, Argentina, India, Europe, South Africa, Nigeria — each built from the same nine blocks (prices, propagation ledger, crush, basis, weather, supply & demand, flows, positioning, data health). The market is a parameter, not a code path: a new market is a registry entry, not new code.
 
@@ -31,7 +31,8 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | # | Source | What it provides |
 |--:|--------|------------------|
 | 1 | Yahoo Finance | Daily prices for 10 commodity futures |
-| 2 | USDA NASS* | US harvest sizes, yields, weekly crop health ratings |
+| 2 | USDA NASS* | US harvest sizes and yields |
+| 2b | USDA NASS* | Weekly/seasonal crop progress and condition |
 | 3 | FRED* | The economic backdrop: dollar strength, inflation, interest rates |
 | 4 | CFTC | What big speculators are betting (published weekly) |
 | 5 | Open-Meteo | Weather in 19 growing regions across 6 continents |
@@ -45,6 +46,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 13 | EIA* | Ethanol, biodiesel, diesel — fuel demand for crops |
 | 14 | USDA* | How many beans got crushed, how many got shipped |
 | 15 | CONAB | Brazil's official crop estimates (their version of the USDA) |
+| 15b | CONAB | Weekly Paraná farmgate prices |
 | 16 | data.gov.in / Agmarknet | India domestic bean prices at the mandis (Madhya Pradesh + Maharashtra) |
 | 17 | CEPEA via Notícias Agrícolas | Brazil farm-gate and Paranaguá soy indicators |
 | 18 | JSE SAFEX via Grain SA | South Africa's soy futures exchange |
@@ -56,7 +58,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 24 | SAGIS | South Africa monthly soybean supply & demand balance (incl. crush volume) |
 | 25 | Crop Estimates Committee (SA) | South Africa's official monthly crop estimate, with its in-season revision path |
 
-\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, and optionally `DATA_GOV_IN_API_KEY`). **20 of 25 sources need no key at all**, and if any one source fails, the rest still run.
+\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, and optionally `DATA_GOV_IN_API_KEY`). **21 of 27 operational layers need no private key**, and if any one contextual source fails, the rest still run and the degradation remains visible.
 
 ## What the Analysis Actually Tells You
 
@@ -76,7 +78,7 @@ In plain terms, each piece answers a question a trader would ask:
 ```bash
 pip install -r requirements.txt
 
-python main.py                      # collect all 25 data sources into the database
+python main.py                      # run all 27 operational layers
 python scripts/generate_site.py     # build the whole site → docs/
 python scripts/generate_site.py --only india    # or one page, for the dev loop
 python -c "from analysis.briefing import generate_briefing; print(generate_briefing())"   # print today's briefing
@@ -91,11 +93,11 @@ Free public data fails in quiet ways. Most of the engineering here is about refu
 - **Unsettled prices are dropped, not stored.** A run landing mid-session would otherwise save an unfinished bar as the day's close. The site prints a gap rather than a wrong close.
 - **Our outage never reads as the market's silence.** When a page is thin because *our* ingest broke, it says so, with the date of the last good run.
 - **A basis says whether trade can actually close it.** India's bean trades ~+66% over Chicago and nothing arbitrages it — GM imports are banned behind a tariff wall — so it renders as a labelled policy spread, never as a tradeable one.
-- **A failure is isolated three ways**: a broken block renders an empty state with its reason, a broken page is replaced by a tombstone carrying the error (never yesterday's stale file), and a broken headline fails the run.
+- **A failure is isolated three ways**: a broken block renders an empty state with its reason, a broken page becomes a diagnostic tombstone only inside the private candidate, and a broken headline fails the candidate. A candidate with a tombstone never replaces the last trustworthy public edition.
 
 ## Deployment
 
-GitHub Actions runs the whole thing unattended: daily (and on every push to `main`) it collects the data, rebuilds the site, and republishes to GitHub Pages. The schedule targets a landing window after Chicago settlement — but correctness never depends on the cron, only on the settlement guard. API keys live in repository secrets. Storage is a local SQLite file; snapshot-only sources (which cannot be re-downloaded) round-trip through CSVs committed to git, so an ephemeral CI runner keeps its history without a cloud database.
+GitHub Actions runs the whole thing unattended: daily (and on every push to `main`) it collects the data and builds a private candidate. The promotion contract requires current soy-complex benchmarks, a generated briefing, aligned required calculations, all expected pages without tombstones, valid timestamps, consistent 27-layer counts, valid internal links, and overflow-free desktop/mobile rendering. Only a passing candidate is uploaded to GitHub Pages; otherwise the previous trustworthy edition remains public. A second smoke test reads the deployed public URLs. The schedule targets a landing window after Chicago settlement, while settlement and freshness guards enforce correctness independently of cron timing. Snapshot-only observations and operational freshness state round-trip through committed CSVs so an ephemeral runner retains both history and the age of the last known good run.
 
 ### Trusted Static Preview
 

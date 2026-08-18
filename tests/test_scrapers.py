@@ -717,6 +717,39 @@ def test_mandi_rate_limit_envelope_is_retried_not_a_schema_error(monkeypatch) ->
     assert len(calls) == 2
 
 
+def test_mandi_wrong_filter_payload_is_retried_before_it_can_pollute_state(
+    monkeypatch,
+) -> None:
+    """A throttled edge has returned a cached page for a different state."""
+    payloads = [
+        _mandi_payload([_mandi_record(state="Uttar Pradesh")], total=1),
+        _mandi_payload([_mandi_record(state="Madhya Pradesh")], total=1),
+    ]
+
+    class _Resp:
+        status_code = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._payload = payload
+
+        def json(self) -> dict:
+            return self._payload
+
+    calls: list[int] = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        calls.append(1)
+        return _Resp(payloads[len(calls) - 1])
+
+    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
+    monkeypatch.setattr("fetchers.mandi.retry_sleep", lambda attempt: None)
+
+    payload = _mandi_fetch_page(0, "Madhya Pradesh")
+
+    assert payload["records"][0]["state"] == "Madhya Pradesh"
+    assert len(calls) == 2
+
+
 def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
     monkeypatch.setattr(
         "fetchers.mandi._fetch_page",

@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 # the committed CSV is the only record. Self-healing layers (prices,
 # weather, COT, PSD, ...) re-download their own history and stay out.
 HISTORY_TABLES: dict[str, tuple[str, ...]] = {
+    # Operational state must survive the ephemeral CI runner so a failed run
+    # can report the real age of its last known good predecessor.
+    "data_freshness": ("layer_name",),
     # AgRural Paranaguá FOB (1 row/day, the Brazil basis source) + CEPEA
     # via Notícias Agrícolas (~10 sessions deep — only recent self-heals).
     "brazil_spot_prices": ("Date", "commodity"),

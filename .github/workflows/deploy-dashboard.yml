@@ -113,6 +113,11 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      generation_outcome: ${{ steps.generate_site.outcome }}
+      promotion_outcome: ${{ steps.smoke_candidate.outcome }}
+      deployment_outcome: ${{ steps.deployment_status.outputs.outcome }}
+      postdeploy_outcome: ${{ steps.smoke_public.outcome }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}
@@ -154,15 +159,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/ci_layer_alert.py
 
-      # The site orchestrator owns the page list (headline, players, eight
-      # market pages) and M8 #150's failure-isolation policy: a failed market
-      # page becomes a tombstone rather than yesterday's file, and any
-      # tombstone exits non-zero. continue-on-error so the deploy still
-      # uploads — the site stays usefully up while CI goes red below.
+      # Render privately. Tombstones remain useful diagnostics inside the
+      # candidate, but an incomplete candidate is never promoted over the
+      # last trustworthy public edition.
       - name: Generate static site
         id: generate_site
         continue-on-error: true
-        run: python scripts/generate_site.py
+        run: python scripts/generate_site.py --output-dir "$RUNNER_TEMP/mirror-market-candidate"
 
       # main.py already exported history, but the briefing is written to the
       # DB by generate_html.py (main.py never generates one) — so today's row
@@ -175,9 +178,10 @@ jobs:
         run: python -c "from pipeline.history import export_history; export_history()"
 
       # Snapshot-only sources (AgRural, SAFEX, forward curve, CONAB,
-      # inspections, Gulf bids, briefings) have no upstream history — the
-      # committed CSVs under data/history/ are the persistence layer. main.py
-      # seeds the empty runner DB from them at start and re-exports at end.
+      # inspections, Gulf bids, briefings) have no upstream history, and
+      # data_freshness preserves last-known-good run state. The committed CSVs
+      # under data/history/ are their persistence layer. main.py seeds the
+      # empty runner DB from them at start and re-exports at end.
       # [skip ci] prevents the data commit from retriggering workflows.
       # !cancelled() because this step now runs after dashboard generation: a
       # failed dashboard build must not also cost us the day's data.
@@ -217,11 +221,8 @@ jobs:
           # The strategy cannot reach beyond data/history: the commit stages
           # nothing else, so no other path can conflict.
           #
-          # --autostash: this step runs after dashboard generation, so the
-          # freshly written (tracked) docs/index.html is an unstaged change
-          # and a plain `pull --rebase` would abort on the dirty tree.
-          # Autostash sets it aside and restores it, keeping the new
-          # dashboard in place for the Pages artifact upload below.
+          # --autostash remains defensive for any generated tracked state;
+          # the site candidate itself lives privately under RUNNER_TEMP.
           for attempt in 1 2 3; do
             if git push origin main; then
               exit 0
@@ -232,21 +233,33 @@ jobs:
           echo "::error::history snapshot push failed after 3 attempts"
           exit 1
 
+      - name: Install Chrome for viewport smoke checks
+        if: ${{ !cancelled() && steps.generate_site.outcome == 'success' }}
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Verify candidate promotion contract
+        id: smoke_candidate
+        if: ${{ !cancelled() && steps.generate_site.outcome == 'success' }}
+        continue-on-error: true
+        run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
+
       - name: Upload Pages artifact
+        if: ${{ steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/
+          path: ${{ runner.temp }}/mirror-market-candidate/
 
       # Pages deploys fail transiently (API blips, deployment-in-progress
       # races) — try up to 3 times, pausing between attempts, before the
       # job fails and the deploy-alert job raises an issue.
       - name: Deploy to GitHub Pages
         id: deployment
+        if: ${{ steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
         uses: actions/deploy-pages@v4
         continue-on-error: true
 
       - name: Wait before deploy retry 1
-        if: steps.deployment.outcome == 'failure'
+        if: ${{ steps.deployment.outcome == 'failure' }}
         run: sleep 30
 
       - name: Deploy to GitHub Pages (retry 1)
@@ -264,15 +277,32 @@ jobs:
         if: steps.deployment.outcome == 'failure' && steps.deployment-retry1.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
-      # A tombstoned page reds the job here, AFTER the upload and deploy —
-      # M8 #150's isolation policy: the site stays usefully up with a dated
-      # error where the broken page was, and CI is loud about it rather than
-      # the failure being invisible behind a green run. `continue-on-error`
-      # on the generate step above is what defers the failure to this point.
-      - name: Fail the run on a page tombstone
-        if: ${{ !cancelled() && steps.generate_site.outcome == 'failure' }}
+      - name: Classify deployment outcome
+        id: deployment_status
+        if: ${{ always() && !cancelled() }}
+        env:
+          FIRST: ${{ steps.deployment.outcome }}
+          SECOND: ${{ steps.deployment-retry1.outcome }}
+          THIRD: ${{ steps.deployment-retry2.outcome }}
         run: |
-          echo "::error::One or more pages were tombstoned — see the 'Generate static site' step."
+          if [[ "$FIRST" == "success" || "$SECOND" == "success" || "$THIRD" == "success" ]]; then
+            echo "outcome=success" >> "$GITHUB_OUTPUT"
+          elif [[ "$FIRST" == "skipped" ]]; then
+            echo "outcome=skipped" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Smoke the deployed public artifact
+        id: smoke_public
+        if: ${{ !cancelled() && (steps.deployment.outcome == 'success' || steps.deployment-retry1.outcome == 'success' || steps.deployment-retry2.outcome == 'success') }}
+        continue-on-error: true
+        run: python scripts/smoke_site.py --url "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}" --browser
+
+      - name: Enforce publication outcome
+        if: ${{ !cancelled() && (steps.generate_site.outcome == 'failure' || steps.smoke_candidate.outcome == 'failure' || steps.smoke_public.outcome == 'failure') }}
+        run: |
+          echo "::error::Candidate generation, promotion, or post-deploy smoke failed. The candidate was not silently accepted."
           exit 1
 
   # Deploy failures must be loud, not buried in a red run nobody opens:
@@ -291,4 +321,11 @@ jobs:
       - name: Raise or clear deploy alert
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/ci_deploy_alert.py "${{ needs.build-deploy.result }}" "${{ needs.check.result }}"
+        run: >-
+          python scripts/ci_deploy_alert.py
+          "${{ needs.build-deploy.result }}"
+          "${{ needs.check.result }}"
+          "${{ needs.build-deploy.outputs.generation_outcome }}"
+          "${{ needs.build-deploy.outputs.promotion_outcome }}"
+          "${{ needs.build-deploy.outputs.deployment_outcome }}"
+          "${{ needs.build-deploy.outputs.postdeploy_outcome }}"

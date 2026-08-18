@@ -55,7 +55,7 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
             coverage = _coverage(row)
             if coverage:
                 returned, expected = coverage
-                level = "WARNING" if status == "failed" else "NOTE"
+                level = "WARNING" if status in {"failed", "stale", "incomplete"} else "NOTE"
                 layer_warnings.append(
                     f"  {level}: {layer} returned {returned} of {expected} keys"
                 )
@@ -63,17 +63,28 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
             # A failed latest attempt means the briefing is showing whatever
             # the last good fetch left behind — flag it even if that data is
             # still inside the staleness window (dashboard path already does).
-            if status == "failed":
+            if status in {"failed", "stale", "incomplete"}:
+                label = {
+                    "failed": "UPSTREAM FAILED",
+                    "stale": "STALE LAST-KNOWN-GOOD",
+                    "incomplete": "INCOMPLETE KEY COVERAGE",
+                }[status]
                 if pd.notna(last):
                     days_old = (now - last).days
                     layer_warnings.append(
-                        f"  WARNING: {layer} last fetch FAILED — "
+                        f"  WARNING: {layer} {label} — "
                         f"showing data from {days_old} days ago"
                     )
                 else:
                     layer_warnings.append(
-                        f"  WARNING: {layer} last fetch FAILED — never succeeded"
+                        f"  WARNING: {layer} {label} — no recorded success"
                     )
+                continue
+
+            if status == "no_publication":
+                layer_warnings.append(
+                    f"  NOTE: {layer} had a legitimate no-publication run"
+                )
                 continue
 
             # Layers publish on different cadences — weekly COT being 6 days

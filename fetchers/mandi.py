@@ -178,8 +178,22 @@ def _fetch_page(offset: int, state: str) -> dict:
             if resp.status_code == 200:
                 payload = resp.json()
                 if "records" in payload or not payload.get("error"):
-                    return payload
-                last_error = f"API error: {payload['error']}"
+                    records = payload.get("records")
+                    if isinstance(records, list):
+                        try:
+                            _assert_filters_honoured(records, state)
+                        except ScraperShapeError as exc:
+                            # The throttled edge has occasionally served a
+                            # cached page for another state after 429s. Keep
+                            # the fail-closed check, but retry at the transport
+                            # boundary before declaring the whole layer bad.
+                            last_error = str(exc)
+                        else:
+                            return payload
+                    else:
+                        return payload
+                if payload.get("error"):
+                    last_error = f"API error: {payload['error']}"
             else:
                 last_error = f"HTTP {resp.status_code}"
             logger.warning(

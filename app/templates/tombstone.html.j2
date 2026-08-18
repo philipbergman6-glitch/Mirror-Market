@@ -2,13 +2,9 @@
 {#
   Page tombstone — M8 #150's middle failure level.
 
-  A page that fails to render is REPLACED by this, never left as yesterday's
-  file. GitHub Pages ships the whole docs/ artifact, so a silently retained
-  page is exactly the stale-serving failure mode #157 caught in the SAFEX
-  scraper: the reader has no way to tell a live page from a frozen one.
-
-  The site stays usefully up and CI goes red after the upload — a tombstone
-  fails the job (see scripts/generate_site.py).
+  A page that fails to render is REPLACED by this inside the private candidate,
+  never left as yesterday's file. The promotion contract rejects every
+  tombstone before upload, leaving the last trustworthy public edition intact.
 #}
 {% block title %}Mirror Market — {{ page_name }} unavailable{% endblock %}
 

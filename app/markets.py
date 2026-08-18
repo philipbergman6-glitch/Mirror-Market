@@ -721,7 +721,7 @@ def _latest_observation(conn, source: Source) -> date | None:
 
 
 def _ingest_status(conn, layer: str) -> str | None:
-    """"our last run of ``layer`` failed" as a printable clause, else None.
+    """Describe an adverse latest ingest verdict as a printable clause.
 
     A block can be missing for two very different reasons, and the page
     prints the reason: **no source exists** for this market (nobody
@@ -733,8 +733,7 @@ def _ingest_status(conn, layer: str) -> str | None:
 
     Age alone cannot tell them apart — a rate-limited layer and a market
     with no source both surface as "no rows". ``data_freshness`` can: it
-    records status='failed' with ``last_success`` held back, which is
-    exactly the state a partial or failed run leaves behind.
+    records the classified run state with ``last_success`` held back.
     """
     try:
         row = conn.execute(
@@ -744,12 +743,17 @@ def _ingest_status(conn, layer: str) -> str | None:
     except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
         log.debug("tier probe: data_freshness unavailable (%s)", exc)
         return None
-    if not row or row[0] != "failed":
+    if not row or row[0] not in {"failed", "stale", "incomplete"}:
         return None
+    state = {
+        "failed": "failed upstream",
+        "stale": "returned stale last-known-good data",
+        "incomplete": "returned incomplete key coverage",
+    }[row[0]]
     last_success = row[1]
     if last_success:
-        return f"our {layer} ingest failed; last good run {str(last_success)[:10]}"
-    return f"our {layer} ingest failed and has never succeeded"
+        return f"our {layer} ingest {state}; last good run {str(last_success)[:10]}"
+    return f"our {layer} ingest {state}; no recorded successful run"
 
 
 def _is_current(conn, source: Source | None, today: date) -> tuple[bool, str]:

@@ -46,8 +46,8 @@ def test_freshness_age_is_non_negative_for_past_timestamp(monkeypatch):
 
     items = generate_html._build_freshness_items()
 
-    assert len(items) == 2
-    for item in items:
+    assert len(items) == 27
+    for item in (item for item in items if item["name"] in {"prices", "fred"}):
         age_str = item["age"]
         assert not age_str.startswith("-"), (
             f"Freshness age for {item['name']!r} was {age_str!r}; "
@@ -69,7 +69,7 @@ def test_freshness_age_handles_aware_and_naive_timestamps(monkeypatch):
     past_utc = datetime.now(timezone.utc) - timedelta(hours=2)
 
     df = pd.DataFrame({
-        "layer_name": ["aware_layer", "naive_layer"],
+        "layer_name": ["prices", "fred"],
         "last_success": [past_utc, past_utc.replace(tzinfo=None)],
         "last_attempt": [past_utc, past_utc.replace(tzinfo=None)],
         "rows_fetched": [1, 1],
@@ -81,12 +81,12 @@ def test_freshness_age_handles_aware_and_naive_timestamps(monkeypatch):
 
     items = generate_html._build_freshness_items()
 
-    assert len(items) == 2
-    for item in items:
+    assert len(items) == 27
+    for item in (item for item in items if item["name"] in {"prices", "fred"}):
         assert not item["age"].startswith("-"), (
             f"{item['name']!r}: age {item['age']!r} is negative — "
             "tz handling regressed for "
-            f"{'aware' if item['name'] == 'aware_layer' else 'naive'} input."
+            f"{'aware' if item['name'] == 'prices' else 'naive'} input."
         )
 
 
@@ -134,8 +134,8 @@ def test_freshness_handles_writer_format_against_non_utc_local_clock(monkeypatch
     monkeypatch.setattr(gh, "datetime", FakeDatetime)
 
     items = gh._build_freshness_items()
-    assert len(items) == 1
-    age_str = items[0]["age"]
+    assert len(items) == 27
+    age_str = next(item for item in items if item["name"] == "prices")["age"]
     assert age_str == "2h ago", (
         f"expected '2h ago' (stored=09:00 UTC, now=11:00 UTC), got {age_str!r}. "
         "If this returned '-3h ago', the reader is using naive local time again."

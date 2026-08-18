@@ -14,7 +14,7 @@
 /* ---- sections ---- */
 section { padding: 26px 0; border-bottom: 1px solid var(--rule); }
 section:last-of-type { border-bottom: none; }
-.sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; cursor: pointer; user-select: none; }
+.sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; cursor: pointer; user-select: none; flex-wrap: wrap; }
 .sec-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
 .sec-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
 .sec-head .why { color: var(--text-dim); font-size: 12px; margin-left: auto; }
@@ -54,7 +54,10 @@ details { background: var(--card); border: 1px solid var(--rule); border-radius:
 details summary { padding: 12px 16px; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
 details summary::before { content: "\25B6"; font-size: 10px; margin-right: 8px; color: var(--text-dim); display: inline-block; transition: transform 0.15s; }
 details[open] summary::before { transform: rotate(90deg); }
-details .det-content { padding: 0 16px 16px; }
+details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; }
+@media (max-width: 768px) {
+  .sec-head .why { flex-basis: 100%; margin-left: 0; overflow-wrap: anywhere; }
+}
 
 /* ---- misc ---- */
 .dl { display: inline-flex; align-items: center; gap: 6px; color: var(--green); text-decoration: none; font-size: 13px; font-weight: 500; margin-right: 16px; }
@@ -106,7 +109,7 @@ details .det-content { padding: 0 16px 16px; }
   {% if command_center %}
   <div class="legs">
     {% for leg in command_center.legs %}
-    <div class="leg">
+    <div class="leg" data-benchmark="{{ leg.name }}" data-as-of="{{ leg.as_of }}">
       <div class="name" style="color: {{ leg.color }}">{{ leg.name }}</div>
       <div class="px num">{{ leg.price }}<small> $/MT</small></div>
       <div class="chg num {{ leg.chg_class }}">{{ leg.daily_chg }} today</div>
@@ -121,7 +124,7 @@ details .det-content { padding: 0 16px 16px; }
   </div>
   <div class="grid grid-4">
     {% for m in command_center.key_metrics %}
-    <div class="mc">
+    <div class="mc"{% if m.label == 'Crush Spread' %} data-derived="crush" data-aligned="{{ 'true' if m.as_of else 'false' }}" data-as-of="{{ m.as_of }}"{% endif %}>
       <div class="mc-label">{{ m.label }}</div>
       <div class="mc-val num {{ m.val_class }}">{{ m.value }}</div>
       <div class="mc-delta {{ m.delta_class }}">{{ m.delta }}</div>
@@ -352,37 +355,16 @@ details .det-content { padding: 0 16px 16px; }
   <div class="sec-head"><span class="sec-no">11</span><h2>About the Data</h2><span class="why">sources · methodology · units</span></div>
 
   <details>
-    <summary>Data Sources (21 Layers)</summary>
+    <summary>Data Sources ({{ production_layers|length }} Operational Layers)</summary>
     <div class="det-content">
     <table class="dtable">
       <thead>
         <tr><th>Layer</th><th>Source</th><th>Frequency</th><th>Coverage</th></tr>
       </thead>
       <tbody>
-        <tr><td>1</td><td>Yahoo Finance (CME/CBOT/ICE)</td><td>Daily</td><td>11 commodity futures</td></tr>
-        <tr><td>2</td><td>USDA NASS QuickStats</td><td>Annual + Weekly</td><td>US soybean production, crop progress</td></tr>
-        <tr><td>3</td><td>Federal Reserve (FRED)</td><td>Daily/Monthly</td><td>Dollar index, CPI, rates, yields</td></tr>
-        <tr><td>4</td><td>CFTC (COT Reports)</td><td>Weekly</td><td>10 commodities positioning</td></tr>
-        <tr><td>5</td><td>Open-Meteo</td><td>Daily + 7d forecast</td><td>24 growing regions, 6 continents</td></tr>
-        <tr><td>6</td><td>USDA FAS (PSD)</td><td>Monthly</td><td>8 commodities x 27 countries</td></tr>
-        <tr><td>7</td><td>Yahoo Finance (FX)</td><td>Daily</td><td>13 currency pairs</td></tr>
-        <tr><td>8</td><td>World Bank Pink Sheet</td><td>Monthly</td><td>Robusta, Palm Oil benchmarks</td></tr>
-        <tr><td>9</td><td>AKShare (DCE)</td><td>Daily</td><td>5 Chinese futures contracts</td></tr>
-        <tr><td>10</td><td>USDA FAS (Export Sales)</td><td>Weekly</td><td>6 commodities, top buyers</td></tr>
-        <tr><td>11</td><td>Yahoo Finance (Contracts)</td><td>Daily</td><td>Forward curves, 10 commodities</td></tr>
-        <tr><td>12</td><td>USDA WASDE</td><td>Monthly</td><td>Supply/demand forecasts</td></tr>
-        <tr><td>13</td><td>EIA</td><td>Weekly/Monthly</td><td>Ethanol, biodiesel, diesel</td></tr>
-        <tr><td>14</td><td>USDA (Crush + Inspections)</td><td>Monthly/Weekly</td><td>Soybean crush, export inspections</td></tr>
-        <tr><td>15</td><td>CONAB</td><td>Monthly + Weekly</td><td>Brazil crop estimates + PR farmgate prices</td></tr>
-        <tr><td>16</td><td>data.gov.in (Agmarknet)</td><td>Daily</td><td>India mandi soybean price (MP median)</td></tr>
-        <tr><td>17</td><td>CEPEA via Notícias Agrícolas</td><td>Daily</td><td>Brazil farm-gate soy indicator</td></tr>
-        <tr><td>18</td><td>JSE SAFEX</td><td>Daily</td><td>South Africa soy prices</td></tr>
-        <tr><td>19</td><td>AgRural</td><td>Daily</td><td>Paranaguá FOB port price</td></tr>
-        <tr><td>20</td><td>USDA AMS</td><td>Daily</td><td>CIF NOLA Gulf export bids</td></tr>
-        <tr><td>21</td><td>MAGyP (Argentina)</td><td>Daily</td><td>Official FOB export values — beans, oil, meal</td></tr>
-        <tr><td>23</td><td>SAGIS (South Africa)</td><td>Weekly</td><td>Producer deliveries into commercial storage — soybeans, sunflower seed</td></tr>
-        <tr><td>24</td><td>SAGIS (South Africa)</td><td>Monthly</td><td>Soybean supply &amp; demand — imports, exports, crush volume, stocks</td></tr>
-        <tr><td>25</td><td>CEC (South Africa)</td><td>Monthly</td><td>Official area and production estimates — soybeans, sunflower seed</td></tr>
+        {% for layer in production_layers %}
+        <tr><td>{{ layer[1] }}</td><td>{{ layer[2] }}</td><td>{{ layer[3] }}</td><td>{{ layer[4] }}</td></tr>
+        {% endfor %}
       </tbody>
     </table>
     </div>
@@ -398,7 +380,7 @@ details .det-content { padding: 0 16px 16px; }
       </thead>
       <tbody>
         {% for item in freshness_items %}
-        <tr>
+        <tr data-layer="{{ item.name }}">
           <td>{{ item.name }}</td>
           <td><span class="{% if item.status == 'fresh' %}up{% elif item.status in ('old', 'degraded') %}down{% else %}muted{% endif %}">{{ item.status }}</span></td>
           {# Coverage is rendered only below full: a badge on every healthy

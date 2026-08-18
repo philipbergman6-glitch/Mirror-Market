@@ -111,7 +111,11 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(markets_mod, "get_connection", lambda: sqlite3.connect(str(db_path)))
     monkeypatch.setattr(markets_mod, "is_cloud", lambda: False)
     monkeypatch.setattr(config, "DB_PATH", str(db_path))
-    return SiteContext(conn=conn, today=TODAY)
+    ctx = SiteContext(conn=conn, today=TODAY)
+    try:
+        yield ctx
+    finally:
+        conn.close()
 
 
 @pytest.fixture

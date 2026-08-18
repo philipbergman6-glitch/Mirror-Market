@@ -68,16 +68,30 @@ def build_alert_body(status: dict | None) -> str:
             "no layer results are available (early abort, e.g. history "
             f"import failure or an unhandled exception).\n\nRun: {run_url()}"
         )
-    lines = [
-        "The data pipeline finished with hard layer failures "
-        "(transport/parse outages, not quiet empties):",
-        "",
-    ]
-    lines += [f"- `{layer}`" for layer in status.get("hard_failures", [])]
+    classes = status.get("classifications") or {
+        "upstream_failure": status.get("hard_failures", [])
+    }
+    labels = (
+        ("upstream_failure", "Upstream or ingest failure"),
+        ("stale_last_known_good", "Stale last-known-good data"),
+        ("incomplete_key_coverage", "Incomplete key coverage"),
+    )
+    lines = ["The data pipeline finished with degraded production layers:", ""]
+    for key, heading in labels:
+        layers = classes.get(key, [])
+        if layers:
+            lines += [f"**{heading}:**", *[f"- `{layer}`" for layer in layers], ""]
+    no_publication = classes.get("no_publication", [])
+    if no_publication:
+        lines += [
+            "Legitimate no-publication layers (informational, not outages):",
+            *[f"- `{layer}`" for layer in no_publication],
+            "",
+        ]
     critical = status.get("critical_failures", [])
     if critical:
         lines += ["", f"**Critical layers failed:** {', '.join(critical)} — the deploy was blocked."]
-    lines += ["", f"Run: {run_url()}"]
+    lines += [f"Run: {run_url()}"]
     return "\n".join(lines)
 
 

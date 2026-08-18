@@ -95,7 +95,7 @@ def test_failed_layer_that_never_succeeded_says_so(briefing_warnings):
     warnings = briefing_warnings([_row("magyp_fob", "failed", success_age_days=None)])
 
     assert len(warnings) == 1, warnings
-    assert "never succeeded" in warnings[0]
+    assert "no recorded success" in warnings[0]
     assert "days ago" not in warnings[0]
 
 

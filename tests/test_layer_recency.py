@@ -72,7 +72,7 @@ def test_frozen_upstream_does_not_stamp_success(freshness_calls):
     assert main._finalize_layer("prices", _price_layer(days_ago=stale_by)) is False
 
     assert len(freshness_calls) == 1
-    assert freshness_calls[0]["status"] == "failed"
+    assert freshness_calls[0]["status"] == "stale"
     assert freshness_calls[0]["layer"] == "prices"
 
 
@@ -261,7 +261,7 @@ def test_frozen_upstream_flips_the_layer_to_stale_end_to_end(patched_db):
     # One day past budget: the gate closes and last_success freezes.
     _run_on(budget + 1)
     row = read_freshness().set_index("layer_name").loc["prices"]
-    assert row["status"] == "failed"
+    assert row["status"] == "stale"
     assert row["last_success"] == still_stamping, (
         "last_success advanced on a run that delivered no new data — "
         "this is the F3 bug"
@@ -272,7 +272,7 @@ def test_frozen_upstream_flips_the_layer_to_stale_end_to_end(patched_db):
     for day in range(budget + 2, budget + window + 3):
         _run_on(day)
     final = read_freshness().set_index("layer_name").loc["prices"]
-    assert final["status"] == "failed"
+    assert final["status"] == "stale"
     assert final["last_success"] == still_stamping
 
 
@@ -419,7 +419,7 @@ def test_floorless_layer_still_records_empty_success(freshness_calls):
     """
     assert main._finalize_layer("crop_progress", {"a": pd.DataFrame()}) is False
 
-    assert freshness_calls[0]["status"] == "success"
+    assert freshness_calls[0]["status"] == "no_publication"
     assert "crop_progress" not in main._HARD_FAILURES
 
 
@@ -432,7 +432,7 @@ def test_explicit_empty_fails_overrides_the_derived_default(freshness_calls):
     uniformly.
     """
     assert main._finalize_layer("dce", {"a": pd.DataFrame()}, empty_fails=False) is False
-    assert freshness_calls[0]["status"] == "success"
+    assert freshness_calls[0]["status"] == "no_publication"
 
     assert main._finalize_layer("conab", {"a": pd.DataFrame()}, empty_fails=True) is False
     assert freshness_calls[1]["status"] == "failed"
@@ -478,14 +478,14 @@ def test_partial_layer_still_fails_the_min_keys_floor(freshness_calls):
     payload = {"C0": _indexed_frame(0)}  # 1 key vs a floor of 8
 
     assert main._finalize_layer("prices", payload) is False
-    assert freshness_calls[0]["status"] == "failed"
+    assert freshness_calls[0]["status"] == "incomplete"
 
 
 def test_empty_non_critical_layer_still_records_empty_success(freshness_calls):
     """Unchanged default: a layer that ran fine with nothing to publish."""
     assert main._finalize_layer("safex", {}) is False
 
-    assert freshness_calls[0]["status"] == "success"
+    assert freshness_calls[0]["status"] == "no_publication"
     assert freshness_calls[0]["rows"] == 0
 
 
@@ -524,7 +524,7 @@ def test_scraper_layer_beyond_budget_records_failed(freshness_calls):
     budget = LAYER_MAX_DATA_AGE_DAYS["safex"]
 
     assert _run_safex(days_ago=budget + 5) is False
-    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert [c["status"] for c in freshness_calls] == ["stale"]
     assert "safex" in main._HARD_FAILURES
 
 
@@ -597,7 +597,7 @@ def test_sagis_within_budget_stamps_success(freshness_calls):
 
 def test_sagis_frozen_file_records_failed(freshness_calls):
     assert _run_sagis(days_ago=LAYER_MAX_DATA_AGE_DAYS["sagis"] + 1) is False
-    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert [c["status"] for c in freshness_calls] == ["stale"]
     assert "sagis" in main._HARD_FAILURES
 
 
@@ -688,7 +688,7 @@ def test_sagis_smd_within_budget_stamps_success(freshness_calls):
 
 def test_sagis_smd_frozen_workbook_records_failed(freshness_calls):
     assert _run_sagis_smd(days_ago=LAYER_MAX_DATA_AGE_DAYS["sagis_smd"] + 1) is False
-    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert [c["status"] for c in freshness_calls] == ["stale"]
     assert "sagis_smd" in main._HARD_FAILURES
 
 
@@ -704,7 +704,7 @@ def test_cec_within_budget_stamps_success(freshness_calls):
 
 def test_cec_frozen_mirror_records_failed(freshness_calls):
     assert _run_cec(days_ago=LAYER_MAX_DATA_AGE_DAYS["cec"] + 1) is False
-    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert [c["status"] for c in freshness_calls] == ["stale"]
     assert "cec" in main._HARD_FAILURES
 
 
@@ -747,7 +747,7 @@ def test_partial_scraper_result_records_failed(freshness_calls):
     """Rows arriving is not the same as *every key's* rows arriving."""
     assert _run_partial_mandi(saved=[]) is False
 
-    assert [c["status"] for c in freshness_calls] == ["failed"]
+    assert [c["status"] for c in freshness_calls] == ["incomplete"]
     assert "india_domestic" in main._HARD_FAILURES
 
 

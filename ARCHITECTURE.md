@@ -30,8 +30,8 @@ know which file to open for any given task.
 The five stages are independent — a fetch failure does not block analysis
 of previously stored data, and the dashboard reads from the DB so it can
 be re-generated without re-fetching. `main.py` orchestrates the
-fetch→clean→store stages; `scripts/generate_html.py` orchestrates
-analyze→render.
+fetch→clean→store stages; `scripts/generate_site.py` owns the complete page
+list and delegates the headline to `scripts/generate_html.py`.
 
 ## Stage detail
 
@@ -51,7 +51,7 @@ zero/negative volume. Returns copies — originals are never mutated.
 
 ### Store (`pipeline/store.py` + `schema.py`)
 
-22 tables, defined in `pipeline/schema.py` as `CREATE TABLE IF NOT EXISTS`
+Tables are defined in `pipeline/schema.py` as `CREATE TABLE IF NOT EXISTS`
 strings. `pipeline/store.py` exposes `save_*()` functions that batch-upsert
 via `executemany`. `pipeline/connection.py` returns a Turso cloud
 connection when `TURSO_DATABASE_URL` is set, a local SQLite connection
@@ -73,9 +73,24 @@ Both consumers pull price/currency frames from `analysis/loaders.py`
 
 ### Render (`scripts/generate_html.py` + `app/`)
 
-Calls analyst functions, builds Plotly figures via `app/charts.py`,
-renders `app/templates/dashboard.html.j2` to `docs/index.html`. The
-daily text briefing is embedded as one of the dashboard pages.
+`scripts/generate_site.py` renders the headline, Players, and eight market
+URLs into a private candidate directory. It calls analyst functions, builds
+Plotly figures via `app/charts.py`, and embeds the archived daily text briefing
+in the headline. A page failure may create a dated tombstone inside that
+candidate for diagnosis, but the candidate is not public yet.
+
+### Verify and promote (`trust/site_promotion.py` + `scripts/smoke_site.py`)
+
+Normal publication uses the existing candidate/verification/promotion seam.
+The v1 bridge verifies the complete static candidate while named-contract v2
+coverage continues to expand: all expected URLs and links, current core soy
+benchmarks, briefing presence, aligned crush inputs, no tombstones, valid
+generation/observation timestamps, the authoritative 27-layer count, and
+desktop/mobile viewport fit. Only a verified candidate is uploaded. If render
+or verification fails, GitHub Pages is not called and the previous trustworthy
+edition remains public. After deployment, the same smoke contract reads the
+real Pages URLs; alerting identifies page-generation, contract, deployment,
+and post-deployment failures separately.
 
 ## Module dependency graph
 

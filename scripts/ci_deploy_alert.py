@@ -1,15 +1,14 @@
-"""CI alerter: turn dashboard deploy failures into a GitHub issue.
+"""CI alerter: turn publication-stage failures into a GitHub issue.
 
 Runs as a separate job after build-deploy (always()), receiving the job
 results as arguments. Companion to scripts/ci_layer_alert.py, which covers
-*data layer* outages inside the pipeline step; this one covers the deploy
-job itself — a Pages deploy that failed after all retries, or a CI check
-failure that kept the deploy from running. Either way the user-facing
-outcome is the same: the dashboard silently went stale.
+*data layer* outages inside the pipeline step; this one distinguishes CI-gate,
+page-generation, candidate-contract, Pages-deployment, and public-smoke
+failures.
 
-- build-deploy failed                     -> alert (deploy broke)
-- build-deploy skipped + check failed     -> alert (CI gate blocked deploy)
-- build-deploy succeeded                  -> close any open alert issue
+- any classified publication stage failed -> alert with the precise stage
+- build-deploy skipped + check failed      -> alert (CI gate blocked deploy)
+- build-deploy and public smoke succeeded  -> close any open alert issue
 - anything else (cancelled, skipped+ok)   -> no-op
 
 One rolling issue (label `ci-deploy-alert`) carries the whole outage:
@@ -17,7 +16,7 @@ created on the first failing run, commented on subsequent ones, closed by
 the first green run. Uses the gh CLI with the workflow-provided GH_TOKEN.
 
 Usage:
-    python scripts/ci_deploy_alert.py <build_deploy_result> <check_result>
+    python scripts/ci_deploy_alert.py <build> <check> [<generation> <promotion> <deployment> <postdeploy>]
 
 where each result is a GitHub Actions job result: success | failure |
 cancelled | skipped. Unknown values hard-fail.
@@ -56,12 +55,36 @@ def run_url() -> str:
     return "(run URL unavailable — not running in GitHub Actions?)"
 
 
-def build_alert_body(build_result: str, check_result: str) -> str:
-    if build_result == "failure":
+def build_alert_body(
+    build_result: str,
+    check_result: str,
+    generation_result: str = "",
+    promotion_result: str = "",
+    deployment_result: str = "",
+    postdeploy_result: str = "",
+) -> str:
+    if generation_result == "failure":
         reason = (
-            "The **build-deploy job failed** — the dashboard did not update. "
-            "If the failing step was *Deploy to GitHub Pages*, all retry "
-            "attempts were exhausted."
+            "The **page-generation step failed**. The private candidate was rejected, "
+            "so the last trustworthy public edition remains in place."
+        )
+    elif promotion_result == "failure":
+        reason = (
+            "The **candidate promotion contract failed**. The private candidate was not deployed, "
+            "so the last trustworthy public edition remains in place."
+        )
+    elif postdeploy_result == "failure":
+        reason = "The **post-deployment public smoke test failed** after Pages reported a deployment."
+    elif build_result == "failure" and deployment_result == "skipped":
+        reason = (
+            "The **build failed before page generation or deployment** (for example, an "
+            "upstream pipeline or history-persistence failure). The data-layer alert carries "
+            "the per-source classification; the public edition was left unchanged."
+        )
+    elif deployment_result == "failure" or build_result == "failure":
+        reason = (
+            "The **GitHub Pages deployment failed** after candidate verification; "
+            "all retry attempts were exhausted."
         )
     else:
         reason = (
@@ -113,17 +136,18 @@ def clear_alert() -> None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        logger.error("Usage: ci_deploy_alert.py <build_deploy_result> <check_result>")
+    if len(argv) not in (3, 7):
+        logger.error("Usage: ci_deploy_alert.py <build> <check> [<generation> <promotion> <deployment> <postdeploy>]")
         return 2
     build_result, check_result = argv[1], argv[2]
+    detail_results = argv[3:7] if len(argv) == 7 else ["", "", "", ""]
     for name, value in (("build_deploy", build_result), ("check", check_result)):
         if value not in VALID_RESULTS:
             logger.error("Invalid %s result %r — expected one of %s", name, value, sorted(VALID_RESULTS))
             return 2
 
     if build_result == "failure" or (build_result == "skipped" and check_result == "failure"):
-        raise_alert(build_alert_body(build_result, check_result))
+        raise_alert(build_alert_body(build_result, check_result, *detail_results))
     elif build_result == "success":
         clear_alert()
     else:

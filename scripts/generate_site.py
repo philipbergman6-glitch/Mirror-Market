@@ -13,11 +13,11 @@ Failure isolation, three levels (M8):
     page fails       -> a TOMBSTONE at that page's URL, never yesterday's file
     headline fails   -> the run fails. There is no product without it.
 
-Why the tombstone matters: Pages deploys the whole ``docs/`` artifact, so a
-page left untouched after a failed render silently serves last week's numbers —
-the exact stale-serving shape #157 caught in the SAFEX scraper. So a failed
-page is overwritten with a dated error, and any tombstone reds CI *after* the
-upload: the site stays usefully up and the failure is loud.
+Why the tombstone matters: a failed page cannot simply leave yesterday's HTML
+in a candidate artifact. Every requested page is regenerated or replaced with
+a dated tombstone. The promotion contract rejects every tombstoned candidate,
+so the last trustworthy public edition remains available while the failure is
+reported.
 
 Usage:
     python scripts/generate_site.py                # every page
@@ -110,6 +110,7 @@ def _tombstone(output_dir: Path, relpath: str, page_name: str, error: str, nav: 
         current_market=None,
         day_line=now.strftime("%A %d %B %Y").upper(),
         generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at_iso=now.isoformat(),
     )
     return _write(output_dir, relpath, html)
 
@@ -122,10 +123,15 @@ def nav_items_at(nav: list[dict], root: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Page renderers
 # ---------------------------------------------------------------------------
-def _render_headline(output_dir: Path, nav: list[dict], **_) -> Path:
+def _render_headline(output_dir: Path, nav: list[dict], *, public_trust_state=None, **_) -> Path:
     from scripts.generate_html import generate
 
-    artifacts = generate(output_dir=output_dir, market_nav=nav, include_players=False)
+    artifacts = generate(
+        output_dir=output_dir,
+        market_nav=nav,
+        include_players=False,
+        public_trust_state=public_trust_state,
+    )
     return artifacts["dashboard"]
 
 
@@ -154,6 +160,7 @@ def _render_market(output_dir: Path, nav: list[dict], *, slug: str, markets, tie
         current_page="market",
         day_line=now.strftime("%A %d %B %Y").upper(),
         generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at_iso=now.isoformat(),
     )
     return _write(output_dir, relpath, html)
 
@@ -168,8 +175,6 @@ def generate_site(
     public_trust_state=None,
 ) -> list[PageResult]:
     """Render every page, isolating failures. Returns one result per page."""
-    del public_trust_state  # reserved: threaded through generate() by DT-20
-
     setup_logging()
     output_dir = Path(output_dir)
     now = datetime.now(timezone.utc)
@@ -177,12 +182,15 @@ def generate_site(
     markets = load_markets()
     tiers = compute_tiers(markets)
     nav = nav_items(tiers, markets=markets)
+    if only and only not in {"headline", "players", *markets}:
+        names = ["headline", "players", *markets]
+        raise SystemExit(f"--only {only!r} matches no page; known: {', '.join(names)}")
     # One connection and one cache for every market page: eight pages x nine
     # blocks would otherwise re-read the CBOT reference leg eight times.
     ctx = SiteContext.open(today=now.date())
 
     pages: list[tuple[str, str, callable, dict]] = [
-        ("headline", "index.html", _render_headline, {}),
+        ("headline", "index.html", _render_headline, {"public_trust_state": public_trust_state}),
         ("players", "players.html", _render_players, {}),
     ]
     for slug, market in markets.items():
@@ -196,27 +204,23 @@ def generate_site(
     if only:
         wanted = {only, f"market:{only}"}
         pages = [p for p in pages if p[0] in wanted]
-        if not pages:
-            names = ["headline", "players", *markets]
-            raise SystemExit(f"--only {only!r} matches no page; known: {', '.join(names)}")
 
     results: list[PageResult] = []
-    for name, relpath, render, kwargs in pages:
-        try:
-            path = render(output_dir, nav, **kwargs)
-            results.append(PageResult(name, relpath, path, ok=True))
-        except Exception as exc:  # noqa: BLE001 — isolation is the point
-            # The headline has no product without it: fail the run immediately
-            # rather than tombstoning the front page.
-            if name == "headline":
-                log.error("headline page failed — there is no site without it")
-                raise
-            detail = "".join(traceback.format_exception_only(type(exc), exc)).strip()
-            log.error("%s failed: %s", name, detail, exc_info=True)
-            path = _tombstone(output_dir, relpath, name, detail, nav, now)
-            results.append(PageResult(name, relpath, path, ok=False, error=detail))
-
-    ctx.close()
+    try:
+        for name, relpath, render, kwargs in pages:
+            try:
+                path = render(output_dir, nav, **kwargs)
+                results.append(PageResult(name, relpath, path, ok=True))
+            except Exception as exc:  # noqa: BLE001 — isolation is the point
+                if name == "headline":
+                    log.error("headline page failed — there is no site without it")
+                    raise
+                detail = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+                log.error("%s failed: %s", name, detail, exc_info=True)
+                path = _tombstone(output_dir, relpath, name, detail, nav, now)
+                results.append(PageResult(name, relpath, path, ok=False, error=detail))
+    finally:
+        ctx.close()
 
     failed = [r for r in results if not r.ok]
     log.info("generated %d page(s), %d tombstone(s)", len(results) - len(failed), len(failed))
@@ -235,8 +239,8 @@ def main(argv: list[str] | None = None) -> int:
 
     results = generate_site(output_dir=args.output_dir, only=args.only)
 
-    # A tombstone reds CI *after* the pages are written, so the site stays
-    # usefully up while the failure is loud (M8).
+    # Tombstones diagnose page failures inside the private candidate; the
+    # promotion contract prevents them reaching Pages.
     failed = [r for r in results if not r.ok]
     for result in failed:
         log.error("TOMBSTONE %s at %s: %s", result.name, result.relpath, result.error)

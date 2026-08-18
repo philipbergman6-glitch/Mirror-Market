@@ -103,7 +103,7 @@ def test_partial_outage_records_real_counts_not_zero(freshness_calls):
     assert main._finalize_layer("prices", _payload(below_floor)) is False
 
     call = freshness_calls[0]
-    assert call["status"] == "failed"
+    assert call["status"] == "incomplete"
     assert call["keys_returned"] == below_floor
     assert call["keys_expected"] == len(LAYER_KEY_CATALOGS["prices"])
     assert call["rows"] == 5 * below_floor
@@ -117,7 +117,7 @@ def test_stale_layer_records_real_counts(freshness_calls):
     assert main._finalize_layer("prices", _payload(keys, days_ago=stale_by)) is False
 
     call = freshness_calls[0]
-    assert call["status"] == "failed"
+    assert call["status"] == "stale"
     assert call["keys_returned"] == keys
     assert call["keys_expected"] == len(LAYER_KEY_CATALOGS["prices"])
     assert call["rows"] == 5 * keys

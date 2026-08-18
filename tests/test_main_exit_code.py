@@ -179,7 +179,7 @@ def test_exit_one_when_prices_below_floor(stub_fetchers, monkeypatch):
     from pipeline.query import read_freshness
     df = read_freshness()
     prices_row = df[df["layer_name"] == "prices"]
-    assert prices_row.iloc[0]["status"] == "failed"
+    assert prices_row.iloc[0]["status"] == "incomplete"
 
 
 def test_exit_one_when_many_layers_hard_fail(stub_fetchers, monkeypatch):
@@ -229,8 +229,8 @@ def test_all_empty_world_trips_the_backstop(stub_fetchers, monkeypatch):
 
     # Still permissive where an empty result is a real publishing calendar:
     # no USDA condition ratings out of season, no AMS report some weeks.
-    assert status["crop_progress"] == "success"
-    assert status["crush_inspections"] == "success"
+    assert status["crop_progress"] == "no_publication"
+    assert status["crush_inspections"] == "no_publication"
 
 
 def test_exit_one_when_prices_fail(stub_fetchers, monkeypatch):
@@ -273,6 +273,8 @@ def test_run_writes_pipeline_status_file(stub_fetchers, monkeypatch, tmp_path):
     assert "agrural" in status["hard_failures"]
     assert status["critical_failures"] == []
     assert "prices" in status["succeeded"]
+    assert status["operational_layer_count"] == 27
+    assert "psd" in status["classifications"]["upstream_failure"]
 
 
 def test_failed_layer_writes_freshness_row(stub_fetchers, monkeypatch):

@@ -898,7 +898,7 @@ def save_freshness(
     keys_returned: int | None = None,
     keys_expected: int | None = None,
 ) -> None:
-    """Record a freshness row. Success stamps last_success; failed/disabled preserve it.
+    """Record a freshness row. Only success stamps last_success; other states preserve it.
 
     'disabled' marks a layer intentionally short-circuited (e.g. an upstream
     anti-bot wall) — distinct from 'failed' so it doesn't read as an outage,
@@ -910,9 +910,12 @@ def save_freshness(
     a transport failure before any payload existed, or a layer for which
     partial coverage is not a meaningful state.
     """
-    if status not in ("success", "failed", "disabled"):
+    valid_statuses = {
+        "success", "failed", "disabled", "no_publication", "stale", "incomplete"
+    }
+    if status not in valid_statuses:
         raise ValueError(
-            f"status must be 'success', 'failed' or 'disabled', got {status!r}"
+            f"status must be one of {sorted(valid_statuses)}, got {status!r}"
         )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     with managed_connection(get_connection()) as conn:

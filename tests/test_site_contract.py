@@ -62,7 +62,10 @@ def site_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connecti
     monkeypatch.setattr(markets_mod, "get_connection", lambda: sqlite3.connect(str(db_path)))
     monkeypatch.setattr(markets_mod, "is_cloud", lambda: False)
     monkeypatch.setattr(config, "DB_PATH", str(db_path))
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def _seed_prices(
@@ -553,8 +556,23 @@ def test_missing_rows_after_a_failed_ingest_says_so(site_db):
     tier = markets_mod.compute_tiers()["india"]
 
     assert tier.has_daily_leg is False
-    assert "our india_domestic ingest failed" in tier.notes["price"]
+    assert "our india_domestic ingest failed upstream" in tier.notes["price"]
     assert "last good run 2026-08-11" in tier.notes["price"]
+
+
+@pytest.mark.parametrize(
+    ("status", "phrase"),
+    [
+        ("stale", "stale last-known-good"),
+        ("incomplete", "incomplete key coverage"),
+    ],
+)
+def test_missing_rows_name_the_non_transport_degradation(site_db, status, phrase):
+    _seed_freshness(site_db, "india_domestic", status, "2026-08-11T00:00:00")
+
+    tier = markets_mod.compute_tiers()["india"]
+
+    assert phrase in tier.notes["price"]
 
 
 def test_a_market_with_no_source_is_not_blamed_on_our_ingest(site_db):

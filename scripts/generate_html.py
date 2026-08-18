@@ -38,6 +38,7 @@ from app.sections import (  # noqa: E402
 )
 from config import (  # noqa: E402
     HEALTH_TABLE_WRITER_LAYERS,
+    PRODUCTION_LAYERS,
     freshness_limit_days,
 )
 from scripts.validate_players import validate_players  # noqa: E402
@@ -99,13 +100,13 @@ def _standalone_market_nav() -> list[dict]:
 
 
 def _safe_call(fn, label: str):
-    """Call fn(), returning None on error."""
+    """Call fn(), returning None only when the callable raises.
+
+    Rendered prose is data, not an error protocol. Briefings legitimately use
+    words such as "failed" when reporting a degraded layer.
+    """
     try:
-        result = fn()
-        if isinstance(result, str) and "failed" in result.lower():
-            log.warning("  %s returned error string", label)
-            return None
-        return result
+        return fn()
     except Exception as e:
         log.warning("  %s failed: %s", label, e)
         return None
@@ -155,28 +156,43 @@ def _coverage_label(row) -> str | None:
 
 
 def _build_freshness_items() -> list[dict]:
-    """Build data freshness sidebar items."""
+    """Build one freshness item for every operational production layer."""
     try:
         from pipeline.query import read_freshness
         freshness = read_freshness()
     except Exception:
-        return []
-
-    if freshness.empty:
-        return []
+        freshness = pd.DataFrame()
 
     now = datetime.now(timezone.utc)
     items = []
-    for _, row in freshness.iterrows():
-        layer = row["layer_name"]
+    rows = (
+        freshness.set_index("layer_name").to_dict("index")
+        if not freshness.empty and "layer_name" in freshness.columns
+        else {}
+    )
+    for layer, number, source, cadence, scope in PRODUCTION_LAYERS:
+        row = rows.get(layer)
+        if row is None:
+            items.append({
+                "name": layer,
+                "number": number,
+                "source": source,
+                "cadence": cadence,
+                "scope": scope,
+                "status": "not-run",
+                "age": "not attempted · no recorded success",
+                "coverage": None,
+            })
+            continue
         last = row["last_success"]
         row_status = str(row.get("status") or "success")
 
         # An intentionally disabled layer must not read as fresh or as an
         # outage — it gets its own bucket and is excluded from counts.
         if row_status == "disabled":
-            items.append({"name": layer, "status": "disabled", "age": "disabled",
-                          "coverage": None})
+            items.append({"name": layer, "number": number, "source": source,
+                          "cadence": cadence, "scope": scope, "status": "disabled",
+                          "age": "disabled", "coverage": None})
             continue
 
         coverage = _coverage_label(row)
@@ -184,11 +200,17 @@ def _build_freshness_items() -> list[dict]:
         if pd.notna(last):
             last_dt = pd.to_datetime(last, utc=True)
             age = now - last_dt
-            if row_status == "failed":
-                # Last run failed: show the age of the last GOOD run, never
-                # a green badge — the old code rendered a dead layer "0h ago".
+            if row_status in {"failed", "stale", "incomplete"}:
                 status = "old"
-                age_str = f"failed · last good {age.days}d ago"
+                label = {
+                    "failed": "upstream failure",
+                    "stale": "stale last-known-good",
+                    "incomplete": "incomplete key coverage",
+                }[row_status]
+                age_str = f"{label} · last good {age.days}d ago"
+            elif row_status == "no_publication":
+                status = "no-publication"
+                age_str = f"no publication · last good {age.days}d ago"
             elif age < timedelta(days=1):
                 status = "fresh"
                 age_str = f"{int(age.total_seconds() // 3600)}h ago"
@@ -204,10 +226,20 @@ def _build_freshness_items() -> list[dict]:
                 status = "old"
                 age_str = f"{age.days}d ago"
         else:
-            status = "old"
-            age_str = "failed · never succeeded" if row_status == "failed" else "never"
-        items.append({"name": layer, "status": status, "age": age_str,
-                      "coverage": coverage})
+            if row_status == "no_publication":
+                status = "no-publication"
+                age_str = "no publication · no prior observation"
+            else:
+                status = "old"
+                labels = {
+                    "failed": "upstream failure",
+                    "stale": "stale last-known-good",
+                    "incomplete": "incomplete key coverage",
+                }
+                age_str = f"{labels.get(row_status, 'never')} · no recorded success"
+        items.append({"name": layer, "number": number, "source": source,
+                      "cadence": cadence, "scope": scope, "status": status,
+                      "age": age_str, "coverage": coverage})
     return items
 
 
@@ -218,7 +250,7 @@ _HEALTH_CRITICAL_NOTE = "data health critical"
 # layer's own publication cadence (`config.freshness_limit_days`) — a
 # weekly COT four days after its Friday release is not a problem, and the
 # masthead must not call it one (#179).
-_ON_SCHEDULE_STATUSES = ("fresh", "stale")
+_ON_SCHEDULE_STATUSES = ("fresh", "stale", "no-publication")
 
 
 def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
@@ -768,11 +800,13 @@ def generate(
         "current_page": "headline",
         "current_market": None,
         "generated_at": now.strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at_iso": now.isoformat(),
         # Built before the sidebar reads `freshness_items` — the masthead
         # demotes health-critical layers in place so both agree.
         "masthead": _build_masthead(freshness_items, now, health),
         "public_trust": _build_public_trust_metadata(public_trust_state),
         "freshness_items": freshness_items,
+        "production_layers": PRODUCTION_LAYERS,
         "command_center": _build_command_center(cc_data),
         "technicals": _build_technicals(tech_data),
         "supply": _build_supply(supply_data),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -463,7 +464,7 @@ def test_candidate_rendering_uses_edition_pinned_cache_and_candidate_output_loca
     observed: dict[str, object] = {}
 
     def render_from_cache(cache_path: Path, output_dir: Path, edition: Edition) -> tuple[Path, ...]:
-        with sqlite3.connect(cache_path) as conn:
+        with closing(sqlite3.connect(cache_path)) as conn:
             observed["metadata"] = dict(conn.execute("SELECT key, value FROM cache_metadata").fetchall())
             observed["revision_ids"] = tuple(
                 row[0] for row in conn.execute("SELECT revision_id FROM trusted_observations").fetchall()
