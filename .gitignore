@@ -50,5 +50,17 @@ data/reference/opportunities/*.yml
 data/reference/opportunities/*.yaml
 data/workspace/
 
+# Phase 5 — the trader validation trial. Session records carry a trader's own
+# handle, decisions, notes and evidence; day observations carry the desk's read
+# on what was broken that day. These are YAML files rather than a table for
+# exactly this reason: every table in this project round-trips through
+# data/history/*.csv, which is committed to this public repository, so a trial
+# table would publish trader identity by construction. The README stays tracked;
+# no record does. Generated private output lands in data/workspace/, above.
+data/reference/trial/sessions/*.yml
+data/reference/trial/sessions/*.yaml
+data/reference/trial/days/*.yml
+data/reference/trial/days/*.yaml
+
 # Concurrent-session git worktrees (each is its own checkout, never content)
 .worktrees/

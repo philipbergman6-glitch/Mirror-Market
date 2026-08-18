@@ -447,15 +447,50 @@ def load_sessions(directory: str | os.PathLike[str] | None = None) -> SessionSet
         log.info("no trial session directory at %s — no sessions have been run", root)
         return SessionSet()
 
-    import yaml
 
     sessions: list[SessionRecord] = []
     files: list[str] = []
     for path in sorted(root.glob("*.yml")):
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
-        sessions.extend(parse_sessions(document, where=str(path), source_file=str(path)))
+        document = _load_yaml(path)
+        sessions.extend(_parse_named(parse_sessions, document, path))
         files.append(str(path))
     return SessionSet(sessions=tuple(sessions), loaded_from=tuple(files))
+
+
+def _load_yaml(path: Path) -> Any:
+    """Read one YAML file, or raise a :class:`TrialError` naming the file.
+
+    PyYAML's own ``ScannerError`` is perfectly informative about *where in the
+    text* it gave up, and says nothing about which trial file it was reading or
+    what the operator should do about it. A trader running ``trial.py check``
+    between calls needs the filename first.
+    """
+    import yaml
+
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise TrialError(
+            f"{path}: not valid YAML ({exc.__class__.__name__}). The file is not skipped — a "
+            f"skipped record is a metric computed over the wrong denominator — so fix it or "
+            f"move it out of the directory. Underlying error: {exc}"
+        ) from exc
+
+
+def _parse_named(parser: Any, document: Any, path: Path) -> Any:
+    """Run a parser, ensuring any validation failure names the file it came from.
+
+    The record types validate themselves, which is right — but they know nothing
+    about files, so a confidence of 99 raised a perfectly true message that left
+    the operator grepping twenty-two files for it.
+    """
+    try:
+        return parser(document, where=str(path), source_file=str(path))
+    except TrialError as exc:
+        message = str(exc)
+        if str(path) in message:
+            raise
+        raise TrialError(f"{path}: {message}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -526,15 +561,14 @@ def load_day_observations(
         log.info("no trial day directory at %s — the product's own days were not observed", root)
         return DayObservationSet()
 
-    import yaml
 
     days: list[DayObservation] = []
     files: list[str] = []
     for path in sorted(root.glob("*.yml")):
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        document = _load_yaml(path)
         if document is None:
             continue
-        days.append(parse_day_observation(document, where=str(path), source_file=str(path)))
+        days.append(_parse_named(parse_day_observation, document, path))
         files.append(str(path))
     return DayObservationSet(days=tuple(days), loaded_from=tuple(files))
 

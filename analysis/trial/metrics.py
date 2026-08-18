@@ -93,6 +93,15 @@ class Metric:
     no_go: float | None = None
     min_observations: int = 10
     detail: tuple[tuple[str, float], ...] = ()
+    #: How much trial evidence stands behind the value, where that is a
+    #: different number from the rate's own denominator. It defaults to
+    #: ``observations`` and only ``feature_coverage_rate`` sets it: that rate is
+    #: taken over the site's published pages, so its denominator is 13 the
+    #: moment the trial opens and it would clear the observation floor — and
+    #: grade a hard ``no_go`` — with zero sessions logged. The rendered
+    #: denominator must stay the page count for the note to be checkable, so the
+    #: sufficiency question is asked of a second number instead.
+    sufficiency_basis: int | None = None
 
     def __post_init__(self) -> None:
         if not self.note.strip():
@@ -101,6 +110,8 @@ class Metric:
             )
         if self.observations < 0:
             raise TrialError(f"metric {self.key} cannot have a negative denominator")
+        if self.sufficiency_basis is not None and self.sufficiency_basis < 0:
+            raise TrialError(f"metric {self.key} cannot have a negative sufficiency basis")
 
     @property
     def has_bar(self) -> bool:
@@ -110,7 +121,8 @@ class Metric:
     def status(self) -> str:
         if self.value is None:
             return STATUS_INSUFFICIENT
-        if self.observations < self.min_observations:
+        basis = self.observations if self.sufficiency_basis is None else self.sufficiency_basis
+        if basis < self.min_observations:
             return STATUS_INSUFFICIENT
         go, no_go = self.go, self.no_go
         if go is None or no_go is None:
@@ -255,6 +267,7 @@ def compute_metrics(
         note: str,
         *,
         detail: tuple[tuple[str, float], ...] = (),
+        sufficiency_basis: int | None = None,
     ) -> Metric:
         go, no_go = _bars(key, thresholds)
         return Metric(
@@ -269,6 +282,7 @@ def compute_metrics(
             no_go=no_go,
             min_observations=floor,
             detail=detail,
+            sufficiency_basis=sufficiency_basis,
         )
 
     lookups_total = sum(s.external_lookup_count for s in sessions)
@@ -402,9 +416,10 @@ def compute_metrics(
             len(pages),
             (
                 f"{pages_touched} of {len(pages)} published surfaces were opened at least once "
-                "across the window. The per-page counts beside this are the finding — a page "
-                "opened once and never again is a different signal from one never opened."
+                f"across {total} sessions. The per-page counts beside this are the finding — a "
+                "page opened once and never again is a different signal from one never opened."
             ),
+            sufficiency_basis=total,
         ),
         metric(
             "critical_source_availability",

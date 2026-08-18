@@ -1,0 +1,394 @@
+{#
+  The private trial dashboard (Phase 5).
+
+  Deliberately does NOT extend _base.html.j2. Every page on the site does, and
+  should — one owner for the head, masthead and nav. This page is not on the
+  site: no nav slot, no database, no promotion-contract entry, and it carries
+  trader identity. Inheriting the site base would put it one expected_site_paths()
+  edit away from being deployed with everything else.
+
+  It follows DESIGN.md's palette and type scale directly instead. The banner at
+  the top is not decoration: this file is the one artifact in the repository that
+  would do real damage if someone posted it, so it says so before anything else.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="mirror-market-private" content="trial">
+<title>Trial — private record</title>
+{#
+  No webfont link, and no remote reference of any kind. The public pages load
+  the DESIGN.md faces from Google Fonts; this one deliberately does not, because
+  a private page that fetches anything tells a third party the page was opened —
+  the quietest disclosure available, and one that survives every other guard
+  here. The families are still named first in each stack, so a desk that has
+  them installed sees the intended typography and every other desk falls through
+  to a system face. A test asserts no "http" appears in the rendered output.
+#}
+<style>
+:root {
+  --paper: #FAFAF7; --card: #FFFFFF; --rule: #D8DCD8; --rule-heavy: #191C1A;
+  --ink: #191C1A; --text: #191C1A; --text-muted: #5D6660; --text-dim: #9BA39E;
+  --green: #2D6A4F; --bullish: #1F7A3D; --bearish: #C23B2E;
+  --warning: #A8730A; --warn-fill: #E8C983; --warn-ink: #4A3608;
+  --info: #2F5D8F; --neutral-fill: #E4E8E4;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: Inter, -apple-system, system-ui, sans-serif;
+  font-size: 14px; line-height: 1.45;
+}
+.page { max-width: 1180px; margin: 0 auto; padding: 0 32px 64px; }
+.num { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.privacy {
+  background: var(--bearish); color: #fff; padding: 14px 32px;
+  font-weight: 600; letter-spacing: .01em;
+}
+.privacy .sub { font-weight: 400; opacity: .92; font-size: 13px; margin-top: 3px; }
+.mast {
+  border-bottom: 3px solid var(--rule-heavy); padding: 28px 0 16px;
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+}
+.mast h1 {
+  font-family: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 800; font-size: 42px;
+  letter-spacing: -.03em; line-height: 1; margin: 0;
+}
+.mast h1 em { font-style: normal; color: var(--green); }
+.mast .meta { text-align: right; font-size: 12px; color: var(--text-muted); }
+section { border-bottom: 1px solid var(--rule); padding: 26px 0; }
+h2 {
+  font-family: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 15px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; margin: 0 0 16px;
+}
+h2 .n { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--green); margin-right: 10px; font-weight: 500; }
+.big { font-family: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 700; font-size: 32px; letter-spacing: -.02em; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px; }
+.card .lab { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.card .val { font-family: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 700; font-size: 32px; letter-spacing: -.02em; margin: 4px 0; }
+.card .note { font-size: 12px; color: var(--text-muted); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); border-bottom: 1px solid var(--rule-heavy); padding: 6px 10px 6px 0; font-weight: 600;
+}
+td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.r, th.r { text-align: right; }
+.pill {
+  display: inline-block; border-radius: 3px; padding: 2px 8px; font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+}
+.pill.go { background: var(--bullish); color: #fff; }
+.pill.hold, .pill.reported { background: var(--warn-fill); color: var(--warn-ink); }
+.pill.no_go, .pill.blocker { background: var(--bearish); color: #fff; }
+.pill.insufficient, .pill.minor { background: var(--neutral-fill); color: var(--text-muted); }
+.pill.major { background: var(--warning); color: #fff; }
+.pill.graded { background: var(--green); color: #fff; }
+.empty {
+  background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--warning);
+  border-radius: 8px; padding: 14px 18px; color: var(--text-muted); font-size: 13px;
+}
+.caption { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+ul.plain { margin: 0; padding-left: 18px; }
+ul.plain li { margin-bottom: 8px; }
+.q { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="privacy">
+  PRIVATE TRIAL RECORD — NOT FOR PUBLICATION
+  <div class="sub">
+    Contains the words traders typed mid-session — finding summaries, evidence and the
+    questions they had to answer elsewhere — which can name a cargo or a counterparty by
+    implication. Findings are not attributed to a trader here; participation appears only
+    as a count, so the desk reads the product rather than the person. Written outside
+    <code>docs/</code>, absent from the site promotion contract, and unknown to the site
+    generator. Do not paste any part of this page into a tracker, a chat or a repository.
+  </div>
+</div>
+
+<div class="page">
+
+<div class="mast">
+  <h1>Trial<em>Record</em></h1>
+  <div class="meta">
+    {{ generated_at }}<br>
+    {{ trial.session_count }} session(s)
+  </div>
+</div>
+
+{% if trial.empty %}
+<section>
+  <div class="empty">{{ trial.empty_reason }}</div>
+</section>
+{% else %}
+{% set S = trial.sections %}
+
+{% set v = S.verdict.data %}
+<section>
+  <h2><span class="n">01</span>Verdict</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="lab">Recommendation</div>
+      <div class="val"><span class="pill {{ v.verdict }}">{{ v.verdict|replace('_',' ') }}</span></div>
+      <div class="note">{{ v.reason }}</div>
+    </div>
+    <div class="card">
+      <div class="lab">Window</div>
+      <div class="val num">{{ v.trading_days_covered }}</div>
+      <div class="note">
+        trading day(s) covered, {{ v.window_start }} → {{ v.window_end }}.
+        {% if not v.is_complete %}Below the protocol's coverage requirement.{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="lab">Participation</div>
+      <div class="val num">{{ v.session_count }}</div>
+      <div class="note">session(s) from {{ v.trader_count }} trader(s)</div>
+    </div>
+  </div>
+</section>
+
+{% set m = S.metrics.data %}
+<section>
+  <h2><span class="n">02</span>Metrics</h2>
+  <table>
+    <thead><tr>
+      <th>Metric</th><th class="r">Value</th><th class="r">Obs</th>
+      <th class="r">Go</th><th class="r">No-go</th><th>Status</th><th>Denominator and rule</th>
+    </tr></thead>
+    <tbody>
+    {% for row in m.metrics %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td class="r num">{{ row.display }}</td>
+        <td class="r num">{{ row.observations }}</td>
+        <td class="r num">{{ row.go if row.go is not none else '—' }}</td>
+        <td class="r num">{{ row.no_go if row.no_go is not none else '—' }}</td>
+        <td><span class="pill {{ row.status }}">{{ row.status|replace('_',' ') }}</span></td>
+        <td>{{ row.note }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="caption">
+    Bars come from <code>config.TRIAL_DECISION_THRESHOLDS</code>. A metric below its
+    observation floor reports <em>insufficient</em> rather than a number; a metric with no
+    bar is <em>reported</em> and judged by a human.
+  </div>
+</section>
+
+{% set sc = S.scorecard.data %}
+<section>
+  <h2><span class="n">03</span>Scorecard</h2>
+  <div class="cards" style="margin-bottom:16px">
+    <div class="card">
+      <div class="lab">Overall</div>
+      <div class="val">{{ sc.overall_letter }}{% if sc.overall is not none %} <span class="num" style="font-size:20px">{{ sc.overall }}</span>{% endif %}</div>
+      <div class="note">computed from {{ sc.graded_count }} of {{ sc.dimension_count }} dimensions</div>
+    </div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Dimension</th><th class="r">Score</th><th>Grade</th><th class="r">Obs</th><th>Basis</th>
+    </tr></thead>
+    <tbody>
+    {% for d in sc.dimensions %}
+      <tr>
+        <td>{{ d.key|replace('_',' ') }}</td>
+        <td class="r num">{{ d.score if d.score is not none else '—' }}{% if d.score is not none and d.status != 'graded' %}*{% endif %}</td>
+        <td><span class="pill {{ d.status }}">{{ d.letter }}</span></td>
+        <td class="r num">{{ d.observations }}</td>
+        <td>
+          {% if d.basis %}{{ d.basis|join('; ') }}{% else %}<span style="color:var(--text-dim)">insufficient observations</span>{% endif %}
+          <div class="caption" style="margin-top:4px">{{ d.source }}</div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="caption">
+    * computed, but below the observation floor — not graded, and excluded from the overall
+    rather than averaged in at a default.
+  </div>
+</section>
+
+{% set c = S.coverage.data %}
+<section>
+  <h2><span class="n">04</span>Coverage</h2>
+  <table>
+    <thead><tr><th>Task</th><th class="r">Sessions</th></tr></thead>
+    <tbody>
+    {% for t in c.tasks %}
+      <tr>
+        <td>{{ t.label }}{% if t.count == 0 %} <span class="pill insufficient">never run</span>{% endif %}</td>
+        <td class="r num">{{ t.count }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="caption">{{ c.untouched_note }}</div>
+
+  {% if c.pages %}
+  <h2 style="margin-top:24px"><span class="n">04b</span>Pages opened</h2>
+  <table>
+    <thead><tr><th>Page</th><th class="r">Sessions</th></tr></thead>
+    <tbody>
+    {% for p in c.pages %}<tr><td>{{ p.page }}</td><td class="r num">{{ p.count }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if c.external_tools %}
+  <h2 style="margin-top:24px"><span class="n">04c</span>Where they went instead</h2>
+  <table>
+    <thead><tr><th>Tool</th><th class="r">Lookups</th></tr></thead>
+    <tbody>
+    {% for t in c.external_tools %}<tr><td>{{ t.tool }}</td><td class="r num">{{ t.count }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% set f = S.findings.data %}
+<section>
+  <h2><span class="n">05</span>Findings</h2>
+  {% if f.backlog_items %}
+  <table>
+    <thead><tr>
+      <th>Severity</th><th>Class</th><th>Summary</th><th class="r">Seen</th>
+      <th>Promoted by</th><th>Acceptance criteria</th>
+    </tr></thead>
+    <tbody>
+    {% for i in f.backlog_items %}
+      <tr>
+        <td><span class="pill {{ i.severity }}">{{ i.severity }}</span></td>
+        <td>{{ i.classification|replace('_',' ') }}</td>
+        <td>
+          {{ i.summary }}
+          {% if i.page %}<div class="caption">{{ i.page }}</div>{% endif %}
+          <div class="caption">affects: {{ i.affected_decision }}</div>
+        </td>
+        <td class="r num">{{ i.occurrences }}× / {{ i.trader_count }}t</td>
+        <td class="q">{{ i.promotion_rules|join(', ') }}</td>
+        <td class="q">
+          {{ i.acceptance_criteria }}
+          {% if i.criteria_are_drafted %}
+          <div class="caption" style="color:var(--warning)">Drafted from the issue class, unread by a human. Not ready to be worked.</div>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    No finding met the promotion rule. {{ f.issue_count }} issue(s) were logged; a finding
+    promotes on a blocker, a correctness class, a second occurrence, or a second trader.
+  </div>
+  {% endif %}
+
+  {% if f.observations %}
+  <div class="caption" style="margin-top:14px">
+    <strong>{{ f.observations|length }} observation(s) did not promote</strong> —
+    kept, not discarded, because a trial with far more observations than items is telling you
+    the rule is too strict:
+    <ul class="plain" style="margin-top:8px">
+    {% for o in f.observations %}
+      <li><code>{{ o.classification }}</code> {{ o.summary }} — seen {{ o.occurrences }}×</li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if f.unmet_questions %}
+  <h2 style="margin-top:24px"><span class="n">05b</span>What we could not answer</h2>
+  <table>
+    <thead><tr><th>Question</th><th class="r">Asked elsewhere</th></tr></thead>
+    <tbody>
+    {% for q in f.unmet_questions %}
+      <tr><td class="q">{{ q.question }}</td><td class="r num">{{ q.count }}×</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="caption">
+    The single most valuable output of the trial. Every external lookup must name the
+    question the product could not answer, which is why the record refuses to save without one.
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <h2><span class="n">06</span>Reliability</h2>
+  {% if S.reliability.state == 'ok' %}
+  {% set r = S.reliability.data %}
+  <table>
+    <thead><tr>
+      <th>Day</th><th>Edition</th><th class="r">Critical sources</th><th>Degraded</th><th>Note</th>
+    </tr></thead>
+    <tbody>
+    {% for d in r.days %}
+      <tr>
+        <td class="num">{{ d.trading_day }}{% if d.drill %} <span class="pill insufficient">drill</span>{% endif %}</td>
+        <td>
+          {% if d.current %}<span class="pill go">current</span>
+          {% elif d.published %}<span class="pill hold">stale</span>
+          {% else %}<span class="pill no_go">not published</span>{% endif %}
+        </td>
+        <td class="r num">{{ d.available }}/{{ d.expected }}</td>
+        <td class="q">{{ d.degraded|join(', ') }}</td>
+        <td class="q">{{ d.note }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="caption">
+    {{ r.drill_days }} day(s) marked as drills and excluded from the reliability metrics — a
+    rehearsed outage is not an outage.
+  </div>
+  {% else %}
+  <div class="empty">{{ S.reliability.reason }}</div>
+  {% endif %}
+</section>
+
+{% set rp = S.reproducibility.data %}
+<section>
+  <h2><span class="n">07</span>Reproducibility</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="lab">Sessions reproducible</div>
+      <div class="val num">{{ rp.sessions_reproducible }}/{{ rp.session_count }}</div>
+      <div class="note">stamped against a clean commit</div>
+    </div>
+    <div class="card">
+      <div class="lab">Findings reproducible</div>
+      <div class="val num">{{ rp.findings_reproducible }}/{{ rp.findings_count }}</div>
+      <div class="note">sessions that raised an issue and can be re-run</div>
+    </div>
+    <div class="card">
+      <div class="lab">Revisions seen</div>
+      <div class="val num">{{ rp.revisions|length }}</div>
+      <div class="note">{{ rp.revisions|join(', ') }}</div>
+    </div>
+  </div>
+  <div class="caption">{{ rp.note }}</div>
+</section>
+
+{% set me = S.method.data %}
+<section>
+  <h2><span class="n">08</span>What this page will not do</h2>
+  <ul class="plain">
+  {% for line in me.will_not %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  <div class="caption">Thresholds: <code>{{ me.thresholds_source }}</code>.</div>
+</section>
+
+{% endif %}
+
+</div>
+</body>
+</html>
