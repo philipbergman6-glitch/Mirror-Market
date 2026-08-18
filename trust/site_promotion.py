@@ -32,6 +32,15 @@ def expected_site_paths() -> tuple[str, ...]:
         # The Phase 3 futures workstation, in the contract for exactly the same
         # reason as origins above: the masthead links to it from every page.
         "workstation.html",
+        # The Phase 4 opportunity board — the PUBLIC edition. Same reason again:
+        # the masthead links to it from every page.
+        #
+        # The private edition is deliberately NOT here and never will be. It is
+        # written outside docs/ (config.OPPORTUNITY_PRIVATE_OUTPUT_DIR), so the
+        # promotion contract cannot see it and the Pages upload cannot carry it.
+        # A private edition that appeared in this tuple would be a private
+        # edition somebody eventually published.
+        "opportunities.html",
         *(market.url for market in load_markets().values()),
     )
 

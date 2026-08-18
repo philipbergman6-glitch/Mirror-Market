@@ -1,0 +1,574 @@
+{% extends "_base.html.j2" %}
+{#
+  Opportunities — the Phase 4 page.
+
+  Markup only. Every number, label, rung and reason comes from
+  app/opportunities_page.py; this template never decides whether something is
+  actionable, and it must not be able to soften a blocked lead into a workable
+  trade.
+
+  Both editions render from this one file. The PRIVATE edition simply receives
+  extra sections in `opps.sections`; it is not a different template with more
+  conditions, and — more importantly — the public build's context does not
+  contain the private data at all, so a forgotten `{% if %}` here cannot leak
+  anything. See app/opportunities_page.py.
+
+  The filters are a class toggle over pre-rendered rows: the site is static and
+  there is nothing to ask. Every offered option matches at least one row,
+  because the options are derived from the board.
+#}
+{% import 'blocks/_macros.html.j2' as f %}
+{% set v = opportunities %}
+
+{% block title %}Mirror Market — Opportunities{% if v.is_private %} (private){% endif %}{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>Opportunities</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ day_line }}</div>
+    <div>Generated {{ generated_at }}</div>
+    <div>Engine v{{ v.method_version }} · {{ v.headline.lead_sentence }}</div>
+    <div>{% if v.is_private %}PRIVATE EDITION — not published{% else %}public edition · no trader notes{% endif %}</div>
+{% endblock %}
+
+{% block page_css %}
+{% include '_market_css.html.j2' %}
+
+/* ---- private banner: this edition must never be mistaken for the public one ---- */
+.private-banner { background: #E8C983; color: #4A3608; border-radius: 3px; padding: 10px 14px; margin: 14px 0 0; font-size: 13px; font-weight: 500; }
+
+/* ---- filter bar ---- */
+.filters { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.filter-row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.filter-label { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); min-width: 88px; }
+.chip { font-family: var(--mono); font-size: 11px; padding: 3px 9px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); color: var(--text-muted); cursor: pointer; }
+.chip:hover { color: var(--ink); }
+.chip.active { background: var(--green); border-color: var(--green); color: #fff; }
+.chip .n { opacity: 0.65; margin-left: 5px; }
+.filter-note { font-size: 11px; color: var(--text-dim); }
+.filter-count { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+
+/* ---- the board ---- */
+.opp { background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--rule); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+.opp.rung-actionable { border-left-color: var(--green); }
+.opp.rung-lead { border-left-color: var(--warning); }
+.opp.rung-market_signal { border-left-color: var(--rule); }
+.opp.rung-proposed_trade, .opp.rung-completed_business { border-left-color: var(--info); }
+.opp-head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: baseline; }
+.opp-title { font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.opp-id { font-family: var(--mono); font-size: 11px; color: var(--text-dim); overflow-wrap: anywhere; }
+.opp-why { font-size: 13px; color: var(--text-muted); margin-top: 6px; overflow-wrap: anywhere; }
+.opp-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; align-items: baseline; }
+.opp-next { margin-top: 10px; padding-top: 9px; border-top: 1px dotted var(--rule); font-size: 13px; }
+.opp-next .lbl { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-right: 8px; }
+
+/* ---- pills, in the ledger's grammar: the state carries the colour ---- */
+.rung { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.rung-pill-actionable { background: rgba(45,106,79,0.12); color: var(--green); }
+.rung-pill-lead { background: #E8C983; color: #4A3608; }
+.rung-pill-market_signal { background: transparent; border: 1px solid var(--rule-heavy); color: var(--text-dim); }
+.rung-pill-proposed_trade, .rung-pill-completed_business { background: #E4E8E4; color: var(--info); }
+.tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); white-space: nowrap; }
+.tag-hard { background: var(--bearish); color: #fff; }
+.tag-soft { background: #E8C983; color: #4A3608; }
+.tag-lane { background: rgba(45,106,79,0.12); color: var(--green); }
+
+/* ---- score ---- */
+.score { text-align: right; }
+.score-total { font-family: var(--mono); font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1; }
+.score-cap { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.score-bars { margin-top: 10px; display: grid; grid-template-columns: 108px 1fr 46px; gap: 4px 10px; align-items: center; font-size: 11px; }
+.score-bars .k { color: var(--text-muted); overflow-wrap: anywhere; }
+.score-bars .b { background: #EDEFED; border-radius: 2px; height: 7px; overflow: hidden; }
+.score-bars .b span { display: block; height: 100%; background: var(--green); }
+.score-bars .b.low span { background: var(--warning); }
+.score-bars .b.zero span { background: var(--bearish); }
+.score-bars .val { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.score-bars .why { grid-column: 1 / -1; font-size: 10px; color: var(--text-dim); margin: -2px 0 4px; overflow-wrap: anywhere; }
+.score-bars > * { min-width: 0; }
+
+/* ---- detail ---- */
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+.card h3 { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.sub { font-family: var(--display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); margin: 16px 0 7px; }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; }
+.kv:last-child { border-bottom: none; }
+.kv .k { color: var(--text-muted); }
+.kv .v { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.blocker { padding: 8px 0 8px 12px; border-left: 3px solid var(--warning); margin-bottom: 8px; font-size: 13px; }
+.blocker.hard { border-left-color: var(--bearish); }
+.blocker .rem { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.cp { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; align-items: baseline; }
+.cp:last-child { border-bottom: none; }
+.cp .meta { font-size: 11px; color: var(--text-dim); overflow-wrap: anywhere; }
+.miss { font-size: 13px; color: var(--text-muted); padding: 4px 0 4px 12px; border-left: 3px solid var(--rule); margin-bottom: 6px; }
+
+.hidden { display: none; }
+.opp > *, .card > *, .opp-head > *, .opp-next, .blocker, .miss { min-width: 0; overflow-wrap: anywhere; }
+.opp-title { overflow-wrap: anywhere; }
+
+@media (max-width: 768px) {
+  .opp-head { grid-template-columns: 1fr; }
+  .score { text-align: left; }
+  .score-total { font-size: 22px; }
+  /* The label column shrinks and the note wraps under it: a phone reads the
+     bars as "which component is weak", and the label is what identifies it. */
+  .score-bars { grid-template-columns: 76px 1fr 34px; font-size: 10px; }
+  .opp-id { font-size: 10px; }
+  .cp { grid-template-columns: 1fr; }
+  .filter-label { min-width: 0; flex-basis: 100%; }
+  .kv { flex-direction: column; gap: 2px; }
+  .kv .v { text-align: left; }
+}
+{% endblock %}
+
+{% block prenav %}
+{% if v.is_private %}
+<div class="private-banner">
+  PRIVATE EDITION — written outside <code>docs/</code> and gitignored. It carries the local
+  working file: status, owner, notes, contacts and outcomes. Do not publish this file.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block subnav %}
+{% set board = (v.sections | selectattr('id', 'equalto', 'board') | list | first) %}
+{% if board and board.state == 'ok' %}
+<div class="filters" id="filters">
+  {% for facet in ['product', 'origin', 'destination', 'role', 'confidence', 'status'] %}
+  {% if board.data.facets[facet] %}
+  <div class="filter-row">
+    <span class="filter-label">{{ facet }}</span>
+    {% for option in board.data.facets[facet] %}
+    <button type="button" class="chip" data-facet="{{ facet }}" data-value="{{ option.value }}">{{ option.label }}<span class="n">{{ option.count }}</span></button>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
+  <div class="filter-row">
+    <span class="filter-count" id="filter-count">{{ board.data.rows|length }} of {{ board.data.rows|length }} shown</span>
+    <button type="button" class="chip" id="filter-clear">clear filters</button>
+    <span class="filter-note">{{ board.data.filter_note }}</span>
+  </div>
+</div>
+{% endif %}
+<nav class="index-nav">
+  {% for s in v.sections %}
+  <a href="#section-{{ s.id }}"><span class="no">{{ s.no }}</span>{{ s.title }}</a>
+  {% endfor %}
+</nav>
+{% endblock %}
+
+{% block content %}
+
+{% for s in v.sections %}
+<section class="block" id="section-{{ s.id }}">
+  <div class="block-head">
+    <span class="block-no">{{ s.no }}</span>
+    <h2>{{ s.title }}</h2>
+    <span class="why">{{ s.why }}</span>
+  </div>
+
+  {% if s.state != 'ok' %}
+  <div class="empty-state state-{{ s.state }}">
+    <span class="es-label">{% if s.state == 'absent' %}no source{% else %}nothing to show{% endif %}</span>
+    {{ s.reason }}
+  </div>
+
+  {#- ------------------------------------------------------------------ 01 -#}
+  {% elif s.id == 'board' %}
+  <div class="caption" style="margin-bottom:12px">{{ s.data.rank_note }}</div>
+  {% for r in s.data.rows %}
+  <article class="opp rung-{{ r.ladder }}"
+           data-opp
+           data-product="{{ r.product }}"
+           data-origin="{{ r.origin_iso or '' }}"
+           data-destination="{{ r.destination_iso or '' }}"
+           data-role="{{ r.role }}"
+           data-confidence="{{ r.confidence }}"
+           data-status="{{ r.status }}">
+    <div class="opp-head">
+      <div>
+        <div class="opp-title">{{ r.rule_label }} — {{ r.lane }}</div>
+        <div class="opp-id">{{ r.opportunity_id }} · first seen {{ r.first_detected_on }} · expires {{ r.expires_on }}</div>
+      </div>
+      <div class="score">
+        <div class="score-total">{{ '%.1f'|format(r.score.composite) }}</div>
+        <div class="score-cap">composite</div>
+      </div>
+    </div>
+
+    <div class="opp-why">{{ r.why_now }}</div>
+
+    <div class="opp-meta">
+      <span class="rung rung-pill-{{ r.ladder }}">{{ r.ladder_label }}</span>
+      <span class="tag">{{ r.role_label }}</span>
+      <span class="tag">{{ r.product }}</span>
+      <span class="tag">{{ r.confidence }}</span>
+      {% if r.economics %}<span class="tag tag-lane">{{ f.usd(r.economics.per_mt, 2) }}/MT</span>{% endif %}
+      {% if r.shipment_window_label %}<span class="tag">{{ r.shipment_window_label }}</span>{% endif %}
+      {% for code in r.hard_blocker_codes %}<span class="tag tag-hard">{{ code|replace('_',' ') }}</span>{% endfor %}
+      <span class="tag">{{ r.counterparty_count }} counterpart{{ 'y' if r.counterparty_count == 1 else 'ies' }}</span>
+      {% for other in r.related_ids %}<span class="tag">also {{ other }}</span>{% endfor %}
+    </div>
+
+    <div class="score-bars">
+      {% for c in r.score.components %}
+      <span class="k">{{ c.key }} <span class="muted">x{{ c.weight }}</span></span>
+      <span class="b {% if c.value == 0 %}zero{% elif c.value < 50 %}low{% endif %}"><span style="width: {{ c.value }}%"></span></span>
+      <span class="val">{{ '%.0f'|format(c.value) }}</span>
+      <span class="why">{{ c.note }}</span>
+      {% endfor %}
+    </div>
+
+    <div class="opp-next"><span class="lbl">next</span>{{ r.suggested_next_action }}
+      <a href="#detail-{{ r.opportunity_id }}" style="color:var(--green);text-decoration:none;margin-left:8px">detail &rarr;</a>
+    </div>
+  </article>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 02 -#}
+  {% elif s.id == 'detail' %}
+  {% for r in s.data.cards %}
+  <div class="card" id="detail-{{ r.opportunity_id }}">
+    <h3>{{ r.opportunity_id }} — {{ r.rule_label }}</h3>
+    <div class="caption">{{ r.lane }} · {{ r.ladder_label }} · {{ r.ladder_meaning }}</div>
+
+    <div class="sub">Why now</div>
+    <div style="font-size:13px">{{ r.why_now }}</div>
+
+    <div class="sub">What is on the table</div>
+    <div class="kv"><span class="k">Product / grade</span><span class="v">{{ r.product }}{% if r.grade.specification %} · {{ r.grade.specification }}{% endif %}</span></div>
+    <div class="kv"><span class="k">Origin</span><span class="v">{{ r.origin.name if r.origin else '— not named by this signal' }}</span></div>
+    <div class="kv"><span class="k">Destination</span><span class="v">{{ r.destination.name if r.destination else '— not named by this signal' }}</span></div>
+    <div class="kv"><span class="k">Incoterm</span><span class="v">{{ r.incoterm or '— none stated' }}</span></div>
+    <div class="kv"><span class="k">Shipment window</span><span class="v">{{ r.shipment_window_label or '— none published' }}</span></div>
+    <div class="kv"><span class="k">Volume</span><span class="v">
+      {% if r.volume %}{{ f.num(r.volume.low_mt) }}{% if not r.volume.is_point %}–{{ f.num(r.volume.high_mt) }}{% endif %} MT{% else %}— unknown{% endif %}
+    </span></div>
+    {% if r.volume %}<div class="caption">{{ r.volume.basis }}</div>{% endif %}
+
+    {% if r.economics %}
+    <div class="sub">Economics</div>
+    <div class="kv"><span class="k">{{ r.economics.method }}</span><span class="v">{{ f.usd(r.economics.per_mt, 2) }} / MT</span></div>
+    {% for c in r.economics.components %}
+    <div class="kv"><span class="k">{{ c.label }}</span><span class="v">{{ f.usd(c.value, 2) }}</span></div>
+    {% endfor %}
+    {% if r.economics.total_low_usd is not none %}
+    <div class="kv"><span class="k">Against the observed tonnage</span><span class="v">{{ f.usd(r.economics.total_low_usd, 0) }}{% if r.economics.total_high_usd != r.economics.total_low_usd %} – {{ f.usd(r.economics.total_high_usd, 0) }}{% endif %}</span></div>
+    {% endif %}
+    <div class="caption">Struck {{ r.economics.struck_on }} · method v{{ r.economics.method_version }}{% if r.economics.note %} · {{ r.economics.note }}{% endif %}</div>
+    {% endif %}
+
+    {% if r.dislocation %}
+    <div class="sub">Dislocation</div>
+    <div class="kv"><span class="k">{{ r.dislocation.label }}</span><span class="v">{{ '%.2f'|format(r.dislocation.value) }} {{ r.dislocation.unit }}</span></div>
+    {% if r.dislocation.baseline is not none %}
+    <div class="kv"><span class="k">{{ r.dislocation.baseline_label }}</span><span class="v">{{ '%.2f'|format(r.dislocation.baseline) }} {{ r.dislocation.unit }}</span></div>
+    {% endif %}
+    {% if r.dislocation.z_score is not none %}
+    <div class="kv"><span class="k">Standard deviations from that baseline</span><span class="v">{{ '%.2f'|format(r.dislocation.z_score) }}</span></div>
+    {% endif %}
+    {% endif %}
+
+    <div class="sub">Evidence & lineage</div>
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead><tr><th>Input</th><th class="num">Value</th><th>Observed</th><th>Age vs budget</th><th>Kind</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for e in r.lineage %}
+        <tr>
+          <td>{{ e.label }}{% if e.note %}<div class="caption" style="margin:0">{{ e.note }}</div>{% endif %}</td>
+          <td class="num">{% if e.value is not none %}{{ '%.2f'|format(e.value) }} {{ e.unit }}{% else %}—{% endif %}</td>
+          <td>{{ e.observed_on }}</td>
+          <td>{{ e.age_days }}d / {{ e.budget_days }}d</td>
+          <td><span class="kind">{{ (e.quote_kind or 'n/a')|replace('_',' ') }}</span> · {{ e.confidence }}</td>
+          <td>
+            {% if e.href %}<a href="{{ root }}{{ e.href }}" style="color:var(--green);text-decoration:none">{{ e.layer }}</a>{% else %}{{ e.layer }}{% endif %}
+            <div class="caption" style="margin:0">{{ e.table }} · {{ e.key }}</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% if r.blockers %}
+    <div class="sub">Blockers — why this may not close</div>
+    {% for b in r.blockers %}
+    <div class="blocker {{ b.severity }}">
+      <span class="tag {{ 'tag-hard' if b.severity == 'hard' else 'tag-soft' }}">{{ b.severity }}</span>
+      <strong>{{ b.code|replace('_',' ') }}</strong> — {{ b.message }}
+      <div class="rem">Remedy: {{ b.remedy }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if r.missing_information %}
+    <div class="sub">Not known</div>
+    {% for m in r.missing_information %}<div class="miss">{{ m }}</div>{% endfor %}
+    {% endif %}
+
+    <div class="sub">Suggested counterparties</div>
+    {% for group, rows in [('Sellers / originators', r.sellers), ('Buyers', r.buyers), ('Facilities & terminals', r.facilities)] %}
+    {% if rows %}
+    <div class="caption" style="margin-top:8px">{{ group }}</div>
+    {% for c in rows %}
+    <div class="cp">
+      <div>
+        <strong>{{ c.name }}</strong> <span class="muted">{{ c.country }}</span>
+        <div class="meta">{{ c.roles|join(' · ') }}{% if c.footprint %} — {{ c.footprint[:180] }}{% endif %}</div>
+        {% if c.lane_note %}<div class="meta">{{ c.lane_note }}</div>{% endif %}
+      </div>
+      <div style="text-align:right">
+        {% if c.lane_evidenced %}<span class="tag tag-lane">lane evidenced</span>{% endif %}
+        {% if c.scope == 'global' %}<span class="tag">global house</span>{% endif %}
+        {% if c.tier == 1 %}<span class="tag">tier 1</span>{% endif %}
+        <div class="meta">{{ c.confidence }}{% if c.last_verified %} · verified {{ c.last_verified }}{% if c.verification_age_days %} ({{ c.verification_age_days }}d){% endif %}{% endif %}</div>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+    {% if not r.sellers and not r.buyers %}
+    <div class="miss">The players knowledge base carries no candidate for this lane. None is invented to fill the gap.</div>
+    {% endif %}
+
+    <div class="sub">What would change this</div>
+    {% if r.sensitivity.headroom %}
+    <div class="kv"><span class="k">{{ r.sensitivity.headroom.reading }}</span><span class="v">{{ '%.2f'|format(r.sensitivity.headroom.headroom) }}</span></div>
+    {% endif %}
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead><tr><th>Component</th><th class="num">Score</th><th class="num">Weight</th><th class="num">Contributes</th><th class="num">Most it could</th></tr></thead>
+      <tbody>
+        {% for w in r.sensitivity.swings %}
+        <tr>
+          <td>{{ w.key }}<div class="caption" style="margin:0">{{ w.note }}</div></td>
+          <td class="num">{{ '%.1f'|format(w.value) }}</td>
+          <td class="num">{{ w.weight }}</td>
+          <td class="num">{{ '%.2f'|format(w.contribution) }}</td>
+          <td class="num">{{ '%.2f'|format(w.max_swing) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if r.sensitivity.landed %}
+    <div class="caption" style="margin-top:10px">{{ r.sensitivity.landed.note }}</div>
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead><tr><th>Scenario</th><th>Cheapest origin</th><th class="num">Advantage</th><th>Flips the answer</th></tr></thead>
+      <tbody>
+        {% for sc in r.sensitivity.landed.scenarios %}
+        <tr>
+          <td>{{ sc.scenario.label }}<div class="caption" style="margin:0">{{ sc.scenario.rationale }}</div></td>
+          <td>{{ sc.cheapest_name or '—' }}</td>
+          <td class="num">{{ f.usd(sc.advantage_usd_mt, 2) }}</td>
+          <td>{{ 'yes' if sc.flips_the_answer else 'no' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endif %}
+    <div class="caption" style="margin-top:8px">{{ r.sensitivity.no_probability_note }}</div>
+
+    {% if v.is_private and r.workflow %}
+    <div class="sub">Working file (private)</div>
+    <div class="kv"><span class="k">Status</span><span class="v">{{ r.workflow.status }}</span></div>
+    <div class="kv"><span class="k">Owner</span><span class="v">{{ r.workflow.owner or '—' }}</span></div>
+    <div class="kv"><span class="k">Contacted</span><span class="v">{{ r.workflow.contacted_on or '—' }}</span></div>
+    <div class="kv"><span class="k">Counterparty</span><span class="v">{{ r.workflow.counterparty_named or '—' }}</span></div>
+    <div class="kv"><span class="k">Next action</span><span class="v">{{ r.workflow.next_action or '—' }}{% if r.workflow.next_action_due %} (due {{ r.workflow.next_action_due }}){% endif %}</span></div>
+    {% for n in r.workflow.notes %}<div class="miss">{{ n }}</div>{% endfor %}
+    {% for a in r.workflow.audit %}<div class="caption">{{ a.on }} · {{ a.by }} · {{ a.what }}{% if a.detail %} — {{ a.detail }}{% endif %}</div>{% endfor %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 03 -#}
+  {% elif s.id == 'ladder' %}
+  {% for rung in s.data.rungs %}
+  <div class="card" style="padding:12px 16px">
+    <div class="opp-meta" style="margin-top:0">
+      <span class="rung rung-pill-{{ rung.key }}">{{ rung.label }}</span>
+      <span class="tag">{{ 'reachable from data' if rung.detector_reachable else 'only from the working file' }}</span>
+    </div>
+    <div style="font-size:13px;margin-top:8px">{{ rung.meaning }}</div>
+  </div>
+  {% endfor %}
+  <div class="caption">{{ s.data.note }}</div>
+  <div class="sub">Hard blockers — these cap a candidate at "lead"</div>
+  <div class="opp-meta">{% for code in s.data.hard_blockers %}<span class="tag tag-hard">{{ code|replace('_',' ') }}</span>{% endfor %}</div>
+  <div class="caption" style="margin-top:8px">{{ s.data.hard_blocker_note }}</div>
+
+  {#- ------------------------------------------------------------------ 04 -#}
+  {% elif s.id == 'coverage' %}
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Rule</th><th>Question it asks</th><th class="num">Found</th><th>Thresholds</th></tr></thead>
+    <tbody>
+      {% for rule in s.data.rules %}
+      <tr>
+        <td class="strong">{{ rule.label }}
+          {% if not rule.ran %}<div class="caption" style="margin:0;color:var(--bearish)">did not run — {{ rule.error }}</div>{% endif %}
+        </td>
+        <td>{{ rule.question }}</td>
+        <td class="num">{{ rule.found if rule.ran else '—' }}</td>
+        <td><span class="caption" style="margin:0">{% for k, val in rule.thresholds.items() %}{{ k }}={{ val }}{% if not loop.last %} · {% endif %}{% endfor %}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="caption" style="margin-top:10px">{{ s.data.note }}</div>
+  {% for e in s.data.errors %}<div class="alert alert-warn">{{ e }}</div>{% endfor %}
+
+  {#- ------------------------------------------------------------------ 05 -#}
+  {% elif s.id == 'lifecycle' %}
+  <div class="caption">{{ s.data.note }}</div>
+  {% if s.data.expired %}
+  <div class="sub">Expired — detected, but the evidence is past its budget</div>
+  {% for r in s.data.expired %}
+  <div class="kv">
+    <span class="k">{{ r.opportunity_id }} · {{ r.rule_label }} · {{ r.lane }}</span>
+    <span class="v">expired {{ r.expires_on }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% if s.data.stopped_detecting %}
+  <div class="sub">Stopped detecting</div>
+  <div class="caption">{{ s.data.stopped_note }}</div>
+  {% for r in s.data.stopped_detecting %}
+  <div class="kv">
+    <span class="k">{{ r.opportunity_id }} · {{ r.rule_label }} · {{ r.product }}</span>
+    <span class="v">last seen {{ r.last_detected_on }}</span>
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% if not s.data.expired and not s.data.stopped_detecting %}
+  <div class="caption">Nothing has expired or withdrawn inside the grace window.</div>
+  {% endif %}
+
+  {#- ------------------------------------------------------------------ 06 -#}
+  {% elif s.id == 'method' %}
+  <div class="alert {{ 'alert-warn' if v.is_private else 'alert-info' }}">{{ s.data.privacy.statement }}</div>
+  <div class="sub">The five components</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Component</th><th class="num">Weight</th><th>Formula</th><th>Why it is built that way</th></tr></thead>
+    <tbody>
+      {% for fo in s.data.formulas %}
+      <tr>
+        <td class="strong">{{ fo.key }}</td>
+        <td class="num">{{ (s.data.weights | selectattr('key','equalto',fo.key) | map(attribute='weight') | first) }}</td>
+        <td><code style="font-family:var(--mono);font-size:11px">{{ fo.formula }}</code></td>
+        <td>{{ fo.why }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="sub">Confidence, scored</div>
+  {% for c in s.data.confidence_scores %}
+  <div class="kv"><span class="k">{{ c.key }}</span><span class="v">{{ '%.0f'|format(c.score) }}</span></div>
+  {% endfor %}
+  <div class="sub">What this page will not do</div>
+  <div class="miss">{{ s.data.no_invention }}</div>
+  <div class="miss">{{ s.data.no_routing }}</div>
+  <div class="caption" style="margin-top:10px">
+    Opportunity engine v{{ s.data.method_version }} · landed cost v{{ s.data.landed_method_version }} ·
+    {{ s.data.archived_rows }} detection(s) archived this run ·
+    statuses a detector can set: {{ s.data.privacy.public_statuses|join(', ') }}
+  </div>
+  {% for w in s.data.warnings %}<div class="alert alert-warn">{{ w }}</div>{% endfor %}
+
+  {#- ------------------------------------------------- 07 (private only) -#}
+  {% elif s.id == 'workflow' %}
+  <div class="caption">{{ s.data.note }}</div>
+  <div class="caption">Loaded from: {{ s.data.loaded_from|join(', ') or s.data.directory }}</div>
+  {% for r in s.data.records %}
+  <div class="card">
+    <h3>{{ r.opportunity_id }} — {{ r.workflow.status }}</h3>
+    <div class="caption">{{ r.rule_label }} · {{ r.lane }} · owner {{ r.workflow.owner or 'unassigned' }}</div>
+    <div class="kv"><span class="k">Next action</span><span class="v">{{ r.workflow.next_action or '—' }}{% if r.workflow.next_action_due %} (due {{ r.workflow.next_action_due }}){% endif %}</span></div>
+    <div class="kv"><span class="k">Contacted</span><span class="v">{{ r.workflow.contacted_on or '—' }}</span></div>
+    <div class="kv"><span class="k">Counterparty</span><span class="v">{{ r.workflow.counterparty_named or '—' }}</span></div>
+    {% for n in r.workflow.notes %}<div class="miss">{{ n }}</div>{% endfor %}
+    {% for a in r.workflow.audit %}<div class="caption">{{ a.on }} · {{ a.by }} · {{ a.what }}</div>{% endfor %}
+  </div>
+  {% endfor %}
+  {% for w in s.data.warnings %}<div class="alert alert-warn">{{ w }}</div>{% endfor %}
+
+  {#- ------------------------------------------------- 08 (private only) -#}
+  {% elif s.id == 'feedback' %}
+  <div class="caption">{{ s.data.note }}</div>
+  <div class="sub">Totals</div>
+  {% for kind, n in s.data.totals.items() %}
+  <div class="kv"><span class="k">{{ kind|replace('_',' ') }}</span><span class="v">{{ n }}</span></div>
+  {% endfor %}
+  <div class="sub">By rule</div>
+  {% for rule, counts in s.data.by_rule.items() %}
+  <div class="kv"><span class="k">{{ rule }}</span><span class="v">{% for kind, n in counts.items() %}{{ kind }}={{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</span></div>
+  {% endfor %}
+  <div class="sub">Entries</div>
+  {% for e in s.data.entries %}
+  <div class="card" style="padding:10px 14px">
+    <div class="opp-meta" style="margin-top:0">
+      <span class="tag">{{ e.kind|replace('_',' ') }}</span>
+      <span class="opp-id">{{ e.opportunity_id }} · {{ e.rule_id }} · {{ e.recorded_on }} · {{ e.by }}</span>
+    </div>
+    <div style="font-size:13px;margin-top:6px">{{ e.reason }}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endfor %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Filters: a class toggle over pre-rendered rows. A row survives when, for
+   every facet that has at least one chip active, the row's own value is in
+   that facet's active set — so facets are AND, values within a facet are OR.
+   That is the shape a physical trader expects ("US or Brazil origin, but only
+   actionable"), and getting it the other way round makes every extra click
+   widen the board instead of narrowing it. */
+(() => {
+  const bar = document.getElementById('filters');
+  if (!bar) return;
+  const chips = [...bar.querySelectorAll('.chip[data-facet]')];
+  const rows = [...document.querySelectorAll('[data-opp]')];
+  const counter = document.getElementById('filter-count');
+  const clear = document.getElementById('filter-clear');
+
+  const apply = () => {
+    const active = {};
+    for (const chip of chips) {
+      if (!chip.classList.contains('active')) continue;
+      (active[chip.dataset.facet] ||= new Set()).add(chip.dataset.value);
+    }
+    let shown = 0;
+    for (const row of rows) {
+      const ok = Object.entries(active).every(([facet, values]) =>
+        values.has(row.dataset[facet] || ''));
+      row.classList.toggle('hidden', !ok);
+      if (ok) shown += 1;
+    }
+    if (counter) counter.textContent = `${shown} of ${rows.length} shown`;
+  };
+
+  for (const chip of chips) {
+    chip.addEventListener('click', () => { chip.classList.toggle('active'); apply(); });
+  }
+  if (clear) {
+    clear.addEventListener('click', () => {
+      for (const chip of chips) chip.classList.remove('active');
+      apply();
+    });
+  }
+})();
+</script>
+{% endblock %}

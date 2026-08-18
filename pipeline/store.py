@@ -998,6 +998,68 @@ def save_origin_ranking(rows: list[dict[str, Any]]) -> int:
     return len(payload)
 
 
+def save_opportunity_detections(rows: list[dict[str, Any]]) -> int:
+    """Archive one run's opportunity detections, one row per identity.
+
+    Written for the same reason the origin ranking is — a detection is a
+    function of that morning's database and of an assumption file that expires
+    by design — plus one that is specific to this phase: the archive is what
+    makes an opportunity **id stable**. The id is derived from the identity and
+    the date it was FIRST seen, so without a persisted history a fresh CI
+    database would mint a new id every morning and silently break the link to
+    the trader's own workflow file.
+
+    Nothing a person typed is accepted here. ``status``, ``owner``, ``notes``,
+    contact dates and outcomes live only in the local workflow directory; a row
+    carrying any of them is a programming error and is rejected rather than
+    stored, because a private note in a git-committed table is a leak that no
+    template check would catch.
+    """
+    if not rows:
+        return 0
+    required = {
+        "run_date", "identity", "opportunity_id", "rule_id", "ladder", "product",
+        "first_detected_on", "expires_on", "confidence", "method_version",
+    }
+    forbidden = {"status", "owner", "notes", "contacted_on", "next_action", "feedback", "audit"}
+    for row in rows:
+        missing = required - row.keys()
+        if missing:
+            raise ValueError(f"opportunity detection row missing {sorted(missing)}")
+        leaked = forbidden & row.keys()
+        if leaked:
+            raise ValueError(
+                f"opportunity detection row carries private workflow field(s) {sorted(leaked)} — "
+                "the detection archive is public by construction and must never hold them"
+            )
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    columns = (
+        "run_date", "identity", "opportunity_id", "rule_id", "ladder", "product",
+        "origin", "destination", "window_start", "first_detected_on", "expires_on",
+        "confidence", "composite_score", "blocker_codes", "score_json", "snapshot_json",
+        "method_version", "generated_at",
+    )
+    payload = [
+        tuple(
+            json.dumps(row[column], default=str)
+            if column in ("score_json", "snapshot_json")
+            and not isinstance(row.get(column), (str, type(None)))
+            else (generated_at if column == "generated_at" else row.get(column))
+            for column in columns
+        )
+        for row in rows
+    ]
+    with managed_connection(get_connection()) as conn:
+        conn.executemany(
+            f"INSERT OR REPLACE INTO opportunity_detections ({','.join(columns)}) "  # noqa: S608 - fixed column list
+            f"VALUES ({','.join('?' * len(columns))})",
+            payload,
+        )
+        maybe_sync(conn)
+    logger.info("Archived opportunity detections: %d row(s)", len(payload))
+    return len(payload)
+
+
 # --- Freshness tracking (special-case: bespoke SQL) -------------------------
 
 
