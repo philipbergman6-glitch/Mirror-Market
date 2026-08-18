@@ -1978,6 +1978,15 @@ POSITIONS_DIR = os.getenv("MIRROR_POSITIONS_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "reference", "positions"
 )
 
+# Hand-entered option quotes, on exactly the same terms as POSITIONS_DIR above
+# and for exactly the same reason: no layer here publishes an option chain
+# (verified against the incumbent provider — see data/reference/options/
+# README.md), so a premium or an implied volatility can only come from the
+# user's own broker screen.
+OPTIONS_DIR = os.getenv("MIRROR_OPTIONS_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "options"
+)
+
 # Bumped whenever the arithmetic or the component order changes. Stored on every
 # ranking, so a historical row can be read against the method that produced it
 # rather than against today's.

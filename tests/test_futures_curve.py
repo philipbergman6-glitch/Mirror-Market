@@ -15,7 +15,7 @@ from analysis.futures.curve import (
 )
 from analysis.futures.domain import spec_for
 from analysis.futures.providers import CurveObservation
-from tests.test_futures_hedge import AS_OF, quote
+from tests.test_futures_hedge import AS_OF, quote, unencoded_quote
 
 
 def observation(commodity, legs, *, coherent=True):
@@ -67,7 +67,7 @@ def test_carry_is_annualised_on_expiry_dates_not_month_labels():
 
 
 def test_a_product_without_an_encoded_expiry_gets_no_annualised_carry():
-    legs = [quote("Sugar", 2027, 3, 18.50), quote("Sugar", 2027, 5, 18.80)]
+    legs = [unencoded_quote("Sugar", 2027, 3, 18.50), unencoded_quote("Sugar", 2027, 5, 18.80)]
     spread = build_spread(*legs)
     assert spread.value == pytest.approx(0.30)
     assert spread.business_days is None
@@ -132,10 +132,21 @@ def test_hedge_month_candidates_exclude_expired_and_unencoded_months():
     )]
     assert symbols == ["ZSX26", "ZSF27"]
 
+    # A product with no encoded termination rule offers no month at all: a
+    # hedge month is chosen by proving the contract still trades through the
+    # pricing window, and that proof needs a last trade date.
+    unencoded = analyse_curve(observation("Sugar", [
+        unencoded_quote("Sugar", 2027, 3, 18.5), unencoded_quote("Sugar", 2027, 5, 18.8),
+    ]), as_of=AS_OF)
+    assert hedge_month_candidates(unencoded, pricing_end=date(2026, 10, 20)) == ()
+
+    # Sugar itself, now that ICE Rule 11.06(a) is encoded, does offer months.
     sugar = analyse_curve(observation("Sugar", [
         quote("Sugar", 2027, 3, 18.5), quote("Sugar", 2027, 5, 18.8),
     ]), as_of=AS_OF)
-    assert hedge_month_candidates(sugar, pricing_end=date(2026, 10, 20)) == ()
+    assert [leg.contract.symbol for leg in hedge_month_candidates(
+        sugar, pricing_end=date(2026, 10, 20)
+    )] == ["SBH27", "SBK27"]
 
 
 def test_a_month_too_close_to_expiry_is_not_offered():

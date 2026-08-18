@@ -46,7 +46,9 @@ from analysis.futures.curve import CurveAnalysis, analyse_curve
 from analysis.futures.domain import (
     CONTRACT_SPECS,
     METHOD_VERSION,
+    NO_NOTICE_DAY,
     SOY_COMPLEX,
+    AggregateOpenInterest,
     ExpiryConfidence,
     Side,
     spec_for,
@@ -92,6 +94,19 @@ REFERENCE_QUANTITY_MT = 1_000.0
 REFERENCE_LABEL = (
     "reference calculation — a worked 1,000 MT example so the arithmetic can be checked. "
     "This is not a position and no position has been entered."
+)
+
+#: Discount rate for the manual Black-76 valuations. A stated, inspectable
+#: constant rather than a number lifted from the `economic` layer: Black-76
+#: discounts the payoff at a risk-free rate the *user* should be choosing, and
+#: silently substituting a 10-year Treasury yield would hide that choice inside
+#: a premium. Rho is reported per rate point so the sensitivity to this number
+#: is visible on every row.
+OPTION_DISCOUNT_RATE = 0.04
+OPTION_RATE_NOTE = (
+    "Model values below discount at a stated 4.0% continuously-compounded rate. It is a "
+    "constant on this page, not a sourced number — rho on each row shows what a different "
+    "rate would be worth."
 )
 
 
@@ -174,6 +189,7 @@ def build_view(
     today: date | None = None,
     generated_at: datetime | None = None,
     positions_dir: str | None = None,
+    options_dir: str | None = None,
 ) -> dict[str, Any]:
     """Everything the workstation template renders, as plain data."""
     as_of = today or date.today()
@@ -203,6 +219,14 @@ def build_view(
 
     crush_proposal = _crush_proposal(exposures, curves, as_of=as_of)
 
+    # Whole-product open interest, per commodity, from the weekly COT report.
+    # Read here rather than inside the curve section so the provider stays the
+    # only thing that touches the database.
+    open_interest = {
+        commodity: provider.aggregate_open_interest(commodity, as_of=as_of)
+        for commodity in curves
+    }
+
     scenario_results = tuple(
         scenarios_mod.run_panel(proposal, scenarios_mod.default_panel_for(proposal))
         for proposal in proposals
@@ -229,13 +253,13 @@ def build_view(
         "sections": [
             _alerts_section(page_alerts),
             _contracts_section(curves),
-            _curve_section(curves),
+            _curve_section(curves, open_interest),
             _hedge_section(proposals, crush_proposal, is_reference),
             _scenarios_section(proposals, scenario_results, is_reference),
             _ticket_section(tickets, is_reference),
             _book_section(book, valuation),
             _calendar_section(conn, as_of=as_of),
-            _options_section(curves),
+            _options_section(curves, as_of=as_of, options_dir=options_dir),
             _provider_section(provider, curves, as_of=as_of),
         ],
     }
@@ -348,7 +372,10 @@ def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
     return _section("contracts", state=STATE_OK, data={"commodities": rows})
 
 
-def _curve_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
+def _curve_section(
+    curves: dict[str, CurveAnalysis],
+    open_interest: dict[str, AggregateOpenInterest | None],
+) -> dict[str, Any]:
     rows = []
     for commodity, analysis in curves.items():
         if analysis.is_empty or len(analysis.legs) < 2:
@@ -368,18 +395,29 @@ def _curve_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
             "spreads": [spread.to_dict() for spread in analysis.spreads],
             "histories": [history.to_dict() for history in analysis.histories],
             "volume_available": analysis.volume_available,
+            # Per contract month: still nothing, and still not inferred.
             "open_interest_available": analysis.open_interest_available,
+            # Whole product, weekly, on its own date. A separate key because it
+            # is a separate fact — see AggregateOpenInterest.
+            "aggregate_open_interest": (
+                None if (aggregate := open_interest.get(commodity)) is None
+                else aggregate.to_dict()
+            ),
         })
     if not rows:
         return _section("curve", state=STATE_EMPTY, reason=(
             "a term structure needs at least two legs observed on the same session; no commodity "
             "currently has that"
         ))
-    from analysis.futures.curve import OPEN_INTEREST_UNAVAILABLE
+    from analysis.futures.curve import (
+        OPEN_INTEREST_AGGREGATE_NOTE,
+        OPEN_INTEREST_UNAVAILABLE,
+    )
 
     return _section("curve", state=STATE_OK, data={
         "commodities": rows,
         "open_interest_note": OPEN_INTEREST_UNAVAILABLE,
+        "aggregate_open_interest_note": OPEN_INTEREST_AGGREGATE_NOTE,
     })
 
 
@@ -463,12 +501,37 @@ def _calendar_section(conn, *, as_of: date) -> dict[str, Any]:
     })
 
 
-def _options_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
+def _options_section(
+    curves: dict[str, CurveAnalysis], *, as_of: date, options_dir: str | None,
+) -> dict[str, Any]:
     front = next(
         (analysis.front.contract for analysis in curves.values() if analysis.front is not None),
         None,
     )
-    return _section("options", state=STATE_OK, data=options_mod.chain_status(front))
+    data = options_mod.chain_status(front)
+
+    # The manual ladder. A malformed document raises out of here on purpose —
+    # the same rule the book follows, because an option entered wrongly must
+    # not render as no option entered.
+    ladder = options_mod.load_ladder(options_dir)
+    forwards = {
+        leg.contract.symbol: leg.quote.price
+        for analysis in curves.values() for leg in analysis.legs
+    }
+    data.update({
+        "entered": [] if ladder.is_empty else list(options_mod.value_manual_ladder(
+            ladder, as_of=as_of, forwards=forwards, rate=OPTION_DISCOUNT_RATE,
+        )),
+        "entered_from": list(ladder.loaded_from),
+        "rate": OPTION_DISCOUNT_RATE,
+        "rate_note": OPTION_RATE_NOTE,
+        "empty_note": (
+            "No options entered. This is the correct state for a clone that has entered "
+            "none — see data/reference/options/README.md for the file shape."
+            if ladder.is_empty else ""
+        ),
+    })
+    return _section("options", state=STATE_OK, data=data)
 
 
 def _provider_section(provider, curves, *, as_of: date) -> dict[str, Any]:
@@ -496,7 +559,16 @@ def _provider_section(provider, curves, *, as_of: date) -> dict[str, Any]:
                 "exchange": spec.exchange.value,
                 "confidence": spec.expiry_confidence.value,
                 "rule": spec.expiry_rule.value if spec.expiry_rule else "not encoded",
+                # Three states, not two. "not encoded" is a gap in this
+                # project; NO_NOTICE_DAY is a fact about the contract, and a
+                # hedger told the wrong one goes looking for a date that does
+                # not exist (see ContractSpec.first_notice_rule).
                 "first_notice_rule": spec.first_notice_rule or "not encoded",
+                "first_notice_note": (
+                    "this contract has no notice day — the delivery obligation "
+                    "attaches at the close of the last trading day"
+                    if spec.first_notice_rule == NO_NOTICE_DAY else ""
+                ),
             }
             for name, spec in CONTRACT_SPECS.items()
         ],

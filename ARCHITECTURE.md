@@ -140,9 +140,16 @@ test rather than by convention:
   `PriceType.DELAYED_CLOSE`; `is_settlement_proven` is `False` everywhere, and
   no surface may call it a settlement. `PriceType.SETTLEMENT` exists only for
   the day an authoritative provider is substituted at `providers.py`.
-* **Expiry is a published rule or it is absent.** Sugar No. 11 and Cotton No. 2
-  carry `ExpiryConfidence.NOT_ENCODED`: no days-to-expiry, no annualised carry,
-  no roll window, no hedge month — an absence rather than an estimate.
+* **Expiry is a published rule or it is absent.** All nine products now carry
+  `ExpiryConfidence.DOCUMENTED`, the two ICE softs having been encoded off the
+  exchange rulebook (Sugar 11.06(a), Cotton 10.02(a)) rather than off a summary
+  page — the summary and the rulebook state Cotton's rule in different frames,
+  and only the pair proves the counting convention. `NOT_ENCODED` and its
+  degradation stay tested against a purpose-built spec, because the next
+  product added may arrive without a rule. A first notice day can be absent for
+  two different reasons and they render differently: not encoded by us, versus
+  `NO_NOTICE_DAY` — a contract that has none (Sugar, whose delivery obligation
+  attaches at the last trading day's close).
 * **A curve is one session.** The same rule the fetcher applies, re-checked at
   read time because `forward_curve` can hold legs the fetcher never saw
   together; incoherent legs are dropped and named, and the verdict travels with
@@ -223,3 +230,4 @@ that's the bug — back it out and convert at render instead.
 | A new hedgeable product                  | `CONTRACT_SPECS` entry in `analysis/futures/domain.py` (with its expiry rule, or `None` to leave it un-encoded) + its `config.FORWARD_CURVE_CONTRACTS` months |
 | A new exposure alert                     | A check function in `analysis/futures/alerts.py` + wire into `build_alerts` |
 | A new scheduled release on the calendar  | `EVENT_SOURCES` entry in `analysis/futures/events.py` — only if a layer here ingests it |
+| A hand-entered option quote              | A `*.yml` document in `data/reference/options/` — see its README; never code |

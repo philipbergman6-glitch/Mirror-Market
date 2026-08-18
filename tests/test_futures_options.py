@@ -18,7 +18,10 @@ from analysis.futures.domain import PriceType, named_contract
 from analysis.futures.options import (
     NO_CHAIN_REASON,
     ChainUnavailable,
+    ManualLadder,
+    ManualQuote,
     OptionContract,
+    OptionEntryError,
     OptionRight,
     OptionStyle,
     black76_greeks,
@@ -26,6 +29,9 @@ from analysis.futures.options import (
     chain_status,
     fetch_chain,
     implied_volatility,
+    load_ladder,
+    parse_ladder,
+    value_manual_ladder,
     value_option,
 )
 
@@ -294,3 +300,171 @@ def test_the_page_status_works_before_a_contract_is_chosen():
     status = chain_status(None)
     assert status["underlying"] is None
     assert "Black-76" in status["manual_workflow"]
+
+
+# ---------------------------------------------------------------------------
+# The manual ladder — the workflow the module offered but could not accept
+# ---------------------------------------------------------------------------
+
+LADDER_DOC = {
+    "options": [
+        {
+            "underlying": "ZSX26", "right": "call", "strike": 1200,
+            "expiry": "2026-10-23", "quoted_on": "2026-08-18",
+            "source": "Broker XYZ 15:40 CT", "premium": 24.5,
+        },
+        {
+            "underlying": "ZSX26", "right": "put", "strike": 1100,
+            "expiry": "2026-10-23", "quoted_on": "2026-08-18",
+            "source": "Broker XYZ 15:40 CT", "implied_volatility": 0.185,
+        },
+    ]
+}
+
+AS_OF_OPT = date(2026, 8, 18)
+FORWARDS = {"ZSX26": 1167.75}
+
+
+def test_no_option_chain_is_available_from_the_incumbent_price_provider():
+    """The empirical basis for everything in this section.
+
+    Checked live against yfinance on 2026-08-18: ``Ticker(t).options`` returned
+    an empty tuple for ZS=F, ZM=F, ZL=F, ZC=F, SB=F, CT=F and for the named
+    contract ZSX26.CBT. The chain is not withheld by choice — there is none to
+    fetch — which is why the fill is a hand-entry path rather than a fetcher.
+    """
+    contract = named_contract("Soybeans", 2026, 11)
+    assert fetch_chain(contract, as_of=AS_OF_OPT).available is False
+    assert "yfinance serves equity option chains only" in NO_CHAIN_REASON
+
+
+def test_a_premium_and_a_volatility_are_two_ways_in_and_never_both():
+    """Supplying both would let two inconsistent numbers sit on one row."""
+    contract = OptionContract(
+        underlying=named_contract("Soybeans", 2026, 11), right=OptionRight.CALL,
+        strike=1200.0, expiry=date(2026, 10, 23),
+    )
+    with pytest.raises(OptionEntryError, match="exactly one of premium"):
+        ManualQuote(contract=contract, source="x", quoted_on=AS_OF_OPT,
+                    premium=24.5, implied_volatility=0.185)
+    with pytest.raises(OptionEntryError, match="exactly one of premium"):
+        ManualQuote(contract=contract, source="x", quoted_on=AS_OF_OPT)
+
+
+def test_an_entered_quote_must_say_who_quoted_it():
+    contract = OptionContract(
+        underlying=named_contract("Soybeans", 2026, 11), right=OptionRight.CALL,
+        strike=1200.0, expiry=date(2026, 10, 23),
+    )
+    with pytest.raises(OptionEntryError, match="source is required"):
+        ManualQuote(contract=contract, source="   ", quoted_on=AS_OF_OPT, premium=24.5)
+
+
+def test_an_entered_premium_is_turned_into_a_volatility_and_back_to_the_same_premium():
+    """The round trip that proves the derivation, not just that it ran.
+
+    Entering a premium of 24.5 backs out an implied volatility; re-pricing at
+    that volatility must return 24.5. If it does not, the number on the page is
+    not the number the broker quoted.
+    """
+    valued = value_manual_ladder(
+        parse_ladder(LADDER_DOC, where="doc"), as_of=AS_OF_OPT, forwards=FORWARDS, rate=0.04,
+    )
+    call = valued[0]
+    assert call["valued"] is True
+    assert call["premium"] == pytest.approx(24.5, abs=1e-4)
+    assert call["volatility_derived_from"] == "backed out of the entered premium by bisection"
+    assert 0.0 < call["volatility"] < 2.0
+
+
+def test_an_entered_volatility_is_used_as_given_rather_than_re_derived():
+    valued = value_manual_ladder(
+        parse_ladder(LADDER_DOC, where="doc"), as_of=AS_OF_OPT, forwards=FORWARDS, rate=0.04,
+    )
+    put = valued[1]
+    assert put["volatility"] == pytest.approx(0.185)
+    assert put["volatility_derived_from"] == "entered implied volatility"
+
+
+def test_every_entered_row_is_labelled_a_model_value_carrying_the_human_source():
+    valued = value_manual_ladder(
+        parse_ladder(LADDER_DOC, where="doc"), as_of=AS_OF_OPT, forwards=FORWARDS, rate=0.04,
+    )
+    for row in valued:
+        assert row["price_type"] == PriceType.MANUAL.value
+        assert "Broker XYZ" in row["volatility_source"]
+        assert any("model value, not a market price" in c for c in row["caveats"])
+        # American style is the default, and the floor caveat must ride with it.
+        assert any("early-exercise premium is not modelled" in c for c in row["caveats"])
+
+
+def test_an_option_on_a_contract_the_board_has_no_price_for_is_not_valued():
+    """Refusal with a reason, rather than a forward invented to fill the gap."""
+    valued = value_manual_ladder(
+        parse_ladder(LADDER_DOC, where="doc"), as_of=AS_OF_OPT, forwards={}, rate=0.04,
+    )
+    assert all(row["valued"] is False for row in valued)
+    assert "no board price for ZSX26" in valued[0]["reason"]
+
+
+def test_a_premium_outside_the_models_bounds_is_refused_not_clamped():
+    """A premium above the forward has no implied volatility. Say so."""
+    doc = {"options": [{
+        "underlying": "ZSX26", "right": "call", "strike": 1200,
+        "expiry": "2026-10-23", "quoted_on": "2026-08-18",
+        "source": "typo test", "premium": 5000.0,
+    }]}
+    row = value_manual_ladder(
+        parse_ladder(doc, where="doc"), as_of=AS_OF_OPT, forwards=FORWARDS, rate=0.04,
+    )[0]
+    assert row["valued"] is False
+    assert "arbitrage bounds" in row["reason"]
+
+
+@pytest.mark.parametrize("missing", ["underlying", "right", "strike", "expiry", "quoted_on"])
+def test_a_document_missing_a_required_field_raises_rather_than_defaulting(missing):
+    row = dict(LADDER_DOC["options"][0])
+    row.pop(missing)
+    with pytest.raises(OptionEntryError):
+        parse_ladder({"options": [row]}, where="doc")
+
+
+def test_an_unparseable_underlying_raises_rather_than_being_skipped():
+    row = dict(LADDER_DOC["options"][0], underlying="NOTACONTRACT")
+    with pytest.raises(OptionEntryError):
+        parse_ladder({"options": [row]}, where="doc")
+
+
+def test_a_missing_directory_is_an_empty_ladder_and_a_malformed_file_raises(tmp_path):
+    """The positions rule, applied here: those two states must not look alike."""
+    assert load_ladder(str(tmp_path / "nothing-here")).is_empty
+
+    good = tmp_path / "ladder"
+    good.mkdir()
+    (good / "a.yml").write_text(
+        "options:\n"
+        "  - underlying: ZSX26\n    right: call\n    strike: 1200\n"
+        "    expiry: 2026-10-23\n    quoted_on: 2026-08-18\n"
+        "    source: Broker XYZ\n    premium: 24.5\n",
+        encoding="utf-8",
+    )
+    loaded = load_ladder(str(good))
+    assert len(loaded.quotes) == 1
+    assert loaded.loaded_from == (str(good / "a.yml"),)
+
+    (good / "b.yml").write_text("options:\n  - right: call\n", encoding="utf-8")
+    with pytest.raises(OptionEntryError):
+        load_ladder(str(good))
+
+
+def test_an_empty_ladder_is_not_the_same_object_as_an_unavailable_chain():
+    """Two different absences, and the page must keep them apart.
+
+    ``ChainUnavailable`` is "the market has options and we cannot see them".
+    An empty ``ManualLadder`` is "you have not typed any in". Conflating them
+    would make our gap look like the market's.
+    """
+    assert ManualLadder().is_empty is True
+    assert ChainUnavailable(
+        underlying=named_contract("Soybeans", 2026, 11), reason=NO_CHAIN_REASON
+    ).available is False

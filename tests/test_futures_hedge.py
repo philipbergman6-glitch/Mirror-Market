@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -10,9 +11,11 @@ from analysis.futures.curve import analyse_curve
 from analysis.futures.domain import (
     YFINANCE_DELAYED,
     ContractQuote,
+    NamedContract,
     PriceType,
     Side,
     named_contract,
+    spec_for,
 )
 from analysis.futures.hedge import (
     BasisConvention,
@@ -35,6 +38,33 @@ AS_OF = date(2026, 8, 18)
 def quote(commodity: str, year: int, month: int, price: float, *, observed=AS_OF) -> ContractQuote:
     return ContractQuote(
         contract=named_contract(commodity, year, month),
+        price=price,
+        price_type=PriceType.DELAYED_CLOSE,
+        observation_date=observed,
+        provider=YFINANCE_DELAYED,
+    )
+
+
+def unencoded_contract(commodity: str, year: int, month: int) -> NamedContract:
+    """A contract whose product has no encoded termination rule.
+
+    All nine products this stack carries now have one — the two ICE softs were
+    encoded off the rulebook once the counting convention could be proved. The
+    *degradation* those two used to demonstrate is still the load-bearing
+    behaviour (no days-to-expiry, no carry, no roll window, no hedge month, and
+    a named refusal instead of a guess), and the next product added may well
+    arrive without a rule, so it keeps its tests. It just needs a subject that
+    cannot silently become encoded underneath them.
+    """
+    spec = replace(spec_for(commodity), expiry_rule=None, first_notice_rule=None)
+    return NamedContract(spec=spec, year=year, month=month, last_trade=None, first_notice=None)
+
+
+def unencoded_quote(
+    commodity: str, year: int, month: int, price: float, *, observed=AS_OF
+) -> ContractQuote:
+    return ContractQuote(
+        contract=unencoded_contract(commodity, year, month),
         price=price,
         price_type=PriceType.DELAYED_CLOSE,
         observation_date=observed,

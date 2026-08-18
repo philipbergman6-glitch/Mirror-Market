@@ -276,8 +276,16 @@ class CurveAnalysis:
 
 
 OPEN_INTEREST_UNAVAILABLE = (
-    "Open interest is not published by any source this project ingests. It is shown as "
-    "unavailable rather than derived from volume or price — there is no honest way to derive it."
+    "Open interest per contract month is not published by any source this project ingests. "
+    "It is shown as unavailable rather than derived from volume or price — there is no honest "
+    "way to derive it, and a whole-product figure attributed to one month would be wrong."
+)
+
+OPEN_INTEREST_AGGREGATE_NOTE = (
+    "Whole-product open interest is available weekly from the CFTC Commitments of Traders "
+    "report (Layer 4): every listed month combined, as of that report's Tuesday. It is shown "
+    "beside the curve rather than on a leg, because it belongs to the product and to that "
+    "Tuesday — not to any one contract month or to the session the prices came from."
 )
 
 
@@ -503,6 +511,7 @@ def hedge_month_candidates(
 __all__ = [
     "BUSINESS_DAYS_PER_YEAR",
     "MIN_HISTORY_FOR_PERCENTILE",
+    "OPEN_INTEREST_AGGREGATE_NOTE",
     "OPEN_INTEREST_UNAVAILABLE",
     "CalendarSpread",
     "CurveAnalysis",

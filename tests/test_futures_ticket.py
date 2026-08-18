@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 import pytest
 
+from analysis.futures import domain
 from analysis.futures.continuous import (
     MIN_SESSIONS,
     active_contract,
@@ -31,7 +33,15 @@ from analysis.futures.ticket import (
     render_text,
 )
 from pipeline import schema
-from tests.test_futures_hedge import AS_OF, BEANS, MEAL, OIL, curve, exposure, quote
+from tests.test_futures_hedge import (
+    AS_OF,
+    BEANS,
+    MEAL,
+    OIL,
+    curve,
+    exposure,
+    unencoded_quote,
+)
 
 GENERATED = datetime(2026, 8, 18, 21, 30, 0)
 
@@ -178,10 +188,10 @@ def test_a_crush_ticket_labels_each_product_leg_with_its_yield():
 
 
 def test_a_hedge_with_no_selectable_month_still_produces_a_readable_ticket():
-    sugar = curve("Sugar", [quote("Sugar", 2027, 3, 18.5)])
+    unencoded = curve("Sugar", [unencoded_quote("Sugar", 2027, 3, 18.5)])
     made = build_ticket(
         propose_hedge(
-            exposure(Side.LONG, commodity="Sugar", basis_usd_per_mt=0.0), sugar, as_of=AS_OF,
+            exposure(Side.LONG, commodity="Sugar", basis_usd_per_mt=0.0), unencoded, as_of=AS_OF,
         ),
         generated_at=GENERATED,
     )
@@ -236,7 +246,25 @@ def test_the_roll_rule_leaves_the_front_before_first_notice():
     assert active_contract("Soybeans", date(2026, 9, 9)).symbol == "ZSX26"
 
 
-def test_a_product_with_no_encoded_expiry_has_no_roll_and_says_none():
+def test_the_ice_softs_now_roll_on_their_own_published_rules():
+    """SBV26 last trades 30 Sep 2026, so on 18 Aug the active sugar contract is
+    October and the schedule names it every session."""
+    assert active_contract("Sugar", date(2026, 8, 18)).symbol == "SBV26"
+    schedule = roll_schedule("Sugar", date(2026, 8, 10), date(2026, 8, 18))
+    assert {symbol for _, symbol in schedule} == {"SBV26"}
+    # Cotton October 2026 last trades 8 Oct, so five sessions of roll
+    # offset still leave it the front on 18 Aug.
+    assert active_contract("Cotton", date(2026, 8, 18)).symbol == "CTV26"
+
+
+def test_a_product_with_no_encoded_expiry_has_no_roll_and_says_none(monkeypatch):
+    """Both functions resolve their spec by name, so the un-encoded case is
+    reached by replacing the spec rather than by naming a product that has none
+    — there is no longer any product that has none."""
+    monkeypatch.setitem(
+        domain.CONTRACT_SPECS, "Sugar",
+        replace(domain.CONTRACT_SPECS["Sugar"], expiry_rule=None, first_notice_rule=None),
+    )
     assert active_contract("Sugar", date(2026, 8, 18)) is None
     assert roll_schedule("Sugar", date(2026, 8, 10), date(2026, 8, 18)) == ()
 

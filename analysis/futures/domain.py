@@ -29,8 +29,11 @@ predicate every surface asks.
 **Expiry is a published rule or it is absent.** Days-to-expiry drives the roll
 alert, the hedge month choice and the carry annualisation, so a guessed last
 trade date is worse than none. Rules are encoded per product with an explicit
-:class:`ExpiryConfidence`; two products (Sugar No. 11, Cotton No. 2) are left
+:class:`ExpiryConfidence`, read off the exchange's own rulebook and cited at
+the rule number; where this project has no such rule the product is left
 ``NOT_ENCODED`` rather than approximated, and every consumer degrades visibly.
+All nine products are encoded as of the ICE additions below — the mechanism
+stays because the next product added may not be.
 
 **Units never convert implicitly.** A contract carries its native unit and its
 size in that unit; the MT equivalent is derived from the same factors
@@ -126,6 +129,13 @@ class ExpiryConfidence(str, Enum):
     NOT_ENCODED = "not_encoded"
 
 
+#: ``ContractSpec.first_notice_rule`` for a contract that has no notice day.
+#: ICE Sugar No. 11 is the one such product here: Rule 11.06(b) puts the
+#: delivery obligation on the close of the last trading day itself, so there is
+#: no notice period to compute and none to be out ahead of.
+NO_NOTICE_DAY = "no_notice_day_mechanism"
+
+
 class ExpiryRule(str, Enum):
     """Published contract-termination rules, one per family."""
 
@@ -136,6 +146,18 @@ class ExpiryRule(str, Enum):
     LAST_BUSINESS_DAY_OF_MONTH = "last_business_day_of_month"
     #: CME Lean Hogs — 10th business day of the contract month.
     TENTH_BUSINESS_DAY_OF_MONTH = "tenth_business_day_of_month"
+    #: ICE Sugar No. 11 — Rule 11.06(a): "the last full trading day of the
+    #: month preceding the delivery month", with a January-only carve-out
+    #: (the 2nd business day before the preceding 24 December).
+    ICE_SUGAR_LAST_TRADING_DAY = "ice_sugar_last_trading_day"
+    #: ICE Cotton No. 2 — Rule 10.02(a)(ix) read through (vii): Last Trading
+    #: Day is the 10th business day before Last Delivery Day, and Last Delivery
+    #: Day is the 7th-last business day of the delivery month. 10 + 7 = the
+    #: 17th business day counted back from the month end, which is exactly the
+    #: "seventeen business days from end of spot month" the contract summary
+    #: states — two independent statements of one rule, which is why both were
+    #: read before encoding it.
+    ICE_COTTON_LAST_TRADING_DAY = "ice_cotton_last_trading_day"
 
 
 class RollMethod(str, Enum):
@@ -307,6 +329,37 @@ def nth_business_day_of_month(year: int, month: int, n: int) -> date:
         cursor += timedelta(days=1)
 
 
+def nth_business_day_from_month_end(year: int, month: int, n: int) -> date:
+    """The ``n``-th business day counted backwards from the end of a month.
+
+    ``n = 1`` is the last business day, ``n = 2`` the one before it. Both ICE
+    rules encoded here are stated this way — Cotton's last trading day is the
+    17th and its last delivery day the 7th — so the counting convention lives
+    in one function rather than being re-derived at each call site, where an
+    off-by-one is a hedge left open into the delivery period.
+    """
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+    cursor = date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1)
+    seen = 0
+    while True:
+        if is_business_day(cursor):
+            seen += 1
+            if seen == n:
+                return cursor
+        cursor -= timedelta(days=1)
+
+
+def business_days_before(day: date, n: int) -> date:
+    """The business day ``n`` business days before ``day`` (``day`` excluded)."""
+    if n < 1:
+        raise ValueError(f"n must be >= 1, got {n}")
+    cursor = day
+    for _ in range(n):
+        cursor = previous_business_day(cursor)
+    return cursor
+
+
 # ---------------------------------------------------------------------------
 # Contract specifications
 # ---------------------------------------------------------------------------
@@ -336,6 +389,12 @@ class ContractSpec:
     #: CBOT grains: last business day of the month preceding the delivery
     #: month. Left None where not encoded — a hedger must be out before FND,
     #: so a guess here is a directly actionable wrong number.
+    #:
+    #: :data:`NO_NOTICE_DAY` is a third state, and the distinction matters on
+    #: the page: None means *we* have not encoded the rule, while NO_NOTICE_DAY
+    #: means the contract runs no notice-day mechanism at all. Rendering the
+    #: second as the first invites a hedger to go looking for a date that does
+    #: not exist, and to assume they have room they do not have.
     first_notice_rule: str | None = None
     provider_suffix: str = ""        # Yahoo's exchange suffix, e.g. ".CBT"
 
@@ -449,22 +508,35 @@ CONTRACT_SPECS: dict[str, ContractSpec] = {
         expiry_rule=ExpiryRule.TENTH_BUSINESS_DAY_OF_MONTH,
         provider_suffix=".CME",
     ),
-    # Sugar No. 11 and Cotton No. 2 terminate on ICE rules this project has not
-    # encoded. Everything else about them is known, so they are carried in full
-    # — they simply have no expiry metadata, and every consumer says so.
+    # The two ICE softs. Their termination rules are read off the ICE Futures
+    # U.S. rulebook rather than off a summary page, because the summaries state
+    # each rule in a *different* frame from the rulebook and only the pair of
+    # them proves the counting convention (see ExpiryRule).
+    #
+    # Sugar No. 11 carries no first_notice_rule, and that absence is the
+    # finding, not a gap: the contract has no notice-day mechanism at all.
+    # Rule 11.06(b) obliges every open short to issue a "Memo of Deliverer"
+    # after the close of business on the Last Trading Day, so the delivery
+    # obligation attaches on the last trading day itself. That is earlier and
+    # stricter than an FND, not looser, and inventing one here would tell a
+    # hedger they had days they do not have.
     "Sugar": ContractSpec(
         root="SB", exchange=Exchange.ICE_US, name="Sugar", display="ICE Sugar No. 11",
         currency="USD", native_unit=NativeUnit.CENTS_PER_POUND,
         contract_size=112_000, size_unit=SizeUnit.POUND,
         tick_size=0.01, tick_value_usd=11.20,
-        expiry_rule=None, provider_suffix=".NYB",
+        expiry_rule=ExpiryRule.ICE_SUGAR_LAST_TRADING_DAY,
+        first_notice_rule=NO_NOTICE_DAY,
+        provider_suffix=".NYB",
     ),
     "Cotton": ContractSpec(
         root="CT", exchange=Exchange.ICE_US, name="Cotton", display="ICE Cotton No. 2",
         currency="USD", native_unit=NativeUnit.CENTS_PER_POUND,
         contract_size=50_000, size_unit=SizeUnit.POUND,
         tick_size=0.01, tick_value_usd=5.00,
-        expiry_rule=None, provider_suffix=".NYB",
+        expiry_rule=ExpiryRule.ICE_COTTON_LAST_TRADING_DAY,
+        first_notice_rule="five_business_days_before_first_delivery_day",
+        provider_suffix=".NYB",
     ),
 }
 
@@ -529,15 +601,34 @@ def last_trade_date(spec: ContractSpec, year: int, month: int) -> date | None:
         return nth_business_day_of_month(year, month, -1)
     if rule is ExpiryRule.TENTH_BUSINESS_DAY_OF_MONTH:
         return nth_business_day_of_month(year, month, 10)
+    if rule is ExpiryRule.ICE_SUGAR_LAST_TRADING_DAY:
+        if month == 1:
+            # Rule 11.06(a)'s January carve-out. Unreachable through
+            # NamedContract, which rejects any month outside the listed set
+            # (Sugar lists Mar/May/Jul/Oct) — encoded because this function
+            # takes a bare month, and a silently wrong January is worse than
+            # a branch that never fires.
+            return business_days_before(date(year - 1, 12, 24), 2)
+        prior_year, prior_month = (year - 1, 12) if month == 1 else (year, month - 1)
+        return nth_business_day_from_month_end(prior_year, prior_month, 1)
+    if rule is ExpiryRule.ICE_COTTON_LAST_TRADING_DAY:
+        return nth_business_day_from_month_end(year, month, 17)
     raise ValueError(f"unhandled expiry rule {rule}")
 
 
 def first_notice_date(spec: ContractSpec, year: int, month: int) -> date | None:
     """First notice day, or None where the project has not encoded the rule."""
-    if spec.first_notice_rule != "last_business_day_of_prior_month":
-        return None
-    prior_year, prior_month = (year - 1, 12) if month == 1 else (year, month - 1)
-    return nth_business_day_of_month(prior_year, prior_month, -1)
+    if spec.first_notice_rule == "last_business_day_of_prior_month":
+        prior_year, prior_month = (year - 1, 12) if month == 1 else (year, month - 1)
+        return nth_business_day_of_month(prior_year, prior_month, -1)
+    if spec.first_notice_rule == "five_business_days_before_first_delivery_day":
+        # Cotton No. 2, Rule 10.02(a)(v)+(vi): First Delivery Day is the first
+        # business day of the expiring month and First Notice Day is the fifth
+        # business day before it. Note this lands *before* the last trading
+        # day, not after — the opposite order to the CBOT grains — which is the
+        # whole reason this project keys its roll alerts on FND.
+        return business_days_before(nth_business_day_of_month(year, month, 1), 5)
+    return None
 
 
 @dataclass(frozen=True)
@@ -757,6 +848,43 @@ MANUAL_ENTRY = Provider(
 
 
 @dataclass(frozen=True)
+class AggregateOpenInterest:
+    """Open interest for a *product*, across every listed month at once.
+
+    Deliberately not a field on :class:`ContractQuote`, and deliberately a
+    different type. No source this project ingests publishes open interest per
+    contract month — the price feed carries none at all, and the one number
+    that does exist comes from the CFTC's weekly Commitments of Traders report,
+    which is a whole-product figure as of Tuesday's close.
+
+    Putting that number on a contract row would say something false in two
+    directions at once: it would attribute the whole product's open interest to
+    one month, and it would date a Tuesday figure to whatever session the price
+    came from. So it is carried as its own thing, with its own date, and the
+    per-contract field stays ``None`` — which continues to mean "nobody told
+    us", the only honest reading available for a single month.
+    """
+
+    commodity: str
+    contracts: float
+    report_date: date              # the CFTC report Tuesday, not our fetch date
+    scope: str = "all contract months combined"
+    source: str = "CFTC Commitments of Traders (weekly)"
+
+    def age_days(self, as_of: date) -> int:
+        return (as_of - self.report_date).days
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "commodity": self.commodity,
+            "contracts": self.contracts,
+            "report_date": self.report_date.isoformat(),
+            "scope": self.scope,
+            "source": self.source,
+        }
+
+
+@dataclass(frozen=True)
 class ContractQuote:
     """A price *for a named contract*, with everything needed to defend it."""
 
@@ -933,12 +1061,14 @@ __all__ = [
     "MONTH_ABBR",
     "MONTH_CODES",
     "MT_PER_SHORT_TON",
+    "NO_NOTICE_DAY",
     "POUNDS_PER_MT",
     "ROLL_METHOD_DESCRIPTIONS",
     "SOY_COMPLEX",
     "SPEC_BY_ROOT",
     "YFINANCE_DELAYED",
     "MANUAL_ENTRY",
+    "AggregateOpenInterest",
     "ContinuousSeries",
     "ContractQuote",
     "ContractSpec",
@@ -958,11 +1088,13 @@ __all__ = [
     "contracts_from",
     "exchange_holidays",
     "fingerprint",
+    "business_days_before",
     "first_notice_date",
     "is_business_day",
     "last_trade_date",
     "named_contract",
     "next_business_day",
+    "nth_business_day_from_month_end",
     "nth_business_day_of_month",
     "parse_symbol",
     "previous_business_day",

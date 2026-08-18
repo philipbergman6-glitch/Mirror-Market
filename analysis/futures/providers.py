@@ -45,6 +45,7 @@ from typing import Protocol, runtime_checkable
 from analysis.futures.domain import (
     CONTRACT_SPECS,
     YFINANCE_DELAYED,
+    AggregateOpenInterest,
     ContinuousSeries,
     ContractQuote,
     Freshness,
@@ -109,6 +110,17 @@ class QuoteProvider(Protocol):
 
     def fx_rate(self, pair: str, *, on: date) -> tuple[date, float] | None:
         """(observation date, rate) for the most recent print at or before ``on``."""
+
+    def aggregate_open_interest(
+        self, commodity: str, *, as_of: date
+    ) -> AggregateOpenInterest | None:
+        """Whole-product open interest, or None where the provider has none.
+
+        Separate from :meth:`quote` on purpose: a provider that publishes open
+        interest per contract month would fill ``ContractQuote.open_interest``
+        instead, and this method is what a provider that only has the weekly
+        aggregate can honestly answer.
+        """
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +428,40 @@ class SqliteQuoteProvider:
             roll_method=RollMethod.PROVIDER_FRONT_MONTH,
             points=points,
             adjustment_note="unadjusted; the provider does not publish its roll dates",
+        )
+
+    # -- open interest -----------------------------------------------------
+    def aggregate_open_interest(
+        self, commodity: str, *, as_of: date
+    ) -> AggregateOpenInterest | None:
+        """Whole-product open interest from the stored CFTC COT report.
+
+        The only open-interest figure anything in this stack ingests. It is a
+        weekly Tuesday number covering every listed month at once, which is why
+        it comes back as :class:`AggregateOpenInterest` and never as a field on
+        a contract quote — see that class for what attaching it to one month
+        would falsely assert.
+
+        The COT commodity keys (``config.COT_COMMODITIES``) are the same nine
+        strings ``CONTRACT_SPECS`` uses, so the join is by name with no mapping
+        table to drift. Returns None where the layer has never run or the
+        product is not in the report; a missing number stays missing.
+        """
+        if not self._has_table("cot"):
+            return None
+        row = self.conn.execute(
+            "SELECT Date, total_open_interest FROM cot "
+            "WHERE commodity = ? AND Date <= ? AND total_open_interest IS NOT NULL "
+            "ORDER BY Date DESC LIMIT 1",
+            (commodity, as_of.isoformat()),
+        ).fetchone()
+        if not row:
+            return None
+        report_date = _as_date(row[0])
+        if report_date is None:
+            return None
+        return AggregateOpenInterest(
+            commodity=commodity, contracts=float(row[1]), report_date=report_date,
         )
 
     # -- fx ----------------------------------------------------------------

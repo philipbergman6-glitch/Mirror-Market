@@ -248,3 +248,72 @@ def test_the_stored_front_month_series_is_labelled_as_the_providers_own_roll(con
     assert series.is_hedgeable is False
     assert series.contract_by_date == ()      # the provider does not say
     assert "does not publish its roll dates" in series.adjustment_note
+
+
+# ---------------------------------------------------------------------------
+# Open interest — the aggregate that exists, not the per-month one that does not
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_open_interest_reads_the_latest_cot_report_at_or_before_the_date(conn):
+    """A weekly Tuesday number, and the *latest* one that is not in the future.
+
+    Asking as of Sunday 16 Aug must return the 11 Aug report, not the 18th —
+    the 18th had not been published yet, and a hedger reading Sunday's page
+    must see what was knowable on Sunday.
+    """
+    conn.executemany(
+        "INSERT INTO cot (commodity, Date, total_open_interest) VALUES (?,?,?)",
+        [
+            ("Soybeans", "2026-08-04", 795_000.0),
+            ("Soybeans", "2026-08-11", 812_345.0),
+            ("Soybeans", "2026-08-18", 820_000.0),
+        ],
+    )
+    conn.commit()
+    oi = open_provider(conn).aggregate_open_interest("Soybeans", as_of=date(2026, 8, 16))
+    assert oi.contracts == 812_345.0
+    assert oi.report_date == date(2026, 8, 11)
+    assert oi.scope == "all contract months combined"
+
+
+def test_aggregate_open_interest_is_absent_rather_than_zero_when_nothing_is_stored(conn):
+    """Three ways it can be missing, and none of them may render as 0."""
+    provider = open_provider(conn)
+    # No row for the commodity at all.
+    assert provider.aggregate_open_interest("Soybeans", as_of=AS_OF) is None
+    # A row exists but the column is NULL — the COT fetch ran without it.
+    conn.execute(
+        "INSERT INTO cot (commodity, Date, total_open_interest) VALUES ('Corn','2026-08-11',NULL)"
+    )
+    conn.commit()
+    assert provider.aggregate_open_interest("Corn", as_of=AS_OF) is None
+    # No cot table at all — a database that never ran the pipeline.
+    bare = sqlite3.connect(":memory:")
+    assert SqliteQuoteProvider(conn=bare).aggregate_open_interest("Soybeans", as_of=AS_OF) is None
+    bare.close()
+
+
+def test_open_interest_never_reaches_a_contract_quote(conn):
+    """The invariant the aggregate must not break.
+
+    ``ContractQuote.open_interest`` means "this contract month's open
+    interest". Nothing publishes that, so it stays None even while the
+    whole-product figure is available beside it.
+    """
+    conn.execute(
+        "INSERT INTO cot (commodity, Date, total_open_interest) VALUES ('Soybeans','2026-08-11',812345)"
+    )
+    conn.commit()
+    provider = open_provider(conn)
+    assert provider.aggregate_open_interest("Soybeans", as_of=AS_OF) is not None
+    for leg in provider.curve("Soybeans", as_of=AS_OF).legs:
+        assert leg.open_interest is None
+
+
+def test_the_cot_commodity_keys_are_the_same_strings_the_specs_use(conn):
+    """The join is by name, so a drift in either table would silently return None."""
+    from analysis.futures.domain import CONTRACT_SPECS
+    from config import COT_COMMODITIES
+
+    assert set(CONTRACT_SPECS) <= set(COT_COMMODITIES)

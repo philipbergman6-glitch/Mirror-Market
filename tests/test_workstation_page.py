@@ -13,6 +13,7 @@ from datetime import date, datetime
 import pytest
 import yaml
 
+from analysis.futures import options as options_mod
 from app.workstation_page import (
     REFERENCE_LABEL,
     SECTION_SPECS,
@@ -51,6 +52,12 @@ def conn():
         "INSERT INTO prices (commodity, Date, Open, High, Low, Close, Volume) "
         "VALUES (?,?,NULL,NULL,NULL,?,NULL)",
         [("Soybeans", f"2026-08-{day:02d}", 1100.0 + day) for day in range(3, 19)],
+    )
+    # The one open-interest number this stack has: weekly, whole product,
+    # dated to the CFTC report Tuesday rather than to the price session.
+    connection.executemany(
+        "INSERT INTO cot (commodity, Date, total_open_interest) VALUES (?,?,?)",
+        [("Soybeans", "2026-08-11", 812_345.0), ("Soybean Meal", "2026-08-11", 601_200.0)],
     )
     connection.commit()
     yield connection
@@ -130,12 +137,60 @@ def test_open_interest_is_reported_unavailable_rather_than_zero(conn, empty_posi
             assert leg["open_interest"] is None
 
 
-def test_the_products_with_no_encoded_expiry_are_named_on_the_page(conn, empty_positions):
+def test_whole_product_open_interest_comes_from_cot_and_says_it_is_not_per_month(
+    conn, empty_positions
+):
+    """The one open-interest number this stack actually has, and its caveats.
+
+    It is weekly, it covers every listed month at once, and it is dated to the
+    CFTC report Tuesday (11 Aug) rather than to the price session (18 Aug).
+    Each of those three is a way the number could be misread, so each is
+    carried on the row rather than left to the reader.
+    """
+    curve = section(view(conn, empty_positions), "curve")["data"]
+    beans = next(row for row in curve["commodities"] if row["commodity"] == "Soybeans")
+    aggregate = beans["aggregate_open_interest"]
+    assert aggregate["contracts"] == 812_345.0
+    assert aggregate["report_date"] == "2026-08-11"      # not the 18th
+    assert aggregate["scope"] == "all contract months combined"
+    assert "CFTC" in aggregate["source"]
+    # And it has not leaked onto a contract row, where it would claim to be
+    # one month's open interest.
+    assert beans["open_interest_available"] is False
+    assert "a whole-product figure attributed to one month would be wrong" in (
+        curve["open_interest_note"]
+    )
+
+
+def test_a_commodity_with_no_cot_row_reports_no_open_interest_rather_than_zero(
+    conn, empty_positions
+):
+    """Soybean Oil has no COT row in this fixture. Absence stays absence."""
+    curve = section(view(conn, empty_positions), "curve")["data"]
+    oil = next(row for row in curve["commodities"] if row["commodity"] == "Soybean Oil")
+    assert oil["aggregate_open_interest"] is None
+
+
+def test_every_products_termination_rule_is_named_on_the_page(conn, empty_positions):
+    """The page states each product's rule, and states which products have none.
+
+    The ``not_encoded`` list is empty today because all nine are encoded — the
+    list stays because it is what the page would say if a tenth arrived without
+    a rule, and an absent list would leave that silence unlabelled.
+    """
     data = section(view(conn, empty_positions), "provider")["data"]
-    assert set(data["not_encoded"]) == {"Sugar", "Cotton"}
+    assert data["not_encoded"] == []
     rules = {row["commodity"]: row for row in data["expiry_rules"]}
-    assert rules["Sugar"]["rule"] == "not encoded"
+    assert len(rules) == 9
+    assert all(row["confidence"] == "documented" for row in rules.values())
     assert rules["Soybeans"]["first_notice_rule"] == "last_business_day_of_prior_month"
+    assert rules["Sugar"]["rule"] == "ice_sugar_last_trading_day"
+    assert rules["Cotton"]["rule"] == "ice_cotton_last_trading_day"
+    # Sugar's FND absence is a fact about the contract, not a gap in this
+    # project, and the page distinguishes the two.
+    assert rules["Sugar"]["first_notice_rule"] == "no_notice_day_mechanism"
+    assert "no notice day" in rules["Sugar"]["first_notice_note"]
+    assert rules["Soybeans"]["first_notice_note"] == ""
 
 
 def test_the_continuous_series_is_never_offered_as_hedgeable(conn, empty_positions):
@@ -327,3 +382,68 @@ def test_a_curve_stitched_from_two_sessions_is_flagged_rather_than_used(empty_po
     alerts = section(page, "alerts")["data"]["alerts"]
     assert any("not a single session" in a["message"] for a in alerts)
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Options: the chain is still unavailable, and the hand-entered ladder works
+# ---------------------------------------------------------------------------
+
+
+def test_the_options_section_is_empty_but_says_why_when_nothing_is_entered(
+    conn, empty_positions, tmp_path
+):
+    data = section(
+        build_view(conn, today=AS_OF, generated_at=GENERATED,
+                   positions_dir=empty_positions, options_dir=str(tmp_path / "none")),
+        "options",
+    )["data"]
+    assert data["available"] is False                 # the chain, still
+    assert data["entered"] == []                      # the ladder, empty
+    assert "No options entered" in data["empty_note"]
+    # And the two absences are stated separately: ours and the market's.
+    assert "no source ingested by this project" in data["reason"].lower()
+
+
+def test_a_hand_entered_option_is_valued_against_the_board_and_labelled_a_model_value(
+    conn, empty_positions, tmp_path
+):
+    """The end-to-end fill: a broker quote in a file, priced off our own curve.
+
+    ZSX26 prints 1167.75 in the fixture curve, so the 1200 call is out of the
+    money and its delta must be below 0.5. Everything on the row is stamped
+    manual and carries the source string from the file.
+    """
+    ladder = tmp_path / "options"
+    ladder.mkdir()
+    (ladder / "book.yml").write_text(
+        "options:\n"
+        "  - underlying: ZSX26\n    right: call\n    strike: 1200\n"
+        "    expiry: 2026-10-23\n    quoted_on: 2026-08-18\n"
+        "    source: Broker XYZ 15:40 CT\n    implied_volatility: 0.185\n",
+        encoding="utf-8",
+    )
+    data = section(
+        build_view(conn, today=AS_OF, generated_at=GENERATED,
+                   positions_dir=empty_positions, options_dir=str(ladder)),
+        "options",
+    )["data"]
+    row = data["entered"][0]
+    assert row["valued"] is True
+    assert row["forward"] == 1167.75
+    assert 0.0 < row["greeks"]["delta"] < 0.5
+    assert row["price_type"] == "manual"
+    assert "Broker XYZ" in row["volatility_source"]
+    assert data["empty_note"] == ""
+    assert "4.0%" in data["rate_note"]
+
+
+def test_a_malformed_options_document_fails_the_page_rather_than_rendering_empty(
+    conn, empty_positions, tmp_path
+):
+    """Same rule as the position book: entered wrongly is not entered nothing."""
+    ladder = tmp_path / "options"
+    ladder.mkdir()
+    (ladder / "bad.yml").write_text("options:\n  - right: call\n", encoding="utf-8")
+    with pytest.raises(options_mod.OptionEntryError):
+        build_view(conn, today=AS_OF, generated_at=GENERATED,
+                   positions_dir=empty_positions, options_dir=str(ladder))

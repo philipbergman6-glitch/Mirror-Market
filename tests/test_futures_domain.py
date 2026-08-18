@@ -14,6 +14,7 @@ import pytest
 from analysis.futures.domain import (
     CONTRACT_SPECS,
     MONTH_CODES,
+    NO_NOTICE_DAY,
     ContinuousSeries,
     NamedContract,
     RollMethod,
@@ -32,6 +33,7 @@ from analysis.futures.domain import (
     trading_months,
 )
 from pipeline.units import CONVERSION_FACTORS
+from tests.test_futures_hedge import unencoded_contract
 
 # ---------------------------------------------------------------------------
 # Contract specifications — hand-checked
@@ -193,14 +195,89 @@ def test_livestock_rules():
     assert first_notice_date(spec_for("LE"), 2026, 12) is None
 
 
+def test_ice_sugar_terminates_on_the_month_before_delivery():
+    """ICE Rule 11.06(a): the last full trading day of the month preceding delivery.
+
+    SBH27 (March 2027) therefore stops trading on the last business day of
+    February 2027 = Friday 26 Feb. SBH26 lands on Friday 27 Feb 2026, and
+    SBK26 (May) on Thursday 30 Apr 2026 — a month-end that is a business day,
+    which is the ordinary case.
+    """
+    sugar = spec_for("SB")
+    assert last_trade_date(sugar, 2027, 3) == date(2027, 2, 26)
+    assert last_trade_date(sugar, 2026, 3) == date(2026, 2, 27)
+    assert last_trade_date(sugar, 2026, 5) == date(2026, 4, 30)
+    assert spec_for("Sugar").expiry_confidence.value == "documented"
+
+
+def test_ice_sugar_has_no_first_notice_day_because_the_contract_has_none():
+    """Absence with a reason, not an omission.
+
+    Sugar No. 11 runs no notice-day mechanism: Rule 11.06(b) obliges every open
+    short to issue a Memo of Deliverer after the close on the *last trading
+    day*. The delivery obligation attaches then, which is stricter than an FND,
+    so a synthesised one would hand a hedger days they do not have.
+    """
+    assert spec_for("SB").first_notice_rule == NO_NOTICE_DAY
+    assert first_notice_date(spec_for("SB"), 2027, 3) is None
+    # And that is a different state from "we have not encoded it", which is
+    # what a None here would mean — Live Cattle's FND rule genuinely is not
+    # encoded, and the two must not render alike.
+    assert spec_for("LE").first_notice_rule is None
+
+
+def test_ice_cotton_terminates_seventeen_business_days_from_the_month_end():
+    """Two published statements of one rule, and they must agree.
+
+    The contract summary says "seventeen business days from end of spot month".
+    The rulebook says Last Trading Day is the 10th business day before Last
+    Delivery Day (10.02(a)(ix)) and Last Delivery Day is the 7th-last business
+    day of the month (10.02(a)(vii)) — 10 + 7 = 17 counting back with the last
+    business day as 1. CTZ24: December 2024's business days run to the 31st,
+    and the 17th counted back is Friday 6 December.
+    """
+    cotton = spec_for("CT")
+    assert last_trade_date(cotton, 2024, 12) == date(2024, 12, 6)
+    assert last_trade_date(cotton, 2026, 12) == date(2026, 12, 8)
+    assert last_trade_date(cotton, 2026, 3) == date(2026, 3, 9)
+
+
+def test_ice_cotton_first_notice_day_falls_before_its_last_trading_day():
+    """The reason this project keys roll alerts on FND rather than last trade.
+
+    Cotton's First Delivery Day is the first business day of the delivery month
+    and First Notice Day is five business days before it (10.02(a)(v)+(vi)), so
+    for CTZ24 notice starts 22 Nov 2024 — a fortnight *before* the 6 Dec last
+    trade. A hedger reading last trade as their deadline is already deliverable.
+    """
+    cotton = spec_for("CT")
+    fnd = first_notice_date(cotton, 2024, 12)
+    assert fnd == date(2024, 11, 22)
+    ltd = last_trade_date(cotton, 2024, 12)
+    assert ltd is not None and fnd is not None and fnd < ltd
+
+
+def test_every_carried_product_now_has_a_documented_termination_rule():
+    """The state of the world, asserted so a regression is loud.
+
+    Not a claim that NOT_ENCODED is dead — the mechanism is still tested, on a
+    spec built for the purpose (``unencoded_contract``). This asserts only that
+    no product we actually carry is relying on it today.
+    """
+    undocumented = [
+        name for name, spec in CONTRACT_SPECS.items()
+        if spec.expiry_confidence.value != "documented"
+    ]
+    assert undocumented == []
+
+
 def test_unencoded_expiry_is_absent_not_estimated():
-    """Sugar and Cotton have no encoded rule, and nothing downstream may invent one."""
-    for commodity in ("Sugar", "Cotton"):
-        contract = named_contract(commodity, 2027, 3)
-        assert contract.last_trade is None
-        assert contract.days_to_expiry(date(2026, 8, 18)) is None
-        assert contract.is_expired(date(2026, 8, 18)) is None
-        assert contract.expiry_confidence.value == "not_encoded"
+    """Where no rule is encoded, nothing downstream may invent one."""
+    contract = unencoded_contract("Sugar", 2027, 3)
+    assert contract.last_trade is None
+    assert contract.days_to_expiry(date(2026, 8, 18)) is None
+    assert contract.is_expired(date(2026, 8, 18)) is None
+    assert contract.expiry_confidence.value == "not_encoded"
 
 
 def test_current_delivery_month_is_a_candidate_until_it_expires():

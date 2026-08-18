@@ -45,7 +45,7 @@ from analysis.futures.positions import (
 )
 from analysis.futures.providers import CurveObservation
 from pipeline import schema
-from tests.test_futures_hedge import AS_OF, BEANS, curve, exposure, quote
+from tests.test_futures_hedge import AS_OF, BEANS, curve, exposure, quote, unencoded_quote
 
 # ---------------------------------------------------------------------------
 # Alert plumbing
@@ -99,10 +99,12 @@ def test_a_far_dated_contract_raises_nothing():
 
 
 def test_a_product_with_no_encoded_expiry_is_refused_a_hedge_month_rather_than_guessed():
-    """Sugar has no encoded rule, so no month can be shown to be still trading."""
-    sugar = curve("Sugar", [quote("Sugar", 2027, 3, 18.5), quote("Sugar", 2027, 5, 18.8)])
+    """With no encoded rule, no month can be shown to still trade through the window."""
+    unencoded = curve("Sugar", [
+        unencoded_quote("Sugar", 2027, 3, 18.5), unencoded_quote("Sugar", 2027, 5, 18.8),
+    ])
     proposal = propose_hedge(
-        exposure(Side.LONG, commodity="Sugar", basis_usd_per_mt=0.0), sugar, as_of=AS_OF,
+        exposure(Side.LONG, commodity="Sugar", basis_usd_per_mt=0.0), unencoded, as_of=AS_OF,
     )
     assert proposal.legs == ()
     assert any(w.code == "no_hedge_month" for w in proposal.warnings)
@@ -110,8 +112,8 @@ def test_a_product_with_no_encoded_expiry_is_refused_a_hedge_month_rather_than_g
 
 
 def test_a_leg_with_no_encoded_expiry_warns_that_no_alert_can_fire_for_it():
-    """Hedged in Sugar anyway (a leg named by hand): silence must not read as safety."""
-    leg = size_leg(quote("Sugar", 2027, 3, 18.5), side=Side.SHORT, physical_mt=1_000)
+    """Hedged in it anyway (a leg named by hand): silence must not read as safety."""
+    leg = size_leg(unencoded_quote("Sugar", 2027, 3, 18.5), side=Side.SHORT, physical_mt=1_000)
     proposal = build_hedge(
         exposure(Side.LONG, commodity="Sugar", basis_usd_per_mt=0.0), (leg,), as_of=AS_OF,
     )

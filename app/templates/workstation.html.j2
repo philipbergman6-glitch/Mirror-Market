@@ -228,9 +228,18 @@
     {% for hist in c.histories %}{% if hist.withheld_reason %}
     <div class="note-block">{{ hist.symbols }}: {{ hist.withheld_reason }}</div>
     {% endif %}{% endfor %}
+    {% if c.aggregate_open_interest %}
+    <div class="note-block">
+      Open interest, all months combined:
+      <strong>{{ '{:,.0f}'.format(c.aggregate_open_interest.contracts) }}</strong> contracts
+      as of {{ c.aggregate_open_interest.report_date }}
+      ({{ c.aggregate_open_interest.source }}). Not a per-month figure.
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
   <div class="note-block">{{ s.data.open_interest_note }}</div>
+  <div class="note-block">{{ s.data.aggregate_open_interest_note }}</div>
 
   {#- ------------------------------------------------------------------ 04 -#}
   {% elif s.id == 'hedge' %}
@@ -412,6 +421,56 @@
     {% for a in s.data.model_assumptions %}<li>{{ a }}</li>{% endfor %}
   </ul>
 
+  <h3 style="font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px">Entered options</h3>
+  {% if s.data.empty_note %}
+  <div class="note-block">{{ s.data.empty_note }}</div>
+  {% else %}
+  <div class="note-block">{{ s.data.rate_note }}</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Option</th><th class="num">Strike</th><th>Expiry</th>
+        <th class="num">Forward</th><th class="num">Vol</th><th class="num">Premium</th>
+        <th class="num">USD/contract</th><th class="num">Delta</th><th class="num">Vega</th>
+        <th class="num">Theta</th><th>Source</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in s.data.entered %}
+      {% if row.valued %}
+      <tr>
+        <td class="sym">{{ row.contract.symbol }}</td>
+        <td class="num">{{ '{:g}'.format(row.contract.strike) }}</td>
+        <td>{{ row.contract.expiry }}</td>
+        <td class="num">{{ '{:,.2f}'.format(row.forward) }}</td>
+        <td class="num">{{ '{:.1f}'.format(row.volatility * 100) }}%</td>
+        <td class="num">{{ '{:,.3f}'.format(row.premium) }}</td>
+        <td class="num">{{ '{:,.0f}'.format(row.premium_usd) }}</td>
+        <td class="num">{{ '{:+.3f}'.format(row.greeks.delta) }}</td>
+        <td class="num">{{ '{:+.3f}'.format(row.greeks.vega_per_vol_point) }}</td>
+        <td class="num">{{ '{:+.3f}'.format(row.greeks.theta_per_day) }}</td>
+        <td>{{ row.volatility_source }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td class="sym">{{ row.contract.symbol }}</td>
+        <td class="num">{{ '{:g}'.format(row.contract.strike) }}</td>
+        <td>{{ row.contract.expiry }}</td>
+        <td colspan="7" class="muted">not valued — {{ row.reason }}</td>
+        <td>{{ row.source }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="note-block">
+    Every row above is a <strong>model value</strong> from an input you supplied, not a market
+    price. Entered from: {{ s.data.entered_from|join(', ') }}.
+  </div>
+  {% endif %}
+
   {#- ------------------------------------------------------------------ 10 -#}
   {% elif s.id == 'provider' %}
   <div class="kv"><span class="lbl">Provider</span><span class="val">{{ s.data.provider.display }}</span></div>
@@ -447,7 +506,8 @@
     {% for r in s.data.expiry_rules %}
       <tr>
         <td>{{ r.commodity }}</td><td class="sym">{{ r.root }}</td><td>{{ r.exchange }}</td>
-        <td>{{ r.rule|replace('_', ' ') }}</td><td>{{ r.first_notice_rule|replace('_', ' ') }}</td>
+        <td>{{ r.rule|replace('_', ' ') }}</td>
+        <td>{% if r.first_notice_note %}<span title="{{ r.first_notice_note }}">none — {{ r.first_notice_note }}</span>{% else %}{{ r.first_notice_rule|replace('_', ' ') }}{% endif %}</td>
         <td><span class="ptype">{{ r.confidence|replace('_', ' ') }}</span></td>
       </tr>
     {% endfor %}

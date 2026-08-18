@@ -45,13 +45,24 @@ everywhere it surfaces.
 
 from __future__ import annotations
 
+import logging
 import math
+import os
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from analysis.futures.domain import METHOD_VERSION, NamedContract, PriceType
+from analysis.futures.domain import (
+    METHOD_VERSION,
+    NamedContract,
+    PriceType,
+    UnknownContract,
+    parse_symbol,
+)
+
+log = logging.getLogger(__name__)
 
 DAYS_PER_YEAR = 365.0
 
@@ -440,12 +451,219 @@ def chain_status(underlying: NamedContract | None = None) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# The manual ladder — the workflow described above, actually wired up
+# ---------------------------------------------------------------------------
+#
+# The chain is unavailable and stays unavailable; this is the other half of that
+# sentence. It was described in :class:`ChainUnavailable.manual_workflow` from
+# the start and had no entry point, which made the offer unusable — the module
+# said "type in your broker's quote" and nothing could be typed in.
+#
+# Shape and failure mode are copied deliberately from
+# ``analysis/futures/positions.py``: a directory of YAML documents, a missing
+# directory is an empty ladder, and a *present but malformed* file raises. The
+# reason is the same one — "nothing entered" and "something entered wrongly"
+# must not render alike — and the reason for copying rather than inventing is
+# that a trader should not have to learn two file formats for the two things
+# only they can supply.
+
+
+class OptionEntryError(ValueError):
+    """A manual option document could not be read. Never swallowed into empty."""
+
+
+@dataclass(frozen=True)
+class ManualQuote:
+    """One option, as a human typed it off their own screen.
+
+    Exactly one of ``premium`` and ``implied_volatility`` is required, and the
+    other is derived: given a premium the vol is backed out by bisection, given
+    a vol the premium is priced. ``source`` is mandatory and free text — it is
+    the name of whoever quoted it, and it is what stops a model number and a
+    market number from becoming indistinguishable three screens later.
+    """
+
+    contract: OptionContract
+    source: str
+    quoted_on: date
+    premium: float | None = None
+    implied_volatility: float | None = None
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.source.strip():
+            raise OptionEntryError(
+                f"{self.contract.symbol}: source is required — a hand-entered option "
+                "quote must say who quoted it"
+            )
+        supplied = [self.premium is not None, self.implied_volatility is not None]
+        if sum(supplied) != 1:
+            raise OptionEntryError(
+                f"{self.contract.symbol}: give exactly one of premium or "
+                "implied_volatility — the other is derived from it. Supplying both "
+                "would let two inconsistent numbers sit on one row with nothing "
+                "saying which was believed"
+            )
+
+
+@dataclass(frozen=True)
+class ManualLadder:
+    """Every hand-entered option, and where each document came from."""
+
+    quotes: tuple[ManualQuote, ...] = ()
+    loaded_from: tuple[str, ...] = ()
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.quotes
+
+
+def value_manual_ladder(
+    ladder: ManualLadder, *, as_of: date, forwards: dict[str, float], rate: float,
+) -> tuple[dict[str, Any], ...]:
+    """Value each hand-entered option against the board's own forward.
+
+    ``forwards`` is keyed by underlying symbol (``ZSX26``) in the underlying's
+    native units. A quote whose underlying is not on the board is *not* valued
+    — it is returned with its reason, because pricing an option against a
+    forward we do not have would mean inventing the one input the trader could
+    not give us.
+    """
+    out: list[dict[str, Any]] = []
+    for quote in ladder.quotes:
+        symbol = quote.contract.underlying.symbol
+        forward = forwards.get(symbol)
+        if forward is None:
+            out.append({
+                "contract": quote.contract.to_dict(),
+                "source": quote.source,
+                "quoted_on": quote.quoted_on.isoformat(),
+                "valued": False,
+                "reason": (
+                    f"no board price for {symbol} on this session, so there is no forward "
+                    "to value it against"
+                ),
+            })
+            continue
+
+        volatility = quote.implied_volatility
+        derived_from = "entered implied volatility"
+        if volatility is None:
+            assert quote.premium is not None      # guaranteed by __post_init__
+            volatility = implied_volatility(
+                quote.premium, forward, quote.contract.strike,
+                quote.contract.years_to_expiry(as_of), rate, quote.contract.right,
+            )
+            derived_from = "backed out of the entered premium by bisection"
+        if volatility is None:
+            out.append({
+                "contract": quote.contract.to_dict(),
+                "source": quote.source,
+                "quoted_on": quote.quoted_on.isoformat(),
+                "valued": False,
+                "reason": (
+                    "the entered premium is outside the model's arbitrage bounds, so no "
+                    "implied volatility exists for it — check the premium's units"
+                ),
+            })
+            continue
+
+        valuation = value_option(
+            quote.contract, as_of=as_of, forward=forward, volatility=volatility,
+            rate=rate, volatility_source=f"{quote.source} ({derived_from})",
+        )
+        payload = valuation.to_dict()
+        payload.update({
+            "valued": True,
+            "source": quote.source,
+            "quoted_on": quote.quoted_on.isoformat(),
+            "entered_premium": quote.premium,
+            "volatility_derived_from": derived_from,
+            "note": quote.note,
+        })
+        out.append(payload)
+    return tuple(out)
+
+
+def parse_ladder(payload: dict[str, Any], *, where: str) -> ManualLadder:
+    """Parse one manual-options document. Raises on anything it cannot read."""
+    if not isinstance(payload, dict):
+        raise OptionEntryError(f"{where}: expected a mapping with an 'options' key")
+    rows = payload.get("options") or []
+    if not isinstance(rows, list):
+        raise OptionEntryError(f"{where}: 'options' must be a list")
+
+    quotes: list[ManualQuote] = []
+    for index, row in enumerate(rows, start=1):
+        at = f"{where}[options][{index}]"
+        if not isinstance(row, dict):
+            raise OptionEntryError(f"{at}: expected a mapping")
+        try:
+            underlying = parse_symbol(str(row["underlying"]))
+            right = OptionRight(str(row["right"]).strip().lower())
+            strike = float(row["strike"])
+            expiry = date.fromisoformat(str(row["expiry"]))
+            quoted_on = date.fromisoformat(str(row["quoted_on"]))
+        except KeyError as exc:
+            raise OptionEntryError(f"{at}: missing required field {exc}") from exc
+        except (UnknownContract, ValueError) as exc:
+            raise OptionEntryError(f"{at}: {exc}") from exc
+
+        style = OptionStyle(str(row.get("style", "american")).strip().lower())
+        quotes.append(ManualQuote(
+            contract=OptionContract(
+                underlying=underlying, right=right, strike=strike,
+                expiry=expiry, style=style,
+            ),
+            source=str(row.get("source", "")),
+            quoted_on=quoted_on,
+            premium=None if row.get("premium") in (None, "") else float(row["premium"]),
+            implied_volatility=(
+                None if row.get("implied_volatility") in (None, "")
+                else float(row["implied_volatility"])
+            ),
+            note=str(row.get("note", "")),
+        ))
+    return ManualLadder(quotes=tuple(quotes), loaded_from=(where,))
+
+
+def load_ladder(directory: str | os.PathLike[str] | None = None) -> ManualLadder:
+    """Read every ``*.yml`` manual-options document in ``directory``.
+
+    A missing directory is an empty ladder. A malformed one raises — see the
+    section comment above for why those two must not look alike.
+    """
+    import config
+
+    root = Path(str(directory) if directory is not None else getattr(
+        config, "OPTIONS_DIR", "data/reference/options"
+    ))
+    if not root.is_dir():
+        log.info("no options directory at %s — no options entered", root)
+        return ManualLadder()
+
+    import yaml
+
+    quotes: list[ManualQuote] = []
+    sources: list[str] = []
+    for path in sorted(root.glob("*.yml")):
+        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        ladder = parse_ladder(payload, where=str(path))
+        quotes.extend(ladder.quotes)
+        sources.append(str(path))
+    return ManualLadder(quotes=tuple(quotes), loaded_from=tuple(sources))
+
+
 __all__ = [
     "DAYS_PER_YEAR",
     "NO_CHAIN_REASON",
     "ChainQuote",
     "ChainUnavailable",
     "Greeks",
+    "ManualLadder",
+    "ManualQuote",
+    "OptionEntryError",
     "OptionChain",
     "OptionChainProvider",
     "OptionContract",
@@ -457,5 +675,8 @@ __all__ = [
     "chain_status",
     "fetch_chain",
     "implied_volatility",
+    "load_ladder",
+    "parse_ladder",
+    "value_manual_ladder",
     "value_option",
 ]
