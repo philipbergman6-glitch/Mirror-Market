@@ -10,6 +10,9 @@ workflow steps.
    FX and the forward curve over a short window. Same code as the daily
    build with two arguments different, so the settlement guard, the cleaners
    and the freshness grading cannot diverge between the two paths.
+   ``--layers`` overrides the layer set for schedule-specific runs — the
+   08:00 UTC slot passes ``dce``, because Dalian closes 15:00 CST (07:00
+   UTC) and an evening fetch is 13-17h late against a 6h objective.
 2. Generate the whole site into a private candidate directory.
 3. Gate it twice: the existing structural contract
    (``verify_site_candidate``), and then
@@ -109,16 +112,18 @@ def refresh(
     output_dir: Path,
     public_manifest_source: str | None,
     skip_pipeline: bool = False,
+    layers: tuple[str, ...] | None = None,
 ) -> int:
     setup_logging()
 
+    selected = tuple(layers) if layers else FAST_REFRESH_LAYERS
     if not skip_pipeline:
         import main as pipeline_main
 
-        log.info("fast refresh: %s over %s", ", ".join(FAST_REFRESH_LAYERS),
+        log.info("fast refresh: %s over %s", ", ".join(selected),
                  FAST_REFRESH_HISTORY_PERIOD)
         code = pipeline_main.run(
-            layer_keys=FAST_REFRESH_LAYERS,
+            layer_keys=selected,
             history_period=FAST_REFRESH_HISTORY_PERIOD,
         )
         if code != 0:
@@ -188,11 +193,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="generate and gate only, against the database as it stands",
     )
+    parser.add_argument(
+        "--layers",
+        help=(
+            "comma-separated layer keys to fetch instead of "
+            "config.FAST_REFRESH_LAYERS (e.g. 'dce' for the morning Dalian "
+            "run). Unknown keys hard-fail in main.run, never run short."
+        ),
+    )
     args = parser.parse_args(argv)
+    layers = tuple(k.strip() for k in args.layers.split(",") if k.strip()) if args.layers else None
     return refresh(
         output_dir=args.output_dir,
         public_manifest_source=args.public_manifest,
         skip_pipeline=args.skip_pipeline,
+        layers=layers,
     )
 
 

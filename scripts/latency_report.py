@@ -4,6 +4,8 @@
     python scripts/latency_report.py --json           # the manifest's latency block
     python scripts/latency_report.py --manifest URL   # read a published edition
     python scripts/latency_report.py --fail-on-breach # exit 1 if any layer misses
+    python scripts/latency_report.py --fail-on-breach-layers prices,currencies
+                                                      # exit 1 only for these
 
 ``--manifest`` is how the *product's* latency is measured rather than the
 pipeline's: it reads a published ``manifest.json``, local path or URL, and
@@ -99,19 +101,55 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="exit 1 when any layer breaches its objective",
     )
+    parser.add_argument(
+        "--fail-on-breach-layers",
+        help=(
+            "comma-separated layer names: exit 1 only when one of THESE "
+            "breaches. This is the CI gate for a scheduled run, scoped to the "
+            "layers that run just fetched — an unscoped gate would be red "
+            "every day on layers whose acquisition breaches structurally "
+            "(COT carries a 3-day provider delay against a 24h target; the "
+            "daily build re-stamps dce 13-17h after the Dalian close)."
+        ),
+    )
     args = parser.parse_args(argv)
+    gate_layers = (
+        {name.strip() for name in args.fail_on_breach_layers.split(",") if name.strip()}
+        if args.fail_on_breach_layers
+        else None
+    )
+    if gate_layers is not None:
+        from latency.domain import TRADER_CRITICAL_LAYERS
+
+        unknown = gate_layers.difference(TRADER_CRITICAL_LAYERS)
+        if unknown:
+            # A typo'd gate layer would otherwise be a gate that never fires.
+            raise SystemExit(
+                f"unknown gate layer(s): {', '.join(sorted(unknown))}. "
+                f"Known: {', '.join(TRADER_CRITICAL_LAYERS)}"
+            )
+
+    def _exit_code(breaching_layers: list[str]) -> int:
+        if args.fail_on_breach and breaching_layers:
+            return 1
+        if gate_layers is not None:
+            gated = sorted(gate_layers.intersection(breaching_layers))
+            if gated:
+                print(f"BREACH in gated layer(s): {', '.join(gated)}", file=sys.stderr)
+                return 1
+        return 0
 
     if args.manifest:
         output, breaching = _report_from_manifest(args.manifest, args.json)
         print(output)
-        return 1 if (args.fail_on_breach and breaching) else 0
+        return _exit_code(breaching)
 
     now = datetime.now(timezone.utc)
     measurements = measure()
     print(json.dumps(to_dict(measurements, now), indent=2) if args.json
           else to_text(measurements, now))
-    breaching = [m for m in measurements if m.verdict is Verdict.BREACHES]
-    return 1 if (args.fail_on_breach and breaching) else 0
+    breaching = [m.layer for m in measurements if m.verdict is Verdict.BREACHES]
+    return _exit_code(breaching)
 
 
 if __name__ == "__main__":
