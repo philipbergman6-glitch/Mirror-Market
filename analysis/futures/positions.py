@@ -36,7 +36,7 @@ import csv
 import logging
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import Enum
 from pathlib import Path
@@ -51,9 +51,18 @@ from analysis.futures.domain import (
     parse_symbol,
     spec_for,
 )
-from analysis.futures.hedge import PhysicalUnit, to_metric_tons
+from analysis.futures.hedge import BasisConvention, PhysicalUnit, to_metric_tons
+from analysis.futures.limits import DeskLimit, LimitCheck, LimitError, LimitStatus
+from analysis.futures.limits import evaluate as evaluate_limits
 
 log = logging.getLogger(__name__)
+
+#: Kept under the old names. A ``Limit`` is a desk limit and a ``LimitBreach``
+#: is a check whose status is ``breach`` — see ``analysis/futures/limits.py``,
+#: which owns both so that the page, the alerts and the mandate cannot end up
+#: with three definitions of the same line.
+Limit = DeskLimit
+LimitBreach = LimitCheck
 
 
 class PositionError(ValueError):
@@ -194,6 +203,15 @@ class PhysicalPosition:
     average_cost_usd_mt: float | None = None
     currency: str = "USD"
     fx_pair: str | None = None
+    #: How this position is priced. It decides whether the tonnes still move
+    #: with the board at all, so it is the single most consequential field on
+    #: this record for the exposure views — see ``analysis/futures/exposure.py``.
+    basis_convention: BasisConvention = BasisConvention.UNPRICED
+    #: Whether the file actually said. False means the convention above is this
+    #: module's most-exposed default rather than the trader's statement, and
+    #: every exposure line computed from it carries a warning saying so. The
+    #: default is never silently trusted.
+    pricing_stated: bool = True
     #: The three entry-time levels an attribution needs. All or nothing.
     entry_futures_usd_mt: float | None = None
     entry_basis_usd_mt: float | None = None
@@ -216,31 +234,6 @@ class PhysicalPosition:
             and self.current_basis_usd_mt is not None
             and (self.currency == "USD" or self.entry_fx_rate is not None)
         )
-
-
-@dataclass(frozen=True)
-class Limit:
-    """One configurable line. Checked and reported; never enforced."""
-
-    key: str                 # net_mt | unhedged_mt | notional_usd | loss_usd
-    scope: str               # commodity name or "*"
-    maximum: float
-    note: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"key": self.key, "scope": self.scope, "maximum": self.maximum, "note": self.note}
-
-
-@dataclass(frozen=True)
-class LimitBreach:
-    limit: Limit
-    observed: float
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            **self.limit.to_dict(),
-            "observed": round(self.observed, 2),
-            "excess": round(abs(self.observed) - self.limit.maximum, 2),
-        }
 
 
 @dataclass(frozen=True)
@@ -289,7 +282,7 @@ class Book:
 
     physical: tuple[PhysicalPosition, ...] = ()
     futures: tuple[FuturesPosition, ...] = ()
-    limits: tuple[Limit, ...] = ()
+    limits: tuple[DeskLimit, ...] = ()
     loaded_from: tuple[str, ...] = ()
 
     @property
@@ -303,11 +296,18 @@ class BookValuation:
 
     as_of: date
     positions: tuple[MarkedPosition, ...]
-    breaches: tuple[LimitBreach, ...]
+    breaches: tuple[LimitCheck, ...]
     total_unrealised_usd: float
     total_realised_usd: float
     net_mt_by_commodity: dict[str, float]
     mark_note: str
+    #: Every rate ``value_book`` looked up, keyed by pair, ``None`` where the
+    #: lookup found nothing. Carried so the exposure views mark the currency
+    #: legs at the same rate the P&L did rather than looking one up again.
+    fx_rates: dict[str, tuple[date, float] | None] = field(default_factory=dict)
+    #: Every limit measured, breaches and headroom alike. ``breaches`` above is
+    #: the subset a page leads with; a desk also needs to see what is close.
+    limit_checks: tuple[LimitCheck, ...] = ()
     method_version: str = METHOD_VERSION
     warnings: tuple[str, ...] = ()
 
@@ -317,6 +317,8 @@ class BookValuation:
             "method_version": self.method_version,
             "positions": [p.to_dict() for p in self.positions],
             "breaches": [b.to_dict() for b in self.breaches],
+            "limit_checks": [c.to_dict() for c in self.limit_checks],
+            "pnl_basis": MANAGEMENT_BASIS,
             "total_unrealised_usd": round(self.total_unrealised_usd, 2),
             "total_realised_usd": round(self.total_realised_usd, 2),
             "net_mt_by_commodity": {k: round(v, 3) for k, v in sorted(self.net_mt_by_commodity.items())},
@@ -329,6 +331,10 @@ MARK_NOTE = (
     "Marks are delayed daily closes, not proven exchange settlements. This valuation is a "
     "management figure; it is not a margin calculation and will not match a clearing statement."
 )
+
+#: Every P&L this module produces is on the management basis, and says so in
+#: its own payload. ``analysis/futures/clearing.py`` produces the other one.
+MANAGEMENT_BASIS = "management_estimate"
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +488,11 @@ def value_book(
     """
     marked: list[MarkedPosition] = []
     warnings: list[str] = []
+    fx_rates: dict[str, tuple[date, float] | None] = {}
 
+    # Futures first, then physical, each in book order. `analysis.futures.
+    # exposure` pairs its lines with the book by that order, so it is a
+    # contract rather than an implementation detail; a test pins it.
     for futures_position in book.futures:
         marked.append(_mark_futures(
             futures_position,
@@ -502,6 +512,8 @@ def value_book(
             fx_for(physical_position.fx_pair)
             if (fx_for and physical_position.fx_pair) else None
         )
+        if physical_position.fx_pair:
+            fx_rates[physical_position.fx_pair] = rate
         marked.append(_mark_physical(physical_position, quote, rate))
 
     net_by_commodity: dict[str, float] = {}
@@ -510,53 +522,63 @@ def value_book(
 
     total_unrealised = sum(p.unrealised_usd or 0.0 for p in marked)
     total_realised = sum(p.realised_usd for p in marked)
+    notional = sum(
+        abs(p.net_mt) * (p.mark or 0.0) for p in marked if p.kind is BookKind.PHYSICAL
+    )
 
-    return BookValuation(
+    valuation = BookValuation(
         as_of=as_of,
         positions=tuple(marked),
-        breaches=check_limits(book.limits, marked, net_by_commodity, total_unrealised),
+        breaches=(),
         total_unrealised_usd=total_unrealised,
         total_realised_usd=total_realised,
         net_mt_by_commodity=net_by_commodity,
         mark_note=MARK_NOTE,
+        fx_rates=fx_rates,
+    )
+    checks = check_limits(book, valuation, notional_usd=notional)
+    return replace(
+        valuation,
+        breaches=tuple(check for check in checks if check.is_breach),
+        limit_checks=checks,
         warnings=tuple(warnings),
     )
 
 
 def check_limits(
-    limits: tuple[Limit, ...],
-    marked: list[MarkedPosition],
-    net_by_commodity: dict[str, float],
-    total_unrealised: float,
-) -> tuple[LimitBreach, ...]:
-    """Report every crossed line. Reporting only — nothing is prevented."""
-    breaches: list[LimitBreach] = []
-    for limit in limits:
-        if limit.key == "net_mt":
-            scopes = net_by_commodity if limit.scope == "*" else {
-                limit.scope: net_by_commodity.get(limit.scope, 0.0)
-            }
-            for _, value in scopes.items():
-                if abs(value) > limit.maximum:
-                    breaches.append(LimitBreach(limit, value))
-        elif limit.key == "unhedged_mt":
-            for commodity, value in net_by_commodity.items():
-                if limit.scope not in ("*", commodity):
-                    continue
-                if abs(value) > limit.maximum:
-                    breaches.append(LimitBreach(limit, value))
-        elif limit.key == "notional_usd":
-            exposure = sum(
-                abs(p.net_mt) * (p.mark or 0.0) for p in marked if p.kind is BookKind.PHYSICAL
-            )
-            if exposure > limit.maximum:
-                breaches.append(LimitBreach(limit, exposure))
-        elif limit.key == "loss_usd":
-            if total_unrealised < -abs(limit.maximum):
-                breaches.append(LimitBreach(limit, total_unrealised))
-        else:
-            log.warning("unknown limit key %r — not checked", limit.key)
-    return tuple(breaches)
+    book: Book,
+    valuation: BookValuation,
+    *,
+    notional_usd: float | None = None,
+) -> tuple[LimitCheck, ...]:
+    """Measure every configured line against the exposure views.
+
+    Reporting only — nothing is prevented. The arithmetic lives in
+    ``analysis.futures.limits`` and the exposures it reads live in
+    ``analysis.futures.exposure``; this function only joins them, so a mandate
+    and the risk table on the page cannot end up measuring different things.
+
+    Imported inside the function because ``exposure`` reads *this* module: the
+    valuation is the input to the exposure report, and the limits are checked
+    against the report.
+    """
+    if not book.limits:
+        return ()
+    from analysis.futures.exposure import build_exposure
+
+    report = build_exposure(book, valuation, as_of=valuation.as_of)
+    if notional_usd is None:
+        notional_usd = sum(
+            abs(p.net_mt) * (p.mark or 0.0)
+            for p in valuation.positions
+            if p.kind is BookKind.PHYSICAL
+        )
+    return evaluate_limits(
+        book.limits,
+        exposure=report,
+        total_unrealised_usd=valuation.total_unrealised_usd,
+        notional_usd=notional_usd,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +650,8 @@ def parse_book(payload: dict[str, Any], *, where: str) -> Book:
             entry_fx_rate=_optional_float(raw.get("entry_fx_rate")),
             mark_contract=raw.get("mark_contract"),
             current_basis_usd_mt=_optional_float(raw.get("current_basis_usd_mt")),
+            basis_convention=_pricing(raw.get("pricing"), label),
+            pricing_stated=raw.get("pricing") not in (None, ""),
             location=str(raw.get("location") or ""),
             note=str(raw.get("note") or ""),
         ))
@@ -666,15 +690,18 @@ def parse_book(payload: dict[str, Any], *, where: str) -> Book:
 
     for index, raw in enumerate(payload.get("limits") or ()):
         label = f"{where}: limits[{index}]"
-        key = str(raw.get("key") or "")
-        if key not in ("net_mt", "unhedged_mt", "notional_usd", "loss_usd"):
-            raise PositionError(f"{label}: unknown limit key {key!r}")
-        limits.append(Limit(
-            key=key,
-            scope=str(raw.get("scope") or "*"),
-            maximum=float(raw["maximum"]),
-            note=str(raw.get("note") or ""),
-        ))
+        try:
+            limits.append(DeskLimit(
+                key=str(raw.get("key") or ""),
+                scope=str(raw.get("scope") or "*"),
+                maximum=float(raw["maximum"]),
+                warn_at=_optional_float(raw.get("warn_at")),
+                note=str(raw.get("note") or ""),
+            ))
+        except KeyError as exc:
+            raise PositionError(f"{label}: a limit needs a `maximum` ({exc})") from exc
+        except LimitError as exc:
+            raise PositionError(f"{label}: {exc}") from exc
 
     return Book(
         physical=tuple(physical), futures=tuple(futures), limits=tuple(limits),
@@ -684,6 +711,25 @@ def parse_book(payload: dict[str, Any], *, where: str) -> Book:
 
 def _optional_float(value: Any) -> float | None:
     return None if value in (None, "") else float(value)
+
+
+def _pricing(raw: Any, where: str) -> BasisConvention:
+    """How the position is priced.
+
+    Omitted is legal and means "not stated": the position is then counted at
+    its most exposed reading and every exposure line built from it says the
+    convention was a default rather than a statement. A *wrong* value is not
+    legal — it would silently move tonnes between the flat-price and basis
+    views, which is a risk report saying something untrue.
+    """
+    if raw in (None, ""):
+        return BasisConvention.UNPRICED
+    try:
+        return BasisConvention(str(raw).strip().lower())
+    except ValueError as exc:
+        raise PositionError(
+            f"{where}: pricing {raw!r} is not one of {[c.value for c in BasisConvention]}"
+        ) from exc
 
 
 def load_book(directory: str | os.PathLike[str] | None = None) -> Book:
@@ -782,14 +828,18 @@ def positions_from_csv(path: str | os.PathLike[str]) -> Book:
 
 __all__ = [
     "CSV_COLUMNS",
+    "MANAGEMENT_BASIS",
     "MARK_NOTE",
     "Book",
     "BookKind",
     "BookValuation",
+    "DeskLimit",
     "Fill",
     "FuturesPosition",
     "Limit",
     "LimitBreach",
+    "LimitCheck",
+    "LimitStatus",
     "LotResult",
     "MarkedPosition",
     "PhysicalPosition",

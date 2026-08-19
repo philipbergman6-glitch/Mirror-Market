@@ -13,15 +13,16 @@ import pytest
 
 from analysis.futures.domain import Side, named_contract, parse_symbol, spec_for
 from analysis.futures.hedge import PhysicalUnit
+from analysis.futures.limits import LimitError
 from analysis.futures.positions import (
     Book,
     BookKind,
     Fill,
     FuturesPosition,
     Limit,
+    LimitStatus,
     PhysicalPosition,
     PositionError,
-    check_limits,
     load_book,
     parse_book,
     positions_from_csv,
@@ -311,43 +312,77 @@ def marked_long(net_mt: float, mark: float = 400.0):
     )
 
 
-def test_a_net_mt_limit_breaches_on_absolute_size_either_way():
-    marked = marked_long(30_000).positions
-    net = {"Soybeans": 30_000.0}
-    breaches = check_limits((Limit("net_mt", "Soybeans", 25_000),), list(marked), net, 0.0)
-    assert len(breaches) == 1
-    assert breaches[0].to_dict()["excess"] == pytest.approx(5_000.0)
+def limited(net_mt: float, *limits, mark: float = 400.0):
+    """Value a one-position book under a set of limits.
 
-    short = check_limits((Limit("net_mt", "Soybeans", 25_000),), list(marked), {"Soybeans": -30_000.0}, 0.0)
-    assert len(short) == 1
+    Limits are now measured against the exposure views rather than against a
+    dict of net tonnages handed in by the caller, so they are exercised through
+    ``value_book`` — the same path the page uses. A limit checked by a private
+    arithmetic the page does not run is a limit nobody is actually keeping.
+    """
+    book = Book(
+        physical=(PhysicalPosition(
+            commodity="Soybeans", quantity=abs(net_mt), unit=PhysicalUnit.METRIC_TON,
+            side=Side.LONG if net_mt >= 0 else Side.SHORT,
+            average_cost_usd_mt=mark, mark_contract="ZSX26", current_basis_usd_mt=0.0,
+        ),),
+        limits=limits,
+    )
+    return value_book(
+        book, as_of=AS_OF, quote_for=quotes(ZSX26=quote("Soybeans", 2026, 11, 1167.75)),
+    )
+
+
+def test_a_net_mt_limit_breaches_on_absolute_size_either_way():
+    long_side = limited(30_000, Limit("net_mt", "Soybeans", 25_000))
+    assert len(long_side.breaches) == 1
+    assert long_side.breaches[0].to_dict()["excess"] == pytest.approx(5_000.0)
+    assert len(limited(-30_000, Limit("net_mt", "Soybeans", 25_000)).breaches) == 1
 
 
 def test_a_limit_scoped_to_another_commodity_does_not_fire():
-    breaches = check_limits(
-        (Limit("net_mt", "Corn", 1.0),), [], {"Soybeans": 30_000.0}, 0.0
-    )
-    assert breaches == ()
+    assert limited(30_000, Limit("net_mt", "Corn", 1.0)).breaches == ()
 
 
 def test_a_loss_limit_fires_on_negative_unrealised_only():
-    limit = (Limit("loss_usd", "*", 100_000),)
-    assert check_limits(limit, [], {}, -150_000.0)
-    assert check_limits(limit, [], {}, 150_000.0) == ()
+    # Bought at 500 and marked at ~429: a loss well past the line.
+    assert limited(30_000, Limit("loss_usd", "*", 100_000), mark=500.0).breaches
+    # Bought at 300: the same size, in profit. A profit cannot cross a loss limit.
+    assert limited(30_000, Limit("loss_usd", "*", 100_000), mark=300.0).breaches == ()
 
 
 def test_a_notional_limit_measures_the_physical_marked_value():
-    valuation = marked_long(10_000)
-    breaches = check_limits(
-        (Limit("notional_usd", "*", 1_000_000),),
-        list(valuation.positions), valuation.net_mt_by_commodity, 0.0,
-    )
+    breaches = limited(10_000, Limit("notional_usd", "*", 1_000_000)).breaches
     assert breaches and breaches[0].observed > 4_000_000
 
 
-def test_an_unknown_limit_key_is_logged_and_not_silently_treated_as_zero(caplog):
-    with caplog.at_level("WARNING"):
-        assert check_limits((Limit("var_99", "*", 1.0),), [], {}, 0.0) == ()
-    assert "unknown limit key" in caplog.text
+def test_an_unknown_limit_key_is_refused_at_construction_not_logged_and_skipped():
+    """A change of behaviour, deliberately.
+
+    The old code logged a warning and checked nothing, which leaves a desk
+    believing a mandate is being kept while nothing keeps it. A limit key this
+    software cannot measure is invalid input, and invalid input fails loudly.
+    """
+    with pytest.raises(LimitError, match="unknown limit key"):
+        Limit("var_99", "*", 1.0)
+
+
+def test_a_warning_level_fires_before_the_breach_and_is_reported_separately():
+    valuation = limited(30_000, Limit("net_mt", "Soybeans", 40_000, warn_at=25_000))
+    assert valuation.breaches == ()
+    statuses = {check.status for check in valuation.limit_checks}
+    assert statuses == {LimitStatus.WARN}
+
+
+def test_a_warning_level_at_or_above_the_maximum_is_refused():
+    with pytest.raises(LimitError, match="not below the maximum"):
+        Limit("net_mt", "*", 1_000, warn_at=1_000)
+
+
+def test_headroom_is_reported_for_a_limit_that_is_nowhere_near_crossed():
+    check = limited(1_000, Limit("net_mt", "Soybeans", 25_000)).limit_checks[0]
+    assert check.status is LimitStatus.OK
+    assert check.headroom == pytest.approx(24_000.0)
 
 
 # ---------------------------------------------------------------------------

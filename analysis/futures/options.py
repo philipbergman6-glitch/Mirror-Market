@@ -45,11 +45,12 @@ everywhere it surfaces.
 
 from __future__ import annotations
 
+import csv
 import logging
 import math
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -65,6 +66,146 @@ from analysis.futures.domain import (
 log = logging.getLogger(__name__)
 
 DAYS_PER_YEAR = 365.0
+
+#: How long an entered or imported quote stays comparable with the board before
+#: the page says so. Options quotes move intraday with the underlying; one
+#: session is generous already.
+QUOTE_STALE_AFTER_DAYS = 1
+
+
+@dataclass(frozen=True)
+class ModelLimitation:
+    """One way Black-76 is wrong about a listed grain option.
+
+    These are data rather than prose because a caveat that lives only in a
+    docstring is a caveat that reaches nobody who is about to trade on the
+    number. Each one says which **direction** it bites: a limitation with no
+    direction cannot be acted on, only worried about.
+    """
+
+    id: str
+    assumption: str            # what the model assumes
+    reality: str               # what a listed grain option actually does
+    why: str                   # the consequence for the number on the screen
+    direction: str             # understates | overstates | either | unknown
+    affects: str               # the desk decision it distorts
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "assumption": self.assumption,
+            "reality": self.reality,
+            "why": self.why,
+            "direction": self.direction,
+            "affects": self.affects,
+        }
+
+
+#: The load-bearing limits of Black-76 applied to **American agricultural**
+#: options. Rendered wherever a model value is shown.
+BLACK76_LIMITATIONS: tuple[ModelLimitation, ...] = (
+    ModelLimitation(
+        id="american_early_exercise",
+        assumption="the option is European and can only be exercised at expiry",
+        reality=(
+            "CBOT options on grain futures are American — the holder may exercise into the "
+            "underlying future on any business day up to expiration"
+        ),
+        why=(
+            "the right to exercise early can only be worth something or nothing, never less "
+            "than nothing, so the Black-76 number is a floor for an American option rather "
+            "than a value for one. The gap widens for deep in-the-money options and for "
+            "puts when rates are high"
+        ),
+        direction="understates",
+        affects="the premium, and therefore any decision to sell an option at the model value",
+    ),
+    ModelLimitation(
+        id="volatility_smile",
+        assumption="one constant volatility describes every strike and the whole life",
+        reality=(
+            "grain implied volatility smiles, and the smile steepens sharply into a weather "
+            "market — out-of-the-money calls in a drought carry a volatility several points "
+            "above the at-the-money"
+        ),
+        why=(
+            "pricing the wings off an at-the-money volatility understates them; using a "
+            "wing volatility at the money overstates it. A single number is right in at "
+            "most one place on the ladder"
+        ),
+        direction="either",
+        affects="every strike away from the money, and any ratio or spread struck across them",
+    ),
+    ModelLimitation(
+        id="constant_volatility_to_expiry",
+        assumption="volatility is constant from today to expiration",
+        reality=(
+            "grain volatility is seasonal and event-driven — a WASDE, a pollination window "
+            "or a South American planting scare raises it on a known calendar"
+        ),
+        why=(
+            "an option spanning a known event is worth more than a flat-vol model says, and "
+            "one expiring before it is worth less; the model cannot tell them apart"
+        ),
+        direction="either",
+        affects="calendar spreads and any comparison of two expiries",
+    ),
+    ModelLimitation(
+        id="constant_discount_rate",
+        assumption="a single continuously-compounded rate holds to expiry",
+        reality="the rate is an input this project does not source; the caller chooses it",
+        why=(
+            "the effect on a short-dated grain option is small, but it is not zero and it "
+            "is not measured here — rho is reported per rate point so the choice stays visible"
+        ),
+        direction="either",
+        affects="the discounted premium, most visibly on longer-dated options",
+    ),
+    ModelLimitation(
+        id="calendar_convention",
+        assumption="time to expiry runs on a 365-day calendar of continuous trading",
+        reality=(
+            "the market trades on business days and volatility does not accrue evenly over "
+            "weekends and exchange holidays"
+        ),
+        why=(
+            "a short-dated option across a long holiday weekend is overstated on a calendar-"
+            "day clock; the difference is largest in the last fortnight of an option's life"
+        ),
+        direction="overstates",
+        affects="options with days rather than months to run",
+    ),
+    ModelLimitation(
+        id="no_market_price",
+        assumption="the inputs describe a traded option",
+        reality=(
+            "no source this project ingests publishes an option premium, a strike ladder or "
+            "an implied volatility for any of these contracts"
+        ),
+        why=(
+            "every number here came from a person or a file they supplied, and is a model "
+            "value computed from it — it is never a market observation"
+        ),
+        direction="unknown",
+        affects="everything on this surface",
+    ),
+)
+
+
+def _aware(value: datetime | None, *, where: str, error: type[Exception]) -> datetime | None:
+    """A timestamp is timezone-aware or it is refused.
+
+    A naive one raises the question "whose local time" — the desk's, the
+    broker's, or the CI runner's — and the three are hours apart.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        raise error(
+            f"{where}: quoted_at has no timezone — a naive timestamp could be the desk's "
+            "local time, the broker's or the runner's, and they are hours apart"
+        )
+    return value
 
 
 class OptionRight(str, Enum):
@@ -356,7 +497,12 @@ def value_option(
 
 @dataclass(frozen=True)
 class ChainQuote:
-    """One strike as a provider would give it. Nothing constructs these today."""
+    """One strike, as a provider would give it or as a desk exported it.
+
+    ``price_type`` defaults to ``MANUAL``, which is what an externally supplied
+    file is: somebody sent it to us, and nothing here verifies it. A genuine
+    feed substituting at this seam would stamp its own type.
+    """
 
     contract: OptionContract
     bid: float | None
@@ -366,6 +512,21 @@ class ChainQuote:
     volume: float | None
     open_interest: float | None
     observation_date: date
+    quoted_at: datetime | None = None
+    source: str = ""
+    premium: float | None = None
+    price_type: PriceType = PriceType.MANUAL
+
+    def __post_init__(self) -> None:
+        _aware(self.quoted_at, where=self.contract.symbol, error=OptionEntryError)
+
+    @property
+    def quoted_price(self) -> float | None:
+        """The premium the file gave, whichever column it used."""
+        for candidate in (self.premium, self.settlement, self.bid, self.ask):
+            if candidate is not None:
+                return candidate
+        return None
 
 
 @dataclass(frozen=True)
@@ -374,6 +535,28 @@ class OptionChain:
     observation_date: date
     quotes: tuple[ChainQuote, ...]
     provider: str
+    #: When the ladder was struck, at the source. One chain is one moment: a
+    #: file stitched from two timestamps is two markets and is refused.
+    quoted_at: datetime | None = None
+    loaded_from: str = ""
+    price_type: PriceType = PriceType.MANUAL
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "available": True,
+            "underlying": self.underlying.symbol,
+            "observation_date": self.observation_date.isoformat(),
+            "quoted_at": self.quoted_at.isoformat() if self.quoted_at else None,
+            "provider": self.provider,
+            "price_type": self.price_type.value,
+            "price_caveat": self.price_type.caveat,
+            "strikes": len(self.quotes),
+            "limitations": [limit.to_dict() for limit in BLACK76_LIMITATIONS],
+        }
 
 
 @dataclass(frozen=True)
@@ -441,6 +624,7 @@ def chain_status(underlying: NamedContract | None = None) -> dict[str, Any]:
             "and Greeks, labelled as model output."
         ),
         "model": "black76",
+        "limitations": [limit.to_dict() for limit in BLACK76_LIMITATIONS],
         "model_assumptions": [
             "underlying is a futures price, lognormal with one constant volatility to expiry",
             "European exercise; listed grain options are American and the early-exercise "
@@ -489,9 +673,29 @@ class ManualQuote:
     quoted_on: date
     premium: float | None = None
     implied_volatility: float | None = None
+    #: The moment at the source, timezone-aware. Optional, because a desk
+    #: reading a number off a broker's morning sheet may genuinely not have
+    #: one — but its absence is stated rather than filled in.
+    quoted_at: datetime | None = None
     note: str = ""
 
+    @property
+    def timestamp_note(self) -> str:
+        if self.quoted_at is not None:
+            return f"quoted at {self.quoted_at.isoformat()}"
+        return (
+            "quoted on this date with no time of day recorded — an options premium moves "
+            "intraday with the underlying, so this cannot be pinned to a board session"
+        )
+
     def __post_init__(self) -> None:
+        _aware(self.quoted_at, where=self.contract.symbol, error=OptionEntryError)
+        if self.quoted_at is not None and self.quoted_at.date() != self.quoted_on:
+            raise OptionEntryError(
+                f"{self.contract.symbol}: quoted_at {self.quoted_at.isoformat()} is not on "
+                f"quoted_on {self.quoted_on.isoformat()} — one of the two is wrong, and "
+                "guessing which would date the quote to the wrong session"
+            )
         if not self.source.strip():
             raise OptionEntryError(
                 f"{self.contract.symbol}: source is required — a hand-entered option "
@@ -586,6 +790,225 @@ def value_manual_ladder(
     return tuple(out)
 
 
+def _parse_timestamp(raw: Any, *, where: str) -> datetime | None:
+    """Read a source timestamp. Absent is legal; naive is not."""
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, datetime):
+        return _aware(raw, where=where, error=OptionEntryError)
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise OptionEntryError(
+            f"{where}: quoted_at {raw!r} is not an ISO-8601 timestamp"
+        ) from exc
+    return _aware(parsed, where=where, error=OptionEntryError)
+
+
+# ---------------------------------------------------------------------------
+# An externally supplied chain
+# ---------------------------------------------------------------------------
+#
+# The other half of "manually **or externally** supplied": a desk whose broker
+# can export a ladder should not retype it strike by strike. What arrives is
+# still not a feed — it is a file somebody sent us — so every row is stamped
+# ``MANUAL`` and carries the source and the moment it was struck.
+
+#: Columns an external ladder must carry. ``quoted_at`` may instead be supplied
+#: by the caller, which is the one thing about a file that a person can know
+#: better than the file does.
+CHAIN_CSV_COLUMNS = ("right", "strike", "expiry", "premium", "implied_volatility", "quoted_at")
+
+
+def chain_from_csv(
+    path: str | os.PathLike[str],
+    *,
+    underlying: str,
+    source: str,
+    quoted_at: datetime | None = None,
+    observation_date: date | None = None,
+    style: OptionStyle = OptionStyle.AMERICAN,
+) -> OptionChain:
+    """Read a broker's exported option ladder for one underlying.
+
+    Refuses, rather than filling in, on every ambiguity: a row with neither a
+    premium nor an implied volatility, a row with both, a ladder with no
+    timestamp anywhere, and a ladder carrying two different timestamps — that
+    last one is two sessions in one file, and a Greeks table struck across two
+    sessions is not a Greeks table.
+    """
+    if not source.strip():
+        raise OptionEntryError(
+            f"{path}: source is required — an imported ladder must say who supplied it"
+        )
+    try:
+        contract_underlying = parse_symbol(str(underlying))
+    except UnknownContract as exc:
+        raise OptionEntryError(f"{path}: {exc}") from exc
+
+    caller_stamp = _aware(quoted_at, where=str(path), error=OptionEntryError)
+    rows: list[ChainQuote] = []
+    stamps: set[datetime] = set()
+
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        for number, raw in enumerate(reader, start=2):
+            at = f"{path}:{number}"
+            premium = _optional_number(raw.get("premium"), where=at, what="premium")
+            vol = _optional_number(
+                raw.get("implied_volatility"), where=at, what="implied_volatility"
+            )
+            if (premium is None) == (vol is None):
+                raise OptionEntryError(
+                    f"{at}: give exactly one of premium or implied_volatility — neither "
+                    "leaves the row unpriced and this module does not invent one; both "
+                    "leaves two inconsistent numbers with nothing saying which was believed"
+                )
+            stamp = _parse_timestamp(raw.get("quoted_at"), where=at) or caller_stamp
+            if stamp is None:
+                raise OptionEntryError(
+                    f"{at}: no quoted_at, and none supplied by the caller — an options "
+                    "ladder with no time on it cannot be compared with a board session"
+                )
+            stamps.add(stamp)
+            try:
+                contract = OptionContract(
+                    underlying=contract_underlying,
+                    right=OptionRight(str(raw["right"]).strip().lower()),
+                    strike=float(raw["strike"]),
+                    expiry=date.fromisoformat(str(raw["expiry"]).strip()),
+                    style=style,
+                )
+            except KeyError as exc:
+                raise OptionEntryError(f"{at}: missing required column {exc}") from exc
+            except ValueError as exc:
+                raise OptionEntryError(f"{at}: {exc}") from exc
+
+            rows.append(ChainQuote(
+                contract=contract,
+                bid=_optional_number(raw.get("bid"), where=at, what="bid"),
+                ask=_optional_number(raw.get("ask"), where=at, what="ask"),
+                settlement=_optional_number(raw.get("settlement"), where=at, what="settlement"),
+                implied_volatility=vol,
+                volume=_optional_number(raw.get("volume"), where=at, what="volume"),
+                open_interest=_optional_number(
+                    raw.get("open_interest"), where=at, what="open_interest"
+                ),
+                observation_date=stamp.date(),
+                quoted_at=stamp,
+                source=source,
+                premium=premium,
+            ))
+
+    if not rows:
+        raise OptionEntryError(f"{path}: no rows — an empty ladder is not a ladder")
+    if len(stamps) > 1:
+        raise OptionEntryError(
+            f"{path}: the rows carry {len(stamps)} different timestamps "
+            f"({sorted(s.isoformat() for s in stamps)}) — one chain is one moment, and a "
+            "ladder stitched from two is two markets"
+        )
+
+    stamp = next(iter(stamps))
+    return OptionChain(
+        underlying=contract_underlying,
+        observation_date=observation_date or stamp.date(),
+        quotes=tuple(rows),
+        provider=source,
+        quoted_at=stamp,
+        loaded_from=str(path),
+    )
+
+
+def _optional_number(raw: Any, *, where: str, what: str) -> float | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return float(str(raw).replace(",", "").strip())
+    except ValueError as exc:
+        raise OptionEntryError(f"{where}: {what} {raw!r} is not a number") from exc
+
+
+def value_chain(
+    chain: OptionChain,
+    *,
+    as_of: date,
+    forward: float | None,
+    rate: float,
+) -> tuple[dict[str, Any], ...]:
+    """Value an externally supplied ladder against one board forward.
+
+    ``forward`` of ``None`` is the honest state when the board did not print
+    that session: every row comes back unvalued with its reason rather than
+    priced against a forward we invented.
+    """
+    limitations = [limit.why for limit in BLACK76_LIMITATIONS]
+    out: list[dict[str, Any]] = []
+    for quote in chain.quotes:
+        base = {
+            "contract": quote.contract.to_dict(),
+            "source": quote.source or chain.provider,
+            "quoted_at": quote.quoted_at.isoformat() if quote.quoted_at else None,
+            "price_type": quote.price_type.value,
+            "limitations": limitations,
+        }
+        warnings: list[str] = []
+        if quote.quoted_at is not None:
+            age = (as_of - quote.quoted_at.date()).days
+            if age > QUOTE_STALE_AFTER_DAYS:
+                warnings.append(
+                    f"quoted {age} days before this session — an option premium moves "
+                    "intraday, so this is a stale input, not a stale display"
+                )
+        if forward is None:
+            out.append({
+                **base,
+                "valued": False,
+                "warnings": warnings,
+                "reason": (
+                    f"no board price for {chain.underlying.symbol} on this session, so there "
+                    "is no forward to value this ladder against"
+                ),
+            })
+            continue
+
+        volatility = quote.implied_volatility
+        derived_from = "implied volatility as supplied"
+        if volatility is None:
+            premium = quote.quoted_price
+            assert premium is not None      # guaranteed by chain_from_csv
+            volatility = implied_volatility(
+                premium, forward, quote.contract.strike,
+                quote.contract.years_to_expiry(as_of), rate, quote.contract.right,
+            )
+            derived_from = "backed out of the supplied premium by bisection"
+        if volatility is None:
+            out.append({
+                **base,
+                "valued": False,
+                "warnings": warnings,
+                "reason": (
+                    "the supplied premium is outside the model's arbitrage bounds, so no "
+                    "implied volatility exists for it — check the premium's units"
+                ),
+            })
+            continue
+
+        valuation = value_option(
+            quote.contract, as_of=as_of, forward=forward, volatility=volatility,
+            rate=rate, volatility_source=f"{quote.source or chain.provider} ({derived_from})",
+        )
+        out.append({
+            **valuation.to_dict(),
+            **base,
+            "valued": True,
+            "warnings": warnings,
+            "supplied_premium": quote.quoted_price,
+            "volatility_derived_from": derived_from,
+        })
+    return tuple(out)
+
+
 def parse_ladder(payload: dict[str, Any], *, where: str) -> ManualLadder:
     """Parse one manual-options document. Raises on anything it cannot read."""
     if not isinstance(payload, dict):
@@ -618,6 +1041,7 @@ def parse_ladder(payload: dict[str, Any], *, where: str) -> ManualLadder:
             ),
             source=str(row.get("source", "")),
             quoted_on=quoted_on,
+            quoted_at=_parse_timestamp(row.get("quoted_at"), where=at),
             premium=None if row.get("premium") in (None, "") else float(row["premium"]),
             implied_volatility=(
                 None if row.get("implied_volatility") in (None, "")
@@ -656,9 +1080,15 @@ def load_ladder(directory: str | os.PathLike[str] | None = None) -> ManualLadder
 
 
 __all__ = [
+    "BLACK76_LIMITATIONS",
+    "CHAIN_CSV_COLUMNS",
     "DAYS_PER_YEAR",
     "NO_CHAIN_REASON",
+    "QUOTE_STALE_AFTER_DAYS",
     "ChainQuote",
+    "ModelLimitation",
+    "chain_from_csv",
+    "value_chain",
     "ChainUnavailable",
     "Greeks",
     "ManualLadder",

@@ -31,6 +31,7 @@ options:
     expiry: 2026-10-23         # the OPTION's expiration, not the future's last trade
     style: american            # american (default) | european
     quoted_on: 2026-08-18
+    quoted_at: 2026-08-18T20:40:00+00:00     # optional, but must be timezone-aware
     source: "Broker XYZ, 15:40 CT screen"    # required — who quoted it
     # Exactly one of the two below. The other is derived.
     premium: 24.5              # native units, same as the strike
@@ -54,3 +55,47 @@ expiry. Agricultural options have a pronounced smile that steepens into weather
 markets, so a value struck well away from the money is systematically wrong.
 Entering the `implied_volatility` your broker quoted for *that strike* avoids
 this; entering one at-the-money vol and reading values across a ladder does not.
+
+
+## The source timestamp
+
+`quoted_at` is optional and, when given, must be **timezone-aware** and must
+fall on `quoted_on`. A naive timestamp is refused rather than assumed to be
+local time — whose local? the desk's, the broker's, or the CI runner's, and
+they are hours apart. A quote with no `quoted_at` says so on the row: an option
+premium moves intraday with the underlying, so a date alone cannot be pinned to
+a board session.
+
+## Importing an exported ladder
+
+If your broker can export the chain, you need not retype it.
+`analysis.futures.options.chain_from_csv` reads a flat file:
+
+```
+right,strike,expiry,premium,implied_volatility,quoted_at
+call,1150,2026-10-23,42.50,,2026-08-19T14:45:00+00:00
+put,1100,2026-10-23,,0.2450,2026-08-19T14:45:00+00:00
+```
+
+Optional extra columns: `bid`, `ask`, `settlement`, `volume`, `open_interest`.
+
+Four refusals, all the same rule — nothing is invented:
+
+* a row with **neither** a premium nor an implied volatility is refused, not
+  left unpriced;
+* a row with **both** is refused, because two inconsistent numbers on one row
+  leave nothing saying which was believed;
+* a ladder with **no timestamp** anywhere — neither in the file nor supplied by
+  the caller — is refused, because it cannot be compared with a board session;
+* a ladder carrying **two different timestamps** is refused. One chain is one
+  moment, and a Greeks table struck across two sessions is not a Greeks table.
+
+Every imported row is stamped `PriceType.MANUAL`. A file somebody sent us is
+not a feed this project ingests, and it is never rendered as a settlement.
+
+## Where these files are rendered
+
+The entered ladder appears **only in the private edition** of the workstation,
+written to `data/workspace/workstation.html`, outside `docs/`. The public page
+carries the chain's absence, the model and the model's limits — facts about
+this project — and none of your quotes.
