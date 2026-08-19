@@ -160,10 +160,12 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .table-scroll > .dtable { min-width: 760px; }
 
 /* ---- quote-kind label (M3 #145 constraint 4) ----
-   Board settlements, physical assessments, administered minimums and weekly
+   Delayed board closes, physical assessments, administered minimums and weekly
    assessments are different animals; collapsing them into one "price" label is
-   the easiest way to make the product dishonest. Rendered by the market blocks
-   AND by the ledger on both surfaces, so it belongs with the palette. */
+   the easiest way to make the product dishonest. The chip carries the price
+   type as well as the venue — "board" alone reads as the exchange's own
+   settlement, which this stack does not have. Rendered by the market blocks AND
+   by the ledger on both surfaces, so it belongs with the palette. */
 .kind { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
 
 /* ---- propagation ledger (M3 #145 / M12 #161) ----

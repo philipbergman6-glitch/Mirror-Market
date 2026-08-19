@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -31,6 +31,7 @@ from trust.domain import (
     RunStatus,
     Timestamp,
 )
+from trust.reconciliation import ReconciliationReport, reconcile_frames
 from trust.registry import MAGYP_FOB_CONTRACT
 from trust.repository import TrustRepository
 
@@ -73,18 +74,6 @@ class MagypTrustedIngestion:
     finding_ids: tuple[str, ...]
     status: RunStatus
     error: str | None = None
-
-
-@dataclass(frozen=True)
-class ReconciliationReport:
-    matched_rows: int
-    missing_in_trusted: tuple[Mapping[str, object], ...]
-    missing_in_legacy: tuple[Mapping[str, object], ...]
-    field_differences: tuple[Mapping[str, object], ...]
-
-    @property
-    def reconciled(self) -> bool:
-        return not self.missing_in_trusted and not self.missing_in_legacy and not self.field_differences
 
 
 @dataclass(frozen=True)
@@ -297,34 +286,12 @@ def trusted_magyp_fob_frame(repository: TrustRepository) -> pd.DataFrame:
 def reconcile_magyp_fob(legacy: pd.DataFrame, trusted: pd.DataFrame) -> ReconciliationReport:
     """Account for every row and field difference between old and trusted output."""
 
-    key_cols = ("date", "position", "ship_from")
-    value_cols = ("product", "ship_to", "price_usd_mt")
-    legacy_map = _frame_map(legacy, key_cols)
-    trusted_map = _frame_map(trusted, key_cols)
-    legacy_keys = set(legacy_map)
-    trusted_keys = set(trusted_map)
-
-    missing_in_trusted = tuple(legacy_map[key] for key in sorted(legacy_keys - trusted_keys))
-    missing_in_legacy = tuple(trusted_map[key] for key in sorted(trusted_keys - legacy_keys))
-    differences: list[Mapping[str, object]] = []
-    for key in sorted(legacy_keys & trusted_keys):
-        legacy_row = legacy_map[key]
-        trusted_row = trusted_map[key]
-        for column in value_cols:
-            if _comparable(legacy_row[column]) != _comparable(trusted_row[column]):
-                differences.append(
-                    {
-                        "key": dict(zip(key_cols, key, strict=True)),
-                        "field": column,
-                        "legacy": legacy_row[column],
-                        "trusted": trusted_row[column],
-                    }
-                )
-    return ReconciliationReport(
-        matched_rows=len(legacy_keys & trusted_keys),
-        missing_in_trusted=missing_in_trusted,
-        missing_in_legacy=missing_in_legacy,
-        field_differences=tuple(differences),
+    return reconcile_frames(
+        legacy,
+        trusted,
+        key_columns=("date", "position", "ship_from"),
+        value_columns=("product", "ship_to", "price_usd_mt"),
+        text_columns=("date", "ship_from", "ship_to", "position", "product"),
     )
 
 
@@ -442,26 +409,6 @@ def _legacy_product(commodity: str, product_form: str) -> str:
     raise ValueError(
         f"unknown MAGyP product identity: {commodity}/{product_form}"
     )
-
-
-def _frame_map(frame: pd.DataFrame, key_cols: Sequence[str]) -> dict[tuple[object, ...], Mapping[str, object]]:
-    if frame.empty:
-        return {}
-    normalized = frame.copy()
-    for column in ("date", "ship_from", "ship_to", "position", "product"):
-        if column in normalized.columns:
-            normalized[column] = normalized[column].astype(str)
-    rows: dict[tuple[object, ...], Mapping[str, object]] = {}
-    for row in normalized.to_dict("records"):
-        key = tuple(row[column] for column in key_cols)
-        rows[key] = row
-    return rows
-
-
-def _comparable(value: object) -> object:
-    if isinstance(value, float):
-        return round(value, 8)
-    return value
 
 
 def _utc(value: datetime) -> datetime:

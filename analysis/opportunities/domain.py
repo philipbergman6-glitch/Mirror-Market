@@ -56,6 +56,8 @@ from analysis.origins.domain import (
     SourceRef,
     worst_confidence,
 )
+from pricing.policy import assert_confidence_supported
+from pricing.semantics import is_price_quote_kind, price_type_for_quote_kind
 
 __all__ = [
     "AUDIENCE_PRIVATE",
@@ -338,6 +340,22 @@ class Evidence:
     quote_kind: str | None = None
     confidence: Confidence = Confidence.INDICATIVE
     note: str | None = None
+
+    def __post_init__(self) -> None:
+        """A row cannot claim more than the kind of number it rests on.
+
+        Checked at construction rather than at render: by the time a page shows
+        an `executable` row, the board has already ranked on it. Where the quote
+        kind is unknown the confidence stands as given — that is a gap in the
+        evidence, not a licence, and `rules.py` blocks on it separately.
+        """
+        if self.quote_kind is None or not is_price_quote_kind(self.quote_kind):
+            return
+        assert_confidence_supported(
+            self.confidence,
+            price_type=price_type_for_quote_kind(self.quote_kind),
+            context=f"evidence {self.label!r}",
+        )
 
     def age_days(self, today: date) -> int:
         return (today - self.observed_on).days

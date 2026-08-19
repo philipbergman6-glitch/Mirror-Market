@@ -18,6 +18,12 @@ from config import (
     DB_PATH,
     EC_OILSEEDS_CADENCE,
     EC_OILSEEDS_QUOTE_KIND,
+    GTR_OCEAN_ATTRIBUTION,
+    GTR_OCEAN_CADENCE,
+    GTR_OCEAN_QUOTE_KIND,
+    GTR_VESSEL_ATTRIBUTION,
+    GTR_VESSEL_CADENCE,
+    GTR_VESSEL_UNIT,
     STORAGE_DIR,
 )
 from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
@@ -49,6 +55,10 @@ def _migrate_data_freshness(conn) -> None:
         ("last_attempt", "ALTER TABLE data_freshness ADD COLUMN last_attempt TEXT"),
         ("keys_returned", "ALTER TABLE data_freshness ADD COLUMN keys_returned INTEGER"),
         ("keys_expected", "ALTER TABLE data_freshness ADD COLUMN keys_expected INTEGER"),
+        ("observed_at", "ALTER TABLE data_freshness ADD COLUMN observed_at TEXT"),
+        ("fetch_started_at", "ALTER TABLE data_freshness ADD COLUMN fetch_started_at TEXT"),
+        ("fetch_completed_at", "ALTER TABLE data_freshness ADD COLUMN fetch_completed_at TEXT"),
+        ("stored_at", "ALTER TABLE data_freshness ADD COLUMN stored_at TEXT"),
     ):
         if col not in cols:
             try:
@@ -517,6 +527,52 @@ def save_ec_oilseed_prices(series: str, df: pd.DataFrame):
         df[["series", "Date", "price_usd", "price_eur", "cadence", "quote_kind"]],
         ["series", "Date"],
         f"ec_oilseeds/{series}",
+    )
+
+
+def save_ocean_freight(route: str, df: pd.DataFrame):
+    """Write GTR monthly ocean freight rates → 'ocean_freight_rates'.
+
+    attribution is stamped per row rather than looked up at display time: the
+    rate is assessed by O'Neil Commodity Consulting and only *republished* by
+    USDA, and a surface that reads this beside the AMS Gulf bids would
+    otherwise credit both to the same author.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["route"] = route
+    df["Date"] = _date(df["Date"])
+    df["cadence"] = GTR_OCEAN_CADENCE
+    df["quote_kind"] = GTR_OCEAN_QUOTE_KIND
+    df["attribution"] = GTR_OCEAN_ATTRIBUTION
+    _save(
+        "ocean_freight_rates",
+        df[["route", "Date", "rate_usd_mt", "cadence", "quote_kind", "attribution"]],
+        ["route", "Date"],
+        f"gtr_ocean_freight/{route}",
+    )
+
+
+def save_port_vessel_activity(port_region: str, df: pd.DataFrame):
+    """Write GTR weekly vessel activity → 'port_vessel_activity'."""
+    if df.empty:
+        return
+    df = df.copy()
+    df["port_region"] = port_region
+    df["week_ending"] = _date(df["week_ending"])
+    df["unit"] = GTR_VESSEL_UNIT
+    df["cadence"] = GTR_VESSEL_CADENCE
+    df["attribution"] = GTR_VESSEL_ATTRIBUTION
+    _save(
+        "port_vessel_activity",
+        df[[
+            "port_region", "week_ending", "loading", "waiting_to_load",
+            "in_port", "loaded_7day", "due_10day", "unit", "cadence",
+            "attribution",
+        ]],
+        ["port_region", "week_ending"],
+        f"gtr_vessels/{port_region}",
     )
 
 
@@ -1069,6 +1125,7 @@ def save_freshness(
     status: str = "success",
     keys_returned: int | None = None,
     keys_expected: int | None = None,
+    clock: Any = None,
 ) -> None:
     """Record a freshness row. Only success stamps last_success; other states preserve it.
 
@@ -1081,6 +1138,24 @@ def save_freshness(
     sole verdict. None (the default) records NULL, meaning "never learned" —
     a transport failure before any payload existed, or a layer for which
     partial coverage is not a meaningful state.
+
+    ``clock`` carries the latency instrumentation (``latency.clock``).
+    Omitted, it is looked up from the run registry by layer name — which is
+    why the pipeline's eight ``_mark_*`` paths need no knowledge of it. The
+    lookup lives here rather than at those call sites for the same reason
+    the settlement guard lives at ``fetch_one``: this is the single choke
+    point every freshness write passes through, and instrumentation attached
+    anywhere else is instrumentation somebody can forget.
+
+    A run with no clock writes NULL stamps, which is the honest record of a
+    write with no fetch behind it. Never defaulted to ``now``: a fabricated
+    fetch stamp would make the fetch look instantaneous, which is the one
+    shape of wrong a latency measurement cannot survive.
+
+    ``observed_at`` is stamped on EVERY status, not just success. A stale or
+    failed layer's newest observation is exactly what a reader needs to see
+    the size of the hole, and withholding it there would leave the surfaces
+    reporting an outage with no measure of it.
     """
     valid_statuses = {
         "success", "failed", "disabled", "no_publication", "stale", "incomplete"
@@ -1090,6 +1165,27 @@ def save_freshness(
             f"status must be one of {sorted(valid_statuses)}, got {status!r}"
         )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    if clock is None:
+        from latency import clock as run_clock
+
+        clock = run_clock.get(layer_name)
+
+    def _stamp(value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return str(value)
+
+    observed_at = _stamp(getattr(clock, "observed_on", None))
+    fetch_started_at = _stamp(getattr(clock, "fetch_started_at", None))
+    fetch_completed_at = _stamp(getattr(clock, "fetch_completed_at", None))
+    # A layer whose rows were written but whose clock was never told so still
+    # stored them at this instant — the freshness write is the last thing the
+    # runner does. That is a measurement, not a default.
+    stored_at = _stamp(getattr(clock, "stored_at", None)) or (now if clock else None)
+
     with managed_connection(get_connection()) as conn:
         prior_success: str | None
         if status == "success":
@@ -1103,14 +1199,18 @@ def save_freshness(
         conn.execute(
             """INSERT OR REPLACE INTO data_freshness
                (layer_name, last_success, last_attempt, rows_fetched, status,
-                keys_returned, keys_expected)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                keys_returned, keys_expected,
+                observed_at, fetch_started_at, fetch_completed_at, stored_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (layer_name, prior_success, now, rows_fetched, status,
-             keys_returned, keys_expected),
+             keys_returned, keys_expected,
+             observed_at, fetch_started_at, fetch_completed_at, stored_at),
         )
         maybe_sync(conn)
-    logger.debug("Freshness recorded for %s at %s (status=%s, %d rows, keys=%s/%s)",
-                 layer_name, now, status, rows_fetched, keys_returned, keys_expected)
+    logger.debug(
+        "Freshness recorded for %s at %s (status=%s, %d rows, keys=%s/%s, observed=%s)",
+        layer_name, now, status, rows_fetched, keys_returned, keys_expected, observed_at,
+    )
 
 
 def update_commodity_freshness():

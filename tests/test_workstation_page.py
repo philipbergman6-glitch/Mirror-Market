@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 from analysis.futures import options as options_mod
+from analysis.futures.privacy import AUDIENCE_PRIVATE
 from app.workstation_page import (
     REFERENCE_LABEL,
     SECTION_SPECS,
@@ -70,7 +71,12 @@ def empty_positions(tmp_path):
 
 
 def view(conn, positions_dir):
-    return build_view(conn, today=AS_OF, generated_at=GENERATED, positions_dir=positions_dir)
+    # The private edition: these tests are about what the desk sees. The public
+    # edition's redaction is pinned in tests/test_workstation_privacy.py.
+    return build_view(
+        conn, today=AS_OF, generated_at=GENERATED, positions_dir=positions_dir,
+        audience=AUDIENCE_PRIVATE,
+    )
 
 
 def section(page, section_id):
@@ -85,7 +91,9 @@ def section(page, section_id):
 def test_every_declared_section_is_built_in_order(conn, empty_positions):
     page = view(conn, empty_positions)
     assert [s["id"] for s in page["sections"]] == [spec[0] for spec in SECTION_SPECS]
-    assert [s["no"] for s in page["sections"]] == [f"{i:02d}" for i in range(1, 11)]
+    assert [s["no"] for s in page["sections"]] == [
+        f"{i:02d}" for i in range(1, len(SECTION_SPECS) + 1)
+    ]
 
 
 def test_a_non_ok_section_always_names_its_reason(conn, empty_positions):
@@ -394,14 +402,22 @@ def test_the_options_section_is_empty_but_says_why_when_nothing_is_entered(
 ):
     data = section(
         build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(tmp_path / "none")),
+                   positions_dir=empty_positions, options_dir=str(tmp_path / "none"),
+                   audience=AUDIENCE_PRIVATE),
         "options",
     )["data"]
     assert data["available"] is False                 # the chain, still
-    assert data["entered"] == []                      # the ladder, empty
-    assert "No options entered" in data["empty_note"]
     # And the two absences are stated separately: ours and the market's.
     assert "no source ingested by this project" in data["reason"].lower()
+
+    entered = section(
+        build_view(conn, today=AS_OF, generated_at=GENERATED,
+                   positions_dir=empty_positions, options_dir=str(tmp_path / "none"),
+                   audience=AUDIENCE_PRIVATE),
+        "options_entered",
+    )
+    assert entered["state"] == "empty"
+    assert "no options entered" in entered["reason"].lower()
 
 
 def test_a_hand_entered_option_is_valued_against_the_board_and_labelled_a_model_value(
@@ -424,8 +440,9 @@ def test_a_hand_entered_option_is_valued_against_the_board_and_labelled_a_model_
     )
     data = section(
         build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(ladder)),
-        "options",
+                   positions_dir=empty_positions, options_dir=str(ladder),
+                   audience=AUDIENCE_PRIVATE),
+        "options_entered",
     )["data"]
     row = data["entered"][0]
     assert row["valued"] is True
@@ -433,7 +450,6 @@ def test_a_hand_entered_option_is_valued_against_the_board_and_labelled_a_model_
     assert 0.0 < row["greeks"]["delta"] < 0.5
     assert row["price_type"] == "manual"
     assert "Broker XYZ" in row["volatility_source"]
-    assert data["empty_note"] == ""
     assert "4.0%" in data["rate_note"]
 
 
@@ -446,4 +462,5 @@ def test_a_malformed_options_document_fails_the_page_rather_than_rendering_empty
     (ladder / "bad.yml").write_text("options:\n  - right: call\n", encoding="utf-8")
     with pytest.raises(options_mod.OptionEntryError):
         build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(ladder))
+                   positions_dir=empty_positions, options_dir=str(ladder),
+                   audience=AUDIENCE_PRIVATE)

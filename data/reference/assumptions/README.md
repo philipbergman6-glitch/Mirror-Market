@@ -3,6 +3,11 @@
 Hand-entered cost inputs for the origin comparison (`analysis/origins/`).
 One YAML file per topic; every file is a list of assumption mappings.
 
+**Onboarding a route** — exactly what must be entered before US Gulf, Brazil
+Paranaguá or Argentina Up River becomes comparable into North China, and in
+what unit and scope: see [ONBOARDING.md](ONBOARDING.md), or run
+`python scripts/enter_assumption.py --onboarding`.
+
 ## Why this directory exists
 
 Ocean freight, barge-to-vessel elevation, port charges, financing terms and
@@ -80,7 +85,22 @@ python scripts/enter_assumption.py \
 
 python scripts/enter_assumption.py --list          # what is live, and what lapses soon
 python scripts/enter_assumption.py --check         # validate every file, exit 1 on error
+python scripts/enter_assumption.py --onboarding    # per-route checklist + the command for each gap
+python scripts/enter_assumption.py --review        # the renewal queue, and what each lapse blocks
+python scripts/enter_assumption.py --gaps          # what the page cannot rank yet (reads the DB)
 ```
+
+### Set-level validation
+
+`--check` fails (exit 1) on faults in the *files* — a unit that does not match
+its component, a freight with no `origin` (it would price every leg off one
+indication), a scope key that matches no route, two entries of the same scope
+whose windows and lifetimes overlap, or a shipment window that ended before the
+entry was made. `load_assumptions()` raises on the same set, so an unusable file
+can never quietly cost a route.
+
+Expired and expiring entries are **reported, not refused**: the record is the
+audit trail, and a renewal is a decision with a person's name on it.
 
 ## What is shipped here, and what is not
 

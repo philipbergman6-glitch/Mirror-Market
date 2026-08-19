@@ -155,6 +155,55 @@ def _coverage_label(row) -> str | None:
     return f"{returned}/{expected}" if returned < expected else None
 
 
+def _latency_fields(layer: str, row, now: datetime) -> dict:
+    """The three time facts a freshness row could never state before.
+
+    "Last Success" answers *when we ran*. It has never answered *what the
+    number is dated*, and the two come apart in exactly the case that
+    matters: a run that lands before the CBOT settlement fetches
+    successfully, stamps a fresh last_success, and carries yesterday's close.
+    The table read "0h ago" for a price a day old, and it was not wrong — it
+    was answering a different question than the one a reader was asking.
+
+    So: ``observed`` is the newest observation date the layer received,
+    ``fetched`` is when we asked, and ``data_age`` is how stale that
+    observation is right now — the number a trader is actually deciding on.
+    All three are blank rather than defaulted where the stamps are NULL,
+    which is every row written before the instrumentation existed.
+    """
+    from latency.domain import LAYER_LATENCY_BY_KEY, format_delta
+    from latency.measure import measure_from_rows
+
+    if row is None:
+        return {"observed": None, "fetched": None, "data_age": None, "latency_class": None}
+
+    spec = LAYER_LATENCY_BY_KEY.get(layer)
+    if spec is None:
+        # Not a trader-critical layer: it carries no declared observation
+        # hour, so render the date alone rather than inventing a chain for it.
+        observed = row.get("observed_at")
+        fetched = row.get("fetch_completed_at")
+        return {
+            "observed": None if pd.isna(observed) else pd.to_datetime(observed).strftime("%Y-%m-%d"),
+            "fetched": None if pd.isna(fetched) else pd.to_datetime(fetched).strftime("%H:%MZ"),
+            "data_age": None,
+            "latency_class": None,
+        }
+
+    measurement = measure_from_rows({layer: dict(row)}, specs=(spec,))[0]
+    observed_at = measurement.stamps.observed_at
+    fetched_at = measurement.stamps.fetch_completed_at
+    from latency.domain import age_at
+
+    age = age_at(measurement, now)
+    return {
+        "observed": observed_at.strftime("%Y-%m-%d %H:%MZ") if observed_at else None,
+        "fetched": fetched_at.strftime("%Y-%m-%d %H:%MZ") if fetched_at else None,
+        "data_age": format_delta(age) if age is not None else None,
+        "latency_class": spec.latency_class.value,
+    }
+
+
 def _build_freshness_items() -> list[dict]:
     """Build one freshness item for every operational production layer."""
     try:
@@ -182,6 +231,7 @@ def _build_freshness_items() -> list[dict]:
                 "status": "not-run",
                 "age": "not attempted · no recorded success",
                 "coverage": None,
+                **_latency_fields(layer, None, now),
             })
             continue
         last = row["last_success"]
@@ -192,7 +242,8 @@ def _build_freshness_items() -> list[dict]:
         if row_status == "disabled":
             items.append({"name": layer, "number": number, "source": source,
                           "cadence": cadence, "scope": scope, "status": "disabled",
-                          "age": "disabled", "coverage": None})
+                          "age": "disabled", "coverage": None,
+                          **_latency_fields(layer, None, now)})
             continue
 
         coverage = _coverage_label(row)
@@ -239,7 +290,8 @@ def _build_freshness_items() -> list[dict]:
                 age_str = f"{labels.get(row_status, 'never')} · no recorded success"
         items.append({"name": layer, "number": number, "source": source,
                       "cadence": cadence, "scope": scope, "status": status,
-                      "age": age_str, "coverage": coverage})
+                      "age": age_str, "coverage": coverage,
+                      **_latency_fields(layer, row, now)})
     return items
 
 
@@ -335,8 +387,37 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
         "on_schedule_count": len(on_schedule),
         "total_layers": len(active),
         "late_layers": late,
+        "price_age": _price_age_label(now),
         **health_summary,
     }
+
+
+def _price_age_label(now: datetime) -> str | None:
+    """How stale the oldest board or FX leg is, for the masthead.
+
+    "Generated 14:02 UTC" says when the page was built, and a reader
+    reasonably reads that as when the numbers are from. On this site those
+    are routinely a day apart — the settlement guard means a build landing
+    before 14:30 Chicago publishes the previous session's close, correctly
+    and deliberately. Stating the generation time alone lets a correct
+    behaviour read as a fresher product than it is.
+
+    The worst of the board and FX legs, not an average: an average would let
+    a current FX print cover for a board leg that has not moved in three
+    days, which is the one thing a reader must not miss.
+    """
+    from latency.measure import measure, worst_observation_age
+
+    try:
+        age = worst_observation_age(measure(generated_at=now), now)
+    except Exception:  # noqa: BLE001 — the masthead must never fail the build
+        log.warning("could not measure price age for the masthead", exc_info=True)
+        return None
+    if age is None:
+        return None
+    from latency.domain import format_delta
+
+    return format_delta(age)
 
 
 def _build_public_trust_metadata(trust_state) -> dict | None:

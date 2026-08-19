@@ -58,8 +58,49 @@ limits:
   - {key: loss_usd,     scope: "*",      maximum: 250000}
 ```
 
-Limit keys: `net_mt`, `unhedged_mt`, `notional_usd`, `loss_usd`. Anything else
-raises rather than being silently skipped.
+### Limit keys
+
+Every key resolves through `analysis.futures.exposure`, so a limit and the
+exposure table on the page cannot disagree about what the number means.
+Anything not in this list raises rather than being silently skipped — a mandate
+nobody is checking must not look like one that passes.
+
+| key | unit | measures |
+|---|---|---|
+| `flat_price_mt` | MT | tonnes still exposed to a move in the board price |
+| `basis_mt` | MT | tonnes exposed to a move in the basis, hedged tonnes included |
+| `crush_mt` | MT | bean-equivalent tonnes exposed to a move in the crush margin |
+| `residual_mt` | MT | physical tonnes the futures hedge does not cover |
+| `month_mt` | MT | tonnes in one named delivery month |
+| `first_notice_contracts` | lots | contracts open inside the first-notice window |
+| `fx_usd` | USD | USD value exposed to one currency pair |
+| `notional_usd` | USD | marked value of the physical book |
+| `loss_usd` | USD | unrealised mark-to-market loss, management basis |
+| `net_mt` | MT | net position in a commodity — kept so older files still parse |
+| `unhedged_mt` | MT | same as `residual_mt` — kept for the same reason |
+
+`scope` is a commodity, a contract symbol, an FX pair, or `"*"` for every scope
+the metric has. `warn_at` is optional and **must be below** `maximum`: a
+warning that fires only after the breach is not a warning, and is refused.
+
+A limit whose exposure cannot be measured produces **no row at all** rather
+than a passing one. A green line nobody checked is the most dangerous output
+this workspace could produce, so the page says how many limits were configured
+and how many were measured.
+
+### The pricing convention, and why it is worth stating
+
+Each physical position may carry `pricing:`, one of `unpriced`,
+`basis_over_futures`, `formula_priced` or `flat_price`. It decides which
+exposure view the tonnes land in — a flat-priced cargo has left the board,
+an unpriced one has not — so it is the difference between a flat-price limit
+that means something and one that does not.
+
+Omitting it is legal and means *not stated*: the tonnes are then counted at
+their most exposed reading and every line built from them says the convention
+was a default rather than a statement. A **wrong** value is not legal; it would
+move tonnes silently between views, which is a risk report saying something
+untrue.
 
 ## CSV import
 

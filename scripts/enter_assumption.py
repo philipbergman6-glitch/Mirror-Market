@@ -22,8 +22,14 @@ and over SSH.
     # validate every file; exit 1 on any error (wire this into CI)
     python scripts/enter_assumption.py --check
 
-    # what the origin page still needs before it can rank
+    # what the origin page still needs before it can rank (reads the database)
     python scripts/enter_assumption.py --gaps
+
+    # what a trader must enter before each route is comparable (no database)
+    python scripts/enter_assumption.py --onboarding --window 2026-10-01:2026-10-31
+
+    # the renewal queue: what lapses, when, and which routes go dark with it
+    python scripts/enter_assumption.py --review --horizon 30
 """
 
 from __future__ import annotations
@@ -203,18 +209,131 @@ def listing(_: argparse.Namespace) -> int:
     return 0
 
 
-def check(_: argparse.Namespace) -> int:
+def check(args: argparse.Namespace) -> int:
+    """Validate every file. Exit 1 on a fault in the files, 0 on a fault in the world.
+
+    The split is the same one ``analysis/origins/validation.py`` draws: an
+    ambiguous pair or a freight with no origin is a fault in the *files* and
+    fails the command, so CI can hold the line. An expired entry is a fault in
+    the *world* — it is reported, and renewing it is a decision with a person's
+    name on it, not a build break.
+    """
+    from analysis.origins.validation import Severity, validate_set
+
     try:
         assumptions = load_assumptions()
     except AssumptionError as exc:
         print(f"INVALID: {exc}", file=sys.stderr)
         return 1
     today = _today()
-    expired = [a for a in assumptions.assumptions if not a.is_live(today)]
+    issues = validate_set(
+        assumptions, on=today, expiry_horizon_days=args.horizon or EXPIRY_WARNING_DAYS
+    )
     print(f"OK: {len(assumptions.assumptions)} assumption(s) parse, set {assumptions.set_id}")
-    for assumption in expired:
-        print(f"  note: {assumption.id} expired {assumption.expires_on.isoformat()}")
+    for issue in issues:
+        marker = "ERROR" if issue.severity is Severity.ERROR else "note "
+        print(f"  {marker} {issue}")
+        if issue.remedy:
+            print(f"        remedy: {issue.remedy}")
+    return 1 if any(issue.severity is Severity.ERROR for issue in issues) else 0
+
+
+def _window_arg(args: argparse.Namespace):
+    """The window a report is run for: the one given, or the first forward month."""
+    from analysis.origins.sources import offered_windows
+
+    explicit = _parse_window(args.window)
+    if explicit is not None:
+        return explicit
+    windows = offered_windows(_today())
+    return windows[1] if len(windows) > 1 else windows[0]
+
+
+def onboarding(args: argparse.Namespace) -> int:
+    """The route checklist: what must be entered before each route is comparable.
+
+    Reads no database. What a route requires is a property of its delivery term
+    and the landed stack, so this answers on a fresh clone — which is exactly
+    when it is needed.
+    """
+    from analysis.origins.readiness import assess_routes
+
+    today = _today()
+    window = _window_arg(args)
+    destination = args.destination or next(iter(config.DESTINATION_PORTS))
+    assumptions = load_assumptions()
+
+    print(f"Route readiness · {config.DESTINATION_PORTS[destination]['name']} · "
+          f"{window.describe()} · as of {today.isoformat()}")
+    print(f"assumption set {assumptions.set_id}\n")
+
+    ready = 0
+    for route in assess_routes(
+        assumptions, window=window, today=today, destination_key=destination
+    ):
+        if route.unavailable_reason:
+            print(f"{route.label}\n  NOT COMPARABLE — {route.unavailable_reason}\n")
+            continue
+        if route.is_ready:
+            ready += 1
+        state = "READY" if route.is_ready else f"BLOCKED on {len(route.blocking)}"
+        print(f"{route.label}  [{state}]")
+        for requirement in route.requirements:
+            mark = {
+                "satisfied": "  ok  ",
+                "expiring": " soon ",
+                "expired": "LAPSED",
+                "missing": "MISSING",
+            }.get(requirement.status, requirement.status)
+            detail = (
+                f"{requirement.assumption_id} expires {requirement.expires_on} "
+                f"({requirement.entered_by})"
+                if requirement.assumption_id else requirement.unit
+            )
+            print(f"  {mark:<8} {requirement.component.value:<24} {detail}")
+            if requirement.is_blocking:
+                print(f"           {requirement.guidance}")
+                print("           " + requirement.command.replace("\n", "\n           "))
+        print()
+
+    print(f"{ready} route(s) costable to {destination} for {window.describe()}.")
+    print(
+        "A route is 'ready' when every input it needs is entered and live. Being ready "
+        "is not being ranked: an origin quoting a different shipment window, or none at "
+        "all, is still not compared — that is a fact about the market, and it is stated "
+        "on the comparison itself."
+    )
     return 0
+
+
+def review(args: argparse.Namespace) -> int:
+    """The renewal queue. Exit 1 when something has already lapsed."""
+    from analysis.origins.readiness import expiry_review
+
+    today = _today()
+    horizon = args.horizon or 30
+    result = expiry_review(
+        load_assumptions(),
+        today=today,
+        horizon_days=horizon,
+        window=_window_arg(args),
+        destination_key=args.destination,
+    )
+    print(f"Assumption review · as of {result['as_of']} · horizon {horizon}d · "
+          f"routes judged for {result['window']} into {result['destination']}")
+    if result["nothing_due"]:
+        print("Nothing expired, nothing lapsing inside the horizon.")
+        return 0
+    for label, rows in (("EXPIRED", result["expired"]), ("LAPSING", result["expiring"])):
+        for row in rows:
+            blocked = ", ".join(row["routes_blocked"]) or "no route (shadowed or unused)"
+            print(
+                f"{label:<8} {row['id']:<44} {row['expires_on']} "
+                f"({row['days_to_expiry']:+d}d) {row['entered_by']}\n"
+                f"         blocks: {blocked}"
+            )
+    print(f"\n{result['note']}")
+    return 1 if result["expired"] else 0
 
 
 def gaps(_: argparse.Namespace) -> int:
@@ -255,11 +374,23 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--list", action="store_true", help="show every assumption and its state")
     mode.add_argument("--check", action="store_true", help="validate every file; exit 1 on error")
     mode.add_argument("--gaps", action="store_true", help="what the page still needs to rank")
+    mode.add_argument(
+        "--onboarding", action="store_true",
+        help="per-route checklist: what must be entered before each route is comparable",
+    )
+    mode.add_argument(
+        "--review", action="store_true",
+        help="the renewal queue: what lapses, when, and which routes it takes down",
+    )
 
     parser.add_argument("--component", choices=[c.value for c in CostComponent])
     parser.add_argument("--value", type=float)
     parser.add_argument("--unit", help="defaults to the component's required unit")
     parser.add_argument("--days", type=int, help="carry days; required for rate_per_annum")
+    parser.add_argument(
+        "--horizon", type=int,
+        help="how many days ahead --review and --check call out a lapse (review: 30, check: 14)",
+    )
     parser.add_argument("--origin", help="ORIGIN_PORTS key, or a market slug for crush costs")
     parser.add_argument("--destination", help="DESTINATION_PORTS key")
     parser.add_argument("--window", help="START:END in ISO dates")
@@ -284,6 +415,10 @@ def main(argv: list[str] | None = None) -> int:
         return check(args)
     if args.gaps:
         return gaps(args)
+    if args.onboarding:
+        return onboarding(args)
+    if args.review:
+        return review(args)
 
     missing = [
         name for name, value in (

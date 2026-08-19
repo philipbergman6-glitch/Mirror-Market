@@ -546,9 +546,45 @@ def _coherence(
     ), on_session
 
 
-def open_provider(conn: sqlite3.Connection) -> SqliteQuoteProvider:
-    """The default provider for this deployment."""
-    return SqliteQuoteProvider(conn=conn)
+def open_provider(conn: sqlite3.Connection, *, repository=None) -> QuoteProvider:
+    """The provider for this deployment, honouring the trusted-read switch.
+
+    Default is unchanged and always will be: ``SqliteQuoteProvider`` over the
+    v1 tables. The trusted ledger is used only when
+    ``MIRROR_TRUSTED_READ_DATASETS`` names **all three** soy benchmark datasets
+    — a curve mixing a trusted bean with a v1 oil would put two provenances
+    inside one crush — and the rollback is unsetting that variable.
+
+    A switch that names the datasets but cannot open the ledger falls back to
+    v1 with a loud warning rather than failing the build: the v1 answer is the
+    one the site published yesterday, and a page that renders nothing is worse
+    than a page that renders the pre-cutover number and says so.
+    """
+    fallback = SqliteQuoteProvider(conn=conn)
+    try:
+        from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, load_trusted_read_switch
+
+        if not load_trusted_read_switch().enabled_for_all(CBOT_BENCHMARK_DATASET_KEYS):
+            return fallback
+
+        from analysis.futures.trusted_provider import TrustedNamedContractProvider
+        from trust.repository import GitDirectoryTrustRepository
+
+        store = repository if repository is not None else GitDirectoryTrustRepository(_project_root())
+        return TrustedNamedContractProvider(
+            repository=store,
+            fallback=fallback,
+            max_age_days=fallback._max_age_days(),
+        )
+    except Exception:  # noqa: BLE001 — any ledger problem must degrade, not fail the build
+        log.exception("trusted read path unavailable — falling back to the v1 forward_curve tables")
+        return fallback
+
+
+def _project_root():
+    from pathlib import Path
+
+    return Path(__file__).resolve().parents[2]
 
 
 def known_commodities() -> tuple[str, ...]:

@@ -381,7 +381,10 @@ def _safex(row: _LegacyRow) -> tuple[ObservationRevision, ...]:
         effective_date=_date(row.row["Date"], "Date"),
         commodity=commodity,
         product_form=commodity,
-        price_type="settlement",
+        # JSE SAFEX via Grain SA publishes no settlement column at all — the
+        # stored number is the session's last trade (#157). Calling it a
+        # settlement in the identity made the row claim a mark it does not have.
+        price_type="last-traded",
         currency="ZAR",
         unit=_required(row.row, "unit"),
         venue="safex",
@@ -399,7 +402,10 @@ def _forward_curve(row: _LegacyRow) -> tuple[ObservationRevision, ...]:
         effective_date=_date(row.row["fetched_date"], "fetched_date"),
         commodity=commodity,
         product_form=commodity,
-        price_type="settlement",
+        # A forward-curve leg is a yfinance daily bar for one delivery month.
+        # Delayed, and not verified to equal the exchange's settlement — see
+        # `pricing.semantics.PriceType`.
+        price_type="delayed-close",
         currency="USD",
         unit=_futures_unit(commodity),
         venue="cbot",

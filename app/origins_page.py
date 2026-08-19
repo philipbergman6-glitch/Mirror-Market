@@ -16,13 +16,21 @@ silently does nothing.
 Section order is the order a physical trader asks the questions:
 
     01  the answer, or why there isn't one
-    02  the waterfall behind it
-    03  the FOB-equivalent board — the part that survives missing freight
-    04  what would have to move to change the answer
-    05  crush, at all three of the levels that are not the same number
-    06  who could actually do it
-    07  every input, its owner and its expiry
-    08  what changed since the last run
+    02  what has to be entered before each route can be one
+    03  the waterfall behind it
+    04  the FOB-equivalent board — the part that survives missing freight
+    05  what would have to move to change the answer
+    06  crush, at all three of the levels that are not the same number
+    07  who could actually do it
+    08  every input, its owner and its expiry
+    09  what lapses next, and what goes dark with it
+    10  what changed since the last run
+
+Sections 02 and 09 are the operational half. A fail-closed page on a fresh
+clone is correct and unusable in equal measure: "not comparable" is the honest
+answer and the *next* question is always "so what do I have to enter, and who
+enters it". Answering that on the page rather than in a README is what makes
+the blocked state a workflow rather than a wall.
 """
 
 from __future__ import annotations
@@ -35,6 +43,7 @@ import config
 from analysis.origins import crush as crush_mod
 from analysis.origins import history as history_mod
 from analysis.origins import players as players_mod
+from analysis.origins import readiness as readiness_mod
 from analysis.origins import scenarios as scenarios_mod
 from analysis.origins.assumptions import AssumptionSet, load_assumptions
 from analysis.origins.comparison import build_ranking, fob_advantage, fob_board
@@ -44,6 +53,11 @@ from analysis.origins.sources import offered_windows
 
 log = logging.getLogger(__name__)
 
+# How far ahead the renewals section looks. A month is the horizon a desk can
+# actually act on: a freight indication takes about a fortnight to refresh, and
+# anything further out is noise on a page read daily.
+RENEWAL_HORIZON_DAYS = 30
+
 STATE_OK = "ok"
 STATE_EMPTY = "empty"
 STATE_ABSENT = "absent"
@@ -52,12 +66,14 @@ STATE_ABSENT = "absent"
 # shape the market blocks use, so the two page families read identically.
 SECTION_SPECS = (
     ("decision", "Origin decision", "which origin is cheapest delivered, for this window"),
+    ("readiness", "Route readiness", "what must be entered before each route is comparable"),
     ("waterfall", "Landed-cost waterfall", "every dollar between the origin quote and the berth"),
     ("fob", "FOB-equivalent board", "like-for-like at the loading port, before the ocean leg"),
     ("sensitivity", "Sensitivity", "what has to move before the answer changes"),
     ("crush", "Crush margins", "board, gross physical and net plant are three different numbers"),
     ("counterparties", "Counterparties", "who originates, who buys, and over which berth"),
     ("inputs", "Inputs & assumptions", "every number, its owner, and when it lapses"),
+    ("renewals", "Renewals due", "what lapses next, who owns it, and what goes dark with it"),
     ("changes", "What changed", "ranking and input movement since the previous run"),
 )
 
@@ -285,9 +301,85 @@ def _fob(ranking: OriginRanking) -> dict:
     }
 
 
+def _readiness(assumptions: AssumptionSet, ranking: OriginRanking, today: date) -> dict:
+    """What each declared route still needs before it can be costed.
+
+    Built from the registry and the entered set, never from the ranking's rows:
+    a route whose price series is quiet still has an onboarding state, and
+    "we have no freight for this leg" is a different sentence from "this origin
+    did not print today" — the page has to be able to say both.
+    """
+    routes = readiness_mod.assess_routes(
+        assumptions,
+        window=ranking.requested_window,
+        today=today,
+        destination_key=ranking.destination.key,
+    )
+    outstanding = sorted({
+        requirement.component.value
+        for route in routes
+        for requirement in route.blocking
+    })
+    return {
+        "window": ranking.requested_window.describe(),
+        "destination": ranking.destination.name,
+        "routes": [route.to_dict() for route in routes],
+        "ready_count": sum(1 for route in routes if route.is_ready),
+        # Counted against the legs that *have* a price series: the PNW leg is
+        # declared with none, so no amount of entering makes it costable and
+        # putting it in the denominator would read as work outstanding.
+        "route_count": sum(1 for route in routes if route.unavailable_reason is None),
+        "unavailable_count": sum(1 for route in routes if route.unavailable_reason is not None),
+        "outstanding_components": outstanding,
+        "outstanding_labels": [
+            COMPONENT_LABELS[CostComponent(name)] for name in outstanding
+        ],
+        "note": (
+            "A route is ready when every input it needs is entered and live — which is "
+            "not the same as being ranked. An origin quoting a different shipment "
+            "window, or none at all, is still not compared, and that is a fact about "
+            "the market rather than about the onboarding."
+        ),
+        "placeholder_note": (
+            "Each command carries a <VALUE> placeholder rather than a starting number. "
+            "A suggested default is a fabricated default with an extra step, and the "
+            "one nobody changes is the one that decides the ranking."
+        ),
+    }
+
+
+def _renewals(assumptions: AssumptionSet, ranking: OriginRanking, today: date) -> dict:
+    return readiness_mod.expiry_review(
+        assumptions,
+        today=today,
+        horizon_days=RENEWAL_HORIZON_DAYS,
+        window=ranking.requested_window,
+        destination_key=ranking.destination.key,
+    )
+
+
 def _sensitivity(ranking: OriginRanking, assumptions: AssumptionSet, today: date) -> dict:
     results = scenarios_mod.run_panel(ranking, assumptions, today=today)
     breakeven = scenarios_mod.freight_breakeven(ranking)
+    flips = scenarios_mod.input_flip_moves(ranking)
+    fragile = scenarios_mod.most_fragile_input(ranking)
+    return {
+        "flip_moves": [move.to_dict() for move in flips],
+        "most_fragile": fragile.to_dict() if fragile else None,
+        "flip_note": (
+            "Every input, solved rather than searched: each rung is linear in its own "
+            "value given the others, so the move that levels the two landed totals is "
+            "exact. Rows are ordered by how wrong the input would have to be — a "
+            "percentage of its own entered value — because a dollar of freight and a "
+            "point of duty are not comparable as written. An input both origins share "
+            "moves both landed totals together and mostly cannot flip anything; that is "
+            "said in words rather than shown as a large number."
+        ),
+        **_scenario_panel(ranking, results, breakeven),
+    }
+
+
+def _scenario_panel(ranking: OriginRanking, results, breakeven) -> dict:
     return {
         "window": ranking.requested_window.describe(),
         "base_cheapest": ranking.cheapest.quote.origin.name if ranking.cheapest else None,
@@ -493,6 +585,7 @@ def build_view(
             "waterfall": _waterfall(ranking),
             "fob": _fob(ranking),
             "sensitivity": _sensitivity(ranking, assumptions, today),
+            "readiness": _readiness(assumptions, ranking, today),
         })
 
     # Sections that do not vary with the window are built once, off the default
@@ -505,6 +598,7 @@ def build_view(
 
     sections = [
         _section("decision", state=STATE_OK),
+        _section("readiness", state=STATE_OK),
         _section("waterfall", state=STATE_OK),
         _section("fob", state=STATE_OK),
         _section("sensitivity", state=STATE_OK),
@@ -515,6 +609,11 @@ def build_view(
             data=_counterparties(default_ranking, today),
         ),
         _section("inputs", state=STATE_OK, data=_inputs(default_ranking, assumptions, today)),
+        _section(
+            "renewals",
+            state=STATE_OK,
+            data=_renewals(assumptions, default_ranking, today),
+        ),
         _section("changes", state=changes_state, reason=changes_reason, data=changes_data),
     ]
 

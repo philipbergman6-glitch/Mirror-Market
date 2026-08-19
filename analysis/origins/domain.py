@@ -39,6 +39,15 @@ from datetime import date
 from enum import Enum
 from typing import Any
 
+from pricing.semantics import (
+    CONFIDENCE_CEILING,
+    CONFIDENCE_RANK,
+    Confidence,
+    PriceType,
+    price_type_for_quote_kind,
+    worst_confidence,
+)
+
 # ---------------------------------------------------------------------------
 # Units
 # ---------------------------------------------------------------------------
@@ -102,52 +111,30 @@ class QuoteKind(str, Enum):
     WEEKLY_ASSESSMENT = "weekly_assessment"
 
 
-class Confidence(str, Enum):
-    """How much weight a number will bear. Ordered worst-last.
-
-    This is the vocabulary the documentation requirement asks for, and it is
-    computed rather than asserted: a row's confidence is the *worst* of its
-    inputs', so one manual freight guess drags an otherwise-executable row down
-    to ``indicative`` and says so on the page.
-    """
-
-    EXECUTABLE = "executable"        # a board price a hedge can actually be placed against
-    INDICATIVE = "indicative"        # an assessment or bid — directional, not firm to us
-    ADMINISTERED = "administered"    # set by decree, not by trade (Argentina Ley 21.453)
-    PROVISIONAL = "provisional"      # parsed, but one input is inferred rather than verified
-    UNAVAILABLE = "unavailable"      # no value at all
-
-
-# Worst-wins ordering. Explicit rather than relying on enum definition order,
-# because a reorder for readability must not silently change which input
-# dominates a row's published confidence.
-_CONFIDENCE_RANK = {
-    Confidence.EXECUTABLE: 0,
-    Confidence.INDICATIVE: 1,
-    Confidence.ADMINISTERED: 2,
-    Confidence.PROVISIONAL: 3,
-    Confidence.UNAVAILABLE: 4,
-}
+# `Confidence` and the worst-wins helper are the canonical ones from
+# `pricing.semantics`, re-exported here so every existing import site keeps
+# working. Defining a second copy is what allowed a delayed CBOT bar to be
+# `executable` on this page while the workstation called the same number an
+# unproven close.
+_CONFIDENCE_RANK = CONFIDENCE_RANK
 
 # Which confidence a quote of each kind can support on its own, before any
-# assumption drags it down. An administered minimum is not "low confidence" —
-# it is precisely known and legally binding, and simply is not a traded price;
-# collapsing those two ideas into one axis is why it gets its own value.
-CONFIDENCE_BY_QUOTE_KIND = {
-    QuoteKind.BOARD: Confidence.EXECUTABLE,
-    QuoteKind.BOARD_LAST_TRADED: Confidence.INDICATIVE,
-    QuoteKind.PHYSICAL: Confidence.INDICATIVE,
-    QuoteKind.ADMINISTERED: Confidence.ADMINISTERED,
-    QuoteKind.WEEKLY_ASSESSMENT: Confidence.INDICATIVE,
+# assumption drags it down. *Derived* from the price type's ceiling rather than
+# restated: a board quote reaches this stack as a delayed daily bar from a
+# consumer endpoint, so its ceiling is `board_reference` and `executable` is
+# unreachable while no provider proves a settlement. An administered minimum is
+# not "low confidence" — it is precisely known and legally binding, and simply
+# is not a traded price; collapsing those two ideas into one axis is why it
+# keeps its own value.
+CONFIDENCE_BY_QUOTE_KIND: dict[QuoteKind, Confidence] = {
+    kind: CONFIDENCE_CEILING[price_type_for_quote_kind(kind.value)]
+    for kind in QuoteKind
 }
 
 
-def worst_confidence(*values: Confidence | None) -> Confidence:
-    """The weakest link. ``None`` is ignored; no values at all is UNAVAILABLE."""
-    present = [value for value in values if value is not None]
-    if not present:
-        return Confidence.UNAVAILABLE
-    return max(present, key=lambda value: _CONFIDENCE_RANK[value])
+def price_type_of(kind: QuoteKind) -> PriceType:
+    """What sort of number a quote of this kind is."""
+    return price_type_for_quote_kind(kind.value)
 
 
 class Freshness(str, Enum):
@@ -802,12 +789,14 @@ __all__ = [
     "OriginQuote",
     "OriginRanking",
     "Port",
+    "PriceType",
     "QuoteKind",
     "ShipmentWindow",
     "SourceRef",
     "UnavailableOrigin",
     "WaterfallStep",
     "fingerprint",
+    "price_type_of",
     "replace",
     "usd_mt",
     "worst_confidence",

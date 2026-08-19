@@ -763,7 +763,7 @@ SOY_BENCHMARK_CONTRACTS = tuple(
     _pilot_contract(
         source=YAHOO_FINANCE_SOURCE,
         key=f"cbot-{commodity}-named-contracts",
-        name=f"CBOT {commodity.replace('-', ' ')} named-contract settlements",
+        name=f"CBOT {commodity.replace('-', ' ')} named-contract delayed closes",
         cadence=_BUSINESS_DAILY_CHICAGO,
         required_fields=(
             "commodity",
@@ -779,7 +779,13 @@ SOY_BENCHMARK_CONTRACTS = tuple(
             "commodity": commodity,
             "product_form": product_form,
             "venue": "cbot",
-            "price_type": "settlement",
+            # Yahoo Finance is a delayed consumer endpoint. It publishes no
+            # settlement and claims none, so the identity may not say one.
+            # `settlement.confirmed` below is still required and still means
+            # what it always checked: the *session* is closed and the bar is
+            # final, which is the settlement guard's job, not a provenance
+            # claim about the price.
+            "price_type": "delayed-close",
             "currency": "usd",
             "unit": unit,
         },

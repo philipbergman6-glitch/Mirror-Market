@@ -50,6 +50,8 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Any, cast
 
+from pricing.semantics import PriceType
+
 # ---------------------------------------------------------------------------
 # Vocabulary
 # ---------------------------------------------------------------------------
@@ -81,25 +83,11 @@ class SizeUnit(str, Enum):
     METRIC_TON = "metric_ton"
 
 
-class PriceType(str, Enum):
-    """What sort of number a quote is.
-
-    The distinction that matters for this project: ``DELAYED_CLOSE`` is a
-    consumer-endpoint daily bar. It usually equals the exchange settlement and
-    is not verified to, so it may be shown, charted and hedged *against* — but
-    never labelled "settlement". ``SETTLEMENT`` is reserved for a provider that
-    proves it.
-    """
-
-    SETTLEMENT = "settlement"                # official, proven
-    DELAYED_CLOSE = "delayed_close"          # delayed daily bar, settlement unproven
-    LAST_TRADE = "last_trade"                # last print, explicitly not a settlement
-    ASSESSMENT = "assessment"                # a published assessment (physical)
-    MANUAL = "manual"                        # hand-entered by the user
-
-    @property
-    def is_settlement_proven(self) -> bool:
-        return self is PriceType.SETTLEMENT
+# ``PriceType`` is the canonical classification from ``pricing.semantics``,
+# imported rather than defined here. This module had it right first — a
+# consumer-endpoint daily bar is a ``DELAYED_CLOSE`` and nothing may label it a
+# settlement — but it was one of four vocabularies for the same observation, and
+# the other three disagreed. There is now one, and this is a re-export of it.
 
 
 class Freshness(str, Enum):
@@ -656,6 +644,19 @@ class NamedContract:
                 f"({', '.join(MONTH_ABBR[m] for m in listed)})"
             )
 
+    @property
+    def is_hedgeable(self) -> bool:
+        """Always True — the counterpart of ``ContinuousSeries.is_hedgeable``.
+
+        ``pricing.policy.require_hedgeable`` refuses anything that does not
+        declare itself, so this property is what lets a named contract through
+        a hedge, a ticket or a crush, and its absence is what keeps every
+        research artifact — present and future — out of them. A property rather
+        than a field: it is a fact about the type, and a field would put it in
+        ``__eq__``, in the repr and in every constructor call site.
+        """
+        return True
+
     # -- identity ----------------------------------------------------------
     @property
     def month_code(self) -> str:
@@ -918,6 +919,16 @@ class ContractQuote:
     @property
     def contract_value_usd(self) -> float:
         return self.contract.spec.value_usd(self.price)
+
+    @property
+    def is_hedgeable(self) -> bool:
+        """Whether this quote names an instrument a hedge can be placed on.
+
+        Delegated to the contract rather than asserted: a quote is hedgeable
+        because of what it is a quote *of*. Whether the price is any good is a
+        separate question, answered by :attr:`is_settlement_proven`.
+        """
+        return self.contract.is_hedgeable
 
     @property
     def is_settlement_proven(self) -> bool:

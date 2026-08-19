@@ -47,6 +47,7 @@ from app.blocks import (
 )
 from app.markets import Market, Source, TierResult
 from pipeline.units import native_label
+from pricing.semantics import quote_kind_label
 
 log = logging.getLogger(__name__)
 
@@ -571,6 +572,10 @@ def _headline_placeholder(market: Market) -> dict:
         "market_name": market.name,
         "href": market.url,
         "kind": source.quote_kind if source is not None else None,
+        "kind_label": (
+            quote_kind_label(source.quote_kind)
+            if source is not None and source.quote_kind else None
+        ),
         "is_own": False,
         "is_reference": False,
         "expected_gap_days": None,
@@ -635,6 +640,11 @@ def _ledger_row(
         "market_name": owner.name,
         "href": leg.href,
         "kind": source.quote_kind,
+        # The venue plus the price type. One USD/MT column carrying a delayed
+        # board close, a cash assessment and a decreed minimum needs each row to
+        # say which it is; "board" alone reads as a settlement this stack does
+        # not hold.
+        "kind_label": quote_kind_label(source.quote_kind) if source.quote_kind else None,
         "is_own": is_own,
         "is_reference": is_reference,
         "expected_gap_days": leg.expected_gap_days,
@@ -776,6 +786,8 @@ def _home_unit(source: Source, key: str, home_currency: str) -> str:
 # ---------------------------------------------------------------------------
 def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     crush = market.crush
+    if crush.contracts == "named":
+        return _named_crush_block(market, ctx)
     source = crush.as_source()
     rows_by_key = ctx.series(source)
 
@@ -843,7 +855,63 @@ def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             "provisional — one leg's position code is inferred, not cross-checked "
             "against the labelled series (M5 #147)"
         ) if crush.provisional else None,
+        # Structural, not decorative: a margin off continuous main-contract
+        # series is arithmetically fine and names no instrument an order can be
+        # placed in. The block renders the two differently because they are
+        # different claims.
+        "contract_basis": crush.contracts,
+        "hedgeable": False,
+        "contract_note": (
+            "Continuous main-contract series: the underlying contract changes on the "
+            "provider's own schedule and is not published, so this margin names no "
+            "contract and is not one an order can be placed against."
+            if crush.contracts == "continuous" else None
+        ),
+        "legs_named": False,
     }
+
+
+def _named_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict]:
+    """The board crush on explicit delivery months (``analysis.futures.crush``).
+
+    The whole of the CBOT block's arithmetic lives there and is shared with
+    Origins, the Workstation, the Opportunity board and the briefing — so the
+    five surfaces cannot print five different crushes, which is what happened
+    while each one reached for the continuous series itself.
+    """
+    from analysis.futures.crush import CrushWithheld, named_board_crush
+    from analysis.futures.providers import open_provider
+
+    if ctx.conn is None:
+        return STATE_EMPTY, "no database connection", {}
+    outcome = named_board_crush(open_provider(ctx.conn), as_of=ctx.today)
+    if isinstance(outcome, CrushWithheld):
+        return STATE_EMPTY, outcome.reason, {}
+
+    data = outcome.to_dict()
+    data.update({
+        "kind": market.crush.kind,
+        "home_currency": market.home_currency,
+        "as_of": outcome.observation_date.isoformat(),
+        "age_days": _age_days(ctx.today, outcome.observation_date),
+        # A named-contract board crush is quoted in three different native
+        # units (cents/bu, $/short ton, cents/lb), so USD/MT is the only honest
+        # statement of it — the same rule the generic engine keeps.
+        "margin_home": None,
+        "provisional": market.crush.provisional,
+        "provisional_note": None,
+        "contract_basis": outcome.contract_basis.value,
+        "legs_named": True,
+        "contract_note": None,
+        # `key` and `usd_mt` are the generic engine's names for the same two
+        # facts, kept so one template renders both shapes; the contract fields
+        # beside them are what only a named leg can answer.
+        "legs": {
+            leg.role: {**leg.to_dict(), "key": leg.symbol, "usd_mt": leg.usd_per_mt}
+            for leg in outcome.legs
+        },
+    })
+    return STATE_OK, "", data
 
 
 # ---------------------------------------------------------------------------
@@ -888,10 +956,15 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         # Both legs name their kind, like the ledger's Kind column. This is the
         # other block that prints two USD/MT figures side by side, and they are
         # rarely the same animal — an AMS cash bid or an Argentine decreed
-        # minimum against a CBOT settlement. The block header stamps one kind
+        # minimum against a delayed CBOT close. The block header stamps one kind
         # (block 01's case) and cannot label two, so each card carries its own.
+        # The label carries the price type as well as the venue: the CBOT leg is
+        # a delayed daily bar, not the exchange's settlement, and the card is
+        # where a reader would otherwise assume otherwise.
         "local_quote_kind": source.quote_kind,
+        "local_kind_label": quote_kind_label(source.quote_kind) if source.quote_kind else None,
         "board_quote_kind": board_kind,
+        "board_kind_label": quote_kind_label(board_kind) if board_kind else None,
         "direction": "premium" if basis > 0 else "discount",
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),

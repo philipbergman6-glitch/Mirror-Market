@@ -15,10 +15,28 @@ Section order is the order a hedger asks the questions:
     04  the hedge — sizing, coverage, residual, basis and FX left over
     05  scenarios — futures, basis and FX moved together
     06  the ticket — the proposal, not routed
-    07  the book — entered positions, marks, P&L, limits
-    08  what is scheduled — releases from sources this project ingests
-    09  options — the interface, and why there is no chain
-    10  provider and method — where every number came from
+    07  the book — entered positions, marks, P&L                    [private]
+    08  exposure — flat price, basis, crush, FX, month, notice, residual [private]
+    09  limits — every configured line, its headroom, its breaches   [private]
+    10  clearing — the official P&L beside ours, never merged        [private]
+    11  what is scheduled — releases from sources this project ingests
+    12  options — the interface, the model, and why there is no chain
+    13  entered options — the desk's own quotes, valued              [private]
+    14  provider and method — where every number came from
+
+**Two editions.** Sections marked ``[private]`` exist only because a client
+entered something, and a book is front-runnable: it says what somebody owns,
+at what cost, and where they are close to a mandate. The public edition renders
+those five sections ``absent`` with a reason saying so — not ``empty``, which
+would be a claim that the desk holds nothing — and the private edition renders
+them in full and is written outside ``docs/``. The audience is a parameter of
+:func:`build_view` and its default is **public**, so forgetting it is safe.
+
+This is not a hypothetical. Until Phase 6 ``_book_section`` wrote
+``valuation.to_dict()`` and the absolute path of the positions file into
+``docs/workstation.html``, which is on the promotion contract and is uploaded
+to Pages; it stayed quiet only because ``data/reference/positions/`` is empty
+in CI. ``tests/test_workstation_privacy.py`` renders both editions and greps.
 
 A static site has no server, so everything the page offers is computed at build
 time. The hedge section therefore works from the **entered book** when one
@@ -37,8 +55,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from analysis.futures import alerts as alerts_mod
+from analysis.futures import clearing as clearing_mod
 from analysis.futures import continuous as continuous_mod
+from analysis.futures import crush as crush_mod
 from analysis.futures import events as events_mod
+from analysis.futures import exposure as exposure_mod
 from analysis.futures import options as options_mod
 from analysis.futures import positions as positions_mod
 from analysis.futures import scenarios as scenarios_mod
@@ -62,6 +83,12 @@ from analysis.futures.hedge import (
     propose_crush_hedge,
     propose_hedge,
 )
+from analysis.futures.privacy import (
+    AUDIENCE_PUBLIC,
+    AUDIENCES,
+    PRIVATE_SECTION_IDS,
+    redact_for_public,
+)
 from analysis.futures.providers import SqliteQuoteProvider, describe_provider, open_provider
 from analysis.futures.ticket import build_ticket
 
@@ -75,12 +102,17 @@ SECTION_SPECS = (
     ("alerts", "Exposure alerts", "expiry, roll, slippage, basis, limits, inversion, staleness"),
     ("contracts", "Named contracts", "the month, the expiry, and what kind of price this is"),
     ("curve", "Term structure", "calendar spreads, annualised carry and where they sit"),
+    ("crush", "Board crush", "three named contracts of one crush period, on one session"),
     ("hedge", "Hedge calculator", "contracts, coverage, and what the hedge leaves behind"),
     ("scenarios", "Scenarios", "futures, basis and FX moved together, netted against the hedge"),
     ("ticket", "Proposed ticket", "a proposal — not routed, and never routable from here"),
-    ("book", "Positions & P&L", "what was entered, what it marks at, and which limits are crossed"),
+    ("book", "Positions & P&L", "what was entered, what it marks at, on a management basis"),
+    ("exposure", "Exposure", "flat price, basis, crush, FX, month, first notice and residual"),
+    ("limits", "Desk limits", "every configured line, its headroom, and which are crossed"),
+    ("clearing", "Clearing reconciliation", "the official P&L beside ours — reported, never merged"),
     ("calendar", "Release calendar", "scheduled releases from sources this project ingests"),
-    ("options", "Options", "the interface, the model, and why there is no chain"),
+    ("options", "Options", "the interface, the model, its limits, and why there is no chain"),
+    ("options_entered", "Entered options", "quotes this desk supplied, valued and labelled"),
     ("provider", "Provider & method", "where every number on this page came from"),
 )
 
@@ -190,8 +222,22 @@ def build_view(
     generated_at: datetime | None = None,
     positions_dir: str | None = None,
     options_dir: str | None = None,
+    clearing_dir: str | None = None,
+    audience: str = AUDIENCE_PUBLIC,
 ) -> dict[str, Any]:
-    """Everything the workstation template renders, as plain data."""
+    """Everything the workstation template renders, as plain data.
+
+    ``audience`` decides whether the five client sections are rendered or
+    reported absent. It defaults to **public**: a caller who forgets the
+    argument gets the safe edition, which is the only default a privacy
+    boundary may have.
+    """
+    if audience not in AUDIENCES:
+        raise ValueError(
+            f"audience {audience!r} is not one of {list(AUDIENCES)} — there is no third "
+            "edition, and an unrecognised one must not fall through to the private view"
+        )
+    is_private = audience != AUDIENCE_PUBLIC
     as_of = today or date.today()
     generated_at = generated_at or datetime.now(timezone.utc)
     provider = open_provider(conn)
@@ -200,7 +246,12 @@ def build_view(
     book = _load_book(positions_dir)
     valuation = _value_book(book, provider, curves, as_of=as_of)
 
-    exposures = _exposures_from_book(book, as_of=as_of)
+    # The hedge, its scenarios and its ticket are sized from the entered book
+    # when there is one — which makes all three of them the book, restated in
+    # lots. The public edition therefore always works the reference example,
+    # exactly as it does for a clone that has entered nothing: the arithmetic
+    # stays inspectable and the tonnage is ours, not the desk's.
+    exposures = _exposures_from_book(book, as_of=as_of) if is_private else []
     is_reference = not exposures
     if is_reference:
         exposures = [_reference_exposure("Soybeans", as_of=as_of)]
@@ -237,32 +288,50 @@ def build_view(
         for proposal, results in zip(proposals, scenario_results, strict=False)
     )
 
+    # The valuation-derived alerts name a limit key, its maximum and the
+    # observed tonnage — that *is* the book, in one sentence, so the public
+    # edition is not built with it rather than being built and then filtered.
     page_alerts = alerts_mod.build_alerts(
         as_of=as_of,
         proposals=tuple(proposals),
         curves=tuple(curves.values()),
-        valuation=valuation,
+        valuation=valuation if is_private else None,
     )
 
-    return {
+    report = (
+        exposure_mod.build_exposure(book, valuation, as_of=as_of)
+        if valuation is not None else None
+    )
+    ladder = _ladder(options_dir)
+
+    view = {
         "as_of": as_of.isoformat(),
         "generated_at": generated_at.isoformat(),
         "method_version": METHOD_VERSION,
+        "audience": audience,
         "is_reference_calculation": is_reference,
         "reference_label": REFERENCE_LABEL,
         "sections": [
             _alerts_section(page_alerts),
             _contracts_section(curves),
             _curve_section(curves, open_interest),
+            _crush_section(provider, as_of=as_of),
             _hedge_section(proposals, crush_proposal, is_reference),
             _scenarios_section(proposals, scenario_results, is_reference),
             _ticket_section(tickets, is_reference),
             _book_section(book, valuation),
+            _exposure_section(report),
+            _limits_section(book, valuation),
+            _clearing_section(valuation, clearing_dir=clearing_dir),
             _calendar_section(conn, as_of=as_of),
-            _options_section(curves, as_of=as_of, options_dir=options_dir),
+            _options_section(curves, as_of=as_of),
+            _entered_options_section(ladder, curves, as_of=as_of),
             _provider_section(provider, curves, as_of=as_of),
         ],
     }
+    if is_private:
+        return view
+    return redact_for_public(view, section_ids=PRIVATE_SECTION_IDS)
 
 
 def _load_book(positions_dir: str | None) -> positions_mod.Book:
@@ -370,6 +439,21 @@ def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
             "every leg it returned was dropped as being from another session"
         ))
     return _section("contracts", state=STATE_OK, data={"commodities": rows})
+
+
+def _crush_section(provider: SqliteQuoteProvider, *, as_of: date) -> dict[str, Any]:
+    """The board crush, on named contracts or not at all.
+
+    The same calculation the Origins page, the Opportunity board and the daily
+    briefing read — one crush, four surfaces. What it replaced was three
+    provider front-month series that named no contract, which on a hedging page
+    is the sharpest version of the problem: the number a trader would act on
+    could not be placed anywhere.
+    """
+    outcome = crush_mod.named_board_crush(provider, as_of=as_of)
+    if isinstance(outcome, crush_mod.CrushWithheld):
+        return _section("crush", state=STATE_EMPTY, reason=outcome.reason)
+    return _section("crush", state=STATE_OK, data=outcome.to_dict())
 
 
 def _curve_section(
@@ -481,7 +565,70 @@ def _book_section(book: positions_mod.Book, valuation) -> dict[str, Any]:
     return _section("book", state=STATE_OK, data={
         "loaded_from": list(book.loaded_from),
         "valuation": valuation.to_dict(),
-        "limits": [limit.to_dict() for limit in book.limits],
+        "pnl_basis": clearing_mod.PnlBasis.MANAGEMENT_ESTIMATE.value,
+        "pnl_basis_note": clearing_mod.PnlBasis.MANAGEMENT_ESTIMATE.description,
+    })
+
+
+def _exposure_section(report) -> dict[str, Any]:
+    if report is None or report.is_empty:
+        return _section("exposure", state=STATE_EMPTY, reason=(
+            "no positions entered, so there is nothing to decompose. Exposure here is "
+            "measured from the entered book, never from the board alone"
+        ))
+    return _section("exposure", state=STATE_OK, data=report.to_dict())
+
+
+def _limits_section(book: positions_mod.Book, valuation) -> dict[str, Any]:
+    if not book.limits:
+        return _section("limits", state=STATE_EMPTY, reason=(
+            "no limits configured. Add a `limits:` block to a positions document — a limit "
+            "this software invented would be a mandate nobody agreed to"
+        ))
+    if valuation is None:
+        return _section("limits", state=STATE_EMPTY, reason=(
+            "limits are configured but there is no book to measure them against"
+        ))
+    checks = valuation.limit_checks
+    return _section("limits", state=STATE_OK, data={
+        "checks": [check.to_dict() for check in checks],
+        "breaches": [check.to_dict() for check in valuation.breaches],
+        "configured": len(book.limits),
+        "measured": len(checks),
+        "unmeasured_note": (
+            "A limit whose exposure cannot be measured produces no row at all rather than a "
+            "passing one — a green line nobody checked is the most dangerous output here."
+            if len(checks) < len(book.limits) else ""
+        ),
+        "enforcement_note": (
+            "Limits are reported, never enforced. This software stops nothing; it says which "
+            "line was crossed, by how much, and against which exposure."
+        ),
+    })
+
+
+def _clearing_section(valuation, *, clearing_dir: str | None) -> dict[str, Any]:
+    statements = clearing_mod.load_statements(clearing_dir)
+    if not statements:
+        return _section("clearing", state=STATE_EMPTY, reason=(
+            "no clearing statement supplied. This project ingests no account, broker or "
+            "clearing feed, so the official P&L can only come from a file you export into "
+            "data/reference/clearing/"
+        ))
+    if valuation is None:
+        return _section("clearing", state=STATE_EMPTY, reason=(
+            "a clearing statement is present but no position was entered, so there is "
+            "nothing on our side to reconcile it against"
+        ))
+    latest = statements[0]
+    return _section("clearing", state=STATE_OK, data={
+        **clearing_mod.reconcile(valuation, latest).to_dict(),
+        "statements_available": len(statements),
+        "never_merged_note": (
+            "The two columns are the official figure and ours. They are never averaged, "
+            "netted or reconciled into one number — a single figure would belong to "
+            "neither desk and would be acted on as both."
+        ),
     })
 
 
@@ -501,37 +648,59 @@ def _calendar_section(conn, *, as_of: date) -> dict[str, Any]:
     })
 
 
-def _options_section(
-    curves: dict[str, CurveAnalysis], *, as_of: date, options_dir: str | None,
-) -> dict[str, Any]:
+def _ladder(options_dir: str | None) -> options_mod.ManualLadder:
+    """The desk's own quotes. A malformed document raises out of here on
+    purpose — the same rule the book follows, because an option entered wrongly
+    must not render as no option entered."""
+    return options_mod.load_ladder(options_dir)
+
+
+def _options_section(curves: dict[str, CurveAnalysis], *, as_of: date) -> dict[str, Any]:
+    """Public: the chain's absence, the model, and the model's limits.
+
+    Everything here is a fact about *this project* — that no ingested source
+    publishes a chain, and that Black-76 is wrong about an American option in
+    stated ways. None of it says anything about a client, which is why it is
+    the one options section a public reader gets.
+    """
     front = next(
         (analysis.front.contract for analysis in curves.values() if analysis.front is not None),
         None,
     )
     data = options_mod.chain_status(front)
+    data.update({
+        "rate": OPTION_DISCOUNT_RATE,
+        "rate_note": OPTION_RATE_NOTE,
+        "manual_note": (
+            "A desk can enter a broker's premium or implied volatility by hand, or import an "
+            "exported ladder, and get Black-76 values and Greeks from it. Those quotes are "
+            "the client's own records and are rendered only to the private edition."
+        ),
+    })
+    return _section("options", state=STATE_OK, data=data)
 
-    # The manual ladder. A malformed document raises out of here on purpose —
-    # the same rule the book follows, because an option entered wrongly must
-    # not render as no option entered.
-    ladder = options_mod.load_ladder(options_dir)
+
+def _entered_options_section(
+    ladder: options_mod.ManualLadder, curves: dict[str, CurveAnalysis], *, as_of: date,
+) -> dict[str, Any]:
+    if ladder.is_empty:
+        return _section("options_entered", state=STATE_EMPTY, reason=(
+            "no options entered. This is the correct state for a clone that has entered "
+            "none — see data/reference/options/README.md for the file shape"
+        ))
     forwards = {
         leg.contract.symbol: leg.quote.price
         for analysis in curves.values() for leg in analysis.legs
     }
-    data.update({
-        "entered": [] if ladder.is_empty else list(options_mod.value_manual_ladder(
+    return _section("options_entered", state=STATE_OK, data={
+        "entered": list(options_mod.value_manual_ladder(
             ladder, as_of=as_of, forwards=forwards, rate=OPTION_DISCOUNT_RATE,
         )),
         "entered_from": list(ladder.loaded_from),
         "rate": OPTION_DISCOUNT_RATE,
         "rate_note": OPTION_RATE_NOTE,
-        "empty_note": (
-            "No options entered. This is the correct state for a clone that has entered "
-            "none — see data/reference/options/README.md for the file shape."
-            if ladder.is_empty else ""
-        ),
+        "limitations": [limit.to_dict() for limit in options_mod.BLACK76_LIMITATIONS],
     })
-    return _section("options", state=STATE_OK, data=data)
 
 
 def _provider_section(provider, curves, *, as_of: date) -> dict[str, Any]:

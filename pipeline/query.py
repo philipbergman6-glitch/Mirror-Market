@@ -143,6 +143,29 @@ def read_ec_oilseed_prices(series: str | None = None) -> pd.DataFrame:
     return _read_table("ec_oilseed_prices", "series", series, date_cols=("Date",))
 
 
+def read_ocean_freight_rates(route: str | None = None) -> pd.DataFrame:
+    """Read GTR monthly bulk grain ocean freight rates from SQLite.
+
+    A benchmark route (Japan) assessed by a broker and republished by USDA —
+    every row carries the attribution that says so. It is a read on the level
+    of freight, never a quote for a cargo, and must not be substituted for a
+    route-specific rate in a landed-cost stack.
+    """
+    return _read_table("ocean_freight_rates", "route", route, date_cols=("Date",))
+
+
+def read_port_vessel_activity(port_region: str | None = None) -> pd.DataFrame:
+    """Read GTR weekly grain vessel activity by US port region from SQLite.
+
+    Counts of vessels, not tonnes: in port, loaded in the last 7 days, due in
+    the next 10.
+    """
+    return _read_table(
+        "port_vessel_activity", "port_region", port_region,
+        date_cols=("week_ending",),
+    )
+
+
 def read_export_sales(commodity: str | None = None) -> pd.DataFrame:
     """Read export sales data from SQLite."""
     return _read_table(
@@ -330,10 +353,14 @@ def read_freshness() -> pd.DataFrame:
     -------
     pd.DataFrame
         Columns: layer_name, last_success, last_attempt, rows_fetched, status,
-        keys_returned, keys_expected
+        keys_returned, keys_expected, observed_at, fetch_started_at,
+        fetch_completed_at, stored_at
         (last_attempt and status default to NaN/'success' for legacy rows;
         the key-coverage columns are NULL wherever coverage is undefined or
-        was never learned — see save_freshness.)
+        was never learned — see save_freshness. The four latency stamps are
+        NULL on every row written before the instrumentation existed, which
+        `latency.measure` reports as an unmeasured chain rather than a fast
+        one.)
     """
     if not is_cloud() and not os.path.exists(DB_PATH):
         return pd.DataFrame()
@@ -345,7 +372,10 @@ def read_freshness() -> pd.DataFrame:
             logger.warning("Read failed for data_freshness: %s", exc)
             return pd.DataFrame()
 
-    for col in ("last_success", "last_attempt"):
+    for col in (
+        "last_success", "last_attempt", "observed_at",
+        "fetch_started_at", "fetch_completed_at", "stored_at",
+    ):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
 

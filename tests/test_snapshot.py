@@ -45,7 +45,15 @@ def test_empty_db_yields_v2_skeleton_without_raising(patched_db: Path) -> None:
 
     assert snapshot["schema_version"] == SCHEMA_VERSION
     assert snapshot["prices"] == {}
-    assert snapshot["crush_spread"] is None
+    # The crush archives *why* it has no number rather than a bare None: on an
+    # empty database "no curve" and "the section blew up" would otherwise look
+    # identical six months later, and the whole point of naming the contracts
+    # is that a stored crush can be interrogated.
+    assert snapshot["crush_spread"] == {
+        "withheld": "no_curve",
+        "reason": snapshot["crush_spread"]["reason"],
+    }
+    assert "Soybeans" in snapshot["crush_spread"]["reason"]
     assert snapshot["brazil_basis"] is None
     assert snapshot["economic"] == {}
     assert snapshot["yield_curve"] is None

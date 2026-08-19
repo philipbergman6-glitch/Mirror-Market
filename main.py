@@ -18,6 +18,7 @@ Key concepts for learning:
     - logging replaces print() for professional, filterable output.
 """
 
+import argparse
 import json
 import logging
 import sys
@@ -29,6 +30,9 @@ from typing import Any
 import pandas as pd
 
 from config import (
+    DEFAULT_HISTORY_PERIOD,
+    FAST_REFRESH_HISTORY_PERIOD,
+    FAST_REFRESH_LAYERS,
     LAYER_MAX_DATA_AGE_DAYS,
     LAYER_MIN_KEYS,
     MAX_FAILED_LAYERS,
@@ -49,6 +53,7 @@ from fetchers.export_sales import fetch_all_export_sales
 from fetchers.export_sales import is_configured as export_sales_configured
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
+from fetchers.gtr import fetch_gtr_ocean_freight, fetch_gtr_vessel_activity
 from fetchers.gulf_bids import fetch_gulf_bids
 from fetchers.magyp_fob import fetch_magyp_fob
 from fetchers.mandi import fetch_mandi_prices
@@ -67,6 +72,7 @@ from fetchers.weather import fetch_all_regions
 from fetchers.worldbank import fetch_worldbank_prices
 from fetchers.yfinance import fetch_all as fetch_prices
 from fetchers.yfinance import fetch_currencies
+from latency import clock as run_clock
 from pipeline.clean import (
     clean_brazil_spot,
     clean_conab,
@@ -79,7 +85,9 @@ from pipeline.clean import (
     clean_fred_series,
     clean_india_domestic,
     clean_inspections,
+    clean_ocean_freight,
     clean_ohlcv,
+    clean_port_vessel_activity,
     clean_psd,
     clean_safex,
     clean_sagis_deliveries,
@@ -111,7 +119,9 @@ from pipeline.store import (
     save_india_domestic,
     save_inspection_destinations,
     save_inspections,
+    save_ocean_freight,
     save_port_flows,
+    save_port_vessel_activity,
     save_price_data,
     save_psd_data,
     save_safex,
@@ -229,6 +239,18 @@ def _mark_stale(
 _DATE_COLUMNS = (
     "Date", "date", "week_ending", "week_end", "month_end", "report_date",
     "release_date",
+    # Last, and only reached by a frame carrying none of the above: the
+    # forward curve, whose rows are keyed by *contract month* — dates in the
+    # future — but which also carries the session every leg was observed on
+    # (fetchers/forward_curve.py enforces one such date per curve). That
+    # session is the curve's real observation date, and without it a
+    # board-price layer reports a NULL observation and no measurable age.
+    #
+    # It changes no recency verdict: forward_curve is deliberately absent
+    # from LAYER_MAX_DATA_AGE_DAYS (a curve dated by contract month stays
+    # "recent" for a year), so _check_layer_recency returns before reading
+    # this. It is here for the latency chain alone.
+    "observation_date",
 )
 
 
@@ -401,7 +423,20 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> 
        the same as *new* rows arriving; a frozen upstream clears gate 1
        every day forever.
     3. Only then does the run count as a success.
+
+    It also stamps the run clock's observation date on the way through. This
+    is the only place in the pipeline that has both the cleaned frames and
+    the layer's identity, and the recency gate below already computes the
+    quantity — so recording it here costs nothing and guarantees the latency
+    surfaces read the *same* newest-observation date the recency verdict was
+    made on. Two independent answers to "how new is this data" is precisely
+    the drift this project keeps eliminating.
     """
+    clock = run_clock.get(layer)
+    if clock is not None:
+        latest = _latest_observation_date(data)
+        clock.observed(latest.date() if latest is not None else None)
+
     non_empty = sum(1 for v in data.values() if not v.empty)
     total_rows = sum(len(v) for v in data.values())
     floor = LAYER_MIN_KEYS.get(layer, 1)
@@ -480,8 +515,12 @@ def _run_dict_layer(layer: DictLayer) -> bool:
             logger.info("[%s] %s", layer.label, layer.skip_msg)
             return False
 
+        # Started AFTER run_if: a skipped layer never fetched, and a clock on
+        # it would claim otherwise.
+        clock = run_clock.start(layer.key)
         logger.info("[%s] Fetching %s ...", layer.label, layer.desc)
         data = layer.fetch()
+        clock.fetched()
 
         if layer.clean is not None and data:
             logger.info("[Cleaning] Processing %s data ...", layer.key)
@@ -490,6 +529,7 @@ def _run_dict_layer(layer: DictLayer) -> bool:
 
         for name, df in data.items():
             layer.save(name, df)
+        clock.stored()
 
         return _finalize_layer(layer.key, data, empty_fails=layer.empty_fails)
     except Exception:
@@ -523,8 +563,10 @@ def _run_scraper_layer(
     behaviour only for those that opt in by carrying a budget.
     """
     try:
+        clock = run_clock.start(key)
         logger.info("[%s] Fetching %s ...", label, desc)
         result = fetch()
+        clock.fetched()
 
         if result.has_rows:
             # Clean before the recency check: the check reads the cleaners'
@@ -538,6 +580,12 @@ def _run_scraper_layer(
                 # upstream still gets its rows stored (they dedupe against
                 # what is there), and only the freshness verdict changes.
                 save(name, df)
+            clock.stored()
+            # Same reasoning as _finalize_layer: stamp the observation date
+            # off the cleaned frames, so the latency surfaces and the recency
+            # verdict below read one number.
+            latest = _latest_observation_date(cleaned)
+            clock.observed(latest.date() if latest is not None else None)
 
             # A partial result (FetchResult.partial) reaches here with rows
             # *and* status='failed'. Its rows are saved above like any
@@ -568,7 +616,7 @@ def _run_scraper_layer(
         return False
 
 
-def _build_dict_layers() -> list[DictLayer]:
+def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[DictLayer]:
     """The Layer 1-13 table: uniform dict-of-frames layers.
 
     Module-level rather than inline in run() so tests can inspect the
@@ -578,11 +626,20 @@ def _build_dict_layers() -> list[DictLayer]:
     Every fetch/save/clean is a lambda, so main.<fetcher> is resolved
     from module globals at call time and monkeypatching still works
     regardless of when this table is built.
+
+    ``history_period`` is threaded into the two yfinance layers so the fast
+    refresh can pull a short window instead of fifteen years — the single
+    change that makes the price path cheap (see config.FAST_REFRESH_*). It is
+    a parameter of the *table*, not of the fast path, so the fast path stays
+    the same code as the daily build with one argument different rather than
+    a second pipeline that can drift from it. In particular the settlement
+    guard, the cleaners and the LAYER_MIN_KEYS floor are unchanged and
+    unbypassable on this route.
     """
     return [
         DictLayer(
             "prices", "Layer 1", "commodity futures prices",
-            fetch=lambda: fetch_prices(),
+            fetch=lambda: fetch_prices(period=history_period),
             save=lambda n, d: save_price_data(n, d),
             clean=lambda n, d: clean_ohlcv(d, label=n),
         ),
@@ -622,7 +679,7 @@ def _build_dict_layers() -> list[DictLayer]:
         ),
         DictLayer(
             "currencies", "Layer 7", "currency pairs",
-            fetch=lambda: fetch_currencies(),
+            fetch=lambda: fetch_currencies(period=history_period),
             save=lambda n, d: save_currency_data(n, d),
             clean=lambda n, d: clean_ohlcv(d, label=n),
         ),
@@ -644,6 +701,18 @@ def _build_dict_layers() -> list[DictLayer]:
             # the download, the parse, or the stale-file guard broke, never
             # "the Commission published nothing this week".
             empty_fails=True,
+        ),
+        DictLayer(
+            "gtr_ocean_freight", "Layer 26", "AMS GTR ocean freight to Japan",
+            fetch=lambda: fetch_gtr_ocean_freight(),
+            save=lambda n, d: save_ocean_freight(n, d),
+            clean=lambda n, d: clean_ocean_freight(d),
+        ),
+        DictLayer(
+            "gtr_vessels", "Layer 26b", "AMS GTR grain vessel lineups",
+            fetch=lambda: fetch_gtr_vessel_activity(),
+            save=lambda n, d: save_port_vessel_activity(n, d),
+            clean=lambda n, d: clean_port_vessel_activity(d),
         ),
         DictLayer(
             "dce", "Layer 9", "DCE futures (AKShare)",
@@ -686,40 +755,14 @@ def _build_dict_layers() -> list[DictLayer]:
     ]
 
 
-def run() -> int:
-    setup_logging()
-    _HARD_FAILURES.clear()
-    _NO_PUBLICATION.clear()
-    _STALE_LAST_KNOWN_GOOD.clear()
-    _INCOMPLETE_KEY_COVERAGE.clear()
+def _run_custom_layers(results: dict[str, bool]) -> None:
+    """Layers 14-25: the sources that do not fit the DictLayer shape.
 
-    logger.info("=" * 60)
-    logger.info("  Mirror Market — Data Pipeline")
-    logger.info("=" * 60)
-
-    # Track which layers succeeded vs failed
-    results = dict.fromkeys(PRODUCTION_LAYER_KEYS, False)
-    # Layers intentionally short-circuited (upstream anti-bot walls) —
-    # reported separately so the Failed list only carries real outages.
-    disabled = sorted(DISABLED_LAYERS)
-
-    # ── Initialise database schema ─────────────────────────────────
-    init_database()
-
-    # ── Seed snapshot-only history from git-committed CSVs ─────────
-    # Must hard-fail: exporting later from a DB that failed to seed
-    # would overwrite the committed CSVs with today-only data.
-    try:
-        import_history()
-    except HistoryImportError:
-        logger.exception("History import failed — aborting before any export can clobber it")
-        return 1
-
-    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
-    dict_layers = _build_dict_layers()
-    for layer in dict_layers:
-        results[layer.key] = _run_dict_layer(layer)
-
+    Lifted out of run() unchanged so that selecting a subset of layers is a
+    predicate at one call site rather than a conditional wrapped around a
+    hundred lines. The fast refresh path (config.FAST_REFRESH_LAYERS) is
+    entirely dict layers, so it simply does not call this.
+    """
     # ── Layer 14: USDA Crush/Processing + Export Inspections ──────
     # Custom: two sources (QuickStats CRUSHED + AMS text report) sharing
     # one freshness key, with a per-commodity save split.
@@ -882,6 +925,83 @@ def run() -> int:
         save=lambda n, d: save_cec_estimates(n, d),
     )
 
+
+def run(
+    layer_keys: tuple[str, ...] | None = None,
+    history_period: str = DEFAULT_HISTORY_PERIOD,
+) -> int:
+    """Fetch, clean and store the data layers; return a process exit code.
+
+    ``layer_keys`` restricts the run to a subset — the fast refresh path
+    passes ``config.FAST_REFRESH_LAYERS``. ``None`` runs everything, which is
+    the daily build.
+
+    A restricted run is a *different question*, not a partial answer to the
+    same one, and the summary says so: ``results`` is keyed on the selected
+    layers only, so a fast refresh does not report twenty-four untouched
+    layers as failures and ``scripts/ci_layer_alert.py`` does not open an
+    outage issue for every source it deliberately did not ask.
+
+    What a restricted run does NOT skip is the history round-trip. The
+    snapshot-only tables (forward_curve among them) exist only as the
+    committed CSVs on a fresh runner, so a fast refresh that skipped the
+    import would generate a site with no curve history and the export would
+    then refuse the shrink — a correct refusal, of a hole we created.
+    """
+    setup_logging()
+    _HARD_FAILURES.clear()
+    _NO_PUBLICATION.clear()
+    _STALE_LAST_KNOWN_GOOD.clear()
+    _INCOMPLETE_KEY_COVERAGE.clear()
+    run_clock.reset()
+
+    selected = tuple(layer_keys) if layer_keys is not None else PRODUCTION_LAYER_KEYS
+    unknown = [key for key in selected if key not in PRODUCTION_LAYER_KEYS]
+    if unknown:
+        # Hard-fail rather than silently running fewer layers than asked: a
+        # typo'd layer key would otherwise read as a healthy short run.
+        raise ValueError(
+            f"unknown layer key(s): {', '.join(sorted(unknown))}. "
+            f"Known: {', '.join(PRODUCTION_LAYER_KEYS)}"
+        )
+    restricted = layer_keys is not None
+    mode = "fast" if restricted else "full"
+
+    logger.info("=" * 60)
+    logger.info("  Mirror Market — Data Pipeline (%s)", mode)
+    if restricted:
+        logger.info("  layers: %s | history period: %s", ", ".join(selected), history_period)
+    logger.info("=" * 60)
+
+    # Track which layers succeeded vs failed
+    results = dict.fromkeys(selected, False)
+    # Layers intentionally short-circuited (upstream anti-bot walls) —
+    # reported separately so the Failed list only carries real outages.
+    disabled = sorted(DISABLED_LAYERS & set(selected))
+
+    # ── Initialise database schema ─────────────────────────────────
+    init_database()
+
+    # ── Seed snapshot-only history from git-committed CSVs ─────────
+    # Must hard-fail: exporting later from a DB that failed to seed
+    # would overwrite the committed CSVs with today-only data.
+    try:
+        import_history()
+    except HistoryImportError:
+        logger.exception("History import failed — aborting before any export can clobber it")
+        return 1
+
+    # ── Layers 1-13: uniform dict-of-frames layers ────────────────
+    dict_layers = _build_dict_layers(history_period=history_period)
+    for layer in dict_layers:
+        if layer.key not in results:
+            continue
+        results[layer.key] = _run_dict_layer(layer)
+
+    if not restricted:
+        _run_custom_layers(results)
+
+
     # ── Export snapshot-only history back to git-committed CSVs ──
     # Failure exits non-zero so the workflow's commit step never runs
     # against half-written files (writes are atomic per table anyway).
@@ -967,8 +1087,17 @@ def run() -> int:
     # ── Machine-readable run summary ─────────────────────────────
     # Consumed by scripts/ci_layer_alert.py in CI: distinct degradation
     # classes open/update a GitHub issue instead of vanishing into the logs.
-    critical_failures = [name for name in CRITICAL_LAYERS if not results.get(name)]
+    # Scoped to the layers this run actually asked for. A fast refresh does
+    # not fetch FRED, and `results.get("fred")` returning None there would
+    # read as "the critical FRED layer failed" and exit 1 on every single
+    # fast run — a run that was never wrong, judged against a question it was
+    # never asked.
+    critical_failures = [
+        name for name in CRITICAL_LAYERS if name in results and not results[name]
+    ]
     _write_pipeline_status({
+        "mode": mode,
+        "layers_requested": list(selected),
         "succeeded": succeeded,
         "failed": degraded,
         "disabled": disabled,
@@ -1007,5 +1136,30 @@ def run() -> int:
     return 0
 
 
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the Mirror Market data pipeline.")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        # The layer count is read from the catalog, never written here: a
+        # literal would be wrong the next time a layer is added, and this
+        # string is the one place a reader learns what --fast gives up.
+        help=(
+            f"price-only refresh: fetch {', '.join(FAST_REFRESH_LAYERS)} over a "
+            f"{FAST_REFRESH_HISTORY_PERIOD} window instead of all "
+            f"{len(PRODUCTION_LAYER_KEYS)} layers over {DEFAULT_HISTORY_PERIOD}. "
+            "Everything else about the run is identical — same settlement guard, "
+            "same cleaners, same freshness grading."
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.fast:
+        return run(
+            layer_keys=FAST_REFRESH_LAYERS,
+            history_period=FAST_REFRESH_HISTORY_PERIOD,
+        )
+    return run()
+
+
 if __name__ == "__main__":
-    sys.exit(run())
+    sys.exit(main())

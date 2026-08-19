@@ -26,12 +26,21 @@ from config import (
     REQUEST_TIMEOUT,
 )
 from fetchers._backoff import retry_sleep
-from fetchers._settlement import drop_unsettled_session
+from fetchers._settlement import (
+    EXCHANGE_SESSION,
+    FX_SESSION,
+    SessionRule,
+    drop_unsettled_session,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def fetch_one(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame:
+def fetch_one(
+    ticker: str,
+    period: str = DEFAULT_HISTORY_PERIOD,
+    rule: SessionRule = EXCHANGE_SESSION,
+) -> pd.DataFrame:
     """
     Download historical OHLCV data for a single ticker.
 
@@ -41,6 +50,11 @@ def fetch_one(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame
         Yahoo Finance ticker symbol, e.g. "ZS=F"
     period : str
         How far back to look — "1y", "2y", "5y", "max", etc.
+    rule : SessionRule
+        Which venue clock decides whether the newest bar has finished.
+        Defaults to exchange settlement; FX pairs must pass
+        ``fetchers._settlement.FX_SESSION`` — spot FX has no settlement and
+        judging it by the Chicago cutoff stores an open bar as a close.
 
     Returns
     -------
@@ -75,7 +89,7 @@ def fetch_one(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame
             # venue settles that row is an unfinished bar, and storing it
             # publishes a partial print as the day's close — see
             # fetchers/_settlement.py.
-            data = drop_unsettled_session(data, label=ticker)
+            data = drop_unsettled_session(data, label=ticker, rule=rule)
 
             return data
 
@@ -127,6 +141,14 @@ def fetch_currencies(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataF
     export-competitive each country is (a weaker Real makes Brazil's
     soybeans cheaper in dollar terms).
 
+    The one thing it does NOT share with commodity prices is the session
+    rule. Spot FX has no settlement; its bar closes at 17:00 New York.
+    Judged by the exchange cutoff instead, an FX bar opened at 17:00 was
+    stored as that day's close from 14:30 Chicago onwards — verified live
+    on 2026-08-19 (see fetchers/_settlement.py). Every ``home_per_mt`` leg
+    on the site converts at that row's own date, so this is a landed-cost
+    error on every physical origin, not just a wrong FX cell.
+
     Returns
     -------
     dict
@@ -136,7 +158,7 @@ def fetch_currencies(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataF
 
     for name, ticker in CURRENCY_TICKERS.items():
         logger.info("Fetching %s (%s) ...", name, ticker)
-        df = fetch_one(ticker, period=period)
+        df = fetch_one(ticker, period=period, rule=FX_SESSION)
         results[name] = df
         if not df.empty:
             logger.info(

@@ -671,6 +671,60 @@ def clean_ec_oilseeds(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_ocean_freight(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean GTR monthly ocean freight rates (Layer 26).
+
+    Steps:
+        1. Ensure Date is datetime and sort ascending.
+        2. Drop rows with no rate — the only column there is.
+        3. Drop duplicate months, keeping the last.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.dropna(subset=["rate_usd_mt"])
+    df = df.drop_duplicates(subset=["Date"], keep="last")
+    df = df.sort_values("Date").reset_index(drop=True)
+    return df
+
+
+def clean_port_vessel_activity(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean GTR weekly vessel activity (Layer 26b).
+
+    Steps:
+        1. Ensure week_ending is datetime and sort ascending.
+        2. Drop weeks where every count is missing.
+        3. Drop duplicate weeks, keeping the last.
+
+    Individual NaN counts are deliberately preserved: the columns were
+    introduced at different times (the 1990s rows carry `in_port` alone, and
+    the PNW block starts later), so a missing count means the series did not
+    exist that week — not that no vessel was there. Filling it with zero
+    would publish an empty port.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    counts = ["loading", "waiting_to_load", "in_port", "loaded_7day", "due_10day"]
+    present = [column for column in counts if column in df.columns]
+
+    df = df.copy()
+    df["week_ending"] = pd.to_datetime(df["week_ending"])
+    if present:
+        df = df.dropna(subset=present, how="all")
+    df = df.drop_duplicates(subset=["week_ending"], keep="last")
+    df = df.sort_values("week_ending").reset_index(drop=True)
+    return df
+
+
 def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean World Bank monthly price data.

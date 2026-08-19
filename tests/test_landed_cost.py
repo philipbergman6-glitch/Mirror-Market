@@ -438,10 +438,16 @@ def test_a_zero_price_quote_still_costs_the_stack_without_dividing_by_it():
 # ---------------------------------------------------------------------------
 # Confidence and provenance
 # ---------------------------------------------------------------------------
-def test_one_hand_entered_input_drags_an_executable_quote_to_indicative():
+def test_one_hand_entered_input_drags_a_board_quote_down_to_indicative():
+    """The board leg starts at `board_reference`, not `executable`.
+
+    It used to start at `executable`, which claimed a hedge was provably
+    placeable against a delayed yfinance bar. The drag-down behaviour is
+    unchanged — that is the point of asserting both ends here.
+    """
     board = _quote(UP_RIVER, 452.0, quote_kind=QuoteKind.BOARD)
     result = compute_landed_cost(board, CN, SEP, _full_set(), today=TODAY)
-    assert board.base_confidence is Confidence.EXECUTABLE
+    assert board.base_confidence is Confidence.BOARD_REFERENCE
     assert result.confidence is Confidence.INDICATIVE
 
 

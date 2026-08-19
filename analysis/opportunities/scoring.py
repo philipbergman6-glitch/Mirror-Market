@@ -59,8 +59,16 @@ __all__ = [
 #: 21.453 minimum export value is not a weak number — it is precisely known and
 #: legally binding — it simply is not a traded price, which is a different
 #: complaint and one the blockers already make.
+#:
+#: ``BOARD_REFERENCE`` is the CBOT/DCE case and is deliberately *not* 100. The
+#: board price this stack holds is a delayed daily bar from a consumer endpoint
+#: whose settlement no provider proves, so it is the best number here and not a
+#: proven one. ``EXECUTABLE`` is unreachable today by construction
+#: (``pricing.semantics.PROVEN_SETTLEMENT_SOURCES`` is empty) and stays in the
+#: table for the day an authoritative feed is substituted.
 CONFIDENCE_SCORE = {
     Confidence.EXECUTABLE: 100.0,
+    Confidence.BOARD_REFERENCE: 90.0,
     Confidence.INDICATIVE: 75.0,
     Confidence.ADMINISTERED: 60.0,
     Confidence.PROVISIONAL: 40.0,

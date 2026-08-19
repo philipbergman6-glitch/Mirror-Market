@@ -77,6 +77,12 @@ REQUIRED_UNIT: dict[CostComponent, str] = {
     for component in CostComponent
 }
 
+# Confidence values that describe an *observed market price* and can never
+# describe something a person typed into a YAML file. `board_reference` joined
+# `executable` here when the two were separated: a hand-entered freight number
+# is not a venue's own delayed close any more than it is a proven settlement.
+_MARKET_ONLY_CONFIDENCE = frozenset({Confidence.EXECUTABLE, Confidence.BOARD_REFERENCE})
+
 REQUIRED_FIELDS = (
     "id", "component", "value", "unit", "basis", "source",
     "entered_by", "entered_at", "expires_on", "confidence",
@@ -253,10 +259,11 @@ def parse_assumption(raw: dict, *, where: str) -> Assumption:
         confidence = Confidence(str(raw["confidence"]))
     except ValueError as exc:
         raise AssumptionError(f"{where}: unknown confidence {raw['confidence']!r}") from exc
-    if confidence is Confidence.EXECUTABLE:
+    if confidence in _MARKET_ONLY_CONFIDENCE:
         raise AssumptionError(
-            f"{where}: an entered assumption cannot be `executable` — that word is reserved "
-            "for a price a hedge can be placed against, and no hand-entered freight number is one"
+            f"{where}: an entered assumption cannot be `{confidence.value}` — those values are "
+            "reserved for an observed market price (a proven settlement, or a venue's own "
+            "delayed close), and no hand-entered freight number is either"
         )
     return Assumption(
         id=str(raw["id"]),
@@ -416,6 +423,22 @@ def load_assumptions(directory: str | os.PathLike[str] | None = None) -> Assumpt
         files.append(name)
 
     result = AssumptionSet(assumptions=tuple(parsed), loaded_from=tuple(files))
+
+    # Set-level validation. One entry can be valid on its own and the file still
+    # be unusable — an ocean freight with no origin prices all three legs off one
+    # indication, and two overlapping entries make the answer depend on file
+    # order. Those are raised here rather than at lookup, because at lookup the
+    # complaint surfaces halfway through a page build for whichever route asked
+    # first, and the person who can retire the stale entry is not there.
+    from analysis.origins.validation import errors, structural_issues
+
+    faults = errors(structural_issues(result))
+    if faults:
+        raise AssumptionError(
+            f"{len(faults)} unusable assumption(s) in {root}:\n  "
+            + "\n  ".join(f"{issue}\n    remedy: {issue.remedy}" for issue in faults)
+        )
+
     log.info("Loaded %d assumption(s) from %s (set %s)", len(parsed), root, result.set_id)
     return result
 

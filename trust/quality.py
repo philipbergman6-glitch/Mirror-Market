@@ -566,7 +566,10 @@ def _settlement_confirmed(context: QualityRuleContext) -> tuple[RuleFinding, ...
     return (
         RuleFinding(
             evidence={"settlement_state": state.value if state is not None else None},
-            message="Settlement observations must be final settled bars",
+            message=(
+                "Board observations must be final settled-session bars, not the "
+                "session in progress"
+            ),
         ),
     )
 

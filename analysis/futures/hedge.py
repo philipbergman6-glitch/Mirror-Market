@@ -61,6 +61,11 @@ from analysis.futures.domain import (
 # about how much oil a tonne of beans makes.
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 
+# The two refusals every sizing call makes, held centrally so a second sizing
+# path cannot be written without them: a stitched series is not an instrument,
+# and a price nobody traded at is not a market to hedge in.
+from pricing.policy import require_hedgeable, require_traded_price
+
 
 class Rounding(str, Enum):
     """How a fractional contract count becomes a whole one.
@@ -186,7 +191,7 @@ class PhysicalExposure:
         return self.side.opposite
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "commodity": self.commodity,
             "side": self.side.value,
             "quantity": self.quantity,
@@ -199,10 +204,16 @@ class PhysicalExposure:
             "basis_source": self.basis_source,
             "currency": self.currency,
             "fx_pair": self.fx_pair,
-            "counterparty": self.counterparty,
             "note": self.note,
             "futures_side": self.futures_side.value,
         }
+        # Emitted only when there is one. A counterparty names a client's trade
+        # partner, so the public leak guard refuses the key outright; a blank
+        # string carries no such information and an absent field is the honest
+        # rendering of "no counterparty was entered" anyway.
+        if self.counterparty:
+            payload["counterparty"] = self.counterparty
+        return payload
 
 
 @dataclass(frozen=True)
@@ -385,6 +396,8 @@ def size_leg(
     arrive with a source, which is why the source is a required-in-practice
     argument rather than an optional label.
     """
+    require_hedgeable(quote, calculation="size_leg")
+    require_traded_price(quote.price_type, context=f"size_leg({quote.contract.symbol})")
     if hedge_ratio <= 0:
         raise ValueError("hedge_ratio must be positive")
     spec = quote.contract.spec
@@ -443,6 +456,11 @@ def build_hedge(
     extra_warnings: tuple[HedgeWarning, ...] = (),
 ) -> HedgeProposal:
     """Assemble a proposal and compute what the legs leave behind."""
+    # Re-asked here rather than trusted from `size_leg`: legs can be built by
+    # hand or replaced on a frozen proposal, and this is the last point before
+    # a number becomes a trade a person would place.
+    for leg in legs:
+        require_hedgeable(leg.quote, calculation="build_hedge")
     quantity_mt = exposure.quantity_mt
     covered = sum(leg.covered_physical_mt for leg in legs)
     residual = quantity_mt - covered
@@ -661,7 +679,18 @@ def propose_crush_hedge(
     ZM and ZL settle against US products, and a crusher outside the US carries
     the product basis between their local market and the board. That is
     reported, not assumed away.
+
+    **The three months are one crush period, not three independent choices.**
+    The bean month is chosen against the exposure's pricing window; the product
+    months then *follow* it under the documented convention
+    (``analysis.futures.crush.product_month_for`` — same month, except November
+    beans, which crush into December). Letting each leg pick its own nearest
+    month is how a Nov bean short ends up against Oct products: a legal set of
+    contracts that is not a crush, and the P&L of the mismatch is invisible in
+    the sizing.
     """
+    from analysis.futures.crush import product_month_for
+
     if exposure.side is not Side.LONG:
         raise ValueError(
             "a crush hedge applies to a long bean position; a short bean position is the "
@@ -679,25 +708,52 @@ def propose_crush_hedge(
             bean_quote, side=Side.SHORT, physical_mt=exposure.quantity_mt,
             hedge_ratio=1.0, hedge_ratio_source="1:1 — the beans owned", rounding=rounding,
         ))
-
-    for commodity, analysis in (("Soybean Meal", meal_curve), ("Soybean Oil", oil_curve)):
-        product_quote, product_problem = select_hedge_month(
-            analysis, exposure, min_days_to_expiry=min_days_to_expiry
+        product_year, product_month = product_month_for(
+            bean_quote.contract.year, bean_quote.contract.month
         )
-        if product_problem or product_quote is None:
-            if product_problem:
-                warnings.append(product_problem)
-            continue
-        legs.append(size_leg(
-            product_quote, side=Side.LONG, physical_mt=exposure.quantity_mt,
-            hedge_ratio=CRUSH_YIELDS_MT[commodity],
-            hedge_ratio_source=CRUSH_YIELD_SOURCE,
-            rounding=rounding,
-            cross_hedge_note=(
-                f"cross hedge: {commodity} produced from the bean position, sized at the "
-                "mass-balance yield; product basis to the local market is not hedged"
-            ),
-        ))
+
+        for commodity, analysis in (("Soybean Meal", meal_curve), ("Soybean Oil", oil_curve)):
+            product_quote = next(
+                (
+                    leg.quote for leg in analysis.legs
+                    if leg.contract.year == product_year and leg.contract.month == product_month
+                ),
+                None,
+            )
+            if product_quote is None:
+                warnings.append(HedgeWarning(
+                    code="crush_month_unquoted",
+                    message=(
+                        f"{bean_quote.contract.symbol} crushes into the {product_year}-"
+                        f"{product_month:02d} {commodity} contract under this project's crush "
+                        "convention, and no quote for it is stored — the product leg is left "
+                        "off rather than placed in a month that is not the crush's"
+                    ),
+                    severity="alert",
+                ))
+                continue
+            if product_quote.observation_date != bean_quote.observation_date:
+                warnings.append(HedgeWarning(
+                    code="crush_legs_mixed_sessions",
+                    message=(
+                        f"{product_quote.contract.symbol} is observed "
+                        f"{product_quote.observation_date.isoformat()} against "
+                        f"{bean_quote.contract.symbol} on "
+                        f"{bean_quote.observation_date.isoformat()} — the crush value implied "
+                        "by these legs spans two sessions"
+                    ),
+                    severity="alert",
+                ))
+            legs.append(size_leg(
+                product_quote, side=Side.LONG, physical_mt=exposure.quantity_mt,
+                hedge_ratio=CRUSH_YIELDS_MT[commodity],
+                hedge_ratio_source=CRUSH_YIELD_SOURCE,
+                rounding=rounding,
+                cross_hedge_note=(
+                    f"cross hedge: {commodity} produced from the bean position, sized at the "
+                    "mass-balance yield; product basis to the local market is not hedged"
+                ),
+            ))
 
     proposal = build_hedge(
         exposure, tuple(legs), as_of=as_of, fx=fx, rounding=rounding, extra_warnings=tuple(warnings)

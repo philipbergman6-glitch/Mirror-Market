@@ -242,6 +242,51 @@
   <div class="note-block">{{ s.data.aggregate_open_interest_note }}</div>
 
   {#- ------------------------------------------------------------------ 04 -#}
+  {% elif s.id == 'crush' %}
+  <div class="contract-card">
+    <div class="contract-head">
+      <h3>{{ s.data.period_label }}</h3>
+      <span class="ptype">{{ s.data.label }}</span>
+      <span class="ptype">{{ 'hedgeable months' if s.data.hedgeable else 'not placeable' }}</span>
+    </div>
+    <div class="spec-line">{{ s.data.meaning }}</div>
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>Leg</th><th>Contract</th><th>Month</th><th class="num">Native</th>
+          <th class="num">USD/MT</th><th class="num">Yield MT/MT</th>
+          <th class="num">Contribution USD/MT</th><th>Price type</th><th>Observed</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for leg in s.data.legs %}
+        <tr>
+          <td>{{ leg.role }}</td>
+          <td class="sym">{{ leg.symbol }}</td>
+          <td>{{ leg.contract_label }}</td>
+          <td class="num">{{ leg.native_display }} {{ leg.native_unit }}</td>
+          <td class="num">{{ '{:,.2f}'.format(leg.usd_per_mt) }}</td>
+          <td class="num">{% if leg.yield_mt is none %}—{% else %}{{ '{:.6f}'.format(leg.yield_mt) }}{% endif %}</td>
+          <td class="num">{{ '{:+,.2f}'.format(leg.contribution_usd_mt) }}</td>
+          <td>{{ leg.price_label }}{% if not leg.settlement_proven %} <span class="muted">· settlement not proven</span>{% endif %}</td>
+          <td>{{ leg.observation_date }}</td>
+        </tr>
+      {% endfor %}
+        <tr>
+          <td colspan="6"><strong>Margin</strong></td>
+          <td class="num"><strong>{{ '{:+,.2f}'.format(s.data.margin_usd_mt) }}</strong></td>
+          <td colspan="2">revenue {{ '{:,.2f}'.format(s.data.revenue_usd_mt) }} − bean {{ '{:,.2f}'.format(s.data.bean_cost_usd_mt) }}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="note-block">{{ s.data.convention }}</div>
+    <div class="note-block">{{ s.data.provider_display }} — {{ s.data.provider_note }}</div>
+    {% for note in s.data.curve_notes %}<div class="incoherent">{{ note }}</div>{% endfor %}
+  </div>
+
+  {#- ------------------------------------------------------------------ 05 -#}
   {% elif s.id == 'hedge' %}
   {% if s.data.is_reference %}
   <div class="ref-note">{{ s.data.reference_label }}</div>
@@ -380,8 +425,114 @@
   <div class="note-block">{{ p.key }}: {{ w }}</div>
   {% endfor %}{% endfor %}
   <div class="note-block">{{ val.mark_note }}</div>
+  <div class="note-block"><strong>Basis:</strong> {{ s.data.pnl_basis_note }}</div>
 
   {#- ------------------------------------------------------------------ 08 -#}
+  {% elif s.id == 'exposure' %}
+  <div class="caption">as of {{ s.data.as_of }}</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>View</th><th>Scope</th><th class="num">MT</th><th class="num">Lots</th>
+        <th>Per unit move</th><th class="num">USD exposed</th><th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for line in s.data.lines %}
+      <tr>
+        <td class="sym">{{ line.view|replace('_', ' ') }}</td>
+        <td class="strong">{{ line.key }}</td>
+        <td class="num">{% if line.quantity_mt is none %}—{% else %}{{ '{:+,.0f}'.format(line.quantity_mt) }}{% endif %}</td>
+        <td class="num">{% if line.contracts is none %}—{% else %}{{ '{:+,.0f}'.format(line.contracts) }}{% endif %}</td>
+        <td>{{ line.unit_move_label }}</td>
+        <td class="num">{% if line.usd_exposure is none %}<span class="muted">unmeasured</span>{% else %}{{ '{:+,.0f}'.format(line.usd_exposure) }}{% endif %}</td>
+        <td class="muted">{{ line.note }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% for line in s.data.lines %}{% for w in line.warnings %}
+  <div class="note-block">{{ line.key }}: {{ w }}</div>
+  {% endfor %}{% endfor %}
+  {% for w in s.data.warnings %}<div class="alert alert-warn">{{ w }}</div>{% endfor %}
+  <div class="note-block">{{ s.data.method_note }}</div>
+
+  {#- ------------------------------------------------------------------ 09 -#}
+  {% elif s.id == 'limits' %}
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Limit</th><th>Scope</th><th>Measures</th><th class="num">Observed</th>
+        <th class="num">Warn at</th><th class="num">Maximum</th><th class="num">Headroom</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in s.data.checks %}
+      <tr>
+        <td class="sym strong">{{ c.key }}</td>
+        <td>{{ c.scope_key }}</td>
+        <td class="muted">{{ c.measures }}</td>
+        <td class="num">{{ '{:+,.0f}'.format(c.observed) }} {{ c.unit }}</td>
+        <td class="num">{% if c.warn_at is none %}<span class="muted">none set</span>{% else %}{{ f.num(c.warn_at) }}{% endif %}</td>
+        <td class="num">{{ f.num(c.maximum) }}</td>
+        <td class="num">{{ '{:+,.0f}'.format(c.headroom) }}</td>
+        <td><span class="ptype">{{ c.status }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% for b in s.data.breaches %}
+  <div class="alert alert-err">Limit breach — {{ b.key }} for {{ b.scope_key }}: limit {{ f.num(b.maximum) }} {{ b.unit }}, observed {{ f.num(b.observed) }}, over by {{ f.num(b.excess) }}</div>
+  {% endfor %}
+  {% if s.data.unmeasured_note %}<div class="alert alert-warn">{{ s.data.unmeasured_note }}</div>{% endif %}
+  <div class="note-block">{{ s.data.enforcement_note }}</div>
+
+  {#- ------------------------------------------------------------------ 10 -#}
+  {% elif s.id == 'clearing' %}
+  <div class="caption">
+    statement {{ s.data.statement_date }} · valued {{ s.data.as_of }} · tolerance USD {{ f.num(s.data.tolerance_usd) }}
+  </div>
+  <div class="kv"><span class="lbl">Official — {{ s.data.official.basis|replace('_', ' ') }}</span><span class="val">{% if s.data.official.unrealised_usd is none %}<span class="muted">not stated</span>{% else %}{{ '{:+,.0f}'.format(s.data.official.unrealised_usd) }} USD{% endif %}</span></div>
+  <div class="kv"><span class="lbl">Ours — {{ s.data.management.basis|replace('_', ' ') }}</span><span class="val">{% if s.data.management.unrealised_usd is none %}<span class="muted">not stated</span>{% else %}{{ '{:+,.0f}'.format(s.data.management.unrealised_usd) }} USD{% endif %}</span></div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Contract</th><th class="num">Their lots</th><th class="num">Our lots</th>
+        <th class="num">Settlement</th><th class="num">Our mark</th>
+        <th class="num">Their unrealised</th><th class="num">Ours</th>
+        <th class="num">Difference</th><th>Agrees</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in s.data.rows %}
+      <tr>
+        <td class="sym strong">{{ r.key }}</td>
+        <td class="num">{% if r.official_quantity is none %}<span class="muted">absent</span>{% else %}{{ '{:+,.0f}'.format(r.official_quantity) }}{% endif %}</td>
+        <td class="num">{% if r.management_quantity is none %}<span class="muted">absent</span>{% else %}{{ '{:+,.0f}'.format(r.management_quantity) }}{% endif %}</td>
+        <td class="num">{% if r.settlement_price is none %}—{% else %}{{ '{:,.2f}'.format(r.settlement_price) }}{% endif %}</td>
+        <td class="num">{% if r.mark is none %}—{% else %}{{ '{:,.2f}'.format(r.mark) }}{% endif %}</td>
+        <td class="num">{% if r.official_unrealised_usd is none %}<span class="muted">not stated</span>{% else %}{{ '{:+,.0f}'.format(r.official_unrealised_usd) }}{% endif %}</td>
+        <td class="num">{% if r.management_unrealised_usd is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.0f}'.format(r.management_unrealised_usd) }}{% endif %}</td>
+        <td class="num">{% if r.difference_usd is none %}<span class="muted">—</span>{% else %}{{ '{:+,.0f}'.format(r.difference_usd) }}{% endif %}</td>
+        <td>{% if r.agrees is none %}<span class="muted">unknown</span>{% elif r.agrees %}yes{% else %}<span class="down">no</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% for r in s.data.rows %}{% for n in r.notes %}
+  <div class="note-block">{{ r.key }}: {{ n }}</div>
+  {% endfor %}{% endfor %}
+  {% for w in s.data.warnings %}<div class="alert alert-warn">{{ w }}</div>{% endfor %}
+  <div class="note-block"><strong>{{ s.data.summary }}</strong></div>
+  <div class="note-block">{{ s.data.never_merged_note }}</div>
+
+  {#- ------------------------------------------------------------------ 11 -#}
   {% elif s.id == 'calendar' %}
   <div class="table-scroll">
   <table class="dtable">
@@ -416,15 +567,32 @@
     {{ s.data.reason }}
   </div>
   <div class="note-block"><strong>Manual workflow.</strong> {{ s.data.manual_workflow }}</div>
+  <div class="note-block">{{ s.data.manual_note }}</div>
   <div class="note-block"><strong>Model.</strong> {{ s.data.model }} — assumptions, all of which bite:</div>
   <ul class="assump">
     {% for a in s.data.model_assumptions %}<li>{{ a }}</li>{% endfor %}
   </ul>
 
-  <h3 style="font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px">Entered options</h3>
-  {% if s.data.empty_note %}
-  <div class="note-block">{{ s.data.empty_note }}</div>
-  {% else %}
+  <h3 style="font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 6px">Where Black-76 is wrong about these options</h3>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Assumption</th><th>What a listed grain option does</th><th>Consequence</th><th>Bites</th></tr></thead>
+    <tbody>
+    {% for lim in s.data.limitations %}
+      <tr>
+        <td>{{ lim.assumption }}</td>
+        <td>{{ lim.reality }}</td>
+        <td>{{ lim.why }}</td>
+        <td><span class="ptype">{{ lim.direction }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="note-block">{{ s.data.rate_note }}</div>
+
+  {#- ----------------------------------------------------------------- 13 -#}
+  {% elif s.id == 'options_entered' %}
   <div class="note-block">{{ s.data.rate_note }}</div>
   <div class="table-scroll">
   <table class="dtable">
@@ -469,7 +637,9 @@
     Every row above is a <strong>model value</strong> from an input you supplied, not a market
     price. Entered from: {{ s.data.entered_from|join(', ') }}.
   </div>
-  {% endif %}
+  {% for lim in s.data.limitations %}
+  <div class="note-block"><strong>{{ lim.direction }}</strong> — {{ lim.why }}</div>
+  {% endfor %}
 
   {#- ------------------------------------------------------------------ 10 -#}
   {% elif s.id == 'provider' %}

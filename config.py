@@ -60,6 +60,13 @@ LAYER_MIN_KEYS = {
     "export_sales": 4,  # of 6 commodities
     "forward_curve": 7,  # of 9 commodities
     "eia": 2,          # of 3 series
+    # Both GTR legs demand *every* key. Each layer has exactly two, they come
+    # out of one workbook in one download, and there is no such thing as one
+    # route publishing while the other does not — so a missing key is a parse
+    # fault, never an off-day, and a floor of 1 would let half a layer go dark
+    # while the run stayed green.
+    "gtr_ocean_freight": 2,  # of 2 routes
+    "gtr_vessels": 2,        # of 2 port regions
 }
 
 # Systemic-outage backstop: exit non-zero when more than this many active
@@ -70,7 +77,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2 and 15 each have an independently
-# runnable sub-layer, hence 27 operational layers across 25 numbered groups.
+# runnable sub-layer, hence 29 operational layers across 26 numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
     ("usda", "2", "USDA NASS QuickStats", "Annual", "US production, area and yield"),
@@ -99,8 +106,47 @@ PRODUCTION_LAYERS = (
     ("sagis", "23", "SAGIS", "Weekly", "South Africa producer deliveries"),
     ("sagis_smd", "24", "SAGIS", "Monthly", "South Africa soy supply and demand"),
     ("cec", "25", "Crop Estimates Committee (SA)", "Monthly", "Official crop estimates"),
+    ("gtr_ocean_freight", "26", "USDA AMS (Grain Transport Report)", "Monthly", "Gulf and PNW to Japan ocean freight"),
+    ("gtr_vessels", "26b", "USDA AMS (Grain Transport Report)", "Weekly", "Gulf and PNW grain vessel lineups"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
+
+# ---------------------------------------------------------------------------
+# Fast refresh — the price-only path (`python main.py --fast`)
+#
+# The daily build re-downloads all 29 layers, and the measured cost of that is
+# dominated by one thing: DEFAULT_HISTORY_PERIOD is 15 years, and a 15-year
+# yfinance pull benchmarked at 24-32 s per ticker against 1-3 s for a short
+# window (2026-08-19, see LATENCY.md). Twenty tickers of history is most of the
+# 6m02s the 2026-08-18 production run spent inside its layers.
+#
+# The fast path exists because the numbers a trader reprices on intraday are a
+# small, cheap subset of that: the board, its curve, and the FX every
+# `home_per_mt` leg converts through. Everything else on the site — a weekly
+# CFTC report, a monthly WASDE, a crop estimate — cannot have changed between
+# two runs on the same day, so re-fetching it would buy nothing and cost the
+# whole runtime.
+#
+# Three deliberate exclusions, each of which looks like it belongs here:
+#   dce           — the DCE closes 15:00 CST, i.e. before any refresh we would
+#                   schedule; a second fetch the same day re-reads one file.
+#   the physical  — cepea/agrural/gulf_bids/magyp_fob publish once a day. They
+#     origin legs   would be legitimate additions to a *second* daily build,
+#                   but they are scrapers against unfriendly upstreams and
+#                   running them more often trades their reliability for
+#                   freshness they do not have (Layer 16's 2026-08-11 rate-limit
+#                   blackout is the standing example).
+#   india_domestic— shares that hazard and the shared-key throttle explicitly.
+#
+# So: what moves, and only what moves.
+FAST_REFRESH_LAYERS = ("prices", "currencies", "forward_curve")
+
+# History is already stored and re-downloading it is the entire cost above. A
+# month covers any weekend-plus-holiday gap the fast path could need to backfill
+# while staying inside the cheap window; INSERT OR REPLACE makes the overlap
+# free. It is NOT used by the daily build, which still pulls DEFAULT_HISTORY_PERIOD
+# so a fresh CI database is seeded with real history.
+FAST_REFRESH_HISTORY_PERIOD = "1mo"
 
 # ---------------------------------------------------------------------------
 # Layer 1 — yfinance ticker symbols (data sourced from CME / ICE / CBOT)
@@ -173,6 +219,20 @@ SEASONAL_MIN_YEARS_PER_MONTH = 5
 # publish the settled bar.
 SETTLEMENT_TIMEZONE = "America/Chicago"
 SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
+
+# Spot FX has no settlement, so the exchange cutoff above is the wrong
+# question for Layer 7 and answering it there stored a partial bar as an FX
+# close — measured live on 2026-08-19 at 03:45 UTC, when BRL=X returned a
+# bar labelled 2026-08-19 with High == Open and Low == Close, an FX day less
+# than four hours old, while Chicago local time was already past 14:30.
+#
+# The FX market runs continuously from Sunday 17:00 New York to Friday
+# 17:00, and Yahoo labels the bar that *closes* at 17:00 on day D with day
+# D's date. So the bar labelled D is unfinished until 17:00 New York on D.
+# Expressed in venue-local time for the same reason as the cutoff above:
+# US DST moves it against UTC twice a year.
+FX_SESSION_TIMEZONE = "America/New_York"
+FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
 
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
@@ -386,6 +446,97 @@ WORLDBANK_PRICES_URL = (
     "74e8be41ceb20fa0da750cda2f6b9e4e-0050012026/related/"
     "CMO-Historical-Data-Monthly.xlsx"
 )
+
+# ---------------------------------------------------------------------------
+# Layer 26 / 26b — USDA AMS Grain Transportation Report (no API key)
+#
+# The transport legs the stack was missing: what it costs to move a cargo
+# (26, ocean freight) and whether the boats are actually moving (26b, vessel
+# lineups). Both come off the same weekly AMS publication, whose supporting
+# tables are posted as standalone workbooks carrying the *whole* series —
+# 1996 for freight, 1995 for vessels — so each run re-reads the full history
+# and the layer self-heals on an empty CI database. Nothing here needs a
+# data/history/ round-trip.
+#
+# The two are separate run units (the 2b/15b convention) because their
+# cadences differ by an order of magnitude: freight is monthly, vessels are
+# weekly, so one recency budget cannot grade both.
+#
+# The links are stable filenames under /sites/default/files/media/ rather
+# than rotating GUIDs, so there is no landing-page resolution step here —
+# but a frozen workbook is still the live risk, and LAYER_MAX_DATA_AGE_DAYS
+# is what catches it.
+# ---------------------------------------------------------------------------
+GTR_DATASETS_LANDING_URL = (
+    "https://www.ams.usda.gov/services/transportation-analysis/gtr-datasets"
+)
+GTR_OCEAN_FREIGHT_URL = (
+    "https://www.ams.usda.gov/sites/default/files/media/GTRFigure20.xlsx"
+)
+GTR_VESSEL_ACTIVITY_URL = (
+    "https://www.ams.usda.gov/sites/default/files/media/GTRTable19_Figure19.xlsx"
+)
+
+# Column index → route, read off the Figure 20 `Data` sheet. Indices are used
+# because that sheet has no single header row (the labels are split across two
+# banner rows), but they are never *trusted*: _parse_ocean_freight checks the
+# published spread column against gulf - pnw on every row, so a column shift
+# fails the parse instead of restating one route as the other.
+GTR_OCEAN_ROUTES = {
+    1: "US Gulf to Japan",
+    3: "PNW to Japan",
+}
+GTR_OCEAN_SPREAD_COLUMN = 5
+
+# Bulk-grain vessel freight, assessed by a broker and republished by USDA —
+# it is not a USDA measurement and not an exchange print.
+GTR_OCEAN_CADENCE = "monthly"
+GTR_OCEAN_QUOTE_KIND = "freight assessment"
+GTR_OCEAN_ATTRIBUTION = (
+    "USDA AMS Grain Transportation Report (rates: O'Neil Commodity Consulting)"
+)
+# Ocean bulk grain freight has traded roughly $10-$120/MT since 1996. The band
+# is deliberately wide: it is here to catch a column shift or a unit change,
+# not to have an opinion on the freight market.
+GTR_OCEAN_MIN_USD_MT = 3.0
+GTR_OCEAN_MAX_USD_MT = 250.0
+
+# The Figure 20 workbook contains a data-entry error its own sequence
+# exposes: seven 2019 months are stored as datetimes in **1919** (Jun-Dec),
+# sitting between "May '19" and 2020-01. The neighbours prove the intent, but
+# rewriting a published year is inventing data, and storing 1919 would put a
+# century-old row at the front of every chart and every "earliest
+# observation" read. So an implausible year is rejected and named: seven
+# months of 2019 are a visible, documented gap rather than a wrong number.
+GTR_MIN_OBSERVATION_YEAR = 1990
+
+# The published-arithmetic checks (Figure 20's spread, Table 19's in-port
+# identity) exist to detect a **column shift**, not to audit the publisher.
+# Measured 2026-08-19 against the live files: 0 of 367 freight months and 8
+# of 1,649 vessel weeks fail, the latter scattered across 2018-2026 and off
+# by 1-12 vessels — upstream noise, not a mapping fault. So an individual
+# failure drops that row (its own components contradict it, and we cannot
+# know which side is right) while a failure *rate* above this threshold
+# means the mapping moved and the whole workbook is discarded.
+GTR_MAX_ARITHMETIC_FAILURE_RATE = 0.05
+
+# Table 19 columns, same deal: pinned by index, verified by the sheet's own
+# arithmetic (in port = loading + waiting to load) wherever all three print.
+# Vancouver (columns 15-17) is deliberately absent — it stopped being
+# reported and every recent row is blank, so demanding it would fail the
+# layer over a discontinued series.
+GTR_PORT_REGIONS = {
+    "US Gulf": {"loading": 2, "waiting_to_load": 3, "in_port": 4,
+                "loaded_7day": 6, "due_10day": 8},
+    "Pacific Northwest": {"loading": 10, "waiting_to_load": 11, "in_port": 12,
+                          "loaded_7day": 13, "due_10day": 14},
+}
+GTR_VESSEL_CADENCE = "weekly"
+GTR_VESSEL_UNIT = "vessels"
+GTR_VESSEL_ATTRIBUTION = "USDA AMS Grain Transportation Report"
+# A count of ships in a port region. Zero is legal (a holiday week); a
+# hundred-plus is a parse fault, not a queue.
+GTR_VESSEL_MAX_COUNT = 200
 
 # ---------------------------------------------------------------------------
 # Layer 22 — European Commission Oilseeds Market Observatory (no API key)
@@ -1043,6 +1194,9 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "crush_inspections": 12,
     "sagis": 12,
     "ec_oilseeds": 12,
+    "gtr_vessels": 12,
+    # Monthly publications — allow ~6 weeks.
+    "gtr_ocean_freight": 42,
     # Monthly publications — allow ~6 weeks.
     "sagis_smd": 42,
     "wasde": 42,
@@ -1158,6 +1312,22 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # days is that gap with a little slack; anything tighter would fail the
     # layer every January for a source behaving exactly as it should.
     "cec": 70,
+    # GTR vessel lineups. The report lands Thursday and the newest week it
+    # carries is the one that ended the *previous* Thursday, so the freshest
+    # possible row is already ~7 days old and is ~14 days old the day before
+    # the next release (measured 2026-08-19: newest week_ending 2026-08-06).
+    # 21 is that worst case plus one missed publication. The workbook lives at
+    # a fixed filename, which is exactly the World Bank / CIRCABC trap — a
+    # file that stops being refreshed keeps answering 200 forever — so this
+    # budget is the only thing standing between a frozen link and a layer
+    # that reports success on 2026 numbers in 2027.
+    "gtr_vessels": 21,
+    # GTR ocean freight is monthly and the month is stamped to its first day,
+    # so the newest row is ~30 days old the moment it publishes and ~60 the
+    # day before the next one. 75 is that worst case plus a little slack, and
+    # it is the same frozen-workbook guard as above rather than an opinion
+    # about how often freight moves.
+    "gtr_ocean_freight": 75,
     # Monthly publication. 100 days matches the identical guard inside
     # fetchers/worldbank.py — the CMO deep link rotates yearly and the old
     # GUID keeps serving a frozen file with HTTP 200. One number, one
@@ -1188,6 +1358,8 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "export_sales": EXPORT_SALES_COMMODITIES,
     "forward_curve": FORWARD_CURVE_CONTRACTS,
     "eia": EIA_SERIES,
+    "gtr_ocean_freight": GTR_OCEAN_ROUTES,
+    "gtr_vessels": GTR_PORT_REGIONS,
 }
 
 
@@ -1311,14 +1483,23 @@ MARKETS: dict[str, dict[str, Any]] = {
             "value_column": "Close",
             "unit": "native_exchange",
         },
+        # NAMED CONTRACTS, not the continuous front-month series. `prices`
+        # holds Yahoo's ZS=F/ZM=F/ZL=F, which name no delivery month and roll
+        # silently on the provider's own schedule — three of them make a margin
+        # nobody can reproduce and nobody can hedge. `contracts: "named"` routes
+        # this descriptor to `analysis.futures.crush`, which strikes the margin
+        # on ZSU26/ZMU26/ZLU26 out of `forward_curve` and withholds it when
+        # those cannot be had on one session.
         "crush": {
             "kind": "board",
+            "contracts": "named",
+            "layer": "forward_curve",
             "yield_set": "soy_board",
-            "table": "prices",
-            "date_column": "Date",
+            "table": "forward_curve",
+            "date_column": "observation_date",
             "key_column": "commodity",
             "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
-            "value_column": "Close",
+            "value_column": "close",
             "unit": "native_exchange",
         },
         # CIF NOLA barge bids over the named CBOT contract (Layer 20).
@@ -1378,8 +1559,13 @@ MARKETS: dict[str, dict[str, Any]] = {
             "value_column": "Close",
             "unit": "home_per_mt",
         },
+        # Continuous main-contract series (akshare A0/M0/Y0): the underlying
+        # contract changes silently and is not published, so this margin is a
+        # China board *reference* and never a hedgeable one. Declared rather
+        # than inferred — that is the whole point of the field.
         "crush": {
             "kind": "board",
+            "contracts": "continuous",
             "yield_set": "soy_board",
             "table": "dce_futures",
             "date_column": "Date",
@@ -1481,6 +1667,7 @@ MARKETS: dict[str, dict[str, Any]] = {
         },
         "crush": {
             "kind": "administered",
+            "contracts": "administered",
             "yield_set": "soy_board",
             "table": "argentina_fob",
             "date_column": "date",
@@ -1986,6 +2173,36 @@ POSITIONS_DIR = os.getenv("MIRROR_POSITIONS_DIR") or os.path.join(
 OPTIONS_DIR = os.getenv("MIRROR_OPTIONS_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "reference", "options"
 )
+
+# Official clearing / broker statements, on the same terms again. These are the
+# client's *authoritative* numbers — the settlement prices and the realised and
+# unrealised P&L their clearer margined the account at — and they exist here for
+# one reason: so a management estimate marked to delayed closes can be shown
+# beside the official figure and reconciled, never merged into it.
+# See analysis/futures/clearing.py.
+CLEARING_DIR = os.getenv("MIRROR_CLEARING_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "clearing"
+)
+
+# Column-mapping profiles for broker / clearing / ERP CSV exports. A profile
+# names somebody's broker and their column conventions, so it is a client record
+# too and is gitignored with the rest. See analysis/futures/imports.py.
+IMPORT_PROFILE_DIR = os.getenv("MIRROR_IMPORT_PROFILE_DIR") or os.path.join(
+    os.path.dirname(__file__), "data", "reference", "import_profiles"
+)
+
+# How close a contract's first notice day has to be before an open position in
+# it is reported as first-notice risk. Ten business days is the window a
+# merchant rolls in: past FND a long is exposed to delivery, and the alert has
+# to arrive with enough time to roll rather than on the day.
+FIRST_NOTICE_WARNING_DAYS = 10
+
+# How far a management mark-to-market may sit from the clearer's official
+# unrealised P&L before the reconciliation calls the line a difference rather
+# than a rounding artefact. In USD per position line. A delayed close against an
+# official settlement is genuinely a different number, so this is not zero; it
+# is small enough that a wrong contract size or a missing fill cannot hide in it.
+CLEARING_RECONCILIATION_TOLERANCE_USD = 25.0
 
 # Bumped whenever the arithmetic or the component order changes. Stored on every
 # ranking, so a historical row can be read against the method that produced it

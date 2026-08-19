@@ -1,7 +1,13 @@
 {# 03 Crush margin. One engine, every market (M7 #149) — only the yields, the
    FX and the kind label vary, and the kind is stamped in the block header
    because a board margin, an administered one and a physical one are not the
-   same claim. #}
+   same claim.
+
+   A second distinction rides beside it: `contract_basis`. A margin struck on
+   named delivery months (ZSU26/ZMU26/ZLU26) states which contracts it is, and
+   one struck on continuous main-contract series cannot — the underlying
+   changes on the provider's own schedule and is not published. Those are
+   different claims and the block renders them differently. #}
 {% import 'blocks/_macros.html.j2' as f %}
 {% set d = block.data %}
 <div class="grid grid-4">
@@ -12,6 +18,7 @@
        currency; a board quoted in cents/bu, cents/lb and $/short ton has no
        such number, and printing one would invent a unit. #}
     {% if d.margin_home is not none %}<div class="mc-delta muted">{{ d.home_currency }} {{ f.num(d.margin_home, 0) }}/MT</div>{% endif %}
+    {% if d.period_label %}<div class="mc-delta muted">{{ d.period_label }}</div>{% endif %}
     {{ f.asof(d.as_of, d.age_days) }}
   </div>
   {% for name in ['bean', 'oil', 'meal'] %}
@@ -19,9 +26,21 @@
     <div class="mc-label">{{ name }} — {{ d.legs[name].key }}</div>
     <div class="mc-val">{{ f.usd(d.legs[name].usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT{% if name != 'bean' %} · yield {{ '%.3f'|format(d.yields[name]) }} MT/MT{% endif %}</div>
+    {% if d.legs_named %}
+    <div class="mc-delta muted">{{ d.legs[name].contract_month }} · {{ d.legs[name].price_label }}{% if not d.legs[name].settlement_proven %} · settlement not proven{% endif %}</div>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
+{% if d.legs_named %}
+<div class="caption">
+  {{ d.convention }}
+  Legs are named contracts, all observed {{ d.as_of }} — {{ d.provider_display }}.
+  {% if d.hedgeable %}Three listed months an order can be entered against; this is a paper margin, not advice to place one.{% endif %}
+</div>
+{% elif d.contract_note %}
+<div class="alert alert-warn">{{ d.contract_note }}</div>
+{% endif %}
 {% if d.provisional %}
 <div class="alert alert-warn">{{ d.provisional_note }}</div>
 {% endif %}

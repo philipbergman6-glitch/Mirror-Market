@@ -47,7 +47,7 @@
         <div class="caption">{{ row.label }}</div>
         {% endif %}
       </td>
-      <td>{% if row.kind %}<span class="kind">{{ row.kind|replace('_', ' ') }}</span>{% endif %}</td>
+      <td>{% if row.kind %}<span class="kind">{{ row.kind_label or row.kind|replace('_', ' ') }}</span>{% endif %}</td>
       <td class="num strong">{{ f.usd(row.usd_mt) }}</td>
       <td class="num">
         {%- if row.has_home_quote and row.home_value is not none -%}

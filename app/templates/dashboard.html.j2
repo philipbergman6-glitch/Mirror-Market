@@ -71,6 +71,12 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {% block mast_meta %}
     <div class="day">{{ masthead.day_line }}</div>
     <div>Generated {{ generated_at }} · {{ masthead.on_schedule_count }}/{{ masthead.total_layers }} layers on schedule{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
+    {# Generation time is not observation time, and on this site they are
+       routinely a day apart: the settlement guard publishes the previous
+       session's close on any build landing before 14:30 Chicago. Stating
+       only "Generated" lets that correct behaviour read as a fresher product
+       than it is, so the oldest board/FX observation is stated beside it. #}
+    {% if masthead.price_age %}<div>Board and FX priced from data <b>{{ masthead.price_age }}</b> old · <a href="manifest.json">latency detail</a></div>{% endif %}
     <div>Soy complex + competing crops · all prices USD/MT</div>
 {% endblock %}
 
@@ -375,17 +381,29 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
     <summary>Layer Freshness ({{ masthead.on_schedule_count }}/{{ masthead.total_layers }} on schedule)</summary>
     <div class="det-content">
     <table class="dtable">
+      {# Two different clocks, side by side and never merged.
+
+         "Last Success" is RUN freshness: when this pipeline last completed.
+         "Observed" is DATA freshness: what the newest number is dated. They
+         diverge in exactly the case that matters — a run landing before the
+         CBOT settlement succeeds, stamps a fresh last_success, and carries
+         yesterday's close. One column alone reads "0h ago" for a day-old
+         price. "Age" is the observation's staleness right now, which is the
+         figure a reader is actually deciding on. #}
       <thead>
-        <tr><th>Layer</th><th>Status</th><th>Keys</th><th>Last Success</th></tr>
+        <tr><th>Layer</th><th>Status</th><th>Keys</th><th>Observed</th><th>Fetched</th><th>Age</th><th>Last Success</th></tr>
       </thead>
       <tbody>
         {% for item in freshness_items %}
-        <tr data-layer="{{ item.name }}">
+        <tr data-layer="{{ item.name }}"{% if item.observed %} data-observed-at="{{ item.observed }}"{% endif %}>
           <td>{{ item.name }}</td>
           <td><span class="{% if item.status == 'fresh' %}up{% elif item.status in ('old', 'degraded') %}down{% else %}muted{% endif %}">{{ item.status }}</span></td>
           {# Coverage is rendered only below full: a badge on every healthy
              layer every day is the badge-blindness #176 removed (#182). #}
           <td class="num">{% if item.coverage %}<span class="muted">{{ item.coverage }}</span>{% endif %}</td>
+          <td class="num">{% if item.observed %}{{ item.observed }}{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+          <td class="num">{% if item.fetched %}{{ item.fetched }}{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+          <td class="num">{% if item.data_age %}{{ item.data_age }}{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
           <td class="num">{{ item.age }}</td>
         </tr>
         {% endfor %}

@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -262,28 +263,83 @@ def _write_private_opportunities(ctx, now, result, render) -> None:
 
 
 def _render_workstation(output_dir: Path, nav: list[dict], *, ctx, now, **_) -> Path:
-    """The Phase 3 futures workstation.
+    """The Phase 3 futures workstation — TWO artifacts, on the Phase 4 pattern.
 
     Shares the site context for the same reason the origins page does: a hedge
     sized on this page must be sized on the same curve row the CBOT market page
     renders, and two connections are two snapshots.
+
+    The public edition goes to ``docs/workstation.html`` with the book,
+    exposure, limits, clearing and entered-option sections rendered absent. The
+    private edition — the one the desk actually works from — is written to
+    ``config.OPPORTUNITY_PRIVATE_OUTPUT_DIR``, outside ``docs/``, because that
+    directory is what the Pages deploy uploads and an entered position must not
+    be able to land there through a path mistake.
     """
+    from analysis.futures.privacy import AUDIENCE_PUBLIC, assert_no_client_records
     from app.workstation_page import build_view
 
     relpath = "workstation.html"
     root = relative_root(relpath)
-    view = build_view(ctx.conn, today=now.date(), generated_at=now)
-    html = _env().get_template("workstation.html.j2").render(
-        workstation=view,
-        root=root,
-        market_nav=nav_items_at(nav, root),
-        current_page="workstation",
-        current_market=None,
-        day_line=now.strftime("%A %d %B %Y").upper(),
-        generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
-        generated_at_iso=now.isoformat(),
+
+    def render(view: dict, link_root: str) -> str:
+        return _env().get_template("workstation.html.j2").render(
+            workstation=view,
+            root=link_root,
+            market_nav=nav_items_at(nav, link_root),
+            current_page="workstation",
+            current_market=None,
+            day_line=now.strftime("%A %d %B %Y").upper(),
+            generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+            generated_at_iso=now.isoformat(),
+        )
+
+    public = build_view(
+        ctx.conn, today=now.date(), generated_at=now, audience=AUDIENCE_PUBLIC,
     )
-    return _write(output_dir, relpath, html)
+    # Checked here, at the last moment before the bytes are written, and not
+    # only in a test: a leak must fail this page — which becomes a tombstone
+    # and blocks the promotion contract — rather than be published and noticed.
+    assert_no_client_records(public, where="docs/workstation.html")
+    path = _write(output_dir, relpath, render(public, root))
+
+    _write_private_workstation(ctx, now, render)
+    return path
+
+
+def _write_private_workstation(ctx, now, render) -> None:
+    """The desk's edition. Isolated: it must never fail the public page.
+
+    Same severity split as the private opportunity board — a workspace that
+    cannot be written is a local inconvenience, while a public page that fails
+    is a tombstone in the candidate and a blocked deploy.
+
+    The destination is checked by :func:`analysis.futures.privacy.
+    assert_private_path` rather than assumed. The check is cheap and the thing
+    it prevents — a book written into ``docs/`` because a constant moved — is
+    unrecoverable once the deploy has run.
+    """
+    from analysis.futures.privacy import (
+        AUDIENCE_PRIVATE,
+        assert_private_path,
+        private_output_dir,
+    )
+    from app.workstation_page import build_view
+
+    try:
+        private_dir = private_output_dir()
+        private_dir.mkdir(parents=True, exist_ok=True)
+        target = assert_private_path(private_dir / "workstation.html", where="private workstation")
+        view = build_view(
+            ctx.conn, today=now.date(), generated_at=now, audience=AUDIENCE_PRIVATE,
+        )
+        # Root is "" rather than a computed prefix: the private file does not
+        # sit inside docs/, so its relative links back to the public site would
+        # be wrong at any depth.
+        target.write_text(render(view, ""), encoding="utf-8")
+        log.info("wrote the private workstation edition to %s", target)
+    except Exception:  # noqa: BLE001 — the workspace must never fail the site
+        log.warning("could not write the private workstation edition", exc_info=True)
 
 
 def _render_market(output_dir: Path, nav: list[dict], *, slug: str, markets, tiers, ctx, now) -> Path:
@@ -356,6 +412,7 @@ def generate_site(
         pages = [p for p in pages if p[0] in wanted]
 
     results: list[PageResult] = []
+    started = time.perf_counter()
     try:
         for name, relpath, render, kwargs in pages:
             try:
@@ -374,7 +431,37 @@ def generate_site(
 
     failed = [r for r in results if not r.ok]
     log.info("generated %d page(s), %d tombstone(s)", len(results) - len(failed), len(failed))
+
+    # The manifest describes the whole edition, so it is written only for a
+    # whole edition. A `--only cbot` dev build would otherwise leave a
+    # manifest claiming one page — and the fast-refresh gate reads page
+    # coverage, so that manifest would block the next real promotion.
+    if not only:
+        _write_manifest(output_dir, now, results, time.perf_counter() - started)
     return results
+
+
+def _write_manifest(
+    output_dir: Path, now, results: list[PageResult], seconds: float
+) -> None:
+    """Write the edition manifest. Isolated: it must never fail a good build.
+
+    The manifest is how the next run proves it is not a regression, so losing
+    it is a real cost — but it is a cost paid *next* time. Failing this build
+    over it would turn a reporting problem into an outage.
+    """
+    from app.manifest import build_manifest, write_manifest
+
+    try:
+        manifest = build_manifest(
+            generated_at=now,
+            pages=[{"name": r.name, "url": r.relpath, "ok": r.ok} for r in results],
+            generation_seconds=round(seconds, 3),
+        )
+        path = write_manifest(output_dir, manifest)
+        log.info("wrote %s (%s edition, %.2fs)", path.name, manifest["edition"]["mode"], seconds)
+    except Exception:  # noqa: BLE001
+        log.warning("could not write the edition manifest", exc_info=True)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -175,12 +175,20 @@ def test_every_quote_kind_maps_to_a_confidence():
     assert set(CONFIDENCE_BY_QUOTE_KIND) == set(QuoteKind)
 
 
-def test_only_a_board_quote_is_executable():
-    executable = {
-        kind for kind, conf in CONFIDENCE_BY_QUOTE_KIND.items()
-        if conf is Confidence.EXECUTABLE
+def test_no_quote_kind_is_executable_and_only_the_board_is_a_board_reference():
+    """`board` used to map to `executable`, which was the defect.
+
+    A CBOT or DCE board price reaches this stack as a delayed daily bar from a
+    consumer endpoint. It is the best number here — hence its own level, above
+    every assessment — and no provider proves it is the settlement a hedge
+    would be placed at, so `executable` is unreachable.
+    """
+    by_confidence = {
+        conf: {kind for kind, value in CONFIDENCE_BY_QUOTE_KIND.items() if value is conf}
+        for conf in Confidence
     }
-    assert executable == {QuoteKind.BOARD}
+    assert by_confidence[Confidence.EXECUTABLE] == set()
+    assert by_confidence[Confidence.BOARD_REFERENCE] == {QuoteKind.BOARD}
 
 
 def test_an_administered_minimum_is_not_merely_low_confidence():

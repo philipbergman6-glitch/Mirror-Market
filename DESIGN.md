@@ -1,7 +1,7 @@
 # Design System — Mirror Market
 
 ## Product Context
-- **What this is:** Commodity market intelligence platform monitoring global agricultural markets with 27 operational data layers across 25 numbered source groups
+- **What this is:** Commodity market intelligence platform monitoring global agricultural markets with 29 operational data layers across 26 numbered source groups
 - **Who it's for:** Business professionals (managers, stakeholders) reviewing the daily state of the soy complex — plus engineers viewing the project from GitHub
 - **Space/industry:** Commodity trading, agricultural markets, market research
 - **Project type:** Data-heavy analytics dashboard (static HTML, generated from Python)

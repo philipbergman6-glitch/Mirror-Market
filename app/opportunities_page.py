@@ -46,8 +46,18 @@ from analysis.opportunities.domain import (
     OpportunityStatus,
     PartyRole,
 )
+from pricing.semantics import CONFIDENCE_CEILING, PROVEN_SETTLEMENT_SOURCES, PriceType
 
 log = logging.getLogger(__name__)
+
+#: Confidence levels no ingested number can reach today, and therefore levels
+#: the method section must not advertise. `executable` requires a provider that
+#: proves an official settlement; `PROVEN_SETTLEMENT_SOURCES` is empty, so no
+#: layer here produces one. Derived rather than hard-coded, so buying a
+#: settlement feed makes the rung appear on the page by itself.
+UNREACHABLE_CONFIDENCE = frozenset(
+    {CONFIDENCE_CEILING[PriceType.SETTLEMENT]} if not PROVEN_SETTLEMENT_SOURCES else set()
+)
 
 STATE_OK = "ok"
 STATE_EMPTY = "empty"
@@ -331,7 +341,7 @@ def _method(result: engine_mod.EngineResult, *, audience: str) -> dict:
                     f"{scoring_mod.CORROBORATION_BONUS:.0f} if two or more source layers"
                 ),
                 "why": (
-                    "Worst-wins. One hand-entered input drags an otherwise-executable row "
+                    "Worst-wins. One hand-entered input drags an otherwise well-evidenced row "
                     "down, and averaging it away is how a weak number gets carried by a "
                     "strong one."
                 ),
@@ -367,10 +377,22 @@ def _method(result: engine_mod.EngineResult, *, audience: str) -> dict:
                 ),
             },
         ],
+        # Only the levels an ingested number can actually reach. `executable`
+        # is in the model and is unreachable today: it requires a provider that
+        # proves an official settlement, and this stack ingests none — CBOT and
+        # DCE arrive as delayed daily closes, which is what `board_reference`
+        # means. Listing a scale rung nothing can score would read as a rung
+        # something does.
         "confidence_scores": [
             {"key": key.value, "score": value}
             for key, value in scoring_mod.CONFIDENCE_SCORE.items()
+            if key not in UNREACHABLE_CONFIDENCE
         ],
+        "confidence_note": (
+            "The top rung of the scale is deliberately absent: it is reserved for a price "
+            "proven to be an exchange settlement, and no source here is one. The board "
+            "legs are the venue's own delayed daily closes."
+        ),
         "privacy": {
             "audience": audience,
             # The only two statuses a detector can set on its own: one comes
