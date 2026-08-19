@@ -1,14 +1,21 @@
-"""Three crush margins that are not the same number (Phase 2).
+"""Four crush margins that are not the same number (Phase 2, Phase 6).
 
 A crusher's economics get quoted as one figure — "the crush" — and the figure
-means three different things depending on who is saying it. This module keeps
-them apart, because the gap between them is where a plant's money actually is:
+means several different things depending on who is saying it. The ladder is one
+closed vocabulary, :class:`analysis.futures.crush.CrushLevel`, imported here
+rather than redefined; this module computes the two physical levels and
+delegates the two board levels to the named-contract calculation.
 
-**Board crush.** Three exchange settlements: ``oil x yield + meal x yield −
-bean``. It is a *paper* margin. It is what a hedge locks and what the futures
-market thinks processing is worth; it is not what any plant earns, because no
-plant buys the front month at the settlement and no plant sells oil at the
-board. It is executable, and it is the only one of the three that is.
+**Board crush — delayed-close reference.** Three *named contracts* of one crush
+period: ``oil x yield + meal x yield − bean``. Struck by
+``analysis.futures.crush.named_board_crush`` on ZSU26/ZMU26/ZLU26 and their
+successors, never on a stitched front-month series — which names no contract,
+rolls silently on the provider's own schedule and cannot be hedged. It is a
+*paper* margin and it is the useful one for direction. It is not an exchange
+settlement (no provider here proves one), and it is not what any plant earns.
+
+**Board crush — official settlements.** The same arithmetic on proven
+settlements. Not constructible today; see ``pricing.semantics``.
 
 **Gross physical crush.** The same arithmetic on *physical* legs — a cash bean
 delivered somewhere real against cash oil and meal at the same place on the
@@ -22,7 +29,7 @@ assumption here, because no free source publishes any of them for any origin.
 Which means this figure is *estimated* in the strong sense and says so in its
 own name — and when the assumptions are absent it is blocked, not defaulted.
 
-Two rules, the same two the landed cost keeps:
+Three rules, the first two the same ones the landed cost keeps:
 
 * **One session for all three legs.** A margin struck across days is not a
   margin. Where the legs do not share a date the result is empty with that as
@@ -31,6 +38,11 @@ Two rules, the same two the landed cost keeps:
   bean and no published cash oil or meal, so there is no US gross physical
   crush here. Falling back to the board and relabelling it is the failure this
   module exists to prevent.
+* **What the legs structurally are is carried, not implied.**
+  :class:`~analysis.futures.crush.ContractBasis` rides on every result. A
+  margin off continuous main-contract series (Dalian) is arithmetically fine
+  and structurally unhedgeable, and the page must be able to tell the two
+  apart without reading a docstring.
 """
 
 from __future__ import annotations
@@ -39,10 +51,17 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, timedelta
-from enum import Enum
 from typing import Any
 
 import config
+from analysis.futures.crush import (
+    CRUSH_CONVENTION_NOTE,
+    ContractBasis,
+    CrushLevel,
+    CrushWithheld,
+    NamedCrush,
+    named_board_crush,
+)
 from analysis.origins.assumptions import AssumptionMiss, AssumptionSet
 from analysis.origins.domain import (
     CRUSH_COST_COMPONENTS,
@@ -76,32 +95,22 @@ YIELD_SETS: dict[str, dict[str, float]] = {
 }
 
 
-class CrushLevel(str, Enum):
-    BOARD = "board"
-    GROSS_PHYSICAL = "gross_physical"
-    NET_PLANT = "net_plant"
+# Labels and meanings live on the enum (`analysis.futures.crush`), which is the
+# one place the four levels are described. These two mappings are kept as the
+# derived views every existing call site already reads.
+LEVEL_LABELS = {level: level.label for level in CrushLevel}
+LEVEL_MEANINGS = {level: level.meaning for level in CrushLevel}
 
-
-LEVEL_LABELS = {
-    CrushLevel.BOARD: "Board crush (paper)",
-    CrushLevel.GROSS_PHYSICAL: "Gross physical crush",
-    CrushLevel.NET_PLANT: "Estimated net plant margin",
-}
-
-LEVEL_MEANINGS = {
-    CrushLevel.BOARD: (
-        "Three exchange settlements. This is what a hedge locks, not what a plant "
-        "earns — no plant buys the front month at the settlement."
-    ),
-    CrushLevel.GROSS_PHYSICAL: (
-        "The same arithmetic on physical legs at one location on one day. Captures "
-        "the basis the board misses; still contains no cost of running a plant."
-    ),
-    CrushLevel.NET_PLANT: (
-        "Gross physical less freight to plant, processing, energy and working "
-        "capital. Every one of those is hand-entered — this figure is an estimate "
-        "in the strong sense."
-    ),
+#: What a market's crush legs structurally are, keyed by the registry's own
+#: `contracts` string. Rejected rather than defaulted: a descriptor that
+#: forgot to say would silently inherit whichever basis the default happened to
+#: be, and the whole point of the field is that "named" and "continuous" are
+#: not interchangeable.
+CONTRACT_BASIS_BY_DESCRIPTOR: dict[str, ContractBasis] = {
+    "named": ContractBasis.NAMED_CONTRACT,
+    "continuous": ContractBasis.CONTINUOUS,
+    "physical": ContractBasis.PHYSICAL,
+    "administered": ContractBasis.ADMINISTERED,
 }
 
 
@@ -114,6 +123,15 @@ class CrushLeg:
     native_unit: str
     quote_kind: QuoteKind
     source: SourceRef
+    #: Set only where the leg *is* a listed contract. ``None`` on a continuous,
+    #: physical or administered leg — and the difference is the whole point:
+    #: an anonymous leg must not be rendered in the same shape as a named one.
+    contract_symbol: str | None = None
+    contract_month: str | None = None      # YYYY-MM
+    observation_date: date | None = None
+    price_type: str | None = None
+    provider: str | None = None
+    settlement_proven: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +142,14 @@ class CrushLeg:
             "native_unit": self.native_unit,
             "quote_kind": self.quote_kind.value,
             "source": self.source.to_dict(),
+            "contract_symbol": self.contract_symbol,
+            "contract_month": self.contract_month,
+            "observation_date": (
+                self.observation_date.isoformat() if self.observation_date else None
+            ),
+            "price_type": self.price_type,
+            "provider": self.provider,
+            "settlement_proven": self.settlement_proven,
         }
 
 
@@ -150,6 +176,26 @@ class CrushResult:
     blockers: tuple[Blocker, ...] = ()
     missing_inputs: tuple[str, ...] = ()
     note: str | None = None
+    #: What the legs structurally are. A board margin off continuous
+    #: main-contract series and one off named contracts are different claims
+    #: and are never rendered alike.
+    contract_basis: ContractBasis | None = None
+    #: The crush period, where the legs are named contracts.
+    period_label: str | None = None
+    #: Lines that reproduce the printed margin from the legs.
+    workings: tuple[str, ...] = ()
+    #: The withheld code when a *named* calculation refused, so a surface can
+    #: distinguish "we hold no source" from "the legs did not share a session".
+    withheld_code: str | None = None
+
+    @property
+    def hedgeable(self) -> bool:
+        """Whether the number refers to instruments an order can be entered against."""
+        return bool(
+            self.contract_basis is not None
+            and self.contract_basis.is_hedgeable
+            and self.margin is not None
+        )
 
     def __post_init__(self) -> None:
         if self.margin is not None and self.blockers:
@@ -184,6 +230,11 @@ class CrushResult:
             "blockers": [blocker.to_dict() for blocker in self.blockers],
             "missing_inputs": list(self.missing_inputs),
             "note": self.note,
+            "contract_basis": self.contract_basis.value if self.contract_basis else None,
+            "hedgeable": self.hedgeable,
+            "period_label": self.period_label,
+            "workings": list(self.workings),
+            "withheld_code": self.withheld_code,
         }
 
 
@@ -195,6 +246,8 @@ def _blocked(
     remedy: str | None = None,
     missing: tuple[str, ...] = (),
     code: str = "missing_leg",
+    contract_basis: ContractBasis | None = None,
+    withheld_code: str | None = None,
 ) -> CrushResult:
     return CrushResult(
         market=market,
@@ -210,6 +263,8 @@ def _blocked(
         confidence=Confidence.UNAVAILABLE,
         blockers=(Blocker(code=code, message=reason, remedy=remedy),),
         missing_inputs=missing,
+        contract_basis=contract_basis,
+        withheld_code=withheld_code,
     )
 
 
@@ -366,6 +421,16 @@ def _margin(legs: dict[str, CrushLeg], yields: dict[str, float]) -> tuple[Money,
 # Level 1 — board
 # ---------------------------------------------------------------------------
 def board_crush(conn, market_slug: str, *, today: date) -> CrushResult:
+    """The board level for one market — named contracts wherever they exist.
+
+    Two paths, and which one a market takes is registry data (``contracts``),
+    not a code path here. ``named`` markets are struck by
+    ``analysis.futures.crush`` on explicit delivery months and are withheld
+    with a reason when those cannot be had coherently. ``continuous`` markets
+    (Dalian's main-contract series) keep the generic engine and are stamped
+    :attr:`ContractBasis.CONTINUOUS`, which is what stops a surface rendering
+    them as something an order can be placed against.
+    """
     market = config.MARKETS.get(market_slug)
     if market is None:
         raise KeyError(f"unknown market {market_slug!r}")
@@ -373,21 +438,126 @@ def board_crush(conn, market_slug: str, *, today: date) -> CrushResult:
     if descriptor is None:
         return _blocked(
             market_slug,
-            CrushLevel.BOARD,
+            CrushLevel.BOARD_REFERENCE,
             market.get("crush_absent_reason", f"no crush descriptor for {market_slug}"),
             code="no_source",
         )
     if descriptor.get("kind") != "board":
         return _blocked(
             market_slug,
-            CrushLevel.BOARD,
+            CrushLevel.BOARD_REFERENCE,
             (
                 f"{market_slug}'s crush legs are {descriptor.get('kind')}, not board "
-                "settlements — there is no exchange here to take a paper margin against"
+                "closes — there is no exchange here to take a paper margin against"
             ),
             code="no_source",
+            contract_basis=_contract_basis(descriptor),
         )
-    return _build(conn, market_slug, {**descriptor, "quote_kind": "board"}, CrushLevel.BOARD, today=today)
+    basis = _contract_basis(descriptor)
+    if basis is ContractBasis.NAMED_CONTRACT:
+        return _named_board_crush(conn, market_slug, descriptor, today=today)
+    return _build(
+        conn,
+        market_slug,
+        {**descriptor, "quote_kind": "board"},
+        CrushLevel.BOARD_REFERENCE,
+        today=today,
+        contract_basis=basis,
+    )
+
+
+def _contract_basis(descriptor: dict) -> ContractBasis:
+    """What a descriptor's legs structurally are. Hard-fails on an unknown value."""
+    declared = descriptor.get("contracts")
+    if declared is None:
+        raise KeyError(
+            "a crush descriptor must declare `contracts` (one of "
+            f"{sorted(CONTRACT_BASIS_BY_DESCRIPTOR)}) — without it a continuous "
+            "main-contract series is indistinguishable from a named contract"
+        )
+    try:
+        return CONTRACT_BASIS_BY_DESCRIPTOR[declared]
+    except KeyError as exc:
+        raise KeyError(
+            f"unknown crush contract basis {declared!r}; known: "
+            f"{sorted(CONTRACT_BASIS_BY_DESCRIPTOR)}"
+        ) from exc
+
+
+def _named_board_crush(conn, market_slug: str, descriptor: dict, *, today: date) -> CrushResult:
+    """Adapt the named-contract calculation into this module's result shape.
+
+    A thin adapter on purpose: the arithmetic, the month convention and every
+    refusal live in ``analysis.futures.crush``, so the Origins page, the
+    Workstation, the Opportunity board and the briefing are reading one
+    calculation rather than four re-derivations of it.
+    """
+    if conn is None:
+        return _blocked(
+            market_slug, CrushLevel.BOARD_REFERENCE, "no database connection",
+            code="no_source", contract_basis=ContractBasis.NAMED_CONTRACT,
+        )
+    from analysis.futures.providers import open_provider
+
+    outcome = named_board_crush(open_provider(conn), as_of=today)
+    if isinstance(outcome, CrushWithheld):
+        return _blocked(
+            market_slug,
+            CrushLevel.BOARD_REFERENCE,
+            outcome.reason,
+            remedy=outcome.remedy,
+            code=outcome.code.value,
+            contract_basis=ContractBasis.NAMED_CONTRACT,
+            withheld_code=outcome.code.value,
+        )
+    return _from_named(market_slug, outcome, descriptor)
+
+
+def _from_named(market_slug: str, crush: NamedCrush, descriptor: dict) -> CrushResult:
+    from analysis.origins.domain import CONFIDENCE_BY_QUOTE_KIND
+
+    quote_kind = QuoteKind(descriptor.get("quote_kind", "board"))
+    layer = descriptor.get("layer", "forward_curve")
+    legs = tuple(
+        CrushLeg(
+            name=leg.role,
+            key=leg.symbol,
+            price=usd_mt(leg.usd_per_mt),
+            native_price=leg.native_price,
+            native_unit=leg.native_unit,
+            quote_kind=quote_kind,
+            source=SourceRef(
+                layer=layer,
+                table="forward_curve",
+                key=leg.symbol,
+                href="workstation.html",
+            ),
+            contract_symbol=leg.symbol,
+            contract_month=leg.contract_month,
+            observation_date=leg.observation_date,
+            price_type=leg.price_type.value,
+            provider=leg.provider.key,
+            settlement_proven=leg.settlement_proven,
+        )
+        for leg in crush.legs
+    )
+    return CrushResult(
+        market=market_slug,
+        level=crush.level,
+        label=crush.label,
+        meaning=crush.meaning,
+        legs=legs,
+        yields=dict(crush.yields),
+        revenue=usd_mt(crush.revenue_usd_mt),
+        bean_cost=usd_mt(crush.bean_cost_usd_mt),
+        margin=usd_mt(crush.margin_usd_mt),
+        as_of=crush.observation_date,
+        confidence=CONFIDENCE_BY_QUOTE_KIND[quote_kind],
+        contract_basis=crush.contract_basis,
+        period_label=crush.period_label,
+        workings=crush.workings(),
+        note=CRUSH_CONVENTION_NOTE,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +580,10 @@ def gross_physical_crush(conn, market_slug: str, *, today: date) -> CrushResult:
             missing=tuple(descriptor.get("missing_legs", ())),
             code="no_source",
         )
-    result = _build(conn, market_slug, descriptor, CrushLevel.GROSS_PHYSICAL, today=today)
+    result = _build(
+        conn, market_slug, descriptor, CrushLevel.GROSS_PHYSICAL,
+        today=today, contract_basis=ContractBasis.PHYSICAL,
+    )
     if result.is_ok and descriptor.get("note"):
         from dataclasses import replace as _replace
 
@@ -418,12 +591,23 @@ def gross_physical_crush(conn, market_slug: str, *, today: date) -> CrushResult:
     return result
 
 
-def _build(conn, market_slug: str, descriptor: dict, level: CrushLevel, *, today: date) -> CrushResult:
+def _build(
+    conn,
+    market_slug: str,
+    descriptor: dict,
+    level: CrushLevel,
+    *,
+    today: date,
+    contract_basis: ContractBasis | None = None,
+) -> CrushResult:
     if conn is None:
-        return _blocked(market_slug, level, "no database connection", code="no_source")
+        return _blocked(
+            market_slug, level, "no database connection",
+            code="no_source", contract_basis=contract_basis,
+        )
     read = _read_legs(conn, descriptor, market_slug, today=today)
     if isinstance(read, str):
-        return _blocked(market_slug, level, read)
+        return _blocked(market_slug, level, read, contract_basis=contract_basis)
     observed, legs, window_label = read
     yields = YIELD_SETS[descriptor.get("yield_set", "soy_board")]
     revenue, bean_cost, margin = _margin(legs, yields)
@@ -443,6 +627,13 @@ def _build(conn, market_slug: str, descriptor: dict, level: CrushLevel, *, today
         as_of=observed,
         shipment_window=window_label,
         confidence=CONFIDENCE_BY_QUOTE_KIND[quote_kind],
+        contract_basis=contract_basis,
+        note=(
+            "Legs are continuous main-contract series: the underlying contract changes on "
+            "the provider's own schedule and is not published, so this margin names no "
+            "contract and is not one an order can be placed against."
+            if contract_basis is ContractBasis.CONTINUOUS else None
+        ),
     )
 
 
@@ -492,6 +683,7 @@ def net_plant_margin(
                 ),
             ),
             missing_inputs=gross.missing_inputs,
+            contract_basis=ContractBasis.PHYSICAL,
         )
 
     window = window or ShipmentWindow(today, today, label="spot")
@@ -586,6 +778,7 @@ def net_plant_margin(
         steps=tuple(steps),
         blockers=tuple(blockers),
         missing_inputs=tuple(missing),
+        contract_basis=ContractBasis.PHYSICAL,
     )
 
 
@@ -630,9 +823,11 @@ def margin_at_yields(result: CrushResult, yields: dict[str, float]) -> float | N
 
 
 __all__ = [
+    "CONTRACT_BASIS_BY_DESCRIPTOR",
     "LEVEL_LABELS",
     "LEVEL_MEANINGS",
     "YIELD_SETS",
+    "ContractBasis",
     "CrushLeg",
     "CrushLevel",
     "CrushResult",

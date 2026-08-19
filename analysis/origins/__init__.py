@@ -10,6 +10,11 @@ Read in this order:
                  comparability verdicts. Standard library only.
 ``assumptions``  the hand-entered input contract: who entered a freight
                  number, when, for which route and window, and when it lapses.
+``validation``   the faults one entry cannot see about itself — an ambiguous
+                 pair, a scope too wide to mean anything, a key that matches
+                 no route. Errors are raised at load; expiry is reported.
+``readiness``    the onboarding view: what each route still needs, the command
+                 that supplies it, and the renewal queue. Reads no database.
 ``sources``      the one module that knows SQL exists; turns registry legs
                  into ``OriginQuote`` values already in USD/MT.
 ``landed_cost``  the canonical, versioned calculation. One order of

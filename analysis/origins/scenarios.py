@@ -40,8 +40,9 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 
-from analysis.origins.assumptions import AssumptionSet
+from analysis.origins.assumptions import REQUIRED_UNIT, AssumptionSet
 from analysis.origins.domain import (
+    COMPONENT_ORDER,
     Comparability,
     CostComponent,
     FxObservation,
@@ -444,25 +445,24 @@ def freight_breakeven(ranking: OriginRanking) -> Breakeven | None:
     )
 
 
-def _marginal_landed_per_freight_dollar(row: LandedCost) -> float:
-    """What one extra USD/MT of ocean freight adds to the landed total.
+def _compounding_after(row: LandedCost, component: CostComponent) -> float:
+    """What a dollar added at ``component``'s rung is worth by the end of the stack.
 
-    Every ad-valorem rung applied *after* freight compounds onto it, and
-    financing compounds onto those. Reading the rates off the row's own steps
-    keeps this exact for whatever stack the route actually has.
+    Every ad-valorem rung applied *after* it compounds onto it, and financing
+    compounds onto those. Reading the rates off the row's own steps keeps this
+    exact for whatever stack the route actually has, rather than assuming the
+    one North China happens to use.
     """
     from analysis.origins.domain import COMPONENT_ORDER
 
     steps = {step.component: step for step in row.steps}
-    if CostComponent.OCEAN_FREIGHT not in steps:
-        return 0.0
-    freight_index = COMPONENT_ORDER.index(CostComponent.OCEAN_FREIGHT)
+    index = COMPONENT_ORDER.index(component)
     multiplier = 1.0
-    for component in COMPONENT_ORDER[freight_index + 1:]:
-        step = steps.get(component)
+    for later in COMPONENT_ORDER[index + 1:]:
+        step = steps.get(later)
         if step is None or step.rate is None:
             continue
-        if component is CostComponent.FINANCING:
+        if later is CostComponent.FINANCING:
             # rate x days / 365; the days are folded into the amount already, so
             # recover the effective fraction from the step itself.
             effective = (
@@ -475,10 +475,218 @@ def _marginal_landed_per_freight_dollar(row: LandedCost) -> float:
     return multiplier
 
 
+def marginal_landed_per_unit(row: LandedCost, component: CostComponent) -> float | None:
+    """d(landed) / d(this input's own value), in the unit the input is entered in.
+
+    Three unit families, three derivatives, and they are genuinely different
+    numbers: a dollar of freight is worth its own compounding; a point of duty
+    is worth the CIF value it is charged on, compounded; a point of financing is
+    worth that value again scaled by the carry period. The period is recovered
+    from the step (``amount / rate``) rather than re-read from the assumption,
+    so a scenario override is differentiated as the row actually stands.
+
+    ``None`` where the derivative cannot be recovered — a financing rate entered
+    as exactly zero carries no trace of its own day count, and inventing one to
+    return a number would be the fabrication this package is built against.
+    """
+    from analysis.origins.domain import AD_VALOREM_COMPONENTS, RATE_TIME_COMPONENTS
+
+    steps = {step.component: step for step in row.steps}
+    step = steps.get(component)
+    if step is None:
+        return None
+    after = _compounding_after(row, component)
+    base = step.running_total.amount - step.amount.amount
+    if component in AD_VALOREM_COMPONENTS:
+        return base * after
+    if component in RATE_TIME_COMPONENTS:
+        if not step.rate:
+            return None
+        # amount = base x rate x days/365, so amount/rate is base x days/365 —
+        # exactly the coefficient the rate multiplies.
+        return (step.amount.amount / step.rate) * after
+    return after
+
+
+def _marginal_landed_per_freight_dollar(row: LandedCost) -> float:
+    value = marginal_landed_per_unit(row, CostComponent.OCEAN_FREIGHT)
+    return value if value is not None else 0.0
+
+
+@dataclass(frozen=True)
+class FlipMove:
+    """How far one named input has to move before the ranking changes.
+
+    Two sides, because a trader can be wrong in either direction: ``move`` is
+    how far the *leader's* input must rise, ``challenger_move`` how far the
+    *challenger's* must fall. Both are stated in the input's own entered unit —
+    a fraction for duty, USD/MT for freight — because a "0.02 move" and a "2
+    point move" are the same thing said in the two units this stack keeps
+    deliberately distinct.
+
+    ``shared`` is the case worth reading twice. A destination-scoped input —
+    duty, VAT, discharge — is the *same entry* on both rows, so moving it moves
+    both landed totals and mostly cannot flip anything. Where it genuinely
+    cannot, ``move`` is ``None`` and ``reason`` says so, rather than printing a
+    large number that would read as "unlikely, but possible".
+    """
+
+    component: CostComponent
+    unit: str
+    leader: str
+    challenger: str
+    shared: bool
+    current_advantage_usd_mt: float
+    move: float | None = None
+    challenger_move: float | None = None
+    current_value: float | None = None
+    move_pct_of_current: float | None = None
+    leader_assumption_id: str | None = None
+    challenger_assumption_id: str | None = None
+    reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "component": self.component.value,
+            "unit": self.unit,
+            "leader": self.leader,
+            "challenger": self.challenger,
+            "shared": self.shared,
+            "current_advantage_usd_mt": self.current_advantage_usd_mt,
+            "move": self.move,
+            "challenger_move": self.challenger_move,
+            "current_value": self.current_value,
+            "move_pct_of_current": self.move_pct_of_current,
+            "leader_assumption_id": self.leader_assumption_id,
+            "challenger_assumption_id": self.challenger_assumption_id,
+            "reason": self.reason,
+        }
+
+
+# Below this the denominator is numerically indistinguishable from zero and the
+# "required move" is an artefact of floating point rather than a decision
+# boundary. One ten-thousandth of a dollar of landed cost per unit of input.
+_NEGLIGIBLE_MARGINAL = 1e-4
+
+
+def _input_value(row: LandedCost, component: CostComponent) -> float | None:
+    """The input's own entered value as the row used it — rate, or flat amount."""
+    for step in row.steps:
+        if step.component is component:
+            return step.rate if step.rate is not None else step.amount.amount
+    return None
+
+
+def input_flip_moves(ranking: OriginRanking) -> tuple[FlipMove, ...]:
+    """Every input that could change the answer, least room first.
+
+    The ordering question is real: "freight must rise 12 USD/MT" and "duty must
+    rise 0.4 points" are not comparable as written, so rows are sorted by the
+    move **as a percentage of the input's current value** — how wrong the number
+    would have to be, which is the thing a trader is actually judging. An input
+    entered as zero has no such percentage and sorts last rather than first,
+    because a percentage of nothing is not a small number, it is no number.
+
+    Solved analytically. Every rung is linear in its own input given the others,
+    so the flip point is exact rather than searched — and the tests check the
+    solved move against a re-run of the whole waterfall, which is the only proof
+    that the derivative and the arithmetic agree.
+    """
+    ordered = ranking.rankable
+    if len(ordered) < 2:
+        return ()
+    leader, challenger = ordered[0], ordered[1]
+    gap = challenger.landed_usd_mt - leader.landed_usd_mt  # type: ignore[operator]
+
+    leader_ids = {step.component: step.assumption_id for step in leader.steps}
+    challenger_ids = {step.component: step.assumption_id for step in challenger.steps}
+    components = [
+        component for component in COMPONENT_ORDER
+        if component is not CostComponent.ORIGIN_PRICE
+        and (component in leader_ids or component in challenger_ids)
+    ]
+
+    moves: list[FlipMove] = []
+    for component in components:
+        leader_marginal = marginal_landed_per_unit(leader, component)
+        challenger_marginal = marginal_landed_per_unit(challenger, component)
+        shared = (
+            leader_ids.get(component) is not None
+            and leader_ids.get(component) == challenger_ids.get(component)
+        )
+        unit = REQUIRED_UNIT[component]
+        current = _input_value(leader, component)
+        reason: str | None = None
+        move: float | None = None
+        challenger_move: float | None = None
+
+        if leader_marginal is None:
+            reason = (
+                "this route does not carry that input, or its entered rate is zero and "
+                "the period it is charged over cannot be recovered from the waterfall"
+            )
+        else:
+            denominator = leader_marginal - (
+                challenger_marginal if shared and challenger_marginal else 0.0
+            )
+            if denominator > _NEGLIGIBLE_MARGINAL:
+                move = gap / denominator
+            else:
+                reason = (
+                    "both origins are costed off the same entry, so moving it moves both "
+                    "landed totals together and cannot change which is cheaper"
+                    if shared else
+                    "this input has no effect on the leader's landed total"
+                )
+        if not shared and challenger_marginal:
+            challenger_move = gap / challenger_marginal
+
+        moves.append(
+            FlipMove(
+                component=component,
+                unit=unit,
+                leader=leader.quote.origin.key,
+                challenger=challenger.quote.origin.key,
+                shared=shared,
+                current_advantage_usd_mt=gap,
+                move=move,
+                challenger_move=challenger_move,
+                current_value=current,
+                move_pct_of_current=(
+                    abs(move / current) * 100.0
+                    if move is not None and current else None
+                ),
+                leader_assumption_id=leader_ids.get(component),
+                challenger_assumption_id=challenger_ids.get(component),
+                reason=reason,
+            )
+        )
+
+    return tuple(
+        sorted(
+            moves,
+            key=lambda item: (
+                item.move_pct_of_current is None,
+                item.move_pct_of_current or 0.0,
+                item.component.value,
+            ),
+        )
+    )
+
+
+def most_fragile_input(ranking: OriginRanking) -> FlipMove | None:
+    """The input the answer is least robust to, or ``None`` if nothing can flip it."""
+    for move in input_flip_moves(ranking):
+        if move.move is not None:
+            return move
+    return None
+
+
 __all__ = [
     "BASE",
     "STANDARD_SCENARIOS",
     "Breakeven",
+    "FlipMove",
     "Scenario",
     "ScenarioResult",
     "Shock",
@@ -487,6 +695,9 @@ __all__ = [
     "freight_breakeven",
     "freight_shock",
     "fx_shock",
+    "input_flip_moves",
+    "marginal_landed_per_unit",
+    "most_fragile_input",
     "run_panel",
     "run_scenario",
     "tariff_shock",
