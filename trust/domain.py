@@ -89,6 +89,29 @@ class SettlementState(str, Enum):
     SETTLED = "settled"
 
 
+class EligibilityScope(str, Enum):
+    """Which consumer is asking for an accepted revision.
+
+    ``public_eligible`` is a rights answer, and it was the *only* gate on every
+    accepted-revision query — repository heads, the query cache, dataset health
+    and the edition contract all AND it in. That is right for anything that
+    reaches a published page, and wrong as a definition of "accepted", because
+    it makes a dataset whose ``public-display`` right is still ``unknown``
+    invisible to the trusted path entirely: it can be ingested and can never be
+    read back, so it can never be reconciled against v1 either.
+
+    The rights model already distinguishes the two actions
+    (``internal-display`` vs ``public-display``), so the scope names which one
+    the caller is exercising. ``PUBLIC`` is the default everywhere and is
+    unchanged fail-closed behaviour; ``INTERNAL`` is for callers that are not a
+    published surface — reconciliation, operational health, desk tooling — and
+    still excludes quarantined, rejected, superseded and legacy revisions.
+    """
+
+    PUBLIC = "public"
+    INTERNAL = "internal"
+
+
 def _enum(enum_type: type[_EnumT], value: _EnumT | str) -> _EnumT:
     return value if isinstance(value, enum_type) else enum_type(value)
 
@@ -291,6 +314,12 @@ def _check_serialized_manifest_hash(data: Mapping[str, Any], actual: str) -> Non
     serialized_payload = {key: value for key, value in data.items() if key != "manifest_hash"}
     if serialized_hash != _manifest_hash(serialized_payload) or serialized_hash != actual:
         raise ValueError("serialized manifest_hash does not match the manifest content")
+
+
+#: The optional candle a price observation may carry beside its headline value.
+#: One tuple, shared by the candidate and the revision, so the two cannot drift
+#: apart in what "the bar this price came off" means.
+_CANDLE_FIELDS = ("open_value", "high_value", "low_value", "close_value", "volume")
 
 
 @dataclass(frozen=True)
@@ -738,12 +767,25 @@ class CandidateObservation:
     observed_at: Timestamp | None = None
     effective_date_inferred: bool = False
     settlement_state: SettlementState | None = None
+    # The candle the value came off, where the source publishes one. Carried on
+    # the candidate and not only on the revision because ``ohlc.relationship``
+    # is a *candidate* rule: an impossible candle has to be refusable before
+    # anything is appended to the ledger, not diagnosed after the fact.
+    open_value: Decimal | int | str | None = None
+    high_value: Decimal | int | str | None = None
+    low_value: Decimal | int | str | None = None
+    close_value: Decimal | int | str | None = None
+    volume: Decimal | int | str | None = None
     candidate_id: str = field(init=False)
     schema_version: ClassVar[int] = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         value = _decimal(self.value, "candidate.value")
         object.__setattr__(self, "value", value)
+        for field_name in _CANDLE_FIELDS:
+            candle_value = getattr(self, field_name)
+            if candle_value is not None:
+                object.__setattr__(self, field_name, _decimal(candle_value, f"candidate.{field_name}"))
         if (
             self.artifact.source_id != self.identity.source_id
             or self.artifact.dataset_id != self.identity.dataset_id
@@ -769,15 +811,27 @@ class CandidateObservation:
                     "observed_at": self.observed_at.to_dict() if self.observed_at else None,
                     "effective_date_inferred": self.effective_date_inferred,
                     "settlement_state": self.settlement_state.value if self.settlement_state else None,
+                    **self._candle_dict(),
                 },
             ),
         )
+
+    def _candle_dict(self) -> dict[str, Any]:
+        return {
+            field_name: (
+                _decimal_text(cast(Decimal, getattr(self, field_name)))
+                if getattr(self, field_name) is not None
+                else None
+            )
+            for field_name in _CANDLE_FIELDS
+        }
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "record_type": "candidate-observation",
             "candidate_id": self.candidate_id,
+            **self._candle_dict(),
             "identity": self.identity.to_dict(),
             "value": _decimal_text(cast(Decimal, self.value)),
             "artifact": self.artifact.to_dict(),
@@ -808,6 +862,11 @@ class CandidateObservation:
             settlement_state=(
                 SettlementState(str(data["settlement_state"])) if data.get("settlement_state") is not None else None
             ),
+            open_value=data.get("open_value"),
+            high_value=data.get("high_value"),
+            low_value=data.get("low_value"),
+            close_value=data.get("close_value"),
+            volume=data.get("volume"),
         )
         _check_serialized_id(data, "candidate_id", result.candidate_id)
         return result
@@ -884,7 +943,7 @@ class ObservationRevision:
                 "rev",
             ),
         )
-        for field_name in ("open_value", "high_value", "low_value", "close_value", "volume"):
+        for field_name in _CANDLE_FIELDS:
             value = getattr(self, field_name)
             if value is not None:
                 object.__setattr__(self, field_name, _decimal(value, f"revision.{field_name}"))
@@ -908,7 +967,7 @@ class ObservationRevision:
         object.__setattr__(self, "revision_id", _stable_id("rev", self.assertion_dict()))
 
     def assertion_dict(self) -> dict[str, Any]:
-        decimal_fields = ("value", "open_value", "high_value", "low_value", "close_value", "volume")
+        decimal_fields = ("value", *_CANDLE_FIELDS)
         result: dict[str, Any] = {
             "observation_id": self.identity.observation_id,
             "ingested_at": self.ingested_at.isoformat(),
@@ -981,6 +1040,23 @@ class ObservationRevision:
         )
         _check_serialized_id(data, "revision_id", result.revision_id)
         return result
+
+
+def revision_is_eligible(
+    revision: ObservationRevision,
+    scope: EligibilityScope = EligibilityScope.PUBLIC,
+) -> bool:
+    """Whether ``revision`` may be read by a consumer at ``scope``.
+
+    Quality state is the same test in both scopes — only an ``accepted``
+    revision is ever eligible, so quarantined, rejected, legacy and superseded
+    revisions stay unreadable however the caller asks. The scope changes only
+    whether the rights answer for *public* display is additionally required.
+    """
+
+    if revision.quality_state is not QualityState.ACCEPTED:
+        return False
+    return revision.public_eligible or scope is EligibilityScope.INTERNAL
 
 
 @dataclass(frozen=True)

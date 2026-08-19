@@ -12,13 +12,14 @@ from trust.domain import (
     ArtifactReference,
     DatasetResult,
     DatasetResultStatus,
+    EligibilityScope,
     Finding,
     FindingSeverity,
     FreshnessState,
     ObservationIdentity,
     ObservationRevision,
-    QualityState,
     ValidationPolicy,
+    revision_is_eligible,
 )
 from trust.registry import CadenceKind, DatasetContract
 
@@ -37,6 +38,14 @@ class DatasetHealthInput:
     external_error: str | None = None
     last_known_good_as_of: date | None = None
     holidays: tuple[date, ...] = ()
+    #: Which consumer this health verdict is for. ``PUBLIC`` (the default)
+    #: keeps the fail-closed rights gate: a revision whose dataset has no
+    #: ``public-display`` decision does not count toward coverage, because it
+    #: cannot be published. ``INTERNAL`` reports ingestion health for a dataset
+    #: whose publication rights are still under review — the dataset is being
+    #: collected and reconciled, and saying its coverage is zero would blame
+    #: the source for a rights answer nobody has recorded yet.
+    eligibility_scope: EligibilityScope = EligibilityScope.PUBLIC
 
 
 def evaluate_dataset_health(input: DatasetHealthInput) -> DatasetResult:
@@ -71,11 +80,13 @@ def evaluate_dataset_health(input: DatasetHealthInput) -> DatasetResult:
         )
 
     evaluation_date = input.now.astimezone(ZoneInfo(contract.cadence.timezone)).date()
-    observable = tuple(
-        revision
-        for revision in input.accepted_revisions
-        if _revision_is_accepted_for_dataset(revision, contract)
-        and not revision.identity.effective_date > evaluation_date
+    observable = _accepted_heads(
+        tuple(
+            revision
+            for revision in input.accepted_revisions
+            if _revision_is_accepted_for_dataset(revision, contract, input.eligibility_scope)
+            and not revision.identity.effective_date > evaluation_date
+        )
     )
     latest_as_of = max((revision.identity.effective_date for revision in observable), default=None)
     current_revisions = tuple(
@@ -221,12 +232,35 @@ def _require_complete_contract(contract: DatasetContract) -> None:
         raise ValueError(f"dataset health evaluation requires contract fields: {', '.join(missing)}")
 
 
-def _revision_is_accepted_for_dataset(revision: ObservationRevision, contract: DatasetContract) -> bool:
-    return (
-        revision.identity.dataset_id == contract.dataset.dataset_id
-        and revision.quality_state is QualityState.ACCEPTED
-        and revision.public_eligible
-    )
+def _revision_is_accepted_for_dataset(
+    revision: ObservationRevision,
+    contract: DatasetContract,
+    scope: EligibilityScope,
+) -> bool:
+    return revision.identity.dataset_id == contract.dataset.dataset_id and revision_is_eligible(revision, scope)
+
+
+def _accepted_heads(revisions: tuple[ObservationRevision, ...]) -> tuple[ObservationRevision, ...]:
+    """One current revision per observation, matching the repository's rule.
+
+    An observation may hold several accepted revisions — a corrected close, a
+    re-printed session — and counting them all would let one observation cover
+    a key twice and report more accepted revisions than the run had candidates.
+    Supersession and last-ingested-wins are decided exactly as
+    ``_DirectoryTrustRepository._accepted_head`` decides them, so the health
+    verdict and the query the analytics run cannot disagree about which
+    revision is current.
+    """
+
+    superseded_ids = {
+        revision.supersedes_revision_id for revision in revisions if revision.supersedes_revision_id is not None
+    }
+    heads: dict[str, ObservationRevision] = {}
+    for revision in sorted(revisions, key=lambda item: (item.ingested_at, item.revision_id)):
+        if revision.revision_id in superseded_ids:
+            continue
+        heads[revision.identity.observation_id] = revision
+    return tuple(heads.values())
 
 
 def _coverage_key(identity: ObservationIdentity, key_fields: tuple[str, ...]) -> str:

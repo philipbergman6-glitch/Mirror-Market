@@ -30,14 +30,15 @@ from trust.domain import (
     DatasetResult,
     Edition,
     EditionStatus,
+    EligibilityScope,
     Finding,
     ObservationIdentity,
     ObservationRevision,
     Promotion,
-    QualityState,
     RawArtifact,
     Run,
     RunStatus,
+    revision_is_eligible,
 )
 from trust.registry import DatasetContract, RawRetention, RightsAction
 
@@ -118,12 +119,19 @@ class TrustRepository(Protocol):
 
     def observation_revisions(self, identity: ObservationIdentity) -> tuple[ObservationRevision, ...]: ...
 
-    def current_accepted_revision(self, identity: ObservationIdentity) -> ObservationRevision | None: ...
+    def current_accepted_revision(
+        self,
+        identity: ObservationIdentity,
+        *,
+        scope: EligibilityScope = EligibilityScope.PUBLIC,
+    ) -> ObservationRevision | None: ...
 
     def revision_effective_at(
         self,
         identity: ObservationIdentity,
         requested_at: datetime,
+        *,
+        scope: EligibilityScope = EligibilityScope.PUBLIC,
     ) -> ObservationRevision | None: ...
 
     def replace_current_edition(self, promotion: Promotion) -> None: ...
@@ -349,13 +357,20 @@ class _DirectoryTrustRepository:
         ]
         return tuple(sorted(revisions, key=lambda revision: (revision.ingested_at, revision.revision_id)))
 
-    def current_accepted_revision(self, identity: ObservationIdentity) -> ObservationRevision | None:
-        return self._accepted_head(self.observation_revisions(identity))
+    def current_accepted_revision(
+        self,
+        identity: ObservationIdentity,
+        *,
+        scope: EligibilityScope = EligibilityScope.PUBLIC,
+    ) -> ObservationRevision | None:
+        return self._accepted_head(self.observation_revisions(identity), scope)
 
     def revision_effective_at(
         self,
         identity: ObservationIdentity,
         requested_at: datetime,
+        *,
+        scope: EligibilityScope = EligibilityScope.PUBLIC,
     ) -> ObservationRevision | None:
         if not isinstance(requested_at, datetime) or requested_at.tzinfo is None or requested_at.utcoffset() is None:
             raise ValueError("requested_at must be a timezone-aware datetime")
@@ -363,23 +378,22 @@ class _DirectoryTrustRepository:
         revisions = tuple(
             revision for revision in self.observation_revisions(identity) if revision.ingested_at <= instant
         )
-        return self._accepted_head(revisions)
+        return self._accepted_head(revisions, scope)
 
     @staticmethod
-    def _accepted_head(revisions: tuple[ObservationRevision, ...]) -> ObservationRevision | None:
+    def _accepted_head(
+        revisions: tuple[ObservationRevision, ...],
+        scope: EligibilityScope = EligibilityScope.PUBLIC,
+    ) -> ObservationRevision | None:
         superseded_ids = {
             revision.supersedes_revision_id
             for revision in revisions
-            if revision.quality_state is QualityState.ACCEPTED
-            and revision.public_eligible
-            and revision.supersedes_revision_id is not None
+            if revision_is_eligible(revision, scope) and revision.supersedes_revision_id is not None
         }
         eligible = [
             revision
             for revision in revisions
-            if revision.quality_state is QualityState.ACCEPTED
-            and revision.public_eligible
-            and revision.revision_id not in superseded_ids
+            if revision_is_eligible(revision, scope) and revision.revision_id not in superseded_ids
         ]
         return eligible[-1] if eligible else None
 
