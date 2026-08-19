@@ -204,6 +204,30 @@ def test_newest_frame_in_the_layer_decides(freshness_calls):
     assert main._finalize_layer("prices", payload) is True
 
 
+def test_forecast_rows_never_date_an_observation(freshness_calls):
+    """Weather frames carry Open-Meteo forward days flagged is_forecast=1.
+
+    A forecast is a model output, not an observation: counting those rows
+    stamped observed_at six days into the future (seen live 2026-08-19,
+    observed_at 2026-08-25) and would let a dead upstream pass recency on
+    forecast rows alone. NULL/NaN in the flag means observed — the store's
+    own legacy convention.
+    """
+    today = pd.Timestamp.now().normalize()
+    frame = pd.DataFrame(
+        {
+            "Date": pd.date_range(end=today + pd.Timedelta(days=6), periods=10),
+            "temp_max": range(10),
+            "is_forecast": [0, 0, None, 0, 1, 1, 1, 1, 1, 1],
+        }
+    )
+    latest = main._latest_observation_date({"US Illinois": frame})
+    assert latest == today
+
+    all_forecast = frame.assign(is_forecast=1)
+    assert main._latest_observation_date({"r": all_forecast}) is None
+
+
 def test_tz_aware_and_naive_frames_compare_without_raising(freshness_calls):
     """Mixed tz-awareness across frames must not blow up the comparison."""
     end = pd.Timestamp.now(tz="UTC").normalize()
