@@ -237,7 +237,7 @@ def layer_budget(layer: str, *, default: int) -> int:
     """The layer's own recency budget, or a stated default for layers with none.
 
     ``config.LAYER_MAX_DATA_AGE_DAYS`` omits sources with no observation date
-    on purpose (CLAUDE.md: "not listed = not checked"). A signal still has to
+    on purpose (LAYERS.md: "not listed = not checked"). A signal still has to
     put *some* horizon on its evidence, so the default is passed in by the
     detector that knows the source's cadence rather than assumed globally.
     """

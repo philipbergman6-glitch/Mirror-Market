@@ -328,7 +328,7 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "SAFEX grain futures close 12:00 SAST; Grain SA's free table republishes "
         "the last traded price afterwards with no stated lag, so two hours is a "
         "working assumption. Note the stored number is a last trade, not a "
-        "settlement (see CLAUDE.md Layer 18).",
+        "settlement (see LAYERS.md Layer 18).",
     ),
     LayerLatency(
         "india_domestic", LatencyClass.PHYSICAL_ORIGIN,

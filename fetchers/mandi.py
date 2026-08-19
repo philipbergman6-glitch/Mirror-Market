@@ -462,7 +462,7 @@ def fetch_mandi_prices() -> FetchResult:
         ``LAYER_MIN_KEYS`` floor, so nothing downstream would notice half
         the layer going dark; it would stamp a fresh ``last_success``
         against a state that was never asked. That is precisely the
-        empty-success inversion CLAUDE.md's "Success requires rows"
+        empty-success inversion LAYERS.md's "Success also requires rows"
         section exists to prevent.
       * An empty state and a failed state are not the same thing and are
         not treated the same here. Empty means asked and answered with
