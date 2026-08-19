@@ -35,6 +35,27 @@ name: Refresh Prices
 # bar as the day's close. The rule is now "drop every bar after the newest
 # finished session", which is what makes this slot safe at all.
 #
+# THREE SLOTS, TWO JOBS
+#
+#   08:00 UTC — DCE only. Dalian closes 15:00 CST = 07:00 UTC and Sina's
+#               daily file carries the settle by evening CST (probed live
+#               2026-08-19), so an evening-only fetch is 13-17h late against
+#               the 6h board objective — a guaranteed daily breach nothing
+#               about the evening schedule can fix. 08:00 + the observed
+#               +64/+298 min scheduler delay lands 09:04-12:58 UTC: inside
+#               6h even at the worst tail, and before the 21:00 CST night
+#               session opens (13:00 UTC) — though Sina's daily endpoint was
+#               observed NOT to emit a next-trade-date row from the night
+#               session, so a late landing is a breach risk, not a bad-data
+#               risk. An early landing that finds no settled row yet stores
+#               D-1 and passes the gates — a wasted run, never a wrong
+#               number — and shows up as a dce breach in the latency gate,
+#               which is the signal to shift this cron later.
+#   21:30 UTC — the FX/board refresh described above.
+#   23:30 UTC — a catch-up. The gates make a redundant run a safe no-op, so
+#               this exists purely to give FX and the board a second shot on
+#               a day the 21:30 run failed or landed absurdly late.
+#
 # It deliberately does NOT re-scrape the physical origin legs. Those are
 # scrapers against unfriendly upstreams and doubling their request rate
 # trades reliability for freshness (the 2026-08-11 data.gov.in throttle
@@ -43,8 +64,17 @@ name: Refresh Prices
 
 on:
   schedule:
+    - cron: '0 8 * * 1-5'
     - cron: '30 21 * * 1-5'
-  workflow_dispatch: {}
+    - cron: '30 23 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      layers:
+        description: >-
+          Comma-separated layer keys to fetch (empty = the default
+          prices,currencies,forward_curve set)
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -68,6 +98,31 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      # Which layers this slot fetches, and which layers its latency gate is
+      # allowed to fail on. The gate is scoped to the layers the run just
+      # fetched: an unscoped gate would be red every day on layers whose
+      # acquisition breaches structurally (COT carries a 3-day provider
+      # delay against a 24h target; the evening daily build re-stamps dce
+      # 13-17h after the Dalian close).
+      - name: Select layers for this slot
+        id: slot
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            LAYERS="${{ inputs.layers }}"
+          elif [[ "${{ github.event.schedule }}" == "0 8 * * 1-5" ]]; then
+            LAYERS="dce"
+          else
+            LAYERS=""
+          fi
+          if [[ -n "$LAYERS" ]]; then
+            GATE="$LAYERS"
+          else
+            GATE="prices,currencies,forward_curve"
+          fi
+          echo "layers=$LAYERS" >> "$GITHUB_OUTPUT"
+          echo "gate=$GATE" >> "$GITHUB_OUTPUT"
+          echo "fetching: ${LAYERS:-default (prices,currencies,forward_curve)} | gating on: $GATE"
 
       - uses: actions/setup-python@v5
         with:
@@ -104,9 +159,14 @@ jobs:
       - name: Fast refresh and gate the candidate
         id: refresh
         run: |
+          EXTRA=()
+          if [[ -n "${{ steps.slot.outputs.layers }}" ]]; then
+            EXTRA+=(--layers "${{ steps.slot.outputs.layers }}")
+          fi
           python scripts/refresh_prices.py \
             --output-dir "$RUNNER_TEMP/mirror-market-candidate" \
-            --public-manifest "${{ vars.PAGES_URL || 'https://philipbergman6-glitch.github.io/Mirror-Market' }}/manifest.json"
+            --public-manifest "${{ vars.PAGES_URL || 'https://philipbergman6-glitch.github.io/Mirror-Market' }}/manifest.json" \
+            "${EXTRA[@]}"
 
       - name: Install Chrome for viewport smoke checks
         uses: browser-actions/setup-chrome@v1
@@ -137,9 +197,12 @@ jobs:
           path: data/storage/mirror_market.db
           key: mirror-market-db-${{ github.run_id }}
 
-      - name: Report the published edition's latency
-        if: ${{ !cancelled() }}
-        continue-on-error: true
+      # Not continue-on-error: a breach in a layer THIS run was responsible
+      # for fetching is a red run, not a log line. The deploy has already
+      # happened by this step — the red flags the breach without harming the
+      # published edition, which is fresher than not deploying it would be.
+      - name: Gate the published edition's latency
         run: |
           python scripts/latency_report.py \
-            --manifest "${{ steps.deployment.outputs.page_url }}manifest.json"
+            --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
+            --fail-on-breach-layers "${{ steps.slot.outputs.gate }}"
