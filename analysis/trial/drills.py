@@ -139,7 +139,13 @@ def _captured_freshness() -> Iterator[list[dict[str, Any]]]:
         status: str = "success",
         keys_returned: int | None = None,
         keys_expected: int | None = None,
+        clock: Any = None,
     ) -> None:
+        # `clock` is accepted and ignored: these drills grade the freshness
+        # *verdict*, and the latency stamps riding along with it are a
+        # different question asked by latency/. Accepting it keeps this
+        # stand-in substitutable for the real save_freshness — a double that
+        # rejects an argument the real function takes stops being a double.
         calls.append({
             "layer": layer_name,
             "rows": rows_fetched,
