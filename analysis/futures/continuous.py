@@ -5,7 +5,7 @@ is unattributable: the provider switches the underlying contract on its own
 schedule, publishes neither the roll date nor the old and new contract, and
 adjusts nothing, so a roll day carries a price gap that is not a move.
 ``analysis.signals.is_near_roll`` exists to demote indicators that gap may have
-faked, and CLAUDE.md's "Known Limitations" records the whole class of damage.
+faked, and LAYERS.md's "Front-month roll-day discontinuities" records the whole class of damage.
 
 This module is the alternative: a series stitched from *our* named-contract
 history, where the roll date is a rule we wrote down and the adjustment is

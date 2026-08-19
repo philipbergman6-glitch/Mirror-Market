@@ -10,7 +10,7 @@
 #
 # PROVENANCE: both rates are the ones this repository already states, in
 # config.MARKETS["dalian"]["basis"] ("bounded by freight, tariff (3%) and VAT
-# (9%), not closed to zero") and in the Layer 9 section of CLAUDE.md. They were
+# (9%), not closed to zero") and in the Layer 9 section of LAYERS.md. They were
 # not re-derived for Phase 2 and are recorded as `indicative` on that basis.
 #
 # KNOWN LIMITATION, and the reason both entries are destination-scoped rather
@@ -36,7 +36,7 @@
     China MFN ad-valorem import duty on soybeans, applied to the CIF value.
     Origin-differentiated retaliatory duties are NOT included — see the file
     header.
-  source: "repo-established (config.MARKETS['dalian']['basis'], CLAUDE.md Layer 9)"
+  source: "repo-established (config.MARKETS['dalian']['basis'], LAYERS.md Layer 9)"
   entered_by: "mirror-market phase-2 build (repo constant, not a trader entry)"
   entered_at: 2026-08-18
   expires_on: 2027-02-18
@@ -52,7 +52,7 @@
     China import VAT on soybeans, applied to the duty-paid value. Charged on
     top of duty, which is why the landed waterfall applies it at its own rung
     rather than adding the two rates together.
-  source: "repo-established (config.MARKETS['dalian']['basis'], CLAUDE.md Layer 9)"
+  source: "repo-established (config.MARKETS['dalian']['basis'], LAYERS.md Layer 9)"
   entered_by: "mirror-market phase-2 build (repo constant, not a trader entry)"
   entered_at: 2026-08-18
   expires_on: 2027-02-18
