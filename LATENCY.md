@@ -93,7 +93,9 @@ and ~6 seconds at 1mo.
 | | Cron | Observed landing |
 |---|---|---|
 | Daily build | `0 19 * * 1-5` | 20:00–24:00 UTC (workflow's own note: +64 to +298 min over 30 runs, median +138) |
+| DCE refresh | `0 8 * * 1-5` | expected 09:04–12:58 UTC by the same delay envelope; not yet observed |
 | Fast refresh | `30 21 * * 1-5` | 22:34–02:28 UTC |
+| Catch-up refresh | `30 23 * * 1-5` | expected 00:34–04:28 UTC; a second shot for FX and the board on a day the 21:30 run failed |
 
 ---
 
@@ -145,11 +147,31 @@ that everything else prices off — FX is in because every `home_per_mt` leg on
 the site converts through it, so a stale rate is a stale landed cost on every
 physical origin, not merely a stale FX cell. Deliberately excluded:
 
-- **DCE** — closes 15:00 CST, hours before any refresh we would schedule.
+- **DCE** — closes 15:00 CST = 07:00 UTC, hours before either evening slot,
+  so it gets its own morning run instead: the 08:00 UTC cron passes
+  `--layers dce` and fetches nothing else. Without it the only DCE fetch was
+  the evening daily build, 13–17h after the close — a guaranteed daily breach
+  of the 6h board objective. Probed live 2026-08-19: Sina's daily endpoint
+  carried the day's settled bar by evening CST and did **not** emit a
+  next-trade-date row from the 21:00 CST night session, so a late landing
+  risks only a breach verdict, never a partial bar. When the first row
+  appears after the 15:00 CST close is not yet measured; an early landing
+  that misses it stores D−1, passes the gates, and reads as a dce breach in
+  the latency gate — the signal to shift the cron later.
 - **The scraped physical legs** (CEPEA, AgRural, Gulf bids, MAGyP, mandi) —
   they publish once a day, and doubling the request rate on unfriendly
   upstreams trades reliability for freshness that is not there. The 2026-08-11
   data.gov.in throttle blackout is the standing example.
+
+**The latency gate.** Every refresh slot ends by reading the published
+edition's `manifest.json` through `scripts/latency_report.py
+--fail-on-breach-layers <the layers that slot fetched>` — a breach in a layer
+the run was responsible for is a red run, not a log line. The gate is scoped
+on purpose: an unscoped `--fail-on-breach` would be red every day on layers
+whose acquisition breaches structurally (COT carries a 3-day provider delay
+against a 24h target; the evening daily build re-stamps `dce` 13–17h after
+the Dalian close, overwriting the morning run's on-time stamps until the next
+morning).
 
 The forward curve is 43 of the 53 seconds. It stays in because a hedger reads
 the curve as a board price, and 53 s is still an order of magnitude under the

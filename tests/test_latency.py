@@ -405,3 +405,55 @@ def test_worst_observation_age_ignores_non_price_classes():
         specs=(LAYER_LATENCY_BY_KEY["cot"],),
     )
     assert worst_observation_age(measurements, now) is None
+
+
+# ---------------------------------------------------------------------------
+# The CI latency gate (scripts/latency_report.py --fail-on-breach-layers)
+# ---------------------------------------------------------------------------
+
+
+def _gate_manifest(tmp_path, rows):
+    import json
+
+    manifest = {
+        "schema_version": 1,
+        "edition": {"mode": "fast", "generated_at": "2026-08-19T22:40:00+00:00"},
+        "latency": {"layers": rows},
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    return str(path)
+
+
+def test_gate_fails_only_on_the_layers_it_was_scoped_to(tmp_path, capsys):
+    """A structural breach elsewhere (COT's 3-day provider delay, dce
+    re-stamped late by the evening daily build) must not redden a run that
+    fetched only prices and FX — an always-red gate is a gate nobody reads."""
+    from scripts.latency_report import main as report_main
+
+    rows = [
+        {"layer": "prices", "class": "board_price", "verdict": "meets"},
+        {"layer": "currencies", "class": "fx", "verdict": "meets"},
+        {"layer": "cot", "class": "fundamentals", "verdict": "breaches"},
+        {"layer": "dce", "class": "board_price", "verdict": "breaches"},
+    ]
+    source = _gate_manifest(tmp_path, rows)
+    assert report_main(["--manifest", source,
+                        "--fail-on-breach-layers", "prices,currencies"]) == 0
+    assert report_main(["--manifest", source,
+                        "--fail-on-breach-layers", "dce"]) == 1
+    # The unscoped flag still fails on any breach, as before.
+    assert report_main(["--manifest", source, "--fail-on-breach"]) == 1
+
+
+def test_gate_refuses_an_unknown_layer_name(tmp_path):
+    """A typo'd gate layer would be a gate that never fires — hard-fail it."""
+    import pytest
+
+    from scripts.latency_report import main as report_main
+
+    source = _gate_manifest(
+        tmp_path, [{"layer": "prices", "class": "board_price", "verdict": "meets"}]
+    )
+    with pytest.raises(SystemExit, match="unknown gate layer"):
+        report_main(["--manifest", source, "--fail-on-breach-layers", "pricez"])

@@ -314,3 +314,58 @@ def test_manifest_round_trips_through_json(tmp_path):
     write_manifest(tmp_path, candidate)
     reloaded = json.loads((tmp_path / MANIFEST_FILENAME).read_text(encoding="utf-8"))
     assert verify_refresh_is_not_a_regression(reloaded, candidate).promotable
+
+
+# ---------------------------------------------------------------------------
+# Schedule-specific layer sets (--layers)
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_threads_an_explicit_layer_set_into_the_pipeline(monkeypatch, tmp_path):
+    """The 08:00 UTC slot passes ('dce',); it must reach main.run verbatim."""
+    import scripts.refresh_prices as refresh_mod
+
+    monkeypatch.setattr(refresh_mod, "setup_logging", lambda: None)
+    captured: dict[str, object] = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return 1  # stop before generation — the threading is the test
+
+    monkeypatch.setattr(main, "run", fake_run)
+    refresh_mod.refresh(output_dir=tmp_path, public_manifest_source=None,
+                        layers=("dce",))
+    assert captured["layer_keys"] == ("dce",)
+
+
+def test_refresh_defaults_to_the_configured_fast_set(monkeypatch, tmp_path):
+    import scripts.refresh_prices as refresh_mod
+
+    monkeypatch.setattr(refresh_mod, "setup_logging", lambda: None)
+    captured: dict[str, object] = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return 1
+
+    monkeypatch.setattr(main, "run", fake_run)
+    refresh_mod.refresh(output_dir=tmp_path, public_manifest_source=None)
+    assert captured["layer_keys"] == FAST_REFRESH_LAYERS
+
+
+def test_refresh_cli_parses_a_comma_separated_layer_list(monkeypatch, tmp_path):
+    import scripts.refresh_prices as refresh_mod
+
+    captured: dict[str, object] = {}
+
+    def fake_refresh(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(refresh_mod, "refresh", fake_refresh)
+    refresh_mod.main(["--output-dir", str(tmp_path), "--layers", "dce, prices"])
+    assert captured["layers"] == ("dce", "prices")
+
+    captured.clear()
+    refresh_mod.main(["--output-dir", str(tmp_path)])
+    assert captured["layers"] is None
