@@ -265,12 +265,25 @@ def _latest_observation_date(data: dict) -> pd.Timestamp | None:
 
     Returns None when nothing datable is present. Callers must treat that as
     "cannot certify recency", never as "recent".
+
+    Rows flagged ``is_forecast == 1`` (weather's Open-Meteo forward days) are
+    excluded before dating: a forecast is a model output, not an observation,
+    and counting them stamped observed_at six days into the future and would
+    let a dead upstream pass recency on forecast rows alone. NULL/NaN is
+    treated as observed — the same convention the store writes ("legacy
+    callers: NULL = observed").
     """
     candidates: list[pd.Timestamp] = []
 
     for frame in data.values():
         if frame is None or frame.empty:
             continue
+
+        columns = getattr(frame, "columns", None)
+        if columns is not None and "is_forecast" in columns:
+            frame = frame[frame["is_forecast"] != 1]
+            if frame.empty:
+                continue
 
         if isinstance(frame.index, pd.DatetimeIndex):
             candidates.append(frame.index.max())
