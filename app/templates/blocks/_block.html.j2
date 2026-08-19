@@ -11,7 +11,7 @@
   <div class="block-head">
     {% if block.no %}<span class="block-no">{{ block.no }}</span>{% endif %}
     <h2>{{ block.title }}</h2>
-    {% if block.kind %}<span class="kind">{{ block.kind|replace('_', ' ') }}</span>{% endif %}
+    {% if block.kind %}<span class="kind">{{ block.kind_label or block.kind|replace('_', ' ') }}</span>{% endif %}
     <span class="why">{{ block.why }}</span>
   </div>
   {% if block.state == 'ok' %}

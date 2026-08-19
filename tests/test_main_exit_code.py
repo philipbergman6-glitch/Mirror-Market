@@ -17,6 +17,7 @@ from unittest import mock
 import pandas as pd
 import pytest
 
+from config import PRODUCTION_LAYERS
 from pipeline.results import FetchResult
 
 
@@ -67,6 +68,8 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_psd_all": empty_dict,
         "fetch_worldbank_prices": empty_dict,
         "fetch_ec_oilseed_prices": empty_dict,
+        "fetch_gtr_ocean_freight": empty_dict,
+        "fetch_gtr_vessel_activity": empty_dict,
         "fetch_dce_futures": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,
@@ -273,7 +276,7 @@ def test_run_writes_pipeline_status_file(stub_fetchers, monkeypatch, tmp_path):
     assert "agrural" in status["hard_failures"]
     assert status["critical_failures"] == []
     assert "prices" in status["succeeded"]
-    assert status["operational_layer_count"] == 27
+    assert status["operational_layer_count"] == len(PRODUCTION_LAYERS)
     assert "psd" in status["classifications"]["upstream_failure"]
 
 

@@ -71,6 +71,12 @@
 .wf-missing { grid-column: 1 / -1; font-size: 12px; color: var(--warning); padding: 6px 0; border-bottom: 1px dotted var(--rule); }
 .wf-missing code { font-family: var(--mono); font-size: 11px; background: #F0F2F0; padding: 1px 4px; border-radius: 2px; overflow-wrap: anywhere; }
 
+/* ---- route readiness ----
+   The entry command is the one long unbreakable-looking string on this page.
+   It wraps rather than widening the document: an onboarding checklist that
+   pushes the page sideways on a phone is a checklist nobody reads there. */
+.req-cmd { display: block; font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+
 /* ---- crush levels ---- */
 .crush-level { border-left: 3px solid var(--rule); padding-left: 14px; margin-bottom: 14px; }
 .crush-level.ok { border-left-color: var(--green); }
@@ -228,6 +234,89 @@
   {% endfor %}
 
   {#- ------------------------------------------------------------------ 02 -#}
+  {% elif s.id == 'readiness' %}
+  {% for view in v.views %}
+  {% set rd = view.readiness %}
+  <div class="win-scope{% if view.key != v.default_window %} hidden{% endif %}" data-window="{{ view.key }}">
+    <div class="caption">{{ rd.note }}</div>
+    <div class="grid grid-3">
+      <div class="mc">
+        <div class="mc-label">Routes costable</div>
+        <div class="mc-val">{{ rd.ready_count }} / {{ rd.route_count }}</div>
+        <div class="mc-delta muted">{{ rd.destination }} · {{ rd.window }}</div>
+      </div>
+      <div class="mc">
+        <div class="mc-label">Inputs outstanding</div>
+        <div class="mc-val">{{ rd.outstanding_components|length }}</div>
+        <div class="mc-delta muted">{{ rd.outstanding_labels|join(', ') or 'none' }}</div>
+      </div>
+      <div class="mc">
+        <div class="mc-label">Entering one</div>
+        <div class="mc-val" style="font-size:14px;font-family:var(--mono)">scripts/enter_assumption.py</div>
+        <div class="mc-delta muted">--onboarding prints this same checklist in a terminal</div>
+      </div>
+    </div>
+
+    {% for route in rd.routes %}
+    <div class="wf">
+      <div class="wf-head">
+        <h3>{{ route.label }}</h3>
+        <span class="kind">{{ route.incoterm }}</span>
+        {% if route.unavailable_reason %}
+        <span class="cmp cmp-window_unknown">no price series</span>
+        {% elif route.is_ready %}
+        <span class="cmp cmp-comparable">every input entered</span>
+        {% else %}
+        <span class="cmp cmp-missing_input">{{ route.blocking|length }} input(s) missing</span>
+        {% endif %}
+        {% if route.expiring %}<span class="tag tag-stale">{{ route.expiring|length }} lapsing</span>{% endif %}
+        <span class="why">{{ route.satisfied_count }} of {{ route.required_count }} entered</span>
+      </div>
+
+      {% if route.unavailable_reason %}
+      <div class="empty-state state-absent">
+        <span class="es-label">no source</span>
+        {{ route.unavailable_reason }}
+      </div>
+      {% else %}
+      <div class="table-scroll">
+      <table class="dtable">
+        <thead><tr><th>Input</th><th>Unit</th><th>Scope</th><th>State</th><th>Owner</th><th>Expires</th></tr></thead>
+        <tbody>
+          {% for req in route.requirements %}
+          <tr>
+            <td class="strong">{{ req.label }}</td>
+            <td style="font-family:var(--mono);font-size:11px">{{ req.unit }}</td>
+            <td>{{ req.origin or '*' }} &rarr; {{ req.destination }}</td>
+            <td>
+              {% if req.status == 'satisfied' %}<span class="cmp cmp-comparable">entered</span>
+              {% elif req.status == 'expiring' %}<span class="tag tag-stale">lapses in {{ req.days_to_expiry }}d</span>
+              {% elif req.status == 'expired' %}<span class="cmp cmp-stale">expired</span>
+              {% else %}<span class="cmp cmp-missing_input">not entered</span>{% endif %}
+            </td>
+            <td class="caption" style="margin:0">{{ req.entered_by or '—' }}</td>
+            <td class="num">{{ req.expires_on or '—' }}</td>
+          </tr>
+          {% if req.is_blocking %}
+          <tr><td colspan="6" class="caption" style="padding-top:0">
+            {{ req.guidance }}
+            <br>{#- escaped explicitly: the site renders with autoescape off, and the command
+   carries <VALUE> placeholders a browser would otherwise eat as a tag -#}
+            <code class="req-cmd">{{ req.command|e }}</code>
+          </td></tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="caption">{{ rd.placeholder_note }}</div>
+  </div>
+  {% endfor %}
+
+  {#- ------------------------------------------------------------------ 03 -#}
   {% elif s.id == 'waterfall' %}
   {% for view in v.views %}
   <div class="win-scope{% if view.key != v.default_window %} hidden{% endif %}" data-window="{{ view.key }}">
@@ -285,7 +374,7 @@
   </div>
   {% endfor %}
 
-  {#- ------------------------------------------------------------------ 03 -#}
+  {#- ------------------------------------------------------------------ 04 -#}
   {% elif s.id == 'fob' %}
   {% for view in v.views %}
   {% set b = view.fob %}
@@ -337,7 +426,7 @@
   </div>
   {% endfor %}
 
-  {#- ------------------------------------------------------------------ 04 -#}
+  {#- ------------------------------------------------------------------ 05 -#}
   {% elif s.id == 'sensitivity' %}
   {% for view in v.views %}
   {% set sv = view.sensitivity %}
@@ -353,6 +442,45 @@
         advantage of {{ f.usd(sv.breakeven.current_advantage_usd_mt) }}/MT.
       </div>
       <div class="caption">{{ sv.breakeven_note }}</div>
+    </div>
+    {% endif %}
+
+    {% if sv.flip_moves %}
+    <div class="subhdr">Which input flips it</div>
+    <div class="table-scroll">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th>Input</th><th class="num">Entered</th><th class="num">Move to flip</th>
+          <th class="num">% wrong</th><th>Other side</th><th>Entry</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in sv.flip_moves %}
+        <tr>
+          <td class="strong">{{ m.component|replace('_',' ') }}
+            {% if m.shared %}<span class="tag tag-global">shared</span>{% endif %}
+          </td>
+          <td class="num">{% if m.current_value is not none %}{{ '%.4g'|format(m.current_value) }} {{ m.unit }}{% else %}—{% endif %}</td>
+          <td class="num strong">
+            {% if m.move is not none %}{{ '%+.4g'|format(m.move) }}{% else %}—{% endif %}
+          </td>
+          <td class="num">{% if m.move_pct_of_current is not none %}{{ '%.1f'|format(m.move_pct_of_current) }}%{% else %}—{% endif %}</td>
+          <td class="caption" style="margin:0">
+            {% if m.reason %}{{ m.reason }}
+            {% elif m.challenger_move is not none %}or {{ m.challenger }}'s own falls by {{ '%.4g'|format(m.challenger_move) }} {{ m.unit }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-family:var(--mono);font-size:11px">{{ m.leader_assumption_id or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="caption">
+      {{ sv.flip_note }}
+      Moves are stated in each input's own entered unit — USD/MT for a flat cost, a
+      fraction for an ad-valorem rate — against {{ sv.base_cheapest }}'s current lead.
     </div>
     {% endif %}
 
@@ -392,7 +520,7 @@
   </div>
   {% endfor %}
 
-  {#- ------------------------------------------------------------------ 05 -#}
+  {#- ------------------------------------------------------------------ 06 -#}
   {% elif s.id == 'crush' %}
   <div class="caption">
     Yields: {{ '%.4f'|format(s.data.yields.oil) }} MT oil and
@@ -413,7 +541,17 @@
         revenue {{ f.usd(lv.revenue_usd_mt, 2) }} − bean {{ f.usd(lv.bean_cost_usd_mt, 2) }}
         · {{ lv.as_of }}{% if lv.shipment_window %} · shipment {{ lv.shipment_window }}{% endif %}
         · <span class="conf">{{ lv.confidence }}</span>
+        {%- if lv.period_label %} · {{ lv.period_label }}{% endif %}
+        {%- if lv.contract_basis %} · legs: {{ lv.contract_basis.replace('_', ' ') }}{% endif %}
       </div>
+      {# Named legs carry the contracts they are. An anonymous leg cannot, and
+         the difference is exactly what the crush replacement is about. #}
+      {% if lv.legs and lv.legs[0].contract_symbol %}
+      <div class="caption">
+        {% for leg in lv.legs %}{{ leg.name }} {{ leg.contract_symbol }} ({{ leg.contract_month }},
+        {{ leg.price_type.replace('_', ' ') }}{% if not leg.settlement_proven %}, settlement not proven{% endif %}){% if not loop.last %} · {% endif %}{% endfor %}
+      </div>
+      {% endif %}
       {% for step in lv.steps %}
       <div class="wf-row">
         <span class="lbl">{{ step.label }}</span>
@@ -438,7 +576,7 @@
   </div>
   {% endfor %}
 
-  {#- ------------------------------------------------------------------ 06 -#}
+  {#- ------------------------------------------------------------------ 07 -#}
   {% elif s.id == 'counterparties' %}
   <div class="caption">{{ s.data.note }} Verification older than {{ s.data.stale_after_days }} days is flagged.</div>
   <div class="grid grid-3">
@@ -487,7 +625,7 @@
     Full profiles, citations and contacts: <a href="{{ root }}players.html" style="color:var(--green)">Players &rarr;</a>
   </div>
 
-  {#- ------------------------------------------------------------------ 07 -#}
+  {#- ------------------------------------------------------------------ 08 -#}
   {% elif s.id == 'inputs' %}
   <div class="grid grid-3">
     <div class="mc">
@@ -576,7 +714,42 @@
     never at today's rate. Files read: {{ s.data.files|join(', ') }}.
   </div>
 
-  {#- ------------------------------------------------------------------ 08 -#}
+  {#- ------------------------------------------------------------------ 09 -#}
+  {% elif s.id == 'renewals' %}
+  <div class="caption">
+    As of {{ s.data.as_of }}, looking {{ s.data.horizon_days }} days ahead. Routes are
+    judged for {{ s.data.window }} into {{ s.data.destination }}.
+  </div>
+  {% if s.data['nothing_due'] %}
+  <div class="alert alert-info">
+    Nothing has expired and nothing lapses inside the horizon.
+  </div>
+  {% else %}
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>State</th><th>Id</th><th>Component</th><th>Route</th><th>Owner</th><th class="num">Expires</th><th>Blocks</th></tr></thead>
+    <tbody>
+      {% for row in s.data.expired + s.data.expiring %}
+      <tr>
+        <td>
+          {% if row.state == 'expired' %}<span class="cmp cmp-stale">expired</span>
+          {% else %}<span class="tag tag-stale">{{ row.days_to_expiry }}d left</span>{% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-size:11px">{{ row.id }}</td>
+        <td>{{ row.component|replace('_',' ') }}</td>
+        <td>{{ row.origin or '*' }} &rarr; {{ row.destination or '*' }}</td>
+        <td class="caption" style="margin:0">{{ row.entered_by }}</td>
+        <td class="num">{{ row.expires_on }}</td>
+        <td>{{ row.routes_blocked|join(', ') or 'no route (shadowed or unused)' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  <div class="caption">{{ s.data.note }}</div>
+
+  {#- ------------------------------------------------------------------ 10 -#}
   {% elif s.id == 'changes' %}
   <div class="caption">Against the run of {{ s.data.previous_run }}. {{ s.data.note }}</div>
   {% if s.data.rank_changes %}

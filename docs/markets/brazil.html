@@ -1,45 +1,17 @@
-{#
-  Base template — owns <head> entirely (M8 #150).
 
-  Before this existed, dashboard.html.j2 and players.html.j2 each carried their
-  own font tags, their own Plotly tag and their own copy of the DESIGN.md
-  palette: the design system was already duplicated across the *two* pages that
-  existed. One <head> owner kills that, and is the same mechanism that gives
-  every page the identical masthead and market nav.
-
-  CSS stays inline rather than moving to docs/assets/mirror.css: it is ~5 KB
-  against a multi-MB page, so a second request and a cache-busting problem buy
-  nothing.
-
-  Blocks a page fills:
-    title       <title> text
-    head_extra  page-specific <head> tags (Plotly, etc.)
-    page_css    page-specific rules, appended after the shared core
-    brand       masthead wordmark (defaults to Mirror/Market)
-    mast_meta   right-hand masthead column
-    prenav      anything between the masthead and the market nav (stale note)
-    subnav      the page's own section-anchor bar, under the market nav
-    content     the page body inside .page
-    scripts     page-specific <script> tags before </body>
-
-  `root` is the relative prefix back to docs/ ("" for docs/index.html, "../"
-  for docs/markets/<slug>.html). Pages sit at two depths and the nav is
-  identical on all of them, so every internal href is prefixed with it. See
-  app.markets.relative_root().
-#}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="mirror-market-generated-at" content="{{ generated_at_iso|default('') }}">
-<meta name="mirror-market-layer-count" content="{{ production_layers|default([])|length }}">
+<meta name="mirror-market-generated-at" content="2026-08-18T19:54:10.756574+00:00">
+<meta name="mirror-market-layer-count" content="0">
 <meta name="qa-overflow" content="pending">
-<title>{% block title %}Mirror Market{% endblock %}</title>
+<title>Mirror Market — Brazil (brief)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-{% block head_extra %}{% endblock %}
+
 <style>
 :root {
   --paper: #FAFAF7;
@@ -201,40 +173,295 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
   .mast-meta { margin-left: 0; text-align: left; }
   .market-nav .mn-end { margin-left: 0; }
 }
-{% block page_css %}{% endblock %}
+
+
+/* ---- tier stamp ---- */
+.tier-stamp { display: flex; align-items: baseline; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.tier-pill { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.tier-pill.brief { background: #E4E8E4; color: var(--text-muted); }
+.tier-pill.stub { background: transparent; border: 1px solid var(--rule); color: var(--text-dim); }
+.tier-why { color: var(--text-dim); }
+.venue { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+
+
+
+/* ---- blocks ---- */
+.block { padding: 22px 0; border-bottom: 1px solid var(--rule); }
+.block:last-of-type { border-bottom: none; }
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.block-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+.block-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.block-head .why { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+@media (max-width: 768px) {
+  .tier-why { flex-basis: 100%; overflow-wrap: anywhere; }
+  .block-head .why { flex-basis: 100%; margin-left: 0; overflow-wrap: anywhere; }
+}
+
+/* An empty state is a labelled statement, never a blank. `absent` reads calm
+   (no source exists, by structure); `empty` reads warm (a source exists and
+   gave us nothing) — M1 constraint 2's distinction, made visible. */
+.empty-state { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--text-muted); }
+.empty-state .es-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.empty-state.state-empty { border-left: 3px solid var(--warning); }
+.empty-state.state-empty .es-label { color: var(--warning); }
+.block-head h2 { font-size: 14px; }
+
 </style>
 </head>
 <body>
 <div class="page">
 
 <header class="masthead">
-  {% block brand %}<h1>Mirror<br><em>Market</em></h1>{% endblock %}
+  <h1>Mirror<br><em>Brazil</em></h1>
   <div class="mast-meta">
-    {% block mast_meta %}{% endblock %}
+    
+    <div class="day">TUESDAY 18 AUGUST 2026</div>
+    <div>Generated 2026-08-18 19:54 UTC</div>
+    <div>CEPEA/ESALQ Paraná · Paranaguá FOB · all prices USD/MT</div>
+
   </div>
 </header>
-{% block prenav %}{% endblock %}
+
 
 <nav class="market-nav">
   <span class="mn-label">Markets</span>
-  <a href="{{ root }}index.html"{% if current_page == 'headline' %} class="current"{% endif %}>Headline</a>
-  {% for m in market_nav %}
-  {%- set cls = ('current' if current_market == m.slug else '') ~ (' stub' if m.tier == 'stub' else '') %}
-  <a href="{{ m.href }}"{% if cls.strip() %} class="{{ cls.strip() }}"{% endif %}>{{ m.name }}</a>
-  {% endfor %}
-  {# Origins, Workstation and Players are cross-market surfaces rather than
-     markets, so they sit after the market list, pushed right. #}
-  <a href="{{ root }}origins.html" class="mn-end{% if current_page == 'origins' %} current{% endif %}">Origins &rarr;</a>
-  <a href="{{ root }}workstation.html"{% if current_page == 'workstation' %} class="current"{% endif %}>Workstation &rarr;</a>
-  <a href="{{ root }}opportunities.html"{% if current_page == 'opportunities' %} class="current"{% endif %}>Opportunities &rarr;</a>
-  <a href="{{ root }}players.html"{% if current_page == 'players' %} class="current"{% endif %}>Players &rarr;</a>
+  <a href="../index.html">Headline</a>
+  
+  <a href="../markets/cbot.html">CBOT</a>
+  
+  <a href="../markets/dalian.html">Dalian</a>
+  
+  <a href="../markets/brazil.html" class="current">Brazil</a>
+  
+  <a href="../markets/argentina.html">Argentina</a>
+  
+  <a href="../markets/india.html">India</a>
+  
+  <a href="../markets/europe.html" class="stub">Europe</a>
+  
+  <a href="../markets/south_africa.html">South Africa</a>
+  
+  <a href="../markets/nigeria.html" class="stub">Nigeria</a>
+  
+  
+  <a href="../origins.html" class="mn-end">Origins &rarr;</a>
+  <a href="../workstation.html">Workstation &rarr;</a>
+  <a href="../opportunities.html">Opportunities &rarr;</a>
+  <a href="../players.html">Players &rarr;</a>
 </nav>
-{% block subnav %}{% endblock %}
 
-{% block content %}{% endblock %}
+<div class="tier-stamp">
+  <span class="tier-pill brief">brief</span>
+  <span class="venue">Brazil</span>
+  <span class="tier-why">a daily leg, but only 2 of 4 supporting blocks — too little for a full page, so this is one screen without the propagation ledger.
+  </span>
+</div>
+
+
+
+
+
+<section class="block" id="block-price">
+  <div class="block-head">
+    <span class="block-no">01</span>
+    <h2>Local price</h2>
+    <span class="kind">physical assessment</span>
+    <span class="why">the decision number, USD/MT over home currency</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-2">
+  
+  <div class="mc">
+    <div class="mc-label">Soybean (CEPEA) · headline</div>
+    
+    <div class="mc-val">$448.7<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="up">+0.0%</span> <span class="muted">session</span> · <span class="up">+3.1%</span> <span class="muted">21 obs</span>
+    </div>
+    <div class="mc-delta muted">BRL 2,291.00/MT</div>
+    <div class="caption">as of 2026-08-11 · 7d ago</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Soybean (ESALQ/B3 Paranaguá)</div>
+    
+    <div class="mc-val">$472.9<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="down">-0.0%</span> <span class="muted">session</span> · <span class="up">+2.9%</span> <span class="muted">21 obs</span>
+    </div>
+    <div class="mc-delta muted">BRL 2,414.83/MT</div>
+    <div class="caption">as of 2026-08-11 · 7d ago</div>
+  </div>
+  
+</div>
+
+<div class="caption">CEPEA/ESALQ Paraná · Paranaguá FOB · daily · dates only — this stack stores no time of day</div>
+  
+</section>
+
+
+<section class="block" id="block-crush">
+  <div class="block-head">
+    <span class="block-no">03</span>
+    <h2>Crush margin</h2>
+    
+    <span class="why">processor economics — board, physical or administered</span>
+  </div>
+  
+  <div class="empty-state state-absent">
+    <span class="es-label">no source</span>
+    no Brazil oil/meal cash quote is ingested — the Paranaguá premium trio is an unbuilt scrape (M7 #149)
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-basis">
+  <div class="block-head">
+    <span class="block-no">04</span>
+    <h2>Basis vs the board</h2>
+    
+    <span class="why">local minus reference, USD/MT</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">Paranaguá FOB over CBOT</div>
+    <div class="mc-val up"><span class="up">+54.9</span></div>
+    <div class="mc-delta muted">USD/MT · premium to the board</div>
+    <div class="caption">as of 2026-08-11 · 7d ago</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Local <span class="kind">physical assessment</span></div>
+    <div class="mc-val">$476.6</div>
+    <div class="mc-delta muted">USD/MT</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">CBOT board <span class="kind">board · delayed close</span></div>
+    <div class="mc-val">$421.6</div>
+    <div class="mc-delta muted">USD/MT · same session</div>
+  </div>
+</div>
+
+
+
+
+<div class="caption">history building — 10 common session(s); range shown at 20</div>
+
+  
+</section>
+
+
+<section class="block" id="block-currency">
+  <div class="block-head">
+    <span class="block-no">05</span>
+    <h2>Currency</h2>
+    
+    <span class="why">the rate every USD figure here is struck at</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">BRL/USD</div>
+    <div class="mc-val">0.1958</div>
+    <div class="mc-delta muted">USD per BRL</div>
+    <div class="caption">as of 2026-08-11 · 7d ago</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">BRL per USD</div>
+    <div class="mc-val">5.11</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Move</div>
+    <div class="mc-val"><span class="down">-0.1%</span></div>
+    <div class="mc-delta muted">5 obs · 21 obs <span class="up">+0.0%</span></div>
+  </div>
+</div>
+<div class="caption">every USD/MT figure on this page is struck at this rate. The rate and the Brazil print are same-day, not simultaneous — this stack stores no time of day.</div>
+  
+</section>
+
+
+<section class="block" id="block-weather">
+  <div class="block-head">
+    <span class="block-no">06</span>
+    <h2>Weather</h2>
+    
+    <span class="why">this market's growing regions</span>
+  </div>
+  
+  <div class="empty-state state-empty">
+    <span class="es-label">no data</span>
+    the weather layer holds no rows for Brazil Mato Grosso, Brazil Parana
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-supply_demand">
+  <div class="block-head">
+    <span class="block-no">07</span>
+    <h2>Supply & demand</h2>
+    
+    <span class="why">annual balance sheet — does not move daily</span>
+  </div>
+  
+  <div class="empty-state state-empty">
+    <span class="es-label">no data</span>
+    the PSD layer holds no soybean balance sheet for Brazil
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-players">
+  <div class="block-head">
+    <span class="block-no">09</span>
+    <h2>Players</h2>
+    
+    <span class="why">counterparties active in this market</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-2">
+  <div class="mc">
+    <div class="mc-label">BR entries</div>
+    <div class="mc-val">17</div>
+    <div class="mc-delta muted">exporter 16 · originator 13 · crusher 12 · terminal-operator 12 · refiner 5</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Names</div>
+    <div class="mc-delta">3tentos Agroindustrial S.A. · ADM do Brasil Ltda. · ALZ Grãos · Agrex do Brasil S.A. · Amaggi Exportação e Importação Ltda. · Bunge Global SA (incl. Viterra) · CHS Agronegócio – Indústria e Comércio Ltda. · CJ Selecta S.A. · COFCO International Brasil S.A. · Caramuru Alimentos S.A. · Cargill Agrícola S.A. · Coamo Agroindustrial Cooperativa · Cotriguaçu Cooperativa Central · Fiagril Ltda. · Louis Dreyfus Company Brasil · NovaAgri Infra-Estrutura de Armazenagem e Escoamento Agrícola · Olfar S.A. Alimento e Energia</div>
+    <div class="caption"><a href="../players.html">Full counterparty map &rarr;</a></div>
+  </div>
+</div>
+  
+</section>
+
+
+<div class="footer">
+  A brief, not a page: Brazil does not currently hold enough live data to fill the standard
+  market anatomy. The address does not change when it does — this page becomes the full nine-block
+  layout at the same URL. All prices USD/MT. Not financial advice.
+  <br><br>
+  <a href="../index.html">&larr; Daily read</a> ·
+  <a href="../players.html">Players</a>
+</div>
+
 
 </div>
-{% block scripts %}{% endblock %}
+
 <script>
 (() => {
   const report = () => {

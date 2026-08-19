@@ -1,12 +1,25 @@
-"""CRUSH SPREAD section — Soybeans crush margin + NASS actual crush volume."""
+"""CRUSH SPREAD section — the named-contract board crush + NASS actual crush volume.
+
+The line used to read ``compute_crush_spread`` over the continuous ``ZS=F`` /
+``ZM=F`` / ``ZL=F`` series: three front months whose underlying contract Yahoo
+changes silently, on three schedules that need not agree. A briefing sentence
+built from that names no contract, and on a roll day it reports a move nobody
+earned.
+
+It now reads the same calculation Origins, the Workstation and the Opportunity
+board read — ``analysis.futures.crush.named_board_crush`` — so the four
+surfaces cannot print four different crushes, and it names the three contracts
+in the line. When the named legs cannot be had on one session the line says so
+instead of falling back to the series.
+"""
 
 import logging
+from datetime import date, datetime, timezone
 
 import pandas as pd
 
+from analysis.futures.crush import CrushWithheld, named_board_crush
 from analysis.nass_crush import latest_crush
-from analysis.spreads import compute_crush_spread
-from pipeline.units import to_metric_tons
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +39,16 @@ def _nass_crush_line() -> str:
     return line
 
 
-def format(price_data: dict[str, pd.DataFrame]) -> str:  # noqa: A001
-    spread_line = _spread_line(price_data)
+def format(price_data: dict[str, pd.DataFrame] | None = None, *, today: date | None = None) -> str:  # noqa: A001
+    """``price_data`` is accepted and unused — the crush no longer reads it.
+
+    Kept in the signature because the orchestrator passes it positionally to
+    every price-driven section, and dropping the parameter would make this the
+    one section with a different shape. The argument being ignored is the
+    point: the continuous series is no longer an input to this number.
+    """
+    del price_data
+    spread_line = _spread_line(today or datetime.now(timezone.utc).date())
     try:
         nass_line = _nass_crush_line()
     except Exception as exc:
@@ -36,28 +57,31 @@ def format(price_data: dict[str, pd.DataFrame]) -> str:  # noqa: A001
     return "\n".join(part for part in (spread_line, nass_line) if part)
 
 
-def _spread_line(price_data: dict[str, pd.DataFrame]) -> str:
-    soybeans = price_data.get("Soybeans", pd.DataFrame())
-    oil = price_data.get("Soybean Oil", pd.DataFrame())
-    meal = price_data.get("Soybean Meal", pd.DataFrame())
-
-    if soybeans.empty or oil.empty or meal.empty:
-        return "CRUSH SPREAD: Insufficient data"
+def _spread_line(today: date) -> str:
+    # Through ``pipeline.query`` rather than ``pipeline.connection`` directly:
+    # that is the module every other briefing section reads the database
+    # through, so this section resolves to the same database they do.
+    from pipeline.connection import managed_connection
+    from pipeline.query import get_connection
 
     try:
-        spread = compute_crush_spread(soybeans, oil, meal)
-        if spread.empty:
-            return "CRUSH SPREAD: No overlapping dates"
+        with managed_connection(get_connection()) as conn:
+            from analysis.futures.providers import open_provider
 
-        latest_cents = spread.iloc[-1]["crush_spread"]
-        oil_share = spread.iloc[-1]["oil_value_share"]
-        crush_mt = to_metric_tons(latest_cents, "Soybeans")
-        if len(spread) >= 6:
-            prev = spread.iloc[-6]["crush_spread"]
-            trend = "widening" if latest_cents > prev else "narrowing"
-            profitability = "processors profitable" if latest_cents > 0 else "margin squeeze"
-            return f"CRUSH SPREAD: ${crush_mt:,.1f}/MT ({trend} — {profitability}, oil share {oil_share:.0%})"
-        return f"CRUSH SPREAD: ${crush_mt:,.1f}/MT (oil share {oil_share:.0%})"
+            outcome = named_board_crush(open_provider(conn), as_of=today)
     except Exception as exc:
         logger.debug("Crush spread error: %s", exc)
         return "CRUSH SPREAD: Calculation error"
+
+    if isinstance(outcome, CrushWithheld):
+        return f"CRUSH SPREAD: withheld — {outcome.reason}"
+
+    share = outcome.oil_value_share
+    profitability = "processors profitable" if outcome.margin_usd_mt > 0 else "margin squeeze"
+    return (
+        f"CRUSH SPREAD: ${outcome.margin_usd_mt:,.1f}/MT on "
+        f"{'/'.join(leg.symbol for leg in outcome.legs)} "
+        f"({outcome.observation_date.isoformat()} — {profitability}"
+        + (f", oil share {share:.0%}" if share is not None else "")
+        + f"; {outcome.level.label.lower()})"
+    )

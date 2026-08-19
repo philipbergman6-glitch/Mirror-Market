@@ -432,7 +432,20 @@ CREATE TABLE IF NOT EXISTS data_freshness (
     -- Key coverage (#182). NULL = never learned (transport failure, or a
     -- layer with no key catalog); 0 = asked and got nothing back.
     keys_returned   INTEGER,
-    keys_expected   INTEGER
+    keys_expected   INTEGER,
+    -- Latency instrumentation. last_attempt above is written after the save
+    -- and so answers "when did this layer finish", which is three questions
+    -- collapsed into one: it cannot say how long the fetch took, nor how
+    -- much of the number's age was the provider's doing rather than our
+    -- schedule's. These four separate them (see latency/domain.py).
+    -- observed_at is the newest observation DATE the run received, which for
+    -- most sources is all there is; latency/domain.py turns it into an
+    -- instant using the layer's declared venue close, and refuses to where
+    -- no such hour is known.
+    observed_at         TEXT,
+    fetch_started_at    TEXT,
+    fetch_completed_at  TEXT,
+    stored_at           TEXT
 );
 """
 
@@ -527,6 +540,38 @@ CREATE TABLE IF NOT EXISTS opportunity_detections (
 );
 """
 
+_CREATE_OCEAN_FREIGHT_RATES = """
+CREATE TABLE IF NOT EXISTS ocean_freight_rates (
+    route        TEXT    NOT NULL,
+    Date         TEXT    NOT NULL,
+    rate_usd_mt  REAL,
+    cadence      TEXT,
+    quote_kind   TEXT,
+    attribution  TEXT,
+    PRIMARY KEY (route, Date)
+);
+"""
+
+# Counts of vessels, not tonnes and not prices. `in_port` is stored even
+# though it equals loading + waiting_to_load on every row that carries all
+# three: the 1990s rows publish only the total, so deriving it would erase
+# them. The identity is enforced at parse time instead.
+_CREATE_PORT_VESSEL_ACTIVITY = """
+CREATE TABLE IF NOT EXISTS port_vessel_activity (
+    port_region      TEXT    NOT NULL,
+    week_ending      TEXT    NOT NULL,
+    loading          REAL,
+    waiting_to_load  REAL,
+    in_port          REAL,
+    loaded_7day      REAL,
+    due_10day        REAL,
+    unit             TEXT,
+    cadence          TEXT,
+    attribution      TEXT,
+    PRIMARY KEY (port_region, week_ending)
+);
+"""
+
 _CREATE_BRIEFINGS = """
 CREATE TABLE IF NOT EXISTS briefings (
     briefing_date   TEXT    NOT NULL PRIMARY KEY,
@@ -569,6 +614,8 @@ ALL_SCHEMAS = (
     _CREATE_SAGIS_DELIVERIES,
     _CREATE_SAGIS_SUPPLY_DEMAND,
     _CREATE_CEC_ESTIMATES,
+    _CREATE_OCEAN_FREIGHT_RATES,
+    _CREATE_PORT_VESSEL_ACTIVITY,
     _CREATE_ORIGIN_RANKINGS,
     _CREATE_OPPORTUNITY_DETECTIONS,
     _CREATE_BRIEFINGS,
@@ -598,6 +645,10 @@ UNIQUE_INDEXES = (
     "ON worldbank_prices (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_ec_oilseed_prices_series_date "
     "ON ec_oilseed_prices (series, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_ocean_freight_route_date "
+    "ON ocean_freight_rates (route, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_port_vessel_region_week "
+    "ON port_vessel_activity (port_region, week_ending);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_dce_futures_commodity_date "
     "ON dce_futures (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_crop_progress_commodity_week_desc "

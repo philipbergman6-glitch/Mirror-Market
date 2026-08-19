@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It has 27 operational layers arranged in 25 numbered source groups (the split groups are 2b and 15b), covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 19 weather regions including SA/Nigeria, 28 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, Argentina MAGyP official FOB, SAGIS South Africa weekly producer deliveries plus its monthly soybean supply & demand balance, and EU rapeseed from the European Commission. Data is stored in SQLite (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The public static site has 13 pages: the headline, the players map, the origin-comparison page, the futures workstation, the opportunity board, and eight market pages. A fourteenth, private edition of the opportunity board is written outside `docs/` and is never published.
+Mirror Market is a commodity market intelligence platform focused on the soy complex (Soybeans, Soybean Oil, Soybean Meal) with supporting data for competing crops. It has 29 operational layers arranged in 26 numbered source groups (the split groups are 2b, 15b and 26b), covering 10 commodity futures, 10 currency pairs including ZAR/NGN, 19 weather regions including SA/Nigeria, 28 countries in PSD supply/demand, weekly export sales, forward curves, WASDE monthly forecasts, EIA biofuel/energy, USDA crush/inspections incl. port-area and destination-country flows, CONAB Brazil estimates, domestic spot prices for India/Brazil/South Africa, AgRural Paranaguá FOB, AMS CIF Gulf export bids, Argentina MAGyP official FOB, SAGIS South Africa weekly producer deliveries plus its monthly soybean supply & demand balance, EU rapeseed from the European Commission, and the USDA AMS Grain Transportation Report's ocean freight and grain-vessel lineups. Data is stored in SQLite (local or Turso cloud). All prices are displayed in **USD/MT** (metric tons) for international comparability. The public static site has 13 pages: the headline, the players map, the origin-comparison page, the futures workstation, the opportunity board, and eight market pages. A fourteenth, private edition of the opportunity board is written outside `docs/` and is never published.
 
 ## Commands
 
@@ -53,7 +53,7 @@ The project follows a three-stage pipeline: **Fetch -> Clean/Validate -> Store**
 
 ### Data Pipeline (27 Operational Layers)
 
-`main.py` orchestrates 27 independently graded operational layers across 25 numbered groups (2b crop progress and 15b CONAB prices are separate run units). `config.PRODUCTION_LAYERS` is the authoritative inventory used by pipeline summaries, the masthead, About Data, health rows, and promotion smoke checks. Dict-shaped sources use `_run_dict_layer()`; scraper sources use `_run_scraper_layer()`; Layers 14–16 retain custom orchestration. Each layer is isolated so contextual failures degrade visibly without hiding healthy results.
+`main.py` orchestrates 29 independently graded operational layers across 26 numbered groups (2b crop progress, 15b CONAB prices and 26b vessel lineups are separate run units). `config.PRODUCTION_LAYERS` is the authoritative inventory used by pipeline summaries, the masthead, About Data, health rows, and promotion smoke checks. Dict-shaped sources use `_run_dict_layer()`; scraper sources use `_run_scraper_layer()`; Layers 14–16 retain custom orchestration. Each layer is isolated so contextual failures degrade visibly without hiding healthy results.
 
 Run state is explicit: `failed` means upstream/transport/parse failure, `no_publication` means the source ran successfully on a legitimate quiet day, `stale` means a fetched payload exceeded its observation-age budget, and `incomplete` means key coverage missed its floor. Only `success` advances `last_success`; all other states preserve the last known good timestamp. `data_freshness` round-trips through `data/history/` so a fresh CI runner does not falsely say a layer “never succeeded.”
 
@@ -97,6 +97,9 @@ Run state is explicit: `failed` means upstream/transport/parse failure, `no_publ
 
 25. **CEC South Africa official crop estimates** — `fetchers/cec.py` (the Crop Estimates Committee's monthly area/production estimate for soybeans + sunflower seed, ha and MT; no API key). Structurally the SA analogue of Layer 15 (CONAB), but **not an independent second opinion**: USDA's PSD carries the CEC's final figure verbatim at PSD year = CEC season − 1 (2,770,000 / 1,848,000 / 2,800,000 t for the 2023 / 2024 / 2025 crops are exact ties), so no "CEC vs USDA" divergence line exists anywhere — what renders is the in-season revision path plus a **lag** read on PSD (#204). Fetched from the SAGIS mirror because the issuer's own domain, `dalrrd.gov.za`, no longer resolves and its replacement (nda.gov.za) publishes no parseable listing; a mirror that stops republishing is caught by the `LAYER_MAX_DATA_AGE_DAYS` budget, since every release carries its own date. PDF-only, four filename conventions, and `.doc` before 2025 — so `CEC_HISTORY_START` bounds the window at 2025-01-01, inside which **every** PDF must parse. The window is ~23 files / ~18 MB and re-downloads in seconds, so the layer re-reads it whole each run and self-heals on an empty CI database; nothing here needs `data/history/`. It is a **revision series** keyed `(commodity, season_year, release_date)`, never overwritten to a current estimate: the season is forecast nine times, finalised in November, and then *re-finalised* by the CELC in February against SAGIS's actual deliveries (2,771,225 → 2,800,000 t for 2025) — that last figure is the one later reports quote as "final crop". `season_year` is the CEC's calendar-year convention (2026 = the 2025/26 season). Area-only releases (January's preliminary area, October's intentions to plant) store `production_t` NULL, never 0. Two header rows in the source are known-wrong and must not be anchored on — `CEC_2026-02-26.pdf` labels its tons column "Ha", `CEC-27-Feb-2025.pdf` declares a change formula it doesn't use — so columns are matched by **label** and the parse is validated against the source's own arithmetic (the printed Change % must be reproducible from the row) plus an implied-yield band. Yield is derived at read time; the release date is read from the document body, since two filename conventions carry no day and the names that do carry the *upload* date.
 
+26. **USDA AMS ocean freight (Grain Transportation Report)** — `fetchers/gtr.py` (`fetch_gtr_ocean_freight`; monthly bulk-grain vessel rates US Gulf → Japan and PNW → Japan, USD/MT, back to Jan 1996; no API key). The stack's first **freight** leg: it could price a cargo at both ends and had no number for moving it. The Gulf-minus-PNW spread is the decision — which US coast is the cheaper way out — and it is **derived at read time**, never stored, because the workbook publishes its own spread column and that column is used as the *parse check* instead (see below). Two things it is not. It is **not a USDA measurement**: USDA republishes an assessment by O'Neil Commodity Consulting, which is why `attribution` is stamped on every row rather than resolved at display time — rendered beside the AMS Gulf bids (Layer 20) an unattributed row credits both to the same author. And it is **not a quote for any cargo here**: Japan is a benchmark route, so this must never be substituted for the route-specific ocean freight that `analysis/origins/` requires (a missing one there is a *hard* blocker, and filling it with a benchmark would convert a visible gap into an invisible wrong answer). Four traps are pinned by test. The period column carries **seven layouts** — six string formats (`96-Jan`, `July_99`, `Jan. 02`, `May  02` with a doubled space, `June 02`, `Aug '17`) plus real datetimes — and its month token has **three spellings**, of which `Sept` (every September 2002-2016) is accepted by neither `%b` nor `%B`. None of that raises: a parser handling a subset returns a *shorter series* and logs success, and the first cut of this module stored 128 of 367 months that way. Months are therefore matched by **unambiguous prefix** against the full month names rather than by strptime. The file also contains a plain data-entry error — seven 2019 months stored as **1919**, between `May '19` and 2020-01 — where the sequence proves the intent but rewriting a published year would be inventing data and storing 1919 would put a century-old rate at the front of every chart; the row is dropped and named, so 360 of 367 months survive and the gap is documented rather than silent. The sheet **ends in a summary block that parses as data**: year-on-year *ratios* (0.33, 0.21) printed under the rate columns, which stored are a freight market that collapsed by two orders of magnitude. And because the sheet has no single header row, columns are addressed by index and therefore **checked against the sheet's own arithmetic on every row** — the published spread must equal gulf − pnw, since a shifted column is a wrong number rather than a missing one. A row with no published spread is still accepted: a missing check is not a failed check. And because the check detects *our* drift rather than auditing the publisher, the verdict rides on the failure **rate** (`GTR_MAX_ARITHMETIC_FAILURE_RATE`, 5%): a handful of contradictory rows in thirty years drops only those rows, while a rate above the threshold means the mapping moved and the whole workbook is discarded — under a shifted mapping the rows that happen to reconcile are no more trustworthy than the ones that do not. Measured live 2026-08-19: 0 of 367 freight months and 8 of 1,649 vessel weeks fail, the latter scattered across 2018-2026 and off by 1-12 vessels. **One route parsing alone discards the whole workbook** — both come out of one download of one sheet, so a lone survivor means the mapping moved and is exactly as suspect as the casualty. The workbook carries the full series on every fetch, so the layer self-heals on an empty CI database and needs no `data/history/` round-trip; the URL is a **fixed filename**, which is the World Bank / CIRCABC trap from the other side — nothing rotates, so a file that stops being refreshed answers 200 forever and only `LAYER_MAX_DATA_AGE_DAYS` (75 days) catches it.
+   - **26b. Grain vessel lineups** — `fetch_gtr_vessel_activity` (weekly counts of vessels in port, loaded in the last 7 days, and due in the next 10, for the US Gulf and the Pacific Northwest, back to 1995). A separate run unit from 26 on the 2b/15b convention, because a weekly cadence and a monthly one cannot share one recency budget (21 days vs 75). Counts of **vessels**, not tonnes and not a lineup by ship — no names, no cargoes, no berths. `in_port` is **stored rather than derived** even though it equals loading + waiting-to-load wherever all three print: the 1990s rows publish only the total, so deriving it would delete a decade — and where all three *are* present the identity is enforced instead, which is what pins the column mapping (the same role the spread plays in 26). Verified against the workbook's own printed presentation sheet, a different sheet from the one parsed: week ending 2026-08-06 reads Gulf 22 in port / 33 loaded / 30 due and PNW 14 in port on both. A region whose columns are entirely blank is a series that did not exist that week — Vancouver's whole tail, which is why Vancouver is deliberately **not** an expected key — and is never read as a zero; an individual blank count is preserved as NULL through the cleaner for the same reason. A **truncated download served as HTTP 200** is a live failure mode here, observed against these files on 2026-08-19 (634,667 bytes arrived, the zip central directory did not, and the result still passed `file(1)` as a workbook): openpyxl raises `zipfile.BadZipFile`, which is **not** an OSError subclass and escapes a naive handler as a mid-run crash.
+
 ### Pipeline Layer
 
 - `pipeline/clean.py` — Normalizes raw data (forward-fill gaps, datetime indices, drop NaN rows). Runs sanity checks (warns on >10% daily moves, zero/negative volume). Contains `_check_nan_gaps()` helper used by `clean_ohlcv()` and `clean_dce_futures()`. Also has `clean_india_domestic()`, `clean_brazil_spot()`, `clean_safex()`, `clean_sagis_deliveries()`.
@@ -117,15 +120,15 @@ Run state is explicit: `failed` means upstream/transport/parse failure, `no_publ
 - `analysis/loaders.py` — Shared, cached price and currency loaders. Used by both `analysis/briefing/` and `analysis/soy_analytics.py` so the two consumers don't drift. `clear_loader_cache()` resets between pipeline runs.
 - `analysis/stocks_to_use.py` — Stocks-to-use ratios from PSD; tight-supply alerts.
 - `analysis/zscore.py` — Shared z-score helper used by COT and weather sections.
-- `analysis/briefing/` — Daily briefing package. Each section of the briefing lives in its own module under `analysis/briefing/sections/` (prices, crush, economic, usda, crop_progress, wasde, export_sales, inspections, gulf_basis, dce, forward_curve, eia, conab, currencies, cot, weather, psd, worldbank, emerging_markets, basis, stocks_to_use, correlations, seasonal, market_drivers, signals, freshness). `analysis/briefing/orchestrator.py` joins them; `analysis/briefing/types.py` defines the typed `BriefingData` returned by `generate_briefing_data()`. `generate_briefing()` is a thin wrapper that returns `BriefingData.text`.
-- `analysis/briefing/snapshot.py` — Distills `BriefingData` into structured `snapshot_json` for the briefings archive (schema v2, marked by a top-level `schema_version`; rows without it are v1). Captures every quantitative section output: technicals, crush, Brazil basis, FRED + yield curve, USDA YoY, crop progress, WASDE revisions, stocks-to-use, export sales (incl. China share), inspections, DCE, forward curve (incl. slope), EIA, CONAB legs (no derived gap — units unreconciled), currencies (session-based `chg_5d_pct`/`chg_21d_pct`), COT + 3y z-scores, weather + 90d z-scores, PSD highlights, World Bank, emerging markets (verbatim), correlations, seasonal, and data health. Stores raw numbers and components, never display labels; every block degrades to None/{} on failure.
+- `analysis/briefing/` — Daily briefing package. Each section of the briefing lives in its own module under `analysis/briefing/sections/` (prices, crush, economic, usda, crop_progress, wasde, export_sales, inspections, gulf_basis, transport, dce, forward_curve, eia, conab, currencies, cot, weather, psd, worldbank, emerging_markets, basis, stocks_to_use, correlations, seasonal, market_drivers, signals, freshness). `analysis/briefing/orchestrator.py` joins them; `analysis/briefing/types.py` defines the typed `BriefingData` returned by `generate_briefing_data()`. `generate_briefing()` is a thin wrapper that returns `BriefingData.text`.
+- `analysis/briefing/snapshot.py` — Distills `BriefingData` into structured `snapshot_json` for the briefings archive (schema v2, marked by a top-level `schema_version`; rows without it are v1). Captures every quantitative section output: technicals, crush, Brazil basis, FRED + yield curve, USDA YoY, crop progress, WASDE revisions, stocks-to-use, export sales (incl. China share), inspections, transport (both ocean-freight legs and both vessel regions, each stamped with its own as-of because the cadences differ), DCE, forward curve (incl. slope), EIA, CONAB legs (no derived gap — units unreconciled), currencies (session-based `chg_5d_pct`/`chg_21d_pct`), COT + 3y z-scores, weather + 90d z-scores, PSD highlights, World Bank, emerging markets (verbatim), correlations, seasonal, and data health. Stores raw numbers and components, never display labels; every block degrades to None/{} on failure.
 - `analysis/soy_analytics.py` — 9 analyst functions for the soy dashboard: command_center, supply, demand, technicals, relative_value, risk, seasonal, forward_curve, emerging_markets. Pulls price/currency dicts from `analysis/loaders.py`.
 - `analysis/health.py` — Per-commodity data health checks (stale data, flat prices, missing commodities)
 
 ### Storage
 
 - Database: `data/storage/mirror_market.db` (SQLite, gitignored)
-- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `inspection_destinations`, `gulf_bids`, `argentina_fob`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `sagis_deliveries`, `sagis_supply_demand`, `cec_estimates`, `ec_oilseed_prices`, `briefings`
+- Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `inspection_destinations`, `gulf_bids`, `argentina_fob`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `sagis_deliveries`, `sagis_supply_demand`, `cec_estimates`, `ec_oilseed_prices`, `ocean_freight_rates`, `port_vessel_activity`, `briefings`
 - `forward_curve` keys on `(commodity, contract_month, fetched_date)` — one full curve per run accumulates term-structure history; `read_forward_curve()` returns only each commodity's latest snapshot.
 - V1 pipeline config lives in `config.py` (tickers, API URLs, region coordinates, thresholds).
   V2 source/dataset cadence, identity, freshness, validation, retention, rights,
@@ -145,6 +148,7 @@ CI runs on an ephemeral runner with an empty DB each day. Most layers self-heal 
 4. Brazil Basis (Paranaguá FOB vs CBOT, USD/MT — Layer 19 × Layer 1)
 4b. US Gulf Basis (CIF NOLA barge — AMS export bids, Layer 20)
 4c. Cross-Origin FOB Board (US Gulf CIF vs Brazil Paranaguá FOB vs Argentina up-river FOB, USD/MT — Layers 19 × 20 × 21)
+4d. Transport (Gulf and PNW ocean freight to Japan with the Gulf-over-PNW spread, plus Gulf/PNW vessel lineups — Layers 26 × 26b)
 5. Economic Context (FRED — dollar index, CPI, rates, ethanol PPI)
 6. USDA Fundamentals (YoY production/yield)
 7. Crop Conditions (weekly USDA % good/excellent, progress)
@@ -227,6 +231,60 @@ python scripts/generate_site.py --only cbot
 #         plus data/workspace/opportunities.html — the private desk edition,
 #         gitignored and never in the promotion contract
 ```
+
+## Landed-cost onboarding (`analysis/origins/`, Phase 6)
+
+The origin page is fail-closed by design: with nothing entered, every landed
+total blocks and says so. That is correct, and on its own it is a wall rather
+than a workflow — the next question is always "so what do I enter, and who
+enters it". Three modules answer it, and none of them relaxes the blocking rule.
+
+- `validation.py` — the faults **one entry cannot see about itself**. An
+  ambiguous pair (same component, same scope, overlapping windows *and*
+  overlapping lifetimes) is two answers to one question; a freight with no
+  `origin` prices all three legs off one indication; `us-gulf` for `us_gulf`
+  matches no route and reads on the page as "never entered". Those are
+  `Severity.ERROR` and `load_assumptions()` **raises** on them, because at
+  lookup time the complaint surfaces mid-page-build for whichever route asked
+  first. Expiry is `Severity.WARNING` and is reported, never raised: the lapsed
+  record is the audit trail, and deleting it to quiet a loader would destroy it.
+  A renewal chain (old entry's `expires_on` shortened to before the new one's
+  `entered_at`) is explicitly legal; an overlapping renewal is not.
+- `readiness.py` — **database-free** route onboarding. What a route requires is
+  the incoterm bridge plus `config.LANDED_STACK`, both derived, so US Gulf asks
+  for elevation and an ex-works leg would ask for inland haulage with no edit
+  here. Status per input (`satisfied` / `expiring` / `expired` / `missing`) is
+  resolved through the same `AssumptionSet.lookup` the calculation uses, so the
+  checklist and the page cannot disagree. Every command carries a `<VALUE>`
+  placeholder — a suggested default is a fabricated default with an extra step.
+  `expiry_review` answers "what lapses, who owns it, which routes go dark",
+  and resolves the last part by re-running readiness with the entry removed
+  rather than by matching scope: an entry shadowed by a more specific one takes
+  nothing down with it.
+- `scenarios.py` — `input_flip_moves` generalises the freight break-even to
+  **every** input. Solved, not searched: each rung is linear in its own value,
+  so `marginal_landed_per_unit` differentiates the row's own waterfall (a flat
+  dollar compounds through the ad-valorem rungs after it; a duty point is worth
+  the CIF base it is charged on; a financing point recovers its carry period as
+  `amount / rate`, and reports `None` at a zero rate rather than inventing one).
+  Rows sort by the move **as a percentage of the input's own value**, because a
+  dollar of freight and a point of duty are not comparable as written. An input
+  **both** origins share moves both totals together and mostly cannot flip
+  anything — said in words, never as a large number that reads as "possible".
+
+Surfaces: page sections **02 Route readiness** and **09 Renewals due**, plus the
+flip table in **05 Sensitivity**; `scripts/enter_assumption.py --onboarding`,
+`--review` and `--check` (exit 1 on file faults, 0 on world faults). What must
+be entered per route is documented in `data/reference/assumptions/ONBOARDING.md`.
+
+The shipped directory still contains **no invented number** — only the two
+China policy rates. The success path is rendered in tests from
+`tests/fixtures/assumptions_complete/`, reached through `MIRROR_ASSUMPTIONS_DIR`
+and never set in CI. One rendering trap is pinned by test: the site renders with
+`autoescape=False`, so `<VALUE>` must be escaped explicitly or a browser eats
+the placeholder as a tag. A second is pinned by name: a template key called
+`clear` resolves to `dict.clear` — a truthy bound method — so the renewals
+verdict is keyed `nothing_due`.
 
 ## Futures Workstation (`analysis/futures/`, Phase 3)
 
@@ -354,6 +412,121 @@ empty book. With no book entered the hedge section shows a labelled 1,000 MT
 **reference calculation** so the arithmetic stays inspectable; it says on the
 row that it is not a position.
 
+## Positions, limits and options workflow (Phase 6)
+
+The supervised desk workflow on top of the workstation: a book that can be
+imported rather than retyped, exposure decomposed into the views a mandate is
+written in, limits that are visible when crossed, the official clearing figure
+beside ours, and options the desk supplies itself. Six modules, and one
+boundary that runs through all of them.
+
+- `analysis/futures/privacy.py` — the client-record boundary, and the reason
+  the phase exists in this shape. Four guards: a **key** guard
+  (`CLIENT_RECORD_FIELDS`), a **provenance** guard (any string naming
+  `reference/{positions,options,clearing,import_profiles}`), a **path** guard
+  (`assert_private_path` refuses anything under `docs/` or on the promotion
+  contract), and **section redaction** (`redact_for_public`).
+- `analysis/futures/exposure.py` — the seven views (flat price, basis, crush,
+  FX, contract month, first notice, residual) and the metrics every limit key
+  resolves through.
+- `analysis/futures/limits.py` — `DeskLimit` over eleven exposure-backed keys
+  with an optional `warn_at`, and `ok`/`warn`/`breach` with headroom.
+- `analysis/futures/clearing.py` — `ClearingStatement`/`ClearingLine` from
+  `data/reference/clearing/`, `PnlBasis`, and `reconcile()`.
+- `analysis/futures/imports.py` — profile-driven import of a broker, clearing
+  or ERP export: a dry-run `ImportReport` first, `apply_import` second.
+- `analysis/futures/options.py` — extended with tz-aware `quoted_at`,
+  `chain_from_csv`/`value_chain` for an externally supplied ladder, and
+  `BLACK76_LIMITATIONS`.
+
+Seven rules are load-bearing, each pinned by a test:
+
+- **The public artifact never contains a book, and that is structural rather
+  than remembered.** `build_view(audience=...)` defaults to
+  **public** — the only default a privacy boundary may have — and the five
+  client sections (`book`, `exposure`, `limits`, `clearing`, `options_entered`)
+  render `absent` with a reason. `absent`, not `empty`: "nothing entered" and
+  "not shown to you" are different states and a public reader is owed the
+  second. The private edition goes to `data/workspace/workstation.html`,
+  outside `docs/` and deliberately absent from
+  `trust.site_promotion.expected_site_paths()`, and
+  `assert_no_client_records` runs at write time in `scripts/generate_site.py`
+  so a leak fails the page — a tombstone, blocking promotion — rather than
+  being published and noticed. This closed a **live leak**: `_book_section`
+  wrote `valuation.to_dict()` and the positions file's absolute path straight
+  into `docs/workstation.html`, quiet only because CI's positions directory is
+  empty. Two things the fix surfaced that a section-level guard alone would
+  not have: the hedge, scenario and ticket sections are *sized from the book*,
+  so the public edition always works the 1,000 MT reference example; and the
+  valuation-derived **alerts** name a limit key and an observed tonnage, which
+  is the book in one sentence, so the public edition is built without the
+  valuation rather than built and filtered. The guard's own list is narrow on
+  purpose — `exposure` was removed from `CLIENT_RECORD_FIELDS` because a public
+  reference hedge honestly has one, and a key belongs there only when *no*
+  public payload could contain it.
+- **The official P&L and ours are two numbers and stay two numbers.** A
+  reconciliation reports both columns, labelled by `PnlBasis`, with their
+  difference against `CLEARING_RECONCILIATION_TOLERANCE_USD` — and there is no
+  `total_usd`, `reconciled_usd` or `net_usd` anywhere in the payload, because a
+  single figure would belong to neither desk and be acted on as both. A
+  quantity mismatch is its own finding, not a price difference. A contract on
+  the statement but not in the book is a finding in its own right — it is a
+  position nobody recorded. Physical positions are not reconciled and the
+  report says why: a clearer holds futures, not beans.
+- **A settlement on a client's statement is `ATTESTED_SETTLEMENT`.** A seventh
+  `PriceType`: official for that account, and still not proven by anything this
+  project ingests, so `PROVEN_SETTLEMENT_SOURCES` stays empty and its
+  confidence ceiling is `BOARD_REFERENCE`, not `EXECUTABLE`.
+- **Importing is two steps and the first writes nothing.** `read_import`
+  returns accepted rows, rejected rows with reasons, unclaimed columns and the
+  file's sha256; `apply_import` refuses while anything was rejected unless
+  `allow_partial=True`. Every refusal is one rule — *nothing is guessed*: a
+  missing required column refuses the **whole file** before any row is read (a
+  per-row failure there reads as bad data rather than a bad mapping); a sign
+  convention is declared (`signed` or `side_column`), never inferred, because a
+  short 68 lots read as a long 68 is a 136-lot error that looks like a
+  position; a date format is tried once, since a fallback is how one file's
+  March becomes another's April; an unmapped product code is rejected, because
+  `SOJA` is *probably* soybeans and probably is not a book; a blank is never a
+  zero. Re-import is idempotent by construction — every row's reference is
+  `<sha256[:8]>:<row number>`, derived from the bytes.
+- **A limit that cannot be measured produces no row, not a passing one.** A
+  green line nobody checked is the most dangerous output here, so the page
+  reports configured-vs-measured. `warn_at` must sit *below* `maximum` or it is
+  refused — a warning that fires only after the breach is misconfiguration that
+  looks like safety. An unknown key **raises** (it used to log and skip, which
+  left a desk believing a mandate was being checked). Limits are reported,
+  never enforced.
+- **Hedging moves tonnes between views; it does not remove them.** Basis
+  exposure is `max(unfixed, hedged)` rather than a sum, so tonnes that are both
+  count once. The pricing convention (`pricing:`) decides which view a cargo
+  lands in; omitting it is legal and means *not stated*, in which case the
+  tonnes are counted at their **most exposed** reading and every line built
+  from them says the convention was a default. A wrong value is refused — it
+  would move tonnes silently between views, which is a risk report saying
+  something untrue.
+- **An option input carries a source and a moment.** `quoted_at` is
+  timezone-aware or refused (whose local time — the desk's, the broker's, or
+  the runner's?), and must fall on `quoted_on`. An imported ladder is refused
+  when a row has neither premium nor vol, when it has both, when nothing
+  anywhere carries a timestamp, and when the rows carry **two** timestamps —
+  one chain is one moment, and a Greeks table struck across two sessions is not
+  a Greeks table. Every imported row is `PriceType.MANUAL`: a file somebody
+  sent us is not a feed. `BLACK76_LIMITATIONS` states the model's limits as
+  **data with a direction** — a caveat that does not say which way it bites
+  cannot be acted on. The American early-exercise one is `understates`: the
+  Black-76 number is a *floor* for an American option, not a value for one.
+
+Surfaces: workstation sections 07–10 and 13 (private), 12 (public — the
+chain's absence, the model, its limits); `scripts/import_positions.py`
+(dry-run default, exit 1 on any rejection so a nightly import can gate on it);
+`scripts/worked_book_example.py`, the end-to-end worked synthetic position.
+Docs: `data/reference/{positions,options,clearing,import_profiles}/README.md`.
+Client records are **files, never tables** — every table here round-trips
+through the committed `data/history/*.csv`, so a positions table would publish
+the book by construction — and all four directories are gitignored but for
+their READMEs.
+
 ## Opportunity engine (`analysis/opportunities/`, Phase 4)
 
 The commercial surface: `docs/opportunities.html`, built by
@@ -435,6 +608,244 @@ detected; the last two require a human and are therefore private by
 construction. There is **no routing and no contact channel** — the output is a
 next action for a person to take.
 
+## The crush (`analysis/futures/crush.py`)
+
+**One crush calculation, four surfaces, and it names its contracts.** Until
+Phase 6 every "board crush" here was three *provider front-month* series —
+Yahoo's `ZS=F`/`ZM=F`/`ZL=F` out of `prices`, which carries no contract column
+at all. That number named no delivery month, so it could not be reproduced;
+Yahoo rolled each leg on its own unannounced schedule, so a roll-day print
+moved for reasons nobody earned and the artifact did *not* cancel across a
+spread; and a crusher acting on it would have had no month to place the three
+orders in. `named_board_crush(provider, as_of=...)` replaces it, reading the
+`forward_curve` layer through the `QuoteProvider` seam and returning either a
+`NamedCrush` or a `CrushWithheld` carrying the reason.
+
+Five things are load-bearing:
+
+- **`CrushLevel` is one closed vocabulary of four**, imported by
+  `analysis.origins.crush` rather than redefined: `board_reference` (named
+  contracts, delayed closes), `board_settlement` (proven settlements — *not
+  constructible today*, because `PROVEN_SETTLEMENT_SOURCES` is empty),
+  `gross_physical`, `net_plant`. The two board levels are computed here, the
+  two physical ones in `analysis/origins/crush.py`.
+- **The month convention is derived, documented and rendered.** ZS lists
+  Jan/Mar/May/Jul/Aug/Sep/Nov; ZM and ZL list Jan/Mar/May/Jul/Aug/Sep/Oct/Dec.
+  Six bean months pair with the products' own month; **November beans crush
+  into December**, the first listed product month after it.
+  `SOY_CRUSH_PRODUCT_MONTH` is derived from the two listed-month sets and
+  pinned against the literal table by test. `propose_crush_hedge` uses the same
+  mapping, so the hedge's product legs *follow* its bean month instead of each
+  choosing its own nearest.
+- **Every leg carries its defence**: symbol, delivery month, observation date,
+  price type, provider, and `settlement_proven`. `NamedCrush.workings()` prints
+  the lines that reproduce the margin by hand, and they are on the page.
+- **Coherence is checked four ways and withheld, never patched.**
+  `no_curve`, `no_crush_month` (nothing listed with ≥5 sessions left),
+  `mixed_sessions`, `mixed_price_types`, `mixed_providers` (a trusted bean and
+  a v1 oil are two provenances in one number), `unsupported_price_type`,
+  `settlement_unproven` (a settlement is a claim about the *provider*), and
+  `expiry_not_encoded`. A withheld crush is a different type from a computed
+  one, so it cannot be read as a margin.
+- **`ContractBasis` states what the legs structurally are** and is registry
+  data, not a code path: `MARKETS[...]["crush"]["contracts"]` is `named`
+  (CBOT), `continuous` (Dalian's akshare main-contract series — arithmetically
+  fine, structurally unhedgeable, and the block says so) or `administered`
+  (Argentina). A descriptor that omits it fails the build. `ContinuousSeries`
+  has no path to a crush at all, and `continuous_withheld()` is the answer a
+  surface gets when that is all it holds.
+
+Consumers: `app/block_builders.crush_block` (block 03), `app/origins_page`
+section 06, `app/workstation_page` section 04, `analysis/opportunities/signals.
+crush_margin_detections`, `analysis/briefing/sections/crush` and the briefings
+archive's `crush_spread` block. `tests/test_named_crush.py` pins the convention
+and every refusal, including the roll-period, missing-leg, mixed-date and
+mixed-price-type boundaries.
+
+## Price semantics (`pricing/semantics.py`)
+
+**One classification of what a stored number is, shared by every surface.**
+`PriceType` has six members — `settlement`, `delayed_close`, `last_trade`,
+`assessment`, `administered`, `manual` — and it is the *same object* wherever it
+appears: `analysis/futures/domain.py`, `analysis/origins/domain.py`,
+`app/markets.py` and `trust` all import it rather than defining their own. Four
+parallel vocabularies is how the stack came to call one yfinance daily bar a
+`DELAYED_CLOSE` on the workstation, "three exchange settlements" on Origins, and
+`Confidence.EXECUTABLE` (scored 100/100, ranked on) on Opportunities.
+
+Three rules are load-bearing:
+
+- **A settlement is a claim about the provider, not the number.**
+  `PROVEN_SETTLEMENT_SOURCES` is empty and that emptiness is the finding: no
+  layer here ingests an authoritative settlement feed, so nothing may be
+  rendered as one. Adding a name to that frozenset is the single edit that turns
+  a delayed close into a settlement across the whole site.
+- **Confidence is derived from the price type, never asserted beside it.**
+  `CONFIDENCE_CEILING` grants `EXECUTABLE` only to a settlement-proven type;
+  `CONFIDENCE_BY_QUOTE_KIND` is built from it rather than restated. A CBOT/DCE
+  board leg is `BOARD_REFERENCE` — above every assessment because it is the
+  venue's own daily print, below `EXECUTABLE` because no provider proves it.
+  The board crush and the board basis are kept in full; only the claim about
+  them changed.
+- **The chip names the animal.** `quote_kind_label` renders `board · delayed
+  close`, not `board`, everywhere a quote kind appears (block headers, block 04,
+  both ledgers). "Board" alone reads as the exchange's own settlement.
+
+`tests/test_price_semantics.py` pins the vocabulary and the derivation;
+`tests/test_price_semantics_rendering.py` renders Origins, Opportunities, every
+market block and the Workstation through their real builders and fails on an
+unnegated "exchange settlement" claim or on the word "executable" reaching a
+page.
+
+## Semantic contract (`pricing/policy.py`)
+
+**`semantics.py` says what a number is; `policy.py` says what may then be said
+and done with it.** One module, imported by `analysis`, `app`, `trust` and the
+tests, because a list of forbidden words living in a test file protects only the
+surfaces that test happens to render. The failure it guards is not a template
+typo — it is a *future* feature reusing an existing number correctly and
+describing it wrongly: an assessment as a firm offer, an administered minimum as
+a traded market price, a delayed consumer-endpoint bar as the official close.
+Each of those parses, prices and looks right.
+
+`ClaimKind` is five members — `settlement`, `official_close`, `executable`,
+`firm_offer`, `traded_price` — and `CLAIM_SUPPORTED_BY` is the whole policy:
+which `PriceType` can support each. `EXECUTABLE` needs a proven `SETTLEMENT`
+(and `PROVEN_SETTLEMENT_SOURCES` is empty, so nothing ingested reaches it);
+`FIRM_OFFER` is supported by **nothing**, because no layer here carries a
+counterparty quote; `TRADED_PRICE` is the discriminating case — a board close
+and a last trade came out of a trade, an assessment and an administered minimum
+did not.
+
+Enforcement is in two places because the claims fail in two ways.
+
+- **Language.** `scan()` reads the tag-stripped text of a page (script and style
+  payloads dropped — a Plotly blob is not prose) against `FORBIDDEN_CLAIMS`, and
+  a claim **negated in its own sentence is not a claim**: "delayed daily closes,
+  not proven exchange settlements" has to stay sayable, and a check that banned
+  the word would delete the sentence that tells the truth. Two narrownesses are
+  deliberate: "last-traded price" is excluded (SAFEX publishes one, and a pattern
+  that fired on the honest label would be switched off within a week), and
+  `price_types=` lets the *one* private surface carrying an attested clearing
+  statement say "settlement" while no public page can.
+- **Structure.** Some claims are made by arithmetic rather than by words.
+  `require_hedgeable` is **opt-in**: `NamedContract`/`ContractQuote` declare
+  `is_hedgeable = True` and everything else — a `ContinuousSeries`, a bare
+  price, the next research artifact nobody has written yet — is refused, at
+  `size_leg`, `build_hedge`, `build_ticket` and `named_board_crush`.
+  `require_traded_price` refuses to size a futures leg off an administered or
+  assessed number, because doing so asserts it is a market price whatever the
+  caption says. `assert_confidence_supported` runs in `Evidence.__post_init__`,
+  so an over-claimed row cannot be constructed, let alone ranked on — judged on
+  `AUTHORITY_TIER`, where `indicative` and `administered` are peers (they differ
+  in *kind*, not strength; `CONFIDENCE_RANK`'s worst-wins ordering is a display
+  concern and is not reused here). A quote kind that is not a price at all
+  (`NON_PRICE_QUOTE_KINDS` — a tonnage, a ratio) has no ceiling to exceed, while
+  an *unknown* kind still raises: "not a price" and "nobody classified this" are
+  different facts.
+
+The same scan runs inside `trust.site_promotion.verify_site_candidate`, so a
+misleading edition is refused at the promotion gate rather than only in CI — a
+page that is wrong and looks right is a worse thing to publish than a tombstone.
+
+`tests/test_semantic_contract.py` generates the **whole site** off a seeded
+database and scans all thirteen public pages, both private workspace editions
+(`data/workspace/opportunities.html`, `workstation.html`), the private trial
+dashboard and the briefing text, plus every structural refusal above.
+
+## Trusted ledger — CBOT named contracts (`trust/cbot_benchmarks.py`, DT-16)
+
+The second pilot dataset in the Data Trust Foundation migration
+(`docs/plans/2026-08-10-data-trust-foundation.md`) and the first **critical**
+one. MAGyP (`trust/magyp_fob.py`) proved artifact capture and structured
+parsing against an official physical source; this proves the four things a
+*board* price needs, and it is the only trusted adapter that actually runs the
+quality engine (MAGyP accepts every candidate unconditionally).
+
+Three registry datasets, one per soy leg: `cbot-soybean-named-contracts`,
+`cbot-soybean-meal-named-contracts`, `cbot-soybean-oil-named-contracts`.
+
+- **A named contract, not a front month.** Every observation identifies
+  exchange, contract code and delivery month. A symbol that does not resolve
+  to a contract of the dataset's own product is refused, not carried as an
+  anonymous price. The ticker set comes from
+  `fetchers.forward_curve._build_contract_tickers` — the v1 builder itself, not
+  a second copy of the month rules — so a reconciliation difference can only
+  mean "different parse", never "different contracts".
+- **The settlement claim is about the session, not the number.** Yahoo
+  publishes no settlement and `price_type` stays `delayed-close`; what
+  `settlement.confirmed` checks is that the bar is a *finished* session. The
+  same defect `fetchers/_settlement.py` prevents at fetch time, restated as a
+  quality rule so a provider substitution cannot lose it.
+- **The candle has to be possible.** `ohlc.relationship` rejects a bar whose
+  high is below its open/low/close, or whose low is above them. Such a frame
+  parses cleanly and is simply not a candle.
+- **An extreme move quarantines rather than overwrites.** A day-over-day move
+  past `DAILY_MOVE_QUARANTINE_THRESHOLD` (20% — deliberately above CBOT's own
+  *expanded* limits, so a move past it cannot be a legitimate session) is
+  appended as a quarantined revision: durable, auditable, never reachable by an
+  accepted query, and it does **not** displace the accepted history it
+  disagrees with. The same-session re-print is the sharper case and is pinned
+  by test — the previous-value lookup prefers the observation's own accepted
+  revision before falling back to the latest earlier session.
+- **Corrections append.** `append_benchmark_correction` writes a superseding
+  accepted revision linked to its predecessor; the superseded value stays
+  queryable and any edition that pinned it is still reproducible.
+
+Two RFC deviations, both deliberate:
+
+- **`EligibilityScope`** (`trust/domain.py`). `public_eligible` was the only
+  gate on every accepted-revision query, so a dataset whose `public-display`
+  right is `unknown` — which Yahoo's is, and which must stay fail-closed —
+  was unreadable and therefore *unreconcilable*. `revision_is_eligible(revision,
+  scope)` adds `INTERNAL`, which uses the rights model's own already-recorded
+  `internal-display: allowed`. No rights decision changed and `PUBLIC` (the
+  default everywhere) is unchanged. **This is not a licensing change** and does
+  not authorise publishing anything.
+- **Dataset-scope vs candidate-scope findings.** `DatasetResult` refuses
+  `success` while carrying a quarantine or reject finding, which is right for a
+  stale payload or a coverage shortfall — facts about the whole dataset that
+  dropping a row cannot resolve. A candidate-scope finding *is* resolved by its
+  own disposition: the record it complains about was quarantined or rejected
+  and is not among the accepted revisions the result exposes. So those findings
+  travel on the revision (`finding_ids`), on `BenchmarkDatasetIngestion`, and in
+  the run manifest's `findings_summary`; only dataset-scope findings reach
+  `evaluate_dataset_health`. Passing them all in would not make the result
+  stricter, it would make the evaluator raise instead of returning a verdict.
+
+**The read path is still v1 and switches per dataset.**
+`trust/read_path.py` reads `MIRROR_TRUSTED_READ_DATASETS`, a comma-separated
+list of registry dataset keys. Unset, empty, `none` or `off` all mean v1; an
+unknown key **raises**, because a typo that silently meant "still on v1" is the
+one failure a cutover switch must not have; there is deliberately no `all`.
+`analysis/futures/providers.open_provider` returns `SqliteQuoteProvider` unless
+**all three** soy keys are named — a crush struck from a trusted bean and a v1
+oil is two provenances in one number — and falls back, logging, on any ledger
+problem, because a storage migration must not be able to take the workstation
+down. With the switch on, `TrustedNamedContractProvider` serves curves from
+accepted current revisions at `INTERNAL` scope and delegates the still-v1 reads
+(continuous series, FX, aggregate open interest) unchanged. Moving the bytes
+into a ledger proves provenance, not authority: `settlement_authoritative`
+stays `False` and the price type stays `DELAYED_CLOSE`.
+
+**Reconciliation.** `trust/reconciliation.py` holds the shared
+`reconcile_frames` (deliberately dumb — no tolerance windows, no fuzzy
+matching); MAGyP now uses it too. `scripts/reconcile_cbot_benchmarks.py` runs
+daily in the `reconcile-trusted` CI job beside the MAGyP report. It downloads
+each ticker **once** through a memoising downloader shared by both parsers: the
+settlement guard means a run straddling the cutoff would otherwise hand one
+path a session the other never saw, and a divergence that might mean "different
+download" is worthless as cutover evidence. Exit 0 reconciled or no session
+published, 1 diverged, 2 upstream unavailable. Quarantined revision ids are
+*reported, never graded* — v1 has no such state, so a held-back leg is not a
+divergence, but a cutover should not be enabled on a day the ledger is holding
+legs back.
+
+Tests: `tests/test_trust_cbot_benchmarks.py` (ingestion, quarantine,
+rejection, corrections, point-in-time), `tests/test_trust_read_path.py` (the
+switch), `tests/test_trust_cutover.py` (the provider and the reconciler). All
+network-free.
+
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
@@ -447,11 +858,35 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 yfinance emits a row for the session **in progress**, so a run landing mid-session used to store an unfinished bar as the day's close (observed: ZS=F 2026-08-07 stored at 1181.25 against a 1156.50 settlement — 2.1% wrong, well under `pipeline/clean.py`'s >10% warning). It self-healed on the next run, but the dashboard published on day D carried day D's partial print.
 
-`fetchers/_settlement.py` drops the current session's row until the venue has settled, applied at `fetchers.yfinance.fetch_one` — the single choke point for every yfinance frame (Layer 1 prices, Layer 7 currencies, Layer 11 forward-curve contracts, which took `Close.iloc[-1]` off the same partial bar). The cutoff is `SETTLEMENT_CUTOFF_LOCAL = (14, 30)` in `SETTLEMENT_TIMEZONE = "America/Chicago"` — one time clearing CBOT 13:15 CT, CME livestock/palm 13:05 CT, ICE cotton 13:20 CT and sugar 12:00 CT, expressed in venue-local time so US DST is handled by zoneinfo. A dropped bar logs a WARNING; the missing day is visible, and today's close lands on the next run.
+`fetchers/_settlement.py` drops unfinished bars, applied at `fetchers.yfinance.fetch_one` — the single choke point for every yfinance frame (Layer 1 prices, Layer 7 currencies, Layer 11 forward-curve contracts, which took `Close.iloc[-1]` off the same partial bar). A dropped bar logs a WARNING; the missing day is visible, and today's close lands on the next run.
 
-Consequence: a run landing before the cutoff publishes a dashboard whose newest price row is D−1. That is the intended trade — a gap over a wrong number.
+**The question is "which session date is the newest one that has finished", not "has Chicago settled".** A `SessionRule` is a (timezone, close-time) pair and answers the first; every row labelled after that answer is dropped. Two rules:
 
-The daily schedule (`.github/workflows/deploy-dashboard.yml`) targets a landing window of ~20:00–24:00 UTC (cron `0 19`, plus GitHub's observed +64 to +298 min scheduler delay), which is after CBOT settlement year-round and picks up Argentina MAGyP and AMS Gulf bids same-day. Brazil CEPEA publishes after 21:01 UTC and is caught on later landings only. Correctness does not depend on the cron — the guard does.
+- `EXCHANGE_SESSION` — `SETTLEMENT_CUTOFF_LOCAL = (14, 30)` in `SETTLEMENT_TIMEZONE = "America/Chicago"`, one time clearing CBOT 13:15 CT, CME livestock/palm 13:05 CT, ICE cotton 13:20 CT and sugar 12:00 CT, in venue-local time so US DST is handled by zoneinfo.
+- `FX_SESSION` — `FX_SESSION_CLOSE_LOCAL = (17, 0)` in `FX_SESSION_TIMEZONE = "America/New_York"`. Spot FX has **no settlement**: it runs continuously Sunday 17:00 NY to Friday 17:00, and Yahoo labels the bar that *closes* at 17:00 on day D with day D's date. `fetch_currencies` passes this rule; everything else takes the exchange one.
+
+Asking the older question — "has Chicago settled? then keep everything" — was wrong in both directions and **measured wrong live on 2026-08-19 at 03:45 UTC**: `BRL=X` returned a bar labelled 2026-08-19 with `High == Open` and `Low == Close`, an FX day under four hours old, and Chicago was past 14:30, so it was stored as that day's FX close. Every `home_per_mt` leg converts at that row's own date, making it a wrong landed cost on every physical origin rather than one wrong FX cell. The same root cause broke the futures side oppositely: the old rule dropped rows *equal to* the Chicago date, so once the CME overnight session opened (19:00 CT, carrying the **next** trade date) its bar compared unequal and survived. One comparison closes both.
+
+Consequence, unchanged: a run landing before the relevant close publishes a dashboard whose newest row for that venue is D−1. That is the intended trade — a gap over a wrong number.
+
+The daily schedule (`.github/workflows/deploy-dashboard.yml`) targets a landing window of ~20:00–24:00 UTC (cron `0 19`, plus GitHub's observed +64 to +298 min scheduler delay), which is after CBOT settlement year-round and picks up Argentina MAGyP and AMS Gulf bids same-day. Brazil CEPEA publishes after 21:01 UTC and is caught on later landings only. The 21:30 UTC fast refresh (`refresh-prices.yml`) lands after the FX close on both sides of US DST — a slot only safe because of the overnight fix above. Correctness does not depend on either cron — the guard does.
+
+### Latency (`latency/`, LATENCY.md)
+
+One vocabulary for "how old is the number on the page, and which part of that age did we cause". `domain.py` is stdlib-only (stage chain, five `LatencyClass`es and their objectives, per-layer `ObservationClock` and declared `provider_delay`), `clock.py` the per-run instrumentation, `measure.py` the single DB-aware seam, `report.py` the rendering.
+
+- **Acquisition** (observation → fetched) contains the provider's delay *and* our cadence wait, and cannot be split by observing ourselves; `provider_delay` is therefore **declared per layer with a stated basis**, never inferred from our own timings, and `cadence_wait = acquisition − provider_delay` is the share our schedule chose. **Pipeline** (fetched → publicly readable) is wholly ours.
+- **A missing stamp is `Verdict.UNKNOWN`, never `MEETS`.** `data_freshness` gained `observed_at`, `fetch_started_at`, `fetch_completed_at`, `stored_at`; `save_freshness` looks the run clock up by layer name at the single write choke point, so the eight `_mark_*` paths need no knowledge of it, and a write with no fetch behind it records NULLs rather than `now` — a fabricated fetch stamp would make a slow fetch look instant.
+- **Observation is an instant where the venue hour is known and `DAY`-granular where it is not.** No invented hours; a day-granular age is a stated lower bound.
+- `observed_at` is stamped on **every** status, not just success — a stale layer's newest observation is what sizes the hole.
+
+Surfaces: the masthead's "Board and FX priced from data N old" (generation time is not observation time, and here they are routinely a day apart), four separate Observed/Fetched/Age/Last Success columns in the Layer Freshness table, and `docs/manifest.json`.
+
+### Fast refresh (`main.py --fast`, `scripts/refresh_prices.py`)
+
+`config.FAST_REFRESH_LAYERS` (`prices`, `currencies`, `forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) — the **same code** as the daily build with two arguments different, so the settlement guard, cleaners, `LAYER_MIN_KEYS` floor and freshness grading cannot drift between the paths. Measured 53 s end to end against the daily build's 6 m 02 s; the lever is `DEFAULT_HISTORY_PERIOD`, since a 15-year yfinance pull benchmarks at 24–32 s/ticker against 1–3 s for a short window. DCE and every scraped physical leg are deliberately excluded — they publish once a day, and doubling the request rate on unfriendly upstreams trades reliability for freshness that is not there.
+
+**A fast refresh's failure mode is not a crash — it is a structurally perfect site that knows less than the one it replaces.** It inherits 26 layers from whatever database it sits on, and on an unseeded runner that is only what `data/history/*.csv` carries, so PSD, weather, COT and crop progress would silently vanish behind legal empty states. `trust.site_promotion.verify_refresh_is_not_a_regression` compares the candidate's `manifest.json` against the published edition's: no layer's observation may go backwards or vanish, no page that rendered may tombstone. A missing *candidate* manifest is a refusal (being unable to compare is being unable to pass); a missing *published* one passes loudly (the first build has nothing to compare against). Refusal is a **no-op** — `scripts/refresh_prices.py` exits before the Pages upload and the live edition is untouched. `docs/manifest.json` is a published **asset**, not a page: it is in `trust.site_promotion.PUBLISHED_ASSETS` (link-checked for existence) rather than `expected_site_paths` (crawled and timestamp-checked as HTML).
 
 ### Front-month roll-day discontinuities (Layer 1)
 

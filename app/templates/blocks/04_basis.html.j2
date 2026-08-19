@@ -15,12 +15,12 @@
     {{ f.asof(d.as_of, d.age_days) }}
   </div>
   <div class="mc">
-    <div class="mc-label">Local{% if d.local_quote_kind %} <span class="kind">{{ d.local_quote_kind|replace('_', ' ') }}</span>{% endif %}</div>
+    <div class="mc-label">Local{% if d.local_quote_kind %} <span class="kind">{{ d.local_kind_label or d.local_quote_kind|replace('_', ' ') }}</span>{% endif %}</div>
     <div class="mc-val">{{ f.usd(d.local_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT</div>
   </div>
   <div class="mc">
-    <div class="mc-label">CBOT board{% if d.board_quote_kind %} <span class="kind">{{ d.board_quote_kind|replace('_', ' ') }}</span>{% endif %}</div>
+    <div class="mc-label">CBOT board{% if d.board_quote_kind %} <span class="kind">{{ d.board_kind_label or d.board_quote_kind|replace('_', ' ') }}</span>{% endif %}</div>
     <div class="mc-val">{{ f.usd(d.board_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT · same session</div>
   </div>

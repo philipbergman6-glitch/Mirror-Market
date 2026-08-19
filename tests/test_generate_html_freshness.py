@@ -18,6 +18,8 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
+from config import PRODUCTION_LAYERS
+
 
 def test_freshness_age_is_non_negative_for_past_timestamp(monkeypatch):
     """A timestamp 3 hours in the past must render with a positive age string.
@@ -46,7 +48,7 @@ def test_freshness_age_is_non_negative_for_past_timestamp(monkeypatch):
 
     items = generate_html._build_freshness_items()
 
-    assert len(items) == 27
+    assert len(items) == len(PRODUCTION_LAYERS)
     for item in (item for item in items if item["name"] in {"prices", "fred"}):
         age_str = item["age"]
         assert not age_str.startswith("-"), (
@@ -81,7 +83,7 @@ def test_freshness_age_handles_aware_and_naive_timestamps(monkeypatch):
 
     items = generate_html._build_freshness_items()
 
-    assert len(items) == 27
+    assert len(items) == len(PRODUCTION_LAYERS)
     for item in (item for item in items if item["name"] in {"prices", "fred"}):
         assert not item["age"].startswith("-"), (
             f"{item['name']!r}: age {item['age']!r} is negative — "
@@ -134,7 +136,7 @@ def test_freshness_handles_writer_format_against_non_utc_local_clock(monkeypatch
     monkeypatch.setattr(gh, "datetime", FakeDatetime)
 
     items = gh._build_freshness_items()
-    assert len(items) == 27
+    assert len(items) == len(PRODUCTION_LAYERS)
     age_str = next(item for item in items if item["name"] == "prices")["age"]
     assert age_str == "2h ago", (
         f"expected '2h ago' (stored=09:00 UTC, now=11:00 UTC), got {age_str!r}. "

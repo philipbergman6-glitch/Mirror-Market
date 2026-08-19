@@ -1,45 +1,17 @@
-{#
-  Base template — owns <head> entirely (M8 #150).
 
-  Before this existed, dashboard.html.j2 and players.html.j2 each carried their
-  own font tags, their own Plotly tag and their own copy of the DESIGN.md
-  palette: the design system was already duplicated across the *two* pages that
-  existed. One <head> owner kills that, and is the same mechanism that gives
-  every page the identical masthead and market nav.
-
-  CSS stays inline rather than moving to docs/assets/mirror.css: it is ~5 KB
-  against a multi-MB page, so a second request and a cache-busting problem buy
-  nothing.
-
-  Blocks a page fills:
-    title       <title> text
-    head_extra  page-specific <head> tags (Plotly, etc.)
-    page_css    page-specific rules, appended after the shared core
-    brand       masthead wordmark (defaults to Mirror/Market)
-    mast_meta   right-hand masthead column
-    prenav      anything between the masthead and the market nav (stale note)
-    subnav      the page's own section-anchor bar, under the market nav
-    content     the page body inside .page
-    scripts     page-specific <script> tags before </body>
-
-  `root` is the relative prefix back to docs/ ("" for docs/index.html, "../"
-  for docs/markets/<slug>.html). Pages sit at two depths and the nav is
-  identical on all of them, so every internal href is prefixed with it. See
-  app.markets.relative_root().
-#}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="mirror-market-generated-at" content="{{ generated_at_iso|default('') }}">
-<meta name="mirror-market-layer-count" content="{{ production_layers|default([])|length }}">
+<meta name="mirror-market-generated-at" content="2026-08-18T19:54:10.756574+00:00">
+<meta name="mirror-market-layer-count" content="0">
 <meta name="qa-overflow" content="pending">
-<title>{% block title %}Mirror Market{% endblock %}</title>
+<title>Mirror Market — Europe (stub)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-{% block head_extra %}{% endblock %}
+
 <style>
 :root {
   --paper: #FAFAF7;
@@ -201,40 +173,150 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
   .mast-meta { margin-left: 0; text-align: left; }
   .market-nav .mn-end { margin-left: 0; }
 }
-{% block page_css %}{% endblock %}
+
+
+/* ---- tier stamp ---- */
+.tier-stamp { display: flex; align-items: baseline; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.tier-pill { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.tier-pill.brief { background: #E4E8E4; color: var(--text-muted); }
+.tier-pill.stub { background: transparent; border: 1px solid var(--rule); color: var(--text-dim); }
+.tier-why { color: var(--text-dim); }
+.venue { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+
+
+
+/* ---- blocks ---- */
+.block { padding: 22px 0; border-bottom: 1px solid var(--rule); }
+.block:last-of-type { border-bottom: none; }
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.block-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+.block-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.block-head .why { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+@media (max-width: 768px) {
+  .tier-why { flex-basis: 100%; overflow-wrap: anywhere; }
+  .block-head .why { flex-basis: 100%; margin-left: 0; overflow-wrap: anywhere; }
+}
+
+/* An empty state is a labelled statement, never a blank. `absent` reads calm
+   (no source exists, by structure); `empty` reads warm (a source exists and
+   gave us nothing) — M1 constraint 2's distinction, made visible. */
+.empty-state { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--text-muted); }
+.empty-state .es-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.empty-state.state-empty { border-left: 3px solid var(--warning); }
+.empty-state.state-empty .es-label { color: var(--warning); }
+.stub-lead { font-size: 14px; color: var(--text-muted); padding: 22px 0 6px; max-width: 640px; }
+.stub-lead b { color: var(--ink); font-weight: 600; }
+.reason-row { display: flex; gap: 14px; padding: 9px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; }
+.reason-row .rk { min-width: 120px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.reason-row .rv { color: var(--text-muted); }
+
 </style>
 </head>
 <body>
 <div class="page">
 
 <header class="masthead">
-  {% block brand %}<h1>Mirror<br><em>Market</em></h1>{% endblock %}
+  <h1>Mirror<br><em>Europe</em></h1>
   <div class="mast-meta">
-    {% block mast_meta %}{% endblock %}
+    
+    <div class="day">TUESDAY 18 AUGUST 2026</div>
+    <div>Generated 2026-08-18 19:54 UTC</div>
+    <div>EC Oilseeds Observatory (EU Moselle rapeseed)</div>
+
   </div>
 </header>
-{% block prenav %}{% endblock %}
+
 
 <nav class="market-nav">
   <span class="mn-label">Markets</span>
-  <a href="{{ root }}index.html"{% if current_page == 'headline' %} class="current"{% endif %}>Headline</a>
-  {% for m in market_nav %}
-  {%- set cls = ('current' if current_market == m.slug else '') ~ (' stub' if m.tier == 'stub' else '') %}
-  <a href="{{ m.href }}"{% if cls.strip() %} class="{{ cls.strip() }}"{% endif %}>{{ m.name }}</a>
-  {% endfor %}
-  {# Origins, Workstation and Players are cross-market surfaces rather than
-     markets, so they sit after the market list, pushed right. #}
-  <a href="{{ root }}origins.html" class="mn-end{% if current_page == 'origins' %} current{% endif %}">Origins &rarr;</a>
-  <a href="{{ root }}workstation.html"{% if current_page == 'workstation' %} class="current"{% endif %}>Workstation &rarr;</a>
-  <a href="{{ root }}opportunities.html"{% if current_page == 'opportunities' %} class="current"{% endif %}>Opportunities &rarr;</a>
-  <a href="{{ root }}players.html"{% if current_page == 'players' %} class="current"{% endif %}>Players &rarr;</a>
+  <a href="../index.html">Headline</a>
+  
+  <a href="../markets/cbot.html">CBOT</a>
+  
+  <a href="../markets/dalian.html">Dalian</a>
+  
+  <a href="../markets/brazil.html">Brazil</a>
+  
+  <a href="../markets/argentina.html">Argentina</a>
+  
+  <a href="../markets/india.html">India</a>
+  
+  <a href="../markets/europe.html" class="current stub">Europe</a>
+  
+  <a href="../markets/south_africa.html">South Africa</a>
+  
+  <a href="../markets/nigeria.html" class="stub">Nigeria</a>
+  
+  
+  <a href="../origins.html" class="mn-end">Origins &rarr;</a>
+  <a href="../workstation.html">Workstation &rarr;</a>
+  <a href="../opportunities.html">Opportunities &rarr;</a>
+  <a href="../players.html">Players &rarr;</a>
 </nav>
-{% block subnav %}{% endblock %}
 
-{% block content %}{% endblock %}
+<div class="tier-stamp">
+  <span class="tier-pill stub">stub</span>
+  <span class="venue">Europe</span>
+  <span class="tier-why">no daily price leg and fewer than 2 supporting blocks</span>
+</div>
+
+
+
+<p class="stub-lead">
+  <b>Europe has no page yet.</b> It is on the map and it keeps this address — when the
+  sources below land, this becomes a brief and then a full market page at the same URL, with nothing
+  to re-link. What is missing, and why:
+</p>
+
+<div style="padding-bottom: 22px;">
+  
+  <div class="reason-row">
+    <span class="rk">Local price</span>
+    <span class="rv">ec_oilseed_prices holds no weekly observation inside its 21-day budget</span>
+  </div>
+  
+  <div class="reason-row">
+    <span class="rk">Crush margin</span>
+    <span class="rv">no EU rapeseed oil or meal assessment is ingested</span>
+  </div>
+  
+  <div class="reason-row">
+    <span class="rk">Basis vs the board</span>
+    <span class="rv">no EU futures board to take a basis against (MATIF is licensed)</span>
+  </div>
+  
+  <div class="reason-row">
+    <span class="rk">Currency</span>
+    <span class="rv">Europe quotes in EUR, the site numeraire — no conversion applies</span>
+  </div>
+  
+  <div class="reason-row">
+    <span class="rk">Weather</span>
+    <span class="rv">no European growing region is in GROWING_REGIONS</span>
+  </div>
+  
+  <div class="reason-row">
+    <span class="rk">Supply & demand</span>
+    <span class="rv">the PSD layer holds no soybean balance sheet for European Union</span>
+  </div>
+  
+  <div class="reason-row">
+    <span class="rk">Players</span>
+    <span class="rv">no players country is mapped to this market</span>
+  </div>
+  
+</div>
+
+<div class="footer">
+  Nothing on this page is inferred or filled in from a neighbouring market. Not financial advice.
+  <br><br>
+  <a href="../index.html">&larr; Daily read</a> ·
+  <a href="../players.html">Players</a>
+</div>
+
 
 </div>
-{% block scripts %}{% endblock %}
+
 <script>
 (() => {
   const report = () => {

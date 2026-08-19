@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
+from datetime import date, datetime, timezone
 from functools import partial
 from typing import Any
 
@@ -49,7 +50,7 @@ from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal
-from analysis.spreads import compute_brazil_basis, compute_crush_spread
+from analysis.spreads import compute_brazil_basis
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
@@ -71,7 +72,9 @@ from pipeline.query import (
     read_gulf_bids,
     read_inspection_destinations,
     read_inspections,
+    read_ocean_freight_rates,
     read_port_flows,
+    read_port_vessel_activity,
     read_psd,
     read_usda,
     read_wasde,
@@ -210,25 +213,42 @@ def _prices_block(enriched: dict[str, pd.DataFrame]) -> dict[str, dict[str, floa
     return out
 
 
-def _crush_block(price_data: dict[str, pd.DataFrame]) -> dict[str, float | None] | None:
-    soybeans = price_data.get("Soybeans", pd.DataFrame())
-    oil = price_data.get("Soybean Oil", pd.DataFrame())
-    meal = price_data.get("Soybean Meal", pd.DataFrame())
-    if soybeans.empty or oil.empty or meal.empty:
-        return None
-    spread = compute_crush_spread(soybeans, oil, meal)
-    if spread.empty:
-        return None
-    cents = _num(spread.iloc[-1]["crush_spread"])
-    chg_5d = None
-    if cents is not None and len(spread) >= 6:
-        prev = _num(spread.iloc[-6]["crush_spread"])
-        chg_5d = cents - prev if prev is not None else None
+def _crush_block(as_of: date | None = None) -> dict[str, Any] | None:
+    """The archived board crush — the same named-contract calculation the page shows.
+
+    It used to be ``compute_crush_spread`` over the continuous front-month
+    series, which archived a number naming no contract: a reader opening a
+    six-month-old snapshot could not tell which September it was, nor whether a
+    provider roll had moved it. Every row now carries its three symbols.
+
+    ``value_cents`` is gone rather than recomputed. The old field was the CBOT
+    board-crush spread in cents/bushel, which only exists because the three
+    legs were being combined in native units; the named calculation converts
+    each leg to USD/MT at its own contract size, and back-deriving a cents
+    figure from it would invent a quote convention. Rows written before this
+    carry ``value_cents`` and no ``contracts`` — that is how they are told
+    apart.
+    """
+    from analysis.futures.crush import CrushWithheld, named_board_crush
+    from analysis.futures.providers import open_provider
+    from pipeline.connection import managed_connection
+    from pipeline.query import get_connection
+
+    as_of = as_of or datetime.now(timezone.utc).date()
+    with managed_connection(get_connection()) as conn:
+        outcome = named_board_crush(open_provider(conn), as_of=as_of)
+    if isinstance(outcome, CrushWithheld):
+        return {"withheld": outcome.code.value, "reason": outcome.reason}
     return {
-        "value_cents": cents,
-        "value_usd_mt": _num(to_metric_tons(cents, "Soybeans")) if cents is not None else None,
-        "oil_value_share": _num(spread.iloc[-1]["oil_value_share"]),
-        "chg_5d_cents": chg_5d,
+        "level": outcome.level.value,
+        "contract_basis": outcome.contract_basis.value,
+        "contracts": [leg.symbol for leg in outcome.legs],
+        "observation_date": outcome.observation_date.isoformat(),
+        "value_usd_mt": _num(outcome.margin_usd_mt),
+        "revenue_usd_mt": _num(outcome.revenue_usd_mt),
+        "bean_cost_usd_mt": _num(outcome.bean_cost_usd_mt),
+        "oil_value_share": _num(outcome.oil_value_share),
+        "settlement_proven": outcome.is_settlement_proven,
     }
 
 
@@ -522,6 +542,49 @@ def _port_flows_block() -> dict[str, dict[str, Any]]:
             "prev_week_ending": _date_str(prev) if prev is not None else None,
             "prev_regions_mt": regions_mt(prev) if prev is not None else None,
         }
+    return out
+
+
+def _transport_block() -> dict[str, Any]:
+    """Ocean freight and vessel lineups (Layers 26/26b).
+
+    Raw numbers and components only, as everywhere else in this module: the
+    Gulf-over-PNW spread is not stored here any more than it is in the DB —
+    a consumer reading `ocean_freight_usd_mt` has both legs and can strike
+    it, and a stored spread would be a second place for it to disagree.
+
+    `as_of` is carried per leg because the two cadences differ by an order
+    of magnitude (monthly freight, weekly vessels). A reader that assumed
+    one date for the block would age the freight rate by three weeks.
+    """
+    out: dict[str, Any] = {}
+
+    rates = read_ocean_freight_rates()
+    if not rates.empty:
+        freight: dict[str, Any] = {}
+        for route, subset in rates.dropna(subset=["rate_usd_mt"]).groupby("route"):
+            latest = subset.sort_values("Date").iloc[-1]
+            freight[str(route)] = {
+                "as_of": _date_str(latest["Date"]),
+                "rate_usd_mt": _num(latest["rate_usd_mt"]),
+            }
+        if freight:
+            out["ocean_freight_usd_mt"] = freight
+
+    activity = read_port_vessel_activity()
+    if not activity.empty:
+        vessels: dict[str, Any] = {}
+        for region, subset in activity.groupby("port_region"):
+            latest = subset.sort_values("week_ending").iloc[-1]
+            vessels[str(region)] = {
+                "week_ending": _date_str(latest["week_ending"]),
+                "in_port": _num(latest.get("in_port")),
+                "loaded_7day": _num(latest.get("loaded_7day")),
+                "due_10day": _num(latest.get("due_10day")),
+            }
+        if vessels:
+            out["vessels"] = vessels
+
     return out
 
 
@@ -905,7 +968,7 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
     snapshot: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "prices": _safe("prices", lambda: _prices_block(data.enriched), {}),
-        "crush_spread": _safe("crush_spread", lambda: _crush_block(data.price_data), None),
+        "crush_spread": _safe("crush_spread", _crush_block, None),
         "brazil_basis": _safe(
             "brazil_basis", lambda: _basis_block(data.price_data, data.currency_data), None
         ),
@@ -922,6 +985,7 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         ),
         "argentina_fob": _safe("argentina_fob", _argentina_fob_block, {}),
         "port_flows": _safe("port_flows", _port_flows_block, {}),
+        "transport": _safe("transport", _transport_block, {}),
         "gulf_bids": _safe("gulf_bids", _gulf_bids_block, {}),
         "nass_crush": _safe("nass_crush", _nass_crush_block, None),
         "dce": _safe("dce", lambda: _dce_block(data.price_data), {}),

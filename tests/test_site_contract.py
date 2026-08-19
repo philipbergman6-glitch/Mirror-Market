@@ -55,6 +55,7 @@ def site_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connecti
         schema._CREATE_BRAZIL_SPOT,
         schema._CREATE_SAFEX,
         schema._CREATE_SAGIS_DELIVERIES,
+        schema._CREATE_FORWARD_CURVE,
     ):
         conn.execute(ddl)
     conn.commit()
@@ -95,6 +96,16 @@ def _seed_prices(
 def _seed_cbot_page(conn) -> None:
     """Give CBOT a daily leg plus crush, basis and weather — a full page."""
     _seed_prices(conn, ["Soybeans", "Soybean Oil", "Soybean Meal"])
+    # CBOT's crush block reads NAMED contracts out of `forward_curve`, not the
+    # continuous front-month series in `prices` — so the tier probe does too,
+    # and a page that has the series but no curve is genuinely a brief.
+    _seed_prices(
+        conn,
+        ["Soybeans", "Soybean Oil", "Soybean Meal"],
+        table="forward_curve",
+        date_col="observation_date",
+        extra={"contract_month": "2026-09-01", "fetched_date": date.today().isoformat()},
+    )
     _seed_prices(
         conn,
         ["Soybeans"],
@@ -272,7 +283,19 @@ def test_a_stale_leg_does_not_count_as_present(site_db):
     assert fresh["cbot"].tier == "page"
 
     site_db.execute("DELETE FROM prices")
+    site_db.execute("DELETE FROM forward_curve")
     _seed_prices(site_db, ["Soybeans", "Soybean Oil", "Soybean Meal"], days_ago=90)
+    # The crush is a *second* source now (named contracts, not the price
+    # series), so ageing the price leg alone would leave it standing — which is
+    # correct, and is why both are aged here.
+    _seed_prices(
+        site_db,
+        ["Soybeans", "Soybean Oil", "Soybean Meal"],
+        days_ago=90,
+        table="forward_curve",
+        date_col="observation_date",
+        extra={"contract_month": "2026-09-01", "fetched_date": "2026-05-01"},
+    )
     stale = markets_mod.compute_tiers()
     assert not stale["cbot"].has_daily_leg
     assert "crush" not in stale["cbot"].present

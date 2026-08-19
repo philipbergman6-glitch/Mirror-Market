@@ -53,6 +53,7 @@ from analysis.opportunities.domain import (
     Volume,
 )
 from analysis.origins.domain import Grade, Incoterm, Money, Port, ShipmentWindow, SourceRef
+from pricing.semantics import confidence_for_quote_kind
 
 log = logging.getLogger(__name__)
 
@@ -783,11 +784,11 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
 
     Uses ``analysis.origins.crush`` and takes the *gross physical* level where
     it exists, falling back to the board. Both are labelled on the opportunity,
-    because they are not the same number: a board crush is three futures
-    settlements and is not what any plant earns.
+    because they are not the same number: a board crush is three named futures
+    contracts and is not what any plant earns.
     """
     from analysis.origins.assumptions import load_assumptions
-    from analysis.origins.crush import CrushLevel, crush_stack
+    from analysis.origins.crush import crush_stack
 
     settings = config.OPPORTUNITY_RULES["crush_margin"]
     assumptions = assumptions if assumptions is not None else load_assumptions()
@@ -827,7 +828,7 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
         if not evidence:
             continue
 
-        is_board = chosen.level is CrushLevel.BOARD
+        is_board = chosen.level.is_board
         signal = MarketSignal(
             signal_id=f"crush:{slug}:{chosen.level.value}:{chosen.as_of.isoformat()}",
             kind=SignalKind.CRUSH_MARGIN,
@@ -854,12 +855,28 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
             blockers.append(Blocker(
                 code=BlockerCode.LIQUIDITY_UNPROVEN,
                 message=(
-                    "This is the BOARD crush — three futures settlements, not a plant's own "
-                    "buy and sell. No physical leg for this market is ingested."
+                    "This is the BOARD crush — three futures contracts"
+                    + (f" ({', '.join(leg.contract_symbol for leg in chosen.legs if leg.contract_symbol)})"
+                       if all(leg.contract_symbol for leg in chosen.legs) else "")
+                    + ", not a plant's own buy and sell. No physical leg for this market "
+                    "is ingested."
                 ),
                 remedy=(
                     "Treat it as a paper margin. A physical crush needs cash oil and meal "
                     "assessments this stack does not have for this market."
+                ),
+            ))
+        if chosen.contract_basis is not None and not chosen.contract_basis.is_hedgeable:
+            blockers.append(Blocker(
+                code=BlockerCode.LIQUIDITY_UNPROVEN,
+                message=(
+                    f"The legs are {chosen.contract_basis.value} — this margin names no "
+                    "delivery month, so there is no contract to place the offsetting "
+                    "orders in."
+                ),
+                remedy=(
+                    "Read it as a direction, not as a hedge. Only a named-contract crush "
+                    "can be placed."
                 ),
             ))
         out.append(Detection(
@@ -892,7 +909,17 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
                 f"{settings['min_margin_usd_mt']:,.0f} USD/MT this engine treats as worth a "
                 "call. A crusher earning that has room to bid up for beans."
             ),
-            context={"level": chosen.level.value, "market": slug},
+            context={
+                "level": chosen.level.value,
+                "market": slug,
+                "contract_basis": (
+                    chosen.contract_basis.value if chosen.contract_basis else None
+                ),
+                "contracts": [
+                    leg.contract_symbol for leg in chosen.legs if leg.contract_symbol
+                ],
+                "period": chosen.period_label,
+            },
         ))
     return out
 
@@ -962,7 +989,11 @@ def currency_detections(conn, *, today: date) -> list[Detection]:
                 source=source,
                 max_age_days=layer_budget("currencies", default=7),
                 quote_kind="board",
-                confidence=Confidence.EXECUTABLE,
+                # A yfinance FX bar is the same animal as a yfinance CBOT bar:
+                # a delayed daily close nobody proves is a settlement. It was
+                # `EXECUTABLE` here, which scored it 100/100 and let an FX move
+                # outrank an evidenced physical spread.
+                confidence=confidence_for_quote_kind("board"),
                 note=(
                     f"{earlier:.6f} → {latest:.6f} USD per unit of "
                     f"{market.get('home_currency', '?')}"

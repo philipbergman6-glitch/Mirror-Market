@@ -15,6 +15,11 @@ Read in this order:
                 annualised carry, days to expiry, spread percentiles.
 ``continuous``  a research series stitched from named contracts, with its roll
                 method carried as data rather than documentation.
+``crush``       the board crush on three named contracts of one crush period.
+                The stack's single crush calculation — Origins, the market
+                pages, the Opportunity board and the daily briefing all read
+                it, so the surfaces cannot print different numbers. Withheld
+                with a reason rather than struck on a stitched series.
 ``hedge``       the sizing calculator: contracts, coverage, residual, basis and
                 FX exposure, crush cross-hedge.
 ``scenarios``   combined futures, basis, FX and crush-yield moves, netted

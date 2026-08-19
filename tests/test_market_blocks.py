@@ -63,6 +63,7 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         schema._CREATE_SAFEX,
         schema._CREATE_SAGIS_DELIVERIES,
         schema._CREATE_EC_OILSEED_PRICES,
+        schema._CREATE_FORWARD_CURVE,
     ):
         conn.execute(ddl)
 
@@ -75,6 +76,23 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                      ("Soybean Oil", _day(offset), 52.0))
         conn.execute("INSERT INTO prices (commodity, Date, Close) VALUES (?,?,?)",
                      ("Soybean Meal", _day(offset), 300.0))
+    # CBOT's crush is struck on NAMED contracts out of `forward_curve`, not on
+    # the continuous front-month series in `prices`. Sep 2026 is the prompt
+    # crush period at TODAY (ZSQ26 has two sessions left and is skipped); the
+    # Nov/Dec set behind it is what the roll falls through to.
+    for commodity, month, ticker, close in (
+        ("Soybeans",     "2026-09-01", "ZSU26.CBT", 1050.0),
+        ("Soybean Meal", "2026-09-01", "ZMU26.CBT",  300.0),
+        ("Soybean Oil",  "2026-09-01", "ZLU26.CBT",   52.0),
+        ("Soybeans",     "2026-11-01", "ZSX26.CBT", 1062.0),
+        ("Soybean Meal", "2026-12-01", "ZMZ26.CBT",  305.0),
+        ("Soybean Oil",  "2026-12-01", "ZLZ26.CBT",   52.5),
+    ):
+        conn.execute(
+            "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+            "observation_date, fetched_date) VALUES (?,?,?,?,?,?,?)",
+            (commodity, month, ticker[:-4], ticker, close, _day(0), _day(0)),
+        )
     # Two Gulf locations on one report date — the averaging case.
     for location, average in (("NOLA", 11.20), ("TEXAS", 11.60)):
         conn.execute(
@@ -306,23 +324,56 @@ def test_the_policy_spread_caveat_reaches_the_markup(seeded, registry):
     assert "alert-warn" not in open_html  # an open basis carries no warning
 
 
-def test_crush_uses_one_session_for_all_three_legs(seeded, registry):
-    seeded.conn.execute("DELETE FROM prices WHERE commodity = 'Soybean Oil' AND Date = ?",
-                        (_day(0),))
-    seeded.conn.commit()
-    ctx = SiteContext(conn=seeded.conn, today=TODAY)
-    crush = _block(build_blocks(registry["cbot"], None, ctx, markets=registry), "crush")
+def test_the_cbot_crush_names_its_three_contracts(seeded, registry):
+    """The board crush is ZSU26/ZMU26/ZLU26, not three anonymous front months.
+
+    `prices` still holds the continuous ZS=F/ZM=F/ZL=F series and the block no
+    longer reads it: a margin off a series whose underlying contract changes on
+    the provider's own schedule names nothing and can be placed nowhere.
+    """
+    crush = _block(_build("cbot", seeded, registry), "crush")
     assert crush.state == "ok"
-    assert crush.data["as_of"] == _day(1)  # the newest date all three share
+    assert crush.data["legs_named"] is True
+    assert crush.data["contract_basis"] == "named_contract"
+    assert [crush.data["legs"][role]["symbol"] for role in ("bean", "meal", "oil")] == [
+        "ZSU26", "ZMU26", "ZLU26"
+    ]
+    assert all(
+        crush.data["legs"][role]["contract_month"] == "2026-09"
+        for role in ("bean", "meal", "oil")
+    )
+    assert crush.data["settlement_proven"] is False
 
 
-def test_crush_with_no_shared_session_is_empty(seeded, registry):
-    seeded.conn.execute("DELETE FROM prices WHERE commodity = 'Soybean Oil'")
+def test_the_cbot_crush_is_withheld_when_the_legs_span_two_sessions(seeded, registry):
+    """One session for all three legs, or no number at all."""
+    seeded.conn.execute(
+        "UPDATE forward_curve SET observation_date = ? WHERE commodity = 'Soybean Oil'",
+        (_day(3),),
+    )
     seeded.conn.commit()
     ctx = SiteContext(conn=seeded.conn, today=TODAY)
     crush = _block(build_blocks(registry["cbot"], None, ctx, markets=registry), "crush")
     assert crush.state == "empty"
-    assert crush.reason
+    assert "session" in crush.reason
+
+
+def test_the_cbot_crush_is_withheld_when_a_leg_is_missing(seeded, registry):
+    seeded.conn.execute("DELETE FROM forward_curve WHERE commodity = 'Soybean Oil'")
+    seeded.conn.commit()
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    crush = _block(build_blocks(registry["cbot"], None, ctx, markets=registry), "crush")
+    assert crush.state == "empty"
+    assert "Soybean Oil" in crush.reason
+
+
+def test_the_dalian_crush_says_its_legs_are_continuous(seeded, registry):
+    """Arithmetically fine, structurally unhedgeable — and it must say so."""
+    crush = _block(_build("dalian", seeded, registry), "crush")
+    assert crush.state == "ok"
+    assert crush.data["contract_basis"] == "continuous"
+    assert crush.data["hedgeable"] is False
+    assert "not published" in crush.data["contract_note"]
 
 
 def test_no_market_ships_a_provisional_crush_today(registry):

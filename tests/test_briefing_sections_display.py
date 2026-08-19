@@ -267,11 +267,18 @@ def test_latest_crush_none_without_rows(patched_db: Path) -> None:
 
 
 def test_crush_section_appends_nass_line(patched_db: Path) -> None:
+    """No forward curve -> the board line is withheld, the NASS line remains.
+
+    The spread half no longer degrades to "Insufficient data" off an empty
+    price dict, because it no longer reads the price dict: it reads the named
+    contract curve, and says which leg it does not hold.
+    """
     _seed_crush(patched_db, _CRUSH_ROWS)
 
-    text = crush.format({})  # no price data -> spread degrades, NASS line remains
+    text = crush.format({})
 
-    assert text.startswith("CRUSH SPREAD: Insufficient data")
+    assert text.startswith("CRUSH SPREAD: withheld — ")
+    assert "Soybeans" in text.splitlines()[0]
     assert "US crush (NASS): 6,143,000 TONS in MAY 2026 (+5.0% YoY)" in text
 
 

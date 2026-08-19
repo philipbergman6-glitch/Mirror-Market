@@ -36,9 +36,17 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
 import config
+from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 from pipeline.connection import get_connection, is_cloud, managed_connection
 from pipeline.units import to_metric_tons
+from pricing.semantics import (  # noqa: F401 — re-exported for the site layer
+    QUOTE_KIND_PRICE_TYPE,
+    PriceType,
+    is_settlement_proven_source,
+    price_type_for_quote_kind,
+    quote_kind_label,
+)
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +69,17 @@ SUPPORTING_BLOCKS = ("ledger", "crush", "basis", "weather")
 # one sprint rather than never.
 DEFAULT_MAX_AGE_DAYS = 14
 
+#: Layers graded on another layer's budget, because the two are the same venue,
+#: provider and cadence. ``forward_curve`` is deliberately absent from
+#: ``LAYER_MAX_DATA_AGE_DAYS`` — its rows are dated by *contract* month, months
+#: into the future, so a frozen curve would read as recent for a year — but
+#: that exemption is about the contract_month column, not about
+#: observation_date, which is what the site grades. Same mapping, same reason,
+#: as ``analysis.futures.providers._CURVE_AGE_LAYER``; without it the CBOT
+#: crush block would silently fall back to the 14-day default when it moved off
+#: `prices` onto named contracts.
+_AGE_BUDGET_LAYER = {"forward_curve": "prices"}
+
 # Crush yield factors per MT of beans, by named set. The board set is imported
 # from analysis/spreads.py rather than restated: M7 #149 established that one
 # crush engine serves every market and only the yields, FX and the kind-label
@@ -73,13 +92,19 @@ CRUSH_YIELD_SETS = {
 # genuinely different animals and collapsing them into one "price" label is the
 # easiest way to make the product dishonest, so the set is closed and a typo
 # fails the build rather than shipping an unlabelled leg.
-QUOTE_KINDS = frozenset({
-    "board",                # traded exchange settlement (CBOT, DCE)
-    "board_last_traded",    # traded, but last-traded rather than settlement (SAFEX)
-    "physical",             # cash/spot assessment (CEPEA, mandi)
-    "administered",         # official minimum export value (Argentina, Ley 21.453)
-    "weekly_assessment",    # weekly physical assessment (EC Oilseeds Observatory)
-})
+#
+# Derived from `pricing.semantics` rather than restated, so a kind cannot exist
+# on the site without a decision about what sort of number it is:
+#
+#   board              CBOT/DCE via yfinance and akshare — a *delayed daily
+#                      close*, not the exchange's settlement. Neither provider
+#                      publishes settlements and neither claims to, so nothing
+#                      on this site may call one a settlement.
+#   board_last_traded  traded, but the last print of the session (SAFEX)
+#   physical           cash/spot assessment (CEPEA, mandi)
+#   administered       official minimum export value (Argentina, Ley 21.453)
+#   weekly_assessment  weekly physical assessment (EC Oilseeds Observatory)
+QUOTE_KINDS = frozenset(QUOTE_KIND_PRICE_TYPE)
 
 CADENCES = frozenset({"daily", "weekly", "monthly"})
 
@@ -180,11 +205,35 @@ class Source:
     @property
     def max_age_days(self) -> int:
         """The layer's own recency budget — the same one the pipeline grades on."""
-        return config.LAYER_MAX_DATA_AGE_DAYS.get(self.layer, DEFAULT_MAX_AGE_DAYS)
+        layer = _AGE_BUDGET_LAYER.get(self.layer, self.layer)
+        return config.LAYER_MAX_DATA_AGE_DAYS.get(layer, DEFAULT_MAX_AGE_DAYS)
 
     @property
     def is_price(self) -> bool:
         return self.unit in PRICE_UNITS
+
+    @property
+    def price_type(self) -> PriceType | None:
+        """What sort of number this source publishes.
+
+        ``None`` only where there is no price at all (a tonnage, a temperature).
+        Every price leg has one, because `load_markets` refuses a price leg with
+        no `quote_kind` and every `quote_kind` is classified.
+        """
+        if self.quote_kind is None:
+            return None
+        return price_type_for_quote_kind(self.quote_kind)
+
+    @property
+    def kind_label(self) -> str | None:
+        """The chip a page shows. Names the animal, not just the venue."""
+        return None if self.quote_kind is None else quote_kind_label(self.quote_kind)
+
+    @property
+    def price_caveat(self) -> str | None:
+        """What a reader is owed beside this number."""
+        price_type = self.price_type
+        return None if price_type is None else price_type.caveat
 
     def to_usd_mt(self, value: float | None, key: str, fx: float | None) -> float | None:
         """Convert one stored number to USD/MT, or None when it cannot be.
@@ -214,9 +263,17 @@ class Source:
 
 @dataclass(frozen=True)
 class Crush:
-    """Crush legs for one market. ``kind`` is rendered on the block, always."""
+    """Crush legs for one market. ``kind`` is rendered on the block, always.
+
+    ``contracts`` says what the legs structurally *are* — a named delivery
+    month, a continuous main-contract series, a physical assessment or an
+    administered value. Required, never defaulted: the CBOT block was three
+    provider front-month series rendered in the same shape as a contract you
+    could place an order in, and no field on the descriptor said otherwise.
+    """
 
     kind: str
+    contracts: str
     yield_set: str
     table: str
     date_column: str
@@ -380,9 +437,9 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
     if quote_kind is None and raw["unit"] in PRICE_UNITS:
         raise ValueError(
             f"market {slug!r} {block} is a price leg (unit {raw['unit']!r}) and declares no "
-            "quote_kind — a board settlement, a physical bid and an administered minimum "
-            "are different animals and every surface that renders one must be able to say "
-            "which (M3 #145 constraint 4)"
+            "quote_kind — a delayed board close, a physical bid and an administered "
+            "minimum are different animals and every surface that renders one must be "
+            "able to say which (M3 #145 constraint 4)"
         )
     headline = raw.get("headline_key")
     if headline is not None and headline not in keys:
@@ -434,7 +491,7 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
 
 def _crush(raw: dict, *, slug: str) -> Crush:
     missing = {
-        "kind", "yield_set", "table", "date_column", "key_column", "legs",
+        "kind", "contracts", "yield_set", "table", "date_column", "key_column", "legs",
         "value_column", "unit",
     } - raw.keys()
     if missing:
@@ -452,8 +509,14 @@ def _crush(raw: dict, *, slug: str) -> Crush:
     legs = dict(raw["legs"])
     if set(legs) != {"bean", "oil", "meal"}:
         raise ValueError(f"market {slug!r} crush legs must be exactly bean/oil/meal, got {sorted(legs)}")
+    if raw["contracts"] not in CONTRACT_BASIS_BY_DESCRIPTOR:
+        raise ValueError(
+            f"market {slug!r} crush contracts {raw['contracts']!r} not in "
+            f"{sorted(CONTRACT_BASIS_BY_DESCRIPTOR)}"
+        )
     return Crush(
         kind=raw["kind"],
+        contracts=raw["contracts"],
         yield_set=raw["yield_set"],
         table=raw["table"],
         date_column=raw["date_column"],
@@ -556,9 +619,9 @@ def _ledger_leg(leg_id: str, markets: dict[str, Market]) -> LedgerLeg:
     if source.quote_kind is None:
         raise ValueError(
             f"ledger leg {leg_id!r} reads {raw['market']}.{raw['block']}, which declares no "
-            "quote_kind — a board settlement, a physical bid and an administered minimum sit "
-            "in one USD/MT column on this block and an unlabelled one reads as whatever its "
-            "neighbours are (M3 #145 constraint 4)"
+            "quote_kind — a delayed board close, a physical bid and an administered minimum "
+            "sit in one USD/MT column on this block and an unlabelled one reads as whatever "
+            "its neighbours are (M3 #145 constraint 4)"
         )
     if source.cadence != "daily":
         raise ValueError(

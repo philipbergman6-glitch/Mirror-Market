@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.markets import Market
+from pricing.semantics import price_type_for_quote_kind, quote_kind_label
 
 STATE_OK = "ok"          # we have the data and it is current
 STATE_EMPTY = "empty"    # a source exists, but produced nothing usable today
@@ -78,10 +79,27 @@ class Block:
                 f"block {self.id!r} is {self.state!r} with no reason — every empty state "
                 "must name its reason (M1 #143 constraint 2)"
             )
+        if self.kind is not None:
+            # Resolved at construction, not at render. An unclassified quote
+            # kind reaching `kind_label` would raise mid-template and be caught
+            # by the block's own failure isolation, which turns "nobody said
+            # what sort of number this is" into a generic empty state.
+            price_type_for_quote_kind(self.kind)
 
     @property
     def is_ok(self) -> bool:
         return self.state == STATE_OK
+
+    @property
+    def kind_label(self) -> str | None:
+        """The chip's words — the *price type*, not just the venue.
+
+        ``board`` on its own reads as the exchange's own settlement, which this
+        stack does not hold: CBOT and DCE arrive as delayed daily bars from a
+        consumer endpoint. The label says which, in one place, for every block
+        header on every market page.
+        """
+        return None if self.kind is None else quote_kind_label(self.kind)
 
 
 def _spec(block_id: str) -> tuple[int, str, str, str]:

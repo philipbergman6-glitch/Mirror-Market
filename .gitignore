@@ -23,7 +23,7 @@ data/storage/*.db
 data/storage/*.csv
 data/storage/*.json
 
-# Trusted-path reconciliation reports (scripts/reconcile_magyp_fob.py).
+# Trusted-path reconciliation reports (scripts/reconcile_*.py).
 # Kept as a CI artifact for the evaluation window, not as repo history —
 # a daily JSON commit would be pure noise in data/.
 data/reconciliation/
@@ -61,6 +61,27 @@ data/reference/trial/sessions/*.yml
 data/reference/trial/sessions/*.yaml
 data/reference/trial/days/*.yml
 data/reference/trial/days/*.yaml
+
+# Phase 6 — the client's own book. Positions, fills, clearing statements, option
+# quotes and the broker column-mapping profiles that name their broker. These are
+# the only records in this repository that belong to a client rather than to a
+# public data source, and a published book is front-runnable. They are YAML/CSV
+# files rather than tables for exactly the reason the trial records are: every
+# table here round-trips through data/history/*.csv, which is committed to this
+# public repository, so a positions table would publish the book by construction.
+# The READMEs stay tracked; no record does.
+data/reference/positions/*.yml
+data/reference/positions/*.yaml
+data/reference/positions/*.csv
+data/reference/options/*.yml
+data/reference/options/*.yaml
+data/reference/options/*.csv
+data/reference/clearing/*.yml
+data/reference/clearing/*.yaml
+data/reference/clearing/*.csv
+data/reference/import_profiles/*.yml
+data/reference/import_profiles/*.yaml
+data/reference/import_profiles/*.csv
 
 # Concurrent-session git worktrees (each is its own checkout, never content)
 .worktrees/

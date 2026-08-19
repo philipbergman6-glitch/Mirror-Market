@@ -37,6 +37,7 @@ from typing import Any
 from analysis.futures.domain import METHOD_VERSION, fingerprint
 from analysis.futures.hedge import HedgeProposal
 from analysis.futures.scenarios import ScenarioResult
+from pricing.policy import require_hedgeable
 
 NOT_ROUTED_BANNER = "PROPOSAL — NOT ROUTED"
 
@@ -151,7 +152,14 @@ def build_ticket(
     ``generated_at`` is passed in rather than read from the clock so the
     function stays pure and testable; the ticket id deliberately excludes it,
     because two tickets for the same trade are the same trade.
+
+    Asked a third time, after ``size_leg`` and ``build_hedge``, because this is
+    where an instrument stops being a calculation and becomes a line a person
+    reads off and phones in.
     """
+    for leg in proposal.legs:
+        require_hedgeable(leg.quote, calculation="build_ticket")
+
     lines = tuple(
         TicketLine(
             instrument=leg.contract.symbol,

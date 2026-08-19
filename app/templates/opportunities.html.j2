@@ -472,8 +472,9 @@
   </div>
   <div class="sub">Confidence, scored</div>
   {% for c in s.data.confidence_scores %}
-  <div class="kv"><span class="k">{{ c.key }}</span><span class="v">{{ '%.0f'|format(c.score) }}</span></div>
+  <div class="kv"><span class="k">{{ c.key|replace('_', ' ') }}</span><span class="v">{{ '%.0f'|format(c.score) }}</span></div>
   {% endfor %}
+  {% if s.data.confidence_note %}<div class="miss">{{ s.data.confidence_note }}</div>{% endif %}
   <div class="sub">What this page will not do</div>
   <div class="miss">{{ s.data.no_invention }}</div>
   <div class="miss">{{ s.data.no_routing }}</div>
