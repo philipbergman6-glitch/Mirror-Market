@@ -105,12 +105,20 @@ jobs:
       - name: Reconcile MAGyP FOB (v1 vs trusted)
         run: python scripts/reconcile_magyp_fob.py
 
-      - name: Upload reconciliation report
+      # DT-16. Runs whatever MAGyP did (`if: !cancelled()`): the two datasets
+      # are independent migrations, and skipping the benchmark report because
+      # an Argentine circular diverged would hide the evidence the CBOT
+      # read-path switch is waiting on.
+      - name: Reconcile CBOT named contracts (v1 vs trusted)
+        if: ${{ !cancelled() }}
+        run: python scripts/reconcile_cbot_benchmarks.py
+
+      - name: Upload reconciliation reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: magyp-reconciliation
-          path: data/reconciliation/magyp_fob.json
+          name: trusted-reconciliation
+          path: data/reconciliation/
           if-no-files-found: warn
 
   build-deploy:
@@ -236,6 +244,27 @@ jobs:
           done
           echo "::error::history snapshot push failed after 3 attempts"
           exit 1
+
+      # The fast refresh (refresh-prices.yml) fetches three layers and reads
+      # the other twenty-six from whatever the database already holds. On a
+      # fresh runner that is only what data/history/*.csv carries, which is
+      # the snapshot-only tables and nothing else — so without this cache a
+      # fast refresh would render a site missing PSD, weather, COT and crop
+      # progress entirely. That candidate is caught and refused by the
+      # regression gate either way; the cache is what makes the fast path
+      # *useful* rather than merely safe.
+      #
+      # Saved after the pipeline and the smoke, so a cached database is one
+      # that produced a promotable edition. Keyed by run id with a prefix
+      # restore-key, because cache entries are immutable: a fixed key would
+      # pin the first day's database forever.
+      - name: Cache the populated database for the fast refresh
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/storage/mirror_market.db
+          key: mirror-market-db-${{ github.run_id }}
 
       - name: Install Chrome for viewport smoke checks
         if: ${{ !cancelled() && steps.generate_site.outcome == 'success' }}

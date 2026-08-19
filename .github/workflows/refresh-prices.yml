@@ -1,0 +1,145 @@
+name: Refresh Prices
+
+# The fast path. It fetches three layers — prices, currencies, forward_curve —
+# and republishes the site from them plus whatever the restored database
+# already holds. Everything else about it is the daily build's code: same
+# settlement guard, same cleaners, same freshness grading, same promotion
+# contract. See LATENCY.md.
+#
+# WHY A SECOND SCHEDULED BUILD AT ALL
+#
+# The daily build is scheduled at 19:00 UTC and lands 20:00-24:00 UTC after
+# GitHub's observed scheduler delay. That window straddles two closes it
+# cannot reliably be on the right side of:
+#
+#   FX          the bar labelled D closes 17:00 New York = 21:00 UTC in EDT,
+#               22:00 UTC in EST. A build landing at 20:30 gets D-1 FX, and
+#               correctly so — the settlement guard drops the open bar.
+#   CEPEA       publishes day D's indicator after 21:01 UTC.
+#
+# So the single daily build publishes FX and the Brazilian physical leg a day
+# behind on any early landing. This run exists to close the FX half of that
+# gap: 21:30 UTC nominal, which after the same +64 to +298 minute scheduler
+# delay lands 22:34-02:28 UTC — past the FX close on both sides of US DST, and
+# a backstop for the board if the daily build landed early or failed.
+#
+# 21:30 rather than later is a two-sided choice. Earlier risks landing on the
+# EST close (22:00 UTC) with the bar barely finished; later pushes the board's
+# settlement-to-fetch interval past its six-hour objective for nothing, since
+# FX is already covered.
+#
+# It also depends on the settlement-guard fix shipped alongside it. This run
+# lands at 17:34-21:28 Chicago, and the CME overnight session opens 19:00 CT
+# carrying the NEXT trade date. Under the old guard — "has Chicago settled?
+# then keep everything" — the later landings would have stored that opening
+# bar as the day's close. The rule is now "drop every bar after the newest
+# finished session", which is what makes this slot safe at all.
+#
+# It deliberately does NOT re-scrape the physical origin legs. Those are
+# scrapers against unfriendly upstreams and doubling their request rate
+# trades reliability for freshness (the 2026-08-11 data.gov.in throttle
+# blackout is the standing example). CEPEA staying D-1 is a known, stated
+# product latency, not an oversight — LATENCY.md says so plainly.
+
+on:
+  schedule:
+    - cron: '30 21 * * 1-5'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Same group as the daily build: two runs must never call deploy-pages at
+# once. cancel-in-progress is FALSE here — a fast refresh that is superseded
+# has nothing to hand over, and cancelling the daily build for a price
+# refresh would trade twenty-six layers for three.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # A miss is not a failure. The refresh still runs, still generates, and
+      # is then refused by the regression gate below because its coverage is
+      # thinner than the published edition's — which is the correct outcome
+      # and leaves the live site untouched.
+      - name: Restore the database from the daily build
+        id: db_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/storage/mirror_market.db
+          key: mirror-market-db-
+          restore-keys: |
+            mirror-market-db-
+
+      - name: Report cache state
+        run: |
+          if [[ "${{ steps.db_cache.outputs.cache-matched-key }}" == "" ]]; then
+            echo "::warning::no cached database — this refresh will be refused by the regression gate"
+          else
+            echo "restored ${{ steps.db_cache.outputs.cache-matched-key }}"
+          fi
+
+      # Pipeline + generate + both gates, in one script so the gates cannot be
+      # reordered or skipped by editing YAML. Exit codes: 1 pipeline, 2
+      # generation, 3 promotion contract, 4 regression.
+      - name: Fast refresh and gate the candidate
+        id: refresh
+        run: |
+          python scripts/refresh_prices.py \
+            --output-dir "$RUNNER_TEMP/mirror-market-candidate" \
+            --public-manifest "${{ vars.PAGES_URL || 'https://philipbergman6-glitch.github.io/Mirror-Market' }}/manifest.json"
+
+      - name: Install Chrome for viewport smoke checks
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Verify candidate promotion contract
+        run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/mirror-market-candidate/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Smoke the deployed public artifact
+        run: python scripts/smoke_site.py --url "${{ steps.deployment.outputs.page_url }}" --browser
+
+      # Re-cache so the next fast refresh builds on this one rather than on
+      # the morning's daily build. Without it, two refreshes in a day would
+      # each start from the same stale snapshot.
+      - name: Re-cache the database
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/storage/mirror_market.db
+          key: mirror-market-db-${{ github.run_id }}
+
+      - name: Report the published edition's latency
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          python scripts/latency_report.py \
+            --manifest "${{ steps.deployment.outputs.page_url }}manifest.json"
