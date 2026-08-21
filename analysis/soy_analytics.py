@@ -83,12 +83,14 @@ SOY_LEGS = ["Soybeans", "Soybean Oil", "Soybean Meal"]
 # Minimum observations before 1Y basis distribution stats are reported.
 _BASIS_STATS_MIN_OBS = 20
 
-# Key growing regions for soy
+# Key growing regions for soy — the soy subset of config.GROWING_REGIONS,
+# which also holds rapeseed, sunflower, canola and palm pins (M14 #207). A
+# test pins every name here to a live region.
 SOY_WEATHER_REGIONS = [
-    "US Midwest (Iowa)", "US Illinois",
-    "Brazil Mato Grosso", "Brazil Parana",
+    "US Midwest (Iowa)", "US Illinois", "US Nebraska",
+    "Brazil Mato Grosso", "Brazil Parana", "Brazil Rio Grande do Sul",
     "Argentina Pampas", "Argentina Cordoba",
-    "Paraguay Chaco",
+    "Paraguay Alto Parana",
     "India Madhya Pradesh", "India Maharashtra",
     "China Heilongjiang",
     "South Africa Free State", "South Africa Mpumalanga",
@@ -110,7 +112,7 @@ EMERGING_MARKET_WEATHER = {
     "South Africa": ["South Africa Free State", "South Africa Mpumalanga"],
     "India": ["India Madhya Pradesh", "India Maharashtra"],
     "Nigeria": ["Nigeria Benue", "Nigeria Kaduna"],
-    "Brazil": ["Brazil Mato Grosso", "Brazil Parana"],
+    "Brazil": ["Brazil Mato Grosso", "Brazil Parana", "Brazil Rio Grande do Sul"],
 }
 
 

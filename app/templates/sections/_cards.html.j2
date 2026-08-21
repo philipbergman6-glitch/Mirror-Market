@@ -32,3 +32,5 @@
 {% macro signed(value, places=1) %}{% if value is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
 
 {% macro pct(value, places=1) %}{% if value is none %}<span class="muted">—</span>{% else %}{{ '{:+.{}f}'.format(value, places) }}%{% endif %}{% endmacro %}
+
+{% macro num(value, places=0) %}{% if value is none %}<span class="muted">n/a</span>{% else %}{{ '{:,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}

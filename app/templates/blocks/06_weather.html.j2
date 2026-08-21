@@ -1,12 +1,16 @@
-{# 06 Weather — this market's own growing regions, from the registry. #}
+{# 06 Weather — this market's own growing regions, from the registry.
+   Each card carries its ROLE (why this pin is on this page) and, when the
+   crop is not in the ground, an out-of-season tag — M14 #207 keeps the
+   reading and tags it rather than hiding or collapsing the card. #}
 {% import 'blocks/_macros.html.j2' as f %}
 {% set d = block.data %}
 <div class="grid grid-{{ [d.regions|length, 3]|min }}">
   {% for r in d.regions %}
   <div class="mc">
-    <div class="mc-label">{{ r.region }}</div>
+    <div class="mc-label">{{ r.region }}{% if r.season_note %} <span class="kind">off-season</span>{% endif %}</div>
     <div class="mc-val">{{ f.num(r.temp_max, 0) }}<small class="muted">°C max</small></div>
     <div class="mc-delta muted">{{ f.num(r.precip_mm, 1) }} mm · 7d {{ f.num(r.precip_7d_mm, 0) }} mm</div>
+    <div class="caption" style="margin-bottom:2px;">{{ r.role }}{% if r.season_note %} · {{ r.season_note }}{% endif %}</div>
     {{ f.asof(r.as_of, r.age_days) }}
   </div>
   {% endfor %}

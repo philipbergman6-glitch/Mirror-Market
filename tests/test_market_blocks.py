@@ -19,6 +19,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 import config
@@ -486,6 +487,26 @@ def test_weather_alerts_use_the_configured_thresholds(seeded, registry):
     assert weather.data["alerts"][0]["alert"] == "Extreme heat"
 
 
+def test_every_weather_card_carries_the_role_that_puts_it_on_this_page(seeded, registry):
+    """M14 #207: Dalian's second pin is in Brazil and Europe's are rapeseed —
+    an unlabelled card reads as this market's own soy crop."""
+    weather = _block(_build("cbot", seeded, registry), "weather")
+    card = weather.data["regions"][0]
+    assert card["role"] == registry["cbot"].weather_roles[card["region"]]
+
+
+def test_an_out_of_season_card_is_tagged_not_hidden(seeded, registry):
+    """August in Mato Grosso: nothing in the ground. The reading still
+    renders — the tag prices it (M14 #207)."""
+    seeded.conn.execute(
+        "INSERT INTO weather (region, Date, temp_max, temp_min, precipitation) "
+        "VALUES (?,?,?,?,?)", ("Brazil Mato Grosso", _day(0), 30.0, 18.0, 5.0))
+    weather = _block(_build("brazil", seeded, registry), "weather")
+    card = next(r for r in weather.data["regions"] if r["region"] == "Brazil Mato Grosso")
+    assert card["season_note"] == "out of season — planting ~Oct"
+    assert card["temp_max"] == 30.0
+
+
 def test_supply_demand_is_stamped_annual_and_carries_yoy(seeded, registry):
     sd = _block(_build("cbot", seeded, registry), "supply_demand")
     assert sd.state == "ok"
@@ -747,3 +768,95 @@ def test_both_oil_panels_render_side_by_side():
     assert "Soy Oil vs Palm Oil" in html
     assert "Soy Oil vs CZCE Rapeseed Oil" in html
     assert html.count("Rapeseed − soy oil spread") == 1
+
+
+# ---------------------------------------------------------------------------
+# Competing-oil weather strip (M14 #207 / M24 #271)
+# ---------------------------------------------------------------------------
+def _weather_frame(temp_max: float, precip: float) -> pd.DataFrame:
+    return pd.DataFrame({
+        "Date": [pd.Timestamp("2026-08-10"), pd.Timestamp("2026-08-11")],
+        "temp_max": [temp_max - 1, temp_max],
+        "temp_min": [18.0, 18.0],
+        "precipitation": [precip, precip],
+        "is_forecast": [0, 0],
+    })
+
+
+@pytest.fixture
+def stub_weather(monkeypatch: pytest.MonkeyPatch):
+    """Palm belt hot, prairies mild — the strip's two lines, deterministically."""
+    import pipeline.query as query
+
+    readings = {
+        "Indonesia Riau (Sumatra)": _weather_frame(41.0, 2.0),
+        "Malaysia Sabah (Borneo)": _weather_frame(31.0, 5.0),
+        "Canada Saskatchewan (Saskatoon)": _weather_frame(24.0, 3.0),
+        "Canada Alberta (central)": _weather_frame(23.0, 4.0),
+    }
+    monkeypatch.setattr(
+        query, "read_weather",
+        lambda region=None: readings.get(region, pd.DataFrame()).copy(),
+    )
+
+
+def test_the_headline_carries_a_competing_oil_weather_strip(stub_weather):
+    """Palm and canola price legs render on the four-oil board and nowhere
+    else, so M14's standing rule puts their weather there too."""
+    result = relative_value_section({"oil_vs_palm": _oil_pair()})
+    belts = result["data"]["competing_oil_weather"]["belts"]
+    assert [b["belt"] for b in belts] == ["Palm", "Canola prairies"]
+
+    palm = belts[0]
+    assert [r["region"] for r in palm["regions"]] == [
+        "Indonesia Riau (Sumatra)", "Malaysia Sabah (Borneo)",
+    ]
+    # 41C is over WEATHER_EXTREME_HEAT_C.
+    assert palm["regions"][0]["alert"] == "Extreme heat"
+    assert palm["regions"][0]["as_of"] == "2026-08-11"
+
+
+def test_the_strip_states_the_palm_yield_lag(stub_weather):
+    """Palm weather does not price palm today — the strip must say so, or the
+    reader prices a 9-to-12-month lag as this week's news."""
+    result = relative_value_section({"oil_vs_palm": _oil_pair()})
+    html = _render_section("relative_value", result["data"])
+    assert "Competing-Oil Weather" in html
+    assert "9–12 month" in html
+    assert "Indonesia Riau (Sumatra)" in html
+    # A strip, not region cards — M2 #144 took those off the headline.
+    assert "mc-val" not in html.split("Competing-Oil Weather")[1].split("<hr")[0]
+
+
+def test_a_missing_pin_is_named_rather_than_dropped(monkeypatch: pytest.MonkeyPatch):
+    """A belt line quietly rendered from one pin reads as a covered belt."""
+    import pipeline.query as query
+
+    monkeypatch.setattr(
+        query, "read_weather",
+        lambda region=None: (
+            _weather_frame(30.0, 2.0)
+            if region == "Indonesia Riau (Sumatra)" else pd.DataFrame()
+        ),
+    )
+    result = relative_value_section({"oil_vs_palm": _oil_pair()})
+    palm = result["data"]["competing_oil_weather"]["belts"][0]
+    assert palm["missing"] == ["Malaysia Sabah (Borneo)"]
+
+    html = _render_section("relative_value", result["data"])
+    assert "no observed rows for Malaysia Sabah (Borneo)" in html
+
+
+def test_the_strip_says_nothing_when_the_weather_layer_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Its own read, its own failure — the oil panels survive it."""
+    import pipeline.query as query
+
+    def boom(region=None):
+        raise sqlite3.OperationalError("no such table: weather")
+
+    monkeypatch.setattr(query, "read_weather", boom)
+    result = relative_value_section({"oil_vs_palm": _oil_pair()})
+    assert "competing_oil_weather" not in result["data"]
+    assert result["data"]["oil_vs_palm"]

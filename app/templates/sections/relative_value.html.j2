@@ -89,6 +89,31 @@
 {% endif %}
 {% endfor %}
 
+{# Competing-oil weather (M14 #207): one line per belt beside the four-oil
+   board, because palm and canola price legs render here and nowhere else.
+   A strip — no region cards on the headline. #}
+{% if s.competing_oil_weather %}
+<hr class="divider"><div class="subhdr">Competing-Oil Weather</div>
+{% for b in s.competing_oil_weather.belts %}
+{% set alerting = b.regions | selectattr('alert') | list %}
+<div class="sig">
+  <span class="badge {{ 'badge-warning' if alerting else 'badge-info' }}">{{ b.belt }}</span>
+  <span class="sig-commodity">{{ b.leg }}</span>
+  <span>
+    {%- for r in b.regions -%}
+    {%- if not loop.first %} · {% endif -%}
+    {{ r.region }} {{ c.num(r.temp_max, 0) }}°C / {{ c.num(r.precip_mm, 1) }} mm
+    {%- if r.alert %} <span class="down">{{ r.alert }}</span>{% endif -%}
+    {%- if r.season_note %} <span class="kind">off-season</span>{% endif -%}
+    {%- if r.as_of %} <span class="muted">({{ r.as_of }})</span>{% endif -%}
+    {%- endfor -%}
+    {%- if b.missing %}{% if b.regions %} · {% endif %}<span class="muted">no observed rows for {{ b.missing | join(', ') }}</span>{% endif -%}
+  </span>
+</div>
+<div class="caption">{{ b.note }}</div>
+{% endfor %}
+{% endif %}
+
 {% if s.bean_corn %}
 <hr class="divider"><div class="subhdr">Soybean/Corn Ratio (acreage signal)</div>
 <div class="grid grid-2">
