@@ -15,8 +15,21 @@
     moves    both, side by side, with an FX tag when the currency did the work
     spread   vs the pinned leg, on a session they SHARE (market pages only)
     state    repriced / no print since / dark — silence never reads as flat
+
+  M21 #250 adds the row drill-down, gated on `d.has_drilldown` — an explicit
+  flag from the builder, never inferred from `has_spread`. The headline section
+  passes it False and is byte-for-byte what it was: its rows are markets, the
+  market cell is already the link, and an expansion would compete with the one
+  affordance that row exists to offer.
+
+  Two halves, deliberately split:
+    * the range band is part of the ROW and rendered here, server-side. With
+      script off the ledger keeps every number it states today, plus the band.
+    * the expansion is a hidden sibling row, drawn client-side on first open.
+      Never a modal — this table's claim is comparative, and a modal covers the
+      rows being compared against.
 #}
-{% import 'blocks/_macros.html.j2' as f %}
+{% import 'blocks/_macros.html.j2' as f %}{% set cols = 8 if d.has_spread else 7 %}
 <div class="table-scroll">
 <table class="dtable ledger">
   <thead>
@@ -33,12 +46,14 @@
   </thead>
   <tbody>
     {% for row in d.rows %}
-    <tr class="lrow{% if row.is_own %} own{% endif %}{% if row.is_reference %} ref{% endif %}">
+    {%- set drill = row.drill if d.has_drilldown else none %}{%- set panel_id = 'drill-' ~ (row.leg_id or loop.index)|replace(':', '-') %}
+    <tr class="lrow{% if row.is_own %} own{% endif %}{% if row.is_reference %} ref{% endif %}{% if drill %} has-drill{% endif %}"{% if drill %} data-panel="{{ panel_id }}"{% endif %}>
       {#- On a market page the row is a LEG, so the leg leads and the link says
           which page explains it — `us_gulf:cif` lands on CBOT, which has no
           page of its own (M12 #161 decision 1). On the headline the row is a
           MARKET, so the market leads and the leg rides underneath. -#}
       <td>
+        {%- if drill %}<button type="button" class="drill-toggle" aria-expanded="false" aria-controls="{{ panel_id }}"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show {{ row.label }} history</span></button>{% endif %}
         {% if d.has_spread %}
         <a href="{{ root }}{{ row.href }}">{{ row.label }}</a>
         <div class="caption">on the {{ row.market_name }} page{% if row.is_own %} · pinned{% endif %}{% if row.is_reference %} · reference, not a peer{% endif %}</div>
@@ -48,7 +63,22 @@
         {% endif %}
       </td>
       <td>{% if row.kind %}<span class="kind">{{ row.kind_label or row.kind|replace('_', ' ') }}</span>{% endif %}</td>
-      <td class="num strong">{{ f.usd(row.usd_mt) }}</td>
+      <td class="num strong">{{ f.usd(row.usd_mt) }}
+        {%- if d.has_drilldown and row.band and row.band.since_label %}
+        {#- Variant C's band: "high in its own range" is often the whole
+            question, so it is stated in the collapsed row rather than behind a
+            click. Under eight prints it says how few there are instead of
+            drawing a range across two points, which would invent one. -#}
+        {% if row.band.has_range %}
+        <div class="range-band" title="range of this leg's prints over the last {{ d.drilldown_default_days }} days">
+          <span class="rb-track"><span class="rb-tick" style="left:{{ (row.band.position * 100)|round(1) }}%"></span></span>
+          <span class="rb-text">{{ f.num(row.band.low, 0) }}–{{ f.num(row.band.high, 0) }} since {{ row.band.since_label }}</span>
+        </div>
+        {% else %}
+        <div class="range-band no-range"><span class="rb-text">{{ row.band.count }} obs since {{ row.band.since_label }} — no range yet</span></div>
+        {% endif %}
+        {%- endif -%}
+      </td>
       <td class="num">
         {%- if row.has_home_quote and row.home_value is not none -%}
         {{ f.num(row.home_value, 2) }} <span class="muted">{{ row.home_unit }}</span>
@@ -79,6 +109,14 @@
         <div class="caption">{{ row.state_detail }}</div>
       </td>
     </tr>
+    {% if drill %}
+    <tr class="drill-row" id="{{ panel_id }}" hidden>
+      <td colspan="{{ cols }}">
+        <div class="drill" data-leg="{{ row.leg_id }}"></div>
+        <script type="application/json" class="drill-data">{{ drill|tojson }}</script>
+      </td>
+    </tr>
+    {% endif -%}
     {% endfor %}
   </tbody>
 </table>

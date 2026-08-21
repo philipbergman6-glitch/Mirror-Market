@@ -483,6 +483,22 @@ def test_every_page_is_under_the_size_budget(rendered):
         )
 
 
+def test_every_market_page_is_under_the_tighter_market_budget(rendered):
+    """M21 #250 — the ledger drill-down ships its series inline on these pages.
+
+    They ran 13–19 KB before it, against a 1.5 MB site budget that would never
+    notice them tripling. Inline series grow silently; this is the gate that
+    makes that growth fail a build rather than a page load.
+    """
+    out, _ = rendered
+    for path in (out / "markets").rglob("*.html"):
+        size = path.stat().st_size
+        assert size <= generate_site.MARKET_PAGE_SIZE_BUDGET_BYTES, (
+            f"{path.relative_to(out)} is {size / 1024:.0f} KB, over the "
+            f"{generate_site.MARKET_PAGE_SIZE_BUDGET_BYTES / 1024:.0f} KB market-page budget"
+        )
+
+
 def test_url_is_stable_across_tier_changes(site_db, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A brief is different contents at the same address, never a 404 (M8 c3)."""
     monkeypatch.setattr(generate_site, "_render_headline", lambda d, nav, **k: _stub_page(d / "index.html"))

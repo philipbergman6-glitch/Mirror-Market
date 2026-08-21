@@ -67,6 +67,12 @@ TEMPLATE_DIR = PROJECT_ROOT / "app" / "templates"
 # budget that is not tested is a wish.
 PAGE_SIZE_BUDGET_BYTES = 1_500_000
 
+# Market pages get a much tighter one (M21 #250). They ran 13–19 KB before the
+# ledger drill-down shipped its series inline, and inline series are exactly the
+# thing that grows without anyone noticing — the prototype went 26 KB → 89 KB on
+# five unclipped legs. Asserted in tests/test_site_contract.py.
+MARKET_PAGE_SIZE_BUDGET_BYTES = 150_000
+
 TEMPLATE_BY_TIER = {
     TIER_PAGE: "market_page.html.j2",
     TIER_BRIEF: "market_brief.html.j2",

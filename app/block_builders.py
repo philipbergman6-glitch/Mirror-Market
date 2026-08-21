@@ -87,6 +87,31 @@ CRUSH_RANGE_MIN_OBS = 20
 # the currency is doing work the reader would otherwise credit to the market.
 FX_DIVERGENCE_PP = 0.1
 
+# ---- the row drill-down (M21 #250) ----------------------------------------
+# Its own budget, declared beside the others. `app/sections.clip()` does NOT fit
+# here: it is `frame.tail(504)` on a DataFrame, sized for the headline's Plotly
+# figures, and these series are lists of tuples over a 90-day default window.
+# Reusing it would either raise on a list or ship 504 points per leg.
+LEDGER_DRILLDOWN_MAX_OBS = 260
+
+# 30d / 90d / 1y — never "all". A control labelled "all" beside a series capped
+# at 260 observations is a lie about the data, and what we do and do not know is
+# this block's entire subject.
+LEDGER_DRILLDOWN_WINDOW_DAYS = (30, 90, 365)
+LEDGER_DRILLDOWN_DEFAULT_DAYS = 90
+
+# The sparse-history rule, by OBSERVATION COUNT on the leg and never by age of
+# the source: the snapshot legs are dense-but-short while a weekly leg is
+# sparse-but-long, and only the count decides whether a shape can be read.
+#
+#   >= 8   line, plus a dot per observation
+#   3 – 7  dots only — a connecting line asserts a path between prints that was
+#          never observed, and on a source publishing one number a day with
+#          holes that assertion is the whole error
+#   < 3    no chart at all; the pane states the level and where history starts
+LEDGER_LINE_MIN_OBS = 8
+LEDGER_CHART_MIN_OBS = 3
+
 
 # ---------------------------------------------------------------------------
 # Shared reads
@@ -480,6 +505,7 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
             is_reference=leg.leg_id in ledger.reference_leg_ids,
             own_prints=own_prints if index else None,
             own_leg=ledger.own,
+            drilldown=True,
         )
         for index, leg in enumerate(ledger.legs)
     ]
@@ -498,12 +524,44 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
             row, leading_edge=leading_edge, today=ctx.today
         )
 
+    # M21 #250: the dashed overlay is drawn only where the ledger names a leg
+    # from another market. That is a structural read of the registry, not a
+    # per-market branch — India's ledger is two of its own state medians
+    # because no foreign bean is connected to a mandi by trade (#206), so there
+    # is no foreign leg to draw. Drawing one anyway would render the
+    # `policy_blocked` +66% as a gap that closes, the read #222 refused on the
+    # basis block. The *reason* is the ledger's own note and is not restated
+    # here: another single-market ledger could arrive for a different reason
+    # entirely, and this sentence would then be a false causal claim.
+    foreign = [leg for leg in ledger.legs if leg.market.slug != market.slug]
+    reference = _reference_payload(ledger.own, ctx, own_prints) if foreign else None
+    reference_note = None if foreign else (
+        f"No reference line: every leg on this ledger is {market.name}'s own, so there "
+        "is no second market to draw against — see the note below this table for why "
+        "this ledger names none."
+    )
+    fx_series = {}
+    for row in ordered:
+        pair = (row["drill"] or {}).get("fx_pair")
+        if pair and pair not in fx_series:
+            payload = _fx_payload(pair, ctx)
+            if payload is not None:
+                fx_series[pair] = payload
+
     return STATE_OK, "", {
         "rule": ledger.rule,
         "rule_statement": ledger.rule_statement,
         "note": ledger.note,
         "rows": ordered,
         "leading_edge": leading_edge,
+        "has_drilldown": True,
+        "reference": reference,
+        "reference_note": reference_note,
+        "fx_series": fx_series,
+        "today": ctx.today.isoformat(),
+        "drilldown_default_days": LEDGER_DRILLDOWN_DEFAULT_DAYS,
+        "line_min_obs": LEDGER_LINE_MIN_OBS,
+        "chart_min_obs": LEDGER_CHART_MIN_OBS,
         # M20 #236: a caption date the reader has to attribute by scanning is
         # half a fact — name the leg(s) that produced it. Plural because the
         # stack stores no time of day, so two legs on the leading date are
@@ -579,6 +637,9 @@ def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, 
     return STATE_OK, "", {
         "rows": rows,
         "leading_edge": leading_edge,
+        # M21 #250 left the headline alone: no pinned leg to overlay, and the
+        # market cell is already this row's affordance.
+        "has_drilldown": False,
         # On the headline the row is the market, so the market names the edge.
         "leading_edge_legs": [
             row["market_label"] for row in rows if row["as_of"] == leading_edge
@@ -629,6 +690,8 @@ def _headline_placeholder(market: Market) -> dict:
         "spread_usd_mt": None,
         "spread_as_of": None,
         "spread_note": None,
+        "drill": None,
+        "band": None,
     }
     if source is None:
         row["forced_state"] = (LEDGER_STATE_DARK, market.absent_reason("price"), True)
@@ -651,8 +714,16 @@ def _ledger_row(
     is_reference: bool,
     own_prints: list[tuple[date, float, int]] | None,
     own_leg,
+    drilldown: bool = False,
 ) -> dict:
-    """One ledger row, before its state pill is set (that needs the whole set)."""
+    """One ledger row, before its state pill is set (that needs the whole set).
+
+    ``drilldown`` is an explicit flag the caller passes, never inferred from
+    ``has_spread``: that is a statement about the spread column, and tying the
+    two together would couple two unrelated decisions. The headline passes
+    False — its rows are markets, the market cell is already the link, and an
+    expansion would compete with the one affordance that row exists to offer.
+    """
     source = leg.source
     owner = leg.market
     prints = ctx.leg_prints(leg)
@@ -691,6 +762,9 @@ def _ledger_row(
         "spread_usd_mt": None,
         "spread_as_of": None,
         "spread_note": None,
+        # M21 #250 — both None on the headline, by the flag above.
+        "drill": None,
+        "band": None,
     }
     if not prints:
         return row
@@ -729,7 +803,300 @@ def _ledger_row(
         row["spread_usd_mt"], row["spread_as_of"], row["spread_note"] = _spread(
             leg, prints, own_leg, own_prints, ctx
         )
+
+    if drilldown:
+        row["drill"] = _leg_drilldown(leg, ctx, prints)
+        row["band"] = _range_band(leg, ctx, prints, row["usd_mt"])
     return row
+
+
+def _short_date(when: date | None) -> str | None:
+    """``29 Jul`` — the ledger's own date vocabulary, no year, no leading zero."""
+    return None if when is None else when.strftime("%d %b").lstrip("0")
+
+
+def _drilldown_treatment(count: int) -> str:
+    """Which of the three sparse-history bands a count of *drawn points* falls in.
+
+    Drawn, not fetched: a print that could not be converted to USD/MT is not a
+    dot, so counting it would let an 8-dot "line" window render five dots — the
+    caption asserting a density the picture does not have.
+    """
+    if count >= LEDGER_LINE_MIN_OBS:
+        return "line"
+    if count >= LEDGER_CHART_MIN_OBS:
+        return "dots"
+    return "none"
+
+
+def _leg_points(leg, ctx: SiteContext, prints: list[tuple[date, float, int]]):
+    """One leg's prints, clipped to the widest window and then to the cap.
+
+    Returns ``(kept, total_inside_window)``. Clipping happens here, at build
+    time, because the payload ships inline in the page: the prototype went
+    26 KB → 89 KB carrying five legs unclipped.
+
+    Bounded at *both* ends. A future-dated row — a venue stamping a forward
+    date, a timezone slip in a fetcher — would otherwise be counted server-side
+    and dropped client-side, so the caption would claim one more observation
+    than the chart draws.
+    """
+    cutoff = ctx.today - _days(max(LEDGER_DRILLDOWN_WINDOW_DAYS))
+    inside = [point for point in prints if cutoff <= point[0] <= ctx.today]
+    return inside[-LEDGER_DRILLDOWN_MAX_OBS:], len(inside)
+
+
+def _rate_at_or_before(rates: list[tuple[date, float]], when: date) -> float | None:
+    """The newest rate on or before ``when`` — **None** where there is none.
+
+    Deliberately not ``SiteContext.fx_on``, which falls back to the oldest rate
+    it holds when a price predates FX coverage. That fallback converts a print
+    at a rate struck *after* it, which invariant 7 forbids ("converts at that
+    row's own date's FX rate or renders blank") and which a chart multiplies:
+    the same wrong rate applied to a run of old prints draws a stretch of
+    movement that is the currency's, attributed to the venue, on a picture that
+    reads as evidence. Blank, and the pane says how many were withheld.
+    """
+    prior = [rate for day, rate in rates if day <= when]
+    return prior[-1] if prior else None
+
+
+def _usd_at_each_date(
+    leg, ctx: SiteContext, points, *, places: int | None = 2
+) -> list[float | None]:
+    """Every observation converted at **its own date's** rate, else None.
+
+    Converting a historical series at today's rate produces a chart in which the
+    venue appears to have moved on days it did not — which is the exact error
+    the separate FX panel exists to expose, so making it here would be
+    self-defeating.
+
+    Only a ``home_per_mt`` leg needs a rate at all: ``to_usd_mt`` ignores the
+    ``fx`` argument for ``usd_per_bushel`` and ``native_exchange``, which are
+    unit conversions inside one currency.
+
+    ``places`` rounds the *payload*, which ships inline and where the third
+    decimal of a USD/MT price is bytes rather than information. The range band
+    passes ``None``: it is compared against the row's own unrounded level, and a
+    band rounded inwards can end a hair below the number sitting in it.
+    """
+    needs_rate = leg.source.unit == "home_per_mt"
+    rates = ctx.fx_series(leg.market.currency_pair) if needs_rate else []
+    out: list[float | None] = []
+    for day, value, _ in points:
+        rate = _rate_at_or_before(rates, day) if needs_rate else None
+        if needs_rate and rate is None:
+            out.append(None)
+            continue
+        usd = leg.source.to_usd_mt(value, leg.key, rate)
+        out.append(None if usd is None else (usd if places is None else round(usd, places)))
+    return out
+
+
+def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]]) -> dict | None:
+    """The inline expansion's payload for one leg — prints, never rows.
+
+    Sourced from ``leg_prints`` like the row above it, so a leg cannot end up
+    with a chart and a row that disagree. Points are **parallel arrays** keyed
+    off a single origin date rather than an array of objects: same numbers, a
+    third of the bytes, and the page ships this inline.
+    """
+    kept, _total = _leg_points(leg, ctx, prints)
+    if not kept:
+        return None
+
+    origin = kept[0][0]
+    usd = _usd_at_each_date(leg, ctx, kept)
+    home_unit = _home_unit(leg.source, leg.key, leg.market.home_currency)
+    # Two different questions, and collapsing them was a defect. Whether the
+    # venue's own number is a *second view* is `has_native_quote` — #230's
+    # shared answer, asked here rather than restated. Whether it is a second
+    # *currency* is narrower, and only that case has an FX component a panel
+    # could separate: CBOT's cents/bu is a second view in the same currency.
+    has_home_quote = leg.source.has_native_quote
+    has_second_currency = leg.source.unit == "home_per_mt"
+
+    windows = []
+    for days in LEDGER_DRILLDOWN_WINDOW_DAYS:
+        start = ctx.today - _days(days)
+        drawn = [
+            day for (day, _, _), value in zip(kept, usd, strict=True)
+            if day >= start and value is not None
+        ]
+        # Per window, never per leg: the cap bites the 1y window and leaves 30d
+        # untouched, so a leg-level note would print "the last 260 of 320"
+        # beside a count of 31 — two populations in one sentence.
+        in_window = len([point for point in prints if start <= point[0] <= ctx.today])
+        shown = len([day for day, _, _ in kept if day >= start])
+        withheld = shown - len(drawn)
+        windows.append({
+            "days": days,
+            "label": "1y" if days >= 365 else f"{days}d",
+            "count": len(drawn),
+            "treatment": _drilldown_treatment(len(drawn)),
+            # Where this window's drawing starts — NOT where the leg's history
+            # starts, which the cap and the window would both misreport.
+            "starts": drawn[0].isoformat() if drawn else None,
+            "starts_label": _short_date(drawn[0]) if drawn else None,
+            "truncated": in_window > shown,
+            "truncation_note": (
+                f"showing the last {shown} of {in_window} observations"
+                if in_window > shown else None
+            ),
+            "withheld_note": (
+                f"{withheld} print{'' if withheld == 1 else 's'} withheld: no "
+                f"{leg.market.currency_pair} rate on or before their date, and a "
+                "print converted at a later rate is the currency's move wearing "
+                "the venue's name"
+                if withheld else None
+            ),
+        })
+
+    return {
+        "leg_id": leg.leg_id,
+        "label": leg.label,
+        "origin": origin.isoformat(),
+        "d": [(day - origin).days for day, _, _ in kept],
+        "usd": usd,
+        # The venue's own print is NOT shipped. Both panes are drawn from `usd`
+        # and the rate; a home-currency array would be up to 260 numbers per leg
+        # inlined on the page and never drawn, which is the exact weight the
+        # build-time clip exists to keep off it. The unit still travels, because
+        # the FX pane's sentence names it.
+        "home_unit": home_unit,
+        "has_home_quote": has_home_quote,
+        "fx_pair": leg.market.currency_pair if has_second_currency else None,
+        "single_currency_note": None if has_second_currency else (
+            f"{leg.label} is quoted in USD/MT. There is no second currency between "
+            "the venue's print and the number in the row, so there is no FX "
+            "component to separate out — one quote, not two."
+            if leg.source.unit == "usd_per_mt" else
+            f"{leg.label} is quoted in {home_unit}, already a US dollar unit. The "
+            "USD/MT figure is a unit conversion, not a currency one, so there is "
+            "no FX component to separate out."
+        ),
+        # The oldest print this page reads at all — bounded by the layer's
+        # lookback, so it is stated as what we hold rather than as when the
+        # market began. Carries its year: this one reaches past the turn of the
+        # year by construction, and "17 Jul" beside a 90-day window reads as
+        # this year's.
+        "history_from": prints[0][0].isoformat() if prints else None,
+        "history_from_label": (
+            prints[0][0].strftime("%d %b %Y").lstrip("0") if prints else None
+        ),
+        "windows": windows,
+        "default_days": LEDGER_DRILLDOWN_DEFAULT_DAYS,
+    }
+
+
+def _range_band(leg, ctx: SiteContext, prints, current_usd: float | None) -> dict:
+    """The collapsed row's range band — ``352–378 since 29 Jul``.
+
+    Variant C's band, kept: for a buyer scanning five legs, "high in its own
+    range" is often the entire question, so it must not need a click. Rendered
+    server-side with the rest of the row (the expansion is the only client-side
+    part) — the page must not depend on script running to state a number.
+
+    Under ``LEDGER_LINE_MIN_OBS`` prints it reads ``4 obs since 06 Aug — no
+    range yet``: two points are not a range, and a band drawn across them
+    invents one.
+    """
+    start = ctx.today - _days(LEDGER_DRILLDOWN_DEFAULT_DAYS)
+    inside = [point for point in prints if start <= point[0] <= ctx.today]
+    # Count and date describe the same population: a print that could not be
+    # converted is not in the range, so it must not date the range either.
+    priced = [
+        (point[0], usd)
+        for point, usd in zip(
+            inside, _usd_at_each_date(leg, ctx, inside, places=None), strict=True
+        )
+        if usd is not None
+    ]
+    values = [usd for _, usd in priced]
+    since = priced[0][0] if priced else None
+    band = {
+        "count": len(values),
+        "since": since.isoformat() if since else None,
+        "since_label": _short_date(since),
+        "has_range": False,
+        "low": None,
+        "high": None,
+        "position": None,
+    }
+    if len(values) < LEDGER_LINE_MIN_OBS:
+        return band
+    low, high = min(values), max(values)
+    latest = current_usd if current_usd is not None else values[-1]
+    band.update({
+        "has_range": True,
+        "low": low,
+        "high": high,
+        # Where today's print sits in the band, clamped: the row's level is
+        # struck on the leg's own newest print, which is inside this window by
+        # construction, but a clamp is cheaper than a tick off the end of a bar.
+        "position": 0.5 if high == low else min(1.0, max(0.0, (latest - low) / (high - low))),
+    })
+    return band
+
+
+def _reference_payload(own_leg, ctx: SiteContext, own_prints) -> dict | None:
+    """The page's own pinned leg, for the dashed overlay under every other row.
+
+    CEPEA on Brazil, No.2 on Dalian — never CBOT everywhere, which is the
+    assumption M4 found wrong and M12 encoded against. Emitted once for the
+    whole block rather than copied onto each row: four copies of the same 260
+    points is four times the payload for one series.
+    """
+    kept, total = _leg_points(own_leg, ctx, own_prints)
+    if not kept:
+        # The pinned leg printed inside its recency budget but outside the
+        # drill-down's widest window. No overlay rather than an invented one.
+        return None
+    origin = kept[0][0]
+    return {
+        "leg_id": own_leg.leg_id,
+        "label": own_leg.label,
+        "origin": origin.isoformat(),
+        "d": [(day - origin).days for day, _, _ in kept],
+        "usd": _usd_at_each_date(own_leg, ctx, kept),
+        # An overlay that stops mid-chart because of the cap must say so, or it
+        # reads as the pinned leg having no earlier history.
+        "truncated": total > len(kept),
+        "truncation_note": (
+            f"the overlay shows the last {len(kept)} of {total} of its own observations"
+            if total > len(kept) else None
+        ),
+    }
+
+
+def _fx_payload(pair: str, ctx: SiteContext) -> dict | None:
+    """One currency pair's own series, over the drill-down's widest window.
+
+    This is what earns the drill-down. SAFEX moved +0.03% locally and +0.44% in
+    USD on one session; a single USD line cannot say which of the two moved.
+    """
+    widest = max(LEDGER_DRILLDOWN_WINDOW_DAYS)
+    cutoff = ctx.today - _days(widest)
+    inside = [row for row in ctx.fx_series(pair) if cutoff <= row[0] <= ctx.today]
+    # Its own cap, not the legs'. A daily rate prints ~261 weekdays a year, so
+    # the leg cap of 260 would truncate every 1y FX pane by a day or two and
+    # start it three months late for no saving worth having. One series per
+    # pair, shared by every row on the page.
+    rows = inside[-widest:]
+    if not rows:
+        return None
+    origin = rows[0][0]
+    return {
+        "pair": pair,
+        "origin": origin.isoformat(),
+        "d": [(day - origin).days for day, _ in rows],
+        "v": [round(rate, 6) for _, rate in rows],
+        "truncated": len(inside) > len(rows),
+        "truncation_note": (
+            f"showing the last {len(rows)} of {len(inside)} rates"
+            if len(inside) > len(rows) else None
+        ),
+    }
 
 
 def _spread(leg, prints, own_leg, own_prints, ctx: SiteContext):

@@ -43,3 +43,54 @@
   .river-row { grid-template-columns: 1fr; }
   .river-row .val { text-align: left; white-space: normal; }
 }
+
+/* ---- ledger row drill-down (M21 #250) ----
+   Lives here rather than in _base.html.j2 because only a market page renders
+   it: the headline ledger has no pinned leg to overlay and no drill-down, and
+   a copy of these rules in the shared <head> would invite one. Inline SVG in
+   the block's own palette — Plotly is loaded for the headline's figures and is
+   not worth shipping to eight market pages for a sparkline. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Every affordance below is gated on `.drill-ready`, which the script adds. A
+   chevron that opens nothing is worse than no chevron: with script off the
+   ledger simply loses the drill-down and keeps the rest, band included. */
+.drill-row[hidden] { display: none; }
+.drill-toggle { display: none; background: none; border: none; padding: 0 6px 0 0; margin: 0; cursor: pointer; color: var(--text-dim); font-size: 11px; line-height: 1; }
+.ledger.drill-ready .drill-toggle { display: inline-block; }
+.ledger.drill-ready .lrow.has-drill { cursor: pointer; }
+.ledger.drill-ready .lrow.has-drill:hover td { background: rgba(45,106,79,0.05); }
+.ledger .lrow.open td { background: rgba(45,106,79,0.07); }
+.lrow.open .drill-toggle .chev { display: inline-block; transform: rotate(90deg); }
+.drill-hint { color: var(--text-dim); }
+
+/* The range band, rendered server-side with the rest of the row: "high in its
+   own range" must not depend on script running. */
+.range-band { margin-top: 4px; font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.range-band .rb-track { display: block; position: relative; height: 3px; margin: 0 0 3px auto; width: 78px; background: var(--rule); border-radius: 2px; }
+.range-band .rb-tick { position: absolute; top: -2px; width: 2px; height: 7px; background: var(--green); transform: translateX(-1px); }
+.range-band.no-range { color: var(--text-dim); }
+
+.drill-row > td { background: #F4F6F3; padding: 14px 16px; }
+.drill-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.drill-pane { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.drill-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 6px; }
+.drill-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.drill-flat { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.drill-flat .v { font-size: 18px; font-weight: 500; }
+.drill-windows { display: flex; gap: 6px; margin-bottom: 10px; }
+.drill-windows .dw { font-family: var(--mono); font-size: 11px; padding: 2px 9px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); color: var(--text-muted); cursor: pointer; }
+.drill-windows .dw.on { background: var(--green); border-color: var(--green); color: #fff; }
+.drill-svg { width: 100%; height: auto; display: block; }
+.drill-svg .ax { stroke: var(--rule); stroke-width: 1; }
+.drill-svg .lbl { font-family: var(--mono); font-size: 9px; fill: var(--text-dim); text-anchor: end; }
+.drill-svg .lbl.dt { text-anchor: start; }
+.drill-svg .lbl.dt.end { text-anchor: end; }
+.drill-svg .ln { fill: none; stroke-width: 1.4; }
+.drill-svg .ln.own { stroke: var(--green); }
+.drill-svg .ln.ref { stroke: var(--text-dim); stroke-dasharray: 4 3; }
+.drill-svg .ln.fx { stroke: var(--info); }
+.drill-svg .pt { stroke: none; }
+.drill-svg .pt.own { fill: var(--green); }
+.drill-svg .pt.ref { fill: var(--text-dim); }
+.drill-svg .pt.fx { fill: var(--info); }
+@media (max-width: 768px) { .drill-panes { grid-template-columns: 1fr; } }
