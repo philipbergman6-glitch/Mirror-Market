@@ -88,40 +88,26 @@ def _as_date(value) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# 03 Crush & relative value
+# 05 Relative value (the crush board is its own section — M16 #208)
 # ---------------------------------------------------------------------------
 def relative_value_section(data: dict | None) -> dict:
     from app.charts import (
         build_basis_chart,
         build_bean_corn_ratio_chart,
-        build_crush_spread_chart,
         build_oil_meal_ratio_chart,
     )
-    from pipeline.units import to_metric_tons
 
     if not data:
         return _empty("the relative-value analyst returned nothing — check the prices layer")
 
     out: dict[str, Any] = {}
 
-    crush = data.get("crush") or {}
-    spread = crush.get("series")
-    if spread is not None and not spread.empty:
-        clipped = clip(spread)
-        out["crush"] = {
-            "current_usd_mt": crush.get("current_usd_mt"),
-            "profitable": bool(crush.get("profitable")),
-            "as_of": crush.get("as_of"),
-            "chart_html": _chart(
-                lambda: build_crush_spread_chart(
-                    clipped,
-                    clipped["crush_spread"].apply(lambda x: to_metric_tons(x, "Soybeans")),
-                    crush,
-                ),
-                "crush spread",
-            ),
-        }
-
+    # The CBOT crush spread that used to open this section is gone (M16 #208).
+    # Its successor is the crush board one section up, which strikes CBOT's
+    # margin on named delivery months and renders it beside Dalian's,
+    # Brazil's and Argentina's — each labelled by kind. A continuous
+    # front-month crush chart underneath a named-contract margin would be a
+    # second CBOT crush on one page, which is the thing M7 #149 named.
     out["basis"] = _basis_panel(data, build_basis_chart)
 
     omr = data.get("oil_meal_ratio") or {}
@@ -181,7 +167,7 @@ def relative_value_section(data: dict | None) -> dict:
 
     out = {key: value for key, value in out.items() if value}
     if not out:
-        return _empty("no crush, basis or ratio series had enough rows to render")
+        return _empty("no basis or ratio series had enough rows to render")
     return section("ok", **out)
 
 

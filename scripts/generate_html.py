@@ -57,14 +57,18 @@ SECTIONS = [
     # M2 #144 put the eight-row ledger third — the headline's sole per-market
     # presence, and the way a reader gets to a market page (M19 #223).
     {"id": "propagation", "no": "03", "name": "Propagation"},
-    {"id": "relative-value", "no": "04", "name": "Crush & Value"},
-    {"id": "supply-demand", "no": "05", "name": "Supply & Demand"},
-    {"id": "risk", "no": "06", "name": "Risk"},
-    {"id": "forward-curves", "no": "07", "name": "Curves"},
-    {"id": "seasonal", "no": "08", "name": "Seasonal"},
-    {"id": "technicals", "no": "09", "name": "Technicals"},
-    {"id": "briefing", "no": "10", "name": "Briefing"},
-    {"id": "about", "no": "11", "name": "About"},
+    # M2 #144 put the cross-market crush board fourth, built by M16 #208. The
+    # CBOT-only crush spread that used to open the next section is its
+    # predecessor, not its neighbour.
+    {"id": "crush-board", "no": "04", "name": "Crush Board"},
+    {"id": "relative-value", "no": "05", "name": "Relative Value"},
+    {"id": "supply-demand", "no": "06", "name": "Supply & Demand"},
+    {"id": "risk", "no": "07", "name": "Risk"},
+    {"id": "forward-curves", "no": "08", "name": "Curves"},
+    {"id": "seasonal", "no": "09", "name": "Seasonal"},
+    {"id": "technicals", "no": "10", "name": "Technicals"},
+    {"id": "briefing", "no": "11", "name": "Briefing"},
+    {"id": "about", "no": "12", "name": "About"},
 ]
 
 LEG_COLORS = {
@@ -74,21 +78,33 @@ LEG_COLORS = {
 }
 
 
-def _build_headline_ledger() -> dict:
-    """M2 #144's eight-row ledger, in the {state, reason, data} envelope.
+def _build_registry_sections() -> dict[str, dict]:
+    """The two headline sections built from the market registry (03 and 04).
 
-    Its own DB session: this renderer is also runnable standalone, and the
-    market-page orchestrator's SiteContext does not reach here.
+    One DB session for both: this renderer is also runnable standalone, and the
+    market-page orchestrator's SiteContext does not reach here. Each builder
+    fails on its own — a crush board that raises must not take the propagation
+    ledger down with it, which is the same failure isolation the nine market
+    blocks get.
     """
-    from app.block_builders import SiteContext, headline_ledger
+    from app.block_builders import SiteContext, headline_crush_board, headline_ledger
     from app.markets import load_markets
 
+    builders = {"ledger": headline_ledger, "crush_board": headline_crush_board}
+    out: dict[str, dict] = {}
     ctx = SiteContext.open()
     try:
-        state, reason, data = headline_ledger(load_markets(), ctx)
+        markets = load_markets()
+        for name, build in builders.items():
+            try:
+                state, reason, data = build(markets, ctx)
+            except Exception as e:  # noqa: BLE001 — one section, not the page
+                log.warning("  headline %s failed: %s", name, e)
+                state, reason, data = "empty", f"{name} could not be built for this render", {}
+            out[name] = {"state": state, "reason": reason, "data": data}
     finally:
         ctx.close()
-    return {"state": state, "reason": reason, "data": data}
+    return out
 
 
 def _standalone_market_nav() -> list[dict]:
@@ -484,14 +500,23 @@ def _build_command_center(data: dict) -> dict | None:
     km = data.get("key_metrics", {})
     key_metrics = []
 
+    # The front-month crush over the three benchmark legs. Named for what it
+    # is since M16 #208: the crush board one section down strikes CBOT's margin
+    # on ZSU26/ZMU26/ZLU26, and two tiles both called "Crush Spread" would read
+    # as one number printed twice. Its job here is also structural — the
+    # promotion contract reads `data-derived="crush"` to prove the three
+    # benchmark legs came from one session, which is why the tile survives the
+    # retirement of the DCE one below.
     crush_val = crush.get("value_usd_mt")
     key_metrics.append({
-        "label": "Crush Spread",
+        "label": "CBOT Front-Month Crush",
         "value": f"${crush_val:,.1f}" if crush_val else "N/A",
         "val_class": "up" if crush.get("profitable") else "down" if crush_val else "",
         "delta": "Profitable" if crush.get("profitable") else "Negative" if crush_val else "",
         "delta_class": "up" if crush.get("profitable") else "down",
         "as_of": crush.get("as_of") or "",
+        # The alignment probe, declared rather than inferred from the label.
+        "derived": "crush",
     })
 
     # key_metrics is a flat dict: brl_usd, brl_weekly_chg, dollar_index, cny_usd
@@ -526,20 +551,13 @@ def _build_command_center(data: dict) -> dict | None:
         "as_of": km.get("cny_usd_date") or "",
     })
 
-    # DCE board crush (China story) — CNY/MT, USD/MT beneath when available.
-    dce_crush = km.get("dce_crush_cny_mt")
-    dce_crush_usd = km.get("dce_crush_usd_mt")
-    key_metrics.append({
-        "label": "DCE Board Crush",
-        "value": f"CNY {dce_crush:+,.0f}" if dce_crush is not None else "N/A",
-        "val_class": (
-            "up" if dce_crush is not None and dce_crush > 0
-            else "down" if dce_crush is not None else ""
-        ),
-        "delta": f"${dce_crush_usd:+,.0f}/MT" if dce_crush_usd is not None else "",
-        "delta_class": "muted",
-        "as_of": km.get("dce_crush_date") or "",
-    })
+    # The DCE Board Crush tile that used to sit here is retired (M16 #208).
+    # Section 04 renders Dalian's margin beside CBOT's, Brazil's and
+    # Argentina's, off the same engine the Dalian page's block 03 uses — while
+    # this tile was `analysis.spreads.compute_dce_crush_margin` over the
+    # continuous series, a fifth surface computing its own crush. M2 #144's
+    # rule for the grid: a metric rendered better one section down is how a
+    # page rots.
 
     # Signals
     signals = []
@@ -860,12 +878,18 @@ def generate(
     log.info("Running health check...")
     health = _safe_call(run_health_check, "health")
 
-    log.info("Building the headline ledger...")
-    ledger = _safe_call(_build_headline_ledger, "headline_ledger") or {
-        "state": "empty",
-        "reason": "the headline ledger could not be built for this render",
-        "data": {},
-    }
+    log.info("Building the registry sections (ledger, crush board)...")
+    registry_sections = _safe_call(_build_registry_sections, "registry_sections") or {}
+
+    def _section(name: str) -> dict:
+        return registry_sections.get(name) or {
+            "state": "empty",
+            "reason": f"the headline {name.replace('_', ' ')} could not be built for this render",
+            "data": {},
+        }
+
+    ledger = _section("ledger")
+    crush_board = _section("crush_board")
 
     # Build template context
     log.info("Building template context...")
@@ -903,6 +927,10 @@ def generate(
         # same builder the market pages use — one implementation, so the
         # headline and a page can never disagree about who has repriced.
         "ledger": ledger,
+        # M16 #208: four markets' crush margins side by side, each card calling
+        # the same `crush_block` its market page's block 03 does — so the
+        # headline and the page cannot print two different margins.
+        "crush_board": crush_board,
         "briefing_text": _build_briefing_text(briefing_text) if briefing_text else "",
         "briefing_uri": _to_data_uri(briefing_text) if briefing_text else "",
         "health_html": _build_health_html(health) if health else "",

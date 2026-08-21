@@ -35,7 +35,6 @@ from analysis.signals import demote_near_roll_signals, detect_all_signals
 from analysis.spreads import (
     compute_brazil_basis,
     compute_crush_spread,
-    compute_dce_crush_margin,
     compute_domestic_basis,
 )
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
@@ -554,22 +553,12 @@ def command_center() -> dict:
         key_metrics["cny_usd"] = cny["Close"].iloc[-1]
         key_metrics["cny_usd_date"] = _asof(cny.index[-1])
 
-    # DCE board crush (China demand story) — CNY/MT, plus USD/MT when the
-    # CNY/USD rate is available. Continuous main-contract legs; see
-    # analysis.spreads.compute_dce_crush_margin for the roll caveat.
-    try:
-        dce_crush = compute_dce_crush_margin(read_dce_futures())
-        if not dce_crush.empty:
-            latest_dce = dce_crush.iloc[-1]
-            key_metrics["dce_crush_cny_mt"] = float(latest_dce["crush_cny_mt"])
-            key_metrics["dce_crush_date"] = _asof(latest_dce["Date"])
-            cny_rate = key_metrics.get("cny_usd")
-            if cny_rate is not None and pd.notna(cny_rate) and cny_rate > 0:
-                key_metrics["dce_crush_usd_mt"] = (
-                    float(latest_dce["crush_cny_mt"]) * float(cny_rate)
-                )
-    except Exception:
-        logger.warning("Command-center DCE crush computation failed", exc_info=True)
+    # The DCE board crush that used to be computed here for the key-metrics
+    # grid is gone with its tile (M16 #208). Dalian's margin is on the crush
+    # board now, struck by the same engine as its market page's block 03 —
+    # while this was a fifth surface computing its own, off the continuous
+    # main-contract series. `compute_dce_crush_margin` itself stays: the
+    # briefing's DCE section is its remaining reader.
 
     # Dollar index
     econ = read_economic()

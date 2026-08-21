@@ -107,6 +107,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {% set seasonal = seasonal|default(_missing, true) %}
 {% set emerging_markets = emerging_markets|default(_missing, true) %}
 {% set ledger = ledger|default(_missing, true) %}
+{% set crush_board = crush_board|default(_missing, true) %}
 {# ================================================================ #}
 {# 01 — THE COMPLEX OVERNIGHT                                       #}
 {# ================================================================ #}
@@ -130,7 +131,10 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   </div>
   <div class="grid grid-4">
     {% for m in command_center.key_metrics %}
-    <div class="mc"{% if m.label == 'Crush Spread' %} data-derived="crush" data-aligned="{{ 'true' if m.as_of else 'false' }}" data-as-of="{{ m.as_of }}"{% endif %}>
+    {# The alignment probe the promotion contract reads. Keyed off a declared
+       field rather than the tile's display label, which a rename would break
+       silently (M16 #208). #}
+    <div class="mc"{% if m.derived is defined and m.derived %} data-derived="{{ m.derived }}" data-aligned="{{ 'true' if m.as_of else 'false' }}" data-as-of="{{ m.as_of }}"{% endif %}>
       <div class="mc-label">{{ m.label }}</div>
       <div class="mc-val num {{ m.val_class }}">{{ m.value }}</div>
       <div class="mc-delta {{ m.delta_class }}">{{ m.delta }}</div>
@@ -176,10 +180,22 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 </section>
 
 {# ================================================================ #}
-{# 04 — CRUSH & RELATIVE VALUE                                      #}
+{# 04 — CRUSH BOARD                                                 #}
+{# ================================================================ #}
+<section id="crush-board">
+  <div class="sec-head"><span class="sec-no">04</span><h2>Crush Board</h2><span class="why">is processing paying, and where</span></div>
+  {% if crush_board.state == 'ok' %}
+  {% with s = crush_board.data %}{% include 'sections/crush_board.html.j2' %}{% endwith %}
+  {% else %}
+  <div class="alert alert-warn">{{ crush_board.reason }}</div>
+  {% endif %}
+</section>
+
+{# ================================================================ #}
+{# 05 — RELATIVE VALUE                                              #}
 {# ================================================================ #}
 <section id="relative-value">
-  <div class="sec-head"><span class="sec-no">04</span><h2>Crush &amp; Relative Value</h2><span class="why">is processing paying · where is Brazil</span></div>
+  <div class="sec-head"><span class="sec-no">05</span><h2>Relative Value</h2><span class="why">where is Brazil · oil vs meal · the competing oils</span></div>
   {% if relative_value.state == 'ok' %}
   {% with s = relative_value.data %}{% include 'sections/relative_value.html.j2' %}{% endwith %}
   {% else %}
@@ -191,7 +207,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 05 — SUPPLY & DEMAND                                             #}
 {# ================================================================ #}
 <section id="supply-demand">
-  <div class="sec-head"><span class="sec-no">05</span><h2>Supply &amp; Demand</h2><span class="why">WASDE · CONAB · exports · emerging markets</span></div>
+  <div class="sec-head"><span class="sec-no">06</span><h2>Supply &amp; Demand</h2><span class="why">WASDE · CONAB · exports · emerging markets</span></div>
   {% if supply or demand or emerging_markets.state == 'ok' %}
   <div class="tabs" data-tabgroup="sd">
     <div class="tab active" data-tab="sd-1">Soy Complex</div>
@@ -264,7 +280,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 06 — RISK MONITOR                                                #}
 {# ================================================================ #}
 <section id="risk">
-  <div class="sec-head"><span class="sec-no">06</span><h2>Risk Monitor</h2><span class="why">currencies · positioning · weather</span></div>
+  <div class="sec-head"><span class="sec-no">07</span><h2>Risk Monitor</h2><span class="why">currencies · positioning · weather</span></div>
   {% if risk_monitor.state == 'ok' %}
   {% with s = risk_monitor.data %}{% include 'sections/risk_monitor.html.j2' %}{% endwith %}
   {% else %}
@@ -276,7 +292,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 07 — FORWARD CURVES                                              #}
 {# ================================================================ #}
 <section id="forward-curves">
-  <div class="sec-head"><span class="sec-no">07</span><h2>Forward Curves</h2><span class="why">contango or backwardation — what the term structure says</span></div>
+  <div class="sec-head"><span class="sec-no">08</span><h2>Forward Curves</h2><span class="why">contango or backwardation — what the term structure says</span></div>
   {% if forward_curves.state == 'ok' %}
   {% with s = forward_curves.data %}{% include 'sections/forward_curves.html.j2' %}{% endwith %}
   {% else %}
@@ -288,7 +304,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 08 — SEASONAL                                                    #}
 {# ================================================================ #}
 <section id="seasonal">
-  <div class="sec-head"><span class="sec-no">08</span><h2>Seasonal</h2><span class="why">current price vs the historical norm for this month</span></div>
+  <div class="sec-head"><span class="sec-no">09</span><h2>Seasonal</h2><span class="why">current price vs the historical norm for this month</span></div>
   {% if seasonal.state == 'ok' %}
   {% with s = seasonal.data %}{% include 'sections/seasonal.html.j2' %}{% endwith %}
   {% else %}
@@ -300,7 +316,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 09 — TECHNICALS                                                  #}
 {# ================================================================ #}
 <section id="technicals">
-  <div class="sec-head"><span class="sec-no">09</span><h2>Technicals</h2><span class="why">the deep charts — candles, RSI, MACD</span></div>
+  <div class="sec-head"><span class="sec-no">10</span><h2>Technicals</h2><span class="why">the deep charts — candles, RSI, MACD</span></div>
   {% if technicals %}
   <div class="alert alert-info" style="margin-bottom: 16px;">
     Charts use the yfinance front-month series. On contract roll days the underlying contract changes, which can introduce artificial price gaps; signals within ±3 trading days of a roll are demoted to <em>info</em> severity.
@@ -335,7 +351,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 10 — THE FULL BRIEFING                                           #}
 {# ================================================================ #}
 <section id="briefing">
-  <div class="sec-head"><span class="sec-no">10</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text</span></div>
+  <div class="sec-head"><span class="sec-no">11</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text</span></div>
   {% if briefing_text %}
   <div class="briefing">{{ briefing_text }}</div>
   {% if briefing_uri %}
@@ -358,7 +374,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {# 11 — ABOUT THE DATA                                              #}
 {# ================================================================ #}
 <section id="about">
-  <div class="sec-head"><span class="sec-no">11</span><h2>About the Data</h2><span class="why">sources · methodology · units</span></div>
+  <div class="sec-head"><span class="sec-no">12</span><h2>About the Data</h2><span class="why">sources · methodology · units</span></div>
 
   <details>
     <summary>Data Sources ({{ production_layers|length }} Operational Layers)</summary>
