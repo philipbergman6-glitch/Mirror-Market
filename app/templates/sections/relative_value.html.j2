@@ -1,19 +1,9 @@
-{# 03 Crush & relative value. `s` is the section's data (app/sections.py). #}
-{% import 'sections/_cards.html.j2' as c %}
-{% if s.crush %}
-<div class="subhdr">Crush Spread</div>
-<div class="grid grid-2">
-  <div class="mc">
-    <div class="mc-label">Current (USD/MT)</div>
-    <div class="mc-val {{ 'up' if s.crush.profitable else 'down' }}">{{ c.money(s.crush.current_usd_mt) }}</div>
-    <div class="mc-delta {{ 'up' if s.crush.profitable else 'down' }}">{{ 'Profitable' if s.crush.profitable else 'Negative' }}</div>
-    {{ c.asof(s.crush.as_of) }}
-  </div>
-  <div class="chart-box">{{ s.crush.chart_html | safe }}</div>
-</div>
-<hr class="divider">
-{% endif %}
+{# 05 Relative value. `s` is the section's data (app/sections.py).
 
+   The Crush Spread sub-block that used to open this section moved out to the
+   crush board, section 04 (M16 #208): one CBOT margin on named contracts
+   beside Dalian's, Brazil's and Argentina's, each labelled by kind. #}
+{% import 'sections/_cards.html.j2' as c %}
 {% if s.basis %}
 <div class="subhdr">{{ s.basis.title }}</div>
 <div class="grid grid-2">
