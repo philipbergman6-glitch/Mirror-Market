@@ -46,7 +46,9 @@
 
 <div class="footer">
   All prices in <strong>USD per metric ton (USD/MT)</strong>; native exchange units are converted at the display layer.
-  {{ market.name }} quotes in {{ market.home_currency }}. Data delayed and provided as-is; not financial advice.
+  {# #230: the venue's unit, not the country's currency — Argentina's FOB and the
+     EC workbook publish USD/MT, and "quotes in ARS" was simply false. #}
+  {% if market.quote_unit %}{{ market.venue }} quotes in {{ market.quote_unit }}. {% endif %}Data delayed and provided as-is; not financial advice.
   <br><br>
   <a href="{{ root }}index.html">&larr; Daily read</a> ·
   <a href="{{ root }}players.html">Players</a> ·

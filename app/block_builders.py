@@ -46,7 +46,6 @@ from app.blocks import (
     make_block,
 )
 from app.markets import Market, Source, TierResult
-from pipeline.units import native_label
 from pricing.semantics import quote_kind_label
 
 log = logging.getLogger(__name__)
@@ -348,7 +347,13 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             "label": source.key_label(key),
             "is_headline": key == (source.headline_key or ordered[0]),
             "home_value": value,
-            "home_currency": market.home_currency,
+            # #230: the venue's own number gets the venue's own unit, and it is
+            # only a *second* quote where the venue does not already publish
+            # USD/MT. Argentina's FOB is dollars; labelling it ARS stated a
+            # figure wrong by three orders of magnitude. Same answer the ledger
+            # gives (`_ledger_row`), by the same registry call.
+            "home_unit": _home_unit(source, key, market.home_currency),
+            "has_home_quote": source.has_native_quote,
             "usd_mt": source.to_usd_mt(value, key, fx),
             "as_of": when.isoformat(),
             "age_days": _age_days(ctx.today, when),
@@ -372,7 +377,9 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         "quote_kind": source.quote_kind,
         "cadence": source.cadence,
         "venue": market.venue,
-        "home_currency": market.home_currency,
+        # No block-level `home_currency`: the unit belongs to the leg, not the
+        # market (#230). One table can hold three units; a page-wide currency
+        # label is the assumption that produced "ARS 451.67/MT" for dollars.
         "signals": _signal_chips(rows_by_key.get(headline["key"]) or [], headline["key"]),
         # M3 #145: the stack stores no time of day, so a page can honestly show
         # the date a venue printed and never a timestamp.
@@ -673,7 +680,7 @@ def _ledger_row(
         "usd_mt": None,
         "home_value": None,
         "home_unit": _home_unit(source, leg.key, owner.home_currency),
-        "has_home_quote": source.unit != "usd_per_mt",
+        "has_home_quote": source.has_native_quote,
         "usd_chg_pct": None,
         "home_chg_pct": None,
         "fx_tag": False,
@@ -779,21 +786,8 @@ def _ledger_state(row: dict, *, leading_edge: str | None, today: date):
 
 
 def _home_unit(source: Source, key: str, home_currency: str) -> str:
-    """What the venue's own number is quoted in — never inferred from the table.
-
-    A price is only a price with its unit, and one table can hold three: CBOT's
-    `prices` rows are cents/bu, cents/lb and USD/short ton at once. The registry
-    states the unit; this turns it into a label and nothing here guesses.
-    """
-    if source.unit == "home_per_mt":
-        return f"{home_currency}/MT"
-    if source.unit == "usd_per_mt":
-        return "USD/MT"
-    if source.unit == "usd_per_bushel":
-        return "USD/bu"
-    if source.unit == "native_exchange":
-        return native_label(key) or "native"
-    return ""
+    """The venue's own quote unit. One vocabulary — see `Source.quote_unit`."""
+    return source.quote_unit(key, home_currency)
 
 
 # ---------------------------------------------------------------------------

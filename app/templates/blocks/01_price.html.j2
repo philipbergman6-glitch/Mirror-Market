@@ -14,7 +14,14 @@
       {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>
       {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">21 obs</span>{% endif %}
     </div>
-    <div class="mc-delta muted">{{ d.home_currency }} {{ f.num(leg.home_value, 2) }}/MT{% if leg.quotes > 1 %} · mean of {{ leg.quotes }} quotes{% endif %}</div>
+    {# #230: the venue's own print, in the venue's own unit, and only where it
+       is a second view of the number above. A `usd_per_mt` venue (Argentina's
+       FOB, the EC workbook) already published the headline — re-labelling it
+       with the home currency asserts a figure nobody observed. #}
+    {%- set home = leg.has_home_quote and leg.home_value is not none %}
+    {%- if home or leg.quotes > 1 %}
+    <div class="mc-delta muted">{% if home %}{{ f.num(leg.home_value, 2) }} {{ leg.home_unit }}{% endif %}{% if home and leg.quotes > 1 %} · {% endif %}{% if leg.quotes > 1 %}mean of {{ leg.quotes }} quotes{% endif %}</div>
+    {%- endif %}
     {{ f.asof(leg.as_of, leg.age_days) }}
   </div>
   {% endfor %}

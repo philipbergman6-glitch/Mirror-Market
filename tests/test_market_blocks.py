@@ -38,6 +38,7 @@ from app.sections import (
     section,
 )
 from pipeline import schema
+from pipeline.units import native_label
 
 TODAY = date(2026, 8, 12)
 
@@ -181,6 +182,50 @@ def test_a_missing_fx_rate_empties_the_block_rather_than_printing_the_local_numb
     # relabelled as dollars.
     assert price.data["headline"]["usd_mt"] is None
     assert price.data["headline"]["home_value"] == 2000.0
+
+
+def test_a_usd_native_price_leg_is_not_relabelled_as_the_home_currency(seeded, registry):
+    """#230: Argentina's official FOB is dollars, and ARS 451.67/MT is a lie.
+
+    At ~1,400 ARS/USD the peso figure would be ~632,000 — the page was stating
+    a number wrong by three orders of magnitude, in a shape that reads as a
+    plausible dual-quote. A `usd_per_mt` venue has one observation in one unit,
+    so there is no second view to print. Same answer the ledger gives
+    (`test_a_usd_native_leg_is_not_dual_quoted`).
+    """
+    for product, price in (("Soybeans", 451.67), ("Sunflower Oil", 1367.33)):
+        seeded.conn.execute(
+            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
+            "VALUES (?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", price),
+        )
+    seeded.conn.commit()
+
+    price = _block(_build("argentina", seeded, registry), "price")
+    assert price.state == "ok"
+    assert "home_currency" not in price.data  # the unit belongs to the leg
+    for leg in price.data["legs"]:
+        assert leg["has_home_quote"] is False
+        assert leg["home_unit"] == "USD/MT"
+    assert round(price.data["headline"]["usd_mt"], 2) == 451.67
+
+
+def test_a_native_unit_leg_keeps_the_venues_own_unit_on_the_price_block(seeded, registry):
+    """The other half of #230: cents/bu was being labelled "USD ... /MT" too."""
+    price = _block(_build("cbot", seeded, registry), "price")
+    headline = price.data["headline"]
+    assert headline["has_home_quote"] is True
+    assert headline["home_unit"] == native_label("Soybeans")
+
+    brazil = _block(_build("brazil", seeded, registry), "price")
+    assert brazil.data["headline"]["home_unit"] == "BRL/MT"
+
+
+def test_the_footer_states_the_venues_unit_not_the_countrys_currency(registry):
+    """#230's page-level half — "Argentina quotes in ARS" was false."""
+    assert registry["argentina"].quote_unit == "USD/MT"
+    assert registry["europe"].quote_unit == "USD/MT"
+    assert registry["brazil"].quote_unit == "BRL/MT"
 
 
 def test_several_quotes_on_one_date_are_averaged_and_say_so(seeded, registry):

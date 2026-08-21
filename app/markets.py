@@ -39,7 +39,7 @@ import config
 from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 from pipeline.connection import get_connection, is_cloud, managed_connection
-from pipeline.units import to_metric_tons
+from pipeline.units import native_label, to_metric_tons
 from pricing.semantics import (  # noqa: F401 — re-exported for the site layer
     QUOTE_KIND_PRICE_TYPE,
     PriceType,
@@ -235,6 +235,38 @@ class Source:
         price_type = self.price_type
         return None if price_type is None else price_type.caveat
 
+    def quote_unit(self, key: str, home_currency: str) -> str:
+        """What the venue's own number is quoted in — never inferred from the table.
+
+        A price is only a price with its unit, and one table can hold three:
+        CBOT's `prices` rows are cents/bu, cents/lb and USD/short ton at once.
+        The registry states the unit; this turns it into a label and nothing
+        here guesses. Note that a `usd_per_mt` venue quotes in USD whatever its
+        market's home currency is (Argentina's FOB, the EC workbook) — #230.
+        """
+        if self.unit == "home_per_mt":
+            return f"{home_currency}/MT"
+        if self.unit == "usd_per_mt":
+            return "USD/MT"
+        if self.unit == "usd_per_bushel":
+            return "USD/bu"
+        if self.unit == "native_exchange":
+            return native_label(key) or "native"
+        return ""
+
+    @property
+    def has_native_quote(self) -> bool:
+        """Whether the venue's own number is a *second* view of the USD/MT one.
+
+        False when the venue publishes USD/MT itself: there is one observation
+        in one unit, and printing it twice under two labels states a number
+        that was never observed (#230 — Argentina's USD FOB read as ARS, wrong
+        by three orders of magnitude). This is the rule the ledger already
+        applies (`_ledger_row`'s `has_home_quote`); it lives here so the price
+        block and the ledger cannot answer it differently.
+        """
+        return self.unit != "usd_per_mt"
+
     def to_usd_mt(self, value: float | None, key: str, fx: float | None) -> float | None:
         """Convert one stored number to USD/MT, or None when it cannot be.
 
@@ -394,6 +426,19 @@ class Market:
     @property
     def url(self) -> str:
         return MARKET_URL_TEMPLATE.format(slug=self.slug)
+
+    @property
+    def quote_unit(self) -> str | None:
+        """What this market's venue publishes its headline price in.
+
+        The footer's disclosure. ``None`` when there is no price leg to
+        describe — a stub has no quote unit, and saying it "quotes in ARS"
+        would be an assertion about nothing (#230).
+        """
+        if self.price is None:
+            return None
+        key = self.price.headline_key or (self.price.keys[0] if self.price.keys else "")
+        return self.price.quote_unit(key, self.home_currency) or None
 
     def absent_reason(self, block: str) -> str:
         """Why ``block`` has no source at all — never an empty string.
