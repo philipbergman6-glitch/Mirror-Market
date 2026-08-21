@@ -2151,7 +2151,10 @@ LEDGER_LEGS = {
 #
 # The first leg is the page's own, pinned; the rest are counterparts, and each
 # counterpart carries a spread against the pinned leg. `reference_legs` names
-# the rows that are a flat-price yardstick rather than a peer offer.
+# the rows that are a flat-price yardstick rather than a peer offer. Rows
+# render in DECLARED ORDER (M20 #236 — position is role in the trade, never
+# recency), so a reference leg must be declared last; app/markets.py refuses
+# the set otherwise.
 LEDGER_RULES = ("origin", "destination")
 
 LEDGERS = {

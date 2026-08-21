@@ -149,7 +149,7 @@ Key files:
 
 ### The propagation ledger (block 02, headline section 03)
 
-Answers one question — who has repriced, and who has not printed. Shape from M3 #145: settlement-ordered rows, each dual-quoting USD/MT over the venue's own print, both moves with an `FX` tag when the currency did the work, and a state pill so silence can never read as flat. Counterpart sets from M12 #161, which are **registry data** (`config.LEDGER_LEGS` + `config.LEDGERS`), not a code path.
+Answers one question — who has repriced, and who has not printed. Shape from M3 #145, ordering from M20 #236: rows in the registry's declared order (position is role in the trade, never recency — the state pill and the leading-edge caption carry recency, and reference legs are declared last, enforced at load), each dual-quoting USD/MT over the venue's own print, both moves with an `FX` tag when the currency did the work, and a state pill so silence can never read as flat. Counterpart sets from M12 #161, which are **registry data** (`config.LEDGER_LEGS` + `config.LEDGERS`), not a code path.
 
 Five things about it are load-bearing:
 

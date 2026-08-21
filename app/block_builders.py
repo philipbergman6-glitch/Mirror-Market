@@ -420,10 +420,12 @@ def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
 def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     """The propagation ledger: who has repriced, and who has not printed.
 
-    Shape from M3 #145 — settlement-ordered rows, each dual-quoting USD/MT over
-    its home print, both moves with an ``FX`` tag when they diverge, and a state
-    pill so silence can never read as flat. Counterpart set from M12 #161, read
-    from the registry (``config.LEDGERS``) rather than chosen here.
+    Shape from M3 #145, ordering from M20 #236 — rows render in the registry's
+    declared order (row position is role in the trade, never recency; the state
+    pill and the leading-edge caption carry recency), each dual-quoting USD/MT
+    over its home print, both moves with an ``FX`` tag when they diverge, and a
+    state pill so silence can never read as flat. Counterpart set from M12
+    #161, read from the registry (``config.LEDGERS``) rather than chosen here.
 
     Two things this builder is careful about, both of which would otherwise
     produce a confident wrong number:
@@ -460,14 +462,12 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
         for index, leg in enumerate(ledger.legs)
     ]
 
-    # Settlement-ordered (M3): newest print first, so the reader's eye lands on
-    # whoever repriced most recently. The pinned own leg keeps its place at the
-    # top whatever its date — it is the page's subject, not a competitor — and
-    # reference rows ride last by decision (M12: CBOT on South Africa is a
-    # yardstick, not a peer).
-    own_row, others = rows[0], rows[1:]
-    others.sort(key=lambda row: (row["is_reference"], _sort_date(row)))
-    ordered = [own_row, *others]
+    # Declared order (M20 #236): row position is role in the trade, never
+    # recency. The own leg leads because the registry declares it first, and a
+    # reference row rides last because the load-time gate in app/markets.py
+    # refuses any other declaration. Recency is carried entirely by the state
+    # pill and the leading-edge caption.
+    ordered = rows
 
     dated = [row["as_of"] for row in ordered if row["as_of"]]
     leading_edge = max(dated) if dated else None
@@ -482,6 +482,13 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
         "note": ledger.note,
         "rows": ordered,
         "leading_edge": leading_edge,
+        # M20 #236: a caption date the reader has to attribute by scanning is
+        # half a fact — name the leg(s) that produced it. Plural because the
+        # stack stores no time of day, so two legs on the leading date are
+        # genuinely joint holders.
+        "leading_edge_legs": [
+            row["label"] for row in ordered if row["as_of"] == leading_edge
+        ] if leading_edge else [],
         "has_spread": True,
         "commodity": "Soybean",
         # M12 decision 2 — one commodity per ledger, named on the block. In a
@@ -491,11 +498,12 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
             "Every row is the soybean. Meal and oil are a different good and would "
             "be a second ledger, not more rows here."
         ),
-        # M3 #145 / M4 #146: the stack stores no time of day, so the ordering is
-        # by settlement *date* and the page must not imply anything finer.
+        # M20 #236 wording, M3 #145 / M4 #146 constraint: position states role,
+        # and the stack stores no time of day, so the page must not imply
+        # anything finer than the date.
         "no_timestamp_note": (
-            "ordered by print date — this stack stores no time of day, so two legs "
-            "sharing a date are not ordered against each other"
+            "ordered as declared in the registry — role in the trade. This stack "
+            "stores no time of day, so no finer ordering than the date exists"
         ),
     }
 
@@ -549,6 +557,10 @@ def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, 
     return STATE_OK, "", {
         "rows": rows,
         "leading_edge": leading_edge,
+        # On the headline the row is the market, so the market names the edge.
+        "leading_edge_legs": [
+            row["market_label"] for row in rows if row["as_of"] == leading_edge
+        ] if leading_edge else [],
         "has_spread": False,
         "commodity": "Soybean",
         "commodity_note": (
@@ -607,16 +619,6 @@ def _headline_placeholder(market: Market) -> dict:
             False,
         )
     return row
-
-
-def _sort_date(row: dict):
-    """Newest first, undated last — a leg with no print cannot be ordered by one."""
-    return (row["as_of"] is None, "" if row["as_of"] is None else _negated(row["as_of"]))
-
-
-def _negated(iso: str) -> str:
-    """Descending-by-date sort key for an ISO date, as a string."""
-    return "".join(chr(ord("9") - (ord(ch) - ord("0"))) if ch.isdigit() else ch for ch in iso)
 
 
 def _ledger_row(
