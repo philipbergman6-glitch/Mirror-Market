@@ -46,7 +46,6 @@ from app.blocks import (
     make_block,
 )
 from app.markets import Market, Source, TierResult
-from pipeline.units import native_label
 from pricing.semantics import quote_kind_label
 
 log = logging.getLogger(__name__)
