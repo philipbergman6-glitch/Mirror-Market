@@ -1,0 +1,82 @@
+name: Retry Failed Pipeline
+
+# The second shot for snapshot-only sources (#254).
+#
+# A snapshot-only upstream serves the current day and overwrites it tomorrow
+# (AMS Gulf bids, India mandi, SAFEX, AgRural, MAGyP — the set
+# pipeline/history.py exists for). The daily build gets one attempt at each,
+# so one layer failure loses that observation permanently: the 2026-08-05
+# Gulf bid edition died on a single parse error inside a run GitHub showed as
+# green, and 3 of India mandi's first 4 days died on a throttled key.
+#
+# This workflow does no fetching of its own. It asks one question — did the
+# day's last completed pipeline run hard-fail a layer? — and if so sends a
+# `repository_dispatch` back to deploy-dashboard.yml for one full re-run.
+# On a green day it exits in seconds having touched no upstream, which is
+# why this is a conditional trigger rather than a second unconditional cron
+# (a second cron would double the load on the still-anonymous data.gov.in
+# sample key every single day, including the days nothing was wrong).
+#
+# WHY THIS SLOT
+#   The daily build is scheduled 19:00 UTC and lands 20:04-23:58 after
+#   GitHub's observed +64 to +298 minute scheduler delay (median +138).
+#   20:40 nominal is 1h40m behind it, so at comparable delay the retry lands
+#   ~1h40m after the primary — inside the 1.5-3h the design asks for, and
+#   with room to finish before UTC midnight. The delays are not guaranteed to
+#   be comparable, so both ends are handled rather than assumed: if the
+#   primary has not finished yet the decision defers (no retry that day,
+#   nothing lost that was not already lost), and past 23:20 UTC the decision
+#   refuses outright, because the upstreams are about to roll to tomorrow's
+#   edition and a retry landing after midnight would recover nothing while
+#   consuming tomorrow's one retry.
+#
+# WHY NO CHAIN IS POSSIBLE
+#   Runs do not trigger retries — this cron does, once per weekday. And the
+#   decision script refuses when today already has a `repository_dispatch`
+#   run, whatever its conclusion. The marker is the trigger type itself, so
+#   it cannot be dropped or forgotten.
+
+on:
+  schedule:
+    - cron: '40 20 * * 1-5'
+  # For rehearsing the decision by hand; pair with --dry-run below if you
+  # only want to see the verdict.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Decide and report without dispatching'
+        type: boolean
+        default: false
+
+permissions:
+  # read: gh run list + gh run download (the pipeline-status artifact).
+  actions: read
+  # write: POST /repos/{owner}/{repo}/dispatches requires contents:write.
+  # repository_dispatch is one of the two events GITHUB_TOKEN is explicitly
+  # allowed to raise a new workflow run with (workflow_dispatch is the other).
+  contents: write
+
+# Deliberately NOT the `pages` group. This job never publishes and never
+# writes data/history — joining that group would make it queue behind the
+# very run it is trying to observe, and it would then observe it too late.
+concurrency:
+  group: pipeline-retry
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Decide whether the day's pipeline failure earns a retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/ci_retry_decision.py
+          ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -18,6 +18,14 @@ on:
     # drops the current session's bar on any run that lands early.
     - cron: '0 19 * * 1-5'
   workflow_dispatch: {}
+  # The same-day second shot for snapshot-only sources (#254). Sent by
+  # scripts/ci_retry_decision.py from retry-failed-pipeline.yml, and only
+  # when the day's last completed run hard-failed a layer. The event type IS
+  # the retry marker: a retry is visibly a `repository_dispatch` run in the
+  # Actions list, and the decision script refuses to send a second one on a
+  # day that already has one — so a retry cannot chain off its own failure.
+  repository_dispatch:
+    types: [pipeline-retry]
   push:
     branches: [main]
     # Broadened by M17 #213. The old hand-kept seven-file list would have
@@ -59,9 +67,12 @@ permissions:
 # construction: the run behind it regenerates the whole dashboard from an
 # empty DB, so nothing it would have published is lost.
 #
-# Scheduled and manual runs are never cancelled *by* a later run of their own
-# kind: the daily run is the one that must land, and a workflow_dispatch is
-# someone waiting on a result. The remaining edge is a merge landing while the
+# Scheduled, manual and retry (`repository_dispatch`) runs are never cancelled
+# *by* a later run of their own kind: the daily run is the one that must land,
+# a workflow_dispatch is someone waiting on a result, and a retry is a
+# snapshot-only source's last chance at the day. Sharing the group is what
+# keeps a retry from racing the history-snapshot push of anything already in
+# flight — it queues behind it. The remaining edge is a merge landing while the
 # 19:00 UTC scheduled run is mid-flight — the push run cancels it and then
 # publishes a strictly fresher dashboard itself, so the outcome is benign.
 concurrency:
@@ -136,6 +147,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Makes a retry legible in the run log without opening the trigger
+      # payload. The Actions list already labels it `repository_dispatch`.
+      - name: Announce retry run
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        run: |
+          echo "::notice title=Same-day retry::Retrying after hard layer failures — ${{ github.event.client_payload.reason }}"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -170,6 +188,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/ci_layer_alert.py
+
+      # The carrier for the retry decision (#254). data/storage/ is
+      # gitignored and the runner is thrown away, so this artifact is the
+      # only way retry-failed-pipeline.yml can read what this run actually
+      # did. Same file the alerter reads — one definition of "hard failure",
+      # not a second one. Absent when main.py crashed before writing it,
+      # which the decision script reads as "retry" exactly as the alerter
+      # reads it as "alert".
+      - name: Publish the run summary for the retry decision
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-status
+          path: data/storage/pipeline_status.json
+          if-no-files-found: ignore
+          retention-days: 2
 
       # Render privately. Tombstones remain useful diagnostics inside the
       # candidate, but an incomplete candidate is never promoted over the
