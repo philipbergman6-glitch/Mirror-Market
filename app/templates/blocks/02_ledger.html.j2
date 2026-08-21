@@ -11,6 +11,15 @@
    2. THAT EVERY ROW IS ONE GOOD. In a single USD/MT column a per-row label is
       not strong enough to stop five numbers reading as one price in five
       places, so the good is named once, above them all.
+
+   M21 #250 adds the row drill-down. The series ride on the row (see
+   `_ledger_table.html.j2`); what is declared once here is what the whole block
+   shares — the pinned leg every other row is overlaid against, the currency
+   series the FX panels read, and the three thresholds that decide whether a
+   window may be drawn as a line, as dots, or not at all.
+
+   Inline SVG rather than Plotly: Plotly is loaded for the headline's figures
+   and is not worth shipping to eight market pages for a sparkline.
 #}
 {% set d = block.data %}
 <div class="ledger-rule">
@@ -20,4 +29,335 @@
 <div class="ledger-good">All rows: <strong>{{ d.commodity }}</strong> · {{ d.commodity_note }}</div>
 {% include 'blocks/_ledger_table.html.j2' %}
 <div class="caption">{{ d.no_timestamp_note }}.{% if d.leading_edge %} Newest print on this ledger: {{ d.leading_edge }} ({{ d.leading_edge_legs|join(', ') }}).{% endif %}</div>
+{% if d.has_drilldown %}
+{#- The hint is `hidden` until the script says otherwise: telling a reader to
+    open a row that nothing will open is worse than saying nothing. Same rule as
+    the chevron, which `.drill-ready` gates in `_market_css.html.j2`. -#}
+<div class="caption drill-hint" hidden>Open a row for its own history in USD/MT{% if d.reference %}, against {{ d.reference.label }} (pinned, dashed){% endif %}. Under {{ d.line_min_obs }} prints a window is drawn as dots: a connecting line would assert a path between prints that was never observed.</div>
+{% if d.reference_note %}<div class="caption">{{ d.reference_note }}</div>{% endif %}
+<script type="application/json" id="ledger-context">{{ {
+  "today": d.today,
+  "reference": d.reference,
+  "fx_series": d.fx_series,
+  "line_min_obs": d.line_min_obs,
+  "chart_min_obs": d.chart_min_obs,
+  "default_days": d.drilldown_default_days,
+}|tojson }}</script>
+<script>
+/* Ledger row drill-down (M21 #250).
+
+   Everything below is presentation of numbers already decided server-side. It
+   draws no relationship the builder did not emit: the dashed overlay is a drawn
+   comparison, never an inferred one, and there is deliberately no correlation
+   or lead-lag figure anywhere in it (#145 is out of scope, #250).
+
+   Two rules this file must not soften:
+     * a series with fewer than `line_min_obs` points is drawn as dots and never
+       joined, and one with fewer than `chart_min_obs` is not drawn at all —
+       applied to EVERY series, the dashed overlay and the FX line included;
+     * an absence is stated, never left blank. A pane with nothing in it says
+       which number was missing and why.
+
+   Deliberately ES5 and DOM-only: no build step, no framework, and a market page
+   must not acquire a dependency for a sparkline. */
+(function () {
+  var block = document.getElementById('block-ledger');
+  if (!block) return;
+  var contextEl = block.querySelector('#ledger-context');
+  var table = block.querySelector('table.ledger');
+  if (!contextEl || !table) return;
+  var CTX = JSON.parse(contextEl.textContent);
+  var DAY = 86400000;
+  var TODAY = Date.parse(CTX.today);
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /* `NodeList.forEach` and `Element.closest` are not ES5, and this script runs
+     un-transpiled on whatever the reader brought. */
+  function each(list, fn) {
+    for (var i = 0; i < list.length; i++) fn(list[i], i);
+  }
+
+  var ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, function (c) { return ESCAPES[c]; });
+  }
+
+  function isInsideLink(node) {
+    while (node && node !== table) {
+      if (node.tagName === 'A') return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
+  function treatment(count) {
+    if (count >= CTX.line_min_obs) return 'line';
+    if (count >= CTX.chart_min_obs) return 'dots';
+    return 'none';
+  }
+
+  /* Parallel arrays -> [[ms, value], ...] inside the window. Nulls are prints we
+     could not convert; they are skipped rather than interpolated, and the
+     server-side note beside the chart says how many and why. */
+  function points(payload, key, from) {
+    if (!payload) return [];
+    var base = Date.parse(payload.origin);
+    var values = payload[key] || [];
+    var out = [];
+    for (var i = 0; i < payload.d.length; i++) {
+      var t = base + payload.d[i] * DAY;
+      var v = values[i];
+      if (v === null || v === undefined || t < from || t > TODAY) continue;
+      out.push([t, v]);
+    }
+    return out;
+  }
+
+  function fmt(value, places) {
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: places, maximumFractionDigits: places
+    });
+  }
+
+  /* Enough decimals that the two axis labels are different numbers. A USD/MT
+     leg lands on 0; INR/USD at ~0.0115 lands on 4. Fixed precision would print
+     "0.0115" at both ends of a chart with a visible shape — an axis asserting
+     no movement over a line that shows some. */
+  function placesFor(lo, hi) {
+    for (var p = 0; p < 6; p++) {
+      if (fmt(lo, p) !== fmt(hi, p)) return p;
+    }
+    return 6;
+  }
+
+  function shortDate(ms, withYear) {
+    var date = new Date(ms);
+    return date.getUTCDate() + ' ' + MONTHS[date.getUTCMonth()] +
+      (withYear ? ' ' + date.getUTCFullYear() : '');
+  }
+
+  var W = 600, H = 140, PAD_L = 46, PAD_R = 10, PAD_T = 12, PAD_B = 22;
+
+  /* One pane's chart. `sets` is [{points, treatment, cls}] — the leg first, the
+     dashed overlay second where there is one. */
+  function svg(sets, from, label) {
+    var drawn = [];
+    each(sets, function (s) { if (s.points.length) drawn.push(s); });
+    if (!drawn.length) return '';
+    var lo = Infinity, hi = -Infinity;
+    each(drawn, function (s) {
+      each(s.points, function (p) {
+        if (p[1] < lo) lo = p[1];
+        if (p[1] > hi) hi = p[1];
+      });
+    });
+    /* Labels state the OBSERVED extremes; the padding only buys drawing room.
+       Printing the padded bounds would put a number on the axis that no session
+       ever printed — and disagree with the range band in the collapsed row. */
+    var dataLo = lo, dataHi = hi;
+    var places = placesFor(dataLo, dataHi);
+    var pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.02 || 1;
+    lo -= pad; hi += pad;
+    /* A window wider than a season needs the year, or the 1y toggle prints the
+       same DD MMM at both ends of the axis. */
+    var withYear = (TODAY - from) > 180 * DAY;
+    var x = function (t) {
+      return PAD_L + (W - PAD_L - PAD_R) * ((t - from) / (TODAY - from || 1));
+    };
+    var y = function (v) {
+      return PAD_T + (H - PAD_T - PAD_B) * (1 - (v - lo) / (hi - lo || 1));
+    };
+    var parts = [
+      '<svg class="drill-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" ',
+      'aria-label="' + esc(label) + '" preserveAspectRatio="xMidYMid meet">',
+      '<line class="ax" x1="' + PAD_L + '" y1="' + (H - PAD_B) + '" x2="' + (W - PAD_R),
+      '" y2="' + (H - PAD_B) + '"/>',
+      '<text class="lbl" x="' + (PAD_L - 6) + '" y="' + (PAD_T + 4) + '">' + fmt(dataHi, places) + '</text>',
+      '<text class="lbl" x="' + (PAD_L - 6) + '" y="' + (H - PAD_B) + '">' + fmt(dataLo, places) + '</text>',
+      '<text class="lbl dt" x="' + PAD_L + '" y="' + (H - 6) + '">' + shortDate(from, withYear) + '</text>',
+      '<text class="lbl dt end" x="' + (W - PAD_R) + '" y="' + (H - 6) + '">' + shortDate(TODAY, withYear) + '</text>'
+    ];
+    each(drawn, function (s) {
+      var coords = [];
+      each(s.points, function (p) { coords.push(x(p[0]) + ',' + y(p[1])); });
+      if (s.treatment === 'line' && coords.length > 1) {
+        parts.push('<polyline class="ln ' + s.cls + '" points="' + coords.join(' ') + '"/>');
+      }
+      each(s.points, function (p) {
+        parts.push('<circle class="pt ' + s.cls + '" cx="' + x(p[0]) + '" cy="' + y(p[1]) + '" r="2.2"/>');
+      });
+    });
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function pane(title, body, note) {
+    return '<div class="drill-pane"><div class="drill-title">' + esc(title) + '</div>' +
+      body + (note ? '<div class="drill-note">' + esc(note) + '</div>' : '') + '</div>';
+  }
+
+  /* Fewer than three points is not a thin chart, it is no chart: the level, the
+     print date and how little there is, stated as text. */
+  function tooSparse(win, series, unit) {
+    var last = series.length ? series[series.length - 1] : null;
+    var body = last
+      ? '<div class="drill-flat"><span class="v">' + esc(fmt(last[1], 2)) + '</span> ' +
+        esc(unit) + ' <span class="muted">on ' + esc(shortDate(last[0], false)) + '</span></div>'
+      : '<div class="drill-flat muted">nothing to draw in this window</div>';
+    return body + '<div class="drill-note">' + win.count + ' observation' +
+      (win.count === 1 ? '' : 's') +
+      (win.starts_label ? ' in this window, from ' + esc(win.starts_label) : '') +
+      ' — too few to draw a shape</div>';
+  }
+
+  /* Everything the pane knows about its own completeness, in one sentence. Each
+     clause is a separate fact and none stands in for another: what is drawn,
+     from when, how far back the page reads, what the cap removed, what could
+     not be converted. */
+  function provenance(drill, win, overlayNote) {
+    var parts = [win.count + ' observation' + (win.count === 1 ? '' : 's')];
+    if (win.starts_label) parts.push('from ' + win.starts_label);
+    if (drill.history_from_label) parts.push('page reads back to ' + drill.history_from_label);
+    if (win.truncated) parts.push(win.truncation_note);
+    if (win.withheld_note) parts.push(win.withheld_note);
+    if (overlayNote) parts.push(overlayNote);
+    if (win.treatment === 'dots') {
+      parts.push('dots only: under ' + CTX.line_min_obs +
+        ' prints a connecting line would assert a path never observed');
+    }
+    return parts.join(' · ');
+  }
+
+  function pricePane(drill, win, from) {
+    var usd = points(drill, 'usd', from);
+    if (win.treatment === 'none') {
+      return pane(drill.label + ' · USD/MT', tooSparse(win, usd, 'USD/MT'), null);
+    }
+    var sets = [{ points: usd, treatment: win.treatment, cls: 'own' }];
+    var overlay = '', overlayNote = null;
+    if (CTX.reference && CTX.reference.leg_id !== drill.leg_id) {
+      var ref = points(CTX.reference, 'usd', from);
+      var refTreatment = treatment(ref.length);
+      if (refTreatment === 'none') {
+        /* The floor is about what may be DRAWN, so it binds the overlay too —
+           two dashed dots would set the y-scale for a series they cannot
+           describe. */
+        overlayNote = 'no overlay in this window: ' + CTX.reference.label + ' has ' +
+          ref.length + ' print' + (ref.length === 1 ? '' : 's') + ' here, too few to draw';
+      } else {
+        sets.push({ points: ref, treatment: refTreatment, cls: 'ref' });
+        overlay = ' · dashed: ' + CTX.reference.label + ' (pinned)';
+        if (CTX.reference.truncated) overlayNote = CTX.reference.truncation_note;
+      }
+    }
+    return pane(
+      drill.label + ' · USD/MT' + overlay,
+      svg(sets, from, drill.label + ' in USD per metric ton over ' + win.label +
+        ', ' + win.count + ' observations'),
+      provenance(drill, win, overlayNote)
+    );
+  }
+
+  function currencyPane(drill, win, from) {
+    if (!drill.fx_pair) {
+      return pane('The currency component',
+        '<div class="drill-flat muted">' + esc(drill.single_currency_note) + '</div>', null);
+    }
+    var series = CTX.fx_series[drill.fx_pair];
+    if (!series) {
+      return pane(drill.fx_pair + ' · the currency component',
+        '<div class="drill-flat muted">no ' + esc(drill.fx_pair) + ' rate is stored inside ' +
+        'this window, so the currency component cannot be separated out</div>', null);
+    }
+    var fx = points(series, 'v', from);
+    var fxTreatment = treatment(fx.length);
+    var note = 'The row quotes ' + drill.home_unit + ' and USD/MT. This is which of the ' +
+      'two moved — a single USD line cannot say.' +
+      (series.truncated ? ' ' + series.truncation_note + '.' : '');
+    if (fxTreatment === 'none') {
+      return pane(drill.fx_pair + ' · the currency component',
+        '<div class="drill-flat muted">' + fx.length + ' rate' + (fx.length === 1 ? '' : 's') +
+        ' in this window — too few to draw</div>', note);
+    }
+    return pane(
+      drill.fx_pair + ' · the currency component',
+      svg([{ points: fx, treatment: fxTreatment, cls: 'fx' }], from,
+        drill.fx_pair + ' over ' + win.label),
+      note
+    );
+  }
+
+  function render(container, drill, days) {
+    var win = null;
+    each(drill.windows, function (w) { if (w.days === days) win = w; });
+    if (!win) win = drill.windows[0];
+    var from = TODAY - win.days * DAY;
+
+    var chips = '';
+    each(drill.windows, function (w) {
+      chips += '<button type="button" class="dw' + (w === win ? ' on' : '') +
+        '" aria-pressed="' + (w === win) + '" data-days="' + w.days + '">' +
+        esc(w.label) + '</button>';
+    });
+
+    container.innerHTML =
+      '<div class="drill-windows" role="group" aria-label="history window">' + chips +
+      '</div><div class="drill-panes">' +
+      pricePane(drill, win, from) + currencyPane(drill, win, from) + '</div>';
+
+    each(container.querySelectorAll('.dw'), function (btn) {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        render(container, drill, parseInt(btn.getAttribute('data-days'), 10));
+      });
+    });
+  }
+
+  function close(row) {
+    var panel = document.getElementById(row.getAttribute('data-panel'));
+    if (panel) panel.hidden = true;
+    var toggle = row.querySelector('.drill-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    row.classList.remove('open');
+  }
+
+  /* One open at a time — the table is the comparison, and two expansions push
+     the rows being compared off the screen. */
+  function toggle(row) {
+    var panel = document.getElementById(row.getAttribute('data-panel'));
+    if (!panel) return;
+    var opening = panel.hidden;
+    each(table.querySelectorAll('tr.lrow.open'), close);
+    if (!opening) return;
+    var container = panel.querySelector('.drill');
+    if (!container.getAttribute('data-drawn')) {
+      render(container, JSON.parse(panel.querySelector('.drill-data').textContent),
+        CTX.default_days);
+      container.setAttribute('data-drawn', '1');
+    }
+    panel.hidden = false;
+    row.classList.add('open');
+    var chevron = row.querySelector('.drill-toggle');
+    if (chevron) chevron.setAttribute('aria-expanded', 'true');
+  }
+
+  each(table.querySelectorAll('tr.lrow.has-drill'), function (row) {
+    row.addEventListener('click', function (event) {
+      /* The leg cell's link is how a reader reaches the page that explains the
+         leg; swallowing it here would trade one affordance for another. */
+      if (isInsideLink(event.target)) return;
+      toggle(row);
+    });
+  });
+
+  /* Only now is there something behind the chevron, so only now do the chevron
+     and the hint appear. Wiring first, affordances second: if anything above
+     threw, the page is left exactly as it renders without script. */
+  table.classList.add('drill-ready');
+  var hint = block.querySelector('.drill-hint');
+  if (hint) hint.hidden = false;
+})();
+</script>
+{% endif %}
 <div class="ledger-note">{{ d.note }}</div>

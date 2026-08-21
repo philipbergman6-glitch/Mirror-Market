@@ -553,3 +553,448 @@ def test_every_headline_row_links_to_its_market_page(seeded, registry):
     _state, _reason, data = headline_ledger(registry, seeded)
     for row in data["rows"]:
         assert row["href"] == registry[row["market_slug"]].url
+
+
+# ---------------------------------------------------------------------------
+# The row drill-down (M21 #250)
+#
+# What these pin, in order of how much a bug would cost:
+#
+# 1. **A connecting line asserts a path that was never observed.** Under eight
+#    prints the chart is dots, and under three there is no chart at all. On a
+#    snapshot source publishing one number a day with holes, drawing through
+#    the holes is the whole error — and it is invisible, because the line looks
+#    exactly like a line drawn through real data.
+# 2. **The chart reads prints, not rows.** #157 one level down: a dot is a
+#    stronger claim than a table cell, because it *looks* like evidence that
+#    something printed.
+# 3. **India draws no reference line.** A rendering absence, and therefore
+#    invisible to every other kind of check.
+# 4. **The headline is untouched.** The table partial is shared, so a change
+#    aimed at block 02 lands on the headline section unless something stops it.
+# ---------------------------------------------------------------------------
+from jinja2 import Environment, FileSystemLoader  # noqa: E402
+
+from app.block_builders import (  # noqa: E402
+    LEDGER_DRILLDOWN_DEFAULT_DAYS,
+    LEDGER_DRILLDOWN_MAX_OBS,
+    LEDGER_DRILLDOWN_WINDOW_DAYS,
+)
+
+TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "app" / "templates"
+
+
+def _template_env() -> Environment:
+    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+
+
+def _ledger_html(data: dict) -> str:
+    """The shared table partial — the surface block 02 and the headline both use."""
+    return _template_env().get_template("blocks/_ledger_table.html.j2").render(
+        d=data, root="../"
+    )
+
+
+def _block_html(data: dict) -> str:
+    """Block 02 whole, which is where the block-wide statements are rendered."""
+    return _template_env().get_template("blocks/02_ledger.html.j2").render(
+        block={"data": data, "id": "ledger"}, root="../"
+    )
+
+
+def _block(slug, seeded, registry) -> dict:
+    state, reason, data = ledger_block(registry[slug], seeded, markets=registry)
+    assert state == "ok", reason
+    return data
+
+
+def _window(drill: dict, days: int) -> dict:
+    return next(w for w in drill["windows"] if w["days"] == days)
+
+
+def _seed_cbot_prints(seeded, count: int, *, volume: float = 15000.0) -> None:
+    """Exactly ``count`` trade-proved CBOT prints, newest today."""
+    seeded.conn.execute("DELETE FROM prices WHERE commodity = 'Soybeans'")
+    for offset in range(count):
+        seeded.conn.execute(
+            "INSERT INTO prices (commodity, Date, Close, Volume) VALUES (?,?,?,?)",
+            ("Soybeans", _day(offset), 1000.0 + offset, volume),
+        )
+    seeded.conn.commit()
+    seeded._cache.clear()
+
+
+def _seed_india_prints(seeded, count: int = 6) -> None:
+    """Both mandi legs, inside the 7-day india_domestic budget."""
+    seeded.conn.execute(
+        "INSERT OR REPLACE INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+        ("INR/USD", _day(0), 0.0115),
+    )
+    for offset in range(count):
+        for key, level in (("Soybean (Mandi MP)", 45000.0), ("Soybean (Mandi MH)", 46000.0)):
+            seeded.conn.execute(
+                "INSERT OR REPLACE INTO india_domestic_prices "
+                "(Date, commodity, Close) VALUES (?,?,?)",
+                (_day(offset), key, level + offset * 100),
+            )
+    seeded.conn.commit()
+    seeded._cache.clear()
+
+
+@pytest.mark.parametrize(
+    ("observations", "treatment"),
+    [(2, "none"), (3, "dots"), (7, "dots"), (8, "line")],
+)
+def test_the_three_bands_fall_at_two_three_seven_and_eight(
+    observations, treatment, seeded, registry
+):
+    """The prototype drew a line at 3–7 prints. That is the defect, not the shape.
+
+    A connecting line asserts a path between prints that was never observed.
+    Eight is where a shape becomes readable; below three there is nothing to
+    draw at all and the pane states the level and the start date instead.
+    """
+    _seed_cbot_prints(seeded, observations)
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    assert _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)["treatment"] == treatment
+
+
+def test_every_band_states_where_the_history_starts_and_how_many_prints(seeded, registry):
+    _seed_cbot_prints(seeded, 5)
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    window = _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)
+    assert window["count"] == 5
+    assert window["starts"] == _day(4)
+
+
+def test_a_zero_volume_row_is_not_an_observation_on_the_chart(seeded, registry):
+    """#157 at chart level — and worse here, because a dot looks like evidence.
+
+    Grain SA re-dates a carried SAFEX price with Volume 0. Six such rows must
+    move the count by nothing; the leg keeps the single print that traded.
+    """
+    for offset in range(4, 10):
+        seeded.conn.execute(
+            "INSERT INTO safex_prices (Date, commodity, Close, Volume) VALUES (?,?,?,?)",
+            (_day(offset), "Soybean (SAFEX)", 8000.0, 0.0),
+        )
+    # A rate as old as the oldest print, so this test measures the proof column
+    # and nothing else — a print predating FX coverage is withheld for a
+    # different reason, pinned by its own test below.
+    seeded.conn.execute(
+        "INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)", ("ZAR/USD", _day(9), 0.055)
+    )
+    seeded.conn.commit()
+    seeded._cache.clear()
+    rows = {row["leg_id"]: row for row in _block("south_africa", seeded, registry)["rows"]}
+    drill = rows["south_africa:safex"]["drill"]
+    assert _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)["count"] == 1
+    assert _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)["treatment"] == "none"
+
+
+def test_india_draws_no_reference_line(seeded, registry):
+    """The `policy_blocked` case — an absence, and so invisible to other checks.
+
+    India's ledger names no foreign leg because no foreign bean is connected to
+    a mandi by trade. A dashed series under a mandi one would render the +66%
+    policy spread as a gap that closes, which is the read #222 refused.
+    """
+    _seed_india_prints(seeded)
+    data = _block("india", seeded, registry)
+    assert data["reference"] is None
+    assert data["reference_note"], "an absent reference line must say why"
+    html = _block_html(data)
+    assert "No reference line" in html, "the absence is stated on the block, not hidden"
+    # The *reason* is the ledger's own note, not restated by the drill-down: a
+    # future single-market ledger could exist for a different reason entirely,
+    # and a hard-coded "policy-blocked" would then be a false causal claim.
+    assert "GM soybean imports" in html
+    assert "policy-blocked" not in data["reference_note"]
+
+
+def test_the_overlay_is_the_pages_own_pinned_leg_not_cbot(seeded, registry):
+    """CEPEA on Brazil, not CBOT — and SAFEX on South Africa, whose ledger
+    carries CBOT as a labelled reference row and would be the easy thing to
+    reach for. CBOT is the least reliable same-day leg (M4), so pinning it
+    everywhere would encode the assumption the ledger exists to correct."""
+    assert _block("brazil", seeded, registry)["reference"]["leg_id"] == "brazil:cepea"
+    assert _block("south_africa", seeded, registry)["reference"]["leg_id"] == (
+        "south_africa:safex"
+    )
+    assert _block("cbot", seeded, registry)["reference"]["leg_id"] == "cbot:board"
+
+
+def test_each_point_converts_at_its_own_dates_fx_rate(seeded, registry):
+    """A series converted at today's rate moves the venue on days it did not.
+
+    CEPEA is flat at BRL 2000 across both prints while BRL/USD goes 0.20 →
+    0.21, so the USD series must show the currency's move and only that.
+    """
+    rows = {row["leg_id"]: row for row in _block("brazil", seeded, registry)["rows"]}
+    drill = rows["brazil:cepea"]["drill"]
+    assert drill["usd"] == [400.0, 420.0]
+
+
+def test_a_usd_native_leg_gets_a_sentence_not_a_second_panel(seeded, registry):
+    """M3's dual-quote rule: there is no second currency, so there is no panel."""
+    rows = {row["leg_id"]: row for row in _block("argentina", seeded, registry)["rows"]}
+    drill = rows["argentina:fob"]["drill"]
+    assert drill["fx_pair"] is None
+    assert "USD/MT" in drill["single_currency_note"]
+
+
+def test_the_fx_panel_reads_the_pairs_own_series(seeded, registry):
+    data = _block("brazil", seeded, registry)
+    rows = {row["leg_id"]: row for row in data["rows"]}
+    assert rows["brazil:cepea"]["drill"]["fx_pair"] == "BRL/USD"
+    assert data["fx_series"]["BRL/USD"]["v"] == [0.20, 0.21]
+
+
+def test_the_windows_are_thirty_ninety_and_a_year_never_all(seeded, registry):
+    """A control labelled "all" beside a capped series is a lie about the data."""
+    assert LEDGER_DRILLDOWN_WINDOW_DAYS == (30, 90, 365)
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    assert [w["days"] for w in drill["windows"]] == [30, 90, 365]
+    assert "all" not in " ".join(w["label"] for w in drill["windows"]).lower()
+    assert drill["default_days"] == 90
+
+
+def test_the_payload_is_capped_and_says_so_only_where_it_truncates(seeded, registry):
+    """The cap bites the 1y window and leaves 30d untouched.
+
+    A leg-level note would print "the last 260 of 320" beside a count of 31 —
+    two populations in one sentence, and the smaller one is the true one.
+    """
+    _seed_cbot_prints(seeded, 320)
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    assert len(drill["d"]) == LEDGER_DRILLDOWN_MAX_OBS
+    assert len(drill["usd"]) == LEDGER_DRILLDOWN_MAX_OBS
+
+    year = _window(drill, 365)
+    assert year["truncated"] is True
+    assert str(LEDGER_DRILLDOWN_MAX_OBS) in year["truncation_note"]
+    assert "320" in year["truncation_note"]
+
+    month = _window(drill, 30)
+    assert month["truncated"] is False
+    assert month["truncation_note"] is None
+    assert month["count"] == 31
+
+
+def test_a_window_states_where_it_starts_drawing_not_where_history_starts(
+    seeded, registry
+):
+    """The 1y window starts at the CAP boundary, not at the leg's first print.
+
+    Rendering that as "history starts 26 Nov" would state a payload-size
+    artefact as a fact about the market — in the one block whose subject is
+    what we do and do not know. The leg's own reach is carried separately.
+    """
+    _seed_cbot_prints(seeded, 320)
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    assert _window(drill, 30)["starts"] == _day(30)
+    assert _window(drill, 365)["starts"] == _day(LEDGER_DRILLDOWN_MAX_OBS - 1)
+    # …and what the page actually reads back to is stated once, on the leg.
+    assert drill["history_from"] == _day(319)
+    assert drill["history_from_label"] is not None
+
+
+def test_points_are_parallel_arrays_never_an_array_of_objects(seeded, registry):
+    """The prototype's array-of-objects took one page from 26 KB to 89 KB."""
+    _seed_cbot_prints(seeded, 30)
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    assert all(isinstance(day, int) for day in drill["d"])
+    assert all(value is None or isinstance(value, float) for value in drill["usd"])
+    assert len(drill["d"]) == len(drill["usd"])
+
+
+def test_the_drilldown_payload_stays_inside_its_budget(seeded, registry):
+    """A market page runs 13–19 KB today; the drill-down must not swamp it."""
+    import json
+
+    _seed_cbot_prints(seeded, 400)
+    data = _block("cbot", seeded, registry)
+    size = len(json.dumps(data, default=str))
+    assert size < 90_000, f"the ledger block serialises to {size / 1024:.0f} KB"
+
+
+# -- the collapsed row, which must not need JavaScript ----------------------
+def test_the_range_band_is_rendered_in_the_row_not_by_script(seeded, registry):
+    """With JS off the ledger keeps every number it states today, plus the band.
+
+    "High in its own range" is often the entire question for a buyer scanning
+    five legs, so it must not depend on a click — or on script running at all.
+    """
+    _seed_cbot_prints(seeded, 20)
+    data = _block("cbot", seeded, registry)
+    row = data["rows"][0]
+    band = row["band"]
+    assert band["has_range"] is True
+    assert band["low"] < band["high"]
+    assert band["low"] <= row["usd_mt"] <= band["high"]
+    assert 0.0 <= band["position"] <= 1.0
+    assert band["since"] == _day(19)
+    html = _ledger_html(data)
+    assert "range-band" in html
+    assert band["since_label"] in html
+
+
+def test_under_eight_observations_the_band_says_so_rather_than_drawing_one(
+    seeded, registry
+):
+    """Two points are not a range; a band drawn across them invents one."""
+    _seed_cbot_prints(seeded, 4)
+    data = _block("cbot", seeded, registry)
+    band = data["rows"][0]["band"]
+    assert band["has_range"] is False
+    assert band["count"] == 4
+    assert "4 obs" in _ledger_html(data)
+    assert "no range yet" in _ledger_html(data)
+
+
+def test_a_leg_with_no_print_in_the_window_has_neither_band_nor_drilldown(
+    seeded, registry
+):
+    """No print in the window is not a chart with nothing on it.
+
+    Only the MP leg is seeded, so MH is dark — and a dark leg must carry no
+    chart to open and no range to sit in, rather than an empty pane implying
+    both exist and happen to be blank today.
+    """
+    _seed_india_prints(seeded)
+    seeded.conn.execute("DELETE FROM india_domestic_prices WHERE commodity LIKE '%MH%'")
+    seeded.conn.commit()
+    seeded._cache.clear()
+    rows = {row["leg_id"]: row for row in _block("india", seeded, registry)["rows"]}
+    assert rows["india:mandi_mh"]["state"] == LEDGER_STATE_DARK
+    assert rows["india:mandi_mh"]["drill"] is None
+    assert rows["india:mandi_mh"]["band"] is None
+    html = _ledger_html(_block("india", seeded, registry))
+    assert html.count("drill-row") == 1, "only the leg with prints opens"
+
+
+# -- the headline, which this ticket does not touch -------------------------
+def test_the_headline_ledger_has_no_drilldown(seeded, registry):
+    """A headline row is a MARKET, and the market cell is already the link.
+
+    An expansion would compete with the one affordance that row exists to
+    offer. The gate is an explicit flag, not `has_spread` — that is a statement
+    about the spread column and tying the two together would couple two
+    unrelated decisions.
+    """
+    _state, _reason, data = headline_ledger(registry, seeded)
+    assert data["has_drilldown"] is False
+    assert all(row.get("drill") is None for row in data["rows"])
+    assert all(row.get("band") is None for row in data["rows"])
+
+
+def test_the_headline_table_markup_carries_no_drilldown(seeded, registry):
+    """The partial is shared with block 02 — this is what stops the drift."""
+    _state, _reason, data = headline_ledger(registry, seeded)
+    html = _ledger_html(data)
+    assert "drill" not in html
+    assert "range-band" not in html
+
+
+def test_a_market_page_ledger_opens_one_row_at_a_time(seeded, registry):
+    """Never a modal: the ledger's claim is comparative, and a modal covers the
+    rows being compared against. The expansion is a row under its own row."""
+    _seed_cbot_prints(seeded, 20)
+    data = _block("cbot", seeded, registry)
+    assert data["has_drilldown"] is True
+    html = _ledger_html(data)
+    assert "drill-row" in html
+    assert "modal" not in html.lower()
+    assert 'aria-expanded="false"' in html
+
+
+# -- what the review of the first cut found, pinned so it cannot come back ---
+def test_a_print_that_cannot_be_converted_is_not_an_observation(seeded, registry):
+    """The count must describe what is DRAWN, not what was fetched.
+
+    CEPEA prints ten times with no BRL/USD rate stored. Counting dates would
+    caption the pane "10 observations" over a chart with nothing on it — an
+    absence with no reason, which is the one thing this block must never do.
+    """
+    seeded.conn.execute("DELETE FROM currencies WHERE pair = 'BRL/USD'")
+    for offset in range(10):
+        seeded.conn.execute(
+            "INSERT OR REPLACE INTO brazil_spot_prices (Date, commodity, price_brl) "
+            "VALUES (?,?,?)",
+            (_day(offset), "Soybean (CEPEA)", 2000.0),
+        )
+    seeded.conn.commit()
+    seeded._cache.clear()
+    rows = {row["leg_id"]: row for row in _block("brazil", seeded, registry)["rows"]}
+    drill = rows["brazil:cepea"]["drill"]
+    window = _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)
+    assert window["count"] == 0
+    assert window["treatment"] == "none"
+    assert "no BRL/USD rate" in window["withheld_note"]
+    # …and the collapsed row agrees with the pane, rather than the two
+    # disagreeing about the same ten prints.
+    assert rows["brazil:cepea"]["band"]["count"] == 0
+
+
+def test_a_print_older_than_the_fx_series_is_withheld_not_back_converted(
+    seeded, registry
+):
+    """Invariant 7: that row's own date's rate, or blank. Never a later one.
+
+    `SiteContext.fx_on` falls back to the oldest rate it holds, which on two
+    row values is a small error and on a 260-point chart is a stretch of the
+    currency's movement drawn under the venue's name.
+    """
+    seeded.conn.execute("DELETE FROM currencies WHERE pair = 'BRL/USD'")
+    seeded.conn.execute(
+        "INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)", ("BRL/USD", _day(1), 0.21)
+    )
+    seeded._cache.clear()
+    rows = {row["leg_id"]: row for row in _block("brazil", seeded, registry)["rows"]}
+    drill = rows["brazil:cepea"]["drill"]
+    assert drill["usd"] == [None, 420.0], "the pre-coverage print was converted anyway"
+    assert _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)["count"] == 1
+
+
+def test_a_cents_per_bushel_leg_says_it_has_no_currency_component(seeded, registry):
+    """CBOT and the Gulf are USD legs in a non-MT unit — a conversion, not a rate.
+
+    The first cut keyed the FX panel off "not usd_per_mt", so these two rows got
+    neither the panel nor the sentence: two rows in the same table treated
+    differently with nothing saying why.
+    """
+    rows = {row["leg_id"]: row for row in _block("cbot", seeded, registry)["rows"]}
+    for leg_id in ("cbot:board", "us_gulf:cif"):
+        drill = rows[leg_id]["drill"]
+        assert drill["fx_pair"] is None
+        assert "unit conversion, not a currency one" in drill["single_currency_note"]
+
+
+def test_a_future_dated_row_is_not_counted(seeded, registry):
+    """The client drops anything after today; the count must too, or the caption
+    claims one more observation than the chart draws."""
+    _seed_cbot_prints(seeded, 8)
+    seeded.conn.execute(
+        "INSERT INTO prices (commodity, Date, Close, Volume) VALUES (?,?,?,?)",
+        ("Soybeans", _day(-3), 1200.0, 15000.0),
+    )
+    seeded.conn.commit()
+    seeded._cache.clear()
+    drill = _block("cbot", seeded, registry)["rows"][0]["drill"]
+    assert _window(drill, LEDGER_DRILLDOWN_DEFAULT_DAYS)["count"] == 8
+
+
+def test_the_flag_alone_turns_the_drilldown_off(seeded, registry):
+    """`has_drilldown: False` must be sufficient — no markup may reach a surface
+    that did not ask for it, whatever the rows happen to carry."""
+    _seed_cbot_prints(seeded, 20)
+    data = _block("cbot", seeded, registry)
+    off = _ledger_html({**data, "has_drilldown": False})
+    stripped = _ledger_html({
+        **data,
+        "has_drilldown": False,
+        "rows": [{**row, "drill": None, "band": None} for row in data["rows"]],
+    })
+    assert off == stripped
+    for artefact in ("drill", "range-band", "aria-expanded"):
+        assert artefact not in off
