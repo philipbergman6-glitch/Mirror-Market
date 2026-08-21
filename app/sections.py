@@ -159,6 +159,7 @@ def relative_value_section(data: dict | None) -> dict:
             "has no free daily feed, so CZCE is the rapeseed leg"
         )
     out["oil_vs_rapeseed"] = rapeseed
+    out["competing_oil_weather"] = _competing_oil_weather_strip()
 
     bcr = data.get("bean_corn_ratio") or {}
     if bcr.get("series") is not None:
@@ -251,6 +252,69 @@ def _two_oil_panel(data: dict | None, *, left: tuple[str, str], right: tuple[str
     # headline page and with it the whole deploy (#226). None means "no
     # spread on this pair"; the template skips the block.
     return {"legs": legs, "spread_usd_mt": None, "spread_note": None}
+
+
+def _competing_oil_weather_strip() -> dict | None:
+    """One line per competing-oil belt — palm and the canola prairies.
+
+    M14 #207: palm and canola price legs render on the four-oil board above
+    and nowhere else, so under the standing rule ("every rendered price leg
+    gets the weather that prices it, on the page where that leg renders")
+    their weather belongs here. A **strip**, not a block and not region cards
+    — M2 #144 took the region cards off the headline and this is not their
+    return.
+
+    Its own read and its own failure, like ``_correlations_panel``: the
+    relative-value section keeps its oil panels when the weather layer is
+    unreadable, and says nothing rather than something invented.
+    """
+    try:
+        from datetime import datetime, timezone
+
+        import config
+        from analysis.briefing.sections.weather import observed_only
+        from app.block_builders import out_of_season_note, weather_alert
+        from pipeline.query import read_weather
+
+        today = datetime.now(timezone.utc).date()
+        belts = []
+        for spec in config.COMPETING_OIL_WEATHER_BELTS:
+            regions, missing = [], []
+            for region in spec["regions"]:
+                # A pre-migration or absent DB returns a frame with no columns
+                # at all, so the emptiness check has to come before the sort.
+                observed = observed_only(read_weather(region))
+                if observed.empty:
+                    missing.append(region)
+                    continue
+                row = observed.sort_values("Date").iloc[-1]
+                temp_max = _float_or_none(row.get("temp_max"))
+                precip = _float_or_none(row.get("precipitation"))
+                regions.append({
+                    "region": region,
+                    "temp_max": temp_max,
+                    "precip_mm": precip,
+                    "as_of": _as_date(row.get("Date")),
+                    "alert": weather_alert(temp_max, precip),
+                    "season_note": out_of_season_note(region, today),
+                })
+            belts.append({
+                "belt": spec["belt"],
+                "leg": spec["leg"],
+                "note": spec["note"],
+                "regions": regions,
+                # Named, never dropped silently — a belt line with a pin
+                # missing must say which pin, not quietly narrow the belt.
+                "missing": missing,
+            })
+        return {"belts": belts} if any(b["regions"] for b in belts) else None
+    except Exception:  # noqa: BLE001
+        log.warning("competing-oil weather strip failed", exc_info=True)
+        return None
+
+
+def _float_or_none(value) -> float | None:
+    return None if value is None or pd.isna(value) else float(value)
 
 
 # ---------------------------------------------------------------------------

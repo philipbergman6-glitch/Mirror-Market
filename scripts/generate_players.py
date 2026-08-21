@@ -93,21 +93,25 @@ FAS_COUNTRY_PATTERNS = {
     "CA": "CANADA", "RU": "RUSSIA",
 }
 
-# ISO code → weather regions (config.GROWING_REGIONS names) — the 12
+# ISO code → weather regions (config.GROWING_REGIONS names) — the
 # weather-covered origin countries from the spec's weather/flows mapping.
+# Every value must be a live GROWING_REGIONS key; a test pins that.
 WEATHER_REGIONS_BY_ISO = {
     "US": ["US Midwest (Iowa)", "US Illinois"],
     "BR": ["Brazil Mato Grosso", "Brazil Parana"],
     "AR": ["Argentina Pampas", "Argentina Cordoba"],
-    "PY": ["Paraguay Chaco"],
+    "PY": ["Paraguay Alto Parana"],
     "CN": ["China Heilongjiang"],
     "IN": ["India Madhya Pradesh", "India Maharashtra"],
     "ZA": ["South Africa Free State", "South Africa Mpumalanga"],
     "NG": ["Nigeria Benue", "Nigeria Kaduna"],
     "ID": ["Indonesia Riau (Sumatra)"],
     "MY": ["Malaysia Sabah (Borneo)"],
-    "TH": ["Thailand Surat Thani"],
-    "CI": ["Ivory Coast (Cocoa)"],
+    # TH and CI came out with their pins (M14 #207 / M24 #271): Thailand's
+    # palm is covered by ID+MY, and Ivory Coast was a cocoa relic. A key here
+    # naming a region that GROWING_REGIONS no longer holds would read as a
+    # weather outage for that country rather than as "not covered".
+    "CA": ["Canada Saskatchewan (Saskatoon)", "Canada Alberta (central)"],
 }
 
 WEATHER_Z_ALERT = 2.0  # |z| at or above this gets alert styling
