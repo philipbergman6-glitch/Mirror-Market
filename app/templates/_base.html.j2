@@ -159,6 +159,17 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .table-scroll { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-scroll > .dtable { min-width: 760px; }
 
+/* ---- empty states (M1 #143 constraint 2) ----
+   A labelled statement, never a blank. `absent` reads calm (no source exists,
+   by structure); `empty` reads warm (a source exists and gave us nothing).
+   Moved out of _market_css.html.j2 by M16 #208 for the same reason `.kind`
+   was: the headline's crush board renders empty cards too, and a second copy
+   is exactly the drift the one-<head>-owner rule exists to prevent. */
+.empty-state { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--text-muted); }
+.empty-state .es-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.empty-state.state-empty { border-left: 3px solid var(--warning); }
+.empty-state.state-empty .es-label { color: var(--warning); }
+
 /* ---- quote-kind label (M3 #145 constraint 4) ----
    Delayed board closes, physical assessments, administered minimums and weekly
    assessments are different animals; collapsing them into one "price" label is
