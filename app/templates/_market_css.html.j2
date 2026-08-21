@@ -24,6 +24,23 @@
   .block-head .why { flex-basis: 100%; margin-left: 0; overflow-wrap: anywhere; }
 }
 
+/* ---- river gauges (block 06, M25 #272 / M26 #273) ----
+   DESIGN.md's "Key/value watch row": muted label left, mono value right,
+   dotted rule between. Defined here rather than in _base.html.j2 because only
+   a market block renders a river — the headline and players pages never do,
+   which is the same reason this whole file exists. */
+.river { margin-top: 14px; }
+.river-head { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
+.river-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; align-items: baseline; }
+.river-row:last-child { border-bottom: none; }
+.river-row .lbl { color: var(--text-muted); min-width: 0; overflow-wrap: anywhere; }
+.river-row .val { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.river-row .caption { margin-top: 2px; }
+@media (max-width: 768px) {
+  .river-row { grid-template-columns: 1fr; }
+  .river-row .val { text-align: left; white-space: normal; }
+}
+
 /* An empty state is a labelled statement, never a blank. `absent` reads calm
    (no source exists, by structure); `empty` reads warm (a source exists and
    gave us nothing) — M1 constraint 2's distinction, made visible. */

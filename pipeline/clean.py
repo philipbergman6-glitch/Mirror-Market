@@ -197,6 +197,33 @@ def clean_weather(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_river_levels(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean river stage rows from either provider (Layers 27/28).
+
+    Deliberately *not* clean_weather: weather forward-fills small gaps, and a
+    river gauge must not. A missing stage is a reading nobody took, and the
+    days it goes missing — a frozen sensor in a low-water event — are exactly
+    the days a carried-forward level would be wrong in the direction that
+    matters. NULL stays NULL (invariant 2).
+
+    Returns a cleaned copy; the original is not mutated.
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["stage"] = pd.to_numeric(df["stage"], errors="coerce")
+    if "is_forecast" in df.columns:
+        df["is_forecast"] = pd.to_numeric(df["is_forecast"], errors="coerce")
+    # A row with no date cannot be keyed, and a row with no unit cannot be
+    # read: feet and metres are both plausible numbers for either river.
+    df = df.dropna(subset=["Date"])
+    if "unit" in df.columns:
+        df = df[df["unit"].notna() & (df["unit"].astype(str).str.strip() != "")]
+    return df.sort_values("Date").reset_index(drop=True)
+
+
 def clean_psd(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean PSD (Production, Supply & Distribution) data.

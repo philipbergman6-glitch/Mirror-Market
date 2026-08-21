@@ -468,6 +468,33 @@ def save_weather_data(region: str, df: pd.DataFrame):
           ["region", "Date"], f"weather/{region}")
 
 
+def save_river_levels(gauge: str, df: pd.DataFrame):
+    """Write river stage → 'river_levels' (Layers 27/28).
+
+    `unit` is required rather than defaulted: the two rivers are measured in
+    different units and a row that cannot say which is a number nobody can
+    read. Hard-fails rather than guessing (invariant 1).
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["gauge"] = gauge
+    df["Date"] = _date(df["Date"])
+    if "unit" not in df.columns or df["unit"].isna().any():
+        raise ValueError(
+            f"river_levels/{gauge}: every row must carry its unit — feet and "
+            "metres are both plausible readings for either river"
+        )
+    if "is_forecast" not in df.columns:
+        df["is_forecast"] = None  # legacy callers: NULL = observed
+    for column in ("source", "attribution"):
+        if column not in df.columns:
+            df[column] = None
+    _save("river_levels",
+          df[["gauge", "Date", "stage", "unit", "is_forecast", "source", "attribution"]],
+          ["gauge", "Date"], f"river_levels/{gauge}")
+
+
 def save_psd_data(commodity: str, df: pd.DataFrame):
     """Write PSD → 'psd'. Drops rows with NaN year (INTEGER NOT NULL key)."""
     if df.empty:
@@ -1218,21 +1245,28 @@ def update_commodity_freshness():
     if not is_cloud() and not os.path.exists(DB_PATH):
         return
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    table_specs = [
+    # The optional fourth element is a WHERE fragment. `river_levels` stores
+    # NWPS forecast rows dated up to 14 days ahead, and MAX(Date) over those
+    # reports a gauge as fresh into next week — the same trap
+    # `main._latest_observation_date` exists to avoid. NULL is observed.
+    table_specs: list[tuple[str, str, str] | tuple[str, str, str, str]] = [
         ("prices", "commodity", "Date"),
         ("cot", "commodity", "Date"),
         ("weather", "region", "Date"),
+        ("river_levels", "gauge", "Date", "is_forecast IS NULL OR is_forecast != 1"),
         ("currencies", "pair", "Date"),
         ("dce_futures", "commodity", "Date"),
         ("worldbank_prices", "commodity", "Date"),
         ("forward_curve", "commodity", "fetched_date"),
     ]
     with managed_connection(get_connection()) as conn:
-        for table, key_col, date_col in table_specs:
+        for spec in table_specs:
+            table, key_col, date_col = spec[0], spec[1], spec[2]
+            where = f" WHERE {spec[3]}" if len(spec) > 3 else ""
             try:
                 rows = conn.execute(
                     f"SELECT {key_col}, MAX({date_col}), COUNT(*) "
-                    f"FROM {table} GROUP BY {key_col}"
+                    f"FROM {table}{where} GROUP BY {key_col}"
                 ).fetchall()
             except Exception:
                 continue

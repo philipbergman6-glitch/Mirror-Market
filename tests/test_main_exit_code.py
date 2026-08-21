@@ -70,6 +70,8 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_ec_oilseed_prices": empty_dict,
         "fetch_gtr_ocean_freight": empty_dict,
         "fetch_gtr_vessel_activity": empty_dict,
+        "fetch_nwps_gauges": empty_dict,
+        "fetch_ina_gauges": empty_dict,
         "fetch_dce_futures": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,

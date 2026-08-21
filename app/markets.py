@@ -375,6 +375,13 @@ class Market:
     weather_regions: tuple[str, ...]
     psd_country: str | None
     players_country: str | None
+    # Layers 27/28. A line inside block 06, not a block of its own: the nine
+    # block ids are the contract, and only two of eight markets have a river
+    # that prices their freight — a tenth block would be a permanent
+    # unfillable blank on the other six. Empty is the ordinary case and needs
+    # no absent reason for that reason; a *configured* gauge with no rows
+    # still says so, which is the distinction M1 constraint 2 is about.
+    river_gauges: tuple[str, ...] = ()
     absent_reasons: dict[str, str] = field(default_factory=dict)
     # Wired in a second pass by `load_markets()` — a leg names another market,
     # so every market has to exist before any ledger can be resolved.
@@ -553,6 +560,12 @@ def _market(slug: str, raw: dict) -> Market:
     unknown = set(raw["weather_regions"]) - set(config.GROWING_REGIONS)
     if unknown:
         raise ValueError(f"market {slug!r} names weather region(s) not in GROWING_REGIONS: {sorted(unknown)}")
+
+    unknown_gauges = set(raw.get("river_gauges") or ()) - set(config.RIVER_GAUGES)
+    if unknown_gauges:
+        raise ValueError(
+            f"market {slug!r} names river gauge(s) not in RIVER_GAUGES: {sorted(unknown_gauges)}"
+        )
     if raw.get("currency_pair") and raw["currency_pair"] not in config.CURRENCY_TICKERS:
         raise ValueError(
             f"market {slug!r} currency_pair {raw['currency_pair']!r} is not in CURRENCY_TICKERS"
@@ -573,6 +586,7 @@ def _market(slug: str, raw: dict) -> Market:
         basis=_source(raw["basis"], slug=slug, block="basis") if raw.get("basis") else None,
         flows=_source(raw["flows"], slug=slug, block="flows") if raw.get("flows") else None,
         weather_regions=tuple(raw["weather_regions"]),
+        river_gauges=tuple(raw.get("river_gauges") or ()),
         psd_country=raw.get("psd_country"),
         players_country=raw.get("players_country"),
         absent_reasons=reasons,

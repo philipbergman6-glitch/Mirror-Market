@@ -67,6 +67,12 @@ LAYER_MIN_KEYS = {
     # while the run stayed green.
     "gtr_ocean_freight": 2,  # of 2 routes
     "gtr_vessels": 2,        # of 2 port regions
+    # Both Mississippi gauges come out of the same NWPS API on the same run.
+    # One gauge answering while the other does not is our transport or a
+    # renamed LID, never "that stretch of river had nothing to report" — a
+    # river always has a level. A floor of 1 would let the Memphis leg, which
+    # is the one the basis trades off, go dark behind a green St. Louis.
+    "river_us": 2,           # of 2 gauges
 }
 
 # Systemic-outage backstop: exit non-zero when more than this many active
@@ -77,7 +83,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2 and 15 each have an independently
-# runnable sub-layer, hence 29 operational layers across 26 numbered groups.
+# runnable sub-layer, hence 31 operational layers across 28 numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
     ("usda", "2", "USDA NASS QuickStats", "Annual", "US production, area and yield"),
@@ -108,13 +114,15 @@ PRODUCTION_LAYERS = (
     ("cec", "25", "Crop Estimates Committee (SA)", "Monthly", "Official crop estimates"),
     ("gtr_ocean_freight", "26", "USDA AMS (Grain Transport Report)", "Monthly", "Gulf and PNW to Japan ocean freight"),
     ("gtr_vessels", "26b", "USDA AMS (Grain Transport Report)", "Weekly", "Gulf and PNW grain vessel lineups"),
+    ("river_us", "27", "NOAA NWPS (stage via USACE/USGS)", "Daily + forecast", "Mississippi at Memphis and St. Louis"),
+    ("river_ar", "28", "Argentina INA (Prefectura reading)", "Daily", "Paraná at Rosario"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
 # ---------------------------------------------------------------------------
 # Fast refresh — the price-only path (`python main.py --fast`)
 #
-# The daily build re-downloads all 29 layers, and the measured cost of that is
+# The daily build re-downloads all 31 layers, and the measured cost of that is
 # dominated by one thing: DEFAULT_HISTORY_PERIOD is 15 years, and a 15-year
 # yfinance pull benchmarked at 24-32 s per ticker against 1-3 s for a short
 # window (2026-08-19, see LATENCY.md). Twenty tickers of history is most of the
@@ -349,6 +357,122 @@ GROWING_REGIONS = {
 }
 
 WEATHER_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum"
+
+# ---------------------------------------------------------------------------
+# Layers 27 / 28 — river gauges (M25 #272, M26 #273)
+#
+# River water is tradeable weather, which is why these sit beside
+# GROWING_REGIONS rather than in a transport section: the number is a stage
+# reading, and the trade it moves is the barge freight inside a cash bid.
+#
+#   27  Mississippi (NOAA NWPS)  — Memphis prices the barge freight inside the
+#       `us_gulf:cif` ledger leg. The 2022 low took St. Louis barge rates from
+#       ~$20 to ~$106/ton and US Gulf soybean basis to a record +$3.00/bu, and
+#       it repeated in 2023 and 2024.
+#   28  Paraná at Rosario (INA)  — ~80% of Argentine ag exports move on it. The
+#       2021 low (0.06 m against a 2.92 m 24-year median, a 77-year record) cut
+#       cargo sizes ~5,500-7,000 t and Rosario soy exports by more than two
+#       thirds.
+#
+# TWO PROVIDERS, ONE SHAPE. Every gauge lands in one `river_levels` table with
+# one set of columns, so the market stays a parameter (invariant 5) — but the
+# providers are graded as two layers because a quiet Argentine endpoint must
+# not take the Mississippi leg down with it, and vice versa.
+#
+# `unit` is `ft` or `m` and is stored on every row. This is the one series in
+# the stack that is not a price: it never passes through `to_usd_mt`, and the
+# two rivers must never share a unit label (invariant 7's neighbourhood, from
+# the other side — a metre rendered as a foot parses perfectly).
+#
+# `timezone` is declared here rather than read off the payload. A stage series
+# is bucketed into days in the *gauge's* local time — NWPS stamps every reading
+# in UTC, so a 02:00Z reading belongs to the previous river day, and bucketing
+# by UTC date would file half of every evening under tomorrow. NWPS does
+# publish its own zone, but as a POSIX string (`CST6CDT`) rather than an IANA
+# name, and mapping one to the other is a guess this file would rather state.
+#
+# `low_water` is a DECLARED trade threshold with a named basis, never an
+# inferred one. St. Louis carries None deliberately: it is here as the
+# barge-rate reference, and no threshold for it is sourced — inventing one to
+# fill the column is exactly what invariant 2 forbids. A gauge with no
+# threshold renders its level and its direction and raises no flag.
+# ---------------------------------------------------------------------------
+NWPS_GAUGE_URL = "https://api.water.noaa.gov/nwps/v1/gauges/{gauge_id}/stageflow"
+INA_OBSERVATIONS_URL = "https://alerta.ina.gob.ar/a5/obs/puntual/series/{series_id}/observaciones"
+
+# How much history each provider is asked for on every run. NWPS serves a
+# rolling ~30-day observed window and nothing older, so the Mississippi legs
+# depend on the `data/history/` round-trip; INA serves back to 1884, so the
+# Paraná leg self-heals on an empty CI database for the window asked for here.
+RIVER_NWPS_LOOKBACK_DAYS = 30
+RIVER_INA_LOOKBACK_DAYS = 730
+
+# Sanity band per unit. A stage outside it is a parse fault (a flow value read
+# as a stage, a sentinel that escaped), not a river — NWPS prints -999/-9999
+# for "no value" in the very same field.
+RIVER_STAGE_BOUNDS = {"ft": (-60.0, 80.0), "m": (-5.0, 25.0)}
+
+RIVER_GAUGES: dict[str, dict[str, Any]] = {
+    "Mississippi at Memphis": {
+        "provider": "nwps",
+        "gauge_id": "MEMT1",
+        "river": "Mississippi",
+        "unit": "ft",
+        "timezone": "America/Chicago",
+        # DTN treats Memphis below -5 ft as the basis-moving regime. This is a
+        # *trade* threshold and deliberately not NWPS's own `lowThreshold`
+        # (-8 ft), which answers a navigation question, not a basis one.
+        "low_water": -5.0,
+        "low_water_basis": "DTN's basis-moving regime for the Memphis gauge",
+        "attribution": "NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS",
+        "url": "https://water.noaa.gov/gauges/MEMT1",
+        "note": (
+            "the trade-watched gauge; stage is on the local Memphis gauge datum, "
+            "which is why the record low reads -10.81 ft rather than an elevation"
+        ),
+    },
+    "Mississippi at St. Louis": {
+        "provider": "nwps",
+        "gauge_id": "EADM7",
+        "river": "Mississippi",
+        "unit": "ft",
+        "timezone": "America/Chicago",
+        "low_water": None,
+        "low_water_basis": None,
+        "attribution": "NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS",
+        "url": "https://water.noaa.gov/gauges/EADM7",
+        "note": "the barge-rate reference point, upstream of the Ohio confluence",
+    },
+    "Paraná at Rosario": {
+        "provider": "ina",
+        # INA a5 series 34 — station "Rosario" (id_externo 280, PNA), table
+        # `alturas_prefe`: the daily Prefectura Naval reading, 53,677 values
+        # back to 1884-01-02 (probed live 2026-08-21).
+        "gauge_id": "34",
+        "river": "Paraná",
+        "unit": "m",
+        "timezone": "America/Argentina/Buenos_Aires",
+        # INA's own `nivel_aguas_bajas` for this station, read off the series
+        # metadata rather than chosen here.
+        "low_water": 1.64,
+        "low_water_basis": "INA's own nivel de aguas bajas for the Rosario station",
+        "attribution": "Instituto Nacional del Agua (INA) — reading by Prefectura Naval Argentina",
+        "url": "https://alerta.ina.gob.ar/pub/mapa",
+        "note": (
+            "observed only — INA's forecast trace for this station (series 3387) "
+            "answered empty on every probe, so the Paraná leg carries no forecast"
+        ),
+    },
+}
+
+# Per-layer catalogs. Keyed by provider so each layer is graded on its own
+# gauges; the merged registry above is what the site reads.
+RIVER_GAUGES_NWPS = {
+    name: spec for name, spec in RIVER_GAUGES.items() if spec["provider"] == "nwps"
+}
+RIVER_GAUGES_INA = {
+    name: spec for name, spec in RIVER_GAUGES.items() if spec["provider"] == "ina"
+}
 
 # ---------------------------------------------------------------------------
 # Layer 6 — USDA FAS PSD (global supply/demand, bulk CSV, no API key)
@@ -1278,6 +1402,18 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # the current day, so there is no observed multi-day gap to measure.
     # Revisit at the first Diwali (Oct 2026) with a real gap in hand.
     "india_domestic": 7,
+    # River gauges. Both are fixed-URL sources — nothing rotates, so a feed
+    # that stops being refreshed answers 200 forever with the same stage and
+    # nothing else in the payload marks it frozen (invariant 10 from the other
+    # side). A river has a level every single day, so unlike a market leg
+    # there is no weekend, no holiday and no quiet day to tolerate: 7 days is
+    # already generous and exists only to absorb a run of failed fetches.
+    #
+    # The NWPS frame also carries forecast rows, and `_latest_observation_date`
+    # drops them before dating the layer — otherwise a dead observed feed would
+    # pass this budget on a 14-day forecast trace alone.
+    "river_us": 7,
+    "river_ar": 7,
     "fred": 10,        # 1-day publication lag on the daily series
     "weather": 10,     # includes forecast rows, so age is normally negative
     "dce": 21,         # Spring Festival / Golden Week close the DCE for ~2 weeks
@@ -1360,6 +1496,8 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "eia": EIA_SERIES,
     "gtr_ocean_freight": GTR_OCEAN_ROUTES,
     "gtr_vessels": GTR_PORT_REGIONS,
+    # river_ar is deliberately absent: one gauge, and 1/1 is noise.
+    "river_us": RIVER_GAUGES_NWPS,
 }
 
 
@@ -1524,6 +1662,12 @@ MARKETS: dict[str, dict[str, Any]] = {
             "arbitrage": "open",
         },
         "weather_regions": ["US Midwest (Iowa)", "US Illinois"],
+        # M25 #272. Water is this page's freight leg: the Memphis gauge prices
+        # the barge freight inside the `us_gulf:cif` ledger leg, and St. Louis
+        # is the barge-rate reference point above the Ohio confluence. Rendered
+        # inside block 06 rather than as a tenth block — the nine ids are the
+        # contract, and river water is tradeable weather.
+        "river_gauges": ["Mississippi at Memphis", "Mississippi at St. Louis"],
         "psd_country": "United States",
         "players_country": "US",
     },
@@ -1701,6 +1845,9 @@ MARKETS: dict[str, dict[str, Any]] = {
             "arbitrage": "open",
         },
         "weather_regions": ["Argentina Pampas", "Argentina Cordoba"],
+        # M26 #273. ~80% of Argentine ag exports move down the Paraná, and the
+        # draft at Rosario sets how much of a cargo each vessel can lift.
+        "river_gauges": ["Paraná at Rosario"],
         "psd_country": "Argentina",
         "players_country": "AR",
     },

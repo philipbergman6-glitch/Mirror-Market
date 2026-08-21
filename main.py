@@ -59,6 +59,7 @@ from fetchers.magyp_fob import fetch_magyp_fob
 from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.psd import fetch_psd_all
+from fetchers.river import fetch_ina_gauges, fetch_nwps_gauges
 from fetchers.safex import fetch_safex
 from fetchers.sagis import fetch_sagis_deliveries, fetch_sagis_supply_demand
 from fetchers.usda import (
@@ -89,6 +90,7 @@ from pipeline.clean import (
     clean_ohlcv,
     clean_port_vessel_activity,
     clean_psd,
+    clean_river_levels,
     clean_safex,
     clean_sagis_deliveries,
     clean_sagis_smd,
@@ -124,6 +126,7 @@ from pipeline.store import (
     save_port_vessel_activity,
     save_price_data,
     save_psd_data,
+    save_river_levels,
     save_safex,
     save_sagis_deliveries,
     save_sagis_smd,
@@ -683,6 +686,28 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             fetch=lambda: fetch_all_regions(),
             save=lambda n, d: save_weather_data(n, d),
             clean=lambda n, d: clean_weather(d),
+        ),
+        # River stage sits next to weather because that is what it is: water
+        # is the freight leg of a cash bid, and both layers date rows the same
+        # way and carry forecast rows the recency gate must exclude. Two run
+        # units rather than one because the providers fail independently —
+        # a quiet Argentine endpoint must not take the Mississippi leg down.
+        DictLayer(
+            "river_us", "Layer 27", "Mississippi river stage (NOAA NWPS)",
+            fetch=lambda: fetch_nwps_gauges(),
+            save=lambda n, d: save_river_levels(n, d),
+            clean=lambda n, d: clean_river_levels(d),
+        ),
+        DictLayer(
+            "river_ar", "Layer 28", "Paraná river stage at Rosario (INA)",
+            fetch=lambda: fetch_ina_gauges(),
+            save=lambda n, d: save_river_levels(n, d),
+            clean=lambda n, d: clean_river_levels(d),
+            # One gauge, so no LAYER_MIN_KEYS floor to derive from. INA serves
+            # this series back to 1884 and a river has a level every day —
+            # an empty return means the request or the parse broke, never
+            # "nothing to report today".
+            empty_fails=True,
         ),
         DictLayer(
             "psd", "Layer 6", "USDA FAS PSD global data",
