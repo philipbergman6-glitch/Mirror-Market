@@ -1278,7 +1278,8 @@ def weather_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict
             # None when the crop is in the ground. The card renders either way.
             "season_note": out_of_season_note(region, ctx.today),
         })
-    if not regions:
+    rivers = _river_rows(market, ctx)
+    if not regions and not any(r["state"] == "ok" for r in rivers):
         return STATE_EMPTY, (
             "the weather layer holds no rows for "
             + ", ".join(market.weather_regions)
@@ -1286,7 +1287,124 @@ def weather_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict
     return STATE_OK, "", {
         "regions": regions,
         "alerts": [r for r in regions if r["alert"]],
+        "rivers": rivers,
+        "river_alerts": [r for r in rivers if r.get("low_water_breach")],
     }
+
+
+# ---------------------------------------------------------------------------
+# 06 Weather — the river leg (Layers 27/28, M25 #272 / M26 #273)
+#
+# River water is tradeable weather, so it renders inside block 06 rather than
+# as a tenth block: the nine block ids are the contract on every page, and a
+# river block would be a permanent unfillable blank on the six markets that
+# have no river pricing their freight.
+#
+# A configured gauge with no rows renders as a named gap rather than vanishing
+# (M1 constraint 2). An unconfigured market has no gauges to miss, so it gets
+# no line at all — that is a fact about the registry, not an outage.
+# ---------------------------------------------------------------------------
+def _river_rows(market: Market, ctx: SiteContext) -> list[dict]:
+    out: list[dict] = []
+    for gauge in market.river_gauges:
+        spec = config.RIVER_GAUGES[gauge]
+        observed, forecast, stored_attribution = _river_readings(ctx, gauge)
+        row = {
+            "gauge": gauge,
+            "river": spec["river"],
+            "unit": spec["unit"],
+            "note": spec.get("note"),
+            # The row's own attribution, not the registry's. It is stored per
+            # row for exactly this reason (the same rule ocean_freight_rates
+            # follows): a reading credited to whoever the registry names
+            # *today* would re-credit history on the day a publisher changes.
+            # The registry is the fallback for legacy rows that predate the
+            # column, never the first answer.
+            "attribution": stored_attribution or spec["attribution"],
+            "url": spec.get("url"),
+            "low_water": spec.get("low_water"),
+            "low_water_basis": spec.get("low_water_basis"),
+        }
+        if not observed:
+            out.append({
+                **row,
+                "state": STATE_EMPTY,
+                "reason": f"the {spec['provider']} river layer holds no reading for {gauge}",
+            })
+            continue
+
+        when, stage = observed[-1]
+        # The 7-day change is struck against the reading 7 days back if there
+        # is one, and withheld otherwise — never against "the oldest row we
+        # happen to hold", which on a fresh database is today.
+        prior = _river_reading_on_or_before(observed, when - _days(7))
+        # Only the far end of the forecast trace is rendered: a trader wants
+        # where the river is heading, and every intermediate day is a
+        # different model output dressed as a series.
+        outlook = forecast[-1] if forecast else None
+        low_water = spec.get("low_water")
+        breach = low_water is not None and stage <= low_water
+        outlook_breach = (
+            low_water is not None and outlook is not None and outlook[1] <= low_water
+        )
+        out.append({
+            **row,
+            "state": STATE_OK,
+            "as_of": when.isoformat(),
+            "age_days": _age_days(ctx.today, when),
+            "stage": stage,
+            "change_7d": None if prior is None else stage - prior[1],
+            "forecast_stage": None if outlook is None else outlook[1],
+            "forecast_date": None if outlook is None else outlook[0].isoformat(),
+            "low_water_breach": breach,
+            "low_water_outlook_breach": outlook_breach and not breach,
+        })
+    return out
+
+
+def _river_reading_on_or_before(readings, when):
+    """The newest reading at or before ``when``, or None if none is that old."""
+    older = [row for row in readings if row[0] <= when]
+    return older[-1] if older else None
+
+
+def _river_readings(ctx: SiteContext, gauge: str):
+    """(observed, forecast, attribution) for one gauge; readings oldest-first.
+
+    Observed and forecast are split at read time rather than filtered at write
+    time: the forecast rows are the tradeable part of the Mississippi leg, and
+    NULL ``is_forecast`` counts as observed — the same convention the store
+    writes and the freshness path reads.
+
+    The attribution returned is the newest observed row's, so the credit
+    travels with the reading rather than with the registry.
+    """
+    def build():
+        if ctx.conn is None:
+            return [], [], None
+        cutoff = (ctx.today - _days(400)).isoformat()
+        try:
+            rows = ctx.conn.execute(
+                "SELECT Date, stage, is_forecast, attribution FROM river_levels "
+                "WHERE gauge = ? AND Date >= ? ORDER BY Date",
+                (gauge, cutoff),
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("block read: river_levels unavailable (%s)", exc)
+            return [], [], None
+        observed, forecast = [], []
+        attribution = None
+        for raw_date, stage, is_forecast, credit in rows:
+            parsed = _parse_date(raw_date)
+            if parsed is None or stage is None:
+                continue
+            if is_forecast == 1:
+                forecast.append((parsed, stage))
+            else:
+                observed.append((parsed, stage))
+                attribution = credit
+        return observed, forecast, attribution
+    return ctx.cached(("river_levels", gauge), build)
 
 
 def _weather_rows(ctx: SiteContext, region: str):

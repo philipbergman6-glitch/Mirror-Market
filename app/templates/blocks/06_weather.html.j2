@@ -1,9 +1,14 @@
 {# 06 Weather — this market's own growing regions, from the registry.
    Each card carries its ROLE (why this pin is on this page) and, when the
    crop is not in the ground, an out-of-season tag — M14 #207 keeps the
-   reading and tags it rather than hiding or collapsing the card. #}
+   reading and tags it rather than hiding or collapsing the card.
+   Below the regions, the river that prices this market's freight where it
+   has one (M25 #272 / M26 #273): river water is tradeable weather, which is
+   why it renders here rather than as a tenth block — the nine block ids are
+   the contract on every page. #}
 {% import 'blocks/_macros.html.j2' as f %}
 {% set d = block.data %}
+{% if d.regions %}
 <div class="grid grid-{{ [d.regions|length, 3]|min }}">
   {% for r in d.regions %}
   <div class="mc">
@@ -20,3 +25,40 @@
 {% else %}
 <div class="alert alert-ok">No threshold breach in {{ d.regions|length }} region{{ 's' if d.regions|length != 1 }}</div>
 {% endfor %}
+{% endif %}
+{% if d.rivers %}
+<div class="river">
+  <div class="river-head">River — the freight leg</div>
+  {% for r in d.rivers %}
+  <div class="river-row">
+    <div class="lbl">
+      {{ r.gauge }}
+      {%- if r.note %}<div class="caption">{{ r.note }}</div>{% endif %}
+      {%- if r.state == 'ok' %}<div class="caption">{{ r.attribution }}</div>{% endif %}
+    </div>
+    <div class="val">
+      {%- if r.state == 'ok' -%}
+      {{ f.num(r.stage, 2) }} {{ r.unit }}
+      {%- if r.change_7d is not none %} · 7d {{ f.signed(r.change_7d, 2, ' ' ~ r.unit) }}{% endif %}
+      {%- if r.forecast_stage is not none %}<div class="caption">forecast {{ f.num(r.forecast_stage, 2) }} {{ r.unit }} by {{ r.forecast_date }}</div>{% endif %}
+      {{ f.asof(r.as_of, r.age_days) }}
+      {%- else -%}
+      <span class="muted">no reading</span>
+      {%- endif -%}
+    </div>
+  </div>
+  {% endfor %}
+  {# A gauge with no declared low-water threshold raises no flag — St. Louis
+     is carried as the barge-rate reference and no threshold for it is
+     sourced. Inventing one to fill the line is what invariant 2 forbids. #}
+  {% for r in d.rivers if r.state == 'ok' and r.low_water_breach %}
+  <div class="alert alert-warn">{{ r.gauge }}: low water — {{ f.num(r.stage, 2) }} {{ r.unit }} at or below {{ f.num(r.low_water, 2) }} {{ r.unit }} ({{ r.low_water_basis }})</div>
+  {% endfor %}
+  {% for r in d.rivers if r.state == 'ok' and r.low_water_outlook_breach %}
+  <div class="alert alert-info">{{ r.gauge }}: forecast to reach {{ f.num(r.forecast_stage, 2) }} {{ r.unit }} by {{ r.forecast_date }}, at or below {{ f.num(r.low_water, 2) }} {{ r.unit }} ({{ r.low_water_basis }})</div>
+  {% endfor %}
+  {% for r in d.rivers if r.state != 'ok' %}
+  <div class="empty-state state-empty"><span class="es-label">empty</span>{{ r.reason }}</div>
+  {% endfor %}
+</div>
+{% endif %}

@@ -484,6 +484,10 @@ def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers(
                      EC workbook ships ~400 weekly rows back to 2018 and has
                      not missed a Wednesday since, so empty means the fetch,
                      the parse or the stale-file guard broke (#163)
+      river_ar     — one gauge, so no floor either; INA serves the Rosario
+                     series back to 1884 and a river has a level every day,
+                     so empty means the request or the parse broke, never
+                     "nothing to report today" (M26 #273)
     """
     opted_in = {
         layer.key
@@ -491,7 +495,7 @@ def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers(
         if layer.empty_fails is not None
     }
 
-    assert opted_in == {"worldbank", "wasde", "ec_oilseeds"}
+    assert opted_in == {"worldbank", "wasde", "ec_oilseeds", "river_ar"}
     assert not opted_in & set(LAYER_MIN_KEYS)  # nothing floored needs an override
 
 

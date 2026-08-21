@@ -388,6 +388,18 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "Open-Meteo reanalysis lands within hours of the observation day; the "
         "frame also carries forecast rows, whose age is negative by design.",
     ),
+    LayerLatency(
+        "river_us", LatencyClass.WEATHER, ObservationClock(), timedelta(hours=24),
+        "NWPS republishes the USACE/USGS stage within the hour, but the stored "
+        "value is a completed river day: the current day is a partial "
+        "aggregate and is dropped, so the newest observation is D-1.",
+    ),
+    LayerLatency(
+        "river_ar", LatencyClass.WEATHER, ObservationClock(), timedelta(hours=24),
+        "INA publishes the Prefectura reading for 00:00 local during the "
+        "morning of the same day; the probe on 2026-08-21 carried the series "
+        "to 2026-08-20, so one day is the working assumption, not zero.",
+    ),
 )
 
 LATENCY_CLASS_BY_LAYER: dict[str, LatencyClass] = {

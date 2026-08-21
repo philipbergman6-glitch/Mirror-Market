@@ -72,6 +72,28 @@ CREATE TABLE IF NOT EXISTS weather (
 );
 """
 
+# River stage, Layers 27/28. Deliberately shaped like `weather`: one row per
+# gauge per day, an is_forecast flag rather than a separate table, and the
+# same (key, Date) upsert. `unit` is on the row because the two rivers are
+# measured in different ones (feet on the Mississippi, metres on the Paraná)
+# and nothing downstream may assume either — this is the one series here that
+# is not a price and never passes through to_usd_mt. `attribution` is stored
+# rather than resolved at display time, for the reason ocean_freight_rates
+# stores it: two providers render side by side and an unattributed row credits
+# both to the same author.
+_CREATE_RIVER_LEVELS = """
+CREATE TABLE IF NOT EXISTS river_levels (
+    gauge       TEXT    NOT NULL,
+    Date        TEXT    NOT NULL,
+    stage       REAL,
+    unit        TEXT    NOT NULL,
+    is_forecast INTEGER,
+    source      TEXT,
+    attribution TEXT,
+    PRIMARY KEY (gauge, Date)
+);
+"""
+
 _CREATE_PSD = """
 CREATE TABLE IF NOT EXISTS psd (
     commodity   TEXT    NOT NULL,
@@ -590,6 +612,7 @@ ALL_SCHEMAS = (
     _CREATE_USDA,
     _CREATE_COT,
     _CREATE_WEATHER,
+    _CREATE_RIVER_LEVELS,
     _CREATE_PSD,
     _CREATE_CURRENCIES,
     _CREATE_WORLDBANK,
@@ -637,6 +660,8 @@ UNIQUE_INDEXES = (
     "ON cot (commodity, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_weather_region_date "
     "ON weather (region, Date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_river_levels_gauge_date "
+    "ON river_levels (gauge, Date);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_psd_commodity_country_year_attr "
     "ON psd (commodity, country, year, attribute);",
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_currencies_pair_date "

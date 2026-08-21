@@ -113,6 +113,17 @@ def read_weather(region: str | None = None) -> pd.DataFrame:
     return _read_table("weather", "region", region, missing_ok=False)
 
 
+def read_river_levels(gauge: str | None = None) -> pd.DataFrame:
+    """Read river stage from SQLite (Layers 27/28).
+
+    A level, not a price: `stage` is feet on the Mississippi and metres on the
+    Paraná, and `unit` says which on every row. Rows flagged
+    ``is_forecast = 1`` are NWPS model output dated ahead of today — filter
+    them out before treating the newest row as an observation.
+    """
+    return _read_table("river_levels", "gauge", gauge, date_cols=("Date",))
+
+
 def read_crop_progress(commodity: str | None = None) -> pd.DataFrame:
     """Read crop progress/condition data from SQLite."""
     return _read_table("crop_progress", "commodity", commodity, date_cols=())

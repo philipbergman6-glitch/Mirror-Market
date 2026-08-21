@@ -45,6 +45,18 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     "brazil_spot_prices": ("Date", "commodity"),
     # Grain SA settlement page carries only the current session.
     "safex_prices": ("Date", "commodity"),
+    # River stage (Layers 27/28). Here for the *Mississippi* leg: NWPS serves
+    # a rolling ~30-day observed window and nothing older, so on an ephemeral
+    # CI database the 2022/2023/2024 low-water episodes — the whole reason the
+    # series is carried — would never accumulate. The Paraná leg would
+    # self-heal from INA's own history back to 1884 and rides along because
+    # both providers share one table, which costs ~3 rows/day.
+    #
+    # Forecast rows are exported too and are replaced by the observation when
+    # their date arrives: the (gauge, Date) upsert is what makes that safe,
+    # and fetchers/river.py cuts the forecast trace to dates strictly after
+    # the newest observation so it can never overwrite one.
+    "river_levels": ("gauge", "Date"),
     # data.gov.in mandi resource is a current-day snapshot — the arrival_date
     # filter is ignored upstream, so history exists only where we keep it.
     "india_domestic_prices": ("Date", "commodity"),
