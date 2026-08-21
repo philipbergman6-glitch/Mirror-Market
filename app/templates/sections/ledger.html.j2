@@ -16,4 +16,4 @@
 {% set d = s %}
 <div class="ledger-good">All rows: <strong>{{ d.commodity }}</strong> · {{ d.commodity_note }}</div>
 {% include 'blocks/_ledger_table.html.j2' %}
-<div class="caption">{{ d.no_timestamp_note }}{% if d.leading_edge %} Newest print across the complex: {{ d.leading_edge }}.{% endif %}</div>
+<div class="caption">{{ d.no_timestamp_note }}{% if d.leading_edge %} Newest print across the complex: {{ d.leading_edge }} ({{ d.leading_edge_legs|join(', ') }}).{% endif %}</div>

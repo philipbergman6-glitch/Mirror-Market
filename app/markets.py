@@ -767,6 +767,22 @@ def _ledger(slug: str, raw: dict, markets: dict[str, Market]) -> Ledger:
     if legs[0].leg_id in reference:
         raise ValueError(f"market {slug!r} ledger marks its own pinned leg as a reference row")
 
+    # M20 #236: rows render in declared order — nothing downstream re-seats a
+    # reference row, so a yardstick declared among the peers would RENDER among
+    # the peers. Reference legs must be declared last, at load, not fixed at
+    # render.
+    seen_reference = False
+    for leg_id in leg_ids:
+        if leg_id in reference:
+            seen_reference = True
+        elif seen_reference:
+            raise ValueError(
+                f"market {slug!r} ledger declares peer leg {leg_id!r} after a "
+                "reference leg — reference rows are declared last (M20 #236: row "
+                "position is role in the trade, and the ledger renders declared "
+                "order without re-sorting)"
+            )
+
     # M12 India: a ledger whose counterparts are all the page's own legs has no
     # foreign price in it at all, and under a rule that promises "the origins
     # this market buys from" that reads as a set someone forgot to finish. The

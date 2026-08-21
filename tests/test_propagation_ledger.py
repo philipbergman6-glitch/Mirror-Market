@@ -337,6 +337,54 @@ def test_south_africas_cbot_row_renders_last_because_it_is_a_reference(seeded, r
     assert data["rows"][-1]["is_reference"] is True
 
 
+def test_rows_render_in_declared_order_even_when_a_later_leg_is_fresher(seeded, registry):
+    """M20 #236: row position is role in the trade, never recency.
+
+    On the CBOT ledger Paranaguá is declared before Argentina but is a day
+    staler — the fresher print must NOT move up. Recency is carried entirely
+    by the state pill and the leading-edge caption.
+    """
+    _state, _reason, data = ledger_block(registry["cbot"], seeded, markets=registry)
+    rendered = [row["leg_id"] for row in data["rows"]]
+    assert rendered == [leg.leg_id for leg in registry["cbot"].ledger.legs]
+
+    rows = {row["leg_id"]: row for row in data["rows"]}
+    # Fixture guard: the question is only posed if the earlier-declared leg
+    # really is staler than the one after it.
+    assert rows["brazil:paranagua"]["as_of"] < rows["argentina:fob"]["as_of"]
+    assert rendered.index("brazil:paranagua") < rendered.index("argentina:fob")
+
+
+def test_cbot_lands_last_on_brazil_and_argentina_as_declared(seeded, registry):
+    """The issue's render check: CBOT last among the counterparts, not second."""
+    for slug in ("brazil", "argentina"):
+        _state, _reason, data = ledger_block(registry[slug], seeded, markets=registry)
+        assert data["rows"][-1]["leg_id"] == "cbot:board", slug
+
+
+def test_the_leading_edge_names_the_leg_that_produced_it(seeded, registry):
+    """A caption date the reader has to attribute by scanning is half a fact."""
+    _state, _reason, data = ledger_block(registry["brazil"], seeded, markets=registry)
+    assert data["leading_edge"] == _day(0)
+    assert data["leading_edge_legs"] == ["CBOT board (ZS front)"]
+
+
+def test_the_headline_leading_edge_names_its_market(seeded, registry):
+    _state, _reason, data = headline_ledger(registry, seeded)
+    assert data["leading_edge"] == _day(0)
+    assert data["leading_edge_legs"] == ["CBOT"]
+
+
+def test_the_ledger_note_states_declared_order_and_drops_the_tie_clause(seeded, registry):
+    """The old note ("ordered by print date … two legs sharing a date are not
+    ordered against each other") is now false on both counts."""
+    _state, _reason, data = ledger_block(registry["cbot"], seeded, markets=registry)
+    note = data["no_timestamp_note"]
+    assert "declared" in note and "role in the trade" in note
+    assert "sharing a date" not in note
+    assert "time of day" in note
+
+
 def test_every_ledger_is_one_good(registry):
     """M3's "kinds do not mix" has a twin: goods do not mix either.
 
@@ -413,6 +461,25 @@ def test_a_ledger_that_does_not_pin_its_own_market_fails_the_build(monkeypatch):
         "cbot": {**config.LEDGERS["cbot"], "legs": ["brazil:paranagua", "cbot:board"]},
     }
     with pytest.raises(ValueError, match="the first leg is always the page's own"):
+        _reload(monkeypatch, LEDGERS=ledgers)
+
+
+def test_a_reference_leg_declared_mid_set_fails_the_build(monkeypatch):
+    """M20 #236: with the settlement sort gone, nothing re-seats a mid-set
+    reference row — so the registry must refuse to declare one."""
+    ledgers = {
+        **config.LEDGERS,
+        "south_africa": {
+            **config.LEDGERS["south_africa"],
+            "legs": [
+                "south_africa:safex",
+                "argentina:fob",
+                "cbot:board",
+                "brazil:paranagua",
+            ],
+        },
+    }
+    with pytest.raises(ValueError, match="declared last"):
         _reload(monkeypatch, LEDGERS=ledgers)
 
 
