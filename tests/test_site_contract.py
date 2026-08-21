@@ -149,9 +149,30 @@ def test_every_absent_block_names_a_reason():
 
 
 def test_unknown_weather_region_fails_the_build(monkeypatch: pytest.MonkeyPatch):
-    broken = {"cbot": dict(config.MARKETS["cbot"], weather_regions=["Mars Olympus Mons"])}
+    broken = {"cbot": dict(
+        config.MARKETS["cbot"],
+        weather_regions=[("Mars Olympus Mons", "domestic crop")],
+    )}
     monkeypatch.setattr(config, "MARKETS", broken)
     with pytest.raises(ValueError, match="not in GROWING_REGIONS"):
+        markets_mod.load_markets()
+
+
+def test_a_weather_pin_without_a_role_fails_the_build(monkeypatch: pytest.MonkeyPatch):
+    """M14 #207: every pin says why it is on this page, or the build stops.
+
+    Europe's pins are rapeseed and Dalian's second pin is in Brazil — an
+    unlabelled pin renders as this market's own soy crop, which is a wrong
+    number wearing a region's name.
+    """
+    broken = {"cbot": dict(config.MARKETS["cbot"], weather_regions=["US Illinois"])}
+    monkeypatch.setattr(config, "MARKETS", broken)
+    with pytest.raises(ValueError, match="not a \\(region, role\\) pair"):
+        markets_mod.load_markets()
+
+    blank = {"cbot": dict(config.MARKETS["cbot"], weather_regions=[("US Illinois", "  ")])}
+    monkeypatch.setattr(config, "MARKETS", blank)
+    with pytest.raises(ValueError, match="empty role label"):
         markets_mod.load_markets()
 
 

@@ -373,6 +373,10 @@ class Market:
     basis: Source | None
     flows: Source | None
     weather_regions: tuple[str, ...]
+    # region name → why this pin is on this page ("import origin", "rapeseed,
+    # not soy", …). M14 #207: the role is a registry label, never a code path,
+    # and it is what stops a rapeseed pin reading as a soy pin on the EU page.
+    weather_roles: dict[str, str]
     psd_country: str | None
     players_country: str | None
     # Layers 27/28. A line inside block 06, not a block of its own: the nine
@@ -535,6 +539,32 @@ def _crush(raw: dict, *, slug: str) -> Crush:
     )
 
 
+def _weather_roles(slug: str, entries) -> dict[str, str]:
+    """``[(region, role), …]`` → ``{region: role}``, or hard-fail.
+
+    M14 #207 made every weather pin carry the reason it is on its page. A pin
+    with no role is the failure this rejects at load: Dalian's Mato Grosso pin
+    reads as a Chinese region and Europe's pins read as soy unless the label
+    says otherwise, and a silently-empty label would render exactly that.
+    """
+    roles: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, (tuple, list)) or len(entry) != 2:
+            raise ValueError(
+                f"market {slug!r} weather_regions entry {entry!r} is not a "
+                "(region, role) pair — M14 #207 requires a role label on every pin"
+            )
+        region, role = entry
+        if not role or not str(role).strip():
+            raise ValueError(
+                f"market {slug!r} weather region {region!r} has an empty role label"
+            )
+        if region in roles:
+            raise ValueError(f"market {slug!r} names weather region {region!r} twice")
+        roles[region] = role
+    return roles
+
+
 def _market(slug: str, raw: dict) -> Market:
     missing = {"name", "venue", "home_currency", "weather_regions"} - raw.keys()
     if missing:
@@ -557,7 +587,8 @@ def _market(slug: str, raw: dict) -> Market:
     if not raw["weather_regions"] and "weather" not in reasons:
         raise ValueError(f"market {slug!r} has no weather_regions and no weather_absent_reason")
 
-    unknown = set(raw["weather_regions"]) - set(config.GROWING_REGIONS)
+    weather_roles = _weather_roles(slug, raw["weather_regions"])
+    unknown = set(weather_roles) - set(config.GROWING_REGIONS)
     if unknown:
         raise ValueError(f"market {slug!r} names weather region(s) not in GROWING_REGIONS: {sorted(unknown)}")
 
@@ -585,7 +616,8 @@ def _market(slug: str, raw: dict) -> Market:
         crush=_crush(raw["crush"], slug=slug) if raw.get("crush") else None,
         basis=_source(raw["basis"], slug=slug, block="basis") if raw.get("basis") else None,
         flows=_source(raw["flows"], slug=slug, block="flows") if raw.get("flows") else None,
-        weather_regions=tuple(raw["weather_regions"]),
+        weather_regions=tuple(weather_roles),
+        weather_roles=weather_roles,
         river_gauges=tuple(raw.get("river_gauges") or ()),
         psd_country=raw.get("psd_country"),
         players_country=raw.get("players_country"),

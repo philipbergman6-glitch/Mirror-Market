@@ -52,7 +52,7 @@ LAYER_MIN_KEYS = {
     "prices": 8,       # of 10 tickers
     "currencies": 8,   # of 10 pairs
     "fred": 8,         # of 9 series
-    "weather": 14,     # of 19 regions
+    "weather": 18,     # of 24 regions (M14 #207 remapped the set)
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 10 commodities
     "dce": 3,          # of 8 contracts (6 DCE + 2 CZCE rapeseed)
@@ -320,34 +320,58 @@ COT_COMMODITIES = {
 # ---------------------------------------------------------------------------
 # Layer 5 — Weather data via Open-Meteo (free, no API key)
 #
-# Every major growing region for soybeans and palm oil worldwide.
-# Missing a region means missing a weather event that could move prices.
+# M14 #207 (built by M24 #271) replaced "every major growing region" with one
+# standing rule: **every rendered price leg gets the weather that prices it,
+# and weather with no rendered price leg downstream is not fetched.** Every pin
+# below is therefore traceable to a leg on some page — a market page's own
+# regions, or the headline's competing-oil strip (palm, canola).
+#
+# Dropped by that rule in M14: Ivory Coast (cocoa, no leg), China Jilin (its
+# own comment said corn/feed proxy, not soy) and Thailand Surat Thani
+# (Indonesia + Malaysia ≈ 85% of world palm and both are pinned). Their
+# historical rows stop accruing; that is the intended cost.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
 GROWING_REGIONS = {
-    # ── US Soybean Belt ──
+    # ── US Soybean Belt (CBOT) ──
     "US Midwest (Iowa)":          {"lat": 42.03,  "lon": -93.47},
     "US Illinois":                {"lat": 40.12,  "lon": -89.30},   # #1 soybean state
+    # IA+IL is ~30% of the crop and one climate zone; the classic US
+    # divergence is east vs west (2023: IL fine, western belt burning).
+    "US Nebraska":                {"lat": 40.90,  "lon": -98.40},   # western-belt pin
 
     # ── South America ──
     "Brazil Mato Grosso":         {"lat": -12.64, "lon": -55.42},   # #1 Brazil soy state
     "Brazil Parana":              {"lat": -24.04, "lon": -51.46},   # #2 Brazil soy state
+    # ~20 Mt swing state with a failure mode MT does not share: La Niña
+    # drought (-41% 2019/20, >50% loss 2021/22) and the May 2024 floods.
+    "Brazil Rio Grande do Sul":   {"lat": -28.50, "lon": -53.50},
     "Argentina Pampas":           {"lat": -33.95, "lon": -60.33},   # Soy belt
     "Argentina Cordoba":          {"lat": -31.42, "lon": -64.18},   # #2 Argentina soy province
-    "Paraguay Chaco":             {"lat": -22.35, "lon": -59.95},   # Expanding soy frontier
+    # Sunflower, not soy — it prices the MAGyP sun-oil leg the Argentina page
+    # renders (M5 #162). 2025/26 was a record 6.6 Mt crop centred here.
+    "Argentina Buenos Aires (sunflower)": {"lat": -38.40, "lon": -60.30},
+    # M14 #207: the old "Paraguay Chaco" pin (-22.35,-59.95) was in Boquerón —
+    # cattle country. The soy belt is Alto Paraná–Itapúa–Canindeyú (>80% of
+    # the crop), and 75–85% of its exports barge to the Rosario crush.
+    "Paraguay Alto Parana":       {"lat": -25.90, "lon": -55.30},
 
-    # ── Africa ──
-    "Ivory Coast (Cocoa)":        {"lat": 6.83,   "lon": -5.29},   # Cross-reference
+    # ── Europe (rapeseed, not soy — the EC Moselle leg) ──
+    "France Champagne (Grand Est)":    {"lat": 48.70, "lon": 4.30},  # ~4.6 Mt, EU #1
+    "Germany Mecklenburg-Vorpommern":  {"lat": 53.60, "lon": 12.70},  # ~4.0 Mt, EU #2
+    "Romania Baragan (Danube plain)":  {"lat": 44.60, "lon": 27.00},  # ~2.8 Mt, fastest-growing
+
+    # ── Canada (canola — the ICE canola leg on the headline strip) ──
+    "Canada Saskatchewan (Saskatoon)": {"lat": 52.10, "lon": -106.70},
+    "Canada Alberta (central)":        {"lat": 53.00, "lon": -112.80},
 
     # ── Asia ──
     "Indonesia Riau (Sumatra)":   {"lat": 0.29,   "lon": 101.71},  # #1 palm oil belt
     "Malaysia Sabah (Borneo)":    {"lat": 5.42,   "lon": 116.80},  # #2 palm oil state
     "India Madhya Pradesh":       {"lat": 22.72,  "lon": 75.86},   # India soybean capital
     "India Maharashtra":          {"lat": 19.75,  "lon": 75.71},   # #2 India soybean state
-    "Thailand Surat Thani":       {"lat": 9.14,   "lon": 99.33},   # #3 global palm oil
     "China Heilongjiang":         {"lat": 47.36,  "lon": 127.76},  # China domestic soybean belt
-    "China Jilin":                {"lat": 43.87,  "lon": 125.32},  # China corn belt (hog/feed demand)
 
     # ── Emerging Markets (soy deep dive) ──
     "South Africa Free State":    {"lat": -29.12, "lon": 26.21},   # SA #1 soy province
@@ -1286,14 +1310,94 @@ WEATHER_POD_FILL_HEAT_C = 34
 # Soy regions with their pod-fill months (US: Jul-Aug; South America: Jan-Feb).
 # Keys must match GROWING_REGIONS names.
 WEATHER_SOY_POD_FILL_MONTHS = {
-    "US Midwest (Iowa)":   (7, 8),
-    "US Illinois":         (7, 8),
-    "Brazil Mato Grosso":  (1, 2),
-    "Brazil Parana":       (1, 2),
-    "Argentina Pampas":    (1, 2),
-    "Argentina Cordoba":   (1, 2),
-    "Paraguay Chaco":      (1, 2),
+    "US Midwest (Iowa)":         (7, 8),
+    "US Illinois":               (7, 8),
+    "US Nebraska":               (7, 8),
+    "Brazil Mato Grosso":        (1, 2),
+    "Brazil Parana":             (1, 2),
+    "Brazil Rio Grande do Sul":  (1, 2),
+    "Argentina Pampas":          (1, 2),
+    "Argentina Cordoba":         (1, 2),
+    "Paraguay Alto Parana":      (1, 2),
 }
+
+# Growing-season calendar (M14 #207, built by M24 #271). Same key shape as
+# WEATHER_SOY_POD_FILL_MONTHS: keys must match GROWING_REGIONS names, and the
+# completeness of the map is pinned by a test — a pin with no season would
+# silently render as "in season" all year.
+#
+# Months are declared **in planting order**, so `months[0]` is the planting
+# month and the out-of-season tag can name it ("planting ~Oct") without a
+# second field. Southern-hemisphere seasons are therefore the wrap-around
+# ones. Perennials (palm) and the Aug-sown/Jul-harvested EU rapeseed crop are
+# in the ground all twelve months by construction, not by omission.
+#
+# What the calendar does NOT do: hide or collapse a card. September Iowa rain
+# is real data that prices harvest logistics; the tag prices it, the card
+# still renders. Agronomic alerts stay gated where they already were.
+_ALL_YEAR = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+WEATHER_GROWING_SEASON_MONTHS = {
+    # US soy: planted May, harvested Oct.
+    "US Midwest (Iowa)":         (5, 6, 7, 8, 9, 10),
+    "US Illinois":               (5, 6, 7, 8, 9, 10),
+    "US Nebraska":               (5, 6, 7, 8, 9, 10),
+    # Brazil soy: sown from Oct, harvested Feb–Mar.
+    "Brazil Mato Grosso":        (10, 11, 12, 1, 2, 3),
+    "Brazil Parana":             (10, 11, 12, 1, 2, 3),
+    "Brazil Rio Grande do Sul":  (10, 11, 12, 1, 2, 3),
+    # Argentina soy: sown Nov, harvested Apr–May.
+    "Argentina Pampas":          (11, 12, 1, 2, 3, 4, 5),
+    "Argentina Cordoba":         (11, 12, 1, 2, 3, 4, 5),
+    # Argentine sunflower runs ahead of soy: sown Oct, harvested Feb–Mar.
+    "Argentina Buenos Aires (sunflower)": (10, 11, 12, 1, 2, 3),
+    # Paraguay sows ahead of Argentina, from September.
+    "Paraguay Alto Parana":      (9, 10, 11, 12, 1, 2),
+    # EU rapeseed: sown Aug, harvested the following Jul — always in ground.
+    "France Champagne (Grand Est)":    _ALL_YEAR,
+    "Germany Mecklenburg-Vorpommern":  _ALL_YEAR,
+    "Romania Baragan (Danube plain)":  _ALL_YEAR,
+    # Prairie canola: seeded May, harvested Sep.
+    "Canada Saskatchewan (Saskatoon)": (5, 6, 7, 8, 9),
+    "Canada Alberta (central)":        (5, 6, 7, 8, 9),
+    # Oil palm is perennial — it is never out of season, it is only stressed.
+    "Indonesia Riau (Sumatra)":  _ALL_YEAR,
+    "Malaysia Sabah (Borneo)":   _ALL_YEAR,
+    # India soy is a kharif crop: sown with the monsoon in Jun, harvested Oct.
+    "India Madhya Pradesh":      (6, 7, 8, 9, 10),
+    "India Maharashtra":         (6, 7, 8, 9, 10),
+    # Heilongjiang: sown May, harvested Sep–Oct.
+    "China Heilongjiang":        (5, 6, 7, 8, 9, 10),
+    # South African soy: sown Nov, harvested Apr–May.
+    "South Africa Free State":   (11, 12, 1, 2, 3, 4, 5),
+    "South Africa Mpumalanga":   (11, 12, 1, 2, 3, 4, 5),
+    # Nigerian soy follows the middle-belt rains: sown Jun, harvested Oct–Nov.
+    "Nigeria Benue":             (6, 7, 8, 9, 10, 11),
+    "Nigeria Kaduna":            (6, 7, 8, 9, 10, 11),
+}
+
+# Competing-oil weather strip (M14 #207) — the headline's Oilseed Complex
+# section. Palm and canola price legs render on the four-oil board and nowhere
+# else, so under M14's standing rule their weather belongs there too: **a
+# strip, one line per belt, not a block and not region cards.** M2 #144 took
+# the region cards off the headline and this does not put them back.
+COMPETING_OIL_WEATHER_BELTS = (
+    {
+        "belt": "Palm",
+        "leg": "palm oil",
+        "regions": ("Indonesia Riau (Sumatra)", "Malaysia Sabah (Borneo)"),
+        # Stated on the strip, always: palm weather does not price palm today.
+        "note": (
+            "palm yield lags weather by 9–12 months — today's stress prices "
+            "next year's crop, not this week's board"
+        ),
+    },
+    {
+        "belt": "Canola prairies",
+        "leg": "ICE canola",
+        "regions": ("Canada Saskatchewan (Saskatoon)", "Canada Alberta (central)"),
+        "note": "prairie weather moves the ICE canola leg within the season",
+    },
+)
 # Consecutive-dry-day spell: days with precip < WEATHER_DRY_THRESHOLD_MM.
 WEATHER_DRY_SPELL_ALERT_DAYS = 10
 # 30-day precipitation deficit vs the region's trailing norm. The norm is the
@@ -1478,8 +1582,8 @@ LAYER_MAX_DATA_AGE_DAYS = {
 #
 # The denominator cannot come from the payload: every per-key fetcher
 # inserts into its results dict only *after* a successful fetch, so a
-# weather run that lost 5 of 19 regions returns a 14-key dict and would
-# self-report 14/14 — exactly the outage coverage exists to expose. A layer
+# weather run that lost 6 of 24 regions returns an 18-key dict and would
+# self-report 18/18 — exactly the outage coverage exists to expose. A layer
 # absent from this map records NULL coverage rather than falling back to
 # that self-reported length. Single-key and scraper layers are deliberately
 # absent: 1/1 is noise, not information.
@@ -1661,7 +1765,13 @@ MARKETS: dict[str, dict[str, Any]] = {
             "unit": "usd_per_bushel",
             "arbitrage": "open",
         },
-        "weather_regions": ["US Midwest (Iowa)", "US Illinois"],
+        # (region, role) — the role says why this pin is on this page. M14 #207
+        # / M24 #271: a label, never a code path.
+        "weather_regions": [
+            ("US Midwest (Iowa)", "domestic crop"),
+            ("US Illinois", "domestic crop"),
+            ("US Nebraska", "domestic crop — western belt"),
+        ],
         # M25 #272. Water is this page's freight leg: the Memphis gauge prices
         # the barge freight inside the `us_gulf:cif` ledger leg, and St. Louis
         # is the barge-rate reference point above the Ohio confluence. Rendered
@@ -1741,7 +1851,13 @@ MARKETS: dict[str, dict[str, Any]] = {
             # (3%) and VAT (9%), not closed to zero.
             "arbitrage": "open",
         },
-        "weather_regions": ["China Heilongjiang", "China Jilin"],
+        # Dalian is the one market whose weather is half somebody else's: the
+        # domestic crop prices No.1, and Brazil (73.6% of China's 111.8 Mt
+        # 2025 imports) prices No.2 and meal. Jilin was dropped — corn/feed.
+        "weather_regions": [
+            ("China Heilongjiang", "domestic crop — prices No.1"),
+            ("Brazil Mato Grosso", "import origin — prices No.2 and meal"),
+        ],
         "psd_country": "China",
         "players_country": "CN",
     },
@@ -1782,7 +1898,11 @@ MARKETS: dict[str, dict[str, Any]] = {
             "unit": "home_per_mt",
             "arbitrage": "open",
         },
-        "weather_regions": ["Brazil Mato Grosso", "Brazil Parana"],
+        "weather_regions": [
+            ("Brazil Mato Grosso", "domestic crop"),
+            ("Brazil Parana", "domestic crop"),
+            ("Brazil Rio Grande do Sul", "domestic crop — the La Niña swing state"),
+        ],
         "psd_country": "Brazil",
         "players_country": "BR",
     },
@@ -1844,7 +1964,12 @@ MARKETS: dict[str, dict[str, Any]] = {
             # export duty and the FX regime widen it, they don't block it.
             "arbitrage": "open",
         },
-        "weather_regions": ["Argentina Pampas", "Argentina Cordoba"],
+        "weather_regions": [
+            ("Argentina Pampas", "domestic crop"),
+            ("Argentina Cordoba", "domestic crop"),
+            ("Paraguay Alto Parana", "crushed in Rosario — 75–85% of the crop barges down"),
+            ("Argentina Buenos Aires (sunflower)", "sunflower — prices the sun-oil leg"),
+        ],
         # M26 #273. ~80% of Argentine ag exports move down the Paraná, and the
         # draft at Rosario sets how much of a cargo each vessel can lift.
         "river_gauges": ["Paraná at Rosario"],
@@ -1906,7 +2031,10 @@ MARKETS: dict[str, dict[str, Any]] = {
                 "and a wide print is its normal state, not a data error."
             ),
         },
-        "weather_regions": ["India Madhya Pradesh", "India Maharashtra"],
+        "weather_regions": [
+            ("India Madhya Pradesh", "domestic crop — kharif, monsoon-timed"),
+            ("India Maharashtra", "domestic crop — kharif, monsoon-timed"),
+        ],
         "psd_country": "India",
         "players_country": "IN",
     },
@@ -1940,8 +2068,14 @@ MARKETS: dict[str, dict[str, Any]] = {
         "crush_absent_reason": "no EU rapeseed oil or meal assessment is ingested",
         "basis": None,
         "basis_absent_reason": "no EU futures board to take a basis against (MATIF is licensed)",
-        "weather_regions": [],
-        "weather_absent_reason": "no European growing region is in GROWING_REGIONS",
+        # M14 #207 filled the empty block on the page whose leg is the most
+        # locally weather-driven one on the map. These pins are RAPESEED, not
+        # soy, and the role label is what says so on the page.
+        "weather_regions": [
+            ("France Champagne (Grand Est)", "rapeseed, not soy — EU #1"),
+            ("Germany Mecklenburg-Vorpommern", "rapeseed, not soy — EU #2"),
+            ("Romania Baragan (Danube plain)", "rapeseed, not soy — the risk FR/DE miss"),
+        ],
         "psd_country": "European Union",
         "players_country": None,
     },
@@ -1988,7 +2122,10 @@ MARKETS: dict[str, dict[str, Any]] = {
             "value_column": "week_total",
             "unit": "tonnes",
         },
-        "weather_regions": ["South Africa Free State", "South Africa Mpumalanga"],
+        "weather_regions": [
+            ("South Africa Free State", "domestic crop"),
+            ("South Africa Mpumalanga", "domestic crop"),
+        ],
         "psd_country": "South Africa",
         "players_country": "ZA",
     },
@@ -2008,7 +2145,10 @@ MARKETS: dict[str, dict[str, Any]] = {
         "crush_absent_reason": "no Nigerian price leg to build a margin from",
         "basis": None,
         "basis_absent_reason": "no Nigerian price leg to take a basis from",
-        "weather_regions": ["Nigeria Benue", "Nigeria Kaduna"],
+        "weather_regions": [
+            ("Nigeria Benue", "domestic crop"),
+            ("Nigeria Kaduna", "domestic crop"),
+        ],
         "psd_country": "Nigeria",
         "players_country": "NG",
     },

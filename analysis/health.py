@@ -179,9 +179,14 @@ def _check_table_freshness(table: str, key_col: str, date_col: str,
                 "message": f"MISSING from {table} — no observed rows",
             })
 
-    # Check for stale data
+    # Check for stale data. Only keys the config still expects: a key that was
+    # retired from its catalog (M14 #207 dropped three growing regions) keeps
+    # its stored rows and would otherwise go STALE forever, on a layer that is
+    # correctly no longer fetching it — a permanent warning about working
+    # software is how a reader is trained to ignore the freshness block.
+    expected_set = set(expected_keys)
     for key, (last_date, _count) in found.items():
-        if last_date is None or key in stale_exempt:
+        if last_date is None or key in stale_exempt or key not in expected_set:
             continue
         try:
             last_dt = pd.to_datetime(last_date).date()

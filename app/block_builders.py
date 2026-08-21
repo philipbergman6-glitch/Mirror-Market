@@ -1031,13 +1031,18 @@ def weather_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict
         recent = [row[3] for row in rows[-7:] if row[3] is not None]
         regions.append({
             "region": region,
+            # Why this pin is on this page (M14 #207) — "import origin",
+            # "rapeseed, not soy". Without it Europe's pins read as soy.
+            "role": market.weather_roles[region],
             "as_of": when.isoformat(),
             "age_days": _age_days(ctx.today, when),
             "temp_max": temp_max,
             "temp_min": temp_min,
             "precip_mm": precip,
             "precip_7d_mm": sum(recent) if recent else None,
-            "alert": _weather_alert(temp_max, precip),
+            "alert": weather_alert(temp_max, precip),
+            # None when the crop is in the ground. The card renders either way.
+            "season_note": out_of_season_note(region, ctx.today),
         })
     rivers = _river_rows(market, ctx)
     if not regions and not any(r["state"] == "ok" for r in rivers):
@@ -1191,7 +1196,30 @@ def _weather_rows(ctx: SiteContext, region: str):
     return ctx.cached(("weather", region), build)
 
 
-def _weather_alert(temp_max, precip) -> str | None:
+_MONTH_NAMES = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+
+def out_of_season_note(region: str, today: date) -> str | None:
+    """"out of season — planting ~Oct", or None when the crop is in the ground.
+
+    M14 #207 chose a tag over hiding the card: September Iowa rain is real and
+    prices harvest logistics, so the reading stays and the tag prices it. The
+    calendar is declared planting-first, so ``months[0]`` names the month.
+
+    A region with no calendar entry returns None rather than guessing a
+    season — but nothing should reach that branch: the calendar's keys are
+    pinned to GROWING_REGIONS by test.
+    """
+    months = config.WEATHER_GROWING_SEASON_MONTHS.get(region)
+    if not months or today.month in months:
+        return None
+    return f"out of season — planting ~{_MONTH_NAMES[months[0] - 1]}"
+
+
+def weather_alert(temp_max, precip) -> str | None:
     """Same thresholds and same precedence as the briefing's weather section."""
     if temp_max is not None and temp_max > config.WEATHER_EXTREME_HEAT_C:
         return "Extreme heat"
