@@ -4,6 +4,46 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — M16: cross-market crush board, headline section 04 (2026-08-21)
+
+The headline said whether *CBOT* processing was paying, twice, in two shapes:
+a "Crush Spread" tile in the key-metrics grid and a chart sub-block below it —
+plus a "DCE Board Crush" tile computed a third way. None of the three said what
+kind of margin it was. This run replaces them with one board.
+
+* **Four markets side by side, each labelled by kind.** CBOT (board, named
+  contracts) · Dalian (board, continuous series) · Brazil · Argentina
+  (administered, Ley 21.453), in `config.CRUSH_BOARD` order, each card linking
+  to the market page whose block 03 carries the depth. Every card calls the
+  same `crush_block` that page does, so the headline and the page cannot print
+  two different margins for one market (M7 #149's one engine, enforced by
+  reuse rather than by convention).
+* **Brazil ships without a number.** No Brazilian oil or meal cash quote is
+  ingested — an unbuilt scrape, and additional work rather than a gap this
+  ticket could close — so the card carries the registry's own reason in the
+  `absent` empty state. Dropping it would read as "Brazil has no crush
+  industry".
+* **Argentina ships as a full leg.** #162 verified the meal NCM position
+  `23040010100B` against dataset 358's labelled series (52 of 52 business days
+  exact), so the margin M7 flagged as provisional is no longer caveated.
+* **A range is struck by the engine that struck the level, or not at all.**
+  Dalian and Argentina restrike their own margin for every stored session —
+  one session for all three legs, converted at that row's own date's rate and
+  never a later one. CBOT's named-contract margin gets no range: a mean off the
+  continuous front-month series would be a range around a different number, and
+  the card says so. Under 20 sessions a leg prints its level with "no range
+  yet" and the count.
+* **Housekeeping.** Headline sections renumber 04→05 … 11→12; the old section
+  04 loses its crush sub-block and becomes "Relative Value"; the surviving
+  key-metrics crush tile is renamed "CBOT Front-Month Crush" and now declares
+  `derived: "crush"` rather than being recognised by its display label, so the
+  promotion contract's alignment probe cannot be broken by a rename;
+  `.empty-state` CSS moves into `_base.html.j2` beside `.kind`.
+* **Tests.** `tests/test_crush_board.py` — 20 tests over kind labelling, engine
+  agreement with block 03, the Brazil empty state, both range states, the FX
+  rule, and the rendered section (including a guard that the index nav's
+  section numbers match the page's).
+
 ## Unreleased — Phase 4: opportunity and counterparty engine (2026-08-18)
 
 The players base was a reference document and the market layers were a

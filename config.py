@@ -2118,6 +2118,30 @@ LEDGER_ABSENT_REASONS = {
 
 
 # ---------------------------------------------------------------------------
+# CRUSH_BOARD — which markets sit on the headline crush board (M16 #208)
+#
+# Registry data for the same reason LEDGERS is: which markets are compared
+# side by side is a decision about the trade, and a builder that derived it
+# ("every market with a crush descriptor") would answer a different question —
+# it would drop Brazil, whose empty card is the point.
+#
+# Four, decided by M2 #144, ordered as MARKETS is (role in the trade):
+#
+# * CBOT and Dalian — the two boards, one on named contracts, one on
+#   continuous main-contract series, and the cards say which is which.
+# * Brazil — the largest exporter, and the one leg that does NOT compute: no
+#   oil or meal cash quote is ingested, so the card carries the registry's own
+#   reason (an unbuilt scrape, M7 #149). A board of the three that happen to
+#   work would read as though Brazil had no crush industry.
+# * Argentina — the largest crusher of the four, struck off Ley 21.453
+#   administered FOB minimums. Verified, not provisional, since #162.
+#
+# Kinds are never collapsed: board, physical and administered are three
+# different claims and every card labels its own (M2 constraint 3).
+CRUSH_BOARD = ("cbot", "dalian", "brazil", "argentina")
+
+
+# ---------------------------------------------------------------------------
 # ORIGIN COMPARISON — landed-cost economics (Phase 2)
 #
 # The trader question this registry serves: "for a named shipment window, which

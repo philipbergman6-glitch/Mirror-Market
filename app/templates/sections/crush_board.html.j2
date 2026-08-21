@@ -1,0 +1,63 @@
+{#
+  Headline crush board — four markets side by side (M2 #144 section 04, built
+  by M16 #208).
+
+  The successor to the CBOT-only "Crush Spread" sub-block that used to open
+  the relative-value section, and to the `DCE Board Crush` tile in the
+  key-metrics grid: two markets rendered in two different shapes on one page,
+  neither of them saying what kind of margin it was.
+
+  Three rules the markup keeps:
+
+  * **Every card states its kind.** Board, administered and physical are
+    different claims; the chip on each card is what stops four numbers in one
+    row reading as one "crush" line (M2 constraint 3 / M3 #145 constraint 4).
+  * **The card is the link.** The depth is block 03 on the market page, so the
+    market name is how a reader gets there — the rule the ledger keeps one
+    section up.
+  * **A card with no margin keeps its slot** and states why, in the same
+    empty-state treatment the market blocks use: `absent` calm (no source
+    exists), `empty` warm (a source exists and gave nothing).
+
+  Number formatting comes from the block macros rather than the section ones,
+  so a margin here is formatted by the same macro that formats it inside
+  block 03. Expects `s` (the section's data) and the page-global `root`.
+#}
+{% import 'blocks/_macros.html.j2' as f %}
+<div class="grid grid-4">
+  {% for row in s.rows %}
+  {% if row.state == 'ok' %}
+  <div class="mc" data-crush-market="{{ row.market_slug }}" data-crush-kind="{{ row.kind }}">
+    <div class="mc-label">
+      <a href="{{ root }}{{ row.href }}">{{ row.market_name }}</a>
+      <span class="kind">{{ row.kind_label }}</span>
+    </div>
+    <div class="mc-val num {{ 'up' if row.profitable else 'down' }}">{{ f.signed(row.margin_usd_mt) }}<small class="muted"> $/MT</small></div>
+    {# A home-currency margin exists only where all three legs are quoted per
+       MT in one currency. A board quoted in cents/bu, cents/lb and $/short
+       ton has no such number, and printing one would invent a unit. #}
+    {% if row.margin_home is not none %}<div class="mc-delta muted">{{ row.home_currency }} {{ f.num(row.margin_home, 0) }}/MT</div>{% endif %}
+    {% if row.range %}
+    <div class="mc-delta muted">{{ row.range.window }} mean {{ f.num(row.range.mean, 0) }} · {{ f.num(row.range.low, 0) }} to {{ f.num(row.range.high, 0) }} $/MT</div>
+    {% else %}
+    <div class="mc-delta muted">{{ row.range_note }}</div>
+    {% endif %}
+    <div class="caption" style="margin-bottom:0">
+      bean leg {{ row.bean_key }}{% if row.as_of %} · as of {{ row.as_of }}{% if row.age_days and row.age_days > 1 %} · {{ row.age_days }}d ago{% endif %}{% endif %}
+      {% if row.contract_note %}<br>{{ row.contract_note }}{% endif %}
+      {% if row.provisional %}<br>{{ row.provisional_note }}{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state state-{{ row.state }}" data-crush-market="{{ row.market_slug }}">
+    <div class="mc-label">
+      <a href="{{ root }}{{ row.href }}">{{ row.market_name }}</a>
+      {% if row.kind_label %}<span class="kind">{{ row.kind_label }}</span>{% endif %}
+    </div>
+    <span class="es-label">{% if row.state == 'absent' %}no source{% else %}no margin{% endif %}</span>
+    {{ row.reason }}
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+<div class="caption">{{ s.kind_note }} {{ s.range_note }}</div>

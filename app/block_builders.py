@@ -78,6 +78,11 @@ LEDGER_STATE_NO_PRINT = "no_print_since"
 LEDGER_STATE_DARK = "dark"
 LEDGER_STATE_OUT_OF_CADENCE = "out_of_cadence"
 
+# Sessions a leg needs before the headline crush board puts a mean and a range
+# around its margin. Twenty is the floor the headline basis panel already uses:
+# below it an "average" is a fortnight of weather wearing a year's label.
+CRUSH_RANGE_MIN_OBS = 20
+
 # How far the USD and home-currency moves must diverge before the row is tagged
 # `FX`. A tenth of a percentage point: below that the rate is rounding, above it
 # the currency is doing work the reader would otherwise credit to the market.
@@ -187,16 +192,26 @@ class SiteContext:
         latest = self.fx(pair)
         return latest[1] if latest else None
 
-    def fx_on(self, pair: str | None, when: date) -> float | None:
+    def fx_on(
+        self, pair: str | None, when: date, *, fallback_to_oldest: bool = True
+    ) -> float | None:
         """The rate on ``when``, else the newest rate at or before it.
 
         A price dated D converted at today's rate is a different number from
         the same price converted at D's rate; the ledger's dual quote is only
         honest if the two legs are struck on the same day where one exists.
+
+        ``fallback_to_oldest`` covers a day *older* than every stored rate. For
+        a level that is a carry-forward of at most a weekend and the rate is
+        better than nothing; for a historical session it would convert a margin
+        at a rate from its own future, so callers reading history turn it off
+        and drop the session instead.
         """
         rows = self.fx_series(pair)
         prior = [rate for day, rate in rows if day <= when]
-        return prior[-1] if prior else (rows[0][1] if rows else None)
+        if prior:
+            return prior[-1]
+        return rows[0][1] if rows and fallback_to_oldest else None
 
     # -- the reference board -------------------------------------------------
     def reference_series(self, markets: dict[str, Market]) -> list[tuple[date, float]]:
@@ -784,6 +799,31 @@ def _home_unit(source: Source, key: str, home_currency: str) -> str:
 # ---------------------------------------------------------------------------
 # 03 Crush
 # ---------------------------------------------------------------------------
+def _crush_sessions(crush, rows_by_key: dict) -> set[date]:
+    """The sessions every one of the three legs printed on.
+
+    One engine, every market (M7 #149), and one session for all three legs: a
+    leg's own latest print taken alone would silently mix sessions and move the
+    margin on a day that leg did not trade. Shared by the level and its history
+    so the two cannot come to disagree about which days count.
+    """
+    common: set[date] | None = None
+    for key in crush.legs.values():
+        days = {day for day, _, _ in rows_by_key.get(key) or []}
+        common = days if common is None else (common & days)
+    return common or set()
+
+
+def _crush_margin(legs: dict[str, float], yields: dict[str, float]) -> float:
+    """``oil x yield + meal x yield − bean``, in whatever one unit the legs share.
+
+    The convention lives here once. It is the level's arithmetic and its
+    history's, and a yield change that reached only one of them would put a
+    range around a margin the card is not printing.
+    """
+    return legs["oil"] * yields["oil"] + legs["meal"] * yields["meal"] - legs["bean"]
+
+
 def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     crush = market.crush
     if crush.contracts == "named":
@@ -791,13 +831,7 @@ def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     source = crush.as_source()
     rows_by_key = ctx.series(source)
 
-    # One engine, every market (M7 #149): the margin is computed on a date all
-    # three legs share. Taking each leg's own latest print would silently mix
-    # sessions and quietly move the margin on a day one leg did not trade.
-    common = None
-    for key in crush.legs.values():
-        days = {day for day, _, _ in rows_by_key.get(key) or []}
-        common = days if common is None else (common & days)
+    common = _crush_sessions(crush, rows_by_key)
     if not common:
         return STATE_EMPTY, (
             "the bean, oil and meal legs share no session — a margin across "
@@ -822,10 +856,8 @@ def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         ), {}
 
     yields = crush.yields
-    margin_usd = (
-        legs["oil"]["usd_mt"] * yields["oil"]
-        + legs["meal"]["usd_mt"] * yields["meal"]
-        - legs["bean"]["usd_mt"]
+    margin_usd = _crush_margin(
+        {name: leg["usd_mt"] for name, leg in legs.items()}, yields
     )
     # A home-currency margin exists only where all three legs are quoted per MT
     # in that one currency. CBOT's legs are cents/bu, cents/lb and USD/short
@@ -833,10 +865,8 @@ def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     # produces a number with no unit at all (it printed "USD -820/MT" beside a
     # +$66.9 margin before this check). USD/MT is the only honest statement of
     # a board crush, which is what M7 #149's one engine means in practice.
-    margin_home = (
-        legs["oil"]["home_value"] * yields["oil"]
-        + legs["meal"]["home_value"] * yields["meal"]
-        - legs["bean"]["home_value"]
+    margin_home = _crush_margin(
+        {name: leg["home_value"] for name, leg in legs.items()}, yields
     ) if crush.unit == "home_per_mt" else None
     return STATE_OK, "", {
         "kind": crush.kind,
@@ -912,6 +942,210 @@ def _named_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         },
     })
     return STATE_OK, "", data
+
+
+# ---------------------------------------------------------------------------
+# The headline crush board (section 04, M16 #208)
+# ---------------------------------------------------------------------------
+def headline_crush_board(
+    markets: dict[str, Market], ctx: SiteContext
+) -> tuple[str, str, dict]:
+    """Four markets' crush margins side by side, each labelled by kind.
+
+    The headline's answer to "is processing paying, and where" — a scan, with
+    the depth on the market page each card links to. Three things about it are
+    load-bearing:
+
+    * **The level is block 03's number, not a second calculation.** Every card
+      calls ``crush_block`` for the market it names, so the headline and the
+      page cannot disagree about the same margin. That was M7 #149's finding
+      turned into code: one engine, and only yields, FX and the kind label
+      vary between markets.
+    * **The kinds do not collapse.** A board margin, an administered one and a
+      physical one are three different claims, and four numbers in one row of
+      cards is the easiest place on the site for them to read as one "crush"
+      line. Every card states its own kind (M2 #144 constraint 3).
+    * **Brazil is on the board without a number.** Its oil and meal legs are an
+      unbuilt scrape, so the card carries the registry's reason. Dropping it
+      would say something quite different — that Brazil has no crush industry.
+
+    Which markets these are is ``config.CRUSH_BOARD``, not a rule derived here.
+    """
+    rows = [_crush_board_card(markets[slug], ctx) for slug in config.CRUSH_BOARD]
+    if not any(row["margin_usd_mt"] is not None for row in rows):
+        return STATE_EMPTY, (
+            "no market on the board struck a margin — each leg is either unbuilt or "
+            "short of a session its bean, oil and meal all printed"
+        ), {}
+    return STATE_OK, "", {
+        "rows": rows,
+        "kind_note": (
+            "Board, administered and physical margins are different claims and are "
+            "labelled per card — a Ley 21.453 minimum is not a traded price and an "
+            "exchange close is not a plant's earnings."
+        ),
+        "range_note": (
+            "A range is struck by the same engine that struck the level, or it is "
+            "not struck at all."
+        ),
+    }
+
+
+def _crush_board_card(market: Market, ctx: SiteContext) -> dict:
+    """One market's card — the margin, or the reason there is none.
+
+    Every card carries the same keys whichever way it goes: the template
+    renders one shape, and a key that exists only on the happy path is a
+    ``StrictUndefined`` error that tombstones the whole headline (#226).
+    """
+    card = {
+        "market_slug": market.slug,
+        "market_name": market.name,
+        "venue": market.venue,
+        "href": market.url,
+        "state": STATE_OK,
+        "reason": "",
+        "kind": None,
+        "kind_label": None,
+        "margin_usd_mt": None,
+        "profitable": None,
+        "margin_home": None,
+        "home_currency": market.home_currency,
+        "as_of": None,
+        "age_days": None,
+        "bean_key": None,
+        "contract_basis": None,
+        "legs_named": None,
+        "hedgeable": None,
+        "contract_note": None,
+        "provisional": None,
+        "provisional_note": None,
+        "range": None,
+        "range_note": "",
+    }
+
+    if market.crush is None:
+        # `absent`, not `empty`: nothing was asked of a source, because there
+        # is no source. M1 #143 renders the two differently on purpose — and a
+        # non-`ok` card with no reason is the blank the `Block` type raises on,
+        # so it raises here too rather than rendering an unexplained gap.
+        reason = absent_reason(market, "crush")
+        if not (reason or "").strip():
+            raise ValueError(
+                f"{market.slug} has no crush source and no reason for it — an "
+                "unexplained empty card reads as a market with no crush industry"
+            )
+        card.update(state=STATE_ABSENT, reason=reason)
+        return card
+
+    state, reason, data = crush_block(market, ctx)
+    card["kind"] = market.crush.kind
+    card["kind_label"] = quote_kind_label(market.crush.kind)
+    if state != STATE_OK:
+        card.update(state=state, reason=reason)
+        return card
+
+    band, range_note = _crush_range(market, ctx)
+    card.update(
+        margin_usd_mt=data["margin_usd_mt"],
+        profitable=data["profitable"],
+        margin_home=data["margin_home"],
+        home_currency=data["home_currency"],
+        as_of=data["as_of"],
+        age_days=data["age_days"],
+        bean_key=data["legs"]["bean"]["key"],
+        contract_basis=data["contract_basis"],
+        legs_named=data["legs_named"],
+        hedgeable=data["hedgeable"],
+        contract_note=data["contract_note"],
+        provisional=data["provisional"],
+        provisional_note=data["provisional_note"],
+        range=band,
+        range_note=range_note,
+    )
+    return card
+
+
+def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
+    """This leg's own mean and range, or why it has none (#208 sub-question 4).
+
+    **A range is struck by the engine that struck the level.** CBOT's margin is
+    ZSU26/ZMU26/ZLU26 out of ``forward_curve``; the continuous front-month
+    series beside it in ``prices`` runs back fifteen years and would happily
+    produce a mean — around a different number, on legs that name no contract.
+    Rendered under a named-contract level it would read as that margin's own
+    history, which is the one thing it is not.
+    """
+    crush = market.crush
+    if crush.contracts == "named":
+        return None, (
+            "no range yet — struck on named delivery months; a mean off the "
+            "front-month series would be a range around a different margin"
+        )
+
+    history = _crush_margin_history(market, ctx)
+    if len(history) < CRUSH_RANGE_MIN_OBS:
+        return None, (
+            f"no range yet — {len(history)} session(s) all three legs struck, short "
+            f"of the {CRUSH_RANGE_MIN_OBS} a mean needs"
+        )
+    values = [margin for _, margin in history]
+    return {
+        "n_obs": len(values),
+        # Sessions, never "1Y": the read is bounded at 400 days
+        # (`LOOKBACK_DAYS_BY_CADENCE`) and a leg's stored depth is its own, so
+        # a year is a claim about coverage this cannot make. The count is the
+        # honest label and it is also the more useful one.
+        "window": f"{len(values)}-session",
+        "mean": sum(values) / len(values),
+        "low": min(values),
+        "high": max(values),
+        "start": history[0][0].isoformat(),
+        "end": history[-1][0].isoformat(),
+    }, ""
+
+
+def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:
+    """The generic engine's margin restruck for every session it can be.
+
+    The two rules the level keeps, kept here too rather than relaxed because
+    these are old numbers nobody reads individually:
+
+    * **One session for all three legs.** A day the oil did not print is not a
+      day with a margin, and interpolating one would put a shape into the range
+      that the market never traded.
+    * **That row's own date's rate.** ``ctx.fx_on`` falls back to the oldest
+      stored rate for a day older than every rate, which is right for a level
+      (it is a carry-forward of at most a weekend) and wrong for history: it
+      would convert a margin at a rate from its future. ``fallback_to_oldest``
+      is off here, so those sessions are dropped instead.
+    """
+    crush = market.crush
+    source = crush.as_source()
+    rows_by_key = ctx.series(source)
+
+    common = _crush_sessions(crush, rows_by_key)
+    if not common:
+        return []
+
+    yields = crush.yields
+    values_by_key = {
+        key: {day: value for day, value, _ in rows_by_key.get(key) or []}
+        for key in crush.legs.values()
+    }
+
+    history: list[tuple[date, float]] = []
+    for day in sorted(common):
+        rate = ctx.fx_on(market.currency_pair, day, fallback_to_oldest=False)
+        legs: dict[str, float] = {}
+        for leg_name, key in crush.legs.items():
+            usd = source.to_usd_mt(values_by_key[key][day], key, rate)
+            if usd is None:
+                break
+            legs[leg_name] = usd
+        else:
+            history.append((day, _crush_margin(legs, yields)))
+    return history
 
 
 # ---------------------------------------------------------------------------
