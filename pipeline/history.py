@@ -12,11 +12,19 @@ these tables round-trip through CSV files committed to the repo:
 
 The workflow commits data/history/ back to the repo after each run.
 
-Import uses INSERT OR IGNORE so rows already in the DB (a local dev DB is
-always fresher than the last committed CSV) are never clobbered; the
-fetch layers that follow use INSERT OR REPLACE and overwrite with live
-values where they overlap. Export rewrites each CSV atomically, sorted by
-primary key, so the daily git diff is stable and append-only.
+Import inserts only rows the DB does not already hold, keyed on a
+NULL-safe comparison of the real primary key, so rows already present (a
+local dev DB is always fresher than the last committed CSV) are never
+clobbered; the fetch layers that follow use INSERT OR REPLACE and
+overwrite with live values where they overlap. Export rewrites each CSV
+atomically, sorted by primary key, so the daily git diff is stable and
+append-only.
+
+CSV has one blank and SQLite has two — "" and NULL — and the round trip
+has to resolve that ambiguity from the column's own NOT NULL constraint
+rather than guess. See _decode_row and the insert SQL in
+import_history(); both were a source of silent row loss and of duplicate
+rows on nullable-PK tables (#68).
 
 A failed import must abort the run: exporting from a DB that failed to
 seed would overwrite the committed CSVs with today-only data — the exact
@@ -129,6 +137,53 @@ def _csv_path(table: str) -> str:
     return os.path.join(HISTORY_DIR, f"{table}.csv")
 
 
+def _is_text_affinity(declared_type: str) -> bool:
+    """SQLite affinity rule 2: TEXT if the declared type contains CHAR,
+    CLOB or TEXT. Everything else stores "" as a text value in a numeric
+    column, which is a poisoned cell, not a blank."""
+    t = declared_type.upper()
+    return "CHAR" in t or "CLOB" in t or "TEXT" in t
+
+
+def _decode_row(
+    row: list[str],
+    header: list[str],
+    not_null_text: set[str],
+    not_null_other: set[str],
+    path: str,
+) -> list[object]:
+    """CSV cells → SQLite values, resolving the ""↔NULL ambiguity per column.
+
+    csv.writer renders both NULL and "" as an empty field, so the blank
+    cell alone cannot say which one it was. The column's own NOT NULL
+    constraint can: a NOT NULL column could never have held NULL, so its
+    blank was an empty string (pipeline.store._str_cols defaults missing
+    text to "", so these are real — gulf_bids.delivery is the live case).
+    A nullable column's blank reads back as NULL, which is what the
+    fetchers that leave a field blank on purpose already mean by it.
+
+    A blank in a NOT NULL *numeric* column is neither: our own export
+    cannot produce one, so the CSV is corrupt and the run must stop
+    rather than store the text "" in a REAL column.
+    """
+    out: list[object] = []
+    # strict: a row with the wrong number of fields is a corrupt CSV, not a
+    # row to pad or truncate into shape.
+    for col, cell in zip(header, row, strict=True):
+        if cell != "":
+            out.append(cell)
+        elif col in not_null_text:
+            out.append("")
+        elif col in not_null_other:
+            raise HistoryImportError(
+                f"{path}: blank cell in NOT NULL non-text column '{col}' — "
+                "the CSV is corrupt (this export cannot produce one)"
+            )
+        else:
+            out.append(None)
+    return out
+
+
 def import_history() -> int:
     """Seed the DB from committed history CSVs. Returns rows inserted.
 
@@ -153,19 +208,56 @@ def import_history() -> int:
                     if not header:
                         logger.warning("History import: %s is empty — skipped", path)
                         continue
-                    table_cols = {
-                        r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()
-                    }
+                    info = conn.execute(f"PRAGMA table_info({table})").fetchall()
+                    table_cols = {r[1] for r in info}
                     unknown = set(header) - table_cols
                     if unknown:
                         raise HistoryImportError(
                             f"{path}: columns {sorted(unknown)} not in table {table}"
                         )
+                    not_null_text = {
+                        r[1] for r in info if r[3] and _is_text_affinity(r[2])
+                    }
+                    not_null_other = {
+                        r[1] for r in info if r[3] and not _is_text_affinity(r[2])
+                    }
+                    # The table's *real* primary key, not the export sort order
+                    # in HISTORY_TABLES — the dedupe has to match what SQLite
+                    # actually enforces.
+                    pk_cols = [r[1] for r in sorted(info, key=lambda r: r[5]) if r[5]]
+                    if not pk_cols:
+                        raise HistoryImportError(
+                            f"{table} has no primary key — a re-import could not "
+                            "tell a row it already holds from a new one"
+                        )
+                    missing_pk = [c for c in pk_cols if c not in header]
+                    if missing_pk:
+                        raise HistoryImportError(
+                            f"{path}: primary-key column(s) {missing_pk} absent "
+                            f"from the CSV header"
+                        )
+                    pk_idx = [header.index(c) for c in pk_cols]
+                    # Not INSERT OR IGNORE: it ignores *every* constraint, so a
+                    # row that violates NOT NULL disappears without a word — and
+                    # it dedupes on the unique index, where NULL != NULL, so a
+                    # nullable PK column (wasde.reference_period,
+                    # brazil_estimates.report_date) re-inserts a duplicate on
+                    # every import. The NULL-safe IS comparison does both jobs:
+                    # skip a row we already hold, raise on anything else.
                     sql = (
-                        f"INSERT OR IGNORE INTO {table} ({','.join(header)}) "
-                        f"VALUES ({','.join('?' * len(header))})"
+                        f"INSERT INTO {table} ({','.join(header)}) "
+                        f"SELECT {','.join('?' * len(header))} WHERE NOT EXISTS ("
+                        f"SELECT 1 FROM {table} WHERE "
+                        + " AND ".join(f"{c} IS ?" for c in pk_cols)
+                        + ")"
                     )
-                    rows = [[cell if cell != "" else None for cell in row] for row in reader]
+                    rows = []
+                    for raw in reader:
+                        values = _decode_row(
+                            raw, header, not_null_text, not_null_other, path
+                        )
+                        rows.append(values + [values[i] for i in pk_idx])
+                before = conn.total_changes
                 conn.execute("BEGIN")
                 try:
                     conn.executemany(sql, rows)
@@ -173,8 +265,14 @@ def import_history() -> int:
                 except Exception:
                     conn.execute("ROLLBACK")
                     raise
-                total += len(rows)
-                logger.info("History import: %s ← %d rows", table, len(rows))
+                inserted = conn.total_changes - before
+                total += inserted
+                logger.info(
+                    "History import: %s ← %d rows (%d already held)",
+                    table,
+                    inserted,
+                    len(rows) - inserted,
+                )
             except HistoryImportError:
                 raise
             except Exception as exc:

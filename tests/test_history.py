@@ -251,6 +251,139 @@ def test_briefings_roundtrip(history_env: Path, patched_db: Path) -> None:
     assert rows == [("2026-08-08", "body")]
 
 
+# --- the ""↔NULL boundary (T20 · F10 #68) -----------------------------------
+
+
+def _gulf_row(db_path: Path, delivery: str) -> None:
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT OR REPLACE INTO gulf_bids "
+        "(report_date, commodity, location, delivery, basis_low) "
+        "VALUES ('2026-08-20', 'Soybeans', 'Gulf Coast Ports', ?, 101.0)",
+        (delivery,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_blank_not_null_pk_roundtrips_as_empty_string(
+    history_env: Path, patched_db: Path
+) -> None:
+    """gulf_bids.delivery is TEXT NOT NULL and store._str_cols blanks it.
+
+    CSV cannot tell "" from NULL, so a blanket ""→NULL on import turned a
+    storable empty string into a NOT NULL violation that aborted the whole
+    run. A NOT NULL column can only ever have held "", so that is what the
+    blank cell must be read back as.
+    """
+    _gulf_row(patched_db, "")
+    assert export_history() >= 1
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM gulf_bids")
+    conn.commit()
+    conn.close()
+
+    import_history()
+    conn = sqlite3.connect(str(patched_db))
+    try:
+        rows = conn.execute("SELECT delivery, basis_low FROM gulf_bids").fetchall()
+    finally:
+        conn.close()
+    assert rows == [("", 101.0)]
+
+
+def test_blank_not_null_pk_import_is_idempotent(
+    history_env: Path, patched_db: Path
+) -> None:
+    """Re-importing the same CSV must not duplicate the blank-PK row."""
+    _gulf_row(patched_db, "")
+    export_history()
+    import_history()
+    import_history()
+
+    conn = sqlite3.connect(str(patched_db))
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM gulf_bids").fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 1
+
+
+def test_null_pk_import_is_idempotent(history_env: Path, patched_db: Path) -> None:
+    """wasde.reference_period is a *nullable* PK column.
+
+    SQLite lets NULL into such a column, and NULL != NULL in the implicit
+    unique index — so INSERT OR IGNORE never sees the existing row and the
+    import appends a fresh duplicate on every run.
+    """
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO wasde (commodity, year, attribute, reference_period, value) "
+        "VALUES ('Soybeans', '2026/27', 'Ending Stocks', NULL, 300.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    export_history()
+    import_history()
+    import_history()
+
+    conn = sqlite3.connect(str(patched_db))
+    try:
+        rows = conn.execute(
+            "SELECT reference_period, value FROM wasde"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert rows == [(None, 300.0)]
+
+
+def test_null_pk_import_never_clobbers_db_rows(
+    history_env: Path, patched_db: Path
+) -> None:
+    """The NULL-safe path keeps INSERT OR IGNORE's fresher-DB-wins rule."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO wasde (commodity, year, attribute, reference_period, value) "
+        "VALUES ('Soybeans', '2026/27', 'Ending Stocks', NULL, 300.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    export_history()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("UPDATE wasde SET value = 999.0")
+    conn.commit()
+    conn.close()
+
+    import_history()
+    conn = sqlite3.connect(str(patched_db))
+    try:
+        rows = conn.execute("SELECT value FROM wasde").fetchall()
+    finally:
+        conn.close()
+    assert rows == [(999.0,)]
+
+
+def test_blank_in_not_null_numeric_column_hard_fails(
+    history_env: Path, patched_db: Path
+) -> None:
+    """Our own export can never produce this — a corrupt CSV must crash.
+
+    Keeping "" for a NOT NULL column is only provable for TEXT affinity;
+    an empty string in a NOT NULL numeric column would land as the text ""
+    and poison the series silently.
+    """
+    history_env.mkdir()
+    (history_env / "sagis_deliveries.csv").write_text(
+        "commodity,season_year,week_number,week_end\nSoybeans,2025,,2025-03-08\n"
+    )
+    with pytest.raises(HistoryImportError):
+        import_history()
+
+
 # --- forward_curve history schema -------------------------------------------
 
 
