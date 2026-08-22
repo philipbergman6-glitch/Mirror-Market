@@ -471,3 +471,33 @@ def read_commodity_freshness() -> pd.DataFrame:
             return pd.DataFrame()
 
     return df
+
+
+def read_quarantined_revisions(table_name: str | None = None) -> pd.DataFrame:
+    """Read held-back revisions from the quarantine (T19 · F9, #67).
+
+    An inspection seam, not a display source. Nothing in `analysis/` or
+    `scripts/generate_site.py` may read this: a quarantined value is a
+    number the store layer refused to believe, and rendering one anywhere
+    would publish exactly what the guard exists to keep out of the data.
+    It answers "what did the guard hold back, and against what" after an
+    alert.
+    """
+    if not is_cloud() and not os.path.exists(DB_PATH):
+        return pd.DataFrame()
+
+    sql = "SELECT * FROM quarantined_revisions"
+    params: tuple = ()
+    if table_name is not None:
+        sql += " WHERE table_name = ?"
+        params = (table_name,)
+    sql += " ORDER BY detected_at DESC, table_name, row_key"
+
+    with managed_connection(get_connection()) as conn:
+        try:
+            df = pd.read_sql(sql, conn, params=params or None)
+        except (sqlite3.OperationalError, pd.errors.DatabaseError) as exc:
+            logger.warning("Read failed for quarantined_revisions: %s", exc)
+            return pd.DataFrame()
+
+    return df

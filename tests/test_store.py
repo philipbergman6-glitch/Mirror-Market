@@ -500,12 +500,16 @@ def test_save_empty_returns_silently(patched_db, save_call):
 
 
 def test_save_price_data_insert_or_replace_updates_existing_row(patched_db):
+    # The revision is deliberately inside SAME_PK_DIVERGENCE_QUARANTINE_THRESHOLD
+    # (T19 #67): past it the store layer holds the row back instead, which is
+    # its own scenario in tests/test_store_quarantine.py. This test is about the
+    # upsert, so it revises by an amount a source actually publishes.
     store.save_price_data("Soybeans", _price_df(["2026-01-01"], [1200.0]))
-    store.save_price_data("Soybeans", _price_df(["2026-01-01"], [1500.0]))
+    store.save_price_data("Soybeans", _price_df(["2026-01-01"], [1260.0]))
 
     out = query.read_prices("Soybeans")
     assert len(out) == 1
-    assert out["Close"].iloc[0] == 1500.0
+    assert out["Close"].iloc[0] == 1260.0
 
 
 # ---------------------------------------------------------------------------
