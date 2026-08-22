@@ -48,6 +48,14 @@ already accommodates `country='World'` and `'World Less China'`.
 * Rendered on the briefing's stocks-to-use section and in `snapshot_json`
   (`world_stocks_to_use`), each stating region, denominator, and whether the
   grain adjustment was applied. Tests: +39.
+* **Follow-up: the reconciliation script had never been run.** The PSD API
+  answers in codes (`attributeId` / `unitId`) where the bulk CSVs answer in
+  words, so the first live invocation died on `KeyError:
+  'attributeDescription'`. Fixed by resolving both code tables once per run,
+  and the comparison now rejects a unit mismatch as well as a value mismatch —
+  equal numbers in different units are not agreement. First real run:
+  **480 attribute values across 7 commodities × 8 marketing years
+  (1970→2026), 0 mismatches** against USDA's own World row.
 
 ## Unreleased — M27: the Gulf-bid archive over the MARS API (2026-08-22)
 

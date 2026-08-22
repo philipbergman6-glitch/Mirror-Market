@@ -48,7 +48,13 @@ from fetchers.psd import (  # noqa: E402  (must follow sys.path.insert above)
 logger = logging.getLogger(__name__)
 
 _API = "https://api.fas.usda.gov/api/psd/commodity/{code}/world/year/{year}"
+_ATTRIBUTES_API = "https://api.fas.usda.gov/api/psd/commodityAttributes"
+_UNITS_API = "https://api.fas.usda.gov/api/psd/unitsOfMeasure"
 _AUTH_HEADER = "X-Api-Key"
+
+# The API answers in codes where the bulk CSVs answer in words: a row carries
+# `attributeId` / `unitId`, never the descriptions `_filter_psd` stores. Both
+# lookups are small, static, and fetched once per run.
 
 # The API rejects the unpadded codes the bulk CSVs use: pandas reads
 # Commodity_Code as an int, so "0813100" arrives as "813100" and
@@ -63,19 +69,41 @@ _DEFAULT_COMMODITIES = ("Soybeans", "Corn", "Wheat")
 _DEFAULT_YEARS = (1985, 1995, 2003, 2025)
 
 
-def _api_world_row(code: str, year: int) -> dict[str, float]:
-    """USDA's own World row, keyed by attribute name."""
+def _get(url: str) -> list[dict]:
     resp = requests.get(
-        _API.format(code=code.zfill(_CODE_WIDTH), year=year),
-        headers={_AUTH_HEADER: FAS_API_KEY},
-        timeout=REQUEST_TIMEOUT,
+        url, headers={_AUTH_HEADER: FAS_API_KEY}, timeout=REQUEST_TIMEOUT
     )
     resp.raise_for_status()
-    return {
-        str(row["attributeDescription"]).strip(): float(row["value"])
-        for row in resp.json()
-        if row.get("countryCode", "").strip() == "00"
-    }
+    return resp.json()
+
+
+def _lookup(url: str, id_field: str, name_field: str) -> dict[int, str]:
+    """A PSD code table as {id: description}."""
+    return {int(row[id_field]): str(row[name_field]).strip() for row in _get(url)}
+
+
+def _api_world_row(
+    code: str, year: int, attributes: dict[int, str], units: dict[int, str]
+) -> dict[str, tuple[float, str]]:
+    """USDA's own World row as {attribute name: (value, unit)}."""
+    rows = _get(_API.format(code=code.zfill(_CODE_WIDTH), year=year))
+    out: dict[str, tuple[float, str]] = {}
+    for row in rows:
+        if str(row.get("countryCode", "")).strip() != "00":
+            continue
+        attribute_id = int(row["attributeId"])
+        if attribute_id not in attributes:
+            # An id absent from the code table means the table moved under
+            # us; guessing at the name would compare two different things.
+            raise ValueError(
+                f"PSD attributeId {attribute_id} is not in the API's own "
+                f"attribute table — cannot name the row to compare it"
+            )
+        out[attributes[attribute_id]] = (
+            float(row["value"]),
+            units.get(int(row["unitId"]), ""),
+        )
+    return out
 
 
 def _synthesised_world(commodities: tuple[str, ...]) -> pd.DataFrame:
@@ -105,6 +133,8 @@ def main() -> int:
         logger.error("FAS_API_KEY is not set — the R00 row cannot be fetched")
         return 1
 
+    attributes = _lookup(_ATTRIBUTES_API, "attributeId", "attributeName")
+    units = _lookup(_UNITS_API, "unitId", "unitDescription")
     world = _synthesised_world(tuple(args.commodities))
     mismatches = 0
     checked = 0
@@ -113,7 +143,7 @@ def main() -> int:
         code = PSD_TARGET_COMMODITIES[commodity]
         for year in args.years:
             ours = world[(world["commodity"] == commodity) & (world["year"] == year)]
-            theirs = _api_world_row(code, year)
+            theirs = _api_world_row(code, year, attributes, units)
             if ours.empty or not theirs:
                 logger.warning(
                     "%s MY%d: no %s row — ours=%d attributes, USDA=%d",
@@ -130,12 +160,20 @@ def main() -> int:
                     )
                     continue
                 checked += 1
-                if float(row["value"]) != theirs[attribute]:
+                their_value, their_unit = theirs[attribute]
+                our_unit = str(row["unit"]).strip()
+                if our_unit and their_unit and our_unit != their_unit:
+                    # Equal numbers in different units are not agreement.
+                    mismatches += 1
+                    logger.error(
+                        "%s MY%d %s: bulk unit %s != USDA unit %s",
+                        commodity, year, attribute, our_unit, their_unit,
+                    )
+                elif float(row["value"]) != their_value:
                     mismatches += 1
                     logger.error(
                         "%s MY%d %s: bulk sum %s != USDA World %s",
-                        commodity, year, attribute,
-                        row["value"], theirs[attribute],
+                        commodity, year, attribute, row["value"], their_value,
                     )
 
     logger.info(
