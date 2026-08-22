@@ -38,6 +38,7 @@ from config import (
     MAX_FAILED_LAYERS,
     PRODUCTION_LAYER_KEYS,
     layer_expected_keys,
+    missing_api_keys,
     setup_logging,
 )
 from fetchers.agrural import fetch_agrural
@@ -987,6 +988,11 @@ def run(
     then refuse the shrink — a correct refusal, of a hole we created.
     """
     setup_logging()
+    # Say up front which layers cannot fetch. Each one also logs its own skip
+    # later, but scattered across a 29-layer run those read as ordinary noise;
+    # the reason a run is degraded belongs at the top of it.
+    for name, layers in missing_api_keys().items():
+        logger.warning("%s is not set — %s will run degraded or skip", name, layers)
     _HARD_FAILURES.clear()
     _NO_PUBLICATION.clear()
     _STALE_LAST_KNOWN_GOOD.clear()

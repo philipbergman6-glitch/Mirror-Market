@@ -4,6 +4,32 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the local env file is actually loaded (2026-08-22)
+
+A populated `.env` sat in the repo root and **nothing read it**: `config.py`
+was a bare `os.getenv(...)` per key, no module called `load_dotenv`, and no
+doc said the file had to be sourced by hand. So every local run bound
+`FAS_API_KEY` and its four siblings to `""` and skipped Layers 2, 3, 10 and
+13 while reporting a healthy run — the silent-degradation failure invariant 1
+exists to stop, arriving through the configuration instead of a fetcher. It
+was found the long way: the M15 reconciliation was reported unrunnable "for
+want of a key" that was present all along.
+
+* **Loaded at import, before the constants bind.** A later `load_dotenv()`
+  would be a no-op against names already frozen to `""`.
+* **The environment outranks the file** (`override=False`). CI sets its keys
+  from GitHub secrets and ships no `.env`, so this is inert there; locally, a
+  key exported for one run is not silently overruled by a stale file.
+* **A degraded run says so at the top.** `config.missing_api_keys()` maps each
+  unset key to the layers it gates and `main.py` warns per key before the
+  layers run. The per-layer skip messages still exist, but scattered across a
+  29-layer run they read as ordinary noise.
+* Nothing else in `.env` changes behaviour: the storage backend keys off
+  `TURSO_DATABASE_URL`, which the file does not carry, so invariant 6 is not
+  reachable from it. `DATABASE_URL` / `DB_BACKEND` in the file are read by
+  nothing.
+* Adds `python-dotenv~=1.2.3`. Tests: +7 (`tests/test_config_env.py`).
+
 ## Unreleased — M15: world stocks-to-use from PSD (2026-08-22)
 
 The world total was already inside the bulk CSVs Layer 6 downloads; the
