@@ -509,6 +509,55 @@ def test_partial_layer_still_fails_the_min_keys_floor(freshness_calls):
     assert freshness_calls[0]["status"] == "incomplete"
 
 
+# ── T21 / audit F11 (#69): below the floor, the rows are still stored ──────
+#
+# F11 read the dict path's save-then-grade order as the defect — "a 2/10-key
+# run stores those 2" — and proposed evaluating the floor *before* the save,
+# so a below-floor run committed nothing. That remedy was reversed by #157
+# and #212, which made save-first-grade-second the rule on both paths: the
+# rows a partial run did get are true observations, and several sources
+# (mandi, Gulf bids) serve the current day only, so discarding them punches
+# a permanent hole in history that no later run can refill.
+#
+# The harm F11 named — "cross-commodity analytics silently mix dates" — is
+# closed downstream instead: every spread and crush inner-joins its legs on
+# Date (analysis/spreads.py) and drops any session where a leg is missing,
+# so a half-populated layer cannot produce a cross-day number.
+#
+# What has to stay pinned is the other half: below the floor never grades as
+# a success. The two assertions below travel together — either one alone
+# would let the pair drift back apart.
+
+
+def _run_two_of_ten_prices(saved: list) -> bool:
+    """The ticket's scenario, on the dict path: 2 keys against a floor of 8."""
+    return main._run_dict_layer(
+        main.DictLayer(
+            key="prices",
+            label="Layer 1",
+            desc="market prices",
+            fetch=lambda: {f"C{i}": _indexed_frame(0) for i in range(2)},
+            save=lambda name, df: saved.append(name),
+        )
+    )
+
+
+def test_below_floor_dict_layer_still_saves_the_rows_it_got(freshness_calls):
+    """#212's rule, on the dict path: the two keys that answered are stored."""
+    saved: list = []
+
+    assert _run_two_of_ten_prices(saved) is False
+    assert saved == ["C0", "C1"]
+
+
+def test_below_floor_dict_layer_never_stamps_success(freshness_calls):
+    """F11's real requirement, and the half that survives: no false green."""
+    assert _run_two_of_ten_prices(saved=[]) is False
+
+    assert [c["status"] for c in freshness_calls] == ["incomplete"]
+    assert "prices" in main._HARD_FAILURES
+
+
 def test_empty_non_critical_layer_still_records_empty_success(freshness_calls):
     """Unchanged default: a layer that ran fine with nothing to publish."""
     assert main._finalize_layer("safex", {}) is False
