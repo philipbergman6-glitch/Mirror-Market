@@ -91,7 +91,7 @@ PRODUCTION_LAYERS = (
     ("fred", "3", "Federal Reserve (FRED)", "Daily/Monthly", "Dollar, CPI, rates and yields"),
     ("cot", "4", "CFTC", "Weekly", "10 commodities positioning"),
     ("weather", "5", "Open-Meteo", "Daily + forecast", "19 growing regions"),
-    ("psd", "6", "USDA FAS (PSD)", "Monthly", "10 commodities × 28 countries"),
+    ("psd", "6", "USDA FAS (PSD)", "Monthly", "10 commodities × 28 countries + World"),
     ("currencies", "7", "Yahoo Finance (FX)", "Daily", "10 currency pairs"),
     ("worldbank", "8", "World Bank Pink Sheet", "Monthly", "Palm and rapeseed oil benchmarks"),
     ("dce", "9", "AKShare (DCE/CZCE)", "Daily", "Chinese oilseed futures"),

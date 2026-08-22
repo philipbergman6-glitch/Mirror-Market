@@ -346,6 +346,61 @@ def test_stocks_to_use_section_includes_meal_and_oil(patched_db: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# World stocks-to-use (M15 #237)
+# ---------------------------------------------------------------------------
+
+
+def test_stocks_to_use_section_renders_world_block_with_its_basis(
+    patched_db: Path,
+) -> None:
+    """The world figures print, and the footnote says what they are.
+
+    Soybeans reads 29.19% — ending stocks over Domestic Consumption alone.
+    Wheat reads WASDE's adjusted 33.84%, not the raw-PSD 34.05%, and the
+    Basis line is what tells the reader which of the two it is looking at.
+    """
+    rows = [
+        ("Soybeans", "United States", 2025, "Ending Stocks", 8_435.0, "(1000 MT)"),
+        ("Soybeans", "United States", 2025, "Domestic Consumption", 75_160.0, "(1000 MT)"),
+        ("Soybeans", "United States", 2025, "Exports", 41_370.0, "(1000 MT)"),
+        # World rows as fetchers/psd.py synthesises them.
+        ("Soybeans", "World", 2025, "Ending Stocks", 125_325.0, "(1000 MT)"),
+        ("Soybeans", "World", 2025, "Domestic Consumption", 429_333.0, "(1000 MT)"),
+        ("Soybeans", "World", 2025, "Exports", 187_078.0, "(1000 MT)"),
+        ("Soybeans", "World Less China", 2025, "Ending Stocks", 80_956.0, "(1000 MT)"),
+        ("Soybeans", "World Less China", 2025, "Domestic Consumption", 295_433.0, "(1000 MT)"),
+        ("Wheat", "World", 2025, "Ending Stocks", 279_035.0, "(1000 MT)"),
+        ("Wheat", "World", 2025, "Domestic Consumption", 819_541.0, "(1000 MT)"),
+        ("Wheat", "World", 2025, "Exports", 227_084.0, "(1000 MT)"),
+        ("Wheat", "World", 2025, "Imports", 222_013.0, "(1000 MT)"),
+    ]
+    _seed_psd(patched_db, rows)
+
+    text, _ = stocks_to_use.format()
+
+    assert "STOCKS-TO-USE (world balance sheet, source: PSD):" in text
+    assert "Soybeans: 29.2% (MY 2025) | less China 27.4%" in text
+    assert "Wheat: 33.8% (MY 2025)" in text
+    assert "Basis: World — region: every PSD country" in text
+    assert "denominator = Domestic Consumption only" in text
+    assert "WASDE footnote 2/" in text
+
+
+def test_stocks_to_use_section_has_no_world_block_without_world_rows(
+    patched_db: Path,
+) -> None:
+    _seed_psd(patched_db, [
+        ("Soybeans", "United States", 2025, "Ending Stocks", 8_435.0, "(1000 MT)"),
+        ("Soybeans", "United States", 2025, "Domestic Consumption", 75_160.0, "(1000 MT)"),
+        ("Soybeans", "United States", 2025, "Exports", 41_370.0, "(1000 MT)"),
+    ])
+
+    text, _ = stocks_to_use.format()
+
+    assert "world balance sheet" not in text
+
+
+# ---------------------------------------------------------------------------
 # Inspections China share (X2 #132)
 # ---------------------------------------------------------------------------
 

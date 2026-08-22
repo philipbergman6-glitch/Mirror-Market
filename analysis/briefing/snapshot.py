@@ -54,7 +54,13 @@ from analysis.spreads import compute_brazil_basis
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
+    WASDE_USE_ADJUSTED_COMMODITIES,
+    WORLD,
+    WORLD_COMMODITIES,
+    WORLD_GRAIN_ADJUSTMENT,
+    WORLD_LESS_CHINA,
     compute_stocks_to_use,
+    denominator_note,
     detect_tight_supply,
 )
 from analysis.zscore import trailing_zscore
@@ -438,6 +444,75 @@ def _stocks_to_use_block() -> dict[str, dict[str, Any]]:
             "tight": str(commodity) in tight,
         }
     return out
+
+
+def _world_stocks_to_use_block() -> dict[str, Any]:
+    """World / world-less-China ratios, with the basis they were struck on.
+
+    The basis travels with the numbers (M15 #237): a world ratio and a US
+    ratio print as the same kind of percentage but are different statistics,
+    and a reader who assumes the US denominator reads 29.19% as 20.33%.
+    """
+    psd = read_psd()
+    if psd.empty:
+        return {}
+    world = compute_stocks_to_use(
+        psd, country=WORLD, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT
+    )
+    if world.empty:
+        return {}
+    less_china = compute_stocks_to_use(
+        psd, country=WORLD_LESS_CHINA,
+        wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT,
+    )
+
+    commodities: dict[str, Any] = {}
+    for name in WORLD_COMMODITIES:
+        rows = world[world["commodity"] == name].sort_values("year")
+        if rows.empty:
+            continue
+        current = rows.iloc[-1]
+        year = int(current["year"])
+        history = rows.iloc[-(1 + HISTORY_WINDOW):-1]
+        ex_china = less_china[
+            (less_china["commodity"] == name) & (less_china["year"] == year)
+        ]
+        commodities[name] = {
+            "ratio": _num(current["ratio"]),
+            "ratio_less_china": (
+                _num(ex_china.iloc[0]["ratio"]) if not ex_china.empty else None
+            ),
+            "ending_stocks": _num(current["ending_stocks"]),
+            "total_use": _num(current["total_use"]),
+            "marketing_year": year,
+            "prior_5y_low": (
+                _num(history["ratio"].min())
+                if len(history) >= MIN_HISTORY_YEARS else None
+            ),
+            "prior_5y_high": (
+                _num(history["ratio"].max())
+                if len(history) >= MIN_HISTORY_YEARS else None
+            ),
+        }
+    if not commodities:
+        return {}
+    return {
+        # `ratio` and `ratio_less_china` are two regions, so they carry two
+        # bases — the consumption-only denominator has a different warrant
+        # in each, and the grain adjustment reads the world gap for both.
+        "basis": denominator_note(
+            WORLD, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT
+        ),
+        "basis_less_china": denominator_note(
+            WORLD_LESS_CHINA, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT
+        ),
+        "denominator": "Domestic Consumption",
+        "region": "every PSD country",
+        "region_less_china": "every PSD country except China",
+        "wasde_grain_adjustment": WORLD_GRAIN_ADJUSTMENT,
+        "wasde_grain_adjustment_commodities": sorted(WASDE_USE_ADJUSTED_COMMODITIES),
+        "commodities": commodities,
+    }
 
 
 def _export_sales_block() -> dict[str, dict[str, Any]]:
@@ -978,6 +1053,9 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "crop_progress": _safe("crop_progress", _crop_progress_block, {}),
         "wasde": _safe("wasde", _wasde_block, {}),
         "stocks_to_use": _safe("stocks_to_use", _stocks_to_use_block, {}),
+        "world_stocks_to_use": _safe(
+            "world_stocks_to_use", _world_stocks_to_use_block, {}
+        ),
         "export_sales": _safe("export_sales", _export_sales_block, {}),
         "inspections": _safe("inspections", _inspections_block, {}),
         "inspection_destinations": _safe(
