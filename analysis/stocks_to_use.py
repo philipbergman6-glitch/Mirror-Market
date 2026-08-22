@@ -53,7 +53,7 @@ _AGGREGATE_REGIONS = frozenset({WORLD, WORLD_LESS_CHINA})
 # / corn p.22). Arithmetically exact — wheat 819,541 + (227,084 − 222,013)
 # = 824,612, the figure WASDE prints. The oilseed tables apply no such
 # adjustment, so the set is the grains only.
-_WASDE_USE_ADJUSTED_COMMODITIES = frozenset({"Corn", "Wheat"})
+WASDE_USE_ADJUSTED_COMMODITIES = frozenset({"Corn", "Wheat"})
 
 # Reproduce WASDE's printed grain table rather than the raw PSD balance on
 # every world surface. Either is defensible; mixing them is not, so the
@@ -102,21 +102,84 @@ def denominator_note(
             f"+ Exports (a cargo leaving the country is an offtake)."
         )
 
-    region = (
-        "every PSD country" if country == WORLD
-        else "every PSD country except China (USDA's own World Less China line)"
-    )
+    if country == WORLD:
+        region = "every PSD country"
+        # The world is a closed system: every export lands in some other
+        # country's domestic consumption, so adding exports double-counts it.
+        why = "a world export is already inside an importer's consumption"
+    else:
+        region = (
+            "every PSD country except China — USDA's own World Less China "
+            "balance sheet, a pure subtraction of the China row"
+        )
+        # This region is *open* (China imported 113 MMT of soybeans out of
+        # it in MY2025), so the closed-system argument does not carry. The
+        # denominator is consumption-only because that is the convention of
+        # the world line it is subtracted from — the two are comparable only
+        # if struck the same way. USDA publishes the balance sheet; the
+        # ratio is ours.
+        why = (
+            "matching the world line it is subtracted from, so the two are "
+            "comparable — not because the region is closed, it is not"
+        )
     grain = (
-        "corn/wheat use adjusted for the world export–import gap, "
+        "corn/wheat use adjusted by the world export–import gap, "
         "reproducing WASDE's printed table (WASDE footnote 2/)"
         if wasde_grain_adjustment
         else "raw PSD, without WASDE's corn/wheat use adjustment"
     )
     return (
         f"{country} — region: {region}; denominator = Domestic Consumption "
-        f"only (a world export is already inside an importer's consumption); "
-        f"{grain}."
+        f"only ({why}); {grain}."
     )
+
+
+def _pivot_region(psd_df: pd.DataFrame, country: str) -> pd.DataFrame | None:
+    """One row per (commodity, year) for a region, one column per attribute.
+
+    None when the region has no rows at all. Absent attributes are present
+    as all-NULL columns so callers can decide per branch what is required.
+    """
+    df = psd_df[
+        (psd_df["country"] == country)
+        & (psd_df["attribute"].isin(
+            [_ENDING_STOCKS, _DOMESTIC_CONSUMPTION, _EXPORTS, _IMPORTS]
+        ))
+    ]
+    if df.empty:
+        return None
+
+    wide = df.pivot_table(
+        index=["commodity", "year"],
+        columns="attribute",
+        values="value",
+        aggfunc="last",
+    ).reset_index()
+    wide.columns.name = None
+    wide = wide.rename(columns={_ENDING_STOCKS: "ending_stocks"})
+    for col in ("ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS, _IMPORTS):
+        if col not in wide.columns:
+            wide[col] = pd.NA
+    return wide
+
+
+def _world_trade_gap(psd_df: pd.DataFrame) -> pd.DataFrame:
+    """World (Exports − Imports) per (commodity, year), as column `_gap`.
+
+    This is WASDE's footnote-2/ adjustment term. It is read off the World
+    row for every aggregate region, including World Less China — see the
+    call site.
+    """
+    empty = pd.DataFrame(columns=["commodity", "year", "_gap"])
+    world = _pivot_region(psd_df, WORLD)
+    if world is None:
+        return empty
+    world = world.dropna(subset=[_EXPORTS, _IMPORTS])
+    if world.empty:
+        return empty
+    world = world.copy()
+    world["_gap"] = world[_EXPORTS] - world[_IMPORTS]
+    return world[["commodity", "year", "_gap"]]
 
 
 def compute_stocks_to_use(
@@ -162,46 +225,34 @@ def compute_stocks_to_use(
     if psd_df.empty:
         return pd.DataFrame(columns=empty_cols)
 
-    df = psd_df[
-        (psd_df["country"] == country)
-        & (psd_df["attribute"].isin(
-            [_ENDING_STOCKS, _DOMESTIC_CONSUMPTION, _EXPORTS, _IMPORTS]
-        ))
-    ]
-    if df.empty:
+    wide = _pivot_region(psd_df, country)
+    if wide is None:
         return pd.DataFrame(columns=empty_cols)
-
-    wide = df.pivot_table(
-        index=["commodity", "year"],
-        columns="attribute",
-        values="value",
-        aggfunc="last",
-    ).reset_index()
-    wide.columns.name = None
-    wide = wide.rename(columns={_ENDING_STOCKS: "ending_stocks"})
-
-    for col in ("ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS, _IMPORTS):
-        if col not in wide.columns:
-            wide[col] = pd.NA
 
     if is_aggregate:
         wide = wide.dropna(subset=["ending_stocks", _DOMESTIC_CONSUMPTION])
         wide["total_use"] = wide[_DOMESTIC_CONSUMPTION]
         if wasde_grain_adjustment:
-            adjusted = wide["commodity"].isin(_WASDE_USE_ADJUSTED_COMMODITIES)
-            # A grain row without both trade legs cannot be adjusted, and
+            # The gap is always the *world* one, even for World Less China.
+            # WASDE carries its world (exports − imports) into the less-China
+            # line unchanged: PSD-derived less-China wheat consumption is
+            # 669,541 and WASDE prints 674.61 — the same +5,071 as the world
+            # row (research §4.4, and §8 for corn's +23,937). Recomputing the
+            # gap from the less-China legs instead adds China's own net import
+            # position — wheat MY2025 becomes 9,430, not 5,071 — and the
+            # printed figure then matches neither WASDE nor raw PSD.
+            gap = _world_trade_gap(psd_df)
+            wide = wide.merge(gap, on=["commodity", "year"], how="left")
+            adjusted = wide["commodity"].isin(WASDE_USE_ADJUSTED_COMMODITIES)
+            # A grain row with no world gap to carry cannot be adjusted, and
             # printing it unadjusted under an adjusted label would misstate
             # what the number is. Withhold it instead.
-            incomplete = adjusted & (
-                wide[_EXPORTS].isna() | wide[_IMPORTS].isna()
-            )
-            wide = wide[~incomplete].copy()
-            adjusted = wide["commodity"].isin(_WASDE_USE_ADJUSTED_COMMODITIES)
+            wide = wide[~(adjusted & wide["_gap"].isna())].copy()
+            adjusted = wide["commodity"].isin(WASDE_USE_ADJUSTED_COMMODITIES)
             if adjusted.any():
                 wide.loc[adjusted, "total_use"] = (
                     wide.loc[adjusted, _DOMESTIC_CONSUMPTION]
-                    + wide.loc[adjusted, _EXPORTS]
-                    - wide.loc[adjusted, _IMPORTS]
+                    + wide.loc[adjusted, "_gap"]
                 )
     else:
         wide = wide.dropna(subset=["ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS])

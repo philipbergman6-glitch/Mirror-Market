@@ -240,6 +240,48 @@ def test_grain_adjustment_reproduces_the_wasde_printed_wheat_ratio():
     assert adjusted.iloc[0]["ratio"] == pytest.approx(0.3384, abs=5e-5)
 
 
+def test_grain_adjustment_carries_the_world_gap_into_world_less_china():
+    """WASDE subtracts China from the *already adjusted* world use.
+
+    PSD-derived less-China wheat consumption is 669,541 and WASDE prints
+    674.61 — the same +5,071 world gap as the world row, not a gap
+    recomputed from the less-China trade legs. China exported 1,098 and
+    imported 5,457 in MY2025, so recomputing gives 9,430 and a figure that
+    matches neither WASDE nor raw PSD.
+    """
+    df = pd.concat([
+        _world_frame("Wheat", 2025, _WORLD_WHEAT_2025),
+        _world_frame("Wheat", 2025, {
+            "Ending Stocks": 156_390.0,
+            "Domestic Consumption": 669_541.0,
+            "Exports": 227_084.0 - 1_098.0,
+            "Imports": 222_013.0 - 5_457.0,
+        }, country=WORLD_LESS_CHINA),
+    ], ignore_index=True)
+
+    out = compute_stocks_to_use(
+        df, country=WORLD_LESS_CHINA, wasde_grain_adjustment=True
+    )
+
+    assert out.iloc[0]["total_use"] == pytest.approx(674_612.0)
+    # The wrong answer this test exists to exclude: 669,541 + 9,430.
+    assert out.iloc[0]["total_use"] != pytest.approx(678_971.0)
+
+
+def test_world_less_china_grain_row_is_withheld_without_a_world_row():
+    """No world gap to carry means the adjustment is unanswerable."""
+    df = _world_frame("Wheat", 2025, {
+        "Ending Stocks": 156_390.0, "Domestic Consumption": 669_541.0,
+        "Exports": 225_986.0, "Imports": 216_556.0,
+    }, country=WORLD_LESS_CHINA)
+
+    assert compute_stocks_to_use(
+        df, country=WORLD_LESS_CHINA, wasde_grain_adjustment=True
+    ).empty
+    # Unadjusted, the same rows are perfectly computable.
+    assert not compute_stocks_to_use(df, country=WORLD_LESS_CHINA).empty
+
+
 def test_grain_adjustment_leaves_oilseeds_alone():
     """USDA applies the adjustment in its grain tables only."""
     df = _world_frame("Soybeans", 2025, _WORLD_SOY_2025)
@@ -285,6 +327,20 @@ def test_denominator_note_states_region_denominator_and_adjustment():
 
     us = denominator_note("United States")
     assert "Exports" in us
+
+
+def test_denominator_note_does_not_call_world_less_china_a_closed_system():
+    """The closed-system argument is the world's, and only the world's.
+
+    113 MMT of soybeans leave the less-China region for China every year,
+    so "a world export is already inside an importer's consumption" is not
+    why that region's denominator excludes exports.
+    """
+    note = denominator_note(WORLD_LESS_CHINA, wasde_grain_adjustment=True)
+
+    assert "already inside an importer's consumption" not in note
+    assert "except China" in note
+    assert "Domestic Consumption" in note
 
 
 # ---------------------------------------------------------------------------

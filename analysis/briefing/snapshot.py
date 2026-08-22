@@ -54,6 +54,7 @@ from analysis.spreads import compute_brazil_basis
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
+    WASDE_USE_ADJUSTED_COMMODITIES,
     WORLD,
     WORLD_COMMODITIES,
     WORLD_GRAIN_ADJUSTMENT,
@@ -496,12 +497,20 @@ def _world_stocks_to_use_block() -> dict[str, Any]:
     if not commodities:
         return {}
     return {
+        # `ratio` and `ratio_less_china` are two regions, so they carry two
+        # bases — the consumption-only denominator has a different warrant
+        # in each, and the grain adjustment reads the world gap for both.
         "basis": denominator_note(
             WORLD, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT
         ),
+        "basis_less_china": denominator_note(
+            WORLD_LESS_CHINA, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT
+        ),
         "denominator": "Domestic Consumption",
         "region": "every PSD country",
+        "region_less_china": "every PSD country except China",
         "wasde_grain_adjustment": WORLD_GRAIN_ADJUSTMENT,
+        "wasde_grain_adjustment_commodities": sorted(WASDE_USE_ADJUSTED_COMMODITIES),
         "commodities": commodities,
     }
 

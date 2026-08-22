@@ -94,6 +94,27 @@ def _world_aggregates(df: pd.DataFrame, code_to_name: dict[str, str]) -> pd.Data
     if df.empty:
         return empty
 
+    # One row per (commodity, country, year, attribute) is what makes the sum
+    # a sum. The country path survives a duplicate harmlessly — storage is an
+    # INSERT OR REPLACE on exactly that key, so the last write wins — but a
+    # summed world row would silently double instead. The bulk CSVs carry a
+    # `Month` column (the vintage each country's estimate was last revised
+    # in) and today ship one row per key; if that ever changes, every world
+    # number in the stack is wrong by an amount nothing in its shape reveals.
+    duplicated = df.duplicated(
+        subset=["Commodity_Code", "Country_Name", "Market_Year",
+                "Attribute_Description"],
+        keep=False,
+    )
+    if duplicated.any():
+        sample = df.loc[duplicated].head(3)
+        raise ValueError(
+            f"PSD bulk CSV carries {int(duplicated.sum())} duplicate "
+            f"(commodity, country, year, attribute) rows — refusing to sum "
+            f"them into a world total. First: "
+            f"{sample[['Commodity_Code', 'Country_Name', 'Market_Year', 'Attribute_Description']].to_dict('records')}"
+        )
+
     additive = df[df["Unit_Description"].map(_is_additive_unit)]
     skipped = sorted(set(df["Attribute_Description"]) - set(additive["Attribute_Description"]))
     if skipped:
@@ -125,6 +146,36 @@ def _world_aggregates(df: pd.DataFrame, code_to_name: dict[str, str]) -> pd.Data
             "marketing year — no world row emitted for them", mixed,
         )
         work = work[units_per_key == 1]
+        if work.empty:
+            return empty
+
+    # Every attribute of a (commodity, marketing year) must be reported by
+    # the same country roster. USDA files them that way — a country that
+    # reports nothing still appears with an explicit 0.0 — and it holds on
+    # all 642 (commodity, year) pairs across the three 2026 bulk zips, zero
+    # exceptions. So a short roster is not a quiet USDA choice, it is our
+    # own loss: a partial parse, a truncated download, or rows dropped by
+    # the unit gate above because some of them arrived stamped (PERCENT).
+    #
+    # `min_count=1` alone does not cover this — it withholds an all-NULL
+    # group, but 90 missing countries out of 100 still sum to a plausible
+    # world total with nothing in its shape marking it partial. That is the
+    # 28-country-sum failure this whole module exists to eliminate, arriving
+    # through a different door, so the row is withheld rather than emitted.
+    roster = work.groupby(["commodity", "year"])["country"].transform("nunique")
+    per_attribute = work.groupby(_AGG_KEYS)["country"].transform("nunique")
+    short = per_attribute < roster
+    if short.any():
+        incomplete = sorted({
+            (str(c), int(y), str(a))
+            for c, y, a in work.loc[short, _AGG_KEYS].itertuples(index=False)
+        })
+        logger.warning(
+            "PSD world: %d (commodity, year, attribute) group(s) are missing "
+            "countries their siblings report — no world row emitted for them. "
+            "First: %s", len(incomplete), incomplete[:3],
+        )
+        work = work[~short]
         if work.empty:
             return empty
 

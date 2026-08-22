@@ -4,6 +4,51 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — M15: world stocks-to-use from PSD (2026-08-22)
+
+The world total was already inside the bulk CSVs Layer 6 downloads; the
+country filter destroyed it. Summing *before* that filter reconstructs USDA's
+own R00 row — verified attribute-by-attribute on 197 (commodity, marketing-year)
+pairs 1960→2026 with zero mismatches, and against WASDE-673's printed world
+lines (#210 research). Zero extra HTTP, no schema change: the `psd` primary key
+already accommodates `country='World'` and `'World Less China'`.
+
+* **The world denominator is Domestic Consumption only.** The repo's US formula
+  (consumption + exports) is right for one country and wrong for the world,
+  where an export is already inside some importer's consumption — it moves
+  soybean stocks-to-use from 29.19% to 20.33%. Both are plausible-looking
+  percentages, which is why the denominator now switches on the region instead
+  of being a module constant, and why the test pins 29.19% *and* rejects 20.33%.
+  PSD ships an attr-195 Stocks-to-Use whose World value makes exactly this
+  mistake and lands 17.2 pp from the 63.1% USDA prints for cotton.
+* **Rate attributes are gated on the unit, not on a name blocklist.** Summing
+  country Yield gives 95.39 MT/HA against USDA's 3.01. A blocklist would miss
+  the next rate attribute; only `1000 MT` / `1000 HA` / `1000 480 lb. Bales`
+  are summed, and an unrecognised unit is withheld.
+* **World Less China carries the *world* import/export gap**, not one
+  recomputed from its own trade legs. WASDE subtracts China from the already
+  adjusted world use — PSD-derived less-China wheat use is 669,541 and WASDE
+  prints 674.61, the same +5,071 as the world row. Recomputing adds China's own
+  net import position (+9,430) and yields a figure matching neither WASDE nor
+  raw PSD. The two regions also carry two Basis lines: the closed-system
+  argument for a consumption-only denominator is the world's, and 113 MMT of
+  soybeans leave the less-China region every year.
+* **Two guards stand between a partial parse and a plausible world number.**
+  Duplicate `(commodity, country, year, attribute)` rows hard-fail — the
+  country path survives them on its upsert, a sum would silently double. And a
+  group missing countries its siblings report is withheld: `min_count=1` only
+  catches an all-NULL group, while 10 of 100 countries still sum to something
+  that looks like a world total. `scripts/reconcile_psd_world.py` re-checks the
+  sum against USDA's own R00 row on demand (needs `FAS_API_KEY`; deliberately
+  not in the pipeline, which is key-free).
+* **Cotton ships nothing.** Its consumption line is attr 142 `Domestic Use`,
+  which `PSD_TARGET_ATTRIBUTES` does not request, so no cotton ratio — US or
+  world — is computable at all today. Pre-existing, surfaced by this run,
+  tracked separately.
+* Rendered on the briefing's stocks-to-use section and in `snapshot_json`
+  (`world_stocks_to_use`), each stating region, denominator, and whether the
+  grain adjustment was applied. Tests: +39.
+
 ## Unreleased — M16: cross-market crush board, headline section 04 (2026-08-21)
 
 The headline said whether *CBOT* processing was paying, twice, in two shapes:
