@@ -9,6 +9,11 @@
   pipeline.store and pipeline.query monkeypatched to use it. The fixture
   returns the path so tests can also poke at the DB directly via raw SQL.
 - freshness_calls: captures main.py's save_freshness calls without a DB.
+
+Two guards are always on, session-wide (see tests/_guards.py, ticket #84):
+writing anywhere inside the repo's committed `data/history/` raises, and so
+does any outbound socket connect. The network guard is opt-out per test with
+`@pytest.mark.network`; the history guard has no opt-out.
 """
 
 from __future__ import annotations
@@ -22,11 +27,37 @@ import pytest
 
 import main
 from pipeline import schema
+from tests import _guards
 
 # Every table the pipeline creates, taken from the schema module itself.
 # Re-listing them here let a new table (Layer 24's sagis_supply_demand)
 # exist in production while being absent from every test DB.
 _SCHEMA_CONSTANTS = list(schema.ALL_SCHEMAS)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolation_guards():
+    """Block writes to data/history/ and outbound connections, suite-wide.
+
+    Session-scoped so the patches are installed once, before the first test
+    body runs, and cover fixture setup as well as test bodies. They go up
+    after collection, so a write at module-import time slips past them —
+    as does anything a subprocess does. CI's post-suite `git status` check
+    is the backstop for both.
+    """
+    with _guards.block_history_writes(), _guards.block_network():
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _network_marker(request: pytest.FixtureRequest):
+    """Let `@pytest.mark.network` through the network guard, for that test only."""
+    allowed = request.node.get_closest_marker("network") is not None
+    _guards.set_network_allowed(allowed)
+    try:
+        yield
+    finally:
+        _guards.set_network_allowed(False)
 
 
 @pytest.fixture
