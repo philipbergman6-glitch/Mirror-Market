@@ -68,7 +68,7 @@ def test_export_import_roundtrip(history_env: Path, patched_db: Path) -> None:
 
 
 def test_import_never_clobbers_db_rows(history_env: Path, patched_db: Path) -> None:
-    """INSERT OR IGNORE: a fresher DB row wins over the committed CSV."""
+    """Insert-if-absent: a fresher DB row wins over the committed CSV."""
     _insert_spot(patched_db, "2026-07-30", 2510.0)
     export_history()
     _insert_spot(patched_db, "2026-07-30", 9999.0)  # corrected value in DB
@@ -254,16 +254,37 @@ def test_briefings_roundtrip(history_env: Path, patched_db: Path) -> None:
 # --- the ""↔NULL boundary (T20 · F10 #68) -----------------------------------
 
 
-def _gulf_row(db_path: Path, delivery: str) -> None:
+def _exec(db_path: Path, sql: str, params: tuple = ()) -> None:
     conn = sqlite3.connect(str(db_path))
-    conn.execute(
+    try:
+        conn.execute(sql, params)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _read(db_path: Path, sql: str) -> list[tuple]:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return conn.execute(sql).fetchall()
+    finally:
+        conn.close()
+
+
+def _gulf_row(db_path: Path, delivery: str, sale_type: str | None = None) -> None:
+    _exec(
+        db_path,
         "INSERT OR REPLACE INTO gulf_bids "
-        "(report_date, commodity, location, delivery, basis_low) "
-        "VALUES ('2026-08-20', 'Soybeans', 'Gulf Coast Ports', ?, 101.0)",
-        (delivery,),
+        "(report_date, commodity, location, delivery, sale_type, basis_low) "
+        "VALUES ('2026-08-20', 'Soybeans', 'Gulf Coast Ports', ?, ?, 101.0)",
+        (delivery, sale_type),
     )
-    conn.commit()
-    conn.close()
+
+
+_WASDE_ROW = (
+    "INSERT INTO wasde (commodity, year, attribute, reference_period, value) "
+    "VALUES ('Soybeans', '2026/27', 'Ending Stocks', NULL, 300.0)"
+)
 
 
 def test_blank_not_null_pk_roundtrips_as_empty_string(
@@ -278,19 +299,12 @@ def test_blank_not_null_pk_roundtrips_as_empty_string(
     """
     _gulf_row(patched_db, "")
     assert export_history() >= 1
-
-    conn = sqlite3.connect(str(patched_db))
-    conn.execute("DELETE FROM gulf_bids")
-    conn.commit()
-    conn.close()
+    _exec(patched_db, "DELETE FROM gulf_bids")
 
     import_history()
-    conn = sqlite3.connect(str(patched_db))
-    try:
-        rows = conn.execute("SELECT delivery, basis_low FROM gulf_bids").fetchall()
-    finally:
-        conn.close()
-    assert rows == [("", 101.0)]
+    assert _read(patched_db, "SELECT delivery, basis_low FROM gulf_bids") == [
+        ("", 101.0)
+    ]
 
 
 def test_blank_not_null_pk_import_is_idempotent(
@@ -302,69 +316,83 @@ def test_blank_not_null_pk_import_is_idempotent(
     import_history()
     import_history()
 
-    conn = sqlite3.connect(str(patched_db))
-    try:
-        n = conn.execute("SELECT COUNT(*) FROM gulf_bids").fetchone()[0]
-    finally:
-        conn.close()
-    assert n == 1
+    assert _read(patched_db, "SELECT COUNT(*) FROM gulf_bids") == [(1,)]
 
 
 def test_null_pk_import_is_idempotent(history_env: Path, patched_db: Path) -> None:
     """wasde.reference_period is a *nullable* PK column.
 
     SQLite lets NULL into such a column, and NULL != NULL in the implicit
-    unique index — so INSERT OR IGNORE never sees the existing row and the
-    import appends a fresh duplicate on every run.
+    unique index — so a dedupe by equality never sees the existing row and
+    the import appends a fresh duplicate on every run.
     """
-    conn = sqlite3.connect(str(patched_db))
-    conn.execute(
-        "INSERT INTO wasde (commodity, year, attribute, reference_period, value) "
-        "VALUES ('Soybeans', '2026/27', 'Ending Stocks', NULL, 300.0)"
-    )
-    conn.commit()
-    conn.close()
+    _exec(patched_db, _WASDE_ROW)
 
     export_history()
     import_history()
     import_history()
 
-    conn = sqlite3.connect(str(patched_db))
-    try:
-        rows = conn.execute(
-            "SELECT reference_period, value FROM wasde"
-        ).fetchall()
-    finally:
-        conn.close()
-    assert rows == [(None, 300.0)]
+    assert _read(patched_db, "SELECT reference_period, value FROM wasde") == [
+        (None, 300.0)
+    ]
+
+
+def test_nullable_pk_import_is_idempotent_for_brazil_estimates(
+    history_env: Path, patched_db: Path
+) -> None:
+    """The second live nullable-PK column, on a different table.
+
+    `wasde.reference_period` and `brazil_estimates.report_date` are the only
+    two in HISTORY_TABLES; the plan is built per table from that table's own
+    PRAGMA, so each one is its own path worth exercising.
+    """
+    _exec(
+        patched_db,
+        "INSERT INTO brazil_estimates "
+        "(source, commodity, crop_year, attribute, report_date, value) "
+        "VALUES ('CONAB', 'Soybeans', '2025/26', 'Production', NULL, 169.5)",
+    )
+
+    export_history()
+    import_history()
+    import_history()
+
+    assert _read(
+        patched_db, "SELECT report_date, value FROM brazil_estimates"
+    ) == [(None, 169.5)]
 
 
 def test_null_pk_import_never_clobbers_db_rows(
     history_env: Path, patched_db: Path
 ) -> None:
-    """The NULL-safe path keeps INSERT OR IGNORE's fresher-DB-wins rule."""
-    conn = sqlite3.connect(str(patched_db))
-    conn.execute(
-        "INSERT INTO wasde (commodity, year, attribute, reference_period, value) "
-        "VALUES ('Soybeans', '2026/27', 'Ending Stocks', NULL, 300.0)"
-    )
-    conn.commit()
-    conn.close()
-
+    """The NULL-safe path keeps the fresher-DB-wins rule."""
+    _exec(patched_db, _WASDE_ROW)
     export_history()
-
-    conn = sqlite3.connect(str(patched_db))
-    conn.execute("UPDATE wasde SET value = 999.0")
-    conn.commit()
-    conn.close()
+    _exec(patched_db, "UPDATE wasde SET value = 999.0")
 
     import_history()
-    conn = sqlite3.connect(str(patched_db))
-    try:
-        rows = conn.execute("SELECT value FROM wasde").fetchall()
-    finally:
-        conn.close()
-    assert rows == [(999.0,)]
+    assert _read(patched_db, "SELECT value FROM wasde") == [(999.0,)]
+
+
+def test_blank_in_nullable_column_returns_null_not_empty_string(
+    history_env: Path, patched_db: Path
+) -> None:
+    """The limit of what the CSV boundary can resolve — pinned deliberately.
+
+    A NOT NULL column proves its own blank was "". A *nullable* one proves
+    nothing, and the blank comes back as NULL, so a stored "" does not
+    survive the round trip. No layer can reach this today (gulf_bids
+    hard-fails an unknown sale_type before it is ever stored), and the fix
+    if one ever could is at the write end — store NULL for "not given" per
+    invariant 2, not a guess here. This test exists so that stops being
+    silent: it fails the day the behaviour changes in either direction.
+    """
+    _gulf_row(patched_db, "Aug", sale_type="")
+    export_history()
+    _exec(patched_db, "DELETE FROM gulf_bids")
+
+    import_history()
+    assert _read(patched_db, "SELECT sale_type FROM gulf_bids") == [(None,)]
 
 
 def test_blank_in_not_null_numeric_column_hard_fails(
