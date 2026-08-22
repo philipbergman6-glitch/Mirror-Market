@@ -2,6 +2,9 @@
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "--cov --cov-fail-under=70"
+markers = [
+    "network: test genuinely needs the internet; exempts it from the outbound-connection guard (tests/_guards.py)",
+]
 
 [tool.coverage.run]
 source = ["pipeline", "analysis", "app", "trust", "pricing"]

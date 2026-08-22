@@ -59,3 +59,4 @@ python scripts/generate_site.py --only cbot   # one page (headline | players |
 - Signal severity: `alert` > `warning` > `info`.
 - Thresholds live in `config.py`; v2 source policy in the `trust.registry` contract registry.
 - Front-month yfinance series have roll-day discontinuities — see `LAYERS.md` before adding technical analysis on `Close`.
+- Tests are sandboxed by `tests/_guards.py`: a write inside `data/history/` and any outbound connect both raise. Point `pipeline.history.HISTORY_DIR` at `tmp_path`, stub the fetcher, or mark a test `@pytest.mark.network` if it genuinely needs the internet.

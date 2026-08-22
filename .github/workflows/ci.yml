@@ -65,3 +65,17 @@ jobs:
 
       - name: Tests with coverage
         run: pytest
+
+      # The suite's own guards (tests/_guards.py) raise on a write inside
+      # data/history/ and on any outbound connect, so this should never
+      # fire. It stays because the leak it answers for (#84) was found by
+      # reading `git status` after a run, and a guard with a hole in it
+      # would otherwise be as silent as no guard at all.
+      - name: Working tree is clean after the suite
+        run: |
+          DIRTY=$(git status --porcelain)
+          if [ -n "$DIRTY" ]; then
+            echo "::error::the test suite mutated the working tree — a test escaped its tmp dir (#84):"
+            echo "$DIRTY"
+            exit 1
+          fi
