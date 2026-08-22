@@ -1,0 +1,99 @@
+# One-shot, manually dispatched backfill of US Gulf export bid history over
+# the MARS API (#283). This workflow exists because data/history/*.csv is
+# written only by CI (the history-guard job fails a PR that touches it): the
+# backfill has to run on a runner, store into a DB seeded from the committed
+# CSVs, and let export_history + the snapshot commit persist what it fetched.
+# A local run of scripts/backfill_gulf_bids_mars.py fills a local DB and
+# persists nothing.
+name: Backfill Gulf bids (MARS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'archive = one pull of everything; per-date = walk report dates one at a time'
+        type: choice
+        options: ['archive', 'per-date']
+        default: 'archive'
+        required: true
+      start:
+        description: 'per-date only — start date (ISO). Empty = 2020-02-24, the first date MARS serves.'
+        default: ''
+        required: false
+      end:
+        description: 'per-date only — end date (ISO). Empty = today.'
+        default: ''
+        required: false
+
+permissions:
+  contents: write
+
+# Same group as the deploy workflow: both commit data/history back to main,
+# so they queue rather than race. Never cancels a deploy in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    # The archive pull is one request; the per-date walk is ~1,700 of them at
+    # a 0.5s delay plus request time.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Seed the empty runner DB from the committed CSVs first. Two reasons:
+      # export_history below must see existing rows + backfill rather than a
+      # shrink, and the backfill's pre-write cross-check compares the API
+      # mapping against the PDF-parsed rows those CSVs hold — on an empty DB
+      # there is nothing to check it against.
+      - name: Seed DB from committed history
+        run: |
+          python -c "
+          from pipeline.store import init_database
+          from pipeline.history import import_history
+          init_database()
+          import_history()
+          "
+
+      - name: Run backfill
+        env:
+          MARS_API_KEY: ${{ secrets.MARS_API_KEY }}
+        run: |
+          if [ "${{ inputs.mode }}" = "per-date" ]; then
+            python scripts/backfill_gulf_bids_mars.py --per-date "${{ inputs.start }}" ${{ inputs.end }}
+          else
+            python scripts/backfill_gulf_bids_mars.py
+          fi
+
+      - name: Export history
+        run: python -c "from pipeline.history import export_history; export_history()"
+
+      - name: Commit history snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/history
+          if git diff --staged --quiet; then
+            echo "No history changes — nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore(data): backfill US Gulf export bid history (MARS) [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — rebasing onto moved main."
+            git pull --rebase -X theirs --autostash origin main
+          done
+          echo "::error::backfill history push failed after 3 attempts"
+          exit 1
