@@ -12,11 +12,19 @@ these tables round-trip through CSV files committed to the repo:
 
 The workflow commits data/history/ back to the repo after each run.
 
-Import uses INSERT OR IGNORE so rows already in the DB (a local dev DB is
-always fresher than the last committed CSV) are never clobbered; the
-fetch layers that follow use INSERT OR REPLACE and overwrite with live
-values where they overlap. Export rewrites each CSV atomically, sorted by
-primary key, so the daily git diff is stable and append-only.
+Import inserts only rows the DB does not already hold, keyed on a
+NULL-safe comparison of the real primary key, so rows already present (a
+local dev DB is always fresher than the last committed CSV) are never
+clobbered; the fetch layers that follow use INSERT OR REPLACE and
+overwrite with live values where they overlap. Export rewrites each CSV
+atomically, sorted by primary key, so the daily git diff is stable and
+append-only.
+
+CSV has one blank and SQLite has two — "" and NULL — and the round trip
+has to resolve that ambiguity from the column's own NOT NULL constraint
+rather than guess. See _decode_row and the insert SQL in
+import_history(); both were a source of silent row loss and of duplicate
+rows on nullable-PK tables (#68).
 
 A failed import must abort the run: exporting from a DB that failed to
 seed would overwrite the committed CSVs with today-only data — the exact
@@ -26,6 +34,8 @@ history loss this module exists to prevent.
 import csv
 import logging
 import os
+import sqlite3
+from dataclasses import dataclass
 
 from config import HISTORY_DIR
 from pipeline.connection import get_connection, managed_connection
@@ -108,9 +118,10 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # from the file that just dropped it. ~104 rows/year is cheap insurance
     # against a silent truncation we could not otherwise detect.
     #
-    # Import is INSERT OR IGNORE and the fetch that follows is INSERT OR
-    # REPLACE, so SAGIS's ongoing revisions to closed seasons still land:
-    # the CSV seeds, the live file overwrites, the export re-writes.
+    # Import only adds rows the DB lacks and the fetch that follows is
+    # INSERT OR REPLACE, so SAGIS's ongoing revisions to closed seasons
+    # still land: the CSV seeds, the live file overwrites, the export
+    # re-writes.
     "sagis_deliveries": ("commodity", "season_year", "week_number"),
     # The SMD page lists only the *current* season's workbook plus the two
     # most recent finals (verified 2026-08-12: 2026/27, 2025/26F, 2024/25F).
@@ -127,6 +138,125 @@ class HistoryImportError(RuntimeError):
 
 def _csv_path(table: str) -> str:
     return os.path.join(HISTORY_DIR, f"{table}.csv")
+
+
+def _is_text_affinity(declared_type: str) -> bool:
+    """SQLite affinity rule 2: TEXT if the declared type contains CHAR,
+    CLOB or TEXT. Everything else stores "" as a text value in a numeric
+    column, which is a poisoned cell, not a blank."""
+    t = declared_type.upper()
+    return "CHAR" in t or "CLOB" in t or "TEXT" in t
+
+
+@dataclass(frozen=True)
+class _ImportPlan:
+    """How one CSV becomes rows in its table, derived from the live schema.
+
+    The statement and the parameter binding are one decision, so they are
+    built in one place. `bind` returns the row values followed by the
+    primary-key values *again*, because the NOT EXISTS arm re-binds them;
+    that order means nothing except in terms of the SQL it feeds. Built
+    apart, the two drift silently — the row still carries the right
+    *number* of parameters, they just stop meaning the same things.
+    """
+
+    table: str
+    header: tuple[str, ...]
+    sql: str
+    pk_index: tuple[int, ...]
+    not_null_text: frozenset[str]
+    not_null_other: frozenset[str]
+
+    @classmethod
+    def build(
+        cls, conn: sqlite3.Connection, table: str, header: list[str], path: str
+    ) -> "_ImportPlan":
+        info = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        unknown = set(header) - {r[1] for r in info}
+        if unknown:
+            raise HistoryImportError(
+                f"{path}: columns {sorted(unknown)} not in table {table}"
+            )
+        not_null = [r for r in info if r[3]]
+        text = frozenset(r[1] for r in not_null if _is_text_affinity(r[2]))
+
+        # The table's *real* primary key, not the export sort order in
+        # HISTORY_TABLES — the dedupe has to match what SQLite enforces.
+        pk_cols = [r[1] for r in sorted(info, key=lambda r: r[5]) if r[5]]
+        if not pk_cols:
+            raise HistoryImportError(
+                f"{table} has no primary key — a re-import could not tell a "
+                "row it already holds from a new one"
+            )
+        missing_pk = [c for c in pk_cols if c not in header]
+        if missing_pk:
+            raise HistoryImportError(
+                f"{path}: primary-key column(s) {missing_pk} absent from the "
+                "CSV header"
+            )
+        # Not INSERT OR IGNORE: it ignores *every* constraint, so a row that
+        # violates NOT NULL disappears without a word — and it dedupes on the
+        # unique index, where NULL != NULL, so a nullable PK column
+        # (wasde.reference_period, brazil_estimates.report_date) re-inserts a
+        # duplicate on every import. The NULL-safe IS comparison does both
+        # jobs: skip a row we already hold, raise on anything else.
+        return cls(
+            table=table,
+            header=tuple(header),
+            sql=(
+                f"INSERT INTO {table} ({','.join(header)}) "
+                f"SELECT {','.join('?' * len(header))} WHERE NOT EXISTS ("
+                f"SELECT 1 FROM {table} WHERE "
+                + " AND ".join(f"{c} IS ?" for c in pk_cols)
+                + ")"
+            ),
+            pk_index=tuple(header.index(c) for c in pk_cols),
+            not_null_text=text,
+            not_null_other=frozenset(r[1] for r in not_null) - text,
+        )
+
+    def bind(self, row: list[str], path: str) -> list[object]:
+        """One CSV row → this statement's parameters.
+
+        Resolving the ""↔NULL ambiguity is the interesting half. csv.writer
+        renders both NULL and "" as an empty field, so a blank cell alone
+        cannot say which one it was. A NOT NULL column settles it: it could
+        never have held NULL, so its blank was an empty string — and
+        pipeline.store._str_cols defaults missing text to "" for exactly
+        these columns, so those empty strings are real. gulf_bids.delivery
+        is the live case.
+
+        For a *nullable* column nothing settles it, and the blank reads back
+        as NULL. That is a narrowing, not a resolution: a stored "" returns
+        as NULL. It is unobservable today because no layer can put "" in a
+        nullable column of a history table — gulf_bids rejects an unknown
+        sale_type (fetchers/gulf_bids.py:177, :564) and an unmapped freight
+        term (:585), and forward_curve builds label/ticker from format
+        strings (fetchers/forward_curve.py:92, :94). Should a layer ever
+        start writing "" where NULL is allowed, that column stops
+        round-tripping, and the fix belongs at the write end — store NULL
+        for "not given", per invariant 2.
+
+        A blank in a NOT NULL *numeric* column is neither case: this export
+        cannot produce one, so the CSV is corrupt and the run must stop
+        rather than store the text "" in a REAL column.
+        """
+        out: list[object] = []
+        # strict: a row with the wrong number of fields is a corrupt CSV, not
+        # a row to pad or truncate into shape.
+        for col, cell in zip(self.header, row, strict=True):
+            if cell != "":
+                out.append(cell)
+            elif col in self.not_null_text:
+                out.append("")
+            elif col in self.not_null_other:
+                raise HistoryImportError(
+                    f"{path}: blank cell in NOT NULL non-text column '{col}' "
+                    "— the CSV is corrupt (this export cannot produce one)"
+                )
+            else:
+                out.append(None)
+        return out + [out[i] for i in self.pk_index]
 
 
 def import_history() -> int:
@@ -153,28 +283,24 @@ def import_history() -> int:
                     if not header:
                         logger.warning("History import: %s is empty — skipped", path)
                         continue
-                    table_cols = {
-                        r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()
-                    }
-                    unknown = set(header) - table_cols
-                    if unknown:
-                        raise HistoryImportError(
-                            f"{path}: columns {sorted(unknown)} not in table {table}"
-                        )
-                    sql = (
-                        f"INSERT OR IGNORE INTO {table} ({','.join(header)}) "
-                        f"VALUES ({','.join('?' * len(header))})"
-                    )
-                    rows = [[cell if cell != "" else None for cell in row] for row in reader]
+                    plan = _ImportPlan.build(conn, table, header, path)
+                    rows = [plan.bind(raw, path) for raw in reader]
+                before = conn.total_changes
                 conn.execute("BEGIN")
                 try:
-                    conn.executemany(sql, rows)
+                    conn.executemany(plan.sql, rows)
                     conn.execute("COMMIT")
                 except Exception:
                     conn.execute("ROLLBACK")
                     raise
-                total += len(rows)
-                logger.info("History import: %s ← %d rows", table, len(rows))
+                inserted = conn.total_changes - before
+                total += inserted
+                logger.info(
+                    "History import: %s ← %d rows (%d already held)",
+                    table,
+                    inserted,
+                    len(rows) - inserted,
+                )
             except HistoryImportError:
                 raise
             except Exception as exc:
