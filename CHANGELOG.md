@@ -34,7 +34,21 @@ already writes, and gives it a dispatchable workflow to land history with.
   truncated archive is the one failure mode that looks exactly like a complete
   one. History lands via `.github/workflows/backfill-gulf-bids.yml`
   (invariant 6), never in a PR.
-* Tests: +25 (`tests/test_gulf_bids_api.py`).
+* **Two things only the full pull showed**, both caught by the pre-write check
+  on the first live run. A *listed slot is not always a bid*: seven rows of
+  25,196 carry no basis, no price, no contract and no average — a delivery AMS
+  took no bid on. Nothing was observed, so nothing is stored; a partly filled
+  quote is neither and raises. And *the PDF we capture can be a prelim*: on
+  2026-07-30 both transports agree on the basis and disagree on the flat
+  price, because AMS re-issued at 13:13 against a later futures snapshot than
+  our midday run caught. The check tells that from a mapping error by backing
+  the futures level out of each leg — a re-pricing moves every leg on the date
+  by one offset per contract and leaves the basis alone. It is reported
+  loudly, the archive row supersedes the prelim, and anything not fitting that
+  signature still aborts. Measured over the whole archive: **25,189 rows,
+  1,498 report dates, 2020-08-17 → 2026-08-21, zero disagreements** against
+  the 256 stored PDF rows.
+* Tests: +33 (`tests/test_gulf_bids_api.py`).
 
 ## Unreleased — M16: cross-market crush board, headline section 04 (2026-08-21)
 

@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 
 from fetchers.gulf_bids import (
+    _API_FRAME_COLUMNS,
     _extract_text,
     _map_api_rows,
     _parse_gulf_bids,
@@ -180,6 +181,51 @@ def test_unexpected_units_raise() -> None:
         _map_api_rows([_one_row(**{"price_unit": "$ Per Cwt"})])
 
 
+# A delivery slot AMS listed but took no bid on: every quote cell blank, and
+# a leftover `price_unit` of '¢/Bu' with no `basis_unit` at all. Seven of the
+# 25,196 archive rows look like this (2022-12-15, 2022-12-16, 2024-08-15,
+# 2025-12-15 ×2, 2026-03-18 ×2), which is what stopped the first backfill run.
+_UNQUOTED = {
+    "basis Min": None, "basis Max": None,
+    "basis Min Futures Month": None, "basis Max Futures Month": None,
+    "basis Min Change": None, "basis Max Change": None,
+    "basis Min Direction": None, "basis Max Direction": None,
+    "price Min": None, "price Max": None,
+    "price Min Change": None, "price Max Change": None,
+    "price Min Direction": None, "price Max Direction": None,
+    "avg_price": None, "avg_price_year_ago": None,
+    "basis_unit": None, "price_unit": "¢/Bu",
+}
+
+
+def test_a_slot_with_no_bid_is_dropped_not_stored_as_nulls() -> None:
+    """No basis, no price, no contract: nothing was quoted, so nothing enters.
+
+    Storing it would assert a bid existed and leave its number unknown —
+    the blank-is-never-a-zero line, one step further back.
+    """
+    api = _map_api_rows(_api_rows() + [_one_row(**_UNQUOTED)])
+    assert len(api) == 22
+
+
+def test_a_report_of_only_unquoted_slots_maps_to_an_empty_frame() -> None:
+    df = _map_api_rows([_one_row(**_UNQUOTED)])
+    assert df.empty
+    assert list(df.columns) == _API_FRAME_COLUMNS
+
+
+def test_a_half_quoted_slot_raises_rather_than_being_dropped() -> None:
+    """A price with no basis is not "no bid" — it is a shape we cannot read."""
+    with pytest.raises(ScraperShapeError, match="partly"):
+        _map_api_rows([_one_row(**{**_UNQUOTED, "price Min": 12.5})])
+
+
+def test_a_quoted_row_missing_only_its_average_raises() -> None:
+    """The average is part of the quote; absent alone, the row is malformed."""
+    with pytest.raises(ScraperShapeError, match="partly"):
+        _map_api_rows([_one_row(**{"avg_price": None})])
+
+
 def test_report_dates_are_parsed_never_sorted_as_strings() -> None:
     """MM/DD/YYYY sorts lexically; the stored column must be ISO (#283 trap)."""
     api = _map_api_rows(_api_rows())
@@ -222,6 +268,63 @@ def test_rows_only_one_transport_carries_are_not_a_disagreement() -> None:
     api = _map_api_rows(_api_rows())
     pdf = _parse_gulf_bids(_extract_text(_PDF.read_bytes()), today=date(2026, 8, 11))
     assert check_against_stored_rows(api, pdf.iloc[:5]) == []
+
+
+# ── Prelim vs final: the same quote, a later futures snapshot ────────────────
+#
+# Observed on 2026-07-30 (the day Layer 20 landed): the stored PDF row and the
+# archive's row carry the *same* basis over the *same* contract, but prices
+# that differ by one constant per contract month — AMS re-issued the report at
+# 13:13 against a futures snapshot our midday capture predates. That is a
+# vintage difference in the source, not a mapping error, and it is the only
+# such date in the 6.5-year overlap.
+
+
+def _reprice(df: pd.DataFrame, moves: dict[int, float]) -> pd.DataFrame:
+    """Re-price every row against a futures level `moves[month]` higher."""
+    out = df.copy()
+    for month, move in moves.items():
+        low = out["futures_month"] == month
+        high = out["futures_month_high"] == month
+        out.loc[low, "price_low"] += move
+        out.loc[high, "price_high"] += move
+        out.loc[low | high, "average"] += move * (
+            (low.astype(float) + high.astype(float))[low | high] / 2
+        )
+    return out
+
+
+def test_one_report_repriced_against_later_futures_is_not_a_conflict() -> None:
+    """Same basis, prices shifted by a per-contract constant — a re-issue."""
+    api = _map_api_rows(_api_rows())
+    pdf = _reprice(api, {8: 0.0125, 11: 0.0125, 9: -0.0325, 12: -0.0325})
+    assert check_against_stored_rows(api, pdf) == []
+
+
+def test_a_repriced_report_with_a_moved_basis_is_a_conflict() -> None:
+    """The basis is the quote. If it moved too, this is not a re-pricing."""
+    api = _map_api_rows(_api_rows())
+    pdf = _reprice(api, {8: 0.0125, 11: 0.0125, 9: -0.0325, 12: -0.0325})
+    pdf.loc[pdf.index[0], "basis_low"] += 1.0
+    problems = check_against_stored_rows(api, pdf)
+    assert any("basis_low" in p for p in problems)
+
+
+def test_price_moves_that_are_not_one_shift_per_contract_are_a_conflict() -> None:
+    """Two rows on one contract must move together, or the mapping is wrong."""
+    api = _map_api_rows(_api_rows())
+    pdf = api.copy()
+    same = pdf[pdf["futures_month"] == pdf.loc[pdf.index[0], "futures_month"]]
+    assert len(same) > 1, "fixture must carry two rows on one contract"
+    pdf.loc[same.index[0], ["price_low", "price_high", "average"]] += 0.02
+    assert check_against_stored_rows(api, pdf) != []
+
+
+def test_an_implausibly_large_reprice_is_a_conflict() -> None:
+    """A whole-dollar shift is not an intraday re-snapshot; a human looks."""
+    api = _map_api_rows(_api_rows())
+    pdf = _reprice(api, {m: 2.50 for m in (8, 9, 11, 12)})
+    assert check_against_stored_rows(api, pdf) != []
 
 
 def test_dates_only_one_transport_carries_are_not_compared() -> None:

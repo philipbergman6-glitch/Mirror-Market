@@ -392,6 +392,14 @@ _API_MONTH_RE = re.compile(r"^(?P<name>[A-Z][a-z]+)\s+\((?P<code>[FGHJKMNQUVXZ])
 # Directions AMS prints in the change columns.
 _API_DIRECTIONS = frozenset({"UNCH", "UP", "DN"})
 
+# The cells that carry the quote itself. Either all of them are filled (a bid)
+# or none are (a slot listed with no bid) — never some; see `_api_is_unquoted`.
+_API_QUOTE_FIELDS = (
+    "basis Min", "basis Max",
+    "basis Min Futures Month", "basis Max Futures Month",
+    "price Min", "price Max", "avg_price",
+)
+
 # Decimal places the PDF prints each change column to — basis in whole cents
 # to 2dp ("DN 5.00"), prices to 4dp ("DN 0.1025"). The API carries the same
 # numbers as bare floats, so the formatting has to be restored here or the
@@ -500,6 +508,34 @@ def _api_report_date(value: object) -> str:
         ) from exc
 
 
+def _api_is_unquoted(row: dict) -> bool:
+    """Did AMS list this delivery slot without taking a bid on it?
+
+    Such a row arrives with every quote cell blank — no basis, no price, no
+    contract month, no average — and a leftover ``price_unit`` of '¢/Bu'
+    where a quoted row carries the pair ('¢/Bu', '$ Per Bushel'). Seven of
+    the 25,196 archive rows are like this (measured 2026-08-22; the earliest
+    is 2022-12-15). Nothing was observed, so nothing is stored: a row of
+    NULLs would assert that a bid existed whose number we never learned.
+
+    A row that fills *some* of those cells is neither a quote nor a
+    non-quote, and raises — that is the mapping meeting a shape it cannot
+    read, not AMS declining to print a number.
+    """
+    blank = [row.get(field) in (None, "") for field in _API_QUOTE_FIELDS]
+    if all(blank):
+        return True
+    if any(blank):
+        missing = [
+            f for f, is_blank in zip(_API_QUOTE_FIELDS, blank, strict=True) if is_blank
+        ]
+        raise ScraperShapeError(
+            f"AMS 3147 API: row is partly quoted — {missing!r} blank while the "
+            f"rest of the quote is filled: {row!r}"
+        )
+    return False
+
+
 def _map_api_rows(rows: Sequence[dict]) -> pd.DataFrame:
     """Map Report Detail rows onto the PDF parser's frame, or raise.
 
@@ -507,9 +543,16 @@ def _map_api_rows(rows: Sequence[dict]) -> pd.DataFrame:
     that survives that filter must map completely.
     """
     mapped: list[dict[str, object]] = []
+    unquoted = 0
     for row in rows:
         commodity = row.get("commodity")
         if commodity not in _API_COMMODITIES:
+            continue
+
+        # Before the unit guard: an unquoted slot's unit fields are leftovers
+        # describing a number that is not there, and would read as drift.
+        if _api_is_unquoted(row):
+            unquoted += 1
             continue
 
         if row.get("quote_type") != _API_QUOTE_TYPE:
@@ -542,12 +585,6 @@ def _map_api_rows(rows: Sequence[dict]) -> pd.DataFrame:
                 f"AMS 3147 API: unmapped freight term {freight_key!r}"
             )
 
-        for field in ("basis Min", "basis Max", "price Min", "price Max", "avg_price"):
-            if row.get(field) is None:
-                raise ScraperShapeError(
-                    f"AMS 3147 API: {field!r} missing on a stored row: {row!r}"
-                )
-
         year_ago = row.get("avg_price_year_ago")
         mapped.append({
             "report_date": _api_report_date(row.get("report_date")),
@@ -572,6 +609,11 @@ def _map_api_rows(rows: Sequence[dict]) -> pd.DataFrame:
             "freight": _API_FREIGHT[freight_key],
         })
 
+    if unquoted:
+        logger.info(
+            "AMS 3147 API: %d delivery slot(s) listed with no bid — dropped, "
+            "not stored as blank quotes.", unquoted,
+        )
     return pd.DataFrame(mapped, columns=_API_FRAME_COLUMNS)
 
 

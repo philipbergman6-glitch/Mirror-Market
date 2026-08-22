@@ -1067,7 +1067,13 @@ AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 MARS_API_KEY: str = os.getenv("MARS_API_KEY", "")
 MARS_BASE_URL = "https://marsapi.ams.usda.gov/services/v1.2/reports"
 MARS_GULF_BIDS_SLUG = 3147
-# First report date the API serves for slug 3147 (probed 2026-08-21, #253).
+# First report date slug 3147's *metadata* lists (probed 2026-08-21, #253) —
+# the walk floor, not a promise of data. `Report Detail` answers HTTP 200 with
+# zero rows for the early ones: 1,498 dates carry detail against 1,671 listed,
+# and the first date that carries any is 2020-08-17 (measured 2026-08-22 over
+# a full archive pull — every listed date before it answers empty).
+# A per-date walk from here therefore logs a run of non-publications that are
+# really the archive not reaching back as far as its own index claims.
 MARS_GULF_BIDS_ARCHIVE_START = "2020-02-24"
 # One pull of 6.5 years is tens of megabytes assembled server-side, which the
 # 30s REQUEST_TIMEOUT every daily fetcher uses would cut off mid-archive —
