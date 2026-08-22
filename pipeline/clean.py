@@ -32,7 +32,13 @@ def _validate_price_data(df: pd.DataFrame, label: str = ""):
         - Zero or negative volume (missing data) — skipped for commodities
           in ZERO_VOLUME_EXEMPT
 
-    These are warnings only — they don't block the pipeline.
+    These are warnings only — they don't block the pipeline, and that is
+    correct here: a 10% *session* is a fact about the market, and a cleaner
+    that dropped it would delete the days a trader most needs. The move
+    that is a fact about the *fetch* — a value disagreeing with what is
+    already stored for the same date — is a different question, and it is
+    answered at the write instead, where the stored value can be compared
+    against: see `pipeline.divergence` (T19 · F9, #67).
     """
     if df.empty or "Close" not in df.columns:
         return

@@ -1658,6 +1658,21 @@ DB_PATH = os.path.join(STORAGE_DIR, "mirror_market.db")
 # committed back to the repo by the workflow. See pipeline/history.py.
 HISTORY_DIR = os.path.join(os.path.dirname(__file__), "data", "history")
 
+# How far a price may be revised, against the value already stored under the
+# *same primary key*, before the store layer quarantines it instead of letting
+# INSERT OR REPLACE overwrite (T19 · F9, #67). See pipeline/divergence.py.
+#
+# 20% matches the trust ledger's DAILY_MOVE_QUARANTINE_THRESHOLD, and the
+# choice is conservative twice over: that number is already above CBOT's own
+# *expanded* daily limits, and this rule compares two readings of the SAME
+# session rather than two consecutive sessions — a re-print of one day's close
+# that moves a fifth is not a correction any venue publishes. Erring high is
+# deliberate: a threshold that catches real revisions would suppress the
+# corrections this project depends on, and a suppressed correction is the same
+# silent wrongness the guard exists to prevent (invariant 11 cuts the other
+# way here — the stored value is not a gap).
+SAME_PK_DIVERGENCE_QUARANTINE_THRESHOLD = 0.20
+
 # ---------------------------------------------------------------------------
 # Cloud Database (Turso — hosted SQLite)
 # Set these env vars to use Turso instead of local SQLite.

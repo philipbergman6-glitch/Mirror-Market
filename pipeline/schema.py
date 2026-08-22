@@ -604,6 +604,33 @@ CREATE TABLE IF NOT EXISTS briefings (
 );
 """
 
+# A price that disagreed with what was already stored under its own primary
+# key by more than SAME_PK_DIVERGENCE_QUARANTINE_THRESHOLD, held back instead
+# of overwriting it (T19 · F9, #67). Durable and auditable: the whole rejected
+# row travels as JSON, so the fetch can be reconstructed and the guard's
+# verdict argued with. No read_* function serves it into any surface — a
+# quarantined value is not an observation, and this table exists to be
+# inspected after an alert, not rendered.
+#
+# incoming_value is in the key so a re-run of the same corrupted fetch rewrites
+# one row rather than accumulating, while a *different* bad value is kept
+# beside it — two distinct corruptions are two distinct facts.
+_CREATE_QUARANTINED_REVISIONS = """
+CREATE TABLE IF NOT EXISTS quarantined_revisions (
+    table_name      TEXT    NOT NULL,
+    row_key         TEXT    NOT NULL,
+    value_column    TEXT    NOT NULL,
+    stored_value    REAL,
+    incoming_value  REAL,
+    divergence      REAL,
+    threshold       REAL    NOT NULL,
+    row_json        TEXT    NOT NULL,
+    label           TEXT,
+    detected_at     TEXT    NOT NULL,
+    PRIMARY KEY (table_name, row_key, value_column, incoming_value)
+);
+"""
+
 
 # Bundle for callers that need every table's DDL in one iterable.
 ALL_SCHEMAS = (
@@ -642,6 +669,7 @@ ALL_SCHEMAS = (
     _CREATE_ORIGIN_RANKINGS,
     _CREATE_OPPORTUNITY_DETECTIONS,
     _CREATE_BRIEFINGS,
+    _CREATE_QUARANTINED_REVISIONS,
 )
 
 

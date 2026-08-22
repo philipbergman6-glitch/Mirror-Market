@@ -26,6 +26,7 @@ from config import (
     GTR_VESSEL_UNIT,
     STORAGE_DIR,
 )
+from pipeline import divergence
 from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
 from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
 
@@ -300,6 +301,7 @@ def clear_database():
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
         "brazil_spot_prices", "safex_prices", "sagis_deliveries", "briefings",
+        "quarantined_revisions",
     ]
     with managed_connection(get_connection()) as conn:
         for table in tables:
@@ -335,12 +337,24 @@ def upsert_dataframe(conn, table: str, df: pd.DataFrame, key_cols: list[str]) ->
 
 
 def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
-    """Open a connection and run a transactional upsert. Logs result."""
+    """Open a connection and run a transactional upsert. Logs result.
+
+    Every table write passes through here, which is why the same-PK
+    divergence screen (T19 · F9, #67) hangs off this function rather than
+    off the individual ``save_*`` bodies: a guard wired per call site is a
+    guard the next ``save_*`` forgets. Tables not in
+    ``divergence.GUARDED_TABLES`` pass through untouched.
+
+    The screen and the quarantine record share the write's transaction, so
+    a rolled-back save leaves no record of a rejection that never happened.
+    """
     if df.empty:
         return 0
     with managed_connection(get_connection()) as conn:
         conn.execute("BEGIN")
         try:
+            df, held = divergence.screen(conn, table, df, key_cols, label)
+            divergence.record(conn, held)
             n = upsert_dataframe(conn, table, df, key_cols)
             conn.execute("COMMIT")
         except Exception:
