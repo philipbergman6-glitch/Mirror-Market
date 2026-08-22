@@ -83,6 +83,14 @@ def _world_block(psd) -> list[str]:
     lines.append(
         f"  Basis: {denominator_note(WORLD, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT)}"
     )
+    # Two regions on one line means two bases. The less-China figure is a
+    # different region with a different reason for the same denominator, and
+    # one footnote covering both would be true of only one of them.
+    if not less_china.empty:
+        lines.append(
+            f"  Basis (less China): "
+            f"{denominator_note(WORLD_LESS_CHINA, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT)}"
+        )
     return lines
 
 
