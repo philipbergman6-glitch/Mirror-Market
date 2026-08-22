@@ -39,6 +39,124 @@ _PSD_COUNTRY_ALIASES = {
     "Cote d'Ivoire": "Ivory Coast",
 }
 
+# ── The world aggregate (M15 #237) ──────────────────────────────────
+#
+# The bulk CSVs carry no World row (`Country_Code == "00"` matches nothing),
+# but they contain every country, so the World total is the plain sum of
+# them — verified attribute-by-attribute against USDA's own R00 row on 197
+# (commodity, marketing-year) pairs spanning 1960→2026, zero mismatches
+# (research/2026-08-12-m15-psd-world-stocks-to-use.md §3). The 28-country
+# sum in PSD_TARGET_COUNTRIES is NOT an approximation of it: it is 67.3% of
+# world wheat consumption and puts wheat stocks-to-use 5.7 pp too high.
+#
+# So the sum must happen *before* the country filter, which is what
+# `_filter_psd` does below.
+WORLD = "World"
+WORLD_LESS_CHINA = "World Less China"
+
+# USDA publishes the World-less-China line itself, in every WASDE
+# international supply-and-use table, and it is a pure subtraction of the
+# China row (§4.4). China holds 35% of world soybean stocks and 59% of world
+# corn stocks, so the world ratio is dominated by one balance sheet.
+_CHINA = "China"
+
+# Only *extensive* attributes may be summed. PSD ships rate attributes in the
+# same files — 184 Yield and 195 Stocks-to-Use — and they sum to nonsense
+# (soybean world Yield 3.01 MT/HA against a country-sum of 95.39). The gate
+# is the unit rather than an attribute-name blocklist: a new rate attribute
+# would slip past a blocklist, but it cannot carry a quantity unit.
+#
+# The set is every Unit_Description observed across the three 2026 bulk CSVs
+# (oilseeds: 1000 HA / 1000 MT / MT/HA / PERCENT / RATIO; grains: 1000 HA /
+# 1000 MT / MT/HA; cotton: 1000 HA / KG/HA / PERCENT / 1000 480 lb. Bales).
+# An unrecognised unit is withheld rather than guessed at.
+_ADDITIVE_UNITS = frozenset({"1000 MT", "1000 HA", "1000 480 LB. BALES"})
+
+# Aggregate keys: one world row per commodity, marketing year, attribute.
+_AGG_KEYS = ["commodity", "year", "attribute"]
+
+
+def _is_additive_unit(unit: object) -> bool:
+    """True where a Unit_Description names a quantity that may be summed."""
+    return str(unit).strip().strip("()").strip().upper() in _ADDITIVE_UNITS
+
+
+def _world_aggregates(df: pd.DataFrame, code_to_name: dict[str, str]) -> pd.DataFrame:
+    """Reconstruct USDA's World row — and World-less-China — by summation.
+
+    `df` is the raw CSV already filtered to the target commodities and
+    attributes but **not** to the target countries. Returns rows in the
+    standardised output shape, or an empty frame when nothing is additive.
+    """
+    empty = pd.DataFrame(
+        columns=["commodity", "country", "year", "attribute", "value", "unit"]
+    )
+    if df.empty:
+        return empty
+
+    additive = df[df["Unit_Description"].map(_is_additive_unit)]
+    skipped = sorted(set(df["Attribute_Description"]) - set(additive["Attribute_Description"]))
+    if skipped:
+        logger.info(
+            "PSD world: not aggregating non-quantity attribute(s) %s", skipped,
+        )
+    if additive.empty:
+        return empty
+
+    work = pd.DataFrame({
+        "commodity":     additive["Commodity_Code"].map(code_to_name),
+        "country":       additive["Country_Name"],
+        "year":          pd.to_numeric(additive["Market_Year"], errors="coerce"),
+        "attribute":     additive["Attribute_Description"],
+        "value":         pd.to_numeric(additive["Value"], errors="coerce"),
+        "unit":          additive["Unit_Description"],
+    }).dropna(subset=["commodity", "year"])
+    if work.empty:
+        return empty
+
+    # Units are part of the identity, never averaged: cotton is in bales,
+    # everything else in 1000 MT. Two units on one (commodity, year,
+    # attribute) is a source change, not something to reconcile silently.
+    units_per_key = work.groupby(_AGG_KEYS)["unit"].transform("nunique")
+    if (units_per_key > 1).any():
+        mixed = sorted(set(work.loc[units_per_key > 1, "attribute"]))
+        logger.warning(
+            "PSD world: attribute(s) %s carry more than one unit in a single "
+            "marketing year — no world row emitted for them", mixed,
+        )
+        work = work[units_per_key == 1]
+        if work.empty:
+            return empty
+
+    # min_count=1: an all-NULL group stays NULL. A blank is never a zero.
+    world = (
+        work.groupby([*_AGG_KEYS, "unit"], as_index=False)["value"]
+        .sum(min_count=1)
+        .dropna(subset=["value"])
+    )
+    world["country"] = WORLD
+
+    china = work[work["country"] == _CHINA]
+    if china.empty:
+        return world[empty.columns]
+
+    china = (
+        china.groupby([*_AGG_KEYS, "unit"], as_index=False)["value"]
+        .sum(min_count=1)
+        .dropna(subset=["value"])
+        .rename(columns={"value": "china"})
+    )
+    # An inner join withholds the line where China has no row: absence is
+    # not a China zero, and a World-less-China that silently equals World
+    # would be the most plausible-looking wrong number in the set.
+    less = world.merge(china, on=[*_AGG_KEYS, "unit"], how="inner")
+    less["value"] = less["value"] - less["china"]
+    less["country"] = WORLD_LESS_CHINA
+
+    return pd.concat(
+        [world[empty.columns], less[empty.columns]], ignore_index=True
+    )
+
 
 def fetch_psd_commodity_group(group_name: str) -> pd.DataFrame:
     """
@@ -116,6 +234,28 @@ def _filter_psd(df: pd.DataFrame) -> pd.DataFrame:
     df[code_col] = df[code_col].astype(str).str.strip()
     df = df[df[code_col].isin(target_codes)]
 
+    # Units differ per commodity (grains in 1000 MT, cotton in 1000 480-lb
+    # bales) — never guess a missing column. Checked before the world
+    # aggregate, which gates on this column.
+    if "Unit_Description" not in df.columns:
+        raise ValueError(
+            "PSD response missing Unit_Description column — refusing to "
+            "assume units (cotton is in bales, not 1000 MT)"
+        )
+
+    # Build a reverse lookup: code → commodity name
+    code_to_name = {v: k for k, v in PSD_TARGET_COMMODITIES.items()}
+
+    # Filter by attribute *before* the world aggregate so the synthetic rows
+    # cover exactly the attributes we store, and nothing more.
+    attr_col = "Attribute_Description"
+    if attr_col in df.columns:
+        df = df[df[attr_col].isin(PSD_TARGET_ATTRIBUTES)]
+
+    # The world total lives in the rows we are about to throw away, so take
+    # it first (M15 #237). Everything below narrows to the tracked countries.
+    world = _world_aggregates(df, code_to_name)
+
     # Filter by country. The PSD dataset spells some countries differently
     # from our display names ("Korea, South", "Cote d'Ivoire") — filter on
     # both spellings, then normalise to the display name so downstream
@@ -127,21 +267,6 @@ def _filter_psd(df: pd.DataFrame) -> pd.DataFrame:
         df = df[df[country_col].isin(accepted)]
         df[country_col] = df[country_col].replace(_PSD_COUNTRY_ALIASES)
 
-    # Filter by attribute
-    attr_col = "Attribute_Description"
-    if attr_col in df.columns:
-        df = df[df[attr_col].isin(PSD_TARGET_ATTRIBUTES)]
-
-    # Build a reverse lookup: code → commodity name
-    code_to_name = {v: k for k, v in PSD_TARGET_COMMODITIES.items()}
-
-    # Standardise output columns. Units differ per commodity (grains in
-    # 1000 MT, cotton in 1000 480-lb bales) — never guess a missing column.
-    if "Unit_Description" not in df.columns:
-        raise ValueError(
-            "PSD response missing Unit_Description column — refusing to "
-            "assume units (cotton is in bales, not 1000 MT)"
-        )
     result = pd.DataFrame({
         "commodity": df[code_col].map(code_to_name),
         "country":   df[country_col],
@@ -151,7 +276,10 @@ def _filter_psd(df: pd.DataFrame) -> pd.DataFrame:
         "unit":      df["Unit_Description"],
     })
 
-    return result.dropna(subset=["commodity", "year"])
+    result = result.dropna(subset=["commodity", "year"])
+    if world.empty:
+        return result
+    return pd.concat([result, world], ignore_index=True)
 
 
 def fetch_psd_all() -> dict[str, pd.DataFrame]:

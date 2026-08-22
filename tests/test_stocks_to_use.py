@@ -15,7 +15,10 @@ import pytest
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
+    WORLD,
+    WORLD_LESS_CHINA,
     compute_stocks_to_use,
+    denominator_note,
     detect_tight_supply,
 )
 
@@ -138,6 +141,150 @@ def test_compute_ignores_unrelated_attributes():
     out = compute_stocks_to_use(pd.concat([df, extra], ignore_index=True))
     assert len(out) == 1
     assert out.iloc[0]["ratio"] == pytest.approx(0.1)
+
+
+# ---------------------------------------------------------------------------
+# The world denominator (M15 #237)
+# ---------------------------------------------------------------------------
+
+# USDA PSD world row, soybeans MY2025, July-2026 vintage (WASDE-673), 1000 MT.
+_WORLD_SOY_2025 = {
+    "Ending Stocks": 125_325.0,
+    "Domestic Consumption": 429_333.0,
+    "Exports": 187_078.0,
+    "Imports": 186_342.0,
+}
+# PSD world row, wheat MY2025, same vintage. WASDE's grain tables adjust
+# world use by (exports − imports); its oilseed tables do not.
+_WORLD_WHEAT_2025 = {
+    "Ending Stocks": 279_035.0,
+    "Domestic Consumption": 819_541.0,
+    "Exports": 227_084.0,
+    "Imports": 222_013.0,
+}
+
+
+def _world_frame(commodity: str, year: int, values: dict[str, float],
+                 country: str = WORLD) -> pd.DataFrame:
+    return pd.DataFrame([
+        _psd_row(commodity=commodity, country=country, year=year,
+                 attribute=attribute, value=value)
+        for attribute, value in values.items()
+    ])
+
+
+def test_world_denominator_is_consumption_only():
+    """Soybeans MY2025 = 29.19%, not the 20.33% the US formula would give.
+
+    World exports are already inside some importer's domestic consumption,
+    so adding them to a world denominator double-counts every traded tonne.
+    Both numbers look like plausible percentages — that is why this is pinned.
+    """
+    df = _world_frame("Soybeans", 2025, _WORLD_SOY_2025)
+
+    out = compute_stocks_to_use(df, country=WORLD)
+
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["total_use"] == pytest.approx(429_333.0)
+    assert row["ratio"] == pytest.approx(0.2919, abs=5e-5)
+    # The US formula applied to the world — the trap.
+    assert row["ratio"] != pytest.approx(0.2033, abs=5e-4)
+
+
+def test_world_less_china_uses_the_same_consumption_only_denominator():
+    df = _world_frame(
+        "Soybeans", 2025,
+        {"Ending Stocks": 80_956.0, "Domestic Consumption": 295_433.0,
+         "Exports": 186_958.0, "Imports": 73_342.0},
+        country=WORLD_LESS_CHINA,
+    )
+
+    out = compute_stocks_to_use(df, country=WORLD_LESS_CHINA)
+
+    assert out.iloc[0]["ratio"] == pytest.approx(0.2740, abs=5e-5)
+
+
+def test_single_country_denominator_still_includes_exports():
+    df = _psd_frame(pairs=[(2025, 100.0, 1000.0)])
+
+    out = compute_stocks_to_use(df, country="United States")
+
+    assert out.iloc[0]["total_use"] == pytest.approx(1000.0)
+
+
+def test_world_ratio_needs_no_exports_row():
+    """Consumption-only means an absent Exports row is not a missing input."""
+    df = _world_frame("Soybeans", 2025, {
+        "Ending Stocks": 125_325.0, "Domestic Consumption": 429_333.0,
+    })
+
+    out = compute_stocks_to_use(df, country=WORLD)
+
+    assert out.iloc[0]["ratio"] == pytest.approx(0.2919, abs=5e-5)
+
+
+def test_grain_adjustment_reproduces_the_wasde_printed_wheat_ratio():
+    """WASDE footnote 2/: world use adjusted for the import/export gap.
+
+    819,541 + (227,084 − 222,013) = 824,612, which is the 824.61 WASDE-673
+    prints — and moves wheat S/U from 34.05% to 33.84%.
+    """
+    df = _world_frame("Wheat", 2025, _WORLD_WHEAT_2025)
+
+    raw = compute_stocks_to_use(df, country=WORLD)
+    adjusted = compute_stocks_to_use(df, country=WORLD, wasde_grain_adjustment=True)
+
+    assert raw.iloc[0]["ratio"] == pytest.approx(0.3405, abs=5e-5)
+    assert adjusted.iloc[0]["total_use"] == pytest.approx(824_612.0)
+    assert adjusted.iloc[0]["ratio"] == pytest.approx(0.3384, abs=5e-5)
+
+
+def test_grain_adjustment_leaves_oilseeds_alone():
+    """USDA applies the adjustment in its grain tables only."""
+    df = _world_frame("Soybeans", 2025, _WORLD_SOY_2025)
+
+    adjusted = compute_stocks_to_use(df, country=WORLD, wasde_grain_adjustment=True)
+
+    assert adjusted.iloc[0]["total_use"] == pytest.approx(429_333.0)
+
+
+def test_grain_adjustment_is_withheld_without_an_imports_row():
+    # DC + Exports − Imports with a missing Imports is not "no adjustment",
+    # it is an unanswerable question. Withhold the row rather than print the
+    # unadjusted figure under an adjusted label.
+    df = _world_frame("Wheat", 2025, {
+        "Ending Stocks": 279_035.0, "Domestic Consumption": 819_541.0,
+        "Exports": 227_084.0,
+    })
+
+    assert compute_stocks_to_use(
+        df, country=WORLD, wasde_grain_adjustment=True
+    ).empty
+    assert not compute_stocks_to_use(df, country=WORLD).empty
+
+
+def test_grain_adjustment_is_rejected_for_a_single_country():
+    """The adjustment is a property of USDA's *world* table, not a country's."""
+    df = _psd_frame(pairs=[(2025, 100.0, 1000.0)])
+
+    with pytest.raises(ValueError, match="aggregate region"):
+        compute_stocks_to_use(
+            df, country="United States", wasde_grain_adjustment=True
+        )
+
+
+def test_denominator_note_states_region_denominator_and_adjustment():
+    world = denominator_note(WORLD, wasde_grain_adjustment=True)
+    assert "Domestic Consumption" in world
+    assert "every PSD country" in world
+    assert "WASDE" in world
+
+    raw = denominator_note(WORLD, wasde_grain_adjustment=False)
+    assert "raw PSD" in raw
+
+    us = denominator_note("United States")
+    assert "Exports" in us
 
 
 # ---------------------------------------------------------------------------
