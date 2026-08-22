@@ -28,10 +28,22 @@ on:
 permissions:
   contents: write
 
-# Same group as the deploy workflow: both commit data/history back to main,
-# so they queue rather than race. Never cancels a deploy in progress.
+# Its own group, deliberately NOT `pages`. Sharing that group with the deploy
+# looked like mutual exclusion and was really exposure: deploy-dashboard sets
+# `cancel-in-progress: github.event_name == 'push'`, so every push to main
+# cancels the whole group — and a dispatched backfill, which sits queued
+# behind whatever is running, is cancelled before it is ever assigned a
+# runner. Observed on run 32555346703: dispatched, queued, killed by the merge
+# push, with `data/history/gulf_bids.csv` never written and nothing but a
+# "cancelled" badge to say so.
+#
+# Exclusion against the other history writers is still required — they export
+# `data/history` from their own DB, so one that started before our commit will
+# push a snapshot that does not contain the backfill — but it is enforced by
+# *waiting* below, where a queue cannot turn into a cancellation, and checked
+# again after the push.
 concurrency:
-  group: pages
+  group: backfill-gulf-bids
   cancel-in-progress: false
 
 jobs:
@@ -50,6 +62,30 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # The exclusion the shared `pages` group used to provide, minus the
+      # cancellation. Anything that exports data/history must finish first, or
+      # its snapshot — taken from a DB seeded before our rows existed — lands
+      # after ours and silently shortens the file.
+      - name: Wait for other history writers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 40); do
+            busy=$(gh run list --limit 40 --json workflowName,status --jq '
+              [ .[]
+                | select(.status == "in_progress" or .status == "queued")
+                | select(.workflowName | test("^(Update Dashboard|Refresh Prices|Backfill MAGyP FOB)$"))
+              ] | length')
+            if [ "$busy" -eq 0 ]; then
+              echo "No other history writer running."
+              exit 0
+            fi
+            echo "$busy history writer(s) active — waiting 30s (attempt $attempt/40)."
+            sleep 30
+          done
+          echo "::error::other history writers still running after 20 minutes; not racing them"
+          exit 1
 
       # Seed the empty runner DB from the committed CSVs first. Two reasons:
       # export_history below must see existing rows + backfill rather than a
@@ -97,3 +133,19 @@ jobs:
           done
           echo "::error::backfill history push failed after 3 attempts"
           exit 1
+
+      # Waiting narrows the race; it does not close it. A deploy that started
+      # while the archive was downloading exports from a DB that predates these
+      # rows and can push a shorter file over ours minutes later. Read main
+      # back and say so, loudly — a backfill that ends green having written
+      # nothing is the silent failure this repo exists not to have.
+      - name: Verify the snapshot survived
+        run: |
+          exported=$(($(wc -l < data/history/gulf_bids.csv) - 1))
+          git fetch --depth=1 origin main
+          on_main=$(($(git show FETCH_HEAD:data/history/gulf_bids.csv | wc -l) - 1))
+          echo "exported $exported rows; data/history/gulf_bids.csv on main holds $on_main"
+          if [ "$on_main" -lt "$exported" ]; then
+            echo "::error::main holds $on_main rows against the $exported just exported — a concurrent history writer overwrote the backfill. Re-dispatch when the repo is quiet."
+            exit 1
+          fi

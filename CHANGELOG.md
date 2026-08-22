@@ -101,6 +101,16 @@ already writes, and gives it a dispatchable workflow to land history with.
   signature still aborts. Measured over the whole archive: **25,189 rows,
   1,498 report dates, 2020-08-17 → 2026-08-21, zero disagreements** against
   the 256 stored PDF rows.
+* **The backfill workflow left the `pages` concurrency group.** Sharing it with
+  the deploy read as mutual exclusion and was really exposure: deploy-dashboard
+  cancels the group on push, so the first dispatched run (32555346703) was
+  killed by the merge push while still queued, before it held a runner —
+  history unwritten, nothing but a "cancelled" badge to say so. It now has its
+  own group and *waits* for the other history writers instead, where a queue
+  cannot become a cancellation, then reads `main` back after pushing and fails
+  loudly if a concurrent snapshot shortened the file. A backfill that ends
+  green having written nothing is the failure mode this repo exists not to
+  have.
 * Tests: +33 (`tests/test_gulf_bids_api.py`).
 
 ## Unreleased — M16: cross-market crush board, headline section 04 (2026-08-21)
