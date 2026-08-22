@@ -1052,6 +1052,34 @@ NOTICIAS_AGRICOLAS_URLS = {
 # ---------------------------------------------------------------------------
 AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 
+# The same report over USDA's MARS API (#283): structured rows back to
+# 2020-02-24, where the PDF above is only ever *today's* report — the archive
+# is the whole reason this second transport exists. HTTP Basic with the key as
+# the username; the prices live in the "Report Detail" section, since the base
+# /reports/<slug> endpoint answers with report metadata only.
+#
+# Deliberately not the live path. The PDF is keyless, so an absent or rotated
+# MARS_API_KEY costs the backfill and never the daily leg — the same degraded
+# contract Layer 16 has, read at call time via
+# fetchers.gulf_bids.is_api_configured().
+# Annotated rather than bare: `NAME_API_KEY = <call>` is the literal-assignment
+# shape the pre-commit secret scanner blocks on, and this reads an env var.
+MARS_API_KEY: str = os.getenv("MARS_API_KEY", "")
+MARS_BASE_URL = "https://marsapi.ams.usda.gov/services/v1.2/reports"
+MARS_GULF_BIDS_SLUG = 3147
+# First report date slug 3147's *metadata* lists (probed 2026-08-21, #253) —
+# the walk floor, not a promise of data. `Report Detail` answers HTTP 200 with
+# zero rows for the early ones: 1,498 dates carry detail against 1,671 listed,
+# and the first date that carries any is 2020-08-17 (measured 2026-08-22 over
+# a full archive pull — every listed date before it answers empty).
+# A per-date walk from here therefore logs a run of non-publications that are
+# really the archive not reaching back as far as its own index claims.
+MARS_GULF_BIDS_ARCHIVE_START = "2020-02-24"
+# One pull of 6.5 years is tens of megabytes assembled server-side, which the
+# 30s REQUEST_TIMEOUT every daily fetcher uses would cut off mid-archive —
+# a timeout is the right answer for a daily leg and the wrong one here.
+MARS_ARCHIVE_TIMEOUT = 600
+
 # ---------------------------------------------------------------------------
 # Layer 21 — Argentina official FOB prices (MAGyP, free JSON, no API key)
 # Daily "Precios FOB Oficiales" web service of the Secretaría de Agricultura

@@ -4,6 +4,52 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — M27: the Gulf-bid archive over the MARS API (2026-08-22)
+
+Layer 20 parses *today's* AMS 3147 PDF, and the PDF is only ever today's, so
+the US Gulf basis leg had a fortnight of history and no seasonal shape to read
+a bid against. USDA's MARS API serves the same report as structured rows back
+to **2020-02-24**; this run maps that archive into the table the PDF path
+already writes, and gives it a dispatchable workflow to land history with.
+
+* **One report, one table.** The API path (`fetch_gulf_bids_api`) produces the
+  identical `gulf_bids` frame, not a shape of its own — otherwise the archive
+  and the daily rows become two kinds of number under one set of column names.
+  `tests/test_gulf_bids_api.py` pins that against the *same* report in both
+  forms (the 2026-08-11 PDF and its API payload, 22 rows, cell for cell), and
+  `scripts/backfill_gulf_bids_mars.py` re-runs the comparison against every
+  already-stored date **before writing anything** — a disagreement aborts.
+* **The live path stays on the keyless PDF.** The API is otherwise the better
+  feed — the #196 split-contract quote is native (`basis Min/Max Futures
+  Month`), and `published_date` carries a time of day, the stack's first
+  observed timestamp (M4) — but switching would make a keyless daily leg
+  key-dependent for no rendered gain. Unset `MARS_API_KEY` costs the backfill
+  and nothing else; the switch is a one-line change if that trade changes.
+* **Everything unmappable raises.** A futures month whose spelled name and CME
+  code disagree, a delivery window spanning two months, a half-blank change
+  column, an unmapped freight term, and — the trap — a Texas-port row for a
+  stored commodity, which under the PDF parser's state-dropping location label
+  would merge two markets under one primary key.
+* **A pull that hits the 100,000-row allowance is a failure**, since a
+  truncated archive is the one failure mode that looks exactly like a complete
+  one. History lands via `.github/workflows/backfill-gulf-bids.yml`
+  (invariant 6), never in a PR.
+* **Two things only the full pull showed**, both caught by the pre-write check
+  on the first live run. A *listed slot is not always a bid*: seven rows of
+  25,196 carry no basis, no price, no contract and no average — a delivery AMS
+  took no bid on. Nothing was observed, so nothing is stored; a partly filled
+  quote is neither and raises. And *the PDF we capture can be a prelim*: on
+  2026-07-30 both transports agree on the basis and disagree on the flat
+  price, because AMS re-issued at 13:13 against a later futures snapshot than
+  our midday run caught. The check tells that from a mapping error by backing
+  the futures level out of each leg — a re-pricing moves every leg on the date
+  by one offset per contract and leaves the basis alone. It is reported
+  loudly, the archive row supersedes the prelim, and anything not fitting that
+  signature still aborts. Measured over the whole archive: **25,189 rows,
+  1,498 report dates, 2020-08-17 → 2026-08-21, zero disagreements** against
+  the 256 stored PDF rows.
+* Tests: +33 (`tests/test_gulf_bids_api.py`).
+
 ## Unreleased — M16: cross-market crush board, headline section 04 (2026-08-21)
 
 The headline said whether *CBOT* processing was paying, twice, in two shapes:
