@@ -8,7 +8,35 @@ module can import them from one place.
 import logging
 import os
 from datetime import date as _date
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+
+# ---------------------------------------------------------------------------
+# API keys — load the local env file before anything reads os.getenv
+# ---------------------------------------------------------------------------
+# Every key below is an `os.getenv(...)` at import time, so the file has to be
+# in the environment *before* this module finishes importing — a later
+# load_dotenv() would be a no-op against constants already bound to "".
+#
+# `override=False` is the point: a variable already in the environment wins.
+# CI sets its keys from GitHub secrets and has no env file at all, so this is
+# inert there; locally it is the difference between a run that fetches and a
+# run that skips every keyed layer while looking healthy. Before this, nothing
+# in the repo loaded the file, so a populated .env still left FAS_API_KEY ==
+# "" and Layers 2/3/10/13/16 quietly degraded (#237 follow-up).
+def _load_env_file(path: Path) -> bool:
+    """Put `path`'s variables in the environment. True if the file existed."""
+    if not path.is_file():
+        return False
+    load_dotenv(path, override=False)
+    return True
+
+
+ENV_FILE = Path(__file__).resolve().parent / ".env"
+ENV_FILE_LOADED = _load_env_file(ENV_FILE)
 
 
 # ---------------------------------------------------------------------------
@@ -1065,6 +1093,33 @@ AMS_GULF_BIDS_URL = "https://www.ams.usda.gov/mnreports/ams_3147.pdf"
 # Annotated rather than bare: `NAME_API_KEY = <call>` is the literal-assignment
 # shape the pre-commit secret scanner blocks on, and this reads an env var.
 MARS_API_KEY: str = os.getenv("MARS_API_KEY", "")
+
+
+# ---------------------------------------------------------------------------
+# Key visibility — a degraded run must say so at the top, not only per layer
+# ---------------------------------------------------------------------------
+# Every env var any layer reads, with the layers it gates. Read at call time
+# rather than off the constants above, because fetchers.mandi reads its key
+# from os.environ directly and has no constant here.
+API_KEY_LAYERS: dict[str, str] = {
+    "USDA_API_KEY": "Layers 2, 14",
+    "FRED_API_KEY": "Layer 3",
+    "FAS_API_KEY": "Layer 10",
+    "EIA_API_KEY": "Layer 13",
+    "DATA_GOV_IN_API_KEY": "Layer 16 (degrades to the shared sample key)",
+    "MARS_API_KEY": "Layer 20b backfill only",
+}
+
+
+def missing_api_keys() -> dict[str, str]:
+    """The keys that are unset, as {name: the layers it gates}."""
+    return {
+        name: layers
+        for name, layers in API_KEY_LAYERS.items()
+        if not os.getenv(name)
+    }
+
+
 MARS_BASE_URL = "https://marsapi.ams.usda.gov/services/v1.2/reports"
 MARS_GULF_BIDS_SLUG = 3147
 # First report date slug 3147's *metadata* lists (probed 2026-08-21, #253) —

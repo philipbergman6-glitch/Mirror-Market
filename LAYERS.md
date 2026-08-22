@@ -22,6 +22,15 @@ Run state is explicit: `failed` means upstream/transport/parse failure, `no_publ
 
 ## API keys
 
+Keys are read from the environment. `config.py` loads a repo-root `.env` at
+import time, **before** it binds the key constants, and never overrides a
+variable already in the environment — CI sets its keys from GitHub secrets and
+ships no `.env`, so the file is inert there and an exported key always wins
+locally. Until 2026-08-22 nothing loaded the file at all, so a populated `.env`
+still left every constant at `""` and the keyed layers skipped while the run
+looked healthy; `main.py` now warns per unset key at startup, before the layers
+run. `config.missing_api_keys()` is that list.
+
 - `USDA_API_KEY` — USDA NASS QuickStats API key (Layers 2, 14)
 - `FRED_API_KEY` — Federal Reserve Economic Data API key (Layer 3)
 - `FAS_API_KEY` — USDA FAS OpenData API key (Layer 10 — export sales)
