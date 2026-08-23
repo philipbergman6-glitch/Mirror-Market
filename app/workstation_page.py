@@ -92,7 +92,8 @@ from analysis.futures.privacy import (
 from analysis.futures.providers import SqliteQuoteProvider, describe_provider, open_provider
 from analysis.futures.ticket import build_ticket
 from app.tradingview import (
-    TRADINGVIEW_STAMP,
+    THIRD_PARTY_STAMP,
+    barchart_url,
     tradingview_symbol,
     tradingview_url,
 )
@@ -166,13 +167,24 @@ def _section(section_id: str, *, state: str, reason: str = "", data: Any = None)
 # ---------------------------------------------------------------------------
 
 
-def _curves(provider: SqliteQuoteProvider, *, as_of: date) -> dict[str, CurveAnalysis]:
-    out: dict[str, CurveAnalysis] = {}
+def _curves(
+    provider: SqliteQuoteProvider, *, as_of: date
+) -> tuple[dict[str, CurveAnalysis], dict[str, tuple]]:
+    """Every commodity's curve analysis, plus the raw snapshot history.
+
+    The history is returned alongside rather than re-queried by the contracts
+    section: it is the same ``curve_history`` read the spread percentiles use,
+    and one read means the two surfaces can never disagree about what is
+    stored.
+    """
+    curves: dict[str, CurveAnalysis] = {}
+    histories: dict[str, tuple] = {}
     for commodity in WORKSTATION_COMMODITIES:
         observation = provider.curve(commodity, as_of=as_of)
         history = provider.curve_history(commodity, as_of=as_of, sessions=120)
-        out[commodity] = analyse_curve(observation, as_of=as_of, history=history)
-    return out
+        curves[commodity] = analyse_curve(observation, as_of=as_of, history=history)
+        histories[commodity] = history
+    return curves, histories
 
 
 def _reference_exposure(commodity: str, *, as_of: date) -> PhysicalExposure:
@@ -247,7 +259,7 @@ def build_view(
     generated_at = generated_at or datetime.now(timezone.utc)
     provider = open_provider(conn)
 
-    curves = _curves(provider, as_of=as_of)
+    curves, curve_histories = _curves(provider, as_of=as_of)
     book = _load_book(positions_dir)
     valuation = _value_book(book, provider, curves, as_of=as_of)
 
@@ -318,7 +330,7 @@ def build_view(
         "reference_label": REFERENCE_LABEL,
         "sections": [
             _alerts_section(page_alerts),
-            _contracts_section(curves),
+            _contracts_section(curves, curve_histories),
             _curve_section(curves, open_interest),
             _crush_section(provider, as_of=as_of),
             _hedge_section(proposals, crush_proposal, is_reference),
@@ -409,23 +421,81 @@ def _alerts_section(page_alerts) -> dict[str, Any]:
     })
 
 
-def _contract_leg(leg: CurveLeg) -> dict[str, Any]:
-    """A curve leg, plus the third-party chart symbol the row can expand into.
+#: A close-history chart is withheld below this many observed sessions
+#: (invariant 2): one point is a number the table already prints, not a
+#: history, and drawing it as a chart would dress the gap up as a shape.
+CHART_MIN_POINTS = 2
 
-    The symbol is carried on the leg rather than derived in the template for
-    the usual reason: a template that can build a ticker can build a wrong
-    one. Where the venue is not in ``app.tradingview``'s registry the key is
-    ``None`` and the renderer draws no expander at all — see that module for
-    why a guess is worse than a gap here.
+#: Below this many observations the chart is dots only, never a joined line —
+#: the same rule the ledger drill-down applies (M21 #250): a connecting line
+#: through sparse prints asserts a path nobody observed.
+CHART_LINE_MIN_POINTS = 8
+
+
+def _close_history(leg: CurveLeg, history: tuple) -> dict[str, Any]:
+    """This contract's own stored closes, in USD/MT, or a stated absence.
+
+    Read from the same ``forward_curve`` snapshots the spread percentiles use.
+    The history is thin by construction — snapshots exist only since
+    2026-07-30 — and the stamp says when it starts rather than letting a short
+    axis imply a long record. Points are keyed by the *session* the close
+    belongs to, so a weekend re-fetch of Friday's close is one point, not two.
+    """
+    by_session: dict[str, float] = {}
+    for observation in history:  # oldest first; later snapshots win a session
+        quote = observation.leg(leg.contract.symbol)
+        if quote is not None:
+            by_session[quote.observation_date.isoformat()] = round(quote.usd_per_mt, 2)
+    points = sorted(by_session.items())
+    count = len(points)
+    if count < CHART_MIN_POINTS:
+        return {
+            "points": [],
+            "count": count,
+            "since": None,
+            "stamp": "",
+            "withheld_reason": (
+                f"{count or 'no'} stored session{'' if count == 1 else 's'} for this "
+                "contract — daily snapshots begin 2026-07-30, and a single point is a "
+                "number, not a history; the table above already carries it"
+            ),
+        }
+    since = date.fromisoformat(points[0][0])
+    return {
+        "points": [[session, close] for session, close in points],
+        "count": count,
+        "since": points[0][0],
+        "stamp": (
+            "Our data · delayed daily closes · USD/MT · "
+            f"history since {since.strftime('%-d %b %Y')} ({count} sessions)"
+        ),
+        "withheld_reason": "",
+    }
+
+
+def _contract_leg(leg: CurveLeg, history: tuple) -> dict[str, Any]:
+    """A curve leg, plus everything its row can expand into.
+
+    The third-party symbols and URLs are carried on the leg rather than
+    derived in the template for the usual reason: a template that can build a
+    ticker can build a wrong one. Where the venue is not in
+    ``app.tradingview``'s registries the key is ``None`` and the renderer
+    draws no link at all — see that module for why a guess is worse than a
+    gap here. The close history is our own, from the same snapshots the
+    spread percentiles read.
     """
     payload = leg.to_dict()
     symbol = tradingview_symbol(leg.contract)
     payload["tradingview_symbol"] = symbol
     payload["tradingview_url"] = None if symbol is None else tradingview_url(symbol)
+    payload["barchart_url"] = barchart_url(leg.contract)
+    payload["close_history"] = _close_history(leg, history)
     return payload
 
 
-def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
+def _contracts_section(
+    curves: dict[str, CurveAnalysis], histories: dict[str, tuple]
+) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for commodity, analysis in curves.items():
         if analysis.is_empty:
@@ -452,7 +522,10 @@ def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
             "native_unit": spec_for(commodity).native_unit.value,
             "tick_size": spec_for(commodity).tick_size,
             "tick_value_usd": spec_for(commodity).tick_value_usd,
-            "legs": [_contract_leg(leg) for leg in analysis.legs],
+            "legs": [
+                _contract_leg(leg, histories.get(commodity, ()))
+                for leg in analysis.legs
+            ],
         })
     if not any(row["state"] == STATE_OK for row in rows):
         return _section("contracts", state=STATE_EMPTY, reason=(
@@ -461,16 +534,20 @@ def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
         ))
     return _section("contracts", state=STATE_OK, data={
         "commodities": rows,
-        # The words that frame the embedded chart — both lines, whole. They
+        # The words that frame the expander panel — every line, whole. They
         # live here, with every other label on this page, so the template
-        # decides nothing about what a reader is being shown.
-        "chart_stamp": TRADINGVIEW_STAMP,
+        # decides nothing about what a reader is being shown. The per-leg
+        # own-chart stamp rides on the leg (it carries that leg's dates).
+        "chart_stamp": THIRD_PARTY_STAMP,
         "chart_disclaimer": (
-            "The prices in the table above are this project's own delayed closes, on the "
-            "timestamps shown. The chart below is TradingView's, on their data and their "
-            "timing — not our observation, not a settlement, and not routable. Expanding "
-            "a row requests it from TradingView's servers."
+            "Everything above the rule is this project's own stored data, on our "
+            "timestamps. "
+            "The links below open this contract month on TradingView's and Barchart's "
+            "own sites — their data, their timing, entirely on their pages: not our "
+            "observation, not a settlement, and not routable. Nothing third-party "
+            "renders here."
         ),
+        "chart_line_min_points": CHART_LINE_MIN_POINTS,
     })
 
 

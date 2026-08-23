@@ -59,12 +59,14 @@
 .ptype { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); white-space: nowrap; }
 .incoherent { background: rgba(194,59,46,0.07); border-left: 3px solid var(--bearish); padding: 8px 12px; font-size: 12px; color: var(--bearish); margin-bottom: 10px; overflow-wrap: anywhere; }
 
-/* ---- embedded third-party chart (#320) ----
-   A labelled exception to the "not a real-time feed" line, and the frame is
-   what makes it labelled. Everything here is deliberately *outside* the
-   Morning Scan palette: cool slate rather than our paper, the --info blue
-   rather than the soy green, so a reader can see at a glance where our data
-   stops and TradingView's begins. Approved 2026-08-23, DESIGN.md.
+/* ---- contract-row expander: our chart, then third-party links (#320, #328) ----
+   Split territories, approved 2026-08-23 (DESIGN.md): the panel's top zone is
+   OURS — paper background, --green left border, the contract's own stored
+   closes on our timestamps — and the bottom strip is the only third-party
+   surface left on the page: cool slate on an --info rule, holding plain links
+   out to TradingView and Barchart. Nothing third-party renders here any more
+   (#328: their free embed widget refuses CME symbols); the border colour is
+   the territory line.
 
    Every affordance is gated on `.tv-ready`, which the script adds only after
    the wiring succeeds — with script off the page loses the expander cleanly
@@ -75,28 +77,30 @@
 .dtable.tv-ready tr.crow.has-tv:hover td { background: rgba(47,93,143,0.05); }
 /* Explicit rather than relying on the UA's `[hidden]` default: a table row is
    the one element a stray `display` rule is most likely to have opinions
-   about, and a panel that ships visible ships a dozen iframes. */
+   about. */
 tr.tv-panel[hidden] { display: none; }
-tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(--info); }
-.tv-frame { padding: 12px 14px 10px; }
+tr.tv-panel > td { padding: 0; }
+/* our territory */
+.tv-ours { background: var(--paper); border-left: 3px solid var(--green); padding: 12px 14px 10px; }
+.tv-our-stamp { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--green); }
+.tv-withheld { font-size: 12px; color: var(--text-muted); padding: 6px 0 2px; overflow-wrap: anywhere; }
+.tv-chart { margin-top: 8px; }
+.tv-svg { width: 100%; height: auto; display: block; }
+.tv-svg .ax { stroke: var(--rule); stroke-width: 1; }
+.tv-svg .lbl { font-family: var(--mono); font-size: 9px; fill: var(--text-dim); text-anchor: end; }
+.tv-svg .lbl.dt { text-anchor: start; }
+.tv-svg .lbl.dt.end { text-anchor: end; }
+.tv-svg .ln { fill: none; stroke: var(--green); stroke-width: 1.4; }
+.tv-svg .pt { stroke: none; fill: var(--green); }
+/* their territory: links only */
+.tv-links { background: #EEF1F4; border-left: 3px solid var(--info); padding: 10px 14px 12px; }
 .tv-stamp { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--info); }
-.tv-disclaimer { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 10px; overflow-wrap: anywhere; }
-.tv-widget { height: 452px; background: #FFFFFF; border: 1px solid #C7CFD6; border-radius: 4px; overflow: hidden; padding: 0 8px; }
-.tv-widget .tradingview-widget-container { height: 100%; }
-.tv-widget .tradingview-widget-container__widget { height: calc(100% - 32px); }
-.tv-widget iframe { width: 100%; border: 0; }
-/* TradingView's own copyright block, as their embed ships it. Attribution is
-   a licence condition (invariant 9): sized to read, never hidden. */
-.tradingview-widget-copyright { font-size: 11px; line-height: 32px; text-align: center; color: var(--text-dim); }
-.tradingview-widget-copyright a { text-decoration: none; color: var(--info); }
-.tradingview-widget-copyright .blue-text { color: var(--info); }
+.tv-linkrow { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.tv-link { font-family: var(--mono); font-size: 12px; color: var(--info); text-decoration: none; background: #FFFFFF; border: 1px solid #C7CFD6; border-radius: 4px; padding: 5px 10px; }
+.tv-link:hover { border-color: var(--info); }
+.tv-disclaimer { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 0; overflow-wrap: anywhere; }
 .tv-toggle .chev { display: inline-block; transition: transform 0.1s; }
 .dtable tr.crow.open .tv-toggle .chev { transform: rotate(90deg); }
-.tv-failed { font-size: 12px; color: var(--bearish); padding: 12px 14px; }
-
-@media (max-width: 768px) {
-  .tv-widget { height: 352px; }
-}
 
 /* ---- hedge ---- */
 .hedge-card { background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--green); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
@@ -205,7 +209,7 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
             is worse than no chart at all. -#}
         <tr class="crow{% if tv %} has-tv{% endif %}">
           <td class="sym strong">{{ leg.symbol }}
-            {%- if tv %}<button type="button" class="tv-toggle" aria-expanded="false" aria-controls="tv-{{ tv|replace(":", "-") }}"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show the TradingView chart for {{ leg.symbol }}</span></button>{% endif %}</td>
+            {%- if tv %}<button type="button" class="tv-toggle" aria-expanded="false" aria-controls="tv-{{ tv|replace(":", "-") }}"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show the chart panel for {{ leg.symbol }}</span></button>{% endif %}</td>
           <td>{{ leg.label }}</td>
           <td class="num">{{ '{:,.2f}'.format(leg.price) }}</td>
           <td class="num">{{ '{:,.2f}'.format(leg.usd_per_mt) }}</td>
@@ -219,27 +223,33 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
         {%- if tv %}
         <tr class="tv-panel" id="tv-{{ tv|replace(":", "-") }}" hidden>
           <td colspan="10">
-            <div class="tv-frame">
+            {#- Our territory first: this contract's own stored closes, our
+                palette, our timestamps. The stamp and the withheld reason both
+                come whole from app/workstation_page.py — no wording that
+                separates ours from theirs is decided here. The SVG is drawn on
+                first expand from the JSON below (same pattern as the ledger
+                drill-down, M21 #250); nothing is requested from anywhere. -#}
+            <div class="tv-ours">
+              {%- if leg.close_history.points %}
+              <div class="tv-our-stamp">{{ leg.close_history.stamp }}</div>
+              <div class="tv-chart" data-symbol="{{ leg.symbol }}" data-line-min="{{ s.data.chart_line_min_points }}"><script type="application/json">{{ leg.close_history.points|tojson }}</script></div>
+              {%- else %}
+              <div class="tv-withheld">{{ leg.close_history.withheld_reason }}</div>
+              {%- endif %}
+            </div>
+            {#- Their territory: plain outbound links, the only third-party
+                surface left after #328 (their embed widget refuses CME
+                symbols). A link is not an embed — no attribution markup is
+                required or shipped. -#}
+            <div class="tv-links">
               <div class="tv-stamp">{{ s.data.chart_stamp }}</div>
-              <div class="tv-disclaimer">{{ s.data.chart_disclaimer }}</div>
-              {#- The container below is TradingView's embed structure AS THEY
-                  DESIGNED IT — container, __widget mount, copyright block with
-                  their own rel attributes. Their script requires this shape
-                  (it looks the classes up and rewrites the copyright link),
-                  and their terms require the attribution left as designed, so
-                  nothing here may be renamed, restyled to invisibility, or
-                  replaced with our own credit line (invariant 9). The only
-                  deviation is lazy injection: the <script> tag their snippet
-                  places inside the container is added on first expand, so a
-                  page with 20 contract rows ships 0 iframes, not 20. -#}
-              <div class="tv-widget" data-tv-symbol="{{ tv }}">
-                <!-- TradingView Widget BEGIN -->
-                <div class="tradingview-widget-container">
-                  <div class="tradingview-widget-container__widget"></div>
-                  <div class="tradingview-widget-copyright"><a href="{{ leg.tradingview_url }}" rel="noopener nofollow" target="_blank"><span class="blue-text">{{ tv }} chart</span></a> by TradingView</div>
-                </div>
-                <!-- TradingView Widget END -->
+              <div class="tv-linkrow">
+                <a class="tv-link" href="{{ leg.tradingview_url }}" rel="noopener nofollow" target="_blank">{{ tv }} on TradingView&nbsp;&#8599;</a>
+                {%- if leg.barchart_url %}
+                <a class="tv-link" href="{{ leg.barchart_url }}" rel="noopener nofollow" target="_blank">{{ leg.symbol }} on Barchart&nbsp;&#8599;</a>
+                {%- endif %}
               </div>
+              <div class="tv-disclaimer">{{ s.data.chart_disclaimer }}</div>
             </div>
           </td>
         </tr>
@@ -772,69 +782,100 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
 
 {% block scripts %}
 <script>
-/* Contract-row chart expander (#320).
+/* Contract-row chart expander (#320, reshaped by #328).
 
    Three things this script must keep true:
 
-   * **Lazy.** Nothing from TradingView is requested until a reader expands a
-     row. The page lists every listed month of the soy complex, and loading a
-     chart per row up front would put a dozen third-party iframes on a static
-     page nobody asked for them on.
+   * **Nothing is requested.** The panel's chart is this project's own stored
+     closes, shipped in the page as JSON and drawn as inline SVG on first
+     expand — no third-party script, no iframe, no network. The links out to
+     TradingView and Barchart are plain anchors the browser follows.
    * **One at a time.** Same rule as the market-page ledger drill-down: an
      expansion under the row, never a modal, and opening one closes the last.
-   * **Fails visibly.** If the embed does not load — offline, blocked, network
-     down — the frame says so. An empty grey box beside a price would read as
-     "no trading", which is a wrong number in picture form. */
+   * **Sparse is drawn honestly.** Under `data-line-min` observations the
+     series is dots, never a joined line — a line through the holes of a thin
+     history asserts a path nobody observed (the ledger's M21 rule). Below two
+     points the server ships a stated reason instead of a chart. */
 (function () {
-  var SRC = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var DAY = 86400000;
+  var W = 600, H = 140, PAD_L = 46, PAD_R = 10, PAD_T = 12, PAD_B = 22;
 
   function each(nodes, fn) { Array.prototype.forEach.call(nodes, fn); }
 
-  function load(widget) {
-    if (widget.getAttribute('data-loaded')) return;
-    widget.setAttribute('data-loaded', '1');
-    var container = widget.querySelector('.tradingview-widget-container');
-    var script = document.createElement('script');
-    script.src = SRC;
-    script.async = true;
-    script.type = 'text/javascript';
-    /* The embed script reads its own text content as configuration, mounts
-       the iframe into the container it sits in, and rewrites the copyright
-       link — which is why it is injected into TradingView's own container
-       markup rather than a div of ours. `allow_symbol_change` is off
-       deliberately: this frame answers "what has this contract done", and a
-       reader who switched it to another symbol would be looking at a chart
-       that no longer matches the row it opened from. */
-    script.text = JSON.stringify({
-      autosize: true,
-      symbol: widget.getAttribute('data-tv-symbol'),
-      interval: 'D',
-      timezone: 'Etc/UTC',
-      theme: 'light',
-      style: '1',
-      locale: 'en',
-      allow_symbol_change: false,
-      hide_side_toolbar: true,
-      support_host: 'https://www.tradingview.com'
+  function fmt(value, places) {
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: places, maximumFractionDigits: places
     });
-    script.onerror = function () {
-      /* Cleared so the next expand retries — a network blip at 06:00 should
-         not disable the chart for the rest of the desk day. */
-      widget.removeAttribute('data-loaded');
-      script.remove();
-      var note = widget.querySelector('.tv-failed');
-      if (!note) {
-        note = document.createElement('div');
-        note.className = 'tv-failed';
-        note.textContent = 'TradingView’s chart did not load. Nothing is being withheld — '
-          + 'this frame is theirs, and their script could not be reached from here. '
-          + 'Close and reopen the row to retry.';
-        widget.insertBefore(note, container);
-      }
+  }
+
+  /* Enough decimals that the two axis labels are different numbers — fixed
+     precision would print the same figure at both ends of a chart with a
+     visible shape (same helper as the ledger drill-down). */
+  function placesFor(lo, hi) {
+    for (var p = 0; p < 6; p++) {
+      if (fmt(lo, p) !== fmt(hi, p)) return p;
+    }
+    return 6;
+  }
+
+  function shortDate(ms, withYear) {
+    var date = new Date(ms);
+    return date.getUTCDate() + ' ' + MONTHS[date.getUTCMonth()] +
+      (withYear ? ' ' + date.getUTCFullYear() : '');
+  }
+
+  /* Draw once, on first expand. The data is already in the page; drawing
+     lazily just keeps a dozen collapsed rows from carrying a dozen SVGs. */
+  function draw(chart) {
+    if (!chart || chart.getAttribute('data-drawn')) return;
+    chart.setAttribute('data-drawn', '1');
+    var points = JSON.parse(chart.querySelector('script').textContent);
+    var lineMin = parseInt(chart.getAttribute('data-line-min'), 10) || 8;
+    var lo = Infinity, hi = -Infinity;
+    var coords = [];
+    var from = Date.parse(points[0][0]);
+    var to = Date.parse(points[points.length - 1][0]);
+    each(points, function (p) {
+      if (p[1] < lo) lo = p[1];
+      if (p[1] > hi) hi = p[1];
+    });
+    /* Labels state the OBSERVED extremes; padding only buys drawing room. */
+    var dataLo = lo, dataHi = hi;
+    var places = placesFor(dataLo, dataHi);
+    var pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.02 || 1;
+    lo -= pad; hi += pad;
+    var withYear = (to - from) > 180 * DAY;
+    var x = function (t) {
+      return PAD_L + (W - PAD_L - PAD_R) * ((t - from) / (to - from || 1));
     };
-    var note = widget.querySelector('.tv-failed');
-    if (note) note.remove();
-    container.appendChild(script);
+    var y = function (v) {
+      return PAD_T + (H - PAD_T - PAD_B) * (1 - (v - lo) / (hi - lo || 1));
+    };
+    var symbol = chart.getAttribute('data-symbol') || '';
+    var parts = [
+      '<svg class="tv-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" ',
+      'aria-label="' + symbol + ' stored closes in USD per metric ton, ' +
+        points.length + ' sessions" preserveAspectRatio="xMidYMid meet">',
+      '<line class="ax" x1="' + PAD_L + '" y1="' + (H - PAD_B) + '" x2="' + (W - PAD_R),
+      '" y2="' + (H - PAD_B) + '"/>',
+      '<text class="lbl" x="' + (PAD_L - 6) + '" y="' + (PAD_T + 4) + '">' + fmt(dataHi, places) + '</text>',
+      '<text class="lbl" x="' + (PAD_L - 6) + '" y="' + (H - PAD_B) + '">' + fmt(dataLo, places) + '</text>',
+      '<text class="lbl dt" x="' + PAD_L + '" y="' + (H - 6) + '">' + shortDate(from, withYear) + '</text>',
+      '<text class="lbl dt end" x="' + (W - PAD_R) + '" y="' + (H - 6) + '">' + shortDate(to, withYear) + '</text>'
+    ];
+    each(points, function (p) {
+      coords.push(x(Date.parse(p[0])) + ',' + y(p[1]));
+    });
+    if (points.length >= lineMin) {
+      parts.push('<polyline class="ln" points="' + coords.join(' ') + '"/>');
+    }
+    each(points, function (p) {
+      parts.push('<circle class="pt" cx="' + x(Date.parse(p[0])) + '" cy="' + y(p[1]) + '" r="2.2"/>');
+    });
+    parts.push('</svg>');
+    chart.insertAdjacentHTML('beforeend', parts.join(''));
   }
 
   function close(row) {
@@ -854,7 +895,7 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
        would let beans, meal and oil each hold a live third-party frame. */
     each(document.querySelectorAll('tr.crow.open'), close);
     if (!opening) return;
-    load(panel.querySelector('.tv-widget'));
+    draw(panel.querySelector('.tv-chart'));
     panel.hidden = false;
     row.classList.add('open');
     var chevron = row.querySelector('.tv-toggle');
@@ -866,9 +907,8 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
 
   each(rows, function (row) {
     row.addEventListener('click', function (event) {
-      /* The attribution link inside the panel is a licence condition; a row
-         handler that swallowed clicks would not reach it, but a stray click on
-         any other link in the row should still follow the link. */
+      /* The panel's outbound links are the point of the panel; a row handler
+         that swallowed clicks would never let a reader leave through them. */
       var node = event.target;
       while (node && node !== row) {
         if (node.tagName === 'A') return;

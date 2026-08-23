@@ -1,10 +1,11 @@
-"""The TradingView symbol mapping: a venue registry, not a code path.
+"""The third-party symbol mappings: venue registries, not code paths.
 
-The embedded widget is a labelled exception to the "not a real-time feed"
-line (owner decision 2026-08-23, #320). These tests hold the two things that
-keep the exception honest: a symbol is only ever built for a venue this
-project has *checked*, and an unmapped venue yields nothing at all rather
-than a plausible string that would render a chart of the wrong contract.
+The link-out to TradingView and Barchart is a labelled exception to the "not
+a real-time feed" line (owner decision 2026-08-23, #320, narrowed from an
+embed to links by #328). These tests hold the two things that keep the
+exception honest: a symbol or URL is only ever built for a venue this project
+has *checked*, and an unmapped venue yields nothing at all rather than a
+plausible string that would link to the wrong contract.
 """
 
 from __future__ import annotations
@@ -15,7 +16,9 @@ import pytest
 
 from analysis.futures.domain import Exchange, named_contract, spec_for
 from app.tradingview import (
+    BARCHART_EXCHANGES,
     TRADINGVIEW_EXCHANGES,
+    barchart_url,
     tradingview_symbol,
 )
 
@@ -44,32 +47,47 @@ def test_a_year_past_the_century_keeps_four_digits():
     assert tradingview_symbol(contract) == "CBOT:ZSX2030"
 
 
+def test_barchart_keys_by_the_bare_exchange_symbol():
+    # Verified against the live page 2026-08-23 (#328 research): Barchart's
+    # per-contract chart lives at /futures/quotes/<exchange symbol>/….
+    assert barchart_url(_contract("Soybeans", 2026, 11)) == (
+        "https://www.barchart.com/futures/quotes/ZSX26/interactive-chart"
+    )
+    assert barchart_url(_contract("Soybean Meal", 2026, 12)) == (
+        "https://www.barchart.com/futures/quotes/ZMZ26/interactive-chart"
+    )
+
+
 @pytest.mark.parametrize(
     ("commodity", "month"),
     [("Live Cattle", 12), ("Sugar", 3), ("Cotton", 12)],
 )
 def test_an_unmapped_venue_yields_nothing_rather_than_a_guess(commodity, month):
-    """Until a venue's symbols are checked against TradingView itself, a row
-    gets no expander — withholding with a reason, never a widget pointed at a
-    symbol nobody verified. CME and ICE remain unchecked."""
+    """Until a venue's symbols are checked against the third party itself, a
+    row gets no link — withholding with a reason, never a URL built on a
+    convention nobody verified. CME and ICE remain unchecked, on both
+    registries."""
     spec = spec_for(commodity)
     assert spec.exchange not in TRADINGVIEW_EXCHANGES
+    assert spec.exchange not in BARCHART_EXCHANGES
     assert tradingview_symbol(_contract(commodity, 2026, month)) is None
+    assert barchart_url(_contract(commodity, 2026, month)) is None
 
 
 def test_the_registry_is_the_only_place_a_venue_is_named():
     """Invariant 5: adding a venue is a registry entry, never a branch.
 
-    Still CBOT-only after #321: the coverage check found no other venue
-    TradingView's free embed widget will serve (DCE and SAFEX absent from the
-    platform, NCDEX soy suspended to 2027-03-31, MATIF symbol-addressable but
-    refused by the widget in a live embed test) — the registry comment
-    records each verdict, and #328 tracks the widget refusing CBOT too."""
+    Still CBOT-only after #321: the coverage check found no other venue worth
+    a row (DCE and SAFEX absent from TradingView, NCDEX soy suspended to
+    2027-03-31, MATIF licence-gated) — and #328 then found the embed widget
+    refusing CBOT too, which is why both registries now feed links, not a
+    widget."""
     assert TRADINGVIEW_EXCHANGES == {Exchange.CBOT: "CBOT"}
+    assert frozenset({Exchange.CBOT}) == BARCHART_EXCHANGES
 
 
 def test_every_mapped_exchange_is_a_real_exchange_member():
-    for exchange in TRADINGVIEW_EXCHANGES:
+    for exchange in list(TRADINGVIEW_EXCHANGES) + list(BARCHART_EXCHANGES):
         assert isinstance(exchange, Exchange)
 
 

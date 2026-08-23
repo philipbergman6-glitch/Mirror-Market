@@ -1,35 +1,35 @@
-"""TradingView symbols for named contracts — the one labelled exception.
+"""Third-party chart links for named contracts — the one labelled exception.
 
-`CLAUDE.md` says this product is not a real-time market feed, and every number
-it renders is measured against that. The embedded TradingView chart on the
-workstation's contract rows is a **deliberate, labelled exception** to that
-line (owner decision 2026-08-23, [#320]), not a softening of it: the widget is
-a third-party iframe showing TradingView's own ~10-minute-delayed exchange
-data, framed as foreign territory, and nothing inside it passes through this
-project's price vocabulary. It is not a settlement, it is not our observation,
-and `pricing.semantics` never sees it.
+`CLAUDE.md` says this product is not a real-time market feed. The workstation's
+contract rows carry a **deliberate, labelled exception** to that line (owner
+decision 2026-08-23, [#320], amended by [#328]): each row links out to the same
+contract month on a third party's own site. Originally the exception was an
+embedded TradingView widget; [#328] established that TradingView's free embed
+widget refuses CME symbols on any plan (the widget's symbol universe is not
+the site's free tier), so nothing third-party renders on this site any more —
+the exception has narrowed to **links**. The reader leaves; the pixels they
+then see are the third party's, on the third party's timing, and nothing about
+them passes through this project's price vocabulary. `pricing.semantics`
+never sees any of it.
 
 What lives here is the *only* thing that must be right on our side: the
-mapping from a :class:`~analysis.futures.domain.NamedContract` to the string
-TradingView keys that contract by. Two rules hold it honest.
+mapping from a :class:`~analysis.futures.domain.NamedContract` to the strings
+each third party keys that contract by. Two rules hold it honest.
 
 **A venue is a registry entry, never a branch** (invariant 5). ``ZMU26`` is
-``CBOT:ZMU2026`` because TradingView prefixes with the exchange and spells the
-year in full; whether ICE or CME follow the same convention is not something
-this project may assume from one checked venue. So the registry maps only what
-has been verified against the live symbol page, and a new venue is a row added
-here, never a case added to a function. The other market venues were checked
-under [#321] and every one stays out — the registry comment below records each
-verdict, because an absence with no reason is indistinguishable from a venue
-nobody looked at.
+TradingView's ``CBOT:ZMU2026`` and Barchart's bare ``ZMU26``; whether other
+venues follow either convention is not something this project may assume from
+one checked venue. So each registry maps only what has been verified against
+the live site, and a follow-up ticket adds rows to it rather than cases to a
+function.
 
-**An unmapped venue yields nothing** (invariant 2). A guessed prefix does not
-fail loudly — TradingView renders *something*, and a chart of the wrong
-contract beside a correct price is exactly the wrong-number-worse-than-a-gap
-trade invariant 11 refuses. The caller renders no expander at all.
+**An unmapped venue yields nothing** (invariant 2). A guessed symbol does not
+fail loudly — both sites render *something*, and a link to the wrong contract
+beside a correct price is exactly the wrong-number-worse-than-a-gap trade
+invariant 11 refuses. The caller renders no link at all.
 
 [#320]: https://github.com/philipbergman6-glitch/Mirror-Market/issues/320
-[#321]: https://github.com/philipbergman6-glitch/Mirror-Market/issues/321
+[#328]: https://github.com/philipbergman6-glitch/Mirror-Market/issues/328
 """
 
 from __future__ import annotations
@@ -37,80 +37,49 @@ from __future__ import annotations
 from analysis.futures.domain import Exchange, NamedContract
 
 __all__ = [
-    "TRADINGVIEW_ATTRIBUTION_URL",
+    "BARCHART_EXCHANGES",
+    "THIRD_PARTY_STAMP",
     "TRADINGVIEW_EXCHANGES",
-    "TRADINGVIEW_STAMP",
+    "TRADINGVIEW_SYMBOL_PAGE_URL",
+    "barchart_url",
     "tradingview_symbol",
     "tradingview_url",
 ]
 
-#: Venue prefix by exchange. CBOT only, and checked: ``CBOT:ZMU2026`` resolves
-#: to "Soybean Meal Futures (Sep 2026)" on TradingView's own symbol page
-#: (verified 2026-08-23). CME and ICE US are absent because nobody has checked
-#: them yet, and absence is what keeps a wrong chart off the page.
-#:
-#: The four non-CBOT venues in ``config.MARKETS`` **have** been checked
-#: (2026-08-23, #321 — findings with source URLs are a comment on the issue),
-#: and each stays out for its own reason, not for want of looking:
-#:
-#: - **DCE (Dalian)**: not on TradingView at all. Their symbol-search API
-#:   returns an empty universe for ``exchange=DCE``, and their data-coverage
-#:   catalog lists CFFEX as the only mainland-China futures venue. The only
-#:   embeddable cousin is ``MYX:FSOY`` — Bursa Malaysia's contract
-#:   cash-settled on DCE soy oil — which is another venue's proxy, and a
-#:   proxy chart under a Dalian row is the wrong-number trade invariant 11
-#:   refuses.
-#: - **SAFEX / JSE**: TradingView carries JSE equities and indices only; no
-#:   derivatives row exists in their catalog and the SAFEX agri symbols 404.
-#:   The embed-licence question invariant 9 would ask is moot — there is no
-#:   symbol to embed.
-#: - **NCDEX**: the venue is carried, but its soy pages are spot indices, and
-#:   there is no futures month to chart: SEBI's Dec-2021 suspension of the
-#:   soy complex was extended on 2026-03-27 through 2027-03-31.
-#: - **MATIF (Euronext)**: the near-miss, refused at the last gate. Per-month
-#:   symbols exist in exactly this module's grammar (``EURONEXT:ECOG2027``
-#:   names Rapeseed Feb 2027 on the live page, 15-min delayed free — note:
-#:   *their* delay figure differs from the ~10 min the CBOT stamp quotes, so
-#:   a MATIF entry would need its own stamp). But the embed widget — the only
-#:   surface this product uses — **refuses the symbol**: a live test of the
-#:   shipped embed markup (headless Chrome, 2026-08-23; a NASDAQ control
-#:   rendered data in the same harness) got "This symbol is only available on
-#:   TradingView" for both ``ECOG2027`` and ``ECO1!``, matching Euronext's
-#:   absence from the widget-docs markets list. The site's symbol universe
-#:   and the widget's are different things. Re-check trigger: TradingView
-#:   adding Euronext to that list — and the europe page growing rows that
-#:   name a month, since its series are continuous today.
-#:
-#: The same embed test refused ``CBOT:ZSX2026`` and ``CBOT:ZS1!`` — CME Group
-#: is likewise absent from the widget-docs markets list — which puts the
-#: shipped CBOT expander itself in question. That is #328, a #320 defect, not
-#: a mapping question: this registry's CBOT symbol grammar is verified right,
-#: and what the widget will serve is decided on TradingView's side.
+#: Venue prefix by exchange, for TradingView. CBOT only, and checked:
+#: ``CBOT:ZMU2026`` resolves to "Soybean Meal Futures (Sep 2026)" on
+#: TradingView's own symbol page (verified 2026-08-23). CME and ICE US are
+#: absent because nobody has checked them yet, and absence is what keeps a
+#: wrong link off the page.
 TRADINGVIEW_EXCHANGES: dict[Exchange, str] = {
     Exchange.CBOT: "CBOT",
 }
 
-#: The frame's stamp line, whole, in Python — the template renders it verbatim
-#: and composes none of it, because the surrounding numbers carry an
-#: honest-timestamp claim and no wording that separates ours from theirs may
-#: be decided in markup. The delay figure is **TradingView's own claim** about
-#: their free CBOT feed, and the stamp says so: this project has not measured
-#: it, and `LATENCY.md` owns the vocabulary for ages we assert ourselves.
-TRADINGVIEW_STAMP = (
-    "Third party · TradingView · delayed exchange data (~10 min, their figure)"
-)
+#: Venues whose contracts Barchart keys by the bare exchange symbol
+#: (``ZSX26`` → barchart.com/futures/quotes/ZSX26/interactive-chart). CBOT
+#: only, verified against the live page 2026-08-23 (#328 research). Same rule
+#: as the TradingView registry: membership is a checked fact, never an
+#: assumption, and an absent venue gets no link.
+BARCHART_EXCHANGES: frozenset[Exchange] = frozenset({Exchange.CBOT})
 
-#: Attribution is a licence condition, not decoration. TradingView's Terms of
-#: Use (https://www.tradingview.com/policies/, read 2026-08-23) bar using
-#: their widgets off-site without attribution and require it kept "as
-#: originally designed and intended" — so the template ships the embed's own
-#: ``tradingview-widget-container`` / ``tradingview-widget-copyright`` markup,
-#: whose classes their script (s3.tradingview.com/external-embedding/
-#: embed-widget-advanced-chart.js, inspected the same day) looks up and whose
-#: link it rewrites. No CSS in this project hides or shrinks it (invariant 9 —
-#: publishing is the gate). This URL is that copyright link's target, the
-#: symbol's public page.
-TRADINGVIEW_ATTRIBUTION_URL = "https://www.tradingview.com/symbols/{slug}/"
+#: The link strip's stamp line, whole, in Python — the template renders it
+#: verbatim and composes none of it, because the surrounding numbers carry an
+#: honest-timestamp claim and no wording that separates ours from theirs may
+#: be decided in markup. No delay figure any more: nothing third-party renders
+#: on this page (#328), so there is no feed here to characterise — what a
+#: reader sees after clicking is each site's own claim, made on their page.
+THIRD_PARTY_STAMP = "Third party · TradingView / Barchart · opens on their site"
+
+#: The public symbol page for a contract on TradingView — the link target.
+#: When the widget was embedded this URL was a licence-required attribution
+#: target; a plain outbound hyperlink carries no such condition (their Terms
+#: of Use, re-read 2026-08-23, attach the attribution requirement to use of
+#: their *widgets and content*, and a link uses neither).
+TRADINGVIEW_SYMBOL_PAGE_URL = "https://www.tradingview.com/symbols/{slug}/"
+
+#: Barchart's per-contract interactive chart, keyed by the bare exchange
+#: symbol. Fixed URL shape observed stable in the #328 research (2026-08-23).
+BARCHART_CHART_URL = "https://www.barchart.com/futures/quotes/{symbol}/interactive-chart"
 
 
 def tradingview_symbol(contract: NamedContract) -> str | None:
@@ -128,5 +97,17 @@ def tradingview_symbol(contract: NamedContract) -> str | None:
 
 
 def tradingview_url(symbol: str) -> str:
-    """The public symbol page for ``CBOT:ZMU2026`` — the attribution target."""
-    return TRADINGVIEW_ATTRIBUTION_URL.format(slug=symbol.replace(":", "-"))
+    """The public symbol page for ``CBOT:ZMU2026`` — the exact contract, theirs."""
+    return TRADINGVIEW_SYMBOL_PAGE_URL.format(slug=symbol.replace(":", "-"))
+
+
+def barchart_url(contract: NamedContract) -> str | None:
+    """Barchart's interactive chart for this contract, or ``None`` unchecked.
+
+    Barchart keys by the exchange's own two-digit-year symbol (``ZSX26``), so
+    nothing is rebuilt here — the gate is only whether that convention has
+    been verified for this contract's venue.
+    """
+    if contract.spec.exchange not in BARCHART_EXCHANGES:
+        return None
+    return BARCHART_CHART_URL.format(symbol=contract.symbol)
