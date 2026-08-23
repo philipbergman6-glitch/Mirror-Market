@@ -59,6 +59,41 @@
 .ptype { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); white-space: nowrap; }
 .incoherent { background: rgba(194,59,46,0.07); border-left: 3px solid var(--bearish); padding: 8px 12px; font-size: 12px; color: var(--bearish); margin-bottom: 10px; overflow-wrap: anywhere; }
 
+/* ---- embedded third-party chart (#320) ----
+   A labelled exception to the "not a real-time feed" line, and the frame is
+   what makes it labelled. Everything here is deliberately *outside* the
+   Morning Scan palette: cool slate rather than our paper, the --info blue
+   rather than the soy green, so a reader can see at a glance where our data
+   stops and TradingView's begins. Approved 2026-08-23, DESIGN.md.
+
+   Every affordance is gated on `.tv-ready`, which the script adds only after
+   the wiring succeeds — with script off the page loses the expander cleanly
+   rather than offering a chevron that does nothing. */
+.tv-toggle { display: none; font-family: var(--mono); font-size: 11px; color: var(--info); background: none; border: none; padding: 0 0 0 6px; cursor: pointer; }
+.dtable.tv-ready .tv-toggle { display: inline-block; }
+.dtable.tv-ready tr.crow.has-tv { cursor: pointer; }
+.dtable.tv-ready tr.crow.has-tv:hover td { background: rgba(47,93,143,0.05); }
+/* Explicit rather than relying on the UA's `[hidden]` default: a table row is
+   the one element a stray `display` rule is most likely to have opinions
+   about, and a panel that ships visible ships a dozen iframes. */
+tr.tv-panel[hidden] { display: none; }
+tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(--info); }
+.tv-frame { padding: 12px 14px 10px; }
+.tv-stamp { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--info); }
+.tv-disclaimer { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 10px; overflow-wrap: anywhere; }
+.tv-widget { height: 420px; background: #FFFFFF; border: 1px solid #C7CFD6; border-radius: 4px; overflow: hidden; }
+.tv-widget > div, .tv-widget iframe { height: 100%; width: 100%; display: block; border: 0; }
+/* Attribution is a licence condition (invariant 9): visible, never hidden. */
+.tv-credit { font-size: 11px; margin-top: 6px; }
+.tv-credit a { color: var(--info); }
+.tv-toggle .chev { display: inline-block; transition: transform 0.1s; }
+.dtable tr.crow.open .tv-toggle .chev { transform: rotate(90deg); }
+.tv-failed { font-size: 12px; color: var(--bearish); padding: 12px 14px; }
+
+@media (max-width: 768px) {
+  .tv-widget { height: 320px; }
+}
+
 /* ---- hedge ---- */
 .hedge-card { background: var(--card); border: 1px solid var(--rule); border-left: 3px solid var(--green); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
 .hedge-lead { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; line-height: 1.2; overflow-wrap: anywhere; }
@@ -160,8 +195,13 @@
       </thead>
       <tbody>
       {% for leg in c.legs %}
-        <tr>
-          <td class="sym strong">{{ leg.symbol }}</td>
+        {%- set tv = leg.tradingview_symbol -%}
+        {#- No symbol, no expander: app/tradingview.py maps only venues that have
+            been checked, and a chart of the wrong contract beside a right price
+            is worse than no chart at all. -#}
+        <tr class="crow{% if tv %} has-tv{% endif %}"{% if tv %} data-tv-symbol="{{ tv }}"{% endif %}>
+          <td class="sym strong">{{ leg.symbol }}
+            {%- if tv %}<button type="button" class="tv-toggle" aria-expanded="false" aria-controls="tv-{{ tv|replace(":", "-") }}"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show the TradingView chart for {{ leg.symbol }}</span></button>{% endif %}</td>
           <td>{{ leg.label }}</td>
           <td class="num">{{ '{:,.2f}'.format(leg.price) }}</td>
           <td class="num">{{ '{:,.2f}'.format(leg.usd_per_mt) }}</td>
@@ -172,6 +212,22 @@
           <td class="num"><span class="muted">not published</span></td>
           <td><span class="ptype">{{ leg.price_label }}</span></td>
         </tr>
+        {%- if tv %}
+        <tr class="tv-panel" id="tv-{{ tv|replace(":", "-") }}" hidden>
+          <td colspan="10">
+            <div class="tv-frame">
+              <div class="tv-stamp">Third party · TradingView · {{ s.data.chart_delay_note }}</div>
+              <div class="tv-disclaimer">{{ s.data.chart_disclaimer }}</div>
+              {#- Empty on load. The embed script is injected on first expand, so
+                  a page with 20 contract rows ships 0 iframes, not 20. -#}
+              <div class="tv-widget" data-tv-symbol="{{ tv }}"></div>
+              <div class="tv-credit">
+                <a href="{{ leg.tradingview_url }}" rel="noopener nofollow" target="_blank">{{ tv }} chart by TradingView</a>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {%- endif %}
       {% endfor %}
       </tbody>
     </table>
@@ -696,4 +752,107 @@
 </section>
 {% endfor %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Contract-row chart expander (#320).
+
+   Three things this script must keep true:
+
+   * **Lazy.** Nothing from TradingView is requested until a reader expands a
+     row. The page lists every listed month of the soy complex, and loading a
+     chart per row up front would put a dozen third-party iframes on a static
+     page nobody asked for them on.
+   * **One at a time.** Same rule as the market-page ledger drill-down: an
+     expansion under the row, never a modal, and opening one closes the last.
+   * **Fails visibly.** If the embed does not load — offline, blocked, network
+     down — the frame says so. An empty grey box beside a price would read as
+     "no trading", which is a wrong number in picture form. */
+(function () {
+  var SRC = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+
+  function each(nodes, fn) { Array.prototype.forEach.call(nodes, fn); }
+
+  function load(widget) {
+    if (widget.getAttribute('data-loaded')) return;
+    widget.setAttribute('data-loaded', '1');
+    var script = document.createElement('script');
+    script.src = SRC;
+    script.async = true;
+    script.type = 'text/javascript';
+    /* The embed script reads its own text content as configuration and
+       appends the iframe into its parent node. `allow_symbol_change` is off
+       deliberately: this frame answers "what has this contract done", and a
+       reader who switched it to another symbol would be looking at a chart
+       that no longer matches the row it opened from. */
+    script.text = JSON.stringify({
+      autosize: true,
+      symbol: widget.getAttribute('data-tv-symbol'),
+      interval: 'D',
+      timezone: 'Etc/UTC',
+      theme: 'light',
+      style: '1',
+      locale: 'en',
+      allow_symbol_change: false,
+      hide_side_toolbar: true,
+      support_host: 'https://www.tradingview.com'
+    });
+    script.onerror = function () {
+      widget.innerHTML = '';
+      var note = document.createElement('div');
+      note.className = 'tv-failed';
+      note.textContent = 'TradingView’s chart did not load. Nothing is being withheld — '
+        + 'this frame is theirs, and their script could not be reached from here.';
+      widget.appendChild(note);
+    };
+    widget.appendChild(script);
+  }
+
+  function close(row) {
+    row.classList.remove('open');
+    var panel = row.nextElementSibling;
+    if (panel) panel.hidden = true;
+    var chevron = row.querySelector('.tv-toggle');
+    if (chevron) chevron.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggle(row) {
+    var panel = row.nextElementSibling;
+    if (!panel || !panel.classList.contains('tv-panel')) return;
+    var table = row.closest('table');
+    var opening = panel.hidden;
+    each(table.querySelectorAll('tr.crow.open'), close);
+    if (!opening) return;
+    load(panel.querySelector('.tv-widget'));
+    panel.hidden = false;
+    row.classList.add('open');
+    var chevron = row.querySelector('.tv-toggle');
+    if (chevron) chevron.setAttribute('aria-expanded', 'true');
+  }
+
+  var rows = document.querySelectorAll('tr.crow.has-tv');
+  if (!rows.length) return;
+
+  each(rows, function (row) {
+    row.addEventListener('click', function (event) {
+      /* The attribution link inside the panel is a licence condition; a row
+         handler that swallowed clicks would not reach it, but a stray click on
+         any other link in the row should still follow the link. */
+      var node = event.target;
+      while (node && node !== row) {
+        if (node.tagName === 'A') return;
+        node = node.parentNode;
+      }
+      toggle(row);
+    });
+  });
+
+  /* Affordances last: if anything above threw, the page is left exactly as it
+     renders with script off — a plain table, no chevron, nothing promised. */
+  each(document.querySelectorAll('table.dtable'), function (table) {
+    if (table.querySelector('tr.crow.has-tv')) table.classList.add('tv-ready');
+  });
+})();
+</script>
 {% endblock %}
