@@ -765,7 +765,7 @@ def _build_demand(data: dict) -> dict | None:
             lines.append(f'<div style="margin-bottom:12px;"><strong style="color:var(--text)">{_esc(commodity)}</strong> <span class="muted">(w/e {week_str})</span>')
             lines.append(f'<div style="font-size:13px; color:var(--text-muted);">Net sales: <strong style="color:var(--text)">{info["net_sales"]:,.0f} MT</strong> | Exports: <strong style="color:var(--text)">{info["exports"]:,.0f} MT</strong></div>')
             if info.get("top_buyers"):
-                buyers = ", ".join(f'{b["country"]} ({b["mt"]:,.0f})' for b in info["top_buyers"])
+                buyers = ", ".join(f'{_esc(b["country"])} ({b["mt"]:,.0f})' for b in info["top_buyers"])
                 lines.append(f'<div style="font-size:12px; color:var(--text-dim);">Top buyers: {buyers}</div>')
             lines.append('</div>')
         out["export_sales_html"] = "\n".join(lines)
