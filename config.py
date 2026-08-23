@@ -1831,6 +1831,16 @@ MARKETS: dict[str, dict[str, Any]] = {
             "key_column": "commodity",
             "keys": ["Soybeans", "Soybean Oil", "Soybean Meal"],
             "headline_key": "Soybeans",
+            # A4 #301 display contract: a level whose contract the source
+            # does not name must say so. `prices` is Yahoo's ZS=F family —
+            # the provider does not publish which delivery month a bar
+            # belongs to, and inferring one would assert a fact the source
+            # refuses to state (same refusal as `named_board_crush`).
+            "key_labels": {
+                "Soybeans": "provider front-month — contract not published",
+                "Soybean Oil": "provider front-month — contract not published",
+                "Soybean Meal": "provider front-month — contract not published",
+            },
             "cadence": "daily",
             "quote_kind": "board",
             "value_column": "Close",
