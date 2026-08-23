@@ -106,3 +106,29 @@ def test_get_connection_raises_when_require_turso_and_libsql_missing(monkeypatch
 
     with pytest.raises(connection.TursoUnavailableError):
         connection.get_connection()
+
+
+def test_libsql_is_not_a_declared_dependency():
+    """Invariant 6, pinned at the one fact that actually enforces it.
+
+    The Turso branch in `get_connection()` is dormant, and what keeps it
+    dormant is not the unset env vars — those are one `export` away — but the
+    absence of `libsql` from the requirements files. Nothing else in the suite
+    holds that: every other Turso test monkeypatches the env or the import, so
+    all of them would keep passing if someone added the dependency and made
+    the cloud path genuinely reachable.
+
+    Adding `libsql` is how the 2026-07-30 no-cloud-DB decision gets reversed by
+    accident, so this fails if it appears. Reintroducing it deliberately means
+    deleting this test, which is the review conversation the decision deserves.
+    """
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parent.parent
+    for name in ("requirements.txt", "requirements-dev.txt"):
+        text = (repo / name).read_text(encoding="utf-8").lower()
+        assert "libsql" not in text, (
+            f"{name} declares libsql: the dormant Turso path in "
+            f"pipeline/connection.py becomes reachable, against invariant 6 "
+            f"(no cloud DB, decided 2026-07-30)."
+        )

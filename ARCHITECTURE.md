@@ -18,9 +18,9 @@ data-age vocabulary in `LATENCY.md`.
                                           ▼                  │                  ▲
                                     ┌──────────────────────────────┐            │
                                     │      data/storage/...db      │            │
-                                    │  (SQLite local OR Turso       │            │
-                                    │   cloud — see                 │            │
-                                    │   pipeline/connection.py)     │            │
+                                    │  (SQLite — always, locally    │            │
+                                    │   and in CI; invariant 6)     │            │
+                                    │   pipeline/connection.py      │            │
                                     └──────────────────────────────┘            │
                                           ▲                                     │
                                           │                                     │
@@ -62,9 +62,15 @@ Contains `_check_nan_gaps()` used by `clean_ohlcv()` and
 Tables are defined in `pipeline/schema.py` as `CREATE TABLE IF NOT EXISTS`
 strings. `pipeline/store.py` exposes `save_*()` functions that batch-upsert
 via `executemany` (INSERT OR REPLACE — the pipeline is safe to re-run).
-`pipeline/connection.py` returns a Turso cloud connection when
-`TURSO_DATABASE_URL` is set, a local SQLite connection otherwise — call
-sites don't care which (the cloud path is dormant; see `LAYERS.md`).
+`pipeline/connection.py` returns **a local SQLite connection — always**, in CI
+and on every developer machine. It also carries a dormant Turso branch, which
+is not a deployment option and should not be read as one: `libsql` is
+deliberately absent from `requirements.txt`, no workflow sets
+`TURSO_DATABASE_URL`, and `is_cloud()` is `False` everywhere, so the branch is
+unreachable as the project is actually installed. It is vestigial — it predates
+the 2026-07-30 no-cloud-DB decision (invariant 6) that reversed the direction.
+`LAYERS.md` → "API keys" is the authoritative note on it; deleting it is
+tracked separately.
 
 - Database: `data/storage/mirror_market.db` (SQLite, gitignored)
 - Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `inspection_destinations`, `gulf_bids`, `argentina_fob`, `eia_energy`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `sagis_deliveries`, `sagis_supply_demand`, `cec_estimates`, `ec_oilseed_prices`, `ocean_freight_rates`, `port_vessel_activity`, `river_levels`, `briefings`, `quarantined_revisions`
