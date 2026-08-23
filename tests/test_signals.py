@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from analysis.signals import (
-    demote_near_roll_signals,
+    suppress_near_roll_signals,
     detect_all_signals,
     detect_bollinger_squeeze,
     detect_ma_crossovers,
@@ -410,70 +410,51 @@ def test_is_near_roll_accepts_pd_timestamp():
     assert is_near_roll(pd.Timestamp("2026-07-15"), "Soybeans") is True
 
 
-def test_demote_near_roll_signals_demotes_warning_to_info():
-    signals = [
-        {
-            "date": pd.Timestamp("2026-07-15"),
-            "commodity": "Soybeans",
-            "signal_type": "golden_cross_20_50",
-            "severity": "warning",
-            "description": "Soybeans golden cross",
-        },
-    ]
-    out = demote_near_roll_signals(signals)
-    assert out[0]["severity"] == "info"
-    assert "(near-roll)" in out[0]["description"]
-
-
-def test_demote_near_roll_signals_demotes_alert_to_info():
-    signals = [
-        {
-            "date": pd.Timestamp("2026-07-15"),
-            "commodity": "Soybeans",
-            "signal_type": "golden_cross_50_200",
-            "severity": "alert",
-            "description": "Soybeans MAJOR golden cross",
-        },
-    ]
-    out = demote_near_roll_signals(signals)
-    assert out[0]["severity"] == "info"
-    assert "(near-roll)" in out[0]["description"]
-
-
-def test_demote_near_roll_signals_leaves_far_signals_unchanged():
-    signals = [
-        {
-            "date": pd.Timestamp("2026-04-15"),
-            "commodity": "Soybeans",
-            "signal_type": "golden_cross_20_50",
-            "severity": "warning",
-            "description": "Soybeans golden cross",
-        },
-    ]
-    out = demote_near_roll_signals(signals)
-    assert out[0]["severity"] == "warning"
-    assert "(near-roll)" not in out[0]["description"]
-
-
-def test_demote_near_roll_signals_does_not_mutate_input():
-    original = {
+def _sig(**over):
+    base = {
         "date": pd.Timestamp("2026-07-15"),
         "commodity": "Soybeans",
-        "signal_type": "macd_bullish",
-        "severity": "info",
-        "description": "Soybeans MACD bullish crossover",
+        "signal_type": "golden_cross_20_50",
+        "severity": "warning",
+        "description": "Soybeans golden cross",
     }
-    out = demote_near_roll_signals([original])
-    assert original["severity"] == "info"
-    assert "(near-roll)" not in original["description"]
-    assert "(near-roll)" in out[0]["description"]
+    base.update(over)
+    return base
 
 
-def test_demote_near_roll_signals_handles_missing_keys():
+def test_suppress_drops_near_roll_technical_signal():
+    # A4 #301: suppressed, not demoted — the artifact-suspect number is
+    # withheld entirely (invariant 11).
+    assert suppress_near_roll_signals([_sig()]) == []
+
+
+def test_suppress_drops_alert_severity_too():
+    assert suppress_near_roll_signals([_sig(signal_type="golden_cross_50_200", severity="alert")]) == []
+
+
+def test_suppress_leaves_far_signals_unchanged():
+    out = suppress_near_roll_signals([_sig(date=pd.Timestamp("2026-04-15"))])
+    assert len(out) == 1
+    assert out[0]["severity"] == "warning"
+
+
+def test_suppress_spares_adjusted_series_commodities():
+    # Signals detected on the named ratio-adjusted series carry no roll
+    # artifact — nothing to suppress even inside the window.
+    out = suppress_near_roll_signals([_sig()], adjusted_commodities=frozenset({"Soybeans"}))
+    assert len(out) == 1
+    assert out[0]["severity"] == "warning"
+
+
+def test_suppress_never_touches_fundamental_signals():
+    out = suppress_near_roll_signals([_sig(signal_type="stocks_to_use_tight")])
+    assert len(out) == 1
+
+
+def test_suppress_handles_missing_keys():
     # Defensive: signals missing date or commodity are passed through unchanged.
     signals = [
         {"severity": "warning", "description": "stray"},
         {"date": pd.Timestamp("2026-07-15"), "severity": "warning", "description": "no commodity"},
     ]
-    out = demote_near_roll_signals(signals)
-    assert out == signals
+    assert suppress_near_roll_signals(signals) == signals

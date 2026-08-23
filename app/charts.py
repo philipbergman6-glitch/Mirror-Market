@@ -71,12 +71,20 @@ def delta_str(val: float | None) -> str:
 # ---------------------------------------------------------------------------
 
 def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
-    """Candlestick + RSI + MACD subplots for one soy leg.
+    """Price + RSI + MACD subplots for one soy leg.
 
-    Expects df with DatetimeIndex and columns: Open, High, Low, Close,
-    Volume, MA_20, MA_50, MA_200, BB_Upper, BB_Lower, RSI, MACD,
-    MACD_Signal, MACD_Histogram.
+    Expects df with DatetimeIndex and a Close column plus indicator columns
+    (MA_20/50/200, BB_Upper/Lower, RSI, MACD, MACD_Signal, MACD_Histogram).
+    Two input shapes, drawn differently on purpose:
+
+    - the provider OHLCV frame → candlesticks;
+    - the ratio-adjusted named-contract series (analysis.loaders) → a close
+      line. It has no OHLC by construction, and adjusted highs/lows would
+      be scaled non-prices anyway. Its ``adjustment_note`` (df.attrs) is
+      rendered under the title — a continuous series must never appear on a
+      surface without its method (analysis/futures/continuous.py).
     """
+    has_ohlc = {"Open", "High", "Low"}.issubset(df.columns)
     fig = make_subplots(
         rows=3, cols=1,
         shared_xaxes=True,
@@ -85,16 +93,31 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
         subplot_titles=(leg_name, "RSI", "MACD"),
     )
 
-    # Candlestick
-    fig.add_trace(
-        go.Candlestick(
-            x=df.index, open=df["Open"], high=df["High"],
-            low=df["Low"], close=df["Close"], name="Price",
-            increasing_line_color=COLORS["bullish"],
-            decreasing_line_color=COLORS["bearish"],
-        ),
-        row=1, col=1,
-    )
+    if has_ohlc:
+        fig.add_trace(
+            go.Candlestick(
+                x=df.index, open=df["Open"], high=df["High"],
+                low=df["Low"], close=df["Close"], name="Price",
+                increasing_line_color=COLORS["bullish"],
+                decreasing_line_color=COLORS["bearish"],
+            ),
+            row=1, col=1,
+        )
+    else:
+        fig.add_trace(
+            go.Scatter(
+                x=df.index, y=df["Close"], name="Close",
+                line=dict(width=1.5, color=COLORS["info"]),
+            ),
+            row=1, col=1,
+        )
+        note = df.attrs.get("adjustment_note")
+        if note:
+            fig.add_annotation(
+                text=note, xref="paper", yref="paper", x=0, y=1.08,
+                showarrow=False, font=dict(size=10, color=COLORS["text_dim"]),
+                align="left",
+            )
 
     # Moving averages
     ma_colors = {"MA_20": COLORS["soy_oil"], "MA_50": COLORS["info"], "MA_200": COLORS["bearish"]}
@@ -119,10 +142,16 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
             row=1, col=1,
         )
 
-    # Volume
+    # Volume — colored by close-vs-open where OHLC exists, by day-over-day
+    # close direction on the close-only named series.
     if "Volume" in df.columns:
-        vol_colors = [COLORS["bullish"] if c >= o else COLORS["bearish"]
-                      for c, o in zip(df["Close"], df["Open"], strict=False)]
+        if has_ohlc:
+            vol_colors = [COLORS["bullish"] if c >= o else COLORS["bearish"]
+                          for c, o in zip(df["Close"], df["Open"], strict=False)]
+        else:
+            closes = df["Close"]
+            vol_colors = [COLORS["bullish"] if c >= p else COLORS["bearish"]
+                          for c, p in zip(closes, closes.shift(1).fillna(closes), strict=False)]
         fig.add_trace(
             go.Bar(x=df.index, y=df["Volume"], name="Volume",
                    marker_color=vol_colors, opacity=0.3),

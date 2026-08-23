@@ -1,12 +1,12 @@
 # LAYERS.md — Data Source Reference
 
-The complete per-layer reference: what each of the 31 operational layers fetches, its unit and cadence, and — most importantly — the **traps** each source has already sprung. Every trap here burned a real session and most carry an issue number. Read the entry for a layer before touching its fetcher.
+The complete per-layer reference: what each of the 32 operational layers fetches, its unit and cadence, and — most importantly — the **traps** each source has already sprung. Every trap here burned a real session and most carry an issue number. Read the entry for a layer before touching its fetcher.
 
 See `ARCHITECTURE.md` for the pipeline that runs these layers and `CLAUDE.md` for the project's invariants.
 
 ## Layer run states and grading
 
-`main.py` orchestrates 31 independently graded operational layers across 28 numbered groups (2b crop progress, 15b CONAB prices and 26b vessel lineups are separate run units; Layers 27 and 28 are two river-gauge providers behind one table). `config.PRODUCTION_LAYERS` is the authoritative inventory used by pipeline summaries, the masthead, About Data, health rows, and promotion smoke checks. Dict-shaped sources use `_run_dict_layer()`; scraper sources use `_run_scraper_layer()`; Layers 14–16 retain custom orchestration. Each layer is isolated so contextual failures degrade visibly without hiding healthy results.
+`main.py` orchestrates 32 independently graded operational layers across 28 numbered groups (2b crop progress, 11b named-contract bars, 15b CONAB prices and 26b vessel lineups are separate run units; Layers 27 and 28 are two river-gauge providers behind one table). `config.PRODUCTION_LAYERS` is the authoritative inventory used by pipeline summaries, the masthead, About Data, health rows, and promotion smoke checks. Dict-shaped sources use `_run_dict_layer()`; scraper sources use `_run_scraper_layer()`; Layers 14–16 retain custom orchestration. Each layer is isolated so contextual failures degrade visibly without hiding healthy results.
 
 Run state is explicit: `failed` means upstream/transport/parse failure, `no_publication` means the source ran successfully on a legitimate quiet day, `stale` means a fetched payload exceeded its observation-age budget, and `incomplete` means key coverage missed its floor. Only `success` advances `last_success`; all other states preserve the last known good timestamp. `data_freshness` round-trips through `data/history/` so a fresh CI runner does not falsely say a layer "never succeeded."
 

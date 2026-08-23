@@ -8,8 +8,8 @@ This section is the source of two cross-section dependencies:
 
 import pandas as pd
 
+from analysis.loaders import NAMED_RATIO, SERIES_KIND_ATTR, enrich_with_technicals
 from analysis.signals import detect_all_signals
-from analysis.technical import compute_all_technicals
 from config import RSI_OVERBOUGHT, RSI_OVERSOLD
 from pipeline.units import mt_label, to_metric_tons
 
@@ -23,20 +23,17 @@ def format(price_data: dict[str, pd.DataFrame]) -> tuple[str, list[dict], dict[s
             signals  — list of signal dicts across all commodities
             enriched — dict[commodity] → DataFrame with technicals applied
     """
-    lines = [
-        "PRICES:",
-        "  Note: technicals computed on yfinance front-month series; "
-        "signals within ±3 trading days of contract roll may be data artifacts rather than economic moves.",
-    ]
+    lines = ["PRICES:"]
+    body: list[str] = []
     all_signals: list[dict] = []
     enriched: dict[str, pd.DataFrame] = {}
 
     for commodity, df in price_data.items():
         if df.empty:
-            lines.append(f"  {commodity}: No data")
+            body.append(f"  {commodity}: No data")
             continue
 
-        df = compute_all_technicals(df)
+        df = enrich_with_technicals(commodity, df)
         enriched[commodity] = df
         latest = df.iloc[-1]
         close = latest["Close"]
@@ -78,9 +75,34 @@ def format(price_data: dict[str, pd.DataFrame]) -> tuple[str, list[dict], dict[s
         if pd.notna(hv20):
             parts.append(f"Vol {hv20:.0f}%")
 
-        lines.append(f"  {commodity + ':':16s} {('  '.join(parts))}")
+        # The named series knows which contract its latest bar is — say so.
+        contract = latest.get("contract")
+        if isinstance(contract, str) and contract:
+            parts.append(f"[{contract.split('.')[0]}]")
+
+        body.append(f"  {commodity + ':':16s} {('  '.join(parts))}")
 
         signals = detect_all_signals(df, commodity)
         all_signals.extend(signals)
+
+    # The note states what the technicals were actually computed on — per
+    # series, not as a blanket caveat (A4 #301).
+    named = sorted(
+        c for c, df in enriched.items() if df.attrs.get(SERIES_KIND_ATTR) == NAMED_RATIO
+    )
+    provider = sorted(c for c in enriched if c not in named)
+    if named:
+        lines.append(
+            "  Note: technicals for " + ", ".join(named) + " computed on the "
+            "ratio-adjusted named-contract series (rolls are our own rule; "
+            "levels before the last roll are not tradeable prices)."
+        )
+    if provider:
+        lines.append(
+            "  Note: technicals for " + ", ".join(provider) + " computed on the "
+            "provider front-month series; signals within ±3 trading days of an "
+            "estimated roll are suppressed as possible roll artifacts."
+        )
+    lines.extend(body)
 
     return "\n".join(lines), all_signals, enriched

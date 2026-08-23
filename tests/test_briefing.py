@@ -324,9 +324,11 @@ def test_generate_briefing_with_fully_populated_db(patched_db):
     assert "BIOFUEL & ENERGY" in out
 
 
-def test_near_roll_demotion_reaches_archive_and_display(patched_db, monkeypatch):
-    """Regression (#14): signals_json must store the same demoted severities the
-    briefing text prints — demotion is applied once, upstream, not per-consumer.
+def test_near_roll_suppression_reaches_archive_and_display(patched_db, monkeypatch):
+    """Regression (#14, re-decided in A4 #301): the archive, the display and
+    BriefingData.signals must agree — and the agreed treatment is now
+    suppression. A provider-series technical signal inside the estimated
+    roll window exists nowhere downstream.
     """
     import json
     import sqlite3
@@ -350,14 +352,11 @@ def test_near_roll_demotion_reaches_archive_and_display(patched_db, monkeypatch)
 
     data = generate_briefing_data(archive=True)
 
-    # BriefingData.signals carries the demoted list ...
-    assert len(data.signals) == 1
-    assert data.signals[0]["severity"] == "info"
-    assert "(near-roll)" in data.signals[0]["description"]
+    # BriefingData.signals carries no trace of the suppressed signal ...
+    assert data.signals == []
 
     # ... the displayed section agrees ...
-    assert "[INFO]" in data.section("signals")
-    assert "[ALERT]" not in data.section("signals")
+    assert "golden cross" not in data.section("signals")
 
     # ... and so does the archived signals_json.
     conn = sqlite3.connect(str(patched_db))
@@ -365,6 +364,4 @@ def test_near_roll_demotion_reaches_archive_and_display(patched_db, monkeypatch)
         "SELECT signals_json FROM briefings ORDER BY briefing_date DESC LIMIT 1"
     ).fetchone()
     conn.close()
-    stored = json.loads(signals_json)
-    assert stored[0]["severity"] == "info"
-    assert "(near-roll)" in stored[0]["description"]
+    assert json.loads(signals_json) == []
