@@ -46,13 +46,13 @@ from fetchers.akshare import fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
+from fetchers.contract_history import fetch_all_contract_bars
 from fetchers.cot import fetch_cot_recent
 from fetchers.ec_oilseeds import fetch_ec_oilseed_prices
 from fetchers.eia import fetch_all_eia
 from fetchers.eia import is_configured as eia_configured
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.export_sales import is_configured as export_sales_configured
-from fetchers.contract_history import fetch_all_contract_bars
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
 from fetchers.gtr import fetch_gtr_ocean_freight, fetch_gtr_vessel_activity
@@ -79,12 +79,12 @@ from latency import clock as run_clock
 from pipeline.clean import (
     clean_brazil_spot,
     clean_conab,
+    clean_contract_bars,
     clean_cot,
     clean_dce_futures,
     clean_ec_oilseeds,
     clean_eia,
     clean_export_sales,
-    clean_contract_bars,
     clean_forward_curve,
     clean_fred_series,
     clean_india_domestic,
@@ -110,6 +110,7 @@ from pipeline.store import (
     save_brazil_estimates,
     save_brazil_spot,
     save_cec_estimates,
+    save_contract_bars,
     save_cot_data,
     save_crop_progress,
     save_currency_data,
@@ -117,7 +118,6 @@ from pipeline.store import (
     save_ec_oilseed_prices,
     save_eia_data,
     save_export_sales,
-    save_contract_bars,
     save_forward_curve,
     save_fred_data,
     save_freshness,
