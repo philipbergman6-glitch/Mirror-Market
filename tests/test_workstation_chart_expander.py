@@ -260,6 +260,10 @@ def test_the_renderer_is_our_own_vendored_bundle_with_an_svg_fallback(curve_db):
     assert "cdn.jsdelivr.net" not in html
     assert "window.LightweightCharts" in html      # feature-gated, not assumed
     assert "drawSvg(chart, data.points, regime)" in html
+    # The canvas must not participate in the table's width computation: a
+    # drawn canvas would prop the cell open and the chart could never shrink
+    # with the window (measured 2026-08-23 — table stuck at first-drawn width).
+    assert ".tv-lw { height: 240px; margin-top: 8px; width: 0; min-width: 100%; }" in html
 
 
 def test_a_dots_regime_series_still_ships_its_points(curve_db):

@@ -90,8 +90,11 @@ tr.tv-panel > td { padding: 0; }
    this site's own assets/ — code, never data). A fixed height because the
    library fills its container; the inline-SVG path below stays as the
    fallback when the bundle is absent or fails, so the panel never goes
-   chartless with data in hand. */
-.tv-lw { height: 240px; margin-top: 8px; }
+   chartless with data in hand. width:0 + min-width:100% keeps the canvas out
+   of the table's width computation: without it the drawn canvas props the
+   cell open, the table can never shrink below the chart's first-drawn width,
+   and narrowing the window leaves the chart cut off. */
+.tv-lw { height: 240px; margin-top: 8px; width: 0; min-width: 100%; }
 .tv-svg { width: 100%; height: auto; display: block; }
 .tv-svg .ax { stroke: var(--rule); stroke-width: 1; }
 .tv-svg .lbl { font-family: var(--mono); font-size: 9px; fill: var(--text-dim); text-anchor: end; }
