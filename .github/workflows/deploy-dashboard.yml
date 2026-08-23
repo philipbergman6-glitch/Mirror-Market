@@ -124,6 +124,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: python scripts/reconcile_cbot_benchmarks.py
 
+      # Pilot 3 (#194). Same `if: !cancelled()` for the same reason: three
+      # independent migrations, and a Real that diverged is no reason to
+      # withhold the evidence the other two are collecting.
+      - name: Reconcile required FX pairs (v1 vs trusted)
+        if: ${{ !cancelled() }}
+        run: python scripts/reconcile_fx.py
+
       - name: Upload reconciliation reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
