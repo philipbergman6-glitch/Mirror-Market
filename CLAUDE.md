@@ -17,10 +17,12 @@ The soy complex (beans, oil, meal) priced across every venue that matters to a c
 | Not | Because |
 |---|---|
 | An **execution terminal** | Nothing here is orderable. No blotter, no ladder, no executable quote state. |
-| A **real-time market feed** | Measured: the fastest possible CBOT-settlement-to-reader path is **1 h 15 m**, floored by the settlement guard (`LATENCY.md` §9). No part of this is intraday-authoritative. |
+| A **real-time market feed** [^tv] | Measured: the fastest possible CBOT-settlement-to-reader path is **1 h 15 m**, floored by the settlement guard (`LATENCY.md` §9). No part of this is intraday-authoritative. |
 | A **CTRM** | No contract lifecycle: no L/Cs, GAFTA/FOSFA clause handling, washouts, arbitration, or hedge accounting. |
 | An **authoritative settlement service** | `PROVEN_SETTLEMENT_SOURCES` is empty by design — see invariant 3. Nothing rendered is a settlement. |
 | A **live counterparty market** | No firm bids/offers, no counterparty terms, no broker network. Desk-entered records are one desk's notes, not a market. |
+
+[^tv]: **One labelled exception, decided 2026-08-23 ([#320](https://github.com/philipbergman6-glitch/Mirror-Market/issues/320)).** A workstation contract row expands into an embedded TradingView chart of that contract month — a third-party iframe showing TradingView's own ~10-minute-delayed exchange data. It is framed as foreign territory by design (`DESIGN.md` → "Embedded third-party chart"), lazy-loaded on first expand, and nothing in it passes through this project's price vocabulary: it is not our observation, not a settlement, and invariant 3 is untouched because `pricing.semantics` never sees it. The row above it still carries our own delayed close with our own timestamp. This narrows nothing else in this table — the product still has no order path, no CTRM lifecycle, and no settlement authority.
 
 The Bloomberg-class ambition is not abandoned, it is **deferred and priced**: `ROADMAP.md` records it as a commercially-triggered expansion track. It is not the standard this repo is graded against, and it is not a reason to build toward it speculatively.
 

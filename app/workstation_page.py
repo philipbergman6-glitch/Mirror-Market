@@ -63,7 +63,7 @@ from analysis.futures import exposure as exposure_mod
 from analysis.futures import options as options_mod
 from analysis.futures import positions as positions_mod
 from analysis.futures import scenarios as scenarios_mod
-from analysis.futures.curve import CurveAnalysis, analyse_curve
+from analysis.futures.curve import CurveAnalysis, CurveLeg, analyse_curve
 from analysis.futures.domain import (
     CONTRACT_SPECS,
     METHOD_VERSION,
@@ -91,6 +91,11 @@ from analysis.futures.privacy import (
 )
 from analysis.futures.providers import SqliteQuoteProvider, describe_provider, open_provider
 from analysis.futures.ticket import build_ticket
+from app.tradingview import (
+    TRADINGVIEW_STAMP,
+    tradingview_symbol,
+    tradingview_url,
+)
 
 log = logging.getLogger(__name__)
 
@@ -404,6 +409,22 @@ def _alerts_section(page_alerts) -> dict[str, Any]:
     })
 
 
+def _contract_leg(leg: CurveLeg) -> dict[str, Any]:
+    """A curve leg, plus the third-party chart symbol the row can expand into.
+
+    The symbol is carried on the leg rather than derived in the template for
+    the usual reason: a template that can build a ticker can build a wrong
+    one. Where the venue is not in ``app.tradingview``'s registry the key is
+    ``None`` and the renderer draws no expander at all — see that module for
+    why a guess is worse than a gap here.
+    """
+    payload = leg.to_dict()
+    symbol = tradingview_symbol(leg.contract)
+    payload["tradingview_symbol"] = symbol
+    payload["tradingview_url"] = None if symbol is None else tradingview_url(symbol)
+    return payload
+
+
 def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for commodity, analysis in curves.items():
@@ -431,14 +452,26 @@ def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
             "native_unit": spec_for(commodity).native_unit.value,
             "tick_size": spec_for(commodity).tick_size,
             "tick_value_usd": spec_for(commodity).tick_value_usd,
-            "legs": [leg.to_dict() for leg in analysis.legs],
+            "legs": [_contract_leg(leg) for leg in analysis.legs],
         })
     if not any(row["state"] == STATE_OK for row in rows):
         return _section("contracts", state=STATE_EMPTY, reason=(
             "no forward-curve rows for the soy complex — the Layer 11 fetch has not run, or "
             "every leg it returned was dropped as being from another session"
         ))
-    return _section("contracts", state=STATE_OK, data={"commodities": rows})
+    return _section("contracts", state=STATE_OK, data={
+        "commodities": rows,
+        # The words that frame the embedded chart — both lines, whole. They
+        # live here, with every other label on this page, so the template
+        # decides nothing about what a reader is being shown.
+        "chart_stamp": TRADINGVIEW_STAMP,
+        "chart_disclaimer": (
+            "The prices in the table above are this project's own delayed closes, on the "
+            "timestamps shown. The chart below is TradingView's, on their data and their "
+            "timing — not our observation, not a settlement, and not routable. Expanding "
+            "a row requests it from TradingView's servers."
+        ),
+    })
 
 
 def _crush_section(provider: SqliteQuoteProvider, *, as_of: date) -> dict[str, Any]:
