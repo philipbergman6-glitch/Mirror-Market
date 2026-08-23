@@ -102,7 +102,7 @@ def test_clean_ohlcv_happy_path():
     assert isinstance(out.index, pd.DatetimeIndex)
     assert out.index.name == "Date"
 
-    # All-NaN price row was dropped before ffill, so length drops to 2
+    # All-NaN price row was dropped, so length drops to 2
     assert len(out) == 2
 
     # No NaNs left in OHLC after the all-NaN row is dropped
@@ -146,18 +146,14 @@ def test_clean_ohlcv_palm_oil_cme_exempt_from_zero_volume_warning(caplog):
 
 
 # ---------------------------------------------------------------------------
-# ffill(limit=3) + technical indicators: pin down the interaction.
-#
-# clean_ohlcv ffills small gaps (weekends, single-day holidays) up to 3 days.
-# When the analysis layer then computes RSI/MACD on the cleaned frame, the
-# filled bars contribute *zero-delta* days (Close = prior Close). This test
-# locks that behaviour in so a future change to clean_ohlcv or technical.py
-# doesn't silently shift how indicators respond to filled bars.
+# No fabricated bars (B1, #307): a partial OHLC bar is dropped with a reason,
+# never forward-filled. A carried-forward Close is an invented observation
+# (invariant 2), and RSI/MACD/daily-change would read it as a real 0% session.
 # ---------------------------------------------------------------------------
 
 
-def test_clean_ohlcv_ffills_short_gaps_up_to_three_days():
-    """A single-day NaN row is forward-filled from the prior bar."""
+def test_clean_ohlcv_drops_single_day_gap_instead_of_filling():
+    """A one-day all-NaN price row is dropped — never filled from its neighbour."""
     idx = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"])
     df = pd.DataFrame(
         {
@@ -172,21 +168,13 @@ def test_clean_ohlcv_ffills_short_gaps_up_to_three_days():
 
     out = clean_ohlcv(df)
 
-    # The all-NaN price row is dropped (not just ffilled), so length is 3.
     assert len(out) == 3
     # The remaining bars carry their real values; nothing fabricated.
     assert out["Close"].tolist() == [10.5, 12.5, 13.5]
 
 
-def test_clean_ohlcv_drops_rows_with_all_ohlc_nan_before_ffill():
-    """A row where every OHLC value is NaN is dropped, not ffilled.
-
-    `dropna(how="all")` runs before `ffill(limit=3)`, so weekend/holiday
-    bars that appear as all-NaN never make it to the ffill step. The risk
-    of RSI being computed on a phantom weekend bar is therefore mitigated
-    by the drop, not by the ffill — important to pin down because reversing
-    the order would silently change RSI/MACD behaviour across gaps.
-    """
+def test_clean_ohlcv_drops_rows_with_all_ohlc_nan():
+    """A row where every OHLC value is NaN is dropped even if Volume printed."""
     idx = pd.date_range("2026-01-01", periods=5, freq="B")
     df = pd.DataFrame(
         {
@@ -199,20 +187,17 @@ def test_clean_ohlcv_drops_rows_with_all_ohlc_nan_before_ffill():
         index=idx,
     )
     out = clean_ohlcv(df)
-    # The bar with all-NaN OHLC is dropped even though Volume was present.
     assert len(out) == 4
     assert out["Close"].tolist() == [10.5, 11.5, 12.5, 13.5]
 
 
-def test_clean_ohlcv_ffill_followed_by_rsi_produces_zero_delta_on_filled_bar():
-    """RSI computed on a partial-NaN ffilled bar treats it as zero-delta.
+def test_clean_ohlcv_refuses_to_fabricate_a_close(caplog):
+    """A bar missing only Close is dropped with a logged reason, not filled.
 
-    When at least one OHLC value survives on a bar (so it's not dropped),
-    `ffill(limit=3)` carries the prior values into the NaN cells. The
-    analysis layer can't distinguish a partially-filled bar from a real
-    one, so RSI/MACD/daily_pct_change will compute a 0% move across the
-    filled Close. This is intentional — keeps index alignment stable —
-    but pin it down so a future change doesn't silently shift behaviour.
+    This is the refusal test that replaced the old blessing test: under the
+    removed ffill, bar #20's Close was copied from #19 and RSI computed a
+    0% session on an observation nobody made. Now the bar is gone — RSI's
+    diff spans #19 → #21 and no zero-delta fabricated day exists.
     """
     from analysis.technical import add_rsi
 
@@ -229,23 +214,86 @@ def test_clean_ohlcv_ffill_followed_by_rsi_produces_zero_delta_on_filled_bar():
         },
         index=idx,
     )
-    # Only Close on bar #20 is NaN — High/Low/Open survive. dropna keeps
-    # the row (not all OHLC are NaN), then ffill restores Close from #19.
+    dropped_date = idx[20]
     df.iloc[20, df.columns.get_loc("Close")] = np.nan
 
-    cleaned = clean_ohlcv(df)
+    with caplog.at_level(logging.WARNING, logger="pipeline.clean"):
+        cleaned = clean_ohlcv(df, label="Soybeans")
 
-    # Length unchanged — the partial-NaN row was kept and Close was ffilled.
-    assert len(cleaned) == n
-    assert cleaned["Close"].iloc[20] == pytest.approx(cleaned["Close"].iloc[19])
+    # The partial bar is gone, with a reason on the record (invariant 1).
+    assert len(cleaned) == n - 1
+    assert dropped_date not in cleaned.index
+    assert any("partial" in r.message.lower() for r in caplog.records)
 
-    # delta across 19 → 20 is exactly 0; RSI computes at bar 20 (we're past
-    # the 14-day warm-up) and the indicator treats the filled bar as a
-    # no-movement day. RSI does NOT skip filled bars.
+    # No fabricated zero-delta day anywhere in the diff series.
     with_rsi = add_rsi(cleaned)
-    delta_at_filled_bar = with_rsi["Close"].diff().iloc[20]
-    assert delta_at_filled_bar == pytest.approx(0.0)
-    assert pd.notna(with_rsi["RSI"].iloc[20])
+    deltas = with_rsi["Close"].diff().dropna()
+    assert (deltas != 0.0).all()
+    # Nothing downstream ever sees a NaN price cell either.
+    assert not cleaned[["Open", "High", "Low", "Close"]].isna().any().any()
+
+
+def test_clean_ohlcv_drops_bar_missing_open(caplog):
+    """Any missing price cell disqualifies the bar — Open/High/Low too.
+
+    The site renders full candlesticks (app/charts.py), so a bar with a
+    real Close but no Open is still half an observation: filling it would
+    fabricate, keeping it would render a broken candle. It is dropped.
+    """
+    idx = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03"])
+    df = pd.DataFrame(
+        {
+            "Open":   [10.0, np.nan, 12.0],
+            "High":   [11.0, 12.0,   13.0],
+            "Low":    [9.5,  10.5,   11.5],
+            "Close":  [10.5, 11.5,   12.5],
+            "Volume": [1000, 1100,   1200],
+        },
+        index=idx,
+    )
+    with caplog.at_level(logging.WARNING, logger="pipeline.clean"):
+        out = clean_ohlcv(df)
+    assert len(out) == 2
+    assert out["Close"].tolist() == [10.5, 12.5]
+    assert any("partial" in r.message.lower() for r in caplog.records)
+
+
+def test_clean_ohlcv_keeps_bar_with_missing_volume():
+    """Volume is not a price: a NaN Volume never disqualifies a full bar,
+    and it stays NaN — never learned is not zero (invariant 2)."""
+    idx = pd.to_datetime(["2026-01-01", "2026-01-02"])
+    df = pd.DataFrame(
+        {
+            "Open":   [10.0, 11.0],
+            "High":   [11.0, 12.0],
+            "Low":    [9.5,  10.5],
+            "Close":  [10.5, 11.5],
+            "Volume": [1000, np.nan],
+        },
+        index=idx,
+    )
+    out = clean_ohlcv(df)
+    assert len(out) == 2
+    assert pd.isna(out["Volume"].iloc[1])
+
+
+def test_clean_dce_futures_drops_partial_bar_instead_of_filling(caplog):
+    """The DCE cleaner refuses partial bars the same way clean_ohlcv does."""
+    df = pd.DataFrame(
+        {
+            "date":   ["2026-01-01", "2026-01-02", "2026-01-03"],
+            "open":   [3000.0, 3010.0, 3020.0],
+            "high":   [3050.0, 3060.0, 3070.0],
+            "low":    [2950.0, 2960.0, 2970.0],
+            "close":  [3025.0, np.nan, 3045.0],
+            "volume": [10000, 11000, 12000],
+        }
+    )
+    with caplog.at_level(logging.WARNING, logger="pipeline.clean"):
+        out = clean_dce_futures(df)
+    assert len(out) == 2
+    assert out["Close"].tolist() == [3025.0, 3045.0]
+    assert any("partial" in r.message.lower() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

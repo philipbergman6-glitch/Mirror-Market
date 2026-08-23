@@ -50,11 +50,15 @@ source's traps are documented in `LAYERS.md`.
 
 ### Clean (`pipeline/clean.py`)
 
-Normalises raw frames: parses `Date` to datetime, sets index, forward-fills
-gaps with `limit=3`, drops all-NaN rows, warns on >10% daily moves and
-zero/negative volume. Returns copies — originals are never mutated.
-Contains `_check_nan_gaps()` used by `clean_ohlcv()` and
-`clean_dce_futures()`, plus `clean_india_domestic()`, `clean_brazil_spot()`,
+Normalises raw frames: parses `Date` to datetime, sets index, drops
+all-NaN rows, warns on >10% daily moves and zero/negative volume. Prices
+are **never forward-filled** (#307): a partial OHLC bar is dropped with a
+logged reason via `_drop_partial_bars()` — a carried-forward close would
+read as a real 0% session in every derived metric. Interim treatment
+pending the quarantine-vs-rejection decision (#299). Limited forward-fill
+survives only in `clean_fred_series()` (monthly macro series stay in force
+between publications) and `clean_weather()`. Returns copies — originals
+are never mutated. Also `clean_india_domestic()`, `clean_brazil_spot()`,
 `clean_safex()`, `clean_sagis_deliveries()`.
 
 ### Store (`pipeline/store.py` + `schema.py`)

@@ -5,10 +5,14 @@ Raw data from external APIs is messy — missing days (weekends/holidays),
 occasional NaN values, inconsistent column names.  This module normalises
 everything into a consistent format before it hits the database.
 
-Key concepts for learning:
-    - pandas .fillna(), .dropna(), .resample()
-    - Forward-fill: carrying the last known price into a gap
-    - logging.warning() flags unusual data (like long stretches of missing days)
+Prices are never forward-filled (B1, #307). A carried-forward close is an
+invented observation: RSI/MACD/daily-change would read it as a real 0%
+session, and a rendered candle would show a bar nobody printed. Partial
+bars are dropped with a logged reason instead. Limited forward-fill
+survives only where the series' own semantics allow carrying a published
+observation across a gap — low-frequency macro series (FRED publishes
+monthly; the value *is* in force between publications) and small weather
+gaps — never for market prices.
 """
 
 import logging
@@ -66,31 +70,52 @@ def _validate_price_data(df: pd.DataFrame, label: str = ""):
 
 
 
-def _check_nan_gaps(df: pd.DataFrame, cols: list[str], label: str = "") -> None:
-    """Warn if any column has >5 consecutive NaN values."""
-    prefix = f"[{label}] " if label else ""
-    for col in cols:
-        if col not in df.columns or not df[col].isna().any():
-            continue
-        is_nan = df[col].isna()
-        groups = (is_nan != is_nan.shift()).cumsum()
-        nan_runs = is_nan.groupby(groups).sum()
-        max_gap = int(nan_runs.max()) if not nan_runs.empty else 0
-        if max_gap > 5:
-            logger.warning(
-                "%sColumn '%s' has a gap of %d consecutive missing days — "
-                "forward-fill may be masking a data issue",
-                prefix, col, max_gap,
-            )
+def _drop_partial_bars(df: pd.DataFrame, price_cols: list[str], label: str = "") -> pd.DataFrame:
+    """Drop any bar with a missing value in a present price column.
+
+    A bar missing its Close would need a fabricated close to be usable, and
+    a bar missing Open/High/Low is half an observation that would render as
+    a broken candle — neither is filled, both are dropped with a reason
+    (invariant 2: absence never becomes an assumption).
+
+    TODO(#299): interim treatment. If A2 decides quarantine over rejection,
+    dropped bars should be stored flagged instead of discarded here.
+    """
+    present = [c for c in price_cols if c in df.columns]
+    if not present:
+        return df
+    partial = df[present].isna().any(axis=1)
+    if partial.any():
+        prefix = f"[{label}] " if label else ""
+        # Dates live on the index for yfinance frames, in a column for DCE.
+        date_values = df["Date"][partial] if "Date" in df.columns else df.index[partial]
+        dates = ", ".join(
+            str(d.date()) if hasattr(d, "date") else str(d)
+            for d in list(date_values)[:10]
+        )
+        if int(partial.sum()) > 10:
+            dates += f", … and {int(partial.sum()) - 10} more"
+        logger.warning(
+            "%sDropped %d partial bar(s) with missing price values (%s) — "
+            "never filled; see #299 for quarantine semantics",
+            prefix, int(partial.sum()), dates,
+        )
+        df = df[~partial]
+    return df
+
 
 def clean_ohlcv(df: pd.DataFrame, label: str = "") -> pd.DataFrame:
     """
     Clean a raw OHLCV DataFrame from yfinance.
 
     Steps:
-        1. Drop rows where ALL price columns are NaN (total gaps).
-        2. Forward-fill small gaps (e.g. a single NaN in Volume).
-        3. Ensure the index is a proper DatetimeIndex named "Date".
+        1. Ensure the index is a proper DatetimeIndex named "Date".
+        2. Drop bars with any missing OHLC value — all-NaN weekend/holiday
+           rows and partial bars alike. Nothing is forward-filled (#307).
+        3. Run sanity checks (warnings only).
+
+    A NaN Volume never disqualifies a bar and is left NaN: Volume is not a
+    price, and never-learned is not zero.
 
     Parameters
     ----------
@@ -113,17 +138,12 @@ def clean_ohlcv(df: pd.DataFrame, label: str = "") -> pd.DataFrame:
     df.index = pd.to_datetime(df.index)
     df.index.name = "Date"
 
-    # Drop rows where every OHLC value is missing
     price_cols = ["Open", "High", "Low", "Close"]
     present = [c for c in price_cols if c in df.columns]
+    # Drop all-NaN rows silently (weekends/holidays are expected), then
+    # partial bars with a logged reason — those are real data defects.
     df = df.dropna(subset=present, how="all")
-
-    # Check for long consecutive NaN gaps before forward-filling
-    _check_nan_gaps(df, present, label=label)
-
-    # Forward-fill remaining small gaps, but cap at 3 days to avoid
-    # propagating stale data indefinitely when a source stops updating
-    df = df.ffill(limit=3)
+    df = _drop_partial_bars(df, price_cols, label=label)
 
     # Run sanity checks (warnings only — doesn't block pipeline)
     _validate_price_data(df, label=label)
@@ -275,8 +295,8 @@ def clean_dce_futures(df: pd.DataFrame) -> pd.DataFrame:
     Steps:
         1. Rename columns to project conventions.
         2. Parse Date to datetime and sort by date.
-        3. Drop rows where all price columns are NaN.
-        4. Forward-fill small gaps (same logic as clean_ohlcv).
+        3. Drop bars with any missing OHLC value — nothing is
+           forward-filled, same rule as clean_ohlcv (#307).
 
     Returns cleaned copy (original is not mutated).
     """
@@ -302,16 +322,12 @@ def clean_dce_futures(df: pd.DataFrame) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.sort_values("Date").reset_index(drop=True)
 
-    # Drop rows where all OHLC values are missing
+    # Drop all-NaN price rows silently, then partial bars with a reason —
+    # never filled (#307).
     price_cols = ["Open", "High", "Low", "Close"]
     present = [c for c in price_cols if c in df.columns]
     df = df.dropna(subset=present, how="all")
-
-    # Warn about long NaN gaps before forward-filling
-    _check_nan_gaps(df, present, label="DCE")
-
-    # Forward-fill remaining small gaps (capped at 3 days)
-    df = df.ffill(limit=3)
+    df = _drop_partial_bars(df, price_cols, label="DCE")
 
     return df
 
