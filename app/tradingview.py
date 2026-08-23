@@ -67,18 +67,25 @@ __all__ = [
 #: - **NCDEX**: the venue is carried, but its soy pages are spot indices, and
 #:   there is no futures month to chart: SEBI's Dec-2021 suspension of the
 #:   soy complex was extended on 2026-03-27 through 2027-03-31.
-#: - **MATIF (Euronext)**: the near-miss, and the one to re-check. Per-month
+#: - **MATIF (Euronext)**: the near-miss, refused at the last gate. Per-month
 #:   symbols exist in exactly this module's grammar (``EURONEXT:ECOG2027``
 #:   names Rapeseed Feb 2027 on the live page, 15-min delayed free — note:
 #:   *their* delay figure differs from the ~10 min the CBOT stamp quotes, so
-#:   a MATIF entry needs its own stamp). But Euronext appears nowhere in the
-#:   widget-docs markets list, and the widget FAQ says widget data is
-#:   licence-gated independently of any plan — so the embed surface, the only
-#:   one this product uses, is unconfirmed-negative. It stays out until a
-#:   live Advanced Chart embed of a EURONEXT symbol is actually seen to
-#:   render data (a browser test; it could not be verified over HTTP).
-#:   Separately, the europe page's rows are continuous series — a per-month
-#:   chart also needs a row that names a month.
+#:   a MATIF entry would need its own stamp). But the embed widget — the only
+#:   surface this product uses — **refuses the symbol**: a live test of the
+#:   shipped embed markup (headless Chrome, 2026-08-23; a NASDAQ control
+#:   rendered data in the same harness) got "This symbol is only available on
+#:   TradingView" for both ``ECOG2027`` and ``ECO1!``, matching Euronext's
+#:   absence from the widget-docs markets list. The site's symbol universe
+#:   and the widget's are different things. Re-check trigger: TradingView
+#:   adding Euronext to that list — and the europe page growing rows that
+#:   name a month, since its series are continuous today.
+#:
+#: The same embed test refused ``CBOT:ZSX2026`` and ``CBOT:ZS1!`` — CME Group
+#: is likewise absent from the widget-docs markets list — which puts the
+#: shipped CBOT expander itself in question. That is #328, a #320 defect, not
+#: a mapping question: this registry's CBOT symbol grammar is verified right,
+#: and what the widget will serve is decided on TradingView's side.
 TRADINGVIEW_EXCHANGES: dict[Exchange, str] = {
     Exchange.CBOT: "CBOT",
 }

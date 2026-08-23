@@ -61,10 +61,10 @@ def test_the_registry_is_the_only_place_a_venue_is_named():
     """Invariant 5: adding a venue is a registry entry, never a branch.
 
     Still CBOT-only after #321: the coverage check found no other venue
-    TradingView's free embed widget can serve (DCE and SAFEX absent from the
+    TradingView's free embed widget will serve (DCE and SAFEX absent from the
     platform, NCDEX soy suspended to 2027-03-31, MATIF symbol-addressable but
-    unconfirmed on the widget tier) — the registry comment records each
-    verdict."""
+    refused by the widget in a live embed test) — the registry comment
+    records each verdict, and #328 tracks the widget refusing CBOT too."""
     assert TRADINGVIEW_EXCHANGES == {Exchange.CBOT: "CBOT"}
 
 
