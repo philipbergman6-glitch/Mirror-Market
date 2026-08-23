@@ -343,13 +343,15 @@ def test_both_editions_get_the_expander(curve_db):
 # Layer 11b — the chart draws the contract's own daily history (#332)
 # ---------------------------------------------------------------------------
 def _insert_contract_history(conn, symbol_month, sessions, ticker):
+    # contract_bars carries no label column — the label lives on the
+    # NamedContract, so the third element of symbol_month is simply unused.
     conn.executemany(
-        "INSERT INTO contract_history "
-        "(commodity, ticker, contract_month, label, date, close, volume, fetched_date) "
-        "VALUES (?,?,?,?,?,?,4210,'2026-08-19')",
+        "INSERT INTO contract_bars "
+        "(commodity, ticker, contract_month, Date, Close, Volume, fetched_date) "
+        "VALUES (?,?,?,?,?,4210,'2026-08-19')",
         [
-            (commodity, ticker, month, label, session, close)
-            for (commodity, month, label) in [symbol_month]
+            (commodity, ticker, month, session, close)
+            for (commodity, month, _label) in [symbol_month]
             for session, close in sessions
         ],
     )
@@ -395,13 +397,17 @@ def test_the_dedicated_series_wins_a_session_both_sources_hold(curve_db):
 
 
 def _insert_bars(conn, commodity, month, label, ticker, bars):
-    """Layer 11b rows WITH the candle trio: (session, open, high, low, close)."""
+    """Layer 11b rows WITH the candle trio: (session, open, high, low, close).
+
+    label is accepted for the callers' readability but contract_bars holds
+    no label column — the label lives on the NamedContract."""
+    del label
     conn.executemany(
-        "INSERT INTO contract_history "
-        "(commodity, ticker, contract_month, label, date, open, high, low, close, "
-        "volume, fetched_date) VALUES (?,?,?,?,?,?,?,?,?,4210,'2026-08-19')",
+        "INSERT INTO contract_bars "
+        '(commodity, ticker, contract_month, Date, "Open", High, Low, Close, '
+        "Volume, fetched_date) VALUES (?,?,?,?,?,?,?,?,4210,'2026-08-19')",
         [
-            (commodity, ticker, month, label, session, o, h, low, close)
+            (commodity, ticker, month, session, o, h, low, close)
             for session, o, h, low, close in bars
         ],
     )
@@ -463,10 +469,10 @@ def test_a_hand_edited_partial_trio_never_reaches_a_quote(curve_db):
     """The cleaner enforces all-or-nothing; the read path re-checks, so a row
     edited straight in the database cannot smuggle a partial candle out."""
     curve_db.execute(
-        "INSERT INTO contract_history "
-        "(commodity, ticker, contract_month, label, date, open, high, low, close, "
-        "volume, fetched_date) VALUES ('Soybeans','ZSF27.CBT','2027-01-01',"
-        "'Jan 2027','2026-08-12',1160.0,NULL,1150.0,1155.0,4210,'2026-08-19')"
+        "INSERT INTO contract_bars "
+        '(commodity, ticker, contract_month, Date, "Open", High, Low, Close, '
+        "Volume, fetched_date) VALUES ('Soybeans','ZSF27.CBT','2027-01-01',"
+        "'2026-08-12',1160.0,NULL,1150.0,1155.0,4210,'2026-08-19')"
     )
     curve_db.commit()
     _insert_bars(
@@ -501,21 +507,21 @@ def test_a_lagging_bar_series_falls_back_to_the_line_of_merged_closes(curve_db):
 
 
 def test_an_old_close_only_table_is_migrated_in_place():
-    """A database created by the close-only first cut of #332 gains the
-    candle columns on init — without this, both the save and the read
+    """A database created by the close-only #335 cut of contract_bars gains
+    the candle columns on init — without this, both the save and the read
     raise on the missing columns and stay broken until a manual ALTER."""
     conn = sqlite3.connect(":memory:")
     conn.execute(
-        "CREATE TABLE contract_history (commodity TEXT, ticker TEXT, "
-        "contract_month TEXT, label TEXT, date TEXT, close REAL, volume REAL, "
-        "fetched_date TEXT, PRIMARY KEY (ticker, date))"
+        "CREATE TABLE contract_bars (commodity TEXT, ticker TEXT, "
+        "contract_month TEXT, Date TEXT, Close REAL, Volume REAL, "
+        "fetched_date TEXT, PRIMARY KEY (ticker, Date))"
     )
-    from pipeline.store import _migrate_contract_history_bars
+    from pipeline.store import _migrate_contract_bars_ohlc
 
-    _migrate_contract_history_bars(conn)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_history)")}
-    assert {"open", "high", "low"} <= cols
-    _migrate_contract_history_bars(conn)  # idempotent
+    _migrate_contract_bars_ohlc(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_bars)")}
+    assert {"Open", "High", "Low"} <= cols
+    _migrate_contract_bars_ohlc(conn)  # idempotent
     conn.close()
 
 

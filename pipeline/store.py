@@ -267,26 +267,29 @@ def _migrate_forward_curve_liquidity(conn) -> None:
                 logger.warning("Could not add %s column to forward_curve: %s", column, exc)
 
 
-def _migrate_contract_history_bars(conn) -> None:
-    """Add open / high / low to contract_history if absent. Idempotent.
+def _migrate_contract_bars_ohlc(conn) -> None:
+    """Add Open / High / Low to contract_bars if absent. Idempotent.
 
     All three stay NULL on legacy rows — nothing to fill them with (the
-    trio was not fetched before #332's candle chart), and the table is
-    self-healing: the next Layer 11b run re-downloads every session with
-    the full bar. Without this, a database created by the close-only first
-    cut fails BOTH paths loudly — the save's named-column INSERT and the
-    provider's SELECT — and stays broken until a manual ALTER.
+    trio was not fetched before #332's candle chart). Listed contracts
+    heal on the next Layer 11b run, which re-downloads every session with
+    the full bar; expired contracts' rows keep NULLs forever, because
+    Yahoo no longer serves the symbol — the close is the only fact we
+    hold, and a candle will simply never be drawn for those sessions.
+    Without this, a database created by the close-only #335 cut fails
+    BOTH paths loudly — the save's named-column INSERT and the provider's
+    SELECT — and stays broken until a manual ALTER.
     """
     try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_history)").fetchall()}
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_bars)").fetchall()}
     except Exception:
         return
-    for column in ("open", "high", "low"):
+    for column in ("Open", "High", "Low"):
         if cols and column not in cols:
             try:
-                conn.execute(f'ALTER TABLE contract_history ADD COLUMN "{column}" REAL')
+                conn.execute(f'ALTER TABLE contract_bars ADD COLUMN "{column}" REAL')
             except Exception as exc:
-                logger.warning("Could not add %s column to contract_history: %s", column, exc)
+                logger.warning("Could not add %s column to contract_bars: %s", column, exc)
 
 
 def init_database():
@@ -304,7 +307,7 @@ def init_database():
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
-        _migrate_contract_history_bars(conn)
+        _migrate_contract_bars_ohlc(conn)
         for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -718,31 +721,32 @@ def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
         maybe_sync(conn)
 
 
-def save_contract_history(commodity: str, df: pd.DataFrame):
-    """Write per-contract daily closes → 'contract_history' (Layer 11b).
+def save_contract_bars(commodity: str, df: pd.DataFrame):
+    """Write named-contract daily bars → 'contract_bars' (Layer 11b).
 
-    Plain INSERT OR REPLACE on (ticker, date): every run re-downloads each
-    active contract's whole series, so overlap is the normal case and the
-    newest fetch wins a session. fetched_date is provenance only — it never
-    keys identity, which is the deliberate contrast with forward_curve's
-    snapshot semantics.
+    Plain INSERT OR REPLACE upsert on (ticker, Date) — this table
+    *accumulates*: a re-fetch of a listed contract rewrites the same
+    history plus one new bar, and an expired contract's rows are never
+    touched again (Yahoo no longer serves the symbol; the row here is the
+    only copy). No snapshot-replace like forward_curve — bars are keyed by
+    session, not by fetch, so two runs on one day agree by construction.
+    Open/High/Low/Volume default to None — "never learned", never zero.
     """
     if df.empty:
         return
     df = df.copy()
     df["commodity"] = commodity
-    df["date"] = _date(df["date"])
     df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    df = _str_cols(df, "ticker", "contract_month", "label")
-    for optional in ("open", "high", "low", "volume"):
+    df = _str_cols(df, "ticker", "contract_month", "Date")
+    for optional in ("Open", "High", "Low", "Volume"):
         if optional not in df.columns:
             df[optional] = None
     _save(
-        "contract_history",
-        df[["commodity", "ticker", "contract_month", "label", "date",
-            "open", "high", "low", "close", "volume", "fetched_date"]],
-        ["ticker", "date"],
-        f"contract_history/{commodity}",
+        "contract_bars",
+        df[["commodity", "ticker", "contract_month", "Date",
+            "Open", "High", "Low", "Close", "Volume", "fetched_date"]],
+        ["ticker", "Date"],
+        f"contract_bars/{commodity}",
     )
 
 

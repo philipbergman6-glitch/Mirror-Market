@@ -299,13 +299,13 @@ class SqliteQuoteProvider:
         already resolved it once. A database without the table answers with
         the same reasoned emptiness as one with no rows: "we hold no history
         for this contract"."""
-        if not self._has_table("contract_history"):
+        if not self._has_table("contract_bars"):
             return ()
         rows = list(self.conn.execute(
-            "SELECT date, close, volume, fetched_date, open, high, low "
-            "FROM contract_history "
-            "WHERE commodity = ? AND contract_month = ? AND date <= ? "
-            "ORDER BY date DESC LIMIT ?",
+            'SELECT Date, Close, Volume, fetched_date, "Open", High, Low '
+            "FROM contract_bars "
+            "WHERE commodity = ? AND contract_month = ? AND Date <= ? "
+            "ORDER BY Date DESC LIMIT ?",
             (
                 contract.spec.name,
                 contract.contract_month_date.isoformat(),

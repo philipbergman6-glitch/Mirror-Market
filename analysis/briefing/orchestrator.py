@@ -44,8 +44,8 @@ from analysis.briefing.sections import (
 )
 from analysis.briefing.snapshot import build_snapshot
 from analysis.briefing.types import BriefingData
-from analysis.loaders import load_currencies, load_prices
-from analysis.signals import demote_near_roll_signals
+from analysis.loaders import adjusted_commodities, load_currencies, load_prices
+from analysis.signals import suppress_near_roll_signals
 from pipeline.store import save_briefing
 
 logger = logging.getLogger(__name__)
@@ -76,10 +76,13 @@ def generate_briefing_data(*, archive: bool = True) -> BriefingData:
     stu_text, stu_signals = stocks_to_use.format()
     signal_list.extend(stu_signals)
 
-    # Demote near-roll technicals ONCE, before the list fans out — the signals
-    # section, BriefingData.signals, signals_json, and the snapshot must all
-    # report the same severities.
-    signal_list = demote_near_roll_signals(signal_list)
+    # Suppress provider-series near-roll technicals ONCE, before the list
+    # fans out — the signals section, BriefingData.signals, signals_json, and
+    # the snapshot must all agree on what exists (A4 #301: suppressed, not
+    # demoted; legs on the named adjusted series pass through untouched).
+    signal_list = suppress_near_roll_signals(
+        signal_list, adjusted_commodities=adjusted_commodities(enriched)
+    )
 
     section_texts: dict[str, str] = {
         "freshness": freshness.format(),

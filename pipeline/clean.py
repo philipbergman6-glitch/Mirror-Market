@@ -393,37 +393,31 @@ def clean_forward_curve(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def clean_contract_history(df: pd.DataFrame) -> pd.DataFrame:
+def clean_contract_bars(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean per-contract daily close history (Layer 11b).
+    Clean named-contract daily bars (Layer 11b).
 
     Steps:
-        1. Coerce close numeric; drop NaN and non-positive closes — a CBOT
-           soy price of zero is an error value, never an observation.
-        2. Coerce volume numeric (nullable — Yahoo omits it on some bars).
-        3. One row per (ticker, session): keep the last, matching the
-           store's INSERT OR REPLACE outcome so re-runs converge.
+        1. Coerce Close to numeric; drop rows where it is NaN or <= 0 —
+           a bar with no close is not a session this contract priced.
+        2. Withhold the Open/High/Low trio as a unit where it is partial
+           or incoherent (#332's candle chart) — the close survives.
+        3. Dedupe on (ticker, Date), keeping the last row — matches the
+           PK the store upserts against.
+        4. Sort by (ticker, Date).
 
-    Returns cleaned copy (original is not mutated).
+    Volume is left as-is: NULL means "provider gave none" and must not
+    become 0. Returns a cleaned copy (original is not mutated).
     """
     if df.empty:
         return df
 
     df = df.copy()
 
-    if "close" in df.columns:
-        df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        before = len(df)
-        df = df.dropna(subset=["close"])
-        df = df[df["close"] > 0]
-        if len(df) < before:
-            logger.warning(
-                "contract_history: dropped %d row(s) with missing or "
-                "non-positive close", before - len(df),
-            )
-
-    if "volume" in df.columns:
-        df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+    if "Close" in df.columns:
+        df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+        df = df.dropna(subset=["Close"])
+        df = df[df["Close"] > 0]
 
     # The candle fields live or die as a trio: a bar whose open, high or low
     # is missing, non-positive, or self-contradictory (high < low, or a close
@@ -431,24 +425,24 @@ def clean_contract_history(df: pd.DataFrame) -> pd.DataFrame:
     # a partial or impossible candle drawn anyway would be an invented one
     # (invariant 2). The close survives because it was validated above and is
     # the number every other surface reads.
-    if {"open", "high", "low"} <= set(df.columns) and len(df):
-        for field in ("open", "high", "low"):
+    if {"Open", "High", "Low", "Close"} <= set(df.columns) and len(df):
+        for field in ("Open", "High", "Low"):
             df[field] = pd.to_numeric(df[field], errors="coerce")
         bad = ~(
-            (df["open"] > 0) & (df["high"] > 0) & (df["low"] > 0)
-            & (df["high"] >= df["low"])
-            & (df["close"] >= df["low"]) & (df["close"] <= df["high"])
+            (df["Open"] > 0) & (df["High"] > 0) & (df["Low"] > 0)
+            & (df["High"] >= df["Low"])
+            & (df["Close"] >= df["Low"]) & (df["Close"] <= df["High"])
         )
         if bad.any():
             logger.warning(
-                "contract_history: withheld the open/high/low trio on %d "
+                "contract_bars: withheld the Open/High/Low trio on %d "
                 "row(s) with a missing or incoherent candle", int(bad.sum()),
             )
-            df.loc[bad, ["open", "high", "low"]] = None
+            df.loc[bad, ["Open", "High", "Low"]] = None
 
-    if {"ticker", "contract_month", "date"} <= set(df.columns):
-        df = df.drop_duplicates(subset=["ticker", "date"], keep="last")
-        df = df.sort_values(["contract_month", "date"]).reset_index(drop=True)
+    if {"ticker", "Date"}.issubset(df.columns):
+        df = df.drop_duplicates(subset=["ticker", "Date"], keep="last")
+        df = df.sort_values(["ticker", "Date"]).reset_index(drop=True)
 
     return df
 

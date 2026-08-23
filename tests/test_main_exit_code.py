@@ -75,7 +75,6 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_dce_futures": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,
-        "fetch_all_contract_history": empty_dict,
         "fetch_wasde_estimates": empty_dict,
         "fetch_all_eia": empty_dict,
         "fetch_crush_data": empty_df,
@@ -94,6 +93,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_sagis_deliveries": FetchResult.empty(),
         "fetch_sagis_supply_demand": FetchResult.empty(),
         "fetch_cec_estimates": FetchResult.empty(),
+        "fetch_all_contract_bars": empty_dict,
     }
     # #127 was a one-time fix; this makes it permanent. Any fetcher added to
     # main.py without a stub here makes a real network call (with retries) on

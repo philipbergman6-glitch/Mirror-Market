@@ -28,10 +28,10 @@ from typing import Any
 import pandas as pd
 
 from analysis.forward_curve import analyze_curve, calendar_spread
-from analysis.loaders import load_currencies, load_prices
+from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal, monthly_seasonal
-from analysis.signals import demote_near_roll_signals, detect_all_signals
+from analysis.signals import detect_all_signals, suppress_near_roll_signals
 from analysis.spreads import (
     compute_brazil_basis,
     compute_crush_spread,
@@ -569,7 +569,9 @@ def command_center() -> dict:
             key_metrics["dollar_index_date"] = _asof(dollar.iloc[-1]["Date"])
 
     # Sort signals by severity
-    all_signals = demote_near_roll_signals(all_signals)
+    all_signals = suppress_near_roll_signals(
+        all_signals, adjusted_commodities=adjusted_commodities(prices)
+    )
     severity_order = {"alert": 0, "warning": 1, "info": 2}
     all_signals.sort(key=lambda s: severity_order.get(s.get("severity", "info"), 3))
 
@@ -921,7 +923,9 @@ def technicals_analysis() -> dict:
         signals = detect_all_signals(df, leg)
         all_signals.extend(signals)
 
-    all_signals = demote_near_roll_signals(all_signals)
+    all_signals = suppress_near_roll_signals(
+        all_signals, adjusted_commodities=adjusted_commodities(prices)
+    )
     severity_order = {"alert": 0, "warning": 1, "info": 2}
     all_signals.sort(key=lambda s: severity_order.get(s.get("severity", "info"), 3))
 

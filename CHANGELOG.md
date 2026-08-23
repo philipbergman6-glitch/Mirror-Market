@@ -4,6 +4,31 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — technicals ride a named continuous series; near-roll signals suppressed (2026-08-23)
+
+A4 (#301) decided, B4 (#310) built. Three pieces. **Layer 11b
+(`contract_bars`)** captures full per-contract daily history for the nine
+curve commodities — listed contracts re-fetched daily through the
+settlement guard, recently-expired months probed once with a single
+attempt, and the table round-trips through `data/history/` because Yahoo
+delists expired symbols on no published schedule (measured: ZSN26 gone one
+month after expiry, ZSX25 still served nine months after).
+**`build_from_bars`** stitches those bars into a ratio-adjusted continuous
+series on the package's own roll rule, the roll step struck from the same
+session's two closes; a roll with no joinable session drops the older
+history with a stated reason rather than gluing.
+**`enrich_with_technicals`** (analysis/loaders) is now the one seam
+choosing the technical stack's input: the named adjusted series where it
+clears the floor, the provider frame — labelled — otherwise, with
+`df.attrs["series_kind"]` carrying provenance to every consumer.
+`demote_near_roll_signals` is gone: a provider-series technical signal
+inside the estimated roll window is **suppressed** (invariant 11), while
+signals from the adjusted series pass untouched. The dashboard technicals
+section, briefing PRICES note, chart annotation and CSV export all state
+which series they rode and name the newest bar's contract; the CBOT price
+panel labels its levels "provider front-month — contract not published".
+Layer count 31 → 32.
+
 ## Unreleased — partial bars are dropped, never filled (2026-08-23)
 
 B1 (#307) from the integrity backlog. `clean_ohlcv` and

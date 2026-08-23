@@ -72,6 +72,12 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     "india_domestic_prices": ("Date", "commodity"),
     # One full curve per fetched_date — term-structure history.
     "forward_curve": ("fetched_date", "commodity", "contract_month"),
+    # Named-contract daily bars (Layer 11b). Listed contracts self-heal by
+    # re-download, but expired ones do not: Yahoo delists old symbols on no
+    # published schedule (ZSN26 gone one month after expiry; ZSX25 still
+    # served nine months after), so an expired contract's rows here are the
+    # only copy anywhere — losing them un-builds the continuous series (A4).
+    "contract_bars": ("ticker", "Date"),
     # WA_GR101 report carries only the trailing three weeks.
     "inspections": ("commodity", "week_ending"),
     "inspection_port_flows": ("week_ending", "region", "port_area", "commodity"),

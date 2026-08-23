@@ -318,15 +318,15 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 <section id="technicals">
   <div class="sec-head"><span class="sec-no">10</span><h2>Technicals</h2><span class="why">the deep charts — candles, RSI, MACD</span></div>
   {% if technicals %}
-  <div class="alert alert-info" style="margin-bottom: 16px;">
-    Charts use the yfinance front-month series. On contract roll days the underlying contract changes, which can introduce artificial price gaps; signals within ±3 trading days of a roll are demoted to <em>info</em> severity.
-  </div>
+  {% for note in technicals.notes %}
+  <div class="alert alert-info" style="margin-bottom: 16px;">{{ note }}</div>
+  {% endfor %}
   <div class="tabs" data-tabgroup="tech">
-    {% for leg in technicals %}
-    <div class="tab{% if loop.first %} active{% endif %}" data-tab="tech-{{ loop.index }}">{{ leg.name }}</div>
+    {% for leg in technicals.legs %}
+    <div class="tab{% if loop.first %} active{% endif %}" data-tab="tech-{{ loop.index }}">{{ leg.name }}{% if leg.contract %} · {{ leg.contract }}{% endif %}</div>
     {% endfor %}
   </div>
-  {% for leg in technicals %}
+  {% for leg in technicals.legs %}
   <div class="tab-panel{% if loop.first %} active{% endif %}" data-tabpanel="tech-{{ loop.index }}">
     <div class="chart-box">{{ leg.chart_html | safe }}</div>
     {% if leg.signals %}

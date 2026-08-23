@@ -325,11 +325,13 @@ def test_the_cot_commodity_keys_are_the_same_strings_the_specs_use(conn):
 
 
 def _insert_history(conn, rows):
+    # Rows carry a human label for readability; contract_bars holds no label
+    # column (the label lives on the NamedContract), so it is dropped here.
     conn.executemany(
-        "INSERT INTO contract_history "
-        "(commodity, ticker, contract_month, label, date, close, volume, fetched_date) "
-        "VALUES (?,?,?,?,?,?,?,?)",
-        rows,
+        "INSERT INTO contract_bars "
+        "(commodity, ticker, contract_month, Date, Close, Volume, fetched_date) "
+        "VALUES (?,?,?,?,?,?,?)",
+        [row[:3] + row[4:] for row in rows],
     )
     conn.commit()
 
@@ -432,10 +434,10 @@ def test_close_history_carries_the_session_bar_when_stored_whole(conn):
     from analysis.futures.domain import spec_for
 
     conn.executemany(
-        "INSERT INTO contract_history "
-        "(commodity, ticker, contract_month, label, date, open, high, low, close, "
-        "volume, fetched_date) VALUES "
-        "('Soybeans','ZSX26.CBT','2026-11-01','Nov 2026',?,?,?,?,?,100,'2026-08-18')",
+        "INSERT INTO contract_bars "
+        '(commodity, ticker, contract_month, Date, "Open", High, Low, Close, '
+        "Volume, fetched_date) VALUES "
+        "('Soybeans','ZSX26.CBT','2026-11-01',?,?,?,?,?,100,'2026-08-18')",
         [
             ("2026-08-10", 1148.00, 1152.50, 1146.25, 1150.00),  # full bar
             ("2026-08-11", None, None, None, 1167.75),           # close only

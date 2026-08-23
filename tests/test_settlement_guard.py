@@ -266,7 +266,9 @@ def test_the_guard_sits_in_fetch_one_not_in_the_download(monkeypatch):
         {"Open": [1.0, 2.0], "High": [1.0, 2.0], "Low": [1.0, 2.0], "Close": [1.0, 2.0]},
         index=pd.DatetimeIndex([pd.Timestamp("2026-08-12"), pd.Timestamp("2026-08-13")]),
     )
-    monkeypatch.setattr(yf_module, "download_bars", lambda ticker, period=None: frame)
+    monkeypatch.setattr(
+        yf_module, "download_bars", lambda ticker, period=None, max_retries=3: frame
+    )
     monkeypatch.setattr(
         yf_module,
         "drop_unsettled_session",

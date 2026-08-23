@@ -42,8 +42,10 @@ Both adjusted forms carry that warning in
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
+
+import pandas as pd
 
 from analysis.futures.domain import (
     ContinuousSeries,
@@ -254,6 +256,216 @@ def _roll_step(snapshot, old_symbol: str, new_symbol: str, adjustment: str) -> f
     return new.price / old.price
 
 
+#: How many sessions back a roll step may be struck when the roll date
+#: itself lacks a same-session print of both contracts. Beyond this the two
+#: segments cannot be honestly joined and the older one is dropped.
+MAX_ROLL_STEP_LOOKBACK_SESSIONS = 5
+
+
+def build_from_bars(
+    bars: pd.DataFrame,
+    commodity: str,
+    *,
+    adjustment: str = "ratio",
+    roll_offset_bdays: int = DEFAULT_ROLL_OFFSET_BDAYS,
+) -> ContinuousSeries | None:
+    """Stitch a continuous series from Layer 11b's named-contract bars.
+
+    The deep-history counterpart of :func:`build_continuous`: same roll
+    rule, same adjustment vocabulary, but fed from ``contract_bars`` —
+    full daily history per named contract — instead of forward-curve
+    snapshots, so the same-session roll step is struck from two real
+    closes on (or within :data:`MAX_ROLL_STEP_LOOKBACK_SESSIONS` sessions
+    before) the roll date itself.
+
+    Honesty rules, in order:
+    - A session where the rule's assigned contract did not print is a gap,
+      never a substitution from another contract.
+    - A roll with no session where old and new front both printed cannot
+      be adjusted across; everything *before* that roll is dropped, with
+      the reason recorded in ``adjustment_note`` — a shorter honest series
+      over a longer glued one (invariant 2).
+    - Below MIN_SESSIONS the answer is None, exactly as build_continuous.
+
+    Parameters
+    ----------
+    bars : pd.DataFrame
+        Columns ``ticker`` (provider symbol, e.g. ``ZSX26.CBT``), ``Date``
+        (ISO string or datetime), ``Close``. Extra columns are ignored.
+    commodity : str
+        Key in CONTRACT_SPECS / FORWARD_CURVE_CONTRACTS.
+    """
+    if adjustment not in _ADJUSTMENT_METHODS:
+        raise ValueError(
+            f"unknown adjustment {adjustment!r}; expected one of {sorted(_ADJUSTMENT_METHODS)}"
+        )
+    if bars is None or bars.empty:
+        return None
+    spec = spec_for(commodity)
+    if spec.expiry_rule is None:
+        # No last-trade rule → no roll date → no series. Same refusal as
+        # active_contract; a calendar guessed from the delivery month is
+        # the estimate this package exists to retire.
+        return None
+
+    # date → {provider_symbol: close}
+    closes_by_date: dict[date, dict[str, float]] = {}
+    for row in bars.itertuples(index=False):
+        day = _bar_date(row.Date)
+        if day is None or row.Close is None:
+            continue
+        close_any: Any = row.Close
+        closes_by_date.setdefault(day, {})[str(row.ticker)] = float(close_any)
+
+    ordered: list[tuple[date, float, str]] = []
+    for day in sorted(closes_by_date):
+        wanted = active_contract(commodity, day, roll_offset_bdays=roll_offset_bdays)
+        if wanted is None:
+            continue
+        close = closes_by_date[day].get(wanted.provider_symbol)
+        if close is None:
+            continue  # the assigned contract did not print — a gap
+        ordered.append((day, close, wanted.provider_symbol))
+
+    if len(ordered) < MIN_SESSIONS:
+        log.info(
+            "%s: %d stitched session(s) from contract bars — below the %d-session floor",
+            commodity, len(ordered), MIN_SESSIONS,
+        )
+        return None
+
+    truncation_note = ""
+    if adjustment != "unadjusted":
+        ordered, truncation_note = _truncate_unjoinable(
+            ordered, closes_by_date, commodity
+        )
+        if len(ordered) < MIN_SESSIONS:
+            log.info(
+                "%s: %d joinable session(s) after dropping unadjustable segments — "
+                "below the %d-session floor", commodity, len(ordered), MIN_SESSIONS,
+            )
+            return None
+
+    points = _adjust_from_map(ordered, closes_by_date, adjustment)
+    roll_dates = tuple(
+        day for (day, _, symbol), (_, _, previous) in zip(ordered[1:], ordered, strict=False)
+        if symbol != previous
+    )
+    note = _ADJUSTMENT_NOTES[adjustment] + truncation_note
+    return ContinuousSeries(
+        commodity=commodity,
+        roll_method=_ADJUSTMENT_METHODS[adjustment],
+        points=points,
+        contract_by_date=tuple((day, symbol) for day, _, symbol in ordered),
+        roll_dates=roll_dates,
+        adjustment_note=note,
+    )
+
+
+def _bar_date(value: Any) -> date | None:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    try:
+        text = str(value)[:10]
+        return date.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _roll_step_from_map(
+    closes_by_date: dict[date, dict[str, float]],
+    session_dates: list[date],
+    roll_day: date,
+    old_symbol: str,
+    new_symbol: str,
+    adjustment: str,
+) -> float | None:
+    """Same-session gap between the two contracts, on the roll day or the
+    nearest earlier session (within the lookback) where both printed."""
+    position = len([d for d in session_dates if d <= roll_day])
+    candidates = session_dates[max(0, position - MAX_ROLL_STEP_LOOKBACK_SESSIONS):position]
+    for day in reversed(candidates):
+        legs = closes_by_date.get(day, {})
+        old, new = legs.get(old_symbol), legs.get(new_symbol)
+        if old is None or new is None:
+            continue
+        if adjustment == "difference":
+            return new - old
+        if old == 0:
+            return None
+        return new / old
+    return None
+
+
+def _truncate_unjoinable(
+    ordered: list[tuple[date, float, str]],
+    closes_by_date: dict[date, dict[str, float]],
+    commodity: str,
+) -> tuple[list[tuple[date, float, str]], str]:
+    """Drop everything before the newest roll that cannot be struck.
+
+    Walks backwards from the newest segment; the first roll with no
+    same-session print of both contracts (within the lookback) ends the
+    series — the older segments are dropped rather than glued unadjusted
+    onto an adjusted run.
+    """
+    session_dates = sorted(closes_by_date)
+    for position in range(len(ordered) - 1, 0, -1):
+        day, _, symbol = ordered[position]
+        _, _, previous_symbol = ordered[position - 1]
+        if symbol == previous_symbol:
+            continue
+        step = _roll_step_from_map(
+            closes_by_date, session_dates, day, previous_symbol, symbol, "ratio"
+        )
+        if step is None:
+            note = (
+                f"; history before {day.isoformat()} dropped — no session where "
+                f"{previous_symbol} and {symbol} both printed, so that roll cannot "
+                "be adjusted across"
+            )
+            log.warning("%s: %s", commodity, note.lstrip("; "))
+            return ordered[position:], note
+    return ordered, ""
+
+
+def _adjust_from_map(
+    ordered: list[tuple[date, float, str]],
+    closes_by_date: dict[date, dict[str, float]],
+    adjustment: str,
+) -> tuple[tuple[date, float], ...]:
+    """Back-adjust from the newest segment, same walk as :func:`_adjust`
+    but struck from the bars map instead of curve snapshots."""
+    if adjustment == "unadjusted":
+        return tuple((day, price) for day, price, _ in ordered)
+
+    session_dates = sorted(closes_by_date)
+    identity = 0.0 if adjustment == "difference" else 1.0
+    factors: list[float] = [identity] * len(ordered)
+    running = identity
+
+    for position in range(len(ordered) - 1, 0, -1):
+        day, _, symbol = ordered[position]
+        _, _, previous_symbol = ordered[position - 1]
+        if symbol != previous_symbol:
+            step = _roll_step_from_map(
+                closes_by_date, session_dates, day, previous_symbol, symbol, adjustment
+            )
+            # _truncate_unjoinable has already dropped any roll with no
+            # step, so step is present on every roll reached here.
+            if step is not None:
+                running = running + step if adjustment == "difference" else running * step
+        factors[position - 1] = running
+
+    factors[-1] = identity
+    return tuple(
+        (day, price + factors[position] if adjustment == "difference" else price * factors[position])
+        for position, (day, price, _) in enumerate(ordered)
+    )
+
+
 def describe_provider_series(series: ContinuousSeries | None) -> dict[str, Any]:
     """Render-ready description of a series, method first.
 
@@ -279,6 +491,8 @@ def describe_provider_series(series: ContinuousSeries | None) -> dict[str, Any]:
 
 __all__ = [
     "DEFAULT_ROLL_OFFSET_BDAYS",
+    "MAX_ROLL_STEP_LOOKBACK_SESSIONS",
+    "build_from_bars",
     "MIN_SESSIONS",
     "active_contract",
     "build_continuous",
