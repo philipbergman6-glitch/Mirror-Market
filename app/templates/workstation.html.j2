@@ -81,17 +81,21 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
 .tv-frame { padding: 12px 14px 10px; }
 .tv-stamp { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--info); }
 .tv-disclaimer { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 10px; overflow-wrap: anywhere; }
-.tv-widget { height: 420px; background: #FFFFFF; border: 1px solid #C7CFD6; border-radius: 4px; overflow: hidden; }
-.tv-widget > div, .tv-widget iframe { height: 100%; width: 100%; display: block; border: 0; }
-/* Attribution is a licence condition (invariant 9): visible, never hidden. */
-.tv-credit { font-size: 11px; margin-top: 6px; }
-.tv-credit a { color: var(--info); }
+.tv-widget { height: 452px; background: #FFFFFF; border: 1px solid #C7CFD6; border-radius: 4px; overflow: hidden; padding: 0 8px; }
+.tv-widget .tradingview-widget-container { height: 100%; }
+.tv-widget .tradingview-widget-container__widget { height: calc(100% - 32px); }
+.tv-widget iframe { width: 100%; border: 0; }
+/* TradingView's own copyright block, as their embed ships it. Attribution is
+   a licence condition (invariant 9): sized to read, never hidden. */
+.tradingview-widget-copyright { font-size: 11px; line-height: 32px; text-align: center; color: var(--text-dim); }
+.tradingview-widget-copyright a { text-decoration: none; color: var(--info); }
+.tradingview-widget-copyright .blue-text { color: var(--info); }
 .tv-toggle .chev { display: inline-block; transition: transform 0.1s; }
 .dtable tr.crow.open .tv-toggle .chev { transform: rotate(90deg); }
 .tv-failed { font-size: 12px; color: var(--bearish); padding: 12px 14px; }
 
 @media (max-width: 768px) {
-  .tv-widget { height: 320px; }
+  .tv-widget { height: 352px; }
 }
 
 /* ---- hedge ---- */
@@ -199,7 +203,7 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
         {#- No symbol, no expander: app/tradingview.py maps only venues that have
             been checked, and a chart of the wrong contract beside a right price
             is worse than no chart at all. -#}
-        <tr class="crow{% if tv %} has-tv{% endif %}"{% if tv %} data-tv-symbol="{{ tv }}"{% endif %}>
+        <tr class="crow{% if tv %} has-tv{% endif %}">
           <td class="sym strong">{{ leg.symbol }}
             {%- if tv %}<button type="button" class="tv-toggle" aria-expanded="false" aria-controls="tv-{{ tv|replace(":", "-") }}"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show the TradingView chart for {{ leg.symbol }}</span></button>{% endif %}</td>
           <td>{{ leg.label }}</td>
@@ -216,13 +220,25 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
         <tr class="tv-panel" id="tv-{{ tv|replace(":", "-") }}" hidden>
           <td colspan="10">
             <div class="tv-frame">
-              <div class="tv-stamp">Third party · TradingView · {{ s.data.chart_delay_note }}</div>
+              <div class="tv-stamp">{{ s.data.chart_stamp }}</div>
               <div class="tv-disclaimer">{{ s.data.chart_disclaimer }}</div>
-              {#- Empty on load. The embed script is injected on first expand, so
-                  a page with 20 contract rows ships 0 iframes, not 20. -#}
-              <div class="tv-widget" data-tv-symbol="{{ tv }}"></div>
-              <div class="tv-credit">
-                <a href="{{ leg.tradingview_url }}" rel="noopener nofollow" target="_blank">{{ tv }} chart by TradingView</a>
+              {#- The container below is TradingView's embed structure AS THEY
+                  DESIGNED IT — container, __widget mount, copyright block with
+                  their own rel attributes. Their script requires this shape
+                  (it looks the classes up and rewrites the copyright link),
+                  and their terms require the attribution left as designed, so
+                  nothing here may be renamed, restyled to invisibility, or
+                  replaced with our own credit line (invariant 9). The only
+                  deviation is lazy injection: the <script> tag their snippet
+                  places inside the container is added on first expand, so a
+                  page with 20 contract rows ships 0 iframes, not 20. -#}
+              <div class="tv-widget" data-tv-symbol="{{ tv }}">
+                <!-- TradingView Widget BEGIN -->
+                <div class="tradingview-widget-container">
+                  <div class="tradingview-widget-container__widget"></div>
+                  <div class="tradingview-widget-copyright"><a href="{{ leg.tradingview_url }}" rel="noopener nofollow" target="_blank"><span class="blue-text">{{ tv }} chart</span></a> by TradingView</div>
+                </div>
+                <!-- TradingView Widget END -->
               </div>
             </div>
           </td>
@@ -777,12 +793,15 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
   function load(widget) {
     if (widget.getAttribute('data-loaded')) return;
     widget.setAttribute('data-loaded', '1');
+    var container = widget.querySelector('.tradingview-widget-container');
     var script = document.createElement('script');
     script.src = SRC;
     script.async = true;
     script.type = 'text/javascript';
-    /* The embed script reads its own text content as configuration and
-       appends the iframe into its parent node. `allow_symbol_change` is off
+    /* The embed script reads its own text content as configuration, mounts
+       the iframe into the container it sits in, and rewrites the copyright
+       link — which is why it is injected into TradingView's own container
+       markup rather than a div of ours. `allow_symbol_change` is off
        deliberately: this frame answers "what has this contract done", and a
        reader who switched it to another symbol would be looking at a chart
        that no longer matches the row it opened from. */
@@ -799,14 +818,23 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
       support_host: 'https://www.tradingview.com'
     });
     script.onerror = function () {
-      widget.innerHTML = '';
-      var note = document.createElement('div');
-      note.className = 'tv-failed';
-      note.textContent = 'TradingView’s chart did not load. Nothing is being withheld — '
-        + 'this frame is theirs, and their script could not be reached from here.';
-      widget.appendChild(note);
+      /* Cleared so the next expand retries — a network blip at 06:00 should
+         not disable the chart for the rest of the desk day. */
+      widget.removeAttribute('data-loaded');
+      script.remove();
+      var note = widget.querySelector('.tv-failed');
+      if (!note) {
+        note = document.createElement('div');
+        note.className = 'tv-failed';
+        note.textContent = 'TradingView’s chart did not load. Nothing is being withheld — '
+          + 'this frame is theirs, and their script could not be reached from here. '
+          + 'Close and reopen the row to retry.';
+        widget.insertBefore(note, container);
+      }
     };
-    widget.appendChild(script);
+    var note = widget.querySelector('.tv-failed');
+    if (note) note.remove();
+    container.appendChild(script);
   }
 
   function close(row) {
@@ -820,9 +848,11 @@ tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(-
   function toggle(row) {
     var panel = row.nextElementSibling;
     if (!panel || !panel.classList.contains('tv-panel')) return;
-    var table = row.closest('table');
     var opening = panel.hidden;
-    each(table.querySelectorAll('tr.crow.open'), close);
+    /* One open at a time across the WHOLE page, not per table — the section
+       renders one table per commodity, and "one at a time" scoped per table
+       would let beans, meal and oil each hold a live third-party frame. */
+    each(document.querySelectorAll('tr.crow.open'), close);
     if (!opening) return;
     load(panel.querySelector('.tv-widget'));
     panel.hidden = false;

@@ -92,7 +92,7 @@ from analysis.futures.privacy import (
 from analysis.futures.providers import SqliteQuoteProvider, describe_provider, open_provider
 from analysis.futures.ticket import build_ticket
 from app.tradingview import (
-    TRADINGVIEW_DELAY_NOTE,
+    TRADINGVIEW_STAMP,
     tradingview_symbol,
     tradingview_url,
 )
@@ -461,14 +461,15 @@ def _contracts_section(curves: dict[str, CurveAnalysis]) -> dict[str, Any]:
         ))
     return _section("contracts", state=STATE_OK, data={
         "commodities": rows,
-        # The words that frame the embedded chart. They live here, with every
-        # other label on this page, so the template decides nothing about what
-        # a reader is being shown.
-        "chart_delay_note": TRADINGVIEW_DELAY_NOTE,
+        # The words that frame the embedded chart — both lines, whole. They
+        # live here, with every other label on this page, so the template
+        # decides nothing about what a reader is being shown.
+        "chart_stamp": TRADINGVIEW_STAMP,
         "chart_disclaimer": (
             "The prices in the table above are this project's own delayed closes, on the "
             "timestamps shown. The chart below is TradingView's, on their data and their "
-            "timing — not our observation, not a settlement, and not routable."
+            "timing — not our observation, not a settlement, and not routable. Expanding "
+            "a row requests it from TradingView's servers."
         ),
     })
 

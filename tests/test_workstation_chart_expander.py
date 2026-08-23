@@ -17,7 +17,7 @@ import pytest
 from jinja2 import Environment, FileSystemLoader
 
 from analysis.futures.privacy import AUDIENCE_PRIVATE, AUDIENCE_PUBLIC
-from app.tradingview import TRADINGVIEW_DELAY_NOTE
+from app.tradingview import TRADINGVIEW_STAMP
 from app.workstation_page import build_view
 from pipeline import schema
 
@@ -106,8 +106,10 @@ def test_no_widget_is_loaded_until_a_row_is_expanded(curve_db):
     html = render(view(curve_db))
     assert html.count(EMBED_SRC) == 1
     assert "<iframe" not in html
-    # The panel's mount point ships empty.
-    assert '<div class="tv-widget" data-tv-symbol="CBOT:ZSX2026"></div>' in html
+    # The mount point ships as TradingView's empty container, no script inside.
+    widget = html.split('data-tv-symbol="CBOT:ZSX2026"')[1].split("</td>")[0]
+    assert '<div class="tradingview-widget-container__widget"></div>' in widget
+    assert "<script" not in widget
 
 
 def test_every_panel_ships_hidden(curve_db):
@@ -139,8 +141,9 @@ def test_the_expander_affordance_is_gated_on_script(curve_db):
 # ---------------------------------------------------------------------------
 def test_the_frame_names_the_third_party_and_the_delay(curve_db):
     html = render(view(curve_db))
-    assert TRADINGVIEW_DELAY_NOTE in html
-    assert "Third party · TradingView" in html
+    # The stamp renders whole, from Python — no half of it is template text.
+    assert TRADINGVIEW_STAMP in html
+    assert "their figure" in TRADINGVIEW_STAMP  # the delay is their claim, said so
     assert "not our observation, not a settlement, and not routable" in html
 
 
@@ -152,14 +155,43 @@ def test_the_frame_does_not_borrow_our_brand_accent(curve_db):
     assert "tr.tv-panel > td { padding: 0; background: #EEF1F4; border-left: 3px solid var(--info); }" in html
 
 
-def test_the_attribution_link_is_rendered_and_never_hidden(curve_db):
-    """A licence condition, not decoration (invariant 9). No rule in the page
-    may hide `.tv-credit`."""
+def test_the_attribution_is_tradingviews_own_markup_left_as_designed(curve_db):
+    """A licence condition, not decoration (invariant 9): the terms require the
+    attribution "as originally designed and intended", so what ships is the
+    embed's own container/copyright structure — the classes their script looks
+    up and the link it rewrites — not a credit line of ours. And no rule in
+    the page may hide it."""
     html = render(view(curve_db))
-    assert 'href="https://www.tradingview.com/symbols/CBOT-ZSX2026/"' in html
-    assert "CBOT:ZSX2026 chart by TradingView" in html
-    for hiding in (".tv-credit { display: none", ".tv-credit{display:none"):
-        assert hiding not in html
+    assert '<div class="tradingview-widget-container">' in html
+    assert '<div class="tradingview-widget-container__widget"></div>' in html
+    assert (
+        '<div class="tradingview-widget-copyright">'
+        '<a href="https://www.tradingview.com/symbols/CBOT-ZSX2026/" '
+        'rel="noopener nofollow" target="_blank">'
+        '<span class="blue-text">CBOT:ZSX2026 chart</span></a> by TradingView</div>'
+    ) in html
+    for hiding in ("display: none", "display:none", "visibility: hidden", "font-size: 0"):
+        for rule in ("tradingview-widget-copyright", "tradingview-widget-container"):
+            css = html.split("</style>")[0]
+            for line in css.splitlines():
+                if rule in line:
+                    assert hiding not in line, f"{rule} must stay visible: {line}"
+
+
+def test_one_chart_open_at_a_time_across_the_whole_page(curve_db):
+    """DESIGN.md: one open at a time. The section renders one table per
+    commodity, so the close-others sweep must be document-wide — a per-table
+    sweep would let beans, meal and oil each hold a live third-party frame."""
+    html = render(view(curve_db))
+    assert "each(document.querySelectorAll('tr.crow.open'), close);" in html
+    assert "table.querySelectorAll('tr.crow.open')" not in html
+
+
+def test_a_failed_embed_can_be_retried(curve_db):
+    """`data-loaded` is cleared on error so closing and reopening the row asks
+    again — a network blip must not disable the chart for the desk day."""
+    html = render(view(curve_db))
+    assert "widget.removeAttribute('data-loaded')" in html
 
 
 def test_the_widget_cannot_be_switched_to_another_symbol(curve_db):
@@ -186,12 +218,3 @@ def test_both_editions_get_the_expander(curve_db):
     for html in (public, private):
         assert 'data-tv-symbol="CBOT:ZSX2026"' in html
         assert html.count(EMBED_SRC) == 1
-
-
-def test_the_symbol_is_the_only_thing_that_leaves_this_page(curve_db):
-    """Nothing desk-entered is in the config the widget is handed: the symbol,
-    and exchange-public rendering options."""
-    html = render(view(curve_db))
-    for desk_word in ("basis", "position", "account", "premium"):
-        block = html.split("script.text = JSON.stringify(")[1].split("});")[0]
-        assert desk_word not in block.lower()

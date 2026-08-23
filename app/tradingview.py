@@ -34,8 +34,8 @@ from analysis.futures.domain import Exchange, NamedContract
 
 __all__ = [
     "TRADINGVIEW_ATTRIBUTION_URL",
-    "TRADINGVIEW_DELAY_NOTE",
     "TRADINGVIEW_EXCHANGES",
+    "TRADINGVIEW_STAMP",
     "tradingview_symbol",
     "tradingview_url",
 ]
@@ -48,15 +48,26 @@ TRADINGVIEW_EXCHANGES: dict[Exchange, str] = {
     Exchange.CBOT: "CBOT",
 }
 
-#: What the free widget actually shows. Stated on the frame, in these words,
-#: because the surrounding numbers carry an honest-timestamp claim and the
-#: reader must be able to tell which is which.
-TRADINGVIEW_DELAY_NOTE = "approximately 10-minute delayed exchange data"
+#: The frame's stamp line, whole, in Python — the template renders it verbatim
+#: and composes none of it, because the surrounding numbers carry an
+#: honest-timestamp claim and no wording that separates ours from theirs may
+#: be decided in markup. The delay figure is **TradingView's own claim** about
+#: their free CBOT feed, and the stamp says so: this project has not measured
+#: it, and `LATENCY.md` owns the vocabulary for ages we assert ourselves.
+TRADINGVIEW_STAMP = (
+    "Third party · TradingView · delayed exchange data (~10 min, their figure)"
+)
 
-#: Attribution is a licence condition, not decoration: TradingView's terms
-#: permit free embedding only with the attribution the generated widget ships
-#: with, left as designed. The template renders this link visibly and no CSS
-#: in this project hides it (invariant 9 — publishing is the gate).
+#: Attribution is a licence condition, not decoration. TradingView's Terms of
+#: Use (https://www.tradingview.com/policies/, read 2026-08-23) bar using
+#: their widgets off-site without attribution and require it kept "as
+#: originally designed and intended" — so the template ships the embed's own
+#: ``tradingview-widget-container`` / ``tradingview-widget-copyright`` markup,
+#: whose classes their script (s3.tradingview.com/external-embedding/
+#: embed-widget-advanced-chart.js, inspected the same day) looks up and whose
+#: link it rewrites. No CSS in this project hides or shrinks it (invariant 9 —
+#: publishing is the gate). This URL is that copyright link's target, the
+#: symbol's public page.
 TRADINGVIEW_ATTRIBUTION_URL = "https://www.tradingview.com/symbols/{slug}/"
 
 
