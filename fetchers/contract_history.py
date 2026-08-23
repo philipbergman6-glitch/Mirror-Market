@@ -4,8 +4,8 @@ Layer 11b — per-contract daily close history via yfinance (#332).
 Layer 11 stores one curve snapshot per run, so a contract's stored history
 only reaches back to the day snapshots began (2026-07-30). This layer asks
 Yahoo for each active contract's *own* daily series — months of session
-closes per named month — which is what the workstation's contract-row chart
-draws.
+bars (open/high/low/close, volume) per named month — which is what the
+workstation's contract-row chart draws.
 
 Why this is a separate layer rather than a deeper Layer 11 fetch: the curve
 is a one-session snapshot with a single-observation-date rule; a history is
@@ -54,7 +54,7 @@ def fetch_contract_history(commodity: str, today: date | None = None) -> pd.Data
 
     Returns a long frame — one row per (ticker, session) — with columns:
     ticker, contract_month (ISO first-of-month), label, date (ISO session),
-    close, volume. Empty frame when no contract answered.
+    open, high, low, close, volume. Empty frame when no contract answered.
     """
     spec = FORWARD_CURVE_CONTRACTS[commodity]
     contracts = _build_contract_tickers(
@@ -70,16 +70,25 @@ def fetch_contract_history(commodity: str, today: date | None = None) -> pd.Data
             # either way the absence is the answer, not an error.
             logger.info("%s: no bars returned — expired or delisted", ticker)
             continue
+        def _optional(column: str, frame: pd.DataFrame = bars):
+            # Absent stays absent (invariant 2): a bar Yahoo served without
+            # an Open is stored as NULL, and the cleaner withholds the whole
+            # candle trio rather than letting three-quarters of one render.
+            return (
+                frame[column].to_numpy() if column in frame.columns
+                else [None] * len(frame)
+            )
+
         frames.append(pd.DataFrame({
             "ticker": ticker,
             "contract_month": contract["contract_month"].isoformat(),
             "label": contract["label"],
             "date": [pd.Timestamp(ts).strftime("%Y-%m-%d") for ts in bars.index],
+            "open": _optional("Open"),
+            "high": _optional("High"),
+            "low": _optional("Low"),
             "close": bars["Close"].to_numpy(),
-            "volume": (
-                bars["Volume"].to_numpy() if "Volume" in bars.columns
-                else [None] * len(bars)
-            ),
+            "volume": _optional("Volume"),
         }))
     if not frames:
         logger.warning("%s: no contract returned any history", commodity)

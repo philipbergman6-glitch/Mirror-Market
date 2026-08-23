@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import sys
 import time
 import traceback
@@ -60,6 +61,14 @@ log = logging.getLogger(__name__)
 
 OUTPUT_DIR = PROJECT_ROOT / "docs"
 TEMPLATE_DIR = PROJECT_ROOT / "app" / "templates"
+
+# Static files shipped verbatim beside the pages. Today: the vendored
+# lightweight-charts bundle (TradingView's Apache-2.0 charting library — the
+# workstation's contract-row chart draws OUR stored data with it, at view
+# time, with no request leaving the page) and its licence text. Everything
+# here must also appear in `trust.site_promotion.PUBLISHED_ASSETS`, or the
+# promotion gate will treat a build that lost one as complete.
+ASSETS_SOURCE_DIR = PROJECT_ROOT / "app" / "assets"
 
 # Per-page size budget (M8). docs/index.html is ~7 MB of inline Plotly series
 # today; M2 moves most of that onto the CBOT page, so the budget is what stops
@@ -128,6 +137,22 @@ def _tombstone(output_dir: Path, relpath: str, page_name: str, error: str, nav: 
         generated_at_iso=now.isoformat(),
     )
     return _write(output_dir, relpath, html)
+
+
+def _copy_assets(output_dir: Path) -> None:
+    """Ship ``app/assets/`` verbatim to ``<output>/assets/``.
+
+    A missing bundle is not a broken build — the inline SVG fallback still
+    draws — but it IS a missing published asset, and the promotion contract
+    fails the candidate rather than promoting a site whose charts silently
+    lost their renderer.
+    """
+    target = output_dir / "assets"
+    target.mkdir(parents=True, exist_ok=True)
+    for source in sorted(ASSETS_SOURCE_DIR.iterdir()):
+        if source.is_file():
+            shutil.copy2(source, target / source.name)
+            log.info("copied asset %s (%.0f KB)", source.name, source.stat().st_size / 1024)
 
 
 def nav_items_at(nav: list[dict], root: str) -> list[dict]:
@@ -357,6 +382,11 @@ def _write_private_workstation(ctx, now, render) -> None:
         # sit inside docs/, so its relative links back to the public site would
         # be wrong at any depth.
         target.write_text(render(view, ""), encoding="utf-8")
+        # The desk file opens from data/workspace/ (file:// or otherwise), so
+        # the chart bundle must sit beside it — the docs/ copy is unreachable
+        # from there, and without this the desk edition silently draws the
+        # SVG fallback forever.
+        _copy_assets(private_dir)
         log.info("wrote the private workstation edition to %s", target)
     except Exception:  # noqa: BLE001 — the workspace must never fail the site
         log.warning("could not write the private workstation edition", exc_info=True)
@@ -408,6 +438,10 @@ def generate_site(
     }:
         names = ["headline", "players", "origins", "workstation", "opportunities", *markets]
         raise SystemExit(f"--only {only!r} matches no page; known: {', '.join(names)}")
+    # Assets are copied even for a --only dev build: the one page being
+    # iterated on may be the page that needs the chart bundle.
+    _copy_assets(output_dir)
+
     # One connection and one cache for every market page: eight pages x nine
     # blocks would otherwise re-read the CBOT reference leg eight times.
     ctx = SiteContext.open(today=now.date())

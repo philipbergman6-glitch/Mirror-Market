@@ -425,6 +425,40 @@ def test_close_history_freshness_belongs_to_the_series_not_each_row(conn):
     assert [quote.freshness.value for quote in stale] == ["stale", "stale"]
 
 
+def test_close_history_carries_the_session_bar_when_stored_whole(conn):
+    """The candle trio reaches the quote only complete (#332): a full row
+    yields native open/high/low plus a USD/MT bar converted through the one
+    conversion site; a close-only row and a partial trio both yield None."""
+    from analysis.futures.domain import spec_for
+
+    conn.executemany(
+        "INSERT INTO contract_history "
+        "(commodity, ticker, contract_month, label, date, open, high, low, close, "
+        "volume, fetched_date) VALUES "
+        "('Soybeans','ZSX26.CBT','2026-11-01','Nov 2026',?,?,?,?,?,100,'2026-08-18')",
+        [
+            ("2026-08-10", 1148.00, 1152.50, 1146.25, 1150.00),  # full bar
+            ("2026-08-11", None, None, None, 1167.75),           # close only
+            ("2026-08-12", 1160.00, None, 1158.00, 1163.50),     # partial (hand-edited)
+        ],
+    )
+    conn.commit()
+    quotes = open_provider(conn).close_history(_november_beans(), as_of=AS_OF)
+    full, close_only, partial = quotes
+    assert (full.session_open, full.session_high, full.session_low) == (
+        1148.00, 1152.50, 1146.25,
+    )
+    spec = spec_for("Soybeans")
+    assert full.session_bar_usd_per_mt == (
+        spec.native_to_usd_per_mt(1148.00),
+        spec.native_to_usd_per_mt(1152.50),
+        spec.native_to_usd_per_mt(1146.25),
+    )
+    for quote in (close_only, partial):
+        assert quote.session_open is None
+        assert quote.session_bar_usd_per_mt is None
+
+
 def test_trusted_provider_delegates_close_history_to_its_fallback(conn):
     from analysis.futures.trusted_provider import TrustedNamedContractProvider
 

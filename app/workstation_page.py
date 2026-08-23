@@ -455,19 +455,41 @@ def _close_history(
     belongs to, so a weekend re-fetch of Friday's close is one point, not
     two. The stamp says when the record starts rather than letting a short
     axis imply a long one.
+
+    Where the dedicated series carries full session bars (open/high/low
+    beside the close, all-or-nothing by the Layer 11b cleaner), the payload
+    also ships candles and volumes in USD/MT, and the ``regime`` key tells
+    the renderer which honest drawing the data supports: ``candles``,
+    ``line``, ``dots`` or ``withheld``. The threshold decision is made here,
+    once — the page script draws what it is told and decides nothing.
     """
     by_session: dict[str, float] = {}
     for observation in history:  # oldest first; later snapshots win a session
         quote = observation.leg(leg.contract.symbol)
         if quote is not None:
             by_session[quote.observation_date.isoformat()] = round(quote.usd_per_mt, 2)
+    candles: list[list[Any]] = []
+    volumes: list[list[Any]] = []
     for quote in series:  # oldest first; the per-contract layer wins a session
-        by_session[quote.observation_date.isoformat()] = round(quote.usd_per_mt, 2)
+        session = quote.observation_date.isoformat()
+        by_session[session] = round(quote.usd_per_mt, 2)
+        bar = quote.session_bar_usd_per_mt
+        if bar is not None:
+            bar_open, bar_high, bar_low = bar
+            candles.append([
+                session, round(bar_open, 2), round(bar_high, 2),
+                round(bar_low, 2), by_session[session],
+            ])
+            if quote.volume is not None:
+                volumes.append([session, int(quote.volume)])
     points = sorted(by_session.items())
     count = len(points)
     if count < CHART_MIN_POINTS:
         return {
             "points": [],
+            "candles": [],
+            "volumes": [],
+            "regime": "withheld",
             "count": count,
             "since": None,
             "stamp": "",
@@ -477,14 +499,30 @@ def _close_history(
                 "above already carries it"
             ),
         }
-    since = date.fromisoformat(points[0][0])
+    # One place decides how the history may be drawn; the renderer obeys.
+    # Candles need the full bars and enough of them to read as a series;
+    # closes alone join into a line at the same threshold (M21's rule), and
+    # below it they stay dots — a line through sparse prints asserts a path
+    # nobody observed.
+    if len(candles) >= CHART_LINE_MIN_POINTS:
+        regime = "candles"
+        shown, what = len(candles), "delayed session bars"
+        first = candles[0][0]
+    else:
+        regime = "line" if count >= CHART_LINE_MIN_POINTS else "dots"
+        shown, what = count, "delayed daily closes"
+        first = points[0][0]
+    since = date.fromisoformat(first)
     return {
         "points": [[session, close] for session, close in points],
-        "count": count,
-        "since": points[0][0],
+        "candles": candles if regime == "candles" else [],
+        "volumes": volumes if regime == "candles" else [],
+        "regime": regime,
+        "count": shown,
+        "since": first,
         "stamp": (
-            "Our data · delayed daily closes · USD/MT · "
-            f"history since {since.strftime('%-d %b %Y')} ({count} sessions)"
+            f"Our data · {what} · USD/MT · "
+            f"history since {since.strftime('%-d %b %Y')} ({shown} sessions)"
         ),
         "withheld_reason": "",
     }
@@ -570,13 +608,13 @@ def _contracts_section(
         "chart_stamp": THIRD_PARTY_STAMP,
         "chart_disclaimer": (
             "Everything above the rule is this project's own stored data, on our "
-            "timestamps. "
+            "timestamps, drawn in the page by an open-source charting library served "
+            "from this site — no third-party data renders here and nothing is "
+            "requested from anywhere. "
             "The links below open this contract month on TradingView's and Barchart's "
             "own sites — their data, their timing, entirely on their pages: not our "
-            "observation, not a settlement, and not routable. Nothing third-party "
-            "renders here."
+            "observation, not a settlement, and not routable."
         ),
-        "chart_line_min_points": CHART_LINE_MIN_POINTS,
     })
 
 

@@ -711,12 +711,13 @@ def save_contract_history(commodity: str, df: pd.DataFrame):
     df["date"] = _date(df["date"])
     df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     df = _str_cols(df, "ticker", "contract_month", "label")
-    if "volume" not in df.columns:
-        df["volume"] = None
+    for optional in ("open", "high", "low", "volume"):
+        if optional not in df.columns:
+            df[optional] = None
     _save(
         "contract_history",
         df[["commodity", "ticker", "contract_month", "label", "date",
-            "close", "volume", "fetched_date"]],
+            "open", "high", "low", "close", "volume", "fetched_date"]],
         ["ticker", "date"],
         f"contract_history/{commodity}",
     )

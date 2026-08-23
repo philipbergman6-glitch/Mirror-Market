@@ -899,6 +899,13 @@ class ContractQuote:
     volume: float | None = None      # None means "the provider did not say"
     open_interest: float | None = None
     session_timestamp: datetime | None = None
+    #: The session's bar around the close, in native units. Nullable as a
+    #: trio — the Layer 11b cleaner keeps all three or none, because a candle
+    #: with an invented leg is worse than a close alone (invariant 2). Only
+    #: `close_history` fills these; a curve-snapshot quote never carries them.
+    session_open: float | None = None
+    session_high: float | None = None
+    session_low: float | None = None
 
     def __post_init__(self) -> None:
         if self.price is None:
@@ -915,6 +922,23 @@ class ContractQuote:
     @property
     def usd_per_mt(self) -> float:
         return self.contract.spec.native_to_usd_per_mt(self.price)
+
+    @property
+    def session_bar_usd_per_mt(self) -> tuple[float, float, float] | None:
+        """(open, high, low) in USD/MT, or None when the trio is absent.
+
+        Same conversion site as :attr:`usd_per_mt` — the spec's
+        ``native_to_usd_per_mt`` — applied to each leg of the bar, so a
+        candle and its close can never disagree about the exchange of units.
+        """
+        if self.session_open is None or self.session_high is None or self.session_low is None:
+            return None
+        convert = self.contract.spec.native_to_usd_per_mt
+        return (
+            convert(self.session_open),
+            convert(self.session_high),
+            convert(self.session_low),
+        )
 
     @property
     def contract_value_usd(self) -> float:

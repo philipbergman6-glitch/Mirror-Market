@@ -227,19 +227,39 @@ def test_the_chart_json_ships_in_the_panel_and_is_drawn_locally(curve_db):
     html = render(view(curve_db))
     panel = panel_markup(html, "CBOT:ZSX2026")
     assert 'data-symbol="ZSX26"' in panel
-    payload = panel.split('<script type="application/json">')[1].split("</script>")[0]
-    assert len(json.loads(payload)) == len(ZSX26_SESSIONS)
+    payload = json.loads(
+        panel.split('<script type="application/json">')[1].split("</script>")[0]
+    )
+    assert len(payload["points"]) == len(ZSX26_SESSIONS)
+    assert payload["candles"] == []  # snapshots carry closes, never bars
     # Drawn by the page's own script on first expand — from this JSON, not a fetch.
     assert "draw(panel.querySelector('.tv-chart'))" in html
     assert "insertAdjacentHTML" in html
 
 
 def test_a_sparse_series_is_dots_never_a_joined_line(curve_db):
-    """Under 8 observations no polyline (the ledger's M21 rule): a line
-    through the holes of a thin history asserts a path nobody observed."""
+    """Under 8 observations no joined line (the ledger's M21 rule): a line
+    through the holes of a thin history asserts a path nobody observed. The
+    server decides the regime once; both renderers obey it."""
     html = render(view(curve_db))
-    assert 'data-line-min="8"' in html
-    assert "points.length >= lineMin" in html
+    panel = panel_markup(html, "CBOT:ZLZ2026")     # 3 sessions
+    assert 'data-regime="dots"' in panel
+    assert "regime !== 'dots'" in html             # the SVG's polyline gate
+    assert "pointMarkersVisible: regime === 'dots'" in html
+    assert "data-line-min" not in html             # the client re-derives nothing
+
+
+def test_the_renderer_is_our_own_vendored_bundle_with_an_svg_fallback(curve_db):
+    """#332: the chart is drawn by the vendored lightweight-charts bundle —
+    TradingView's Apache-2.0 code served from THIS site, never their servers
+    or their data — and the inline SVG remains the no-bundle fallback."""
+    html = render(view(curve_db))
+    assert '<script src="assets/lightweight-charts.standalone.production.js">' in html
+    # Served from our origin: no CDN, no tradingview.com host anywhere near it.
+    assert "unpkg.com" not in html
+    assert "cdn.jsdelivr.net" not in html
+    assert "window.LightweightCharts" in html      # feature-gated, not assumed
+    assert "drawSvg(chart, data.points, regime)" in html
 
 
 def test_a_dots_regime_series_still_ships_its_points(curve_db):
@@ -368,6 +388,114 @@ def test_the_dedicated_series_wins_a_session_both_sources_hold(curve_db):
     assert points["2026-08-19"] == expected
     # And the merge never duplicates the session.
     assert leg["close_history"]["count"] == len(ZSX26_SESSIONS)
+
+
+def _insert_bars(conn, commodity, month, label, ticker, bars):
+    """Layer 11b rows WITH the candle trio: (session, open, high, low, close)."""
+    conn.executemany(
+        "INSERT INTO contract_history "
+        "(commodity, ticker, contract_month, label, date, open, high, low, close, "
+        "volume, fetched_date) VALUES (?,?,?,?,?,?,?,?,?,4210,'2026-08-19')",
+        [
+            (commodity, ticker, month, label, session, o, h, low, close)
+            for session, o, h, low, close in bars
+        ],
+    )
+    conn.commit()
+
+
+ZSF27_FULL_BARS = [
+    (f"2026-08-{day:02d}", 1150.0 + day, 1156.0 + day, 1148.0 + day, 1153.0 + day)
+    for day in (3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18)
+]
+
+
+def test_full_bars_lift_the_leg_into_the_candle_regime(curve_db):
+    """With the trio stored, the payload carries candles and volumes, the
+    stamp says bars, and the count is the candle count — the record actually
+    being drawn, not a larger one implied."""
+    _insert_bars(
+        curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", ZSF27_FULL_BARS,
+    )
+    history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    assert history["regime"] == "candles"
+    assert len(history["candles"]) == len(ZSF27_FULL_BARS)
+    assert len(history["volumes"]) == len(ZSF27_FULL_BARS)
+    assert history["count"] == len(ZSF27_FULL_BARS)
+    assert history["since"] == "2026-08-03"
+    assert "delayed session bars" in history["stamp"]
+    html = render(view(curve_db))
+    assert 'data-regime="candles"' in panel_markup(html, "CBOT:ZSF2027")
+
+
+def test_candles_are_usd_per_mt_via_the_one_conversion_site(curve_db):
+    """Every leg of the bar converts through the contract spec (invariant 7),
+    so a candle and the close column can never disagree about units."""
+    _insert_bars(
+        curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", ZSF27_FULL_BARS,
+    )
+    history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    convert = spec_for("Soybeans").native_to_usd_per_mt
+    session, o, h, low, close = ZSF27_FULL_BARS[0]
+    assert history["candles"][0] == [
+        session, round(convert(o), 2), round(convert(h), 2),
+        round(convert(low), 2), round(convert(close), 2),
+    ]
+
+
+def test_closes_without_bars_stay_a_line_never_fake_candles(curve_db):
+    """Snapshot-fed ZSX26 has nine closes and no trio: a candle regime here
+    would require inventing three numbers per session (invariant 2)."""
+    history = leg_for(view(curve_db), "ZSX26")["close_history"]
+    assert history["regime"] == "line"
+    assert history["candles"] == []
+    assert "delayed daily closes" in history["stamp"]
+
+
+def test_a_hand_edited_partial_trio_never_reaches_a_quote(curve_db):
+    """The cleaner enforces all-or-nothing; the read path re-checks, so a row
+    edited straight in the database cannot smuggle a partial candle out."""
+    curve_db.execute(
+        "INSERT INTO contract_history "
+        "(commodity, ticker, contract_month, label, date, open, high, low, close, "
+        "volume, fetched_date) VALUES ('Soybeans','ZSF27.CBT','2027-01-01',"
+        "'Jan 2027','2026-08-18',1160.0,NULL,1150.0,1155.0,4210,'2026-08-19')"
+    )
+    curve_db.commit()
+    _insert_bars(
+        curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT",
+        ZSF27_FULL_BARS[:-1],  # 11 full bars; the 12th session is the partial
+    )
+    history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    sessions = [candle[0] for candle in history["candles"]]
+    assert "2026-08-18" not in sessions          # no candle from a partial trio
+    assert dict(history["points"])["2026-08-18"]  # its close still charts
+
+
+def test_the_bundle_ships_with_the_site_and_the_contract_requires_it():
+    """The vendored renderer and its licence exist in app/assets/, are copied
+    beside the pages, and are in PUBLISHED_ASSETS — a build that lost them
+    must fail promotion, not publish silently degraded charts."""
+    from pathlib import Path
+
+    from scripts.generate_site import ASSETS_SOURCE_DIR, _copy_assets
+    from trust.site_promotion import PUBLISHED_ASSETS
+
+    bundle = "assets/lightweight-charts.standalone.production.js"
+    licence = "assets/LICENSE.lightweight-charts"
+    assert bundle in PUBLISHED_ASSETS and licence in PUBLISHED_ASSETS
+    for name in (bundle, licence):
+        source = ASSETS_SOURCE_DIR / Path(name).name
+        assert source.is_file(), f"missing vendored file: {source}"
+    header = (ASSETS_SOURCE_DIR / Path(bundle).name).read_text(encoding="utf-8")[:400]
+    assert "Apache License 2.0" in header  # redistribution keeps the notice
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        _copy_assets(Path(tmp))
+        assert (Path(tmp) / bundle).is_file()
+        assert (Path(tmp) / licence).is_file()
 
 
 def test_a_leg_with_neither_source_is_still_withheld_with_a_reason(curve_db):

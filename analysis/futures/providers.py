@@ -302,7 +302,8 @@ class SqliteQuoteProvider:
         if not self._has_table("contract_history"):
             return ()
         rows = list(self.conn.execute(
-            "SELECT date, close, volume, fetched_date FROM contract_history "
+            "SELECT date, close, volume, fetched_date, open, high, low "
+            "FROM contract_history "
             "WHERE commodity = ? AND contract_month = ? AND date <= ? "
             "ORDER BY date DESC LIMIT ?",
             (
@@ -321,10 +322,14 @@ class SqliteQuoteProvider:
         newest = _as_date(rows[0][0]) if rows else None
         freshness, _ = _freshness(newest, as_of, max_age)
         quotes: list[ContractQuote] = []
-        for raw_date, close, volume, raw_fetched in reversed(rows):
+        for raw_date, close, volume, raw_fetched, bar_open, bar_high, bar_low in reversed(rows):
             day = _as_date(raw_date)
             if day is None or close is None:
                 continue
+            # The cleaner already enforced all-or-nothing on the trio; the
+            # re-check here means a hand-edited row cannot smuggle a partial
+            # candle past the read path.
+            has_bar = bar_open is not None and bar_high is not None and bar_low is not None
             quotes.append(ContractQuote(
                 contract=contract,
                 price=float(close),
@@ -334,6 +339,9 @@ class SqliteQuoteProvider:
                 freshness=freshness,
                 fetched_date=_as_date(raw_fetched),
                 volume=None if volume is None else float(volume),
+                session_open=float(bar_open) if has_bar else None,
+                session_high=float(bar_high) if has_bar else None,
+                session_low=float(bar_low) if has_bar else None,
             ))
         return tuple(quotes)
 

@@ -219,6 +219,9 @@ CREATE TABLE IF NOT EXISTS contract_history (
     contract_month TEXT NOT NULL,
     label          TEXT,
     date           TEXT NOT NULL,
+    open           REAL,
+    high           REAL,
+    low            REAL,
     close          REAL,
     volume         REAL,
     fetched_date   TEXT NOT NULL,
@@ -229,7 +232,9 @@ CREATE TABLE IF NOT EXISTS contract_history (
 # workstation's contract-row chart reads. Unlike forward_curve, whose rows
 # are one-session snapshots keyed by fetched_date, this is a self-healing
 # series: every run re-downloads each active contract's whole history, so
-# fetched_date records provenance, not identity.
+# fetched_date records provenance, not identity. open/high/low are nullable
+# as a trio (the cleaner keeps all three or none — a partial candle would be
+# an invented one); close is the row's reason to exist.
 
 _CREATE_WASDE = """
 CREATE TABLE IF NOT EXISTS wasde (

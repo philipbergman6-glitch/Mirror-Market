@@ -42,7 +42,10 @@ def test_each_contract_contributes_its_own_sessions(monkeypatch):
         "ZSU26.CBT": _bars(["2026-08-11"], [1150.25]),
     })
     df = ch.fetch_contract_history("Soybeans", today=NOW)
-    assert list(df.columns) == ["ticker", "contract_month", "label", "date", "close", "volume"]
+    assert list(df.columns) == [
+        "ticker", "contract_month", "label", "date",
+        "open", "high", "low", "close", "volume",
+    ]
     assert len(df) == 3
     aug = df[df["ticker"] == "ZSQ26.CBT"]
     assert list(aug["date"]) == ["2026-08-10", "2026-08-11"]
@@ -85,6 +88,48 @@ def test_fetch_all_iterates_the_config_roster_and_skips_empty(monkeypatch):
     # Soybean Oil answered nothing on any ticker → absent, not an empty frame:
     # keys_returned must reflect what actually came back.
     assert list(out) == ["Soybeans"]
+
+
+def test_a_full_bar_ships_and_a_missing_one_stays_absent(monkeypatch):
+    """Yahoo's OHLC ride along when served; a frame without them yields NULL
+    columns, never zeros — absence stays absence (invariant 2)."""
+    with_ohlc = _bars(["2026-08-11"], [1150.25])
+    with_ohlc["Open"] = [1148.00]
+    with_ohlc["High"] = [1151.50]
+    with_ohlc["Low"] = [1147.25]
+    _patch_fetch(monkeypatch, {
+        "ZSQ26.CBT": with_ohlc,
+        "ZSU26.CBT": _bars(["2026-08-11"], [1150.25]),  # Close/Volume only
+    })
+    df = ch.fetch_contract_history("Soybeans", today=NOW)
+    aug = df[df["ticker"] == "ZSQ26.CBT"].iloc[0]
+    assert (aug["open"], aug["high"], aug["low"]) == (1148.00, 1151.50, 1147.25)
+    sep = df[df["ticker"] == "ZSU26.CBT"].iloc[0]
+    assert sep["open"] is None and sep["high"] is None and sep["low"] is None
+
+
+def test_clean_withholds_an_incoherent_candle_but_keeps_its_close():
+    """A bar whose high sits below its low (or whose close escapes its own
+    range) is an impossible candle: the trio is withheld, the validated close
+    survives — a partial candle drawn anyway would be an invented one."""
+    df = pd.DataFrame({
+        "ticker": ["ZSX26.CBT"] * 3,
+        "contract_month": ["2026-11-01"] * 3,
+        "label": ["Nov 2026"] * 3,
+        "date": ["2026-08-10", "2026-08-11", "2026-08-12"],
+        "open": [1148.0, 1160.0, None],
+        "high": [1151.0, 1155.0, 1160.0],   # 08-11: high < low
+        "low": [1147.0, 1158.0, 1150.0],    # 08-12: open missing
+        "close": [1150.0, 1160.0, 1155.0],
+        "volume": [100, 200, 300],
+    })
+    cleaned = clean_contract_history(df)
+    assert list(cleaned["close"]) == [1150.0, 1160.0, 1155.0]
+    good = cleaned[cleaned["date"] == "2026-08-10"].iloc[0]
+    assert (good["open"], good["high"], good["low"]) == (1148.0, 1151.0, 1147.0)
+    for session in ("2026-08-11", "2026-08-12"):
+        row = cleaned[cleaned["date"] == session].iloc[0]
+        assert pd.isna(row["open"]) and pd.isna(row["high"]) and pd.isna(row["low"])
 
 
 def test_clean_drops_nonpositive_closes_and_duplicate_sessions():

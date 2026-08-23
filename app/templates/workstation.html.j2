@@ -85,6 +85,13 @@ tr.tv-panel > td { padding: 0; }
 .tv-our-stamp { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--green); }
 .tv-withheld { font-size: 12px; color: var(--text-muted); padding: 6px 0 2px; overflow-wrap: anywhere; }
 .tv-chart { margin-top: 8px; }
+/* The interactive chart (#332): our stored bars drawn by the vendored
+   lightweight-charts bundle (TradingView's Apache-2.0 library, served from
+   this site's own assets/ — code, never data). A fixed height because the
+   library fills its container; the inline-SVG path below stays as the
+   fallback when the bundle is absent or fails, so the panel never goes
+   chartless with data in hand. */
+.tv-lw { height: 240px; margin-top: 8px; }
 .tv-svg { width: 100%; height: auto; display: block; }
 .tv-svg .ax { stroke: var(--rule); stroke-width: 1; }
 .tv-svg .lbl { font-family: var(--mono); font-size: 9px; fill: var(--text-dim); text-anchor: end; }
@@ -232,7 +239,11 @@ tr.tv-panel > td { padding: 0; }
             <div class="tv-ours">
               {%- if leg.close_history.points %}
               <div class="tv-our-stamp">{{ leg.close_history.stamp }}</div>
-              <div class="tv-chart" data-symbol="{{ leg.symbol }}" data-line-min="{{ s.data.chart_line_min_points }}"><script type="application/json">{{ leg.close_history.points|tojson }}</script></div>
+              {#- The regime is decided in app/workstation_page.py, once:
+                  candles need full bars, sparse closes stay dots, and the
+                  script draws what it is told rather than re-deriving the
+                  thresholds. -#}
+              <div class="tv-chart" data-symbol="{{ leg.symbol }}" data-regime="{{ leg.close_history.regime }}"><script type="application/json">{{ {"points": leg.close_history.points, "candles": leg.close_history.candles, "volumes": leg.close_history.volumes}|tojson }}</script></div>
               {%- else %}
               <div class="tv-withheld">{{ leg.close_history.withheld_reason }}</div>
               {%- endif %}
@@ -781,21 +792,30 @@ tr.tv-panel > td { padding: 0; }
 {% endblock %}
 
 {% block scripts %}
+{#- The vendored chart renderer (#332): TradingView's open-source
+    lightweight-charts bundle, served from THIS site's assets/ — their code
+    under Apache-2.0, never their data or their servers. If it fails to load
+    the inline-SVG fallback below still draws every chart. -#}
+<script src="{{ root }}assets/lightweight-charts.standalone.production.js"></script>
 <script>
-/* Contract-row chart expander (#320, reshaped by #328).
+/* Contract-row chart expander (#320, reshaped by #328, made interactive by
+   #332).
 
    Three things this script must keep true:
 
    * **Nothing is requested.** The panel's chart is this project's own stored
-     closes, shipped in the page as JSON and drawn as inline SVG on first
-     expand — no third-party script, no iframe, no network. The links out to
-     TradingView and Barchart are plain anchors the browser follows.
+     session bars, shipped in the page as JSON and drawn on first expand by
+     the vendored lightweight-charts bundle above (inline SVG when the bundle
+     is unavailable) — no third-party data, no iframe, no network. The links
+     out to TradingView and Barchart are plain anchors the browser follows.
    * **One at a time.** Same rule as the market-page ledger drill-down: an
      expansion under the row, never a modal, and opening one closes the last.
-   * **Sparse is drawn honestly.** Under `data-line-min` observations the
-     series is dots, never a joined line — a line through the holes of a thin
-     history asserts a path nobody observed (the ledger's M21 rule). Below two
-     points the server ships a stated reason instead of a chart. */
+   * **Sparse is drawn honestly.** The server decides `data-regime` once, in
+     app/workstation_page.py: full bars deep enough to read as a series are
+     candles; closes alone are a line; a thin history is dots, never a joined
+     line — a line through the holes asserts a path nobody observed (the
+     ledger's M21 rule). Below two points the server ships a stated reason
+     instead of a chart. This script draws what it is told. */
 (function () {
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -826,13 +846,104 @@ tr.tv-panel > td { padding: 0; }
       (withYear ? ' ' + date.getUTCFullYear() : '');
   }
 
+  function cssColor(name, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
   /* Draw once, on first expand. The data is already in the page; drawing
-     lazily just keeps a dozen collapsed rows from carrying a dozen SVGs. */
+     lazily just keeps a dozen collapsed rows from carrying a dozen charts.
+     Preferred renderer first, SVG when it is missing or throws. */
   function draw(chart) {
     if (!chart || chart.getAttribute('data-drawn')) return;
     chart.setAttribute('data-drawn', '1');
-    var points = JSON.parse(chart.querySelector('script').textContent);
-    var lineMin = parseInt(chart.getAttribute('data-line-min'), 10) || 8;
+    var data = JSON.parse(chart.querySelector('script').textContent);
+    var regime = chart.getAttribute('data-regime') || 'line';
+    if (window.LightweightCharts) {
+      try {
+        drawInteractive(chart, data, regime);
+        return;
+      } catch (err) {
+        /* fall through to the SVG — a broken bundle must not cost the chart */
+      }
+    }
+    drawSvg(chart, data.points, regime);
+  }
+
+  function drawInteractive(chart, data, regime) {
+    var symbol = chart.getAttribute('data-symbol') || '';
+    var host = document.createElement('div');
+    host.className = 'tv-lw';
+    host.setAttribute('role', 'img');
+    chart.appendChild(host);
+    var text = cssColor('--text-dim', '#6B6F66');
+    var rule = cssColor('--rule', '#D8DCD2');
+    var up = cssColor('--green', '#3D6B35');
+    var down = cssColor('--bearish', '#C23B2E');
+    var lw = LightweightCharts.createChart(host, {
+      autoSize: true,
+      layout: {
+        background: { color: 'transparent' },
+        textColor: text,
+        fontSize: 10,
+        fontFamily: getComputedStyle(host).fontFamily
+        /* The library's attribution logo is left at its default (visible):
+           the bundle is TradingView's Apache-2.0 code and the logo is the
+           attribution their licence terms ask for — same stance as the #320
+           embed's attribution, for the renderer instead of the widget. */
+      },
+      grid: { vertLines: { visible: false }, horzLines: { color: rule } },
+      rightPriceScale: { borderColor: rule },
+      timeScale: { borderColor: rule },
+      handleScroll: true,
+      handleScale: true
+    });
+    var count;
+    if (regime === 'candles' && data.candles.length) {
+      count = data.candles.length;
+      var candles = lw.addSeries(LightweightCharts.CandlestickSeries, {
+        upColor: up, downColor: down, borderVisible: false,
+        wickUpColor: up, wickDownColor: down
+      });
+      candles.setData(data.candles.map(function (c) {
+        return { time: c[0], open: c[1], high: c[2], low: c[3], close: c[4] };
+      }));
+      if (data.volumes.length) {
+        var volume = lw.addSeries(LightweightCharts.HistogramSeries, {
+          priceScaleId: '', priceFormat: { type: 'volume' },
+          color: rule, lastValueVisible: false, priceLineVisible: false
+        });
+        volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+        volume.setData(data.volumes.map(function (p) {
+          return { time: p[0], value: p[1] };
+        }));
+      }
+    } else {
+      count = data.points.length;
+      var line = lw.addSeries(LightweightCharts.LineSeries, {
+        color: up, lineWidth: 2,
+        lineVisible: regime !== 'dots',
+        pointMarkersVisible: regime === 'dots',
+        lastValueVisible: true, priceLineVisible: false
+      });
+      line.setData(data.points.map(function (p) {
+        return { time: p[0], value: p[1] };
+      }));
+    }
+    host.setAttribute('aria-label', symbol +
+      ' stored history in USD per metric ton, ' + count + ' sessions');
+    /* Candles open on the last ~six months, the way a chart terminal does —
+       500 sessions squeezed into one screen renders a far-dated month's
+       $2-range bars as sub-pixel smudge. The rest of the record is a scroll
+       or pinch away; the stamp above states its true depth either way. */
+    if (regime === 'candles' && count > 130) {
+      lw.timeScale().setVisibleLogicalRange({ from: count - 126, to: count + 2 });
+    } else {
+      lw.timeScale().fitContent();
+    }
+  }
+
+  function drawSvg(chart, points, regime) {
     var lo = Infinity, hi = -Infinity;
     var coords = [];
     var from = Date.parse(points[0][0]);
@@ -868,7 +979,7 @@ tr.tv-panel > td { padding: 0; }
     each(points, function (p) {
       coords.push(x(Date.parse(p[0])) + ',' + y(p[1]));
     });
-    if (points.length >= lineMin) {
+    if (regime !== 'dots') {
       parts.push('<polyline class="ln" points="' + coords.join(' ') + '"/>');
     }
     each(points, function (p) {
@@ -895,8 +1006,12 @@ tr.tv-panel > td { padding: 0; }
        would let beans, meal and oil each hold a live third-party frame. */
     each(document.querySelectorAll('tr.crow.open'), close);
     if (!opening) return;
-    draw(panel.querySelector('.tv-chart'));
+    /* Unhide BEFORE drawing: the interactive chart sizes itself to its
+       container, and a container inside a hidden row measures zero wide —
+       the initial visible range would be computed on nothing and then reset
+       by the resize. The SVG never cared; the renderer does. */
     panel.hidden = false;
+    draw(panel.querySelector('.tv-chart'));
     row.classList.add('open');
     var chevron = row.querySelector('.tv-toggle');
     if (chevron) chevron.setAttribute('aria-expanded', 'true');

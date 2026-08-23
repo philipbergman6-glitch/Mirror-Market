@@ -425,6 +425,27 @@ def clean_contract_history(df: pd.DataFrame) -> pd.DataFrame:
     if "volume" in df.columns:
         df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
 
+    # The candle fields live or die as a trio: a bar whose open, high or low
+    # is missing, non-positive, or self-contradictory (high < low, or a close
+    # outside its own range) keeps its close and surrenders the other three —
+    # a partial or impossible candle drawn anyway would be an invented one
+    # (invariant 2). The close survives because it was validated above and is
+    # the number every other surface reads.
+    if {"open", "high", "low"} <= set(df.columns) and len(df):
+        for field in ("open", "high", "low"):
+            df[field] = pd.to_numeric(df[field], errors="coerce")
+        bad = ~(
+            (df["open"] > 0) & (df["high"] > 0) & (df["low"] > 0)
+            & (df["high"] >= df["low"])
+            & (df["close"] >= df["low"]) & (df["close"] <= df["high"])
+        )
+        if bad.any():
+            logger.warning(
+                "contract_history: withheld the open/high/low trio on %d "
+                "row(s) with a missing or incoherent candle", int(bad.sum()),
+            )
+            df.loc[bad, ["open", "high", "low"]] = None
+
     if {"ticker", "contract_month", "date"} <= set(df.columns):
         df = df.drop_duplicates(subset=["ticker", "date"], keep="last")
         df = df.sort_values(["contract_month", "date"]).reset_index(drop=True)
