@@ -72,7 +72,18 @@ def curve_db():
         [
             ("Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", 1162.00),
             ("Soybean Meal", "2026-12-01", "Dec 2026", "ZMZ26.CBT", 305.00),
-            ("Soybean Oil", "2026-12-01", "Dec 2026", "ZLZ26.CBT", 52.00),
+        ],
+    )
+    # ZLZ26 sits in the dots regime: 3 sessions — enough to render (the floor
+    # is 2), too few for a joined line (the floor is 8).
+    conn.executemany(
+        "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+        "observation_date, volume, open_interest, fetched_date) "
+        "VALUES ('Soybean Oil','2026-12-01','Dec 2026','ZLZ26.CBT',?,?,4210,NULL,?)",
+        [
+            (51.20, "2026-08-17", "2026-08-17"),
+            (51.85, "2026-08-18", "2026-08-18"),
+            (52.00, "2026-08-19", "2026-08-19"),
         ],
     )
     conn.commit()
@@ -229,6 +240,20 @@ def test_a_sparse_series_is_dots_never_a_joined_line(curve_db):
     html = render(view(curve_db))
     assert 'data-line-min="8"' in html
     assert "points.length >= lineMin" in html
+
+
+def test_a_dots_regime_series_still_ships_its_points(curve_db):
+    """ZLZ26 has 3 sessions — between the render floor (2) and the line floor
+    (8). It must ship as chart data, not be withheld: how it is drawn (dots,
+    no polyline) is the script's job, but whether it exists is the server's."""
+    history = leg_for(view(curve_db), "ZLZ26")["close_history"]
+    assert history["count"] == 3
+    assert history["withheld_reason"] == ""
+    assert len(history["points"]) == 3
+    html = render(view(curve_db))
+    panel = panel_markup(html, "CBOT:ZLZ2026")
+    assert 'data-symbol="ZLZ26"' in panel
+    assert "application/json" in panel
 
 
 def test_a_single_session_withholds_the_chart_with_a_reason(curve_db):

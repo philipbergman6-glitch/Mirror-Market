@@ -89,7 +89,12 @@ from analysis.futures.privacy import (
     PRIVATE_SECTION_IDS,
     redact_for_public,
 )
-from analysis.futures.providers import SqliteQuoteProvider, describe_provider, open_provider
+from analysis.futures.providers import (
+    CurveObservation,
+    SqliteQuoteProvider,
+    describe_provider,
+    open_provider,
+)
 from analysis.futures.ticket import build_ticket
 from app.tradingview import (
     THIRD_PARTY_STAMP,
@@ -169,7 +174,7 @@ def _section(section_id: str, *, state: str, reason: str = "", data: Any = None)
 
 def _curves(
     provider: SqliteQuoteProvider, *, as_of: date
-) -> tuple[dict[str, CurveAnalysis], dict[str, tuple]]:
+) -> tuple[dict[str, CurveAnalysis], dict[str, tuple[CurveObservation, ...]]]:
     """Every commodity's curve analysis, plus the raw snapshot history.
 
     The history is returned alongside rather than re-queried by the contracts
@@ -178,7 +183,7 @@ def _curves(
     stored.
     """
     curves: dict[str, CurveAnalysis] = {}
-    histories: dict[str, tuple] = {}
+    histories: dict[str, tuple[CurveObservation, ...]] = {}
     for commodity in WORKSTATION_COMMODITIES:
         observation = provider.curve(commodity, as_of=as_of)
         history = provider.curve_history(commodity, as_of=as_of, sessions=120)
@@ -432,7 +437,7 @@ CHART_MIN_POINTS = 2
 CHART_LINE_MIN_POINTS = 8
 
 
-def _close_history(leg: CurveLeg, history: tuple) -> dict[str, Any]:
+def _close_history(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[str, Any]:
     """This contract's own stored closes, in USD/MT, or a stated absence.
 
     Read from the same ``forward_curve`` snapshots the spread percentiles use.
@@ -473,7 +478,7 @@ def _close_history(leg: CurveLeg, history: tuple) -> dict[str, Any]:
     }
 
 
-def _contract_leg(leg: CurveLeg, history: tuple) -> dict[str, Any]:
+def _contract_leg(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[str, Any]:
     """A curve leg, plus everything its row can expand into.
 
     The third-party symbols and URLs are carried on the leg rather than
@@ -494,7 +499,7 @@ def _contract_leg(leg: CurveLeg, history: tuple) -> dict[str, Any]:
 
 
 def _contracts_section(
-    curves: dict[str, CurveAnalysis], histories: dict[str, tuple]
+    curves: dict[str, CurveAnalysis], histories: dict[str, tuple[CurveObservation, ...]]
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for commodity, analysis in curves.items():
