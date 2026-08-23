@@ -9,8 +9,8 @@ briefing, signal suppression) keys off the `series_kind` attr it stamps.
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
+import config
 from analysis import loaders
 from analysis.loaders import (
     NAMED_RATIO,
@@ -51,6 +51,7 @@ def _provider_frame() -> pd.DataFrame:
 
 def test_named_series_is_preferred_and_labelled(monkeypatch):
     monkeypatch.setattr(loaders, "read_contract_bars", lambda c=None: _contract_bars())
+    monkeypatch.setattr(config, "TECHNICALS_MIN_SESSIONS", 10)
     out = enrich_with_technicals("Soybeans", _provider_frame())
     assert out.attrs[SERIES_KIND_ATTR] == NAMED_RATIO
     assert "NOT tradeable" in out.attrs["adjustment_note"]
@@ -86,6 +87,17 @@ def test_short_history_falls_back_not_pads(monkeypatch):
     assert out.attrs[SERIES_KIND_ATTR] == PROVIDER_FRONT_MONTH
 
 
+def test_existing_but_thin_series_stays_on_provider(monkeypatch):
+    # The series exists (>= its own floor of 10) but cannot yet carry the
+    # indicators — the labelled provider frame teaches more than a screen
+    # of NaNs, so the switch waits for config.TECHNICALS_MIN_SESSIONS
+    # (measured live 2026-08-23: 11 sessions, every indicator NaN).
+    monkeypatch.setattr(loaders, "read_contract_bars", lambda c=None: _contract_bars())
+    assert len(PRE_ROLL + POST_ROLL) < config.TECHNICALS_MIN_SESSIONS
+    out = enrich_with_technicals("Soybeans", _provider_frame())
+    assert out.attrs[SERIES_KIND_ATTR] == PROVIDER_FRONT_MONTH
+
+
 def test_broken_stitch_never_takes_down_prices(monkeypatch):
     def boom(c=None):
         raise RuntimeError("stitch exploded")
@@ -96,6 +108,7 @@ def test_broken_stitch_never_takes_down_prices(monkeypatch):
 
 def test_adjusted_commodities_reads_the_label(monkeypatch):
     monkeypatch.setattr(loaders, "read_contract_bars", lambda c=None: _contract_bars())
+    monkeypatch.setattr(config, "TECHNICALS_MIN_SESSIONS", 10)
     named = enrich_with_technicals("Soybeans", _provider_frame())
     monkeypatch.setattr(loaders, "read_contract_bars", lambda c=None: pd.DataFrame())
     fallback = enrich_with_technicals("Corn", _provider_frame())

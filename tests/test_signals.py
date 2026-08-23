@@ -13,7 +13,6 @@ import pandas as pd
 import pytest
 
 from analysis.signals import (
-    suppress_near_roll_signals,
     detect_all_signals,
     detect_bollinger_squeeze,
     detect_ma_crossovers,
@@ -22,6 +21,7 @@ from analysis.signals import (
     detect_rsi_extremes,
     detect_volume_spikes,
     is_near_roll,
+    suppress_near_roll_signals,
 )
 
 REQUIRED_SIGNAL_KEYS = {"date", "commodity", "signal_type", "severity", "description"}

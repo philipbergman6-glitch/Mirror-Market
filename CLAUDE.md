@@ -79,5 +79,5 @@ python scripts/generate_site.py --only cbot   # one page (headline | players |
 - Every block/section builder returns a `{state, reason, data}` envelope; a non-`ok` state must carry a reason (enforced by type).
 - Signal severity: `alert` > `warning` > `info`.
 - Thresholds live in `config.py`; v2 source policy in the `trust.registry` contract registry.
-- Front-month yfinance series have roll-day discontinuities — see `LAYERS.md` before adding technical analysis on `Close`.
+- Technicals never compute on raw front-month `Close`: `analysis.loaders.enrich_with_technicals` is the one seam — named ratio-adjusted series first, labelled provider fallback second, near-roll signals suppressed on the fallback. See `LAYERS.md` → roll-day discontinuities.
 - Tests are sandboxed by `tests/_guards.py`: a write inside `data/history/` and any outbound connect both raise. Point `pipeline.history.HISTORY_DIR` at `tmp_path`, stub the fetcher, or mark a test `@pytest.mark.network` if it genuinely needs the internet.

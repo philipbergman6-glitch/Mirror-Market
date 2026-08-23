@@ -52,6 +52,15 @@ def enrich_with_technicals(commodity: str, raw: pd.DataFrame) -> pd.DataFrame:
         bars = read_contract_bars(commodity)
         if not bars.empty:
             series = build_from_bars(bars, commodity, adjustment="ratio")
+        # The switch threshold is higher than the series' own existence
+        # floor: at a handful of sessions every indicator is NaN, and the
+        # labelled, roll-suppressed provider series teaches more than a
+        # screen of blanks. The named series takes over on its own once
+        # config.TECHNICALS_MIN_SESSIONS have accrued (A4 #301).
+        import config
+
+        if series is not None and len(series.points) < config.TECHNICALS_MIN_SESSIONS:
+            series = None
     except Exception:  # noqa: BLE001 — a broken stitch must not take down prices
         import logging
 

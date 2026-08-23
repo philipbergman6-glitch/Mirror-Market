@@ -1378,6 +1378,18 @@ CEC_YIELD_BAND_T_HA = (0.3, 5.0)
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
+# Sessions the named ratio-adjusted continuous series must hold before the
+# technical stack adopts it over the provider front-month frame (A4 #301).
+# The constraint is measured, not aesthetic: the 2023-25 front contracts
+# are already delisted, so the stitched front-month series starts at
+# 2026-08-07 and grows one session per day — at 11 sessions (live,
+# 2026-08-23) every indicator on it is NaN, and a screen of NaNs teaches
+# less than the labelled, roll-suppressed provider series. 60 sessions
+# makes MA_50, RSI-14 and HV_20 real; the switch then happens on its own
+# as history accrues. Distinct from analysis.futures.continuous
+# MIN_SESSIONS (10), which is the floor for the series *existing* at all.
+TECHNICALS_MIN_SESSIONS = 60
+
 # Volume spike: multiple of 20-day average volume to flag as unusual
 VOLUME_SPIKE_MULTIPLIER = 2.0
 
