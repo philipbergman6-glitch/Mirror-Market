@@ -406,7 +406,10 @@ def _insert_bars(conn, commodity, month, label, ticker, bars):
 
 ZSF27_FULL_BARS = [
     (f"2026-08-{day:02d}", 1150.0 + day, 1156.0 + day, 1148.0 + day, 1153.0 + day)
-    for day in (3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18)
+    # Through the 19th — the session the curve snapshot also holds. A bar
+    # series that stopped short of the newest merged session would (rightly)
+    # fall back to the line regime; that case has its own test below.
+    for day in (3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19)
 ]
 
 
@@ -459,17 +462,57 @@ def test_a_hand_edited_partial_trio_never_reaches_a_quote(curve_db):
         "INSERT INTO contract_history "
         "(commodity, ticker, contract_month, label, date, open, high, low, close, "
         "volume, fetched_date) VALUES ('Soybeans','ZSF27.CBT','2027-01-01',"
-        "'Jan 2027','2026-08-18',1160.0,NULL,1150.0,1155.0,4210,'2026-08-19')"
+        "'Jan 2027','2026-08-12',1160.0,NULL,1150.0,1155.0,4210,'2026-08-19')"
     )
     curve_db.commit()
     _insert_bars(
         curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT",
-        ZSF27_FULL_BARS[:-1],  # 11 full bars; the 12th session is the partial
+        # Every session except the 12th, which is the interior partial row.
+        [bar for bar in ZSF27_FULL_BARS if bar[0] != "2026-08-12"],
     )
     history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    assert history["regime"] == "candles"        # the series still qualifies
     sessions = [candle[0] for candle in history["candles"]]
-    assert "2026-08-18" not in sessions          # no candle from a partial trio
-    assert dict(history["points"])["2026-08-18"]  # its close still charts
+    assert "2026-08-12" not in sessions          # no candle from a partial trio
+    assert dict(history["points"])["2026-08-12"]  # its close still charts
+
+
+def test_a_lagging_bar_series_falls_back_to_the_line_of_merged_closes(curve_db):
+    """If the Layer 11b fetch stalls while curve snapshots keep landing, a
+    candle chart would end days before the close printed in the row above
+    it. The regime falls back to the line, which carries every merged
+    session including the newest."""
+    _insert_bars(
+        curve_db, "Soybeans", "2026-11-01", "Nov 2026", "ZSX26.CBT",
+        # Nine full bars ending 2026-08-14 — the snapshots run to 08-19.
+        [
+            (f"2026-08-{day:02d}", 1140.0, 1146.0, 1138.0, 1143.0)
+            for day in (4, 5, 6, 7, 10, 11, 12, 13, 14)
+        ],
+    )
+    history = leg_for(view(curve_db), "ZSX26")["close_history"]
+    assert history["regime"] == "line"
+    assert history["candles"] == []
+    assert dict(history["points"])["2026-08-19"]  # the newest close still charts
+
+
+def test_an_old_close_only_table_is_migrated_in_place():
+    """A database created by the close-only first cut of #332 gains the
+    candle columns on init — without this, both the save and the read
+    raise on the missing columns and stay broken until a manual ALTER."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE contract_history (commodity TEXT, ticker TEXT, "
+        "contract_month TEXT, label TEXT, date TEXT, close REAL, volume REAL, "
+        "fetched_date TEXT, PRIMARY KEY (ticker, date))"
+    )
+    from pipeline.store import _migrate_contract_history_bars
+
+    _migrate_contract_history_bars(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_history)")}
+    assert {"open", "high", "low"} <= cols
+    _migrate_contract_history_bars(conn)  # idempotent
+    conn.close()
 
 
 def test_the_bundle_ships_with_the_site_and_the_contract_requires_it():

@@ -500,11 +500,14 @@ def _close_history(
             ),
         }
     # One place decides how the history may be drawn; the renderer obeys.
-    # Candles need the full bars and enough of them to read as a series;
-    # closes alone join into a line at the same threshold (M21's rule), and
-    # below it they stay dots — a line through sparse prints asserts a path
-    # nobody observed.
-    if len(candles) >= CHART_LINE_MIN_POINTS:
+    # Candles need the full bars, enough of them to read as a series, AND a
+    # record that reaches the newest merged session — if the per-contract
+    # fetch has lagged while curve snapshots kept landing, a candle chart
+    # would end days before the close printed in the row above it, so the
+    # line of merged closes draws instead. Closes alone join into a line at
+    # the same threshold (M21's rule), and below it they stay dots — a line
+    # through sparse prints asserts a path nobody observed.
+    if len(candles) >= CHART_LINE_MIN_POINTS and candles[-1][0] == points[-1][0]:
         regime = "candles"
         shown, what = len(candles), "delayed session bars"
         first = candles[0][0]

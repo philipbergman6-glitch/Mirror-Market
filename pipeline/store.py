@@ -267,6 +267,28 @@ def _migrate_forward_curve_liquidity(conn) -> None:
                 logger.warning("Could not add %s column to forward_curve: %s", column, exc)
 
 
+def _migrate_contract_history_bars(conn) -> None:
+    """Add open / high / low to contract_history if absent. Idempotent.
+
+    All three stay NULL on legacy rows — nothing to fill them with (the
+    trio was not fetched before #332's candle chart), and the table is
+    self-healing: the next Layer 11b run re-downloads every session with
+    the full bar. Without this, a database created by the close-only first
+    cut fails BOTH paths loudly — the save's named-column INSERT and the
+    provider's SELECT — and stays broken until a manual ALTER.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_history)").fetchall()}
+    except Exception:
+        return
+    for column in ("open", "high", "low"):
+        if cols and column not in cols:
+            try:
+                conn.execute(f'ALTER TABLE contract_history ADD COLUMN "{column}" REAL')
+            except Exception as exc:
+                logger.warning("Could not add %s column to contract_history: %s", column, exc)
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
@@ -282,6 +304,7 @@ def init_database():
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
+        _migrate_contract_history_bars(conn)
         for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
