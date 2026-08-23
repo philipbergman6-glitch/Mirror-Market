@@ -465,9 +465,28 @@ Surfaces: the masthead's "Board and FX priced from data N old" (generation time 
              scripts/generate_html (renders dashboard)
 ```
 
-Direction is one-way: nothing in `fetchers/` imports from `pipeline/` or
-`analysis/`; nothing in `pipeline/` imports from `analysis/`. The
-analysis layer imports from `pipeline/query` and `pipeline/units` only.
+Direction is one-way — but the rule is about *stage* direction, not a blanket
+ban on importing downwards, and the earlier wording overstated it (corrected
+2026-08-23, #297; the audit caught it as a false claim).
+
+What actually holds:
+
+- Nothing in `fetchers/` imports from `analysis/`, and nothing in `pipeline/`
+  imports from `analysis/`. No stage reaches forwards.
+- `fetchers/` **does** import `pipeline.results` — `FetchResult` and
+  `ScraperShapeError` are the vocabulary a fetcher uses to report *how* it
+  failed (`fetchers/mandi.py:114` and thirteen others). That is a shared
+  result type, not a call into the clean/store stage; it is the type the two
+  emptinesses of `FetchResult.partial()` are expressed in, so it has to live
+  where both the fetcher and `_finalize_layer` can see it.
+- `analysis/` imports `pipeline.connection`, `pipeline.query`, `pipeline.store`
+  and `pipeline.units` — reading the DB, writing its own derived tables
+  (briefings), and converting units at display.
+
+The invariant worth enforcing is the one that survives: **no stage imports a
+later stage's logic.** `pipeline.results` is not an exception to it — a result
+type is shared vocabulary, not logic, and a fetcher importing it still never
+learns what happens to its rows.
 
 The "trader-grade signals" flow (basis, stocks-to-use, z-score-based
 COT/weather thresholds) runs the same fetch → clean → store → analyze →

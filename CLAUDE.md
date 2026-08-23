@@ -4,16 +4,35 @@ Guidance for Claude Code working in this repository.
 
 ## Mission
 
-Mirror Market is a **Bloomberg-terminal-style market intelligence platform for physical soy traders** — the soy complex (beans, oil, meal) priced across every venue that matters to a cargo: CBOT, Dalian, Brazil, Argentina, India, Europe, South Africa, Nigeria. Competing crops (palm, rapeseed, sunflower, corn) are carried *because* soy traders trade against them, not as scope creep. Everything serves one user: a trader deciding what a cargo is worth, where it moves cheapest, and who has repriced.
+**Public-data soy intelligence and private desk decision support for physical buyers making daily cargo, basis, origin, and hedge decisions.**
 
-The build: 29 data layers (fetch → clean/validate → store, SQLite) → analysis → a 13-page static site on GitHub Pages + a daily briefing. All prices display in **USD/MT**. Private desk editions (opportunity board, workstation book) are written to `data/workspace/`, outside `docs/`, and are never published.
+That sentence is canonical (map #296). Everything below narrows it; nothing widens it.
+
+The soy complex (beans, oil, meal) priced across every venue that matters to a cargo: CBOT, Dalian, Brazil, Argentina, India, Europe, South Africa, Nigeria. Competing crops (palm, rapeseed, sunflower, corn) are carried *because* soy buyers price against them, not as scope creep.
+
+**Primary users: physical buyers, working at a daily cargo/basis cadence.** They open this before the desk day to see what a cargo is worth, where it moves cheapest, and who has repriced — then act on it elsewhere. The cadence is the product: a daily refresh with honest timestamps, not a screen that ticks.
+
+**What this product does not claim to be.** Each of these is a real capability that real traders use, deliberately out of scope — say so plainly rather than half-building it:
+
+| Not | Because |
+|---|---|
+| An **execution terminal** | Nothing here is orderable. No blotter, no ladder, no executable quote state. |
+| A **real-time market feed** | Measured: the fastest possible CBOT-settlement-to-reader path is **1 h 15 m**, floored by the settlement guard (`LATENCY.md` §9). No part of this is intraday-authoritative. |
+| A **CTRM** | No contract lifecycle: no L/Cs, GAFTA/FOSFA clause handling, washouts, arbitration, or hedge accounting. |
+| An **authoritative settlement service** | `PROVEN_SETTLEMENT_SOURCES` is empty by design — see invariant 3. Nothing rendered is a settlement. |
+| A **live counterparty market** | No firm bids/offers, no counterparty terms, no broker network. Desk-entered records are one desk's notes, not a market. |
+
+The Bloomberg-class ambition is not abandoned, it is **deferred and priced**: `ROADMAP.md` records it as a commercially-triggered expansion track. It is not the standard this repo is graded against, and it is not a reason to build toward it speculatively.
+
+The build: 31 operational data layers across 28 numbered groups (fetch → clean/validate → store, SQLite) → analysis → a 13-page static site on GitHub Pages + a daily briefing. `config.PRODUCTION_LAYERS` is the authoritative roster — count from it, never from prose. All prices display in **USD/MT**. Private desk editions (opportunity board, workstation book) are written to `data/workspace/`, outside `docs/`, and are never published.
 
 ## Reference docs — read before touching the relevant area
 
-- **`LAYERS.md`** — all 29 data layers: units, cadence, API keys, and every source's known traps. **Mandatory before editing any fetcher.**
+- **`LAYERS.md`** — all 31 data layers: units, cadence, API keys, and every source's known traps. **Mandatory before editing any fetcher.**
 - **`ARCHITECTURE.md`** — pipeline, analysis, storage, history persistence, site contract, and the product phases (origins, workstation, desk workflow, opportunities, crush, price semantics, trust ledger, latency, fast refresh).
 - **`DESIGN.md`** — all visual/UI decisions. Read before any visual change; never deviate without explicit user approval. In QA mode, flag code that doesn't match it.
 - **`LATENCY.md`** — the data-age vocabulary and objectives.
+- **`ROADMAP.md`** — what is deliberately deferred, and the commercial trigger that would reopen it.
 - `data/reference/*/README.md` — desk-entered files (positions, options, clearing, assumptions, players).
 
 ## Commands
