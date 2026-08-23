@@ -137,3 +137,13 @@ def test_the_roster_is_the_soy_complex(commodity):
     import config
 
     assert commodity in config.CONTRACT_HISTORY_COMMODITIES
+
+
+def test_the_fetch_path_is_the_settlement_guarded_one():
+    """The stubs above replace ``ch.fetch_one`` by name, which would stay
+    green if the module quietly switched to the unguarded ``download_bars``
+    — and an unfinished bar would land as a close (invariant 11). Pin the
+    binding itself."""
+    import fetchers.yfinance
+
+    assert ch.fetch_one is fetchers.yfinance.fetch_one

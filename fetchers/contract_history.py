@@ -24,6 +24,13 @@ Key properties:
       leaves the ephemeral CI database with it. Accepted: the chart only
       renders contracts on the *current* curve, which are alive by
       construction.
+    - Known cost, accepted: ``download_bars`` treats an empty answer as
+      possible throttling and burns all three retries with backoff on a
+      delisted ticker — up to one dead ticker per commodity for the back
+      half of its delivery month (~20s of sleep per run at worst), *on top
+      of* Layer 11 paying the same toll for the same tickers minutes
+      earlier. The alternative — retrying delisted and throttled tickers
+      differently — would need to tell two identical empty frames apart.
 """
 
 import logging

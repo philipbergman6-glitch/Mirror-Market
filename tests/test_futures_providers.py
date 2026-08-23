@@ -401,3 +401,37 @@ def test_close_history_converts_to_usd_per_mt_through_the_one_site(conn):
     assert quote.usd_per_mt == pytest.approx(
         spec_for("Soybeans").native_to_usd_per_mt(1150.00)
     )
+
+
+def test_close_history_freshness_belongs_to_the_series_not_each_row(conn):
+    """A two-year history whose newest session is current is CURRENT on every
+    quote — stamping the older rows STALE would invite a consumer to filter
+    the record away."""
+    _insert_history(conn, [
+        ("Soybeans", "ZSX26.CBT", "2026-11-01", "Nov 2026", "2026-06-01", 1100.00, 100, "2026-08-18"),
+        ("Soybeans", "ZSX26.CBT", "2026-11-01", "Nov 2026", "2026-08-17", 1150.00, 100, "2026-08-18"),
+    ])
+    quotes = open_provider(conn).close_history(_november_beans(), as_of=AS_OF)
+    assert [quote.freshness.value for quote in quotes] == ["current", "current"]
+    # And a series that genuinely stopped printing is stale on every quote.
+    from analysis.futures.domain import named_contract
+
+    _insert_history(conn, [
+        ("Soybean Meal", "ZMZ26.CBT", "2026-12-01", "Dec 2026", "2026-06-01", 300.00, 100, "2026-06-01"),
+        ("Soybean Meal", "ZMZ26.CBT", "2026-12-01", "Dec 2026", "2026-06-02", 301.00, 100, "2026-06-02"),
+    ])
+    december_meal = named_contract("Soybean Meal", year=2026, month=12)
+    stale = open_provider(conn).close_history(december_meal, as_of=AS_OF)
+    assert [quote.freshness.value for quote in stale] == ["stale", "stale"]
+
+
+def test_trusted_provider_delegates_close_history_to_its_fallback(conn):
+    from analysis.futures.trusted_provider import TrustedNamedContractProvider
+
+    _insert_history(conn, ZSX26_HISTORY)
+    trusted = TrustedNamedContractProvider(
+        repository=object(), fallback=open_provider(conn),
+    )
+    assert [q.price for q in trusted.close_history(_november_beans(), as_of=AS_OF)] == [
+        1150.00, 1167.75, 1163.50,
+    ]

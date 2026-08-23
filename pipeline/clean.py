@@ -413,13 +413,19 @@ def clean_contract_history(df: pd.DataFrame) -> pd.DataFrame:
 
     if "close" in df.columns:
         df["close"] = pd.to_numeric(df["close"], errors="coerce")
+        before = len(df)
         df = df.dropna(subset=["close"])
         df = df[df["close"] > 0]
+        if len(df) < before:
+            logger.warning(
+                "contract_history: dropped %d row(s) with missing or "
+                "non-positive close", before - len(df),
+            )
 
     if "volume" in df.columns:
         df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
 
-    if {"ticker", "date"} <= set(df.columns):
+    if {"ticker", "contract_month", "date"} <= set(df.columns):
         df = df.drop_duplicates(subset=["ticker", "date"], keep="last")
         df = df.sort_values(["contract_month", "date"]).reset_index(drop=True)
 

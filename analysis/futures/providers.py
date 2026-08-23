@@ -313,12 +313,18 @@ class SqliteQuoteProvider:
             ),
         ))
         max_age = self._max_age_days()
+        # Freshness belongs to the series, not to each row: a two-year history
+        # whose newest session printed yesterday is CURRENT, and stamping every
+        # older session STALE would invite a future consumer to filter the
+        # whole record away. Graded off the newest date the query returned
+        # (rows arrive newest-first here).
+        newest = _as_date(rows[0][0]) if rows else None
+        freshness, _ = _freshness(newest, as_of, max_age)
         quotes: list[ContractQuote] = []
         for raw_date, close, volume, raw_fetched in reversed(rows):
             day = _as_date(raw_date)
             if day is None or close is None:
                 continue
-            freshness, _ = _freshness(day, as_of, max_age)
             quotes.append(ContractQuote(
                 contract=contract,
                 price=float(close),
