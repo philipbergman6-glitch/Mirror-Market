@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -40,7 +40,16 @@ from app.sections import (
 from pipeline import schema
 from pipeline.units import native_label
 
-TODAY = date(2026, 8, 12)
+# Anchored to the clock, not to a literal date. A frozen anchor rots: the
+# seeded rows are struck at `TODAY - offset`, but
+# `test_a_full_page_renders_real_numbers_not_a_placeholder` goes through
+# `generate_site()`, which builds its own context from `datetime.now(utc)`
+# rather than taking one. With a literal anchor the fixture's rows aged one
+# day per real day until they fell outside the freshness window and the page
+# stopped rendering a price — green on 2026-08-19, red on 2026-08-22 against a
+# docs-only commit (#297). Matching UTC exactly is deliberate: `date.today()`
+# is local and would disagree with the renderer for part of every day.
+TODAY = datetime.now(timezone.utc).date()
 
 
 def _day(offset: int) -> str:
