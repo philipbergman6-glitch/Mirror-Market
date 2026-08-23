@@ -47,6 +47,16 @@ CBOT_BENCHMARK_DATASET_KEYS: tuple[str, ...] = (
     "cbot-soybean-oil-named-contracts",
 )
 
+#: The four conversion-critical FX datasets, likewise. Named together because
+#: they are cut over together or not at all: a landed cost struck from a
+#: trusted Real and a v1 Rand would be two provenances in one comparison.
+REQUIRED_FX_DATASET_KEYS: tuple[str, ...] = (
+    "fx-brl-usd",
+    "fx-cny-usd",
+    "fx-inr-usd",
+    "fx-zar-usd",
+)
+
 
 class TrustedReadSwitchError(ValueError):
     """The switch names a dataset the registry does not have."""
@@ -103,6 +113,7 @@ def trusted_read_enabled(dataset_key: str, env: Mapping[str, str] | None = None)
 
 __all__ = [
     "CBOT_BENCHMARK_DATASET_KEYS",
+    "REQUIRED_FX_DATASET_KEYS",
     "TRUSTED_READ_ENV_VAR",
     "TrustedReadSwitch",
     "TrustedReadSwitchError",

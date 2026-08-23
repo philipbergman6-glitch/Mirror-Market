@@ -36,13 +36,20 @@ from fetchers._settlement import (
 logger = logging.getLogger(__name__)
 
 
-def fetch_one(
-    ticker: str,
-    period: str = DEFAULT_HISTORY_PERIOD,
-    rule: SessionRule = EXCHANGE_SESSION,
-) -> pd.DataFrame:
+def download_bars(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame:
     """
-    Download historical OHLCV data for a single ticker.
+    Download historical OHLCV data for a single ticker, with no session policy.
+
+    The provider frame as it arrives: retried, flattened and stripped of empty
+    rows, but *including* the session in progress. Nothing in the pipeline
+    calls this directly — ``fetch_one`` is the choke point that applies the
+    settlement guard, and every layer goes through it.
+
+    It is separated out for the trusted path (``trust/fx_ingestion.py``,
+    ``trust/cbot_benchmarks.py``), which must see the unfinished bar in order
+    to apply — and record — its own policy on it. An adapter handed a frame
+    v1's guard has already trimmed can never fire its own rule, and would pass
+    while proving nothing.
 
     Parameters
     ----------
@@ -50,11 +57,6 @@ def fetch_one(
         Yahoo Finance ticker symbol, e.g. "ZS=F"
     period : str
         How far back to look — "1y", "2y", "5y", "max", etc.
-    rule : SessionRule
-        Which venue clock decides whether the newest bar has finished.
-        Defaults to exchange settlement; FX pairs must pass
-        ``fetchers._settlement.FX_SESSION`` — spot FX has no settlement and
-        judging it by the Chicago cutoff stores an open bar as a close.
 
     Returns
     -------
@@ -85,12 +87,6 @@ def fetch_one(
             # Drop any completely empty rows (holidays / missing days)
             data = data.dropna(how="all")
 
-            # Yahoo returns a row for the session in progress. Before the
-            # venue settles that row is an unfinished bar, and storing it
-            # publishes a partial print as the day's close — see
-            # fetchers/_settlement.py.
-            data = drop_unsettled_session(data, label=ticker, rule=rule)
-
             return data
 
         except (requests.RequestException, ValueError, KeyError, AttributeError) as exc:
@@ -106,6 +102,41 @@ def fetch_one(
 
     logger.error("All %d attempts failed for %s — returning empty DataFrame", MAX_RETRIES, ticker)
     return pd.DataFrame()
+
+
+def fetch_one(
+    ticker: str,
+    period: str = DEFAULT_HISTORY_PERIOD,
+    rule: SessionRule = EXCHANGE_SESSION,
+) -> pd.DataFrame:
+    """
+    Download historical OHLCV data for a single ticker, guarded.
+
+    The single choke point every v1 yfinance frame flows through (Layer 1
+    prices, Layer 7 currencies, Layer 11 forward curve contracts). Yahoo
+    returns a row for the session in progress; before the venue closes that
+    row is an unfinished bar, and storing it publishes a partial print as the
+    day's close — see ``fetchers/_settlement.py``.
+
+    Parameters
+    ----------
+    ticker : str
+        Yahoo Finance ticker symbol, e.g. "ZS=F"
+    period : str
+        How far back to look — "1y", "2y", "5y", "max", etc.
+    rule : SessionRule
+        Which venue clock decides whether the newest bar has finished.
+        Defaults to exchange settlement; FX pairs must pass
+        ``fetchers._settlement.FX_SESSION`` — spot FX has no settlement and
+        judging it by the Chicago cutoff stores an open bar as a close.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: Open, High, Low, Close, Volume
+        Index: Date
+    """
+    return drop_unsettled_session(download_bars(ticker, period=period), label=ticker, rule=rule)
 
 
 def fetch_all(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataFrame]:

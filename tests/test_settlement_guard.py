@@ -251,3 +251,27 @@ def test_prices_fetch_uses_the_exchange_rule(monkeypatch):
     monkeypatch.setattr(yf_module, "fetch_one", fake_fetch_one)
     yf_module.fetch_all(period="5d")
     assert seen and all(rule is EXCHANGE_SESSION for rule in seen)
+
+
+def test_the_guard_sits_in_fetch_one_not_in_the_download(monkeypatch):
+    """The split for the trusted path must not move the guard off the v1 path.
+
+    ``download_bars`` exists so a trusted adapter can see the unfinished bar
+    and apply — and record — its own policy. That is only safe while every v1
+    caller still goes through ``fetch_one``, which guards.
+    """
+    import fetchers.yfinance as yf_module
+
+    frame = pd.DataFrame(
+        {"Open": [1.0, 2.0], "High": [1.0, 2.0], "Low": [1.0, 2.0], "Close": [1.0, 2.0]},
+        index=pd.DatetimeIndex([pd.Timestamp("2026-08-12"), pd.Timestamp("2026-08-13")]),
+    )
+    monkeypatch.setattr(yf_module, "download_bars", lambda ticker, period=None: frame)
+    monkeypatch.setattr(
+        yf_module,
+        "drop_unsettled_session",
+        lambda df, label="", now=None, rule=EXCHANGE_SESSION: df.iloc[:-1],
+    )
+
+    assert len(yf_module.download_bars("ZS=F", period="5d")) == 2
+    assert len(yf_module.fetch_one("ZS=F", period="5d")) == 1
