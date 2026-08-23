@@ -69,7 +69,7 @@ def assert_never_executable(html: str, *, surface: str) -> None:
 
 
 def _env() -> Environment:
-    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
 
 
 # ---------------------------------------------------------------------------

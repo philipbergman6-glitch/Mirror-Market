@@ -585,7 +585,7 @@ TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "app" / "templates"
 
 
 def _template_env() -> Environment:
-    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
 
 
 def _ledger_html(data: dict) -> str:

@@ -784,10 +784,10 @@ def fetch_cec_estimates() -> FetchResult:
 
     frame = pd.DataFrame(records)
     frame["unit"] = "MT"
-    data = {}
+    data: dict[str, pd.DataFrame] = {}
     for commodity, group in frame.groupby("commodity", sort=False):
         rows = group.sort_values(["season_year", "release_date"]).reset_index(drop=True)
-        data[commodity] = rows
+        data[str(commodity)] = rows
         latest = rows.iloc[-1]
         logger.info(
             "CEC %s: %d estimates, %d seasons; latest %s %s — %s ha, %s t",

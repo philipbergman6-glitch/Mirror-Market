@@ -643,7 +643,7 @@ def _render_block_06(block):
     from jinja2 import Environment, FileSystemLoader
 
     env = Environment(
-        loader=FileSystemLoader(str(Path("app/templates"))), autoescape=False
+        loader=FileSystemLoader(str(Path("app/templates"))), autoescape=True
     )
     return env.get_template("blocks/06_weather.html.j2").render(block=block)
 

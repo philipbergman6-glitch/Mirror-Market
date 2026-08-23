@@ -938,7 +938,11 @@ def generate(
 
     # Render template
     log.info("Rendering template...")
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    # Autoescape matches the site orchestrator's environment (#313): the
+    # dashboard's chart/table fragments pass through `| safe` in the template;
+    # every other value — including text that arrived from an external API —
+    # renders inert by default.
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     template = env.get_template("dashboard.html.j2")
     html_output = template.render(**context)
 

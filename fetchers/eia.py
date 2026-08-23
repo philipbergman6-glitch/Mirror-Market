@@ -81,7 +81,7 @@ def fetch_eia_series(
 
     url = f"{EIA_BASE_URL}{route}"
 
-    params = {
+    params: dict[str, str | int] = {
         "api_key":   EIA_API_KEY,
         "frequency": frequency,
         "data[0]":   "value",

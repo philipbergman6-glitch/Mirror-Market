@@ -28,7 +28,7 @@ from config import (
 )
 from pipeline import divergence
 from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
-from pipeline.schema import ALL_SCHEMAS, UNIQUE_INDEXES
+from pipeline.schema import ALL_SCHEMAS, INDEXES
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +282,7 @@ def init_database():
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
-        for index_sql in UNIQUE_INDEXES:
+        for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
         maybe_sync(conn)
@@ -878,7 +878,13 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
 
 
 def save_brazil_spot(commodity: str, df: pd.DataFrame):
-    """Write CEPEA spot (BRL/MT) → 'brazil_spot_prices'. Renames price_brl_mt → price_brl."""
+    """Write Brazil domestic spot (BRL/MT) → 'brazil_spot_prices'.
+
+    Shared by three layers, not CEPEA-only (#313): CEPEA ESALQ, AgRural FOB
+    and CONAB farmgate rows all land here, each under its own commodity key —
+    the key is what keeps the series apart, so a caller must never write two
+    sources under one key. Renames price_brl_mt → price_brl.
+    """
     if df.empty:
         return
     df = df.copy()

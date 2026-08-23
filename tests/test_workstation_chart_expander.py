@@ -54,7 +54,7 @@ def view(conn, *, audience=AUDIENCE_PUBLIC):
 
 
 def render(page_view) -> str:
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=False)
+    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR), autoescape=True)
     return env.get_template("workstation.html.j2").render(
         workstation=page_view,
         root="",

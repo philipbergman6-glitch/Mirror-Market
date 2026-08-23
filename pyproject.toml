@@ -6,14 +6,17 @@ markers = [
     "network: test genuinely needs the internet; exempts it from the outbound-connection guard (tests/_guards.py)",
 ]
 
+# The perimeter is the product (#313): fetchers, config and the pipeline
+# entrypoint are measured, so the reported figure is close to whole-product
+# coverage rather than a flattering subset. `scripts/` stays out — one-off
+# backfills, CI alerting glue and the site generators exercised by the deploy
+# itself — so the number still overstates coverage of *everything* by that
+# margin; read it as "product code minus scripts/".
 [tool.coverage.run]
-source = ["pipeline", "analysis", "app", "trust", "pricing"]
+source = ["pipeline", "analysis", "app", "trust", "pricing", "fetchers", "main", "config"]
 omit = [
     "tests/*",
     "scripts/*",
-    "fetchers/*",
-    "main.py",
-    "config.py",
 ]
 
 [tool.coverage.report]
@@ -76,13 +79,12 @@ exclude = [
 #
 # Removing an entry here is how one of these modules gets adopted into the
 # checked set. That is a deliberate piece of work, not a side effect of an
-# unrelated import.
+# unrelated import. #313 adopted `fetchers.*` (now on CI's command line) and
+# `app.block_builders` this way; what remains below is still unchecked.
 [[tool.mypy.overrides]]
 module = [
-    "app.block_builders",
     "app.markets",
     "app.sections",
-    "fetchers.*",
     "generate_site",
     "scripts.generate_site",
     "trust.dataset_health",

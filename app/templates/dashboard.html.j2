@@ -353,7 +353,9 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 <section id="briefing">
   <div class="sec-head"><span class="sec-no">11</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text</span></div>
   {% if briefing_text %}
-  <div class="briefing">{{ briefing_text }}</div>
+  {#- Escaped and colorized by _build_briefing_text — a trusted fragment,
+      not raw upstream text, hence the explicit safe. -#}
+  <div class="briefing">{{ briefing_text | safe }}</div>
   {% if briefing_uri %}
   <div style="margin-top: 16px;">
     <a class="dl" href="{{ briefing_uri }}" download="mirror_market_briefing.txt">&#8595; Download briefing as TXT</a>

@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import io
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import date, timedelta
 
 import pandas as pd
@@ -122,7 +122,7 @@ def _try_fetch_bhavcopy(target_date: date) -> pd.DataFrame | None:
     return None
 
 
-def _first_match(columns: Sequence[str], candidates: Sequence[str]) -> str | None:
+def _first_match(columns: Iterable[str], candidates: Sequence[str]) -> str | None:
     """Return the first column name that matches any candidate alias."""
     for col in columns:
         if col in candidates:

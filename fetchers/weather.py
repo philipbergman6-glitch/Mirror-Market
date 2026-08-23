@@ -63,7 +63,7 @@ def fetch_region_weather(
         (1 for rows dated after today — Open-Meteo forecast; 0 for
         observed/past rows). Empty DataFrame on failure.
     """
-    params = {
+    params: dict[str, str | float | int] = {
         "latitude":      lat,
         "longitude":     lon,
         "daily":         WEATHER_DAILY_VARS,

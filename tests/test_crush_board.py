@@ -364,7 +364,7 @@ def _render(context: dict) -> str:
     from scripts import generate_html
 
     env = Environment(
-        loader=FileSystemLoader(str(generate_html.TEMPLATE_DIR)), autoescape=False
+        loader=FileSystemLoader(str(generate_html.TEMPLATE_DIR)), autoescape=True
     )
     return env.get_template("dashboard.html.j2").render(
         sections=generate_html.SECTIONS,

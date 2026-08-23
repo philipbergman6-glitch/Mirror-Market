@@ -233,7 +233,9 @@ def _esmis_xls_index() -> dict[tuple[int, int], str]:
     return index
 
 
-def _resolve_sheet(xl: pd.ExcelFile, layout: dict, commodity: str) -> str | None:
+def _resolve_sheet(
+    xl: pd.ExcelFile, layout: dict[str, str | None], commodity: str
+) -> str | None:
     """Find the sheet holding a table by its title text, not its page number.
 
     The pinned "Page N" is tried first (fast path) but must actually carry
@@ -244,21 +246,22 @@ def _resolve_sheet(xl: pd.ExcelFile, layout: dict, commodity: str) -> str | None
     title = layout.get("title")
     pinned = layout.get("sheet")
 
+    if not title:
+        return pinned if pinned is not None and pinned in xl.sheet_names else None
+    wanted = title.lower()
+
     def has_title(sheet: str) -> bool:
         try:
             head = pd.read_excel(xl, sheet_name=sheet, header=None, nrows=8)
         except Exception:
             return False
         col0 = " ".join(str(v) for v in head.iloc[:, 0].tolist())
-        return title.lower() in col0.lower()
+        return wanted in col0.lower()
 
-    if not title:
-        return pinned if pinned in xl.sheet_names else None
-
-    if pinned in xl.sheet_names and has_title(pinned):
+    if pinned is not None and pinned in xl.sheet_names and has_title(pinned):
         return pinned
 
-    for sheet in xl.sheet_names:
+    for sheet in map(str, xl.sheet_names):
         if sheet != pinned and has_title(sheet):
             logger.info(
                 "[WASDE] %s table found on %r (pinned %r stale — repagination)",

@@ -74,7 +74,7 @@ def _build_contract_tickers(root: str, exchange: str, trading_months: list[int],
         Each dict has: ticker, contract_month (datetime), label (e.g. "Jul 2026")
     """
     today = today or date.today()
-    contracts = []
+    contracts: list[dict] = []
     year = today.year
     max_year = year + 3  # look up to 3 years ahead
 

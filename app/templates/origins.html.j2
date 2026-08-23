@@ -300,8 +300,9 @@
           {% if req.is_blocking %}
           <tr><td colspan="6" class="caption" style="padding-top:0">
             {{ req.guidance }}
-            <br>{#- escaped explicitly: the site renders with autoescape off, and the command
-   carries <VALUE> placeholders a browser would otherwise eat as a tag -#}
+            <br>{#- escaped explicitly even though the environment autoescapes (#313):
+   the command carries <VALUE> placeholders a browser would eat as a tag, and this
+   line must stay correct even under an environment that forgot to escape -#}
             <code class="req-cmd">{{ req.command|e }}</code>
           </td></tr>
           {% endif %}
