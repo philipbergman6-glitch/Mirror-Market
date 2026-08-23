@@ -177,7 +177,7 @@ def _parse_world_prices(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
         )
         configured = set(EC_OILSEEDS_SERIES)
         header_rows = [
-            int(index)
+            int(str(index))
             for index, row in preview.iterrows()
             if configured.intersection(
                 str(value).strip() for value in row if pd.notna(value)

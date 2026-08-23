@@ -52,7 +52,7 @@ def board_db(tmp_db):
 
 
 def render(view: dict) -> str:
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     return env.get_template("opportunities.html.j2").render(
         opportunities=view,
         root="",

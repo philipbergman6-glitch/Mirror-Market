@@ -352,7 +352,12 @@ def _age_days(today: date, when: date | None) -> int | None:
 # 01 Price
 # ---------------------------------------------------------------------------
 def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
+    # Narrowing the Optional descriptor: build_blocks only dispatches a
+    # builder when absent_reason() found a descriptor, so None here is a
+    # dispatch bug — and the assert turns it into M8's generation-error
+    # envelope rather than an AttributeError three lines later.
     source = market.price
+    assert source is not None, f"price_block dispatched for {market.slug} with no price source"
     rows_by_key = ctx.series(source)
     legs: list[dict] = []
     ordered = _headline_first(source)
@@ -489,6 +494,7 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
     manufacture an arbitrage out of a calendar gap.
     """
     ledger = market.ledger
+    assert ledger is not None, f"ledger_block dispatched for {market.slug} with no ledger"
     own_prints = ctx.leg_prints(ledger.own)
     if not own_prints:
         return STATE_EMPTY, (
@@ -660,7 +666,7 @@ def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, 
 def _headline_placeholder(market: Market) -> dict:
     """A row for a market with no ledger — valueless, and it says which kind."""
     source = market.price
-    row = {
+    row: dict[str, Any] = {
         "leg_id": None,
         "label": source.label if source is not None else market.venue,
         "market_slug": market.slug,
@@ -1188,7 +1194,9 @@ def _crush_margin(legs: dict[str, float], yields: dict[str, float]) -> float:
 
 
 def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
+    # Same narrowing contract as price_block: absent_reason() gates dispatch.
     crush = market.crush
+    assert crush is not None, f"crush_block dispatched for {market.slug} with no crush source"
     if crush.contracts == "named":
         return _named_crush_block(market, ctx)
     source = crush.as_source()
@@ -1277,13 +1285,15 @@ def _named_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
 
     if ctx.conn is None:
         return STATE_EMPTY, "no database connection", {}
+    crush = market.crush
+    assert crush is not None, f"named crush requested for {market.slug} with no crush source"
     outcome = named_board_crush(open_provider(ctx.conn), as_of=ctx.today)
     if isinstance(outcome, CrushWithheld):
         return STATE_EMPTY, outcome.reason, {}
 
     data = outcome.to_dict()
     data.update({
-        "kind": market.crush.kind,
+        "kind": crush.kind,
         "home_currency": market.home_currency,
         "as_of": outcome.observation_date.isoformat(),
         "age_days": _age_days(ctx.today, outcome.observation_date),
@@ -1291,7 +1301,7 @@ def _named_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         # units (cents/bu, $/short ton, cents/lb), so USD/MT is the only honest
         # statement of it — the same rule the generic engine keeps.
         "margin_home": None,
-        "provisional": market.crush.provisional,
+        "provisional": crush.provisional,
         "provisional_note": None,
         "contract_basis": outcome.contract_basis.value,
         "legs_named": True,
@@ -1361,7 +1371,7 @@ def _crush_board_card(market: Market, ctx: SiteContext) -> dict:
     renders one shape, and a key that exists only on the happy path is a
     ``StrictUndefined`` error that tombstones the whole headline (#226).
     """
-    card = {
+    card: dict[str, Any] = {
         "market_slug": market.slug,
         "market_name": market.name,
         "venue": market.venue,
@@ -1440,6 +1450,7 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     history, which is the one thing it is not.
     """
     crush = market.crush
+    assert crush is not None, f"crush range requested for {market.slug} with no crush source"
     if crush.contracts == "named":
         return None, (
             "no range yet — struck on named delivery months; a mean off the "
@@ -1484,6 +1495,7 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
       is off here, so those sessions are dropped instead.
     """
     crush = market.crush
+    assert crush is not None, f"crush history requested for {market.slug} with no crush source"
     source = crush.as_source()
     rows_by_key = ctx.series(source)
 
@@ -1516,6 +1528,7 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
 # ---------------------------------------------------------------------------
 def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market], **_):
     source = market.basis
+    assert source is not None, f"basis_block dispatched for {market.slug} with no basis source"
     if source.reference != REFERENCE_MARKET:
         return STATE_EMPTY, f"unknown basis reference {source.reference!r}", {}
 
@@ -1528,7 +1541,7 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
     key = source.headline_key or source.keys[0]
     rows = ctx.series(source).get(key) or []
     history: list[tuple[date, float, float, float]] = []
-    for when, value, _ in rows:
+    for when, value, _n in rows:
         board = reference.get(when)
         if board is None:
             continue  # M3: no cross-day joins — a basis is one session's number

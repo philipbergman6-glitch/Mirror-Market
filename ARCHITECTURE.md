@@ -370,7 +370,7 @@ The origin page is fail-closed by design: with nothing entered, every landed tot
 
 Surfaces: page sections **02 Route readiness** and **09 Renewals due**, plus the flip table in **05 Sensitivity**; `scripts/enter_assumption.py --onboarding`, `--review` and `--check` (exit 1 on file faults, 0 on world faults). What must be entered per route is documented in `data/reference/assumptions/ONBOARDING.md`.
 
-The shipped directory contains **no invented number** — only the two China policy rates. The success path is rendered in tests from `tests/fixtures/assumptions_complete/`, reached through `MIRROR_ASSUMPTIONS_DIR` and never set in CI. One rendering trap is pinned by test: the site renders with `autoescape=False`, so `<VALUE>` must be escaped explicitly or a browser eats the placeholder as a tag. A second is pinned by name: a template key called `clear` resolves to `dict.clear` — a truthy bound method — so the renewals verdict is keyed `nothing_due`.
+The shipped directory contains **no invented number** — only the two China policy rates. The success path is rendered in tests from `tests/fixtures/assumptions_complete/`, reached through `MIRROR_ASSUMPTIONS_DIR` and never set in CI. One rendering trap is pinned by test: `<VALUE>` must survive rendering as text or a browser eats the placeholder as a tag — the site autoescapes since #313, and the template keeps its explicit `|e` as defence in depth. A second is pinned by name: a template key called `clear` resolves to `dict.clear` — a truthy bound method — so the renewals verdict is keyed `nothing_due`.
 
 ## The crush (`analysis/futures/crush.py`)
 

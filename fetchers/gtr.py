@@ -356,11 +356,12 @@ def _parse_ocean_freight(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
         if date is None:
             continue
 
-        rates = {
+        maybe_rates = {
             route: _numeric(row.iloc[column])
             for column, route in GTR_OCEAN_ROUTES.items()
         }
-        if any(rate is None for rate in rates.values()):
+        rates = {r: v for r, v in maybe_rates.items() if v is not None}
+        if len(rates) != len(maybe_rates):
             continue
 
         if any(
@@ -483,8 +484,9 @@ def _parse_vessel_activity(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
             loading = values["loading"]
             waiting = values["waiting_to_load"]
             in_port = values["in_port"]
-            if None not in (loading, waiting, in_port) and (
-                abs((loading + waiting) - in_port) > _ARITHMETIC_TOLERANCE
+            if (
+                loading is not None and waiting is not None and in_port is not None
+                and abs((loading + waiting) - in_port) > _ARITHMETIC_TOLERANCE
             ):
                 rejected_arithmetic += 1
                 continue

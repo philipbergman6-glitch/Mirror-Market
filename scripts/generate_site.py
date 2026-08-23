@@ -90,7 +90,13 @@ class PageResult:
 
 
 def _env() -> Environment:
-    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    # Autoescape is the default-deny stance (#313): externally derived text —
+    # a commodity name from an API, a signal message built from fetched rows —
+    # renders inert unless a template explicitly says otherwise. Chart and
+    # table fragments that genuinely are HTML pass through `| safe` at the
+    # exact spot they are embedded, so every trusted fragment is visible in
+    # the template rather than implied by a global off switch.
+    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
 
 
 def _write(output_dir: Path, relpath: str, html: str) -> Path:
@@ -246,14 +252,23 @@ def _write_private_opportunities(ctx, now, result, render) -> None:
     A workspace that cannot be written is a local inconvenience; a public page
     that fails is a tombstone in the candidate and a blocked deploy. They are
     not the same severity and are not treated as one.
+
+    The destination is checked by :func:`analysis.futures.privacy.
+    assert_private_path` rather than assumed — the same guard the private
+    workstation writer runs, for the same reason: a dismissed-opportunity note
+    written into ``docs/`` because a constant moved is unrecoverable once the
+    deploy has run.
     """
-    import config as _config
+    from analysis.futures.privacy import assert_private_path, private_output_dir
     from analysis.opportunities.domain import AUDIENCE_PRIVATE
     from app.opportunities_page import build_view
 
     try:
-        private_dir = Path(_config.OPPORTUNITY_PRIVATE_OUTPUT_DIR)
+        private_dir = private_output_dir()
         private_dir.mkdir(parents=True, exist_ok=True)
+        target = assert_private_path(
+            private_dir / "opportunities.html", where="private opportunities"
+        )
         view = build_view(
             ctx.conn, today=now.date(), audience=AUDIENCE_PRIVATE, result=result
         )
@@ -261,7 +276,6 @@ def _write_private_opportunities(ctx, now, result, render) -> None:
         # sit inside docs/, so its relative links back to the public site would
         # be wrong at any depth. They are left pointing at the site root, and
         # the page is explicitly not a published artifact.
-        target = private_dir / "opportunities.html"
         target.write_text(render(view, "opportunities.html", ""), encoding="utf-8")
         log.info("wrote the private opportunity edition to %s", target)
     except Exception:  # noqa: BLE001 — the workspace must never fail the site

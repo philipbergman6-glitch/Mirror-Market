@@ -132,7 +132,7 @@ pipeline/          cleaning, validation, unit conversion, database read/write
 analysis/          turns stored data into indicators, signals, and the briefing
 app/               the market registry, the nine block builders, and the HTML templates
 scripts/           generate_site.py — the orchestrator that renders every page
-docs/              the finished site that GitHub Pages serves
+docs/              local site output (gitignored) — Pages serves the CI-built artifact, not this directory
 ```
 
 Design system in `DESIGN.md` · architecture details in `ARCHITECTURE.md` and `CLAUDE.md`.

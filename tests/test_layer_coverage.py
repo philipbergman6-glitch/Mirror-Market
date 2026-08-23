@@ -358,7 +358,7 @@ def test_rendered_sidebar_shows_the_degraded_layer_and_only_it(monkeypatch):
         monkeypatch,
     )
     html = Environment(
-        loader=FileSystemLoader(str(gh.TEMPLATE_DIR)), autoescape=False,
+        loader=FileSystemLoader(str(gh.TEMPLATE_DIR)), autoescape=True,
     ).get_template("dashboard.html.j2").render(
         sections=[],
         generated_at="2026-08-11 12:00 UTC",

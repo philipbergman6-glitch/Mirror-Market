@@ -213,7 +213,7 @@ def _parse_pink_sheet(raw_bytes: bytes) -> dict[str, pd.DataFrame]:
 
             price_val = raw_df.iloc[row_idx, col_idx]
             try:
-                price = float(price_val)
+                price = float(str(price_val))
             except (ValueError, TypeError):
                 continue
 

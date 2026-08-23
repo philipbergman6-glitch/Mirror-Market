@@ -3,7 +3,7 @@
 Rendered, not just built. The page is the only place a trader meets any of
 this, and the two failures that matter are both rendering failures: a command
 whose ``<VALUE>`` placeholder a browser eats as a tag (the site renders with
-autoescape off), and a blocked page that names no way forward.
+autoescape on since #313), and a blocked page that names no way forward.
 
 Both the empty set and a complete one are exercised. The complete one comes
 from ``tests/fixtures/assumptions_complete/`` — invented values, loaded through
@@ -67,7 +67,7 @@ def db(tmp_path):
 
 
 def _render(view: dict) -> BeautifulSoup:
-    """Through the site's own environment — autoescape off, exactly as deployed."""
+    """Through the site's own environment, exactly as deployed."""
     from scripts.generate_site import _env
 
     now = datetime(2026, 8, 18, 21, 0, tzinfo=timezone.utc)
@@ -106,7 +106,7 @@ def test_a_page_with_nothing_entered_names_every_input_and_the_command_for_it(db
 
 
 def test_the_placeholder_survives_rendering_rather_than_being_eaten_as_a_tag(db):
-    """The site renders with autoescape off; <VALUE> has to be escaped explicitly."""
+    """<VALUE> must survive rendering as text, never be eaten as a tag."""
     view = build_view(db, today=TODAY, assumptions=AssumptionSet(assumptions=()))
     readiness = _section(_render(view), "readiness")
     assert "--value <VALUE>" in readiness

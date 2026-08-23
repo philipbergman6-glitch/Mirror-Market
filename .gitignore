@@ -85,3 +85,12 @@ data/reference/import_profiles/*.csv
 
 # Concurrent-session git worktrees (each is its own checkout, never content)
 .worktrees/
+
+# Generated site output (#313). GitHub Pages deploys the Actions artifact
+# built fresh each run — it never reads docs/ from the branch — so a tracked
+# HTML page here is a frozen copy that lies to a local reader while claiming
+# to be the site. Authored documents (docs/audits/, docs/plans/, docs/trial/)
+# stay tracked; rendered pages and their assets do not.
+docs/*.html
+docs/markets/
+docs/manifest.json

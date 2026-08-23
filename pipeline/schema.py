@@ -673,79 +673,27 @@ ALL_SCHEMAS = (
 )
 
 
-# Belt-and-suspenders: explicit UNIQUE INDEXes on every PK column set.
-# PRIMARY KEY already implies a unique index in SQLite, but defining them
-# explicitly keeps the contract visible and protects any older user DBs
-# that may pre-date the current PK constraints.
-UNIQUE_INDEXES = (
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_prices_commodity_date "
-    "ON prices (commodity, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_economic_series_date "
-    "ON economic (series_name, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_usda_cat_year_desc_period "
-    "ON usda (stat_category, year, short_desc, reference_period_desc);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cot_commodity_date "
-    "ON cot (commodity, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_weather_region_date "
-    "ON weather (region, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_river_levels_gauge_date "
-    "ON river_levels (gauge, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_psd_commodity_country_year_attr "
-    "ON psd (commodity, country, year, attribute);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_currencies_pair_date "
-    "ON currencies (pair, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_worldbank_commodity_date "
-    "ON worldbank_prices (commodity, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_ec_oilseed_prices_series_date "
-    "ON ec_oilseed_prices (series, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_ocean_freight_route_date "
-    "ON ocean_freight_rates (route, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_port_vessel_region_week "
-    "ON port_vessel_activity (port_region, week_ending);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_dce_futures_commodity_date "
-    "ON dce_futures (commodity, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_crop_progress_commodity_week_desc "
-    "ON crop_progress (commodity, week_ending, short_desc);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_export_sales_commodity_week_country "
-    "ON export_sales (commodity, week_ending, country);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_forward_curve_commodity_contract_date "
-    "ON forward_curve (commodity, contract_month, fetched_date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_wasde_commodity_year_attr_period "
-    "ON wasde (commodity, year, attribute, reference_period);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_inspections_commodity_week "
-    "ON inspections (commodity, week_ending);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_eia_energy_series_date "
-    "ON eia_energy (series_name, Date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_brazil_estimates_keys "
-    "ON brazil_estimates (source, commodity, crop_year, attribute, report_date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_commodity_freshness_keys "
-    "ON commodity_freshness (commodity, table_name);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_india_domestic_date_commodity "
-    "ON india_domestic_prices (Date, commodity);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_brazil_spot_date_commodity "
-    "ON brazil_spot_prices (Date, commodity);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_safex_date_commodity "
-    "ON safex_prices (Date, commodity);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_sagis_commodity_season_week "
-    "ON sagis_deliveries (commodity, season_year, week_number);",
+# Secondary lookup indexes only (#313). The explicit UNIQUE INDEX per PK
+# column set that used to live here was a belt-and-suspenders duplicate:
+# PRIMARY KEY already creates the unique index SQLite's INSERT OR REPLACE
+# upserts resolve against, and every database this project runs on carries
+# those PKs — CI rebuilds its DB from scratch each run, and the schema has
+# shipped PK constraints on every table since before any surviving local DB
+# was created (verified against the working DB, 2026-08-23). The duplicates
+# were dropped because they could drift: an index whose columns diverge from
+# a changed PK would silently change what INSERT OR REPLACE deduplicates on.
+#
+# What remains is every index that is NOT implied by a PK — the query-path
+# lookups on non-key columns.
+INDEXES = (
     "CREATE INDEX IF NOT EXISTS ix_sagis_week_end "
     "ON sagis_deliveries (week_end);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_sagis_smd_commodity_season_month "
-    "ON sagis_supply_demand (commodity, season_year, month_number);",
     "CREATE INDEX IF NOT EXISTS ix_sagis_smd_month_end "
     "ON sagis_supply_demand (month_end);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_cec_commodity_season_release "
-    "ON cec_estimates (commodity, season_year, release_date);",
     "CREATE INDEX IF NOT EXISTS ix_cec_release_date "
     "ON cec_estimates (release_date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_briefings_date "
-    "ON briefings (briefing_date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_origin_rankings_keys "
-    "ON origin_rankings (run_date, destination, window_start, origin);",
     "CREATE INDEX IF NOT EXISTS ix_origin_rankings_run_date "
     "ON origin_rankings (run_date);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS ux_opportunity_detections_keys "
-    "ON opportunity_detections (run_date, identity);",
     # The lookup the engine makes once per run: every prior sighting of one
     # identity, to recover its first-detected date and therefore its stable id.
     "CREATE INDEX IF NOT EXISTS ix_opportunity_detections_identity "

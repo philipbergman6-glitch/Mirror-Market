@@ -769,7 +769,7 @@ def _render_section(name: str, data: dict) -> str:
 
     from scripts.generate_html import TEMPLATE_DIR
 
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=False)
+    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     return env.get_template(f"sections/{name}.html.j2").render(s=data)
 
 

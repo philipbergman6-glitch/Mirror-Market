@@ -9,7 +9,7 @@ import logging
 import os
 from datetime import date as _date
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from dotenv import load_dotenv
 
@@ -837,7 +837,13 @@ MONTH_CODES = {
 }
 
 # root symbol, exchange suffix, and which calendar months trade
-FORWARD_CURVE_CONTRACTS = {
+class CurveSpec(TypedDict):
+    root: str
+    exchange: str
+    months: list[int]
+
+
+FORWARD_CURVE_CONTRACTS: dict[str, CurveSpec] = {
     "Soybeans":     {"root": "ZS", "exchange": "CBT", "months": [1, 3, 5, 7, 8, 9, 11]},
     "Soybean Oil":  {"root": "ZL", "exchange": "CBT", "months": [1, 3, 5, 7, 8, 9, 10, 12]},
     "Soybean Meal": {"root": "ZM", "exchange": "CBT", "months": [1, 3, 5, 7, 8, 9, 10, 12]},
@@ -883,7 +889,7 @@ WASDE_BACKFILL_MONTHS = 12
 # "sheet" is only a fast-path hint — the parser locates each table by its
 # "title" text (e.g. "U.S. Wheat Supply and Use"), so a USDA repagination
 # (tables drifting to a different "Page N") doesn't silently break parsing.
-WASDE_LAYOUT = {
+WASDE_LAYOUT: dict[str, dict[str, str | None]] = {
     "WHEAT": {
         "sheet": "Page 11", "header_text": None,
         "title": "U.S. Wheat Supply and Use",

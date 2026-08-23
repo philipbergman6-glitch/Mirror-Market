@@ -181,7 +181,7 @@ def _world_aggregates(df: pd.DataFrame, code_to_name: dict[str, str]) -> pd.Data
 
     # min_count=1: an all-NULL group stays NULL. A blank is never a zero.
     world = (
-        work.groupby([*_AGG_KEYS, "unit"], as_index=False)["value"]
+        work.groupby([*_AGG_KEYS, "unit"], as_index=False)[["value"]]
         .sum(min_count=1)
         .dropna(subset=["value"])
     )
@@ -192,7 +192,7 @@ def _world_aggregates(df: pd.DataFrame, code_to_name: dict[str, str]) -> pd.Data
         return world[empty.columns]
 
     china = (
-        china.groupby([*_AGG_KEYS, "unit"], as_index=False)["value"]
+        china.groupby([*_AGG_KEYS, "unit"], as_index=False)[["value"]]
         .sum(min_count=1)
         .dropna(subset=["value"])
         .rename(columns={"value": "china"})

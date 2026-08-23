@@ -269,7 +269,13 @@ def read_india_domestic(commodity: str | None = None) -> pd.DataFrame:
 
 
 def read_brazil_spot(commodity: str | None = None) -> pd.DataFrame:
-    """Read CEPEA Brazil domestic spot prices from SQLite."""
+    """Read Brazil domestic spot prices (BRL/MT) from SQLite.
+
+    ``brazil_spot_prices`` is a shared table, not a CEPEA one (#313): CEPEA
+    ESALQ indicators, AgRural FOB assessments and CONAB farmgate prices all
+    write to it under their own commodity keys, never spliced. Filter by
+    ``commodity`` to get one source's series.
+    """
     return _read_table("brazil_spot_prices", "commodity", commodity)
 
 

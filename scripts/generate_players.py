@@ -401,11 +401,12 @@ def build_country_contexts(codes: list[str]) -> dict[str, list[dict]]:
     for code in codes:
         items: list[dict] = []
         try:
-            items.extend(psd_numbers(psd_df, code))
+            if psd_df is not None:
+                items.extend(psd_numbers(psd_df, code))
         except Exception as e:
             log.warning("players context: PSD failed for %s: %s", code, e)
         try:
-            trend = export_sales_trend(es_df, code)
+            trend = export_sales_trend(es_df, code) if es_df is not None else None
             if trend:
                 items.append(trend)
         except Exception as e:

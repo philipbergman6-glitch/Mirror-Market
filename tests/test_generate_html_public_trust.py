@@ -40,7 +40,7 @@ def test_dashboard_template_can_render_public_trust_metadata_without_raw_values(
     public_trust = generate_html._build_public_trust_metadata(trust_state)
     template = Environment(
         loader=FileSystemLoader(str(generate_html.TEMPLATE_DIR)),
-        autoescape=False,
+        autoescape=True,
     ).get_template("dashboard.html.j2")
 
     html = template.render(

@@ -161,7 +161,7 @@ def test_rendered_masthead_never_claims_all_fresh_while_criticals_exist() -> Non
     """End-to-end on the real template — the acceptance criterion itself."""
     template = Environment(
         loader=FileSystemLoader(str(generate_html.TEMPLATE_DIR)),
-        autoescape=False,
+        autoescape=True,
     ).get_template("dashboard.html.j2")
 
     items = _items("prices", "weather")
@@ -275,7 +275,7 @@ def test_healthy_slow_cadence_layer_is_absent_from_the_rendered_note() -> None:
     """End-to-end on the real template — the acceptance criterion for #179."""
     template = Environment(
         loader=FileSystemLoader(str(generate_html.TEMPLATE_DIR)),
-        autoescape=False,
+        autoescape=True,
     ).get_template("dashboard.html.j2")
 
     items = [

@@ -131,7 +131,7 @@ def _parse_posts(posts: list[dict]) -> pd.DataFrame:
             day = datetime.strptime(
                 str(post["fecha"])[:10], "%Y-%m-%d"
             ).date().isoformat()
-            price = float(post["precio"])
+            price = float(str(post["precio"]))
             ship_from = f"{int(post['añoDesde']):04d}-{int(post['mesDesde']):02d}"
             ship_to = f"{int(post['añoHasta']):04d}-{int(post['mesHasta']):02d}"
         except (KeyError, TypeError, ValueError) as exc:
@@ -210,11 +210,11 @@ def _check_sunflower_siblings_agree(
                 f"{int(post['añoDesde']):04d}-{int(post['mesDesde']):02d}",
                 f"{int(post['añoHasta']):04d}-{int(post['mesHasta']):02d}",
             )
-            price = float(post["precio"])
+            price = float(str(post["precio"]))
         except (KeyError, TypeError, ValueError):
             continue  # a malformed sibling is not evidence of a split
         ours = stored.get(window)
-        if ours is not None and abs(float(ours) - price) > 0.005:
+        if ours is not None and abs(float(str(ours)) - price) > 0.005:
             raise ScraperShapeError(
                 "MAGyP FOB: crude sunflower oil SIM lines disagree for "
                 f"shipment {window[0]}/{window[1]} — stored 15121110310E "
