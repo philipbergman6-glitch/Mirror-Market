@@ -102,7 +102,7 @@ def test_clean_ohlcv_happy_path():
     assert isinstance(out.index, pd.DatetimeIndex)
     assert out.index.name == "Date"
 
-    # All-NaN price row was dropped before ffill, so length drops to 2
+    # All-NaN price row was dropped, so length drops to 2
     assert len(out) == 2
 
     # No NaNs left in OHLC after the all-NaN row is dropped

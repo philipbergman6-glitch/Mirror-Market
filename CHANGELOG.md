@@ -4,6 +4,23 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — partial bars are dropped, never filled (2026-08-23)
+
+B1 (#307) from the integrity backlog. `clean_ohlcv` and
+`clean_dce_futures` no longer forward-fill partial OHLC bars: a
+carried-forward close is an invented observation that RSI/MACD/
+daily-change read as a real 0% session and the candlestick chart renders
+as a bar nobody printed. Any bar with a missing price value is now
+dropped with a logged reason (`_drop_partial_bars`); NaN Volume stays
+NaN and never disqualifies a bar. This **supersedes** the "Forward-fill
+behaviour pinned by tests" entry below — the blessing test it describes
+is replaced by refusal tests, plus a store→analysis→render regression
+(`tests/test_no_fabricated_closes.py`) proving a partial bar's date never
+reaches `prices.Close`, any derived metric, or a rendered candle.
+`clean_fred_series` and `clean_weather` keep their limited fills — those
+series' semantics allow carrying a published observation. Interim
+drop-vs-quarantine treatment is pending A2 (#299).
+
 ## Unreleased — the local env file is actually loaded (2026-08-22)
 
 A populated `.env` sat in the repo root and **nothing read it**: `config.py`

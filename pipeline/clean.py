@@ -93,6 +93,8 @@ def _drop_partial_bars(df: pd.DataFrame, price_cols: list[str], label: str = "")
             str(d.date()) if hasattr(d, "date") else str(d)
             for d in list(date_values)[:10]
         )
+        if int(partial.sum()) > 10:
+            dates += f", … and {int(partial.sum()) - 10} more"
         logger.warning(
             "%sDropped %d partial bar(s) with missing price values (%s) — "
             "never filled; see #299 for quarantine semantics",

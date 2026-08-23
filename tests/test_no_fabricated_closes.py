@@ -51,8 +51,11 @@ def test_partial_bar_never_reaches_prices_close_or_derived_metrics(patched_db):
     store.save_price_data("Soybeans", clean_ohlcv(raw, label="Soybeans"))
 
     # Store: the partial bar's date is not in the prices table at all.
+    # (Normalise through to_datetime so the membership check can never
+    # pass vacuously on a str-vs-Timestamp type mismatch.)
     stored = query.read_prices("Soybeans")
-    assert partial_date.strftime("%Y-%m-%d") not in set(stored["Date"])
+    assert partial_date not in set(pd.to_datetime(stored["Date"]))
+    assert len(stored) == len(raw) - 1
     assert stored["Close"].notna().all()
 
     # Analysis/render: the canonical loader (what the briefing and the site
@@ -71,3 +74,12 @@ def test_partial_bar_never_reaches_prices_close_or_derived_metrics(patched_db):
     # dropped date, and the daily change spans the gap honestly.
     assert partial_date not in df.dropna(subset=["RSI"]).index
     assert df["daily_pct_change"].dropna().gt(0).all()
+
+    # Render: the candlestick chart built from this frame carries no candle
+    # on the dropped date — no fabricated bar reaches a rendered artifact.
+    from app.charts import build_technical_chart
+
+    fig = build_technical_chart(df, "Soybeans")
+    candle = next(t for t in fig.data if t.type == "candlestick")
+    assert partial_date not in pd.to_datetime(list(candle.x))
+    assert not any(pd.isna(v) for v in candle.close)
