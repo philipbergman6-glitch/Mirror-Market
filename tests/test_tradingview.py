@@ -49,16 +49,22 @@ def test_a_year_past_the_century_keeps_four_digits():
     [("Live Cattle", 12), ("Sugar", 3), ("Cotton", 12)],
 )
 def test_an_unmapped_venue_yields_nothing_rather_than_a_guess(commodity, month):
-    """CME and ICE are the follow-up ticket. Until their symbols are checked
-    against the venue, a row gets no expander — withholding with a reason,
-    never a widget pointed at a symbol nobody verified."""
+    """Until a venue's symbols are checked against TradingView itself, a row
+    gets no expander — withholding with a reason, never a widget pointed at a
+    symbol nobody verified. CME and ICE remain unchecked."""
     spec = spec_for(commodity)
     assert spec.exchange not in TRADINGVIEW_EXCHANGES
     assert tradingview_symbol(_contract(commodity, 2026, month)) is None
 
 
 def test_the_registry_is_the_only_place_a_venue_is_named():
-    """Invariant 5: adding a venue is a registry entry, never a branch."""
+    """Invariant 5: adding a venue is a registry entry, never a branch.
+
+    Still CBOT-only after #321: the coverage check found no other venue
+    TradingView's free embed widget can serve (DCE and SAFEX absent from the
+    platform, NCDEX soy suspended to 2027-03-31, MATIF symbol-addressable but
+    unconfirmed on the widget tier) — the registry comment records each
+    verdict."""
     assert TRADINGVIEW_EXCHANGES == {Exchange.CBOT: "CBOT"}
 
 
