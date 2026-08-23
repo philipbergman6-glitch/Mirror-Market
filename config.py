@@ -84,6 +84,7 @@ LAYER_MIN_KEYS = {
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 10 commodities
     "dce": 3,          # of 8 contracts (6 DCE + 2 CZCE rapeseed)
+    "contract_history": 2,  # of 3 soy-complex commodities
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
     "forward_curve": 7,  # of 9 commodities
@@ -110,8 +111,9 @@ RETRY_DELAY = 2         # seconds between retries
 
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
-# denominator cannot drift. Numbered groups 2 and 15 each have an independently
-# runnable sub-layer, hence 31 operational layers across 28 numbered groups.
+# denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
+# independently runnable sub-layer, hence 32 operational layers across 28
+# numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
     ("usda", "2", "USDA NASS QuickStats", "Annual", "US production, area and yield"),
@@ -125,6 +127,7 @@ PRODUCTION_LAYERS = (
     ("dce", "9", "AKShare (DCE/CZCE)", "Daily", "Chinese oilseed futures"),
     ("export_sales", "10", "USDA FAS (Export Sales)", "Weekly", "6 commodities and buyers"),
     ("forward_curve", "11", "Yahoo Finance (Contracts)", "Daily", "9 commodity forward curves"),
+    ("contract_history", "11b", "Yahoo Finance (Contracts)", "Daily", "Soy complex per-contract close history"),
     ("wasde", "12", "USDA WASDE", "Monthly", "Supply and demand forecasts"),
     ("eia", "13", "EIA", "Weekly/Monthly", "Ethanol, biodiesel and diesel"),
     ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
@@ -856,6 +859,24 @@ FORWARD_CURVE_CONTRACTS: dict[str, CurveSpec] = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 11b — per-contract daily close history (#332)
+#
+# The workstation's contract-row chart draws a named contract's own session
+# closes. Curve snapshots (Layer 11) only reach back to 2026-07-30, so this
+# layer pulls each active contract's full daily history through the same
+# settlement-guarded yfinance path. Soy complex only: the chart renders on
+# workstation contract rows, and those are the three CBOT soy legs — widening
+# this roster is a config edit here, never a code path (invariant 5).
+# ---------------------------------------------------------------------------
+CONTRACT_HISTORY_COMMODITIES: tuple[str, ...] = ("Soybeans", "Soybean Oil", "Soybean Meal")
+
+# A named contract is liquid for roughly its last two years, and Yahoo delists
+# it at expiry — so "2y" is the whole series, not a truncation. The layer is
+# excluded from FAST_REFRESH_LAYERS: ~20 two-year pulls belong in the daily
+# build, not the one-minute price path.
+CONTRACT_HISTORY_PERIOD = "2y"
+
+# ---------------------------------------------------------------------------
 # Layer 12 — WASDE Monthly Estimates (USDA OCE — oce-wasde-report-data.xls)
 # THE most market-moving USDA report — monthly supply/demand projections.
 # NASS QuickStats does not serve WASDE forecast rows, so this layer pulls
@@ -1569,6 +1590,10 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # Daily exchange/market data — a long weekend plus a holiday.
     "prices": 7,
     "currencies": 7,
+    # Per-contract closes ride the same venue and cadence as `prices`. Unlike
+    # the curve (dated by contract month, exempt above), these rows are dated
+    # by session, so a frozen upstream is measurable here.
+    "contract_history": 7,
     # SAFEX is a *stale-serving* page: on a non-trading day Grain SA re-serves
     # the previous session's rows rather than emptying (verified 2026-08-02 and
     # 2026-08-08). So "rows came back" says nothing about whether the JSE/BVG
@@ -1686,6 +1711,10 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "dce": DCE_CONTRACTS,
     "export_sales": EXPORT_SALES_COMMODITIES,
     "forward_curve": FORWARD_CURVE_CONTRACTS,
+    "contract_history": {
+        commodity: FORWARD_CURVE_CONTRACTS[commodity]
+        for commodity in CONTRACT_HISTORY_COMMODITIES
+    },
     "eia": EIA_SERIES,
     "gtr_ocean_freight": GTR_OCEAN_ROUTES,
     "gtr_vessels": GTR_PORT_REGIONS,

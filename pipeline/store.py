@@ -695,6 +695,33 @@ def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
         maybe_sync(conn)
 
 
+def save_contract_history(commodity: str, df: pd.DataFrame):
+    """Write per-contract daily closes → 'contract_history' (Layer 11b).
+
+    Plain INSERT OR REPLACE on (ticker, date): every run re-downloads each
+    active contract's whole series, so overlap is the normal case and the
+    newest fetch wins a session. fetched_date is provenance only — it never
+    keys identity, which is the deliberate contrast with forward_curve's
+    snapshot semantics.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    df["date"] = _date(df["date"])
+    df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    df = _str_cols(df, "ticker", "contract_month", "label")
+    if "volume" not in df.columns:
+        df["volume"] = None
+    _save(
+        "contract_history",
+        df[["commodity", "ticker", "contract_month", "label", "date",
+            "close", "volume", "fetched_date"]],
+        ["ticker", "date"],
+        f"contract_history/{commodity}",
+    )
+
+
 def save_dce_futures_data(commodity: str, df: pd.DataFrame):
     """Write DCE futures → 'dce_futures'."""
     if df.empty:

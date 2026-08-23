@@ -75,6 +75,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_dce_futures": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,
+        "fetch_all_contract_history": empty_dict,
         "fetch_wasde_estimates": empty_dict,
         "fetch_all_eia": empty_dict,
         "fetch_crush_data": empty_df,

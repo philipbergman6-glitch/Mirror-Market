@@ -46,6 +46,7 @@ from fetchers.akshare import fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
+from fetchers.contract_history import fetch_all_contract_history
 from fetchers.cot import fetch_cot_recent
 from fetchers.ec_oilseeds import fetch_ec_oilseed_prices
 from fetchers.eia import fetch_all_eia
@@ -78,6 +79,7 @@ from latency import clock as run_clock
 from pipeline.clean import (
     clean_brazil_spot,
     clean_conab,
+    clean_contract_history,
     clean_cot,
     clean_dce_futures,
     clean_ec_oilseeds,
@@ -108,6 +110,7 @@ from pipeline.store import (
     save_brazil_estimates,
     save_brazil_spot,
     save_cec_estimates,
+    save_contract_history,
     save_cot_data,
     save_crop_progress,
     save_currency_data,
@@ -772,6 +775,12 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             fetch=lambda: fetch_all_forward_curves(),
             save=lambda n, d: save_forward_curve(n, d),
             clean=lambda n, d: clean_forward_curve(d),
+        ),
+        DictLayer(
+            "contract_history", "Layer 11b", "per-contract close history",
+            fetch=lambda: fetch_all_contract_history(),
+            save=lambda n, d: save_contract_history(n, d),
+            clean=lambda n, d: clean_contract_history(d),
         ),
         DictLayer(
             "wasde", "Layer 12", "WASDE monthly estimates",

@@ -105,6 +105,15 @@ class QuoteProvider(Protocol):
     def curve_history(self, commodity: str, *, as_of: date, sessions: int) -> tuple[CurveObservation, ...]:
         """Past curve snapshots, oldest first — the input to spread percentiles."""
 
+    def close_history(self, contract: NamedContract, *, as_of: date, sessions: int) -> tuple[ContractQuote, ...]:
+        """One named contract's stored session closes, oldest first.
+
+        The input to the workstation's contract-row chart. Distinct from
+        :meth:`curve_history` on purpose: a curve snapshot is many contracts
+        on one session, this is one contract across many sessions — Layer 11b
+        against Layer 11.
+        """
+
     def continuous(self, commodity: str, *, as_of: date) -> ContinuousSeries | None:
         """The research series, labelled with how it was rolled."""
 
@@ -279,6 +288,48 @@ class SqliteQuoteProvider:
             if observation.legs:
                 out.append(observation)
         return tuple(out)
+
+    def close_history(
+        self, contract: NamedContract, *, as_of: date, sessions: int = 500
+    ) -> tuple[ContractQuote, ...]:
+        """This contract's Layer 11b daily closes, oldest first.
+
+        Keyed by (commodity, contract month) rather than by ticker so the
+        read does not have to rebuild Yahoo's suffix grammar — the fetcher
+        already resolved it once. A database without the table answers with
+        the same reasoned emptiness as one with no rows: "we hold no history
+        for this contract"."""
+        if not self._has_table("contract_history"):
+            return ()
+        rows = list(self.conn.execute(
+            "SELECT date, close, volume, fetched_date FROM contract_history "
+            "WHERE commodity = ? AND contract_month = ? AND date <= ? "
+            "ORDER BY date DESC LIMIT ?",
+            (
+                contract.spec.name,
+                contract.contract_month_date.isoformat(),
+                as_of.isoformat(),
+                int(sessions),
+            ),
+        ))
+        max_age = self._max_age_days()
+        quotes: list[ContractQuote] = []
+        for raw_date, close, volume, raw_fetched in reversed(rows):
+            day = _as_date(raw_date)
+            if day is None or close is None:
+                continue
+            freshness, _ = _freshness(day, as_of, max_age)
+            quotes.append(ContractQuote(
+                contract=contract,
+                price=float(close),
+                price_type=self.price_type,
+                observation_date=day,
+                provider=self.provider,
+                freshness=freshness,
+                fetched_date=_as_date(raw_fetched),
+                volume=None if volume is None else float(volume),
+            ))
+        return tuple(quotes)
 
     def _curve_rows(
         self, commodity: str, *, as_of: date, fetched_date: str | None = None

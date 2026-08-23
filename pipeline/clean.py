@@ -393,6 +393,39 @@ def clean_forward_curve(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_contract_history(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean per-contract daily close history (Layer 11b).
+
+    Steps:
+        1. Coerce close numeric; drop NaN and non-positive closes — a CBOT
+           soy price of zero is an error value, never an observation.
+        2. Coerce volume numeric (nullable — Yahoo omits it on some bars).
+        3. One row per (ticker, session): keep the last, matching the
+           store's INSERT OR REPLACE outcome so re-runs converge.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "close" in df.columns:
+        df["close"] = pd.to_numeric(df["close"], errors="coerce")
+        df = df.dropna(subset=["close"])
+        df = df[df["close"] > 0]
+
+    if "volume" in df.columns:
+        df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+
+    if {"ticker", "date"} <= set(df.columns):
+        df = df.drop_duplicates(subset=["ticker", "date"], keep="last")
+        df = df.sort_values(["contract_month", "date"]).reset_index(drop=True)
+
+    return df
+
+
 def clean_wasde(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean WASDE forecast data from USDA NASS.

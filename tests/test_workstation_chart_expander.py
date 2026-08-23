@@ -313,3 +313,68 @@ def test_both_editions_get_the_expander(curve_db):
         assert 'id="tv-CBOT-ZSX2026"' in html
         assert 'data-symbol="ZSX26"' in html
         assert "s3.tradingview.com" not in html
+
+
+# ---------------------------------------------------------------------------
+# Layer 11b — the chart draws the contract's own daily history (#332)
+# ---------------------------------------------------------------------------
+def _insert_contract_history(conn, symbol_month, sessions, ticker):
+    conn.executemany(
+        "INSERT INTO contract_history "
+        "(commodity, ticker, contract_month, label, date, close, volume, fetched_date) "
+        "VALUES (?,?,?,?,?,?,4210,'2026-08-19')",
+        [
+            (commodity, ticker, month, label, session, close)
+            for (commodity, month, label) in [symbol_month]
+            for session, close in sessions
+        ],
+    )
+    conn.commit()
+
+
+ZSF27_DAILY = [
+    (f"2026-08-{day:02d}", 1150.00 + day)
+    for day in (3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18)
+]
+
+
+def test_the_deep_series_reaches_the_chart_and_starts_the_record(curve_db):
+    """ZSF27 has one curve snapshot (withheld on its own); Layer 11b history
+    lifts it into the joined-line regime and dates the record's true start."""
+    _insert_contract_history(
+        curve_db, ("Soybeans", "2027-01-01", "Jan 2027"), ZSF27_DAILY, "ZSF27.CBT",
+    )
+    leg = leg_for(view(curve_db), "ZSF27")
+    history = leg["close_history"]
+    # 12 daily sessions + the one snapshot session (2026-08-19) they lack.
+    assert history["count"] == 13
+    assert history["since"] == "2026-08-03"
+    assert "history since 3 Aug 2026 (13 sessions)" in history["stamp"]
+    assert history["withheld_reason"] == ""
+
+
+def test_the_dedicated_series_wins_a_session_both_sources_hold(curve_db):
+    """Same venue, same vocabulary — but the per-contract layer is the
+    dedicated record, so where both hold a session its close is the point."""
+    _insert_contract_history(
+        curve_db,
+        ("Soybeans", "2026-11-01", "Nov 2026"),
+        [("2026-08-19", 1152.00)],  # snapshot says 1150.00 for this session
+        "ZSX26.CBT",
+    )
+    leg = leg_for(view(curve_db), "ZSX26")
+    points = dict(leg["close_history"]["points"])
+    expected = round(spec_for("Soybeans").native_to_usd_per_mt(1152.00), 2)
+    assert points["2026-08-19"] == expected
+    # And the merge never duplicates the session.
+    assert leg["close_history"]["count"] == len(ZSX26_SESSIONS)
+
+
+def test_a_leg_with_neither_source_is_still_withheld_with_a_reason(curve_db):
+    leg = leg_for(view(curve_db), "ZMZ26")
+    history = leg["close_history"]
+    assert history["points"] == []
+    assert "single point is a number, not a history" in history["withheld_reason"]
+    # The old text dated the gap to the snapshot start; the record no longer
+    # begins there, so the claim is gone.
+    assert "2026-07-30" not in history["withheld_reason"]

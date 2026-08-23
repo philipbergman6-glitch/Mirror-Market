@@ -61,6 +61,9 @@ GUARDED_TABLES: dict[str, tuple[str, tuple[str, ...]]] = {
     # Named by the ticket: the two core price/FX tables.
     "prices": ("Close", ("commodity", "Date")),
     "currencies": ("Close", ("pair", "Date")),
+    # Layer 11b per-contract closes: same venue and provider as `prices`,
+    # same self-healing caveat — the guard mostly buys a clean local database.
+    "contract_history": ("close", ("ticker", "date")),
     # Snapshot-only price tables (pipeline.history.HISTORY_TABLES). Their
     # upstreams publish only the current session, so the committed CSV is the
     # only copy and an overwrite here is unrecoverable — the sharpest form of

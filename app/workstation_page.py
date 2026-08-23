@@ -70,6 +70,7 @@ from analysis.futures.domain import (
     NO_NOTICE_DAY,
     SOY_COMPLEX,
     AggregateOpenInterest,
+    ContractQuote,
     ExpiryConfidence,
     Side,
     spec_for,
@@ -91,6 +92,7 @@ from analysis.futures.privacy import (
 )
 from analysis.futures.providers import (
     CurveObservation,
+    QuoteProvider,
     SqliteQuoteProvider,
     describe_provider,
     open_provider,
@@ -335,7 +337,7 @@ def build_view(
         "reference_label": REFERENCE_LABEL,
         "sections": [
             _alerts_section(page_alerts),
-            _contracts_section(curves, curve_histories),
+            _contracts_section(provider, curves, curve_histories, as_of=as_of),
             _curve_section(curves, open_interest),
             _crush_section(provider, as_of=as_of),
             _hedge_section(proposals, crush_proposal, is_reference),
@@ -437,20 +439,30 @@ CHART_MIN_POINTS = 2
 CHART_LINE_MIN_POINTS = 8
 
 
-def _close_history(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[str, Any]:
+def _close_history(
+    leg: CurveLeg,
+    history: tuple[CurveObservation, ...],
+    series: tuple[ContractQuote, ...],
+) -> dict[str, Any]:
     """This contract's own stored closes, in USD/MT, or a stated absence.
 
-    Read from the same ``forward_curve`` snapshots the spread percentiles use.
-    The history is thin by construction — snapshots exist only since
-    2026-07-30 — and the stamp says when it starts rather than letting a short
-    axis imply a long record. Points are keyed by the *session* the close
-    belongs to, so a weekend re-fetch of Friday's close is one point, not two.
+    Two sources, one vocabulary: ``series`` is the contract's own Layer 11b
+    daily history (months deep), ``history`` is the Layer 11 curve snapshots
+    the spread percentiles use (daily since 2026-07-30). Both are the same
+    venue's delayed closes through the same guarded path, so where both hold
+    a session the dedicated series wins; a snapshot only contributes a
+    session the series lacks. Points are keyed by the *session* the close
+    belongs to, so a weekend re-fetch of Friday's close is one point, not
+    two. The stamp says when the record starts rather than letting a short
+    axis imply a long one.
     """
     by_session: dict[str, float] = {}
     for observation in history:  # oldest first; later snapshots win a session
         quote = observation.leg(leg.contract.symbol)
         if quote is not None:
             by_session[quote.observation_date.isoformat()] = round(quote.usd_per_mt, 2)
+    for quote in series:  # oldest first; the per-contract layer wins a session
+        by_session[quote.observation_date.isoformat()] = round(quote.usd_per_mt, 2)
     points = sorted(by_session.items())
     count = len(points)
     if count < CHART_MIN_POINTS:
@@ -461,8 +473,8 @@ def _close_history(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict
             "stamp": "",
             "withheld_reason": (
                 f"{count or 'no'} stored session{'' if count == 1 else 's'} for this "
-                "contract — daily snapshots begin 2026-07-30, and a single point is a "
-                "number, not a history; the table above already carries it"
+                "contract — a single point is a number, not a history; the table "
+                "above already carries it"
             ),
         }
     since = date.fromisoformat(points[0][0])
@@ -478,7 +490,11 @@ def _close_history(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict
     }
 
 
-def _contract_leg(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[str, Any]:
+def _contract_leg(
+    leg: CurveLeg,
+    history: tuple[CurveObservation, ...],
+    series: tuple[ContractQuote, ...],
+) -> dict[str, Any]:
     """A curve leg, plus everything its row can expand into.
 
     The third-party symbols and URLs are carried on the leg rather than
@@ -494,12 +510,16 @@ def _contract_leg(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[
     payload["tradingview_symbol"] = symbol
     payload["tradingview_url"] = None if symbol is None else tradingview_url(symbol)
     payload["barchart_url"] = barchart_url(leg.contract)
-    payload["close_history"] = _close_history(leg, history)
+    payload["close_history"] = _close_history(leg, history, series)
     return payload
 
 
 def _contracts_section(
-    curves: dict[str, CurveAnalysis], histories: dict[str, tuple[CurveObservation, ...]]
+    provider: QuoteProvider,
+    curves: dict[str, CurveAnalysis],
+    histories: dict[str, tuple[CurveObservation, ...]],
+    *,
+    as_of: date,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for commodity, analysis in curves.items():
@@ -528,7 +548,11 @@ def _contracts_section(
             "tick_size": spec_for(commodity).tick_size,
             "tick_value_usd": spec_for(commodity).tick_value_usd,
             "legs": [
-                _contract_leg(leg, histories.get(commodity, ()))
+                _contract_leg(
+                    leg,
+                    histories.get(commodity, ()),
+                    provider.close_history(leg.contract, as_of=as_of, sessions=500),
+                )
                 for leg in analysis.legs
             ],
         })

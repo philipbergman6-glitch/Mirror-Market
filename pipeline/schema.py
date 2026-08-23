@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS forward_curve (
 # "none" (0) — which is the difference the whole Phase 3 workstation refuses
 # to blur.
 
+_CREATE_CONTRACT_HISTORY = """
+CREATE TABLE IF NOT EXISTS contract_history (
+    commodity      TEXT NOT NULL,
+    ticker         TEXT NOT NULL,
+    contract_month TEXT NOT NULL,
+    label          TEXT,
+    date           TEXT NOT NULL,
+    close          REAL,
+    volume         REAL,
+    fetched_date   TEXT NOT NULL,
+    PRIMARY KEY (ticker, date)
+);
+"""
+# Layer 11b (#332): one row per (named contract, session) — the shape the
+# workstation's contract-row chart reads. Unlike forward_curve, whose rows
+# are one-session snapshots keyed by fetched_date, this is a self-healing
+# series: every run re-downloads each active contract's whole history, so
+# fetched_date records provenance, not identity.
+
 _CREATE_WASDE = """
 CREATE TABLE IF NOT EXISTS wasde (
     commodity       TEXT NOT NULL,
@@ -648,6 +667,7 @@ ALL_SCHEMAS = (
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,
     _CREATE_FORWARD_CURVE,
+    _CREATE_CONTRACT_HISTORY,
     _CREATE_WASDE,
     _CREATE_INSPECTIONS,
     _CREATE_INSPECTION_PORT_FLOWS,

@@ -26,11 +26,11 @@ The soy complex (beans, oil, meal) priced across every venue that matters to a c
 
 The Bloomberg-class ambition is not abandoned, it is **deferred and priced**: `ROADMAP.md` records it as a commercially-triggered expansion track. It is not the standard this repo is graded against, and it is not a reason to build toward it speculatively.
 
-The build: 31 operational data layers across 28 numbered groups (fetch → clean/validate → store, SQLite) → analysis → a 13-page static site on GitHub Pages + a daily briefing. `config.PRODUCTION_LAYERS` is the authoritative roster — count from it, never from prose. All prices display in **USD/MT**. Private desk editions (opportunity board, workstation book) are written to `data/workspace/`, outside `docs/`, and are never published.
+The build: 32 operational data layers across 28 numbered groups (fetch → clean/validate → store, SQLite) → analysis → a 13-page static site on GitHub Pages + a daily briefing. `config.PRODUCTION_LAYERS` is the authoritative roster — count from it, never from prose. All prices display in **USD/MT**. Private desk editions (opportunity board, workstation book) are written to `data/workspace/`, outside `docs/`, and are never published.
 
 ## Reference docs — read before touching the relevant area
 
-- **`LAYERS.md`** — all 31 data layers: units, cadence, API keys, and every source's known traps. **Mandatory before editing any fetcher.**
+- **`LAYERS.md`** — all 32 data layers: units, cadence, API keys, and every source's known traps. **Mandatory before editing any fetcher.**
 - **`ARCHITECTURE.md`** — pipeline, analysis, storage, history persistence, site contract, and the product phases (origins, workstation, desk workflow, opportunities, crush, price semantics, trust ledger, latency, fast refresh).
 - **`DESIGN.md`** — all visual/UI decisions. Read before any visual change; never deviate without explicit user approval. In QA mode, flag code that doesn't match it.
 - **`LATENCY.md`** — the data-age vocabulary and objectives.

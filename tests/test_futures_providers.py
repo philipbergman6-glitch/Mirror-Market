@@ -317,3 +317,87 @@ def test_the_cot_commodity_keys_are_the_same_strings_the_specs_use(conn):
     from config import COT_COMMODITIES
 
     assert set(CONTRACT_SPECS) <= set(COT_COMMODITIES)
+
+
+# ---------------------------------------------------------------------------
+# close_history — Layer 11b, one contract across many sessions (#332)
+# ---------------------------------------------------------------------------
+
+
+def _insert_history(conn, rows):
+    conn.executemany(
+        "INSERT INTO contract_history "
+        "(commodity, ticker, contract_month, label, date, close, volume, fetched_date) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        rows,
+    )
+    conn.commit()
+
+
+ZSX26_HISTORY = [
+    ("Soybeans", "ZSX26.CBT", "2026-11-01", "Nov 2026", "2026-08-10", 1150.00, 3_100, "2026-08-18"),
+    ("Soybeans", "ZSX26.CBT", "2026-11-01", "Nov 2026", "2026-08-11", 1167.75, 4_210, "2026-08-18"),
+    ("Soybeans", "ZSX26.CBT", "2026-11-01", "Nov 2026", "2026-08-12", 1163.50, None, "2026-08-18"),
+]
+
+
+def _november_beans():
+    from analysis.futures.domain import named_contract
+
+    return named_contract("Soybeans", year=2026, month=11)
+
+
+def test_close_history_returns_the_contracts_sessions_oldest_first(conn):
+    _insert_history(conn, ZSX26_HISTORY)
+    quotes = open_provider(conn).close_history(_november_beans(), as_of=AS_OF)
+    assert [quote.observation_date.isoformat() for quote in quotes] == [
+        "2026-08-10", "2026-08-11", "2026-08-12",
+    ]
+    assert [quote.price for quote in quotes] == [1150.00, 1167.75, 1163.50]
+    # Same vocabulary as every other yfinance read: a delayed close, never a
+    # settlement, and the volume NULL stays "never learned".
+    assert all(quote.price_type.value == "delayed_close" for quote in quotes)
+    assert quotes[0].volume == 3_100
+    assert quotes[2].volume is None
+
+
+def test_close_history_stops_at_as_of_and_honours_the_session_cap(conn):
+    _insert_history(conn, ZSX26_HISTORY)
+    contract = _november_beans()
+    provider = open_provider(conn)
+    upto = provider.close_history(contract, as_of=date(2026, 8, 11))
+    assert [quote.observation_date.isoformat() for quote in upto] == [
+        "2026-08-10", "2026-08-11",
+    ]
+    capped = provider.close_history(contract, as_of=AS_OF, sessions=2)
+    # The cap keeps the *newest* sessions — the chart's right edge is the
+    # market's current state, the left edge is what gets cut.
+    assert [quote.observation_date.isoformat() for quote in capped] == [
+        "2026-08-11", "2026-08-12",
+    ]
+
+
+def test_close_history_is_empty_for_another_contract_month(conn):
+    from analysis.futures.domain import named_contract
+
+    _insert_history(conn, ZSX26_HISTORY)
+    january = named_contract("Soybeans", year=2027, month=1)
+    assert open_provider(conn).close_history(january, as_of=AS_OF) == ()
+
+
+def test_close_history_without_the_table_is_a_reasoned_emptiness():
+    bare = sqlite3.connect(":memory:")
+    try:
+        assert open_provider(bare).close_history(_november_beans(), as_of=AS_OF) == ()
+    finally:
+        bare.close()
+
+
+def test_close_history_converts_to_usd_per_mt_through_the_one_site(conn):
+    from analysis.futures.domain import spec_for
+
+    _insert_history(conn, ZSX26_HISTORY[:1])
+    (quote,) = open_provider(conn).close_history(_november_beans(), as_of=AS_OF)
+    assert quote.usd_per_mt == pytest.approx(
+        spec_for("Soybeans").native_to_usd_per_mt(1150.00)
+    )
