@@ -1,7 +1,7 @@
 # Design System — Mirror Market
 
 ## Product Context
-- **What this is:** Public-data soy intelligence and private desk decision support for physical buyers making daily cargo, basis, origin, and hedge decisions — 31 operational data layers across 28 numbered source groups (canonical mission: `CLAUDE.md`)
+- **What this is:** Public-data soy intelligence and private desk decision support for physical buyers making daily cargo, basis, origin, and hedge decisions — 32 operational data layers across 28 numbered source groups (canonical mission: `CLAUDE.md`)
 - **Who it's for:** Physical buyers working at a daily cargo/basis cadence, reading the state of the soy complex before the desk day — plus engineers viewing the project from GitHub. **Not** an execution terminal, a real-time feed, or a CTRM; the visual language must not imply any of the three
 - **Space/industry:** Commodity trading, agricultural markets, market research
 - **Project type:** Data-heavy analytics dashboard (static HTML, generated from Python)

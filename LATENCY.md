@@ -82,7 +82,7 @@ and ~6 seconds at 1mo.
 
 | Stage | Time | Source |
 |---|---|---|
-| Full daily pipeline, all 31 layers | **6 m 02 s** | production CI 2026-08-18, first to last freshness stamp (13:53:22 → 13:59:24) in `data/history/data_freshness.csv` |
+| Full daily pipeline, all 32 layers | **6 m 02 s** | production CI 2026-08-18, first to last freshness stamp (13:53:22 → 13:59:24) in `data/history/data_freshness.csv` |
 | Fast pipeline (3 layers, fetch + clean + store + history round-trip) | **51.2 s** | local, isolated DB copy |
 | Site generation, 13 pages | **3.4–3.6 s** | local |
 | Fast refresh end to end, both gates included | **53.1 s** | local, `scripts/refresh_prices.py` |
@@ -134,7 +134,7 @@ Two of these deserve their reasoning stated here:
 ## 4. The fast refresh
 
 `python main.py --fast` — `config.FAST_REFRESH_LAYERS` (`prices`, `currencies`,
-`forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) instead of all 31
+`forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) instead of all 32
 layers over `15y`.
 
 It is the **same code** as the daily build with two arguments different, not a

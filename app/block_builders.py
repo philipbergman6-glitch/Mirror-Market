@@ -438,10 +438,10 @@ def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
         import pandas as pd
 
         from analysis.signals import (
-            demote_near_roll_signals,
             detect_ma_crossovers,
             detect_macd_crossover,
             detect_rsi_extremes,
+            suppress_near_roll_signals,
         )
         from analysis.technical import compute_all_technicals
 
@@ -453,7 +453,10 @@ def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
         signals: list[dict] = []
         for detect in (detect_ma_crossovers, detect_rsi_extremes, detect_macd_crossover):
             signals.extend(detect(frame, key))
-        signals = demote_near_roll_signals(signals)
+        # Chips are computed from the market's own close series, which for a
+        # curve commodity is the provider front-month — near an estimated
+        # roll the chip is withheld, not footnoted (A4 #301).
+        signals = suppress_near_roll_signals(signals)
     except Exception:  # noqa: BLE001 — chips are decoration; the price is the block
         log.warning("signal chips failed for %s", key, exc_info=True)
         return []

@@ -393,6 +393,37 @@ def clean_forward_curve(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_contract_bars(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean named-contract daily bars (Layer 11b).
+
+    Steps:
+        1. Coerce Close to numeric; drop rows where it is NaN or <= 0 —
+           a bar with no close is not a session this contract priced.
+        2. Dedupe on (ticker, Date), keeping the last row — matches the
+           PK the store upserts against.
+        3. Sort by (ticker, Date).
+
+    Volume is left as-is: NULL means "provider gave none" and must not
+    become 0. Returns a cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    if "Close" in df.columns:
+        df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+        df = df.dropna(subset=["Close"])
+        df = df[df["Close"] > 0]
+
+    if {"ticker", "Date"}.issubset(df.columns):
+        df = df.drop_duplicates(subset=["ticker", "Date"], keep="last")
+        df = df.sort_values(["ticker", "Date"]).reset_index(drop=True)
+
+    return df
+
+
 def clean_wasde(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean WASDE forecast data from USDA NASS.

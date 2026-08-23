@@ -87,6 +87,7 @@ LAYER_MIN_KEYS = {
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
     "forward_curve": 7,  # of 9 commodities
+    "contract_bars": 7,  # of 9 commodities — same roster as forward_curve
     "eia": 2,          # of 3 series
     # Both GTR legs demand *every* key. Each layer has exactly two, they come
     # out of one workbook in one download, and there is no such thing as one
@@ -125,6 +126,7 @@ PRODUCTION_LAYERS = (
     ("dce", "9", "AKShare (DCE/CZCE)", "Daily", "Chinese oilseed futures"),
     ("export_sales", "10", "USDA FAS (Export Sales)", "Weekly", "6 commodities and buyers"),
     ("forward_curve", "11", "Yahoo Finance (Contracts)", "Daily", "9 commodity forward curves"),
+    ("contract_bars", "11b", "Yahoo Finance (Contracts)", "Daily", "Named-contract daily bar history"),
     ("wasde", "12", "USDA WASDE", "Monthly", "Supply and demand forecasts"),
     ("eia", "13", "EIA", "Weekly/Monthly", "Ethanol, biodiesel and diesel"),
     ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
@@ -1376,6 +1378,18 @@ CEC_YIELD_BAND_T_HA = (0.3, 5.0)
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
+# Sessions the named ratio-adjusted continuous series must hold before the
+# technical stack adopts it over the provider front-month frame (A4 #301).
+# The constraint is measured, not aesthetic: the 2023-25 front contracts
+# are already delisted, so the stitched front-month series starts at
+# 2026-08-07 and grows one session per day — at 11 sessions (live,
+# 2026-08-23) every indicator on it is NaN, and a screen of NaNs teaches
+# less than the labelled, roll-suppressed provider series. 60 sessions
+# makes MA_50, RSI-14 and HV_20 real; the switch then happens on its own
+# as history accrues. Distinct from analysis.futures.continuous
+# MIN_SESSIONS (10), which is the floor for the series *existing* at all.
+TECHNICALS_MIN_SESSIONS = 60
+
 # Volume spike: multiple of 20-day average volume to flag as unusual
 VOLUME_SPIKE_MULTIPLIER = 2.0
 
@@ -1569,6 +1583,10 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # Daily exchange/market data — a long weekend plus a holiday.
     "prices": 7,
     "currencies": 7,
+    # Named-contract bars are the same venue and cadence as prices; the
+    # budget is what catches a run of listed tickers all going quietly
+    # stale while the layer keeps answering with old history.
+    "contract_bars": 7,
     # SAFEX is a *stale-serving* page: on a non-trading day Grain SA re-serves
     # the previous session's rows rather than emptying (verified 2026-08-02 and
     # 2026-08-08). So "rows came back" says nothing about whether the JSE/BVG
@@ -1686,6 +1704,7 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "dce": DCE_CONTRACTS,
     "export_sales": EXPORT_SALES_COMMODITIES,
     "forward_curve": FORWARD_CURVE_CONTRACTS,
+    "contract_bars": FORWARD_CURVE_CONTRACTS,
     "eia": EIA_SERIES,
     "gtr_ocean_freight": GTR_OCEAN_ROUTES,
     "gtr_vessels": GTR_PORT_REGIONS,
@@ -1824,6 +1843,16 @@ MARKETS: dict[str, dict[str, Any]] = {
             "key_column": "commodity",
             "keys": ["Soybeans", "Soybean Oil", "Soybean Meal"],
             "headline_key": "Soybeans",
+            # A4 #301 display contract: a level whose contract the source
+            # does not name must say so. `prices` is Yahoo's ZS=F family —
+            # the provider does not publish which delivery month a bar
+            # belongs to, and inferring one would assert a fact the source
+            # refuses to state (same refusal as `named_board_crush`).
+            "key_labels": {
+                "Soybeans": "provider front-month — contract not published",
+                "Soybean Oil": "provider front-month — contract not published",
+                "Soybean Meal": "provider front-month — contract not published",
+            },
             "cadence": "daily",
             "quote_kind": "board",
             "value_column": "Close",

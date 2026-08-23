@@ -576,13 +576,15 @@ def _build_command_center(data: dict) -> dict | None:
 # ---------------------------------------------------------------------------
 # Technicals context
 # ---------------------------------------------------------------------------
-def _build_technicals(data: dict) -> list[dict] | None:
+def _build_technicals(data: dict) -> dict | None:
     if not data:
         return None
 
     per_leg_mt = data.get("per_leg_mt", data.get("per_leg", {}))
     all_signals = data.get("signals", [])
     items = []
+    named_legs: list[str] = []
+    provider_legs: list[str] = []
 
     for name in ["Soybeans", "Soybean Oil", "Soybean Meal"]:
         df = per_leg_mt.get(name)
@@ -603,18 +605,51 @@ def _build_technicals(data: dict) -> list[dict] | None:
             "message": s.get("description") or s.get("message", ""),
         } for s in leg_signals]
 
-        # CSV download (last 252 trading days)
-        csv_df = df.tail(252)[["Open", "High", "Low", "Close"]].copy()
+        # CSV download (last 252 trading days). The named adjusted series
+        # has no OHLC by construction — export what the series actually is,
+        # contract column included.
+        csv_cols = [c for c in ("Open", "High", "Low", "Close", "contract") if c in df.columns]
+        csv_df = df.tail(252)[csv_cols].copy()
         csv_uri = _csv_data_uri(csv_df)
+
+        # A4 #301 display contract: say which series the indicators rode,
+        # and name the newest bar's contract where the series knows it.
+        series_kind = df.attrs.get("series_kind")
+        contract = None
+        if "contract" in df.columns and len(df):
+            raw_contract = df["contract"].iloc[-1]
+            if isinstance(raw_contract, str) and raw_contract:
+                contract = raw_contract.split(".")[0]
+        (named_legs if series_kind == "named_ratio" else provider_legs).append(name)
 
         items.append({
             "name": name,
             "chart_html": chart_html,
             "signals": sig_items,
             "csv_uri": csv_uri,
+            "series_kind": series_kind,
+            "contract": contract,
         })
 
-    return items if items else None
+    if not items:
+        return None
+
+    notes: list[str] = []
+    if named_legs:
+        notes.append(
+            ", ".join(named_legs) + ": indicators computed on the ratio-adjusted "
+            "named-contract series — rolls are this project's own written rule, "
+            "every bar names its contract, and levels before the most recent "
+            "roll are NOT tradeable prices."
+        )
+    if provider_legs:
+        notes.append(
+            ", ".join(provider_legs) + ": indicators computed on the provider "
+            "front-month series, whose unpublished contract rolls can fake "
+            "price gaps; signals within ±3 trading days of an estimated roll "
+            "are suppressed."
+        )
+    return {"notes": notes, "legs": items}
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ Key concepts for learning:
     - RSI extremes: overbought/oversold conditions may signal reversals
 """
 
+import logging
 from typing import cast
 
 import pandas as pd
@@ -24,6 +25,8 @@ from config import (
     RSI_OVERSOLD,
     VOLUME_SPIKE_MULTIPLIER,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def is_near_roll(date, commodity: str, *, window: int = 3) -> bool:
@@ -80,34 +83,52 @@ TECHNICAL_SIGNAL_TYPES = frozenset({
 })
 
 
-def demote_near_roll_signals(signals: list[dict], *, window: int = 3) -> list[dict]:
-    """Return a copy of `signals` with near-roll entries demoted to severity=info.
+def suppress_near_roll_signals(
+    signals: list[dict],
+    *,
+    window: int = 3,
+    adjusted_commodities: frozenset[str] = frozenset(),
+) -> list[dict]:
+    """Drop provider-series technical signals near a calendar-estimated roll.
 
-    yfinance front-month series have artificial price gaps on contract roll days,
-    which can spawn false MA/MACD crossovers, RSI extremes, and Bollinger squeezes.
-    Anything within `window` business days of a calendar-estimated roll is downgraded
-    to `info` and tagged `(near-roll)` so downstream consumers can distinguish.
-    Only price-derived signal types (TECHNICAL_SIGNAL_TYPES) are eligible.
+    Replaces the old *demotion* rule (A4, #301): a signal the roll gap may
+    have faked was previously downgraded to `info` and tagged `(near-roll)`
+    — still shown, still contaminated. The decided rule is suppression: a
+    number that may be an artifact of the provider switching contracts is
+    withheld, not footnoted (invariant 11 — a wrong number is worse than a
+    gap).
+
+    ``adjusted_commodities`` names the commodities whose signals were
+    detected on the named ratio-adjusted series (analysis.loaders). Those
+    pass through untouched: their roll dates are our own written rule and
+    the adjustment already removed the gap, so there is nothing to
+    suppress. Everything else is judged by the calendar estimate — the
+    provider does not publish its rolls, which is exactly why the whole
+    window is treated as uncertain. Only price-derived signal types
+    (TECHNICAL_SIGNAL_TYPES) are eligible; fundamental signals never are.
     """
     out: list[dict] = []
+    dropped = 0
     for sig in signals:
         date = sig.get("date")
         commodity = sig.get("commodity")
         if (
             date is None
             or commodity is None
+            or commodity in adjusted_commodities
             or sig.get("signal_type") not in TECHNICAL_SIGNAL_TYPES
             or not is_near_roll(date, commodity, window=window)
         ):
             out.append(sig)
             continue
-
-        demoted = dict(sig)
-        demoted["severity"] = "info"
-        desc = demoted.get("description", "")
-        if "(near-roll)" not in desc:
-            demoted["description"] = f"{desc} (near-roll)" if desc else "(near-roll)"
-        out.append(demoted)
+        dropped += 1
+    if dropped:
+        logger.info(
+            "%d technical signal(s) suppressed within ±%d business days of an "
+            "estimated provider roll — the underlying series cannot distinguish "
+            "a roll gap from a move",
+            dropped, window,
+        )
     return out
 
 
