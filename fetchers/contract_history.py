@@ -32,6 +32,7 @@ Two ticker rosters per commodity, treated differently:
 
 import logging
 from datetime import date
+from typing import Any
 
 import pandas as pd
 
@@ -86,7 +87,8 @@ def _bars_rows(df: pd.DataFrame, commodity: str, contract: dict) -> list[dict]:
         close = bar.get("Close")
         if pd.isna(close):
             continue
-        day = pd.Timestamp(stamp)  # type: ignore[arg-type]
+        stamp_any: Any = stamp
+        day = pd.Timestamp(stamp_any)
         if pd.isna(day):
             continue
         volume = bar.get("Volume")

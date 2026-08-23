@@ -12,6 +12,7 @@ or in tests.
 """
 
 from functools import lru_cache
+from typing import Any
 
 import pandas as pd
 
@@ -106,9 +107,11 @@ def _volume_by_session(commodity: str, contract_by_date: dict) -> dict:
         return {}
     out: dict = {}
     for row in bars.itertuples(index=False):
-        day = pd.Timestamp(row.Date).date()  # type: ignore[arg-type]
+        date_any: Any = row.Date
+        day = pd.Timestamp(date_any).date()
         if contract_by_date.get(day) == row.ticker and pd.notna(row.Volume):
-            out[day] = float(row.Volume)  # type: ignore[arg-type]
+            volume_any: Any = row.Volume
+            out[day] = float(volume_any)
     return out
 
 

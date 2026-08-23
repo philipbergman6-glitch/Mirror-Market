@@ -314,7 +314,8 @@ def build_from_bars(
         day = _bar_date(row.Date)
         if day is None or row.Close is None:
             continue
-        closes_by_date.setdefault(day, {})[str(row.ticker)] = float(row.Close)  # type: ignore[arg-type]
+        close_any: Any = row.Close
+        closes_by_date.setdefault(day, {})[str(row.ticker)] = float(close_any)
 
     ordered: list[tuple[date, float, str]] = []
     for day in sorted(closes_by_date):
