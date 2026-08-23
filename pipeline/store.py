@@ -695,6 +695,32 @@ def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
         maybe_sync(conn)
 
 
+def save_contract_bars(commodity: str, df: pd.DataFrame):
+    """Write named-contract daily bars → 'contract_bars' (Layer 11b).
+
+    Plain INSERT OR REPLACE upsert on (ticker, Date) — this table
+    *accumulates*: a re-fetch of a listed contract rewrites the same
+    history plus one new bar, and an expired contract's rows are never
+    touched again (Yahoo no longer serves the symbol; the row here is the
+    only copy). No snapshot-replace like forward_curve — bars are keyed by
+    session, not by fetch, so two runs on one day agree by construction.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    df = _str_cols(df, "ticker", "contract_month", "Date")
+    if "Volume" not in df.columns:
+        df["Volume"] = None
+    _save(
+        "contract_bars",
+        df[["commodity", "ticker", "contract_month", "Date", "Close", "Volume", "fetched_date"]],
+        ["ticker", "Date"],
+        f"contract_bars/{commodity}",
+    )
+
+
 def save_dce_futures_data(commodity: str, df: pd.DataFrame):
     """Write DCE futures → 'dce_futures'."""
     if df.empty:

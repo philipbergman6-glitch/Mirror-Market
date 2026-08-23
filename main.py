@@ -52,6 +52,7 @@ from fetchers.eia import fetch_all_eia
 from fetchers.eia import is_configured as eia_configured
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.export_sales import is_configured as export_sales_configured
+from fetchers.contract_history import fetch_all_contract_bars
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
 from fetchers.gtr import fetch_gtr_ocean_freight, fetch_gtr_vessel_activity
@@ -83,6 +84,7 @@ from pipeline.clean import (
     clean_ec_oilseeds,
     clean_eia,
     clean_export_sales,
+    clean_contract_bars,
     clean_forward_curve,
     clean_fred_series,
     clean_india_domestic,
@@ -100,7 +102,7 @@ from pipeline.clean import (
     clean_worldbank,
 )
 from pipeline.history import HistoryImportError, export_history, import_history
-from pipeline.query import read_prices
+from pipeline.query import captured_contract_tickers, read_prices
 from pipeline.results import FetchResult
 from pipeline.store import (
     init_database,
@@ -115,6 +117,7 @@ from pipeline.store import (
     save_ec_oilseed_prices,
     save_eia_data,
     save_export_sales,
+    save_contract_bars,
     save_forward_curve,
     save_fred_data,
     save_freshness,
@@ -772,6 +775,16 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             fetch=lambda: fetch_all_forward_curves(),
             save=lambda n, d: save_forward_curve(n, d),
             clean=lambda n, d: clean_forward_curve(d),
+        ),
+        DictLayer(
+            "contract_bars", "Layer 11b", "named-contract daily bars",
+            # captured_contract_tickers is read at fetch time, after
+            # import_history() has seeded the ephemeral CI database — an
+            # expired contract captured on any earlier day is therefore
+            # never re-probed.
+            fetch=lambda: fetch_all_contract_bars(captured_contract_tickers()),
+            save=lambda n, d: save_contract_bars(n, d),
+            clean=lambda n, d: clean_contract_bars(d),
         ),
         DictLayer(
             "wasde", "Layer 12", "WASDE monthly estimates",

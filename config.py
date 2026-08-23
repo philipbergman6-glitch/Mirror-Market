@@ -87,6 +87,7 @@ LAYER_MIN_KEYS = {
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
     "forward_curve": 7,  # of 9 commodities
+    "contract_bars": 7,  # of 9 commodities — same roster as forward_curve
     "eia": 2,          # of 3 series
     # Both GTR legs demand *every* key. Each layer has exactly two, they come
     # out of one workbook in one download, and there is no such thing as one
@@ -125,6 +126,7 @@ PRODUCTION_LAYERS = (
     ("dce", "9", "AKShare (DCE/CZCE)", "Daily", "Chinese oilseed futures"),
     ("export_sales", "10", "USDA FAS (Export Sales)", "Weekly", "6 commodities and buyers"),
     ("forward_curve", "11", "Yahoo Finance (Contracts)", "Daily", "9 commodity forward curves"),
+    ("contract_bars", "11b", "Yahoo Finance (Contracts)", "Daily", "Named-contract daily bar history"),
     ("wasde", "12", "USDA WASDE", "Monthly", "Supply and demand forecasts"),
     ("eia", "13", "EIA", "Weekly/Monthly", "Ethanol, biodiesel and diesel"),
     ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
@@ -1569,6 +1571,10 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # Daily exchange/market data — a long weekend plus a holiday.
     "prices": 7,
     "currencies": 7,
+    # Named-contract bars are the same venue and cadence as prices; the
+    # budget is what catches a run of listed tickers all going quietly
+    # stale while the layer keeps answering with old history.
+    "contract_bars": 7,
     # SAFEX is a *stale-serving* page: on a non-trading day Grain SA re-serves
     # the previous session's rows rather than emptying (verified 2026-08-02 and
     # 2026-08-08). So "rows came back" says nothing about whether the JSE/BVG
@@ -1686,6 +1692,7 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "dce": DCE_CONTRACTS,
     "export_sales": EXPORT_SALES_COMMODITIES,
     "forward_curve": FORWARD_CURVE_CONTRACTS,
+    "contract_bars": FORWARD_CURVE_CONTRACTS,
     "eia": EIA_SERIES,
     "gtr_ocean_freight": GTR_OCEAN_ROUTES,
     "gtr_vessels": GTR_PORT_REGIONS,

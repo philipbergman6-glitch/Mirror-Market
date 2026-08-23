@@ -36,7 +36,9 @@ from fetchers._settlement import (
 logger = logging.getLogger(__name__)
 
 
-def download_bars(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataFrame:
+def download_bars(
+    ticker: str, period: str = DEFAULT_HISTORY_PERIOD, max_retries: int = MAX_RETRIES
+) -> pd.DataFrame:
     """
     Download historical OHLCV data for a single ticker, with no session policy.
 
@@ -57,6 +59,11 @@ def download_bars(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataF
         Yahoo Finance ticker symbol, e.g. "ZS=F"
     period : str
         How far back to look — "1y", "2y", "5y", "max", etc.
+    max_retries : int
+        Retry budget. Defaults to config.MAX_RETRIES; Layer 11b's expired-
+        contract probes pass 1, because "empty" there usually means Yahoo
+        has delisted the symbol — an expected daily answer, not a glitch
+        worth three backoff sleeps per symbol.
 
     Returns
     -------
@@ -64,7 +71,7 @@ def download_bars(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataF
         Columns: Open, High, Low, Close, Volume
         Index: Date
     """
-    for attempt in range(1, MAX_RETRIES + 1):
+    for attempt in range(1, max_retries + 1):
         try:
             data = yf.download(ticker, period=period, progress=False, timeout=REQUEST_TIMEOUT)
 
@@ -72,9 +79,9 @@ def download_bars(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataF
                 # An empty frame is usually Yahoo throttling, not a real
                 # "no such ticker" — burn a retry instead of giving up.
                 logger.warning(
-                    "No data returned for %s (attempt %d/%d)", ticker, attempt, MAX_RETRIES
+                    "No data returned for %s (attempt %d/%d)", ticker, attempt, max_retries
                 )
-                if attempt < MAX_RETRIES:
+                if attempt < max_retries:
                     retry_sleep(attempt)
                     continue
                 return data
@@ -95,12 +102,12 @@ def download_bars(ticker: str, period: str = DEFAULT_HISTORY_PERIOD) -> pd.DataF
             # response shape. Caught explicitly so unrelated bugs surface.
             logger.warning(
                 "Attempt %d/%d failed for %s: %s",
-                attempt, MAX_RETRIES, ticker, exc,
+                attempt, max_retries, ticker, exc,
             )
-            if attempt < MAX_RETRIES:
+            if attempt < max_retries:
                 retry_sleep(attempt)
 
-    logger.error("All %d attempts failed for %s — returning empty DataFrame", MAX_RETRIES, ticker)
+    logger.error("All %d attempts failed for %s — returning empty DataFrame", max_retries, ticker)
     return pd.DataFrame()
 
 
@@ -108,6 +115,7 @@ def fetch_one(
     ticker: str,
     period: str = DEFAULT_HISTORY_PERIOD,
     rule: SessionRule = EXCHANGE_SESSION,
+    max_retries: int = MAX_RETRIES,
 ) -> pd.DataFrame:
     """
     Download historical OHLCV data for a single ticker, guarded.
@@ -136,7 +144,9 @@ def fetch_one(
         Columns: Open, High, Low, Close, Volume
         Index: Date
     """
-    return drop_unsettled_session(download_bars(ticker, period=period), label=ticker, rule=rule)
+    return drop_unsettled_session(
+        download_bars(ticker, period=period, max_retries=max_retries), label=ticker, rule=rule
+    )
 
 
 def fetch_all(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataFrame]:

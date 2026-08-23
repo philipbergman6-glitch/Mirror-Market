@@ -208,6 +208,23 @@ def read_forward_curve(commodity: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_contract_bars(commodity: str | None = None) -> pd.DataFrame:
+    """Read named-contract daily bars (Layer 11b)."""
+    return _read_table("contract_bars", "commodity", commodity)
+
+
+def captured_contract_tickers() -> frozenset[str]:
+    """Tickers `contract_bars` already holds rows for.
+
+    The fetcher skips *expired* candidates in this set — their history
+    cannot change, so re-probing a delisted symbol buys nothing.
+    """
+    df = _read_table("contract_bars", date_cols=(), sql="SELECT DISTINCT ticker FROM contract_bars")
+    if df.empty or "ticker" not in df.columns:
+        return frozenset()
+    return frozenset(df["ticker"].astype(str))
+
+
 def read_dce_futures(commodity: str | None = None) -> pd.DataFrame:
     """Read DCE futures data from SQLite."""
     return _read_table("dce_futures", "commodity", commodity, missing_ok=False)

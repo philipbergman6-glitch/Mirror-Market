@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS forward_curve (
 # "none" (0) — which is the difference the whole Phase 3 workstation refuses
 # to blur.
 
+_CREATE_CONTRACT_BARS = """
+CREATE TABLE IF NOT EXISTS contract_bars (
+    commodity        TEXT    NOT NULL,
+    ticker           TEXT    NOT NULL,
+    contract_month   TEXT    NOT NULL,
+    Date             TEXT    NOT NULL,
+    Close            REAL    NOT NULL,
+    Volume           REAL,
+    fetched_date     TEXT    NOT NULL,
+    PRIMARY KEY (ticker, Date)
+);
+"""
+# Layer 11b: one row per (named contract, session). Close is NOT NULL — a
+# bar with no close is not a session this contract priced, and the cleaner
+# drops it by name. Volume NULL means "the provider gave none", never zero.
+# Expired contracts' rows survive only because this table round-trips
+# through data/history/ — Yahoo delists old symbols on no published
+# schedule, so a row lost here is unrecoverable (A4, #301).
+
 _CREATE_WASDE = """
 CREATE TABLE IF NOT EXISTS wasde (
     commodity       TEXT NOT NULL,
@@ -648,6 +667,7 @@ ALL_SCHEMAS = (
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,
     _CREATE_FORWARD_CURVE,
+    _CREATE_CONTRACT_BARS,
     _CREATE_WASDE,
     _CREATE_INSPECTIONS,
     _CREATE_INSPECTION_PORT_FLOWS,
