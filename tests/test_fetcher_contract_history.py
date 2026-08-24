@@ -75,7 +75,10 @@ def test_listed_and_expired_bars_are_captured(monkeypatch):
     df, _ = _run_fetch(monkeypatch, answers)
     assert set(df["ticker"]) == {"ZSQ26.CBT", "ZSN26.CBT"}
     assert len(df) == 4
-    assert set(df.columns) == {"commodity", "ticker", "contract_month", "Date", "Close", "Volume"}
+    assert set(df.columns) == {
+        "commodity", "ticker", "contract_month", "Date",
+        "Open", "High", "Low", "Close", "Volume",
+    }
     q = df[df["ticker"] == "ZSQ26.CBT"].iloc[0]
     assert q["contract_month"] == "2026-08-01"
     assert q["Date"] == "2026-08-20"
@@ -113,6 +116,36 @@ def test_unconfigured_commodity_returns_empty():
     assert ch.fetch_contract_bars("Plutonium", today=NOW).empty
 
 
+def test_a_full_bar_ships_and_a_missing_one_stays_absent(monkeypatch):
+    """Yahoo's OHLC ride along when served (#332's candle chart); a frame
+    without them yields None, never zeros — absence stays absence
+    (invariant 2)."""
+    with_ohlc = _bars(["2026-08-20"], [1150.25])
+    with_ohlc["Open"] = [1148.00]
+    with_ohlc["High"] = [1151.50]
+    with_ohlc["Low"] = [1147.25]
+    answers = {
+        "ZSQ26.CBT": with_ohlc,
+        "ZSU26.CBT": _bars(["2026-08-20"], [1149.00]),  # Close/Volume only
+    }
+    df, _ = _run_fetch(monkeypatch, answers)
+    aug = df[df["ticker"] == "ZSQ26.CBT"].iloc[0]
+    assert (aug["Open"], aug["High"], aug["Low"]) == (1148.00, 1151.50, 1147.25)
+    sep = df[df["ticker"] == "ZSU26.CBT"].iloc[0]
+    # NaN in the frame, NULL once stored — same convention as Volume above.
+    assert pd.isna(sep["Open"]) and pd.isna(sep["High"]) and pd.isna(sep["Low"])
+
+
+def test_the_fetch_path_is_the_settlement_guarded_one():
+    """The stubs above replace ``ch.fetch_one`` by name, which would stay
+    green if the module quietly switched to the unguarded ``download_bars``
+    — and an unfinished bar would land as a close (invariant 11). Pin the
+    binding itself."""
+    import fetchers.yfinance
+
+    assert ch.fetch_one is fetchers.yfinance.fetch_one
+
+
 # ── Cleaner ─────────────────────────────────────────────────────────
 
 def test_clean_drops_nonpositive_and_dedupes():
@@ -128,6 +161,29 @@ def test_clean_drops_nonpositive_and_dedupes():
     # The zero-close duplicate lost to the real print on the same key.
     kept = out[(out["ticker"] == "ZSQ26.CBT") & (out["Date"] == "2026-08-20")]
     assert kept["Close"].tolist() == [1147.0]
+
+
+def test_clean_withholds_an_incoherent_candle_but_keeps_its_close():
+    """A bar whose high sits below its low (or whose open is missing) is an
+    impossible or partial candle: the Open/High/Low trio is withheld as a
+    unit, the validated close survives — a partial candle drawn anyway
+    would be an invented one (invariant 2, #332)."""
+    df = pd.DataFrame({
+        "ticker": ["ZSX26.CBT"] * 3,
+        "Date": ["2026-08-19", "2026-08-20", "2026-08-21"],
+        "Open": [1148.0, 1160.0, None],
+        "High": [1151.0, 1155.0, 1160.0],   # 08-20: high < low
+        "Low": [1147.0, 1158.0, 1150.0],    # 08-21: open missing
+        "Close": [1150.0, 1160.0, 1155.0],
+        "Volume": [100.0, 200.0, 300.0],
+    })
+    out = clean_contract_bars(df)
+    assert list(out["Close"]) == [1150.0, 1160.0, 1155.0]
+    good = out[out["Date"] == "2026-08-19"].iloc[0]
+    assert (good["Open"], good["High"], good["Low"]) == (1148.0, 1151.0, 1147.0)
+    for session in ("2026-08-20", "2026-08-21"):
+        row = out[out["Date"] == session].iloc[0]
+        assert pd.isna(row["Open"]) and pd.isna(row["High"]) and pd.isna(row["Low"])
 
 
 def test_clean_preserves_null_volume():

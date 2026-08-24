@@ -218,6 +218,9 @@ CREATE TABLE IF NOT EXISTS contract_bars (
     ticker           TEXT    NOT NULL,
     contract_month   TEXT    NOT NULL,
     Date             TEXT    NOT NULL,
+    Open             REAL,
+    High             REAL,
+    Low              REAL,
     Close            REAL    NOT NULL,
     Volume           REAL,
     fetched_date     TEXT    NOT NULL,
@@ -227,9 +230,11 @@ CREATE TABLE IF NOT EXISTS contract_bars (
 # Layer 11b: one row per (named contract, session). Close is NOT NULL — a
 # bar with no close is not a session this contract priced, and the cleaner
 # drops it by name. Volume NULL means "the provider gave none", never zero.
-# Expired contracts' rows survive only because this table round-trips
-# through data/history/ — Yahoo delists old symbols on no published
-# schedule, so a row lost here is unrecoverable (A4, #301).
+# Open/High/Low are nullable as a trio for the workstation's candlestick
+# chart (#332): the cleaner keeps all three or none — a partial candle
+# would be an invented one. Expired contracts' rows survive only because
+# this table round-trips through data/history/ — Yahoo delists old symbols
+# on no published schedule, so a row lost here is unrecoverable (A4, #301).
 
 _CREATE_WASDE = """
 CREATE TABLE IF NOT EXISTS wasde (

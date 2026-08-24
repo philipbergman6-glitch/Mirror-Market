@@ -94,3 +94,4 @@ data/reference/import_profiles/*.csv
 docs/*.html
 docs/markets/
 docs/manifest.json
+docs/assets/

@@ -27,7 +27,18 @@ CORE_BENCHMARKS = ("Soybeans", "Soybean Oil", "Soybean Meal")
 # masthead links the manifest so a reader can check the age of what they are
 # pricing off; without this entry that link reads as broken and blocks every
 # promotion.
-PUBLISHED_ASSETS = ("manifest.json",)
+PUBLISHED_ASSETS = (
+    "manifest.json",
+    # The vendored chart renderer (#332): TradingView's open-source
+    # lightweight-charts bundle, copied from app/assets/ by generate_site.
+    # It draws the workstation's contract-row chart from data already in the
+    # page — a candidate without it would publish charts that silently fall
+    # back to the plain SVG, so its absence fails promotion rather than
+    # shipping quietly degraded. The licence file rides with it because
+    # Apache-2.0 redistribution keeps the licence text alongside.
+    "assets/lightweight-charts.standalone.production.js",
+    "assets/LICENSE.lightweight-charts",
+)
 
 
 def expected_site_paths() -> tuple[str, ...]:

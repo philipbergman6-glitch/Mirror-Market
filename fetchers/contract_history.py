@@ -81,7 +81,13 @@ def _expired_candidates(root: str, exchange: str, trading_months: list[int],
 
 def _bars_rows(df: pd.DataFrame, commodity: str, contract: dict) -> list[dict]:
     """Long-form rows for one contract's daily bars. NaN closes are skipped
-    here — a bar with no close is not a session this contract priced."""
+    here — a bar with no close is not a session this contract priced.
+
+    Open/High/Low ride along for the workstation's candlestick chart
+    (#332). They are optional: a bar the provider serves close-only ships
+    the close with the trio as None, and the cleaner withholds a *partial*
+    or incoherent trio as a unit — a candle is drawn whole or not at all.
+    """
     rows: list[dict] = []
     for stamp, bar in df.iterrows():
         close = bar.get("Close")
@@ -92,11 +98,19 @@ def _bars_rows(df: pd.DataFrame, commodity: str, contract: dict) -> list[dict]:
         if pd.isna(day):
             continue
         volume = bar.get("Volume")
+
+        def _optional(column: str, bar_row: pd.Series = bar) -> float | None:
+            value = bar_row.get(column)
+            return None if value is None or pd.isna(value) else float(value)
+
         rows.append({
             "commodity": commodity,
             "ticker": contract["ticker"],
             "contract_month": contract["contract_month"].isoformat(),
             "Date": day.date().isoformat(),
+            "Open": _optional("Open"),
+            "High": _optional("High"),
+            "Low": _optional("Low"),
             "Close": float(close),
             # None, not 0.0 — "the provider gave no volume" and "none
             # traded" are different facts (same rule as Layer 11).
@@ -123,7 +137,8 @@ def fetch_contract_bars(commodity: str, *, already_captured: frozenset[str] = fr
     Returns
     -------
     pd.DataFrame
-        Columns: commodity, ticker, contract_month, Date, Close, Volume.
+        Columns: commodity, ticker, contract_month, Date, Open, High, Low,
+        Close, Volume.
         One row per (ticker, session). Empty if unconfigured or nothing
         answered.
     """

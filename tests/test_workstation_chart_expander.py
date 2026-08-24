@@ -227,19 +227,43 @@ def test_the_chart_json_ships_in_the_panel_and_is_drawn_locally(curve_db):
     html = render(view(curve_db))
     panel = panel_markup(html, "CBOT:ZSX2026")
     assert 'data-symbol="ZSX26"' in panel
-    payload = panel.split('<script type="application/json">')[1].split("</script>")[0]
-    assert len(json.loads(payload)) == len(ZSX26_SESSIONS)
+    payload = json.loads(
+        panel.split('<script type="application/json">')[1].split("</script>")[0]
+    )
+    assert len(payload["points"]) == len(ZSX26_SESSIONS)
+    assert payload["candles"] == []  # snapshots carry closes, never bars
     # Drawn by the page's own script on first expand — from this JSON, not a fetch.
     assert "draw(panel.querySelector('.tv-chart'))" in html
     assert "insertAdjacentHTML" in html
 
 
 def test_a_sparse_series_is_dots_never_a_joined_line(curve_db):
-    """Under 8 observations no polyline (the ledger's M21 rule): a line
-    through the holes of a thin history asserts a path nobody observed."""
+    """Under 8 observations no joined line (the ledger's M21 rule): a line
+    through the holes of a thin history asserts a path nobody observed. The
+    server decides the regime once; both renderers obey it."""
     html = render(view(curve_db))
-    assert 'data-line-min="8"' in html
-    assert "points.length >= lineMin" in html
+    panel = panel_markup(html, "CBOT:ZLZ2026")     # 3 sessions
+    assert 'data-regime="dots"' in panel
+    assert "regime !== 'dots'" in html             # the SVG's polyline gate
+    assert "pointMarkersVisible: regime === 'dots'" in html
+    assert "data-line-min" not in html             # the client re-derives nothing
+
+
+def test_the_renderer_is_our_own_vendored_bundle_with_an_svg_fallback(curve_db):
+    """#332: the chart is drawn by the vendored lightweight-charts bundle —
+    TradingView's Apache-2.0 code served from THIS site, never their servers
+    or their data — and the inline SVG remains the no-bundle fallback."""
+    html = render(view(curve_db))
+    assert '<script src="assets/lightweight-charts.standalone.production.js">' in html
+    # Served from our origin: no CDN, no tradingview.com host anywhere near it.
+    assert "unpkg.com" not in html
+    assert "cdn.jsdelivr.net" not in html
+    assert "window.LightweightCharts" in html      # feature-gated, not assumed
+    assert "drawSvg(chart, data.points, regime)" in html
+    # The canvas must not participate in the table's width computation: a
+    # drawn canvas would prop the cell open and the chart could never shrink
+    # with the window (measured 2026-08-23 — table stuck at first-drawn width).
+    assert ".tv-lw { height: 240px; margin-top: 8px; width: 0; min-width: 100%; }" in html
 
 
 def test_a_dots_regime_series_still_ships_its_points(curve_db):
@@ -313,3 +337,225 @@ def test_both_editions_get_the_expander(curve_db):
         assert 'id="tv-CBOT-ZSX2026"' in html
         assert 'data-symbol="ZSX26"' in html
         assert "s3.tradingview.com" not in html
+
+
+# ---------------------------------------------------------------------------
+# Layer 11b — the chart draws the contract's own daily history (#332)
+# ---------------------------------------------------------------------------
+def _insert_contract_history(conn, symbol_month, sessions, ticker):
+    # contract_bars carries no label column — the label lives on the
+    # NamedContract, so the third element of symbol_month is simply unused.
+    conn.executemany(
+        "INSERT INTO contract_bars "
+        "(commodity, ticker, contract_month, Date, Close, Volume, fetched_date) "
+        "VALUES (?,?,?,?,?,4210,'2026-08-19')",
+        [
+            (commodity, ticker, month, session, close)
+            for (commodity, month, _label) in [symbol_month]
+            for session, close in sessions
+        ],
+    )
+    conn.commit()
+
+
+ZSF27_DAILY = [
+    (f"2026-08-{day:02d}", 1150.00 + day)
+    for day in (3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18)
+]
+
+
+def test_the_deep_series_reaches_the_chart_and_starts_the_record(curve_db):
+    """ZSF27 has one curve snapshot (withheld on its own); Layer 11b history
+    lifts it into the joined-line regime and dates the record's true start."""
+    _insert_contract_history(
+        curve_db, ("Soybeans", "2027-01-01", "Jan 2027"), ZSF27_DAILY, "ZSF27.CBT",
+    )
+    leg = leg_for(view(curve_db), "ZSF27")
+    history = leg["close_history"]
+    # 12 daily sessions + the one snapshot session (2026-08-19) they lack.
+    assert history["count"] == 13
+    assert history["since"] == "2026-08-03"
+    assert "history since 3 Aug 2026 (13 sessions)" in history["stamp"]
+    assert history["withheld_reason"] == ""
+
+
+def test_the_dedicated_series_wins_a_session_both_sources_hold(curve_db):
+    """Same venue, same vocabulary — but the per-contract layer is the
+    dedicated record, so where both hold a session its close is the point."""
+    _insert_contract_history(
+        curve_db,
+        ("Soybeans", "2026-11-01", "Nov 2026"),
+        [("2026-08-19", 1152.00)],  # snapshot says 1150.00 for this session
+        "ZSX26.CBT",
+    )
+    leg = leg_for(view(curve_db), "ZSX26")
+    points = dict(leg["close_history"]["points"])
+    expected = round(spec_for("Soybeans").native_to_usd_per_mt(1152.00), 2)
+    assert points["2026-08-19"] == expected
+    # And the merge never duplicates the session.
+    assert leg["close_history"]["count"] == len(ZSX26_SESSIONS)
+
+
+def _insert_bars(conn, commodity, month, label, ticker, bars):
+    """Layer 11b rows WITH the candle trio: (session, open, high, low, close).
+
+    label is accepted for the callers' readability but contract_bars holds
+    no label column — the label lives on the NamedContract."""
+    del label
+    conn.executemany(
+        "INSERT INTO contract_bars "
+        '(commodity, ticker, contract_month, Date, "Open", High, Low, Close, '
+        "Volume, fetched_date) VALUES (?,?,?,?,?,?,?,?,4210,'2026-08-19')",
+        [
+            (commodity, ticker, month, session, o, h, low, close)
+            for session, o, h, low, close in bars
+        ],
+    )
+    conn.commit()
+
+
+ZSF27_FULL_BARS = [
+    (f"2026-08-{day:02d}", 1150.0 + day, 1156.0 + day, 1148.0 + day, 1153.0 + day)
+    # Through the 19th — the session the curve snapshot also holds. A bar
+    # series that stopped short of the newest merged session would (rightly)
+    # fall back to the line regime; that case has its own test below.
+    for day in (3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19)
+]
+
+
+def test_full_bars_lift_the_leg_into_the_candle_regime(curve_db):
+    """With the trio stored, the payload carries candles and volumes, the
+    stamp says bars, and the count is the candle count — the record actually
+    being drawn, not a larger one implied."""
+    _insert_bars(
+        curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", ZSF27_FULL_BARS,
+    )
+    history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    assert history["regime"] == "candles"
+    assert len(history["candles"]) == len(ZSF27_FULL_BARS)
+    assert len(history["volumes"]) == len(ZSF27_FULL_BARS)
+    assert history["count"] == len(ZSF27_FULL_BARS)
+    assert history["since"] == "2026-08-03"
+    assert "delayed session bars" in history["stamp"]
+    html = render(view(curve_db))
+    assert 'data-regime="candles"' in panel_markup(html, "CBOT:ZSF2027")
+
+
+def test_candles_are_usd_per_mt_via_the_one_conversion_site(curve_db):
+    """Every leg of the bar converts through the contract spec (invariant 7),
+    so a candle and the close column can never disagree about units."""
+    _insert_bars(
+        curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", ZSF27_FULL_BARS,
+    )
+    history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    convert = spec_for("Soybeans").native_to_usd_per_mt
+    session, o, h, low, close = ZSF27_FULL_BARS[0]
+    assert history["candles"][0] == [
+        session, round(convert(o), 2), round(convert(h), 2),
+        round(convert(low), 2), round(convert(close), 2),
+    ]
+
+
+def test_closes_without_bars_stay_a_line_never_fake_candles(curve_db):
+    """Snapshot-fed ZSX26 has nine closes and no trio: a candle regime here
+    would require inventing three numbers per session (invariant 2)."""
+    history = leg_for(view(curve_db), "ZSX26")["close_history"]
+    assert history["regime"] == "line"
+    assert history["candles"] == []
+    assert "delayed daily closes" in history["stamp"]
+
+
+def test_a_hand_edited_partial_trio_never_reaches_a_quote(curve_db):
+    """The cleaner enforces all-or-nothing; the read path re-checks, so a row
+    edited straight in the database cannot smuggle a partial candle out."""
+    curve_db.execute(
+        "INSERT INTO contract_bars "
+        '(commodity, ticker, contract_month, Date, "Open", High, Low, Close, '
+        "Volume, fetched_date) VALUES ('Soybeans','ZSF27.CBT','2027-01-01',"
+        "'2026-08-12',1160.0,NULL,1150.0,1155.0,4210,'2026-08-19')"
+    )
+    curve_db.commit()
+    _insert_bars(
+        curve_db, "Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT",
+        # Every session except the 12th, which is the interior partial row.
+        [bar for bar in ZSF27_FULL_BARS if bar[0] != "2026-08-12"],
+    )
+    history = leg_for(view(curve_db), "ZSF27")["close_history"]
+    assert history["regime"] == "candles"        # the series still qualifies
+    sessions = [candle[0] for candle in history["candles"]]
+    assert "2026-08-12" not in sessions          # no candle from a partial trio
+    assert dict(history["points"])["2026-08-12"]  # its close still charts
+
+
+def test_a_lagging_bar_series_falls_back_to_the_line_of_merged_closes(curve_db):
+    """If the Layer 11b fetch stalls while curve snapshots keep landing, a
+    candle chart would end days before the close printed in the row above
+    it. The regime falls back to the line, which carries every merged
+    session including the newest."""
+    _insert_bars(
+        curve_db, "Soybeans", "2026-11-01", "Nov 2026", "ZSX26.CBT",
+        # Nine full bars ending 2026-08-14 — the snapshots run to 08-19.
+        [
+            (f"2026-08-{day:02d}", 1140.0, 1146.0, 1138.0, 1143.0)
+            for day in (4, 5, 6, 7, 10, 11, 12, 13, 14)
+        ],
+    )
+    history = leg_for(view(curve_db), "ZSX26")["close_history"]
+    assert history["regime"] == "line"
+    assert history["candles"] == []
+    assert dict(history["points"])["2026-08-19"]  # the newest close still charts
+
+
+def test_an_old_close_only_table_is_migrated_in_place():
+    """A database created by the close-only #335 cut of contract_bars gains
+    the candle columns on init — without this, both the save and the read
+    raise on the missing columns and stay broken until a manual ALTER."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE contract_bars (commodity TEXT, ticker TEXT, "
+        "contract_month TEXT, Date TEXT, Close REAL, Volume REAL, "
+        "fetched_date TEXT, PRIMARY KEY (ticker, Date))"
+    )
+    from pipeline.store import _migrate_contract_bars_ohlc
+
+    _migrate_contract_bars_ohlc(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_bars)")}
+    assert {"Open", "High", "Low"} <= cols
+    _migrate_contract_bars_ohlc(conn)  # idempotent
+    conn.close()
+
+
+def test_the_bundle_ships_with_the_site_and_the_contract_requires_it():
+    """The vendored renderer and its licence exist in app/assets/, are copied
+    beside the pages, and are in PUBLISHED_ASSETS — a build that lost them
+    must fail promotion, not publish silently degraded charts."""
+    from pathlib import Path
+
+    from scripts.generate_site import ASSETS_SOURCE_DIR, _copy_assets
+    from trust.site_promotion import PUBLISHED_ASSETS
+
+    bundle = "assets/lightweight-charts.standalone.production.js"
+    licence = "assets/LICENSE.lightweight-charts"
+    assert bundle in PUBLISHED_ASSETS and licence in PUBLISHED_ASSETS
+    for name in (bundle, licence):
+        source = ASSETS_SOURCE_DIR / Path(name).name
+        assert source.is_file(), f"missing vendored file: {source}"
+    header = (ASSETS_SOURCE_DIR / Path(bundle).name).read_text(encoding="utf-8")[:400]
+    assert "Apache License 2.0" in header  # redistribution keeps the notice
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        _copy_assets(Path(tmp))
+        assert (Path(tmp) / bundle).is_file()
+        assert (Path(tmp) / licence).is_file()
+
+
+def test_a_leg_with_neither_source_is_still_withheld_with_a_reason(curve_db):
+    leg = leg_for(view(curve_db), "ZMZ26")
+    history = leg["close_history"]
+    assert history["points"] == []
+    assert "single point is a number, not a history" in history["withheld_reason"]
+    # The old text dated the gap to the snapshot start; the record no longer
+    # begins there, so the claim is gone.
+    assert "2026-07-30" not in history["withheld_reason"]

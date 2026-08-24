@@ -400,9 +400,11 @@ def clean_contract_bars(df: pd.DataFrame) -> pd.DataFrame:
     Steps:
         1. Coerce Close to numeric; drop rows where it is NaN or <= 0 —
            a bar with no close is not a session this contract priced.
-        2. Dedupe on (ticker, Date), keeping the last row — matches the
+        2. Withhold the Open/High/Low trio as a unit where it is partial
+           or incoherent (#332's candle chart) — the close survives.
+        3. Dedupe on (ticker, Date), keeping the last row — matches the
            PK the store upserts against.
-        3. Sort by (ticker, Date).
+        4. Sort by (ticker, Date).
 
     Volume is left as-is: NULL means "provider gave none" and must not
     become 0. Returns a cleaned copy (original is not mutated).
@@ -416,6 +418,27 @@ def clean_contract_bars(df: pd.DataFrame) -> pd.DataFrame:
         df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
         df = df.dropna(subset=["Close"])
         df = df[df["Close"] > 0]
+
+    # The candle fields live or die as a trio: a bar whose open, high or low
+    # is missing, non-positive, or self-contradictory (high < low, or a close
+    # outside its own range) keeps its close and surrenders the other three —
+    # a partial or impossible candle drawn anyway would be an invented one
+    # (invariant 2). The close survives because it was validated above and is
+    # the number every other surface reads.
+    if {"Open", "High", "Low", "Close"} <= set(df.columns) and len(df):
+        for field in ("Open", "High", "Low"):
+            df[field] = pd.to_numeric(df[field], errors="coerce")
+        bad = ~(
+            (df["Open"] > 0) & (df["High"] > 0) & (df["Low"] > 0)
+            & (df["High"] >= df["Low"])
+            & (df["Close"] >= df["Low"]) & (df["Close"] <= df["High"])
+        )
+        if bad.any():
+            logger.warning(
+                "contract_bars: withheld the Open/High/Low trio on %d "
+                "row(s) with a missing or incoherent candle", int(bad.sum()),
+            )
+            df.loc[bad, ["Open", "High", "Low"]] = None
 
     if {"ticker", "Date"}.issubset(df.columns):
         df = df.drop_duplicates(subset=["ticker", "Date"], keep="last")

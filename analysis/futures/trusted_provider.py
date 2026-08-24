@@ -106,6 +106,13 @@ class TrustedNamedContractProvider:
         return self.curve(contract.spec.name, as_of=as_of).leg(contract.symbol)
 
     # -- still v1 ----------------------------------------------------------
+    def close_history(
+        self, contract: NamedContract, *, as_of: date, sessions: int = 500
+    ) -> tuple[ContractQuote, ...]:
+        # Layer 11b has no trusted edition yet; the fallback's answer is the
+        # honest one, already labelled with its own provider and price type.
+        return self.fallback.close_history(contract, as_of=as_of, sessions=sessions)
+
     def continuous(self, commodity: str, *, as_of: date) -> ContinuousSeries | None:
         return self.fallback.continuous(commodity, as_of=as_of)
 

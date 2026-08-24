@@ -267,6 +267,31 @@ def _migrate_forward_curve_liquidity(conn) -> None:
                 logger.warning("Could not add %s column to forward_curve: %s", column, exc)
 
 
+def _migrate_contract_bars_ohlc(conn) -> None:
+    """Add Open / High / Low to contract_bars if absent. Idempotent.
+
+    All three stay NULL on legacy rows — nothing to fill them with (the
+    trio was not fetched before #332's candle chart). Listed contracts
+    heal on the next Layer 11b run, which re-downloads every session with
+    the full bar; expired contracts' rows keep NULLs forever, because
+    Yahoo no longer serves the symbol — the close is the only fact we
+    hold, and a candle will simply never be drawn for those sessions.
+    Without this, a database created by the close-only #335 cut fails
+    BOTH paths loudly — the save's named-column INSERT and the provider's
+    SELECT — and stays broken until a manual ALTER.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(contract_bars)").fetchall()}
+    except Exception:
+        return
+    for column in ("Open", "High", "Low"):
+        if cols and column not in cols:
+            try:
+                conn.execute(f'ALTER TABLE contract_bars ADD COLUMN "{column}" REAL')
+            except Exception as exc:
+                logger.warning("Could not add %s column to contract_bars: %s", column, exc)
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
@@ -282,6 +307,7 @@ def init_database():
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
+        _migrate_contract_bars_ohlc(conn)
         for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -704,6 +730,7 @@ def save_contract_bars(commodity: str, df: pd.DataFrame):
     touched again (Yahoo no longer serves the symbol; the row here is the
     only copy). No snapshot-replace like forward_curve — bars are keyed by
     session, not by fetch, so two runs on one day agree by construction.
+    Open/High/Low/Volume default to None — "never learned", never zero.
     """
     if df.empty:
         return
@@ -711,11 +738,13 @@ def save_contract_bars(commodity: str, df: pd.DataFrame):
     df["commodity"] = commodity
     df["fetched_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     df = _str_cols(df, "ticker", "contract_month", "Date")
-    if "Volume" not in df.columns:
-        df["Volume"] = None
+    for optional in ("Open", "High", "Low", "Volume"):
+        if optional not in df.columns:
+            df[optional] = None
     _save(
         "contract_bars",
-        df[["commodity", "ticker", "contract_month", "Date", "Close", "Volume", "fetched_date"]],
+        df[["commodity", "ticker", "contract_month", "Date",
+            "Open", "High", "Low", "Close", "Volume", "fetched_date"]],
         ["ticker", "Date"],
         f"contract_bars/{commodity}",
     )

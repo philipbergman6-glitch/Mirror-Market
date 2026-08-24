@@ -70,6 +70,7 @@ from analysis.futures.domain import (
     NO_NOTICE_DAY,
     SOY_COMPLEX,
     AggregateOpenInterest,
+    ContractQuote,
     ExpiryConfidence,
     Side,
     spec_for,
@@ -91,6 +92,7 @@ from analysis.futures.privacy import (
 )
 from analysis.futures.providers import (
     CurveObservation,
+    QuoteProvider,
     SqliteQuoteProvider,
     describe_provider,
     open_provider,
@@ -335,7 +337,7 @@ def build_view(
         "reference_label": REFERENCE_LABEL,
         "sections": [
             _alerts_section(page_alerts),
-            _contracts_section(curves, curve_histories),
+            _contracts_section(provider, curves, curve_histories, as_of=as_of),
             _curve_section(curves, open_interest),
             _crush_section(provider, as_of=as_of),
             _hedge_section(proposals, crush_proposal, is_reference),
@@ -437,48 +439,103 @@ CHART_MIN_POINTS = 2
 CHART_LINE_MIN_POINTS = 8
 
 
-def _close_history(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[str, Any]:
+def _close_history(
+    leg: CurveLeg,
+    history: tuple[CurveObservation, ...],
+    series: tuple[ContractQuote, ...],
+) -> dict[str, Any]:
     """This contract's own stored closes, in USD/MT, or a stated absence.
 
-    Read from the same ``forward_curve`` snapshots the spread percentiles use.
-    The history is thin by construction — snapshots exist only since
-    2026-07-30 — and the stamp says when it starts rather than letting a short
-    axis imply a long record. Points are keyed by the *session* the close
-    belongs to, so a weekend re-fetch of Friday's close is one point, not two.
+    Two sources, one vocabulary: ``series`` is the contract's own Layer 11b
+    daily history (months deep), ``history`` is the Layer 11 curve snapshots
+    the spread percentiles use (daily since 2026-07-30). Both are the same
+    venue's delayed closes through the same guarded path, so where both hold
+    a session the dedicated series wins; a snapshot only contributes a
+    session the series lacks. Points are keyed by the *session* the close
+    belongs to, so a weekend re-fetch of Friday's close is one point, not
+    two. The stamp says when the record starts rather than letting a short
+    axis imply a long one.
+
+    Where the dedicated series carries full session bars (open/high/low
+    beside the close, all-or-nothing by the Layer 11b cleaner), the payload
+    also ships candles and volumes in USD/MT, and the ``regime`` key tells
+    the renderer which honest drawing the data supports: ``candles``,
+    ``line``, ``dots`` or ``withheld``. The threshold decision is made here,
+    once — the page script draws what it is told and decides nothing.
     """
     by_session: dict[str, float] = {}
     for observation in history:  # oldest first; later snapshots win a session
         quote = observation.leg(leg.contract.symbol)
         if quote is not None:
             by_session[quote.observation_date.isoformat()] = round(quote.usd_per_mt, 2)
+    candles: list[list[Any]] = []
+    volumes: list[list[Any]] = []
+    for quote in series:  # oldest first; the per-contract layer wins a session
+        session = quote.observation_date.isoformat()
+        by_session[session] = round(quote.usd_per_mt, 2)
+        bar = quote.session_bar_usd_per_mt
+        if bar is not None:
+            bar_open, bar_high, bar_low = bar
+            candles.append([
+                session, round(bar_open, 2), round(bar_high, 2),
+                round(bar_low, 2), by_session[session],
+            ])
+            if quote.volume is not None:
+                volumes.append([session, int(quote.volume)])
     points = sorted(by_session.items())
     count = len(points)
     if count < CHART_MIN_POINTS:
         return {
             "points": [],
+            "candles": [],
+            "volumes": [],
+            "regime": "withheld",
             "count": count,
             "since": None,
             "stamp": "",
             "withheld_reason": (
                 f"{count or 'no'} stored session{'' if count == 1 else 's'} for this "
-                "contract — daily snapshots begin 2026-07-30, and a single point is a "
-                "number, not a history; the table above already carries it"
+                "contract — a single point is a number, not a history; the table "
+                "above already carries it"
             ),
         }
-    since = date.fromisoformat(points[0][0])
+    # One place decides how the history may be drawn; the renderer obeys.
+    # Candles need the full bars, enough of them to read as a series, AND a
+    # record that reaches the newest merged session — if the per-contract
+    # fetch has lagged while curve snapshots kept landing, a candle chart
+    # would end days before the close printed in the row above it, so the
+    # line of merged closes draws instead. Closes alone join into a line at
+    # the same threshold (M21's rule), and below it they stay dots — a line
+    # through sparse prints asserts a path nobody observed.
+    if len(candles) >= CHART_LINE_MIN_POINTS and candles[-1][0] == points[-1][0]:
+        regime = "candles"
+        shown, what = len(candles), "delayed session bars"
+        first = candles[0][0]
+    else:
+        regime = "line" if count >= CHART_LINE_MIN_POINTS else "dots"
+        shown, what = count, "delayed daily closes"
+        first = points[0][0]
+    since = date.fromisoformat(first)
     return {
         "points": [[session, close] for session, close in points],
-        "count": count,
-        "since": points[0][0],
+        "candles": candles if regime == "candles" else [],
+        "volumes": volumes if regime == "candles" else [],
+        "regime": regime,
+        "count": shown,
+        "since": first,
         "stamp": (
-            "Our data · delayed daily closes · USD/MT · "
-            f"history since {since.strftime('%-d %b %Y')} ({count} sessions)"
+            f"Our data · {what} · USD/MT · "
+            f"history since {since.strftime('%-d %b %Y')} ({shown} sessions)"
         ),
         "withheld_reason": "",
     }
 
 
-def _contract_leg(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[str, Any]:
+def _contract_leg(
+    leg: CurveLeg,
+    history: tuple[CurveObservation, ...],
+    series: tuple[ContractQuote, ...],
+) -> dict[str, Any]:
     """A curve leg, plus everything its row can expand into.
 
     The third-party symbols and URLs are carried on the leg rather than
@@ -494,12 +551,16 @@ def _contract_leg(leg: CurveLeg, history: tuple[CurveObservation, ...]) -> dict[
     payload["tradingview_symbol"] = symbol
     payload["tradingview_url"] = None if symbol is None else tradingview_url(symbol)
     payload["barchart_url"] = barchart_url(leg.contract)
-    payload["close_history"] = _close_history(leg, history)
+    payload["close_history"] = _close_history(leg, history, series)
     return payload
 
 
 def _contracts_section(
-    curves: dict[str, CurveAnalysis], histories: dict[str, tuple[CurveObservation, ...]]
+    provider: QuoteProvider,
+    curves: dict[str, CurveAnalysis],
+    histories: dict[str, tuple[CurveObservation, ...]],
+    *,
+    as_of: date,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for commodity, analysis in curves.items():
@@ -528,7 +589,11 @@ def _contracts_section(
             "tick_size": spec_for(commodity).tick_size,
             "tick_value_usd": spec_for(commodity).tick_value_usd,
             "legs": [
-                _contract_leg(leg, histories.get(commodity, ()))
+                _contract_leg(
+                    leg,
+                    histories.get(commodity, ()),
+                    provider.close_history(leg.contract, as_of=as_of, sessions=500),
+                )
                 for leg in analysis.legs
             ],
         })
@@ -546,13 +611,13 @@ def _contracts_section(
         "chart_stamp": THIRD_PARTY_STAMP,
         "chart_disclaimer": (
             "Everything above the rule is this project's own stored data, on our "
-            "timestamps. "
+            "timestamps, drawn in the page by an open-source charting library served "
+            "from this site — no third-party data renders here and nothing is "
+            "requested from anywhere. "
             "The links below open this contract month on TradingView's and Barchart's "
             "own sites — their data, their timing, entirely on their pages: not our "
-            "observation, not a settlement, and not routable. Nothing third-party "
-            "renders here."
+            "observation, not a settlement, and not routable."
         ),
-        "chart_line_min_points": CHART_LINE_MIN_POINTS,
     })
 
 
