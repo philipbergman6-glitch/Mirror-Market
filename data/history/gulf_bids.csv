@@ -25278,3 +25278,21 @@ report_date,commodity,location,delivery,sale_type,basis_low,basis_high,futures_m
 2026-08-28,Wheat,Gulf Coast Ports,Oct,Bid,80.0,90.0,12,12,UNCH,UP 0.2325,8.64,8.74,8.69,6.0925,CIF-B
 2026-08-28,Wheat,Gulf Coast Ports,Sep²,Bid,55.0,75.0,9,9,UNCH,UP 0.2425,8.22,8.42,8.32,5.855,CIF-B
 2026-08-28,Wheat,Gulf Coast Ports,Sep¹,Bid,30.0,55.0,9,9,UNCH,UP 0.2425,7.97,8.22,8.095,5.73,CIF-B
+2026-08-31,Corn,Gulf Coast Ports,Current,Bid,80.0,82.0,9,9,UNCH,UP 0.0300,5.95,5.97,5.96,,CIF-B
+2026-08-31,Corn,Gulf Coast Ports,Dec,Bid,95.0,97.0,12,12,UNCH,UP 0.0125,6.3275,6.3475,6.3375,,CIF-B
+2026-08-31,Corn,Gulf Coast Ports,Nov,Bid,92.0,94.0,12,12,UNCH,UP 0.0125,6.2975,6.3175,6.3075,,CIF-B
+2026-08-31,Corn,Gulf Coast Ports,Oct,Bid,90.0,92.0,12,12,UNCH,UP 0.0125,6.2775,6.2975,6.2875,,CIF-B
+2026-08-31,Corn,Gulf Coast Ports,Sep²,Bid,94.0,108.0,9,9,UNCH,UP 0.0300,6.09,6.23,6.16,,CIF-B
+2026-08-31,Corn,Gulf Coast Ports,Sep¹,Bid,93.0,94.0,9,9,UNCH,UP 0.0300,6.08,6.09,6.085,,CIF-B
+2026-08-31,Soybeans,Gulf Coast Ports,Current,Bid,107.0,108.0,11,11,UNCH,UNCH,13.95,13.96,13.955,,CIF-B
+2026-08-31,Soybeans,Gulf Coast Ports,Dec,Bid,105.0,106.0,1,1,UNCH,UP 0.0050,14.0825,14.0925,14.0875,,CIF-B
+2026-08-31,Soybeans,Gulf Coast Ports,Nov,Bid,117.0,120.0,11,11,UNCH,UNCH,14.05,14.08,14.065,,CIF-B
+2026-08-31,Soybeans,Gulf Coast Ports,Oct,Bid,109.0,110.0,11,11,UNCH,UNCH,13.97,13.98,13.975,,CIF-B
+2026-08-31,Soybeans,Gulf Coast Ports,Sep²,Bid,108.0,110.0,11,11,UNCH,UNCH,13.96,13.98,13.97,,CIF-B
+2026-08-31,Soybeans,Gulf Coast Ports,Sep¹,Bid,108.0,109.0,11,11,UNCH,UNCH,13.96,13.97,13.965,,CIF-B
+2026-08-31,Wheat,Gulf Coast Ports,Current,Bid,25.0,35.0,9,9,UNCH,DN 0.1050,7.815,7.915,7.865,,CIF-B
+2026-08-31,Wheat,Gulf Coast Ports,Dec,Bid,90.0,90.0,12,12,UNCH,DN 0.1000,8.64,8.64,8.64,,CIF-B
+2026-08-31,Wheat,Gulf Coast Ports,Nov,Bid,85.0,90.0,12,12,UNCH,DN 0.1000,8.59,8.64,8.615,,CIF-B
+2026-08-31,Wheat,Gulf Coast Ports,Oct,Bid,80.0,90.0,12,12,UNCH,DN 0.1000,8.54,8.64,8.59,,CIF-B
+2026-08-31,Wheat,Gulf Coast Ports,Sep²,Bid,55.0,75.0,9,9,UNCH,DN 0.1050,8.115,8.315,8.215,,CIF-B
+2026-08-31,Wheat,Gulf Coast Ports,Sep¹,Bid,30.0,55.0,9,9,UNCH,DN 0.1050,7.865,8.115,7.99,,CIF-B
