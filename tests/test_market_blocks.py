@@ -23,6 +23,11 @@ import pandas as pd
 import pytest
 
 import config
+from analysis.futures.crush import (
+    MIN_DAYS_TO_EXPIRY,
+    CrushContracts,
+    crush_contract_candidates,
+)
 from app import block_builders
 from app import markets as markets_mod
 from app.block_builders import SiteContext, build_blocks
@@ -54,6 +59,26 @@ TODAY = datetime.now(timezone.utc).date()
 
 def _day(offset: int) -> str:
     return (TODAY - timedelta(days=offset)).isoformat()
+
+
+def _crush_candidates() -> tuple[CrushContracts, ...]:
+    """The three nearest listed crush periods at TODAY, from the roll rule.
+
+    Derived, never spelled out: a fixture that names ZSU26 by hand is a test
+    that starts failing the session Sep 2026 stops trading (it did, 2026-09-08
+    to 2026-09-19, and took the daily deploy down with it).
+    """
+    return crush_contract_candidates(TODAY, count=3)
+
+
+def _expected_crush() -> CrushContracts:
+    """The period `named_board_crush` must pick: nearest with every leg still
+    carrying at least MIN_DAYS_TO_EXPIRY sessions."""
+    for candidate in _crush_candidates():
+        legs = (candidate.bean, candidate.meal, candidate.oil)
+        if all((leg.days_to_expiry(TODAY) or 0) >= MIN_DAYS_TO_EXPIRY for leg in legs):
+            return candidate
+    raise AssertionError("no crush period with all legs eligible in the next three")
 
 
 @pytest.fixture
@@ -88,22 +113,24 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         conn.execute("INSERT INTO prices (commodity, Date, Close) VALUES (?,?,?)",
                      ("Soybean Meal", _day(offset), 300.0))
     # CBOT's crush is struck on NAMED contracts out of `forward_curve`, not on
-    # the continuous front-month series in `prices`. Sep 2026 is the prompt
-    # crush period at TODAY (ZSQ26 has two sessions left and is skipped); the
-    # Nov/Dec set behind it is what the roll falls through to.
-    for commodity, month, ticker, close in (
-        ("Soybeans",     "2026-09-01", "ZSU26.CBT", 1050.0),
-        ("Soybean Meal", "2026-09-01", "ZMU26.CBT",  300.0),
-        ("Soybean Oil",  "2026-09-01", "ZLU26.CBT",   52.0),
-        ("Soybeans",     "2026-11-01", "ZSX26.CBT", 1062.0),
-        ("Soybean Meal", "2026-12-01", "ZMZ26.CBT",  305.0),
-        ("Soybean Oil",  "2026-12-01", "ZLZ26.CBT",   52.5),
-    ):
-        conn.execute(
-            "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
-            "observation_date, fetched_date) VALUES (?,?,?,?,?,?,?)",
-            (commodity, month, ticker[:-4], ticker, close, _day(0), _day(0)),
-        )
+    # the continuous front-month series in `prices`. The three nearest crush
+    # periods at TODAY are seeded from the roll rule itself, so the fixture
+    # rolls with the calendar; the period the calculation must pick carries
+    # the known numbers, the ones behind it sit a little higher.
+    expected = _expected_crush()
+    for offset, candidate in enumerate(_crush_candidates()):
+        bump = 0.0 if candidate == expected else 12.0 * (offset + 1)
+        for contract, close in (
+            (candidate.bean, 1050.0 + bump),
+            (candidate.meal, 300.0 + bump / 4),
+            (candidate.oil, 52.0 + bump / 24),
+        ):
+            conn.execute(
+                "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+                "observation_date, fetched_date) VALUES (?,?,?,?,?,?,?)",
+                (contract.spec.name, contract.contract_month_date.isoformat(),
+                 contract.symbol, contract.provider_symbol, close, _day(0), _day(0)),
+            )
     # Two Gulf locations on one report date — the averaging case.
     for location, average in (("NOLA", 11.20), ("TEXAS", 11.60)):
         conn.execute(
@@ -380,23 +407,31 @@ def test_the_policy_spread_caveat_reaches_the_markup(seeded, registry):
 
 
 def test_the_cbot_crush_names_its_three_contracts(seeded, registry):
-    """The board crush is ZSU26/ZMU26/ZLU26, not three anonymous front months.
+    """The board crush is e.g. ZSX26/ZMZ26/ZLZ26, not three anonymous front months.
 
     `prices` still holds the continuous ZS=F/ZM=F/ZL=F series and the block no
     longer reads it: a margin off a series whose underlying contract changes on
     the provider's own schedule names nothing and can be placed nowhere.
+
+    The expected period is derived from the roll rule at TODAY, the same way
+    the fixture seeds it, so this test says "the nearest eligible period" and
+    never a month that will one day expire under it.
     """
+    expected = _expected_crush()
     crush = _block(_build("cbot", seeded, registry), "crush")
     assert crush.state == "ok"
     assert crush.data["legs_named"] is True
     assert crush.data["contract_basis"] == "named_contract"
-    assert [crush.data["legs"][role]["symbol"] for role in ("bean", "meal", "oil")] == [
-        "ZSU26", "ZMU26", "ZLU26"
-    ]
-    assert all(
-        crush.data["legs"][role]["contract_month"] == "2026-09"
-        for role in ("bean", "meal", "oil")
+    assert [crush.data["legs"][role]["symbol"] for role in ("bean", "meal", "oil")] == list(
+        expected.symbols
     )
+    assert {
+        role: crush.data["legs"][role]["contract_month"] for role in ("bean", "meal", "oil")
+    } == {
+        "bean": expected.bean.delivery_month,
+        "meal": expected.meal.delivery_month,
+        "oil": expected.oil.delivery_month,
+    }
     assert crush.data["settlement_proven"] is False
 
 

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,15 +33,83 @@ def _load_local(root: Path) -> dict[str, str]:
     }
 
 
+def _fetch(url: str) -> str:
+    with urlopen(url, timeout=30) as response:  # noqa: S310 - explicit smoke target
+        if response.status != 200:
+            raise RuntimeError(f"{url}: HTTP {response.status}")
+        return response.read().decode("utf-8")
+
+
 def _load_remote(base_url: str) -> dict[str, str]:
     base = base_url.rstrip("/") + "/"
-    pages: dict[str, str] = {}
-    for path in expected_site_paths():
-        with urlopen(base + path, timeout=30) as response:  # noqa: S310 - explicit smoke target
-            if response.status != 200:
-                raise RuntimeError(f"{path}: HTTP {response.status}")
-            pages[path] = response.read().decode("utf-8")
-    return pages
+    return {path: _fetch(base + path) for path in expected_site_paths()}
+
+
+def _generated_at(html: str) -> datetime | None:
+    stamp = BeautifulSoup(html, "html.parser").select_one(
+        'meta[name="mirror-market-generated-at"]'
+    )
+    raw = stamp.get("content", "") if stamp else ""
+    try:
+        generated = datetime.fromisoformat(str(raw))
+    except (TypeError, ValueError):
+        return None
+    return generated if generated.tzinfo else generated.replace(tzinfo=timezone.utc)
+
+
+def _candidate_stamp(candidate: Path) -> datetime:
+    index = candidate / "index.html"
+    if not index.is_file():
+        raise SystemExit(f"--candidate {candidate}: no index.html to read a generation stamp from")
+    stamp = _generated_at(index.read_text(encoding="utf-8"))
+    if stamp is None:
+        raise SystemExit(f"--candidate {candidate}: index.html carries no generation stamp")
+    return stamp
+
+
+def _wait_for_propagation(
+    base_url: str,
+    expected: datetime,
+    *,
+    timeout: float,
+    interval: float,
+    fetch=_fetch,
+    sleep=time.sleep,
+    clock=time.monotonic,
+) -> bool:
+    """Block until the public index carries the candidate's own stamp, or give up.
+
+    GitHub Pages reports a deployment as done before its CDN serves it
+    everywhere: observed 2026-09-17, the public index still carried the
+    previous night's edition 37 s after `deploy-pages` returned, and the
+    promotion-window check then failed a deploy that had in fact succeeded.
+    So the smoke asks the live site for the stamp it just uploaded and only
+    grades what it sees once that stamp — or a newer one — is what comes back.
+
+    Returns False on timeout. The caller proceeds regardless: whatever the
+    site serves at that point is graded honestly by the promotion contract,
+    which is the failure the wait exists to avoid raising falsely, not the
+    failure it exists to hide.
+    """
+    url = base_url.rstrip("/") + "/index.html"
+    deadline = clock() + timeout
+    while True:
+        try:
+            served = _generated_at(fetch(url))
+        except Exception as exc:  # noqa: BLE001 — a 404 mid-propagation is expected
+            served = None
+            print(f"propagation: index not readable yet ({exc})")
+        if served is not None and served >= expected:
+            print(f"propagation: public index carries {served.isoformat()}")
+            return True
+        if clock() >= deadline:
+            print(
+                f"propagation: gave up after {int(timeout)}s — public index carries "
+                f"{served.isoformat() if served else 'no stamp'}, candidate is "
+                f"{expected.isoformat()}"
+            )
+            return False
+        sleep(interval)
 
 
 def _chrome_binary(explicit: str | None) -> str | None:
@@ -124,16 +193,9 @@ def _publication_latency_report(pages: dict[str, str], base_url: str | None) -> 
     index = pages.get("index.html")
     if not index:
         return []
-    stamp = BeautifulSoup(index, "html.parser").select_one(
-        'meta[name="mirror-market-generated-at"]'
-    )
-    raw = stamp.get("content", "") if stamp else ""
-    try:
-        generated = datetime.fromisoformat(str(raw))
-    except (TypeError, ValueError):
+    generated = _generated_at(index)
+    if generated is None:
         return []
-    if generated.tzinfo is None:
-        generated = generated.replace(tzinfo=timezone.utc)
     delay = datetime.now(timezone.utc) - generated
     print(
         f"PUBLICATION LATENCY: generated {generated.isoformat()}, publicly readable "
@@ -150,8 +212,26 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--url")
     parser.add_argument("--browser", action="store_true")
     parser.add_argument("--chrome")
+    parser.add_argument(
+        "--candidate", type=Path,
+        help=(
+            "with --url: the local candidate just deployed. The smoke waits until the "
+            "public index carries that candidate's generation stamp before grading, "
+            "bounded by --propagation-timeout."
+        ),
+    )
+    parser.add_argument("--propagation-timeout", type=float, default=240.0,
+                        help="seconds to wait for the CDN to serve the candidate (default 240)")
+    parser.add_argument("--propagation-interval", type=float, default=10.0)
     args = parser.parse_args(argv)
+    if args.candidate and not args.url:
+        parser.error("--candidate only makes sense with --url")
 
+    if args.url and args.candidate:
+        _wait_for_propagation(
+            args.url, _candidate_stamp(args.candidate),
+            timeout=args.propagation_timeout, interval=args.propagation_interval,
+        )
     pages = _load_local(args.root) if args.root else _load_remote(args.url)
     assets = _available_assets(args.root, args.url)
     verdict = verify_site_candidate(pages, assets=assets)

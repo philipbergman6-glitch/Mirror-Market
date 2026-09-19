@@ -372,7 +372,11 @@ jobs:
         id: smoke_public
         if: ${{ !cancelled() && (steps.deployment.outcome == 'success' || steps.deployment-retry1.outcome == 'success' || steps.deployment-retry2.outcome == 'success') }}
         continue-on-error: true
-        run: python scripts/smoke_site.py --url "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}" --browser
+        run: >-
+          python scripts/smoke_site.py
+          --url "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}"
+          --candidate "$RUNNER_TEMP/mirror-market-candidate"
+          --browser
 
       - name: Enforce publication outcome
         if: ${{ !cancelled() && (steps.generate_site.outcome == 'failure' || steps.smoke_candidate.outcome == 'failure' || steps.smoke_public.outcome == 'failure') }}

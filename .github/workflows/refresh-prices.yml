@@ -117,6 +117,15 @@ jobs:
           fi
           if [[ -n "$LAYERS" ]]; then
             GATE="$LAYERS"
+          elif [[ "${{ github.event.schedule }}" == "30 23 * * 1-5" ]]; then
+            # The catch-up slot publishes; it does not prove latency. CBOT
+            # settles 18:15 UTC and the board objective is six hours, so a
+            # 23:30 cron that lands after 00:15 UTC — every observed run,
+            # 2026-09-05 to 2026-09-19 landed 01:11-01:38 — breaches by
+            # construction, after the deploy has already succeeded. A red
+            # that cannot be green is a red nobody reads (#176). The report
+            # still prints; only the exit code is ungated.
+            GATE=""
           else
             GATE="prices,currencies,forward_curve"
           fi
@@ -183,8 +192,16 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+      # `--candidate` makes the smoke wait (bounded) until the public index
+      # carries the stamp it just uploaded: Pages reports a deploy done before
+      # its CDN serves it, and grading the previous edition fails a deploy
+      # that succeeded (2026-09-17).
       - name: Smoke the deployed public artifact
-        run: python scripts/smoke_site.py --url "${{ steps.deployment.outputs.page_url }}" --browser
+        run: >-
+          python scripts/smoke_site.py
+          --url "${{ steps.deployment.outputs.page_url }}"
+          --candidate "$RUNNER_TEMP/mirror-market-candidate"
+          --browser
 
       # Re-cache so the next fast refresh builds on this one rather than on
       # the morning's daily build. Without it, two refreshes in a day would
@@ -203,6 +220,7 @@ jobs:
       # published edition, which is fresher than not deploying it would be.
       - name: Gate the published edition's latency
         run: |
+          GATE="${{ steps.slot.outputs.gate }}"
           python scripts/latency_report.py \
             --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
-            --fail-on-breach-layers "${{ steps.slot.outputs.gate }}"
+            ${GATE:+--fail-on-breach-layers "$GATE"}

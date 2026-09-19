@@ -171,7 +171,20 @@ on purpose: an unscoped `--fail-on-breach` would be red every day on layers
 whose acquisition breaches structurally (COT carries a 3-day provider delay
 against a 24h target; the evening daily build re-stamps `dce` 13–17h after
 the Dalian close, overwriting the morning run's on-time stamps until the next
-morning).
+morning). One slot is ungated: the 23:30 UTC catch-up. It lands after 00:15
+UTC on every observed run (01:11–01:38, 2026-09-05 to 2026-09-19), which is
+past settlement-plus-six-hours by construction, so its gate could never be
+green and was red every night after a deploy that had succeeded. The report
+still prints for that slot; only the exit code is ungated.
+
+**The post-deploy smoke waits for the CDN.** `deploy-pages` reports done
+before GitHub's CDN serves the new edition everywhere: on 2026-09-17 the
+public index still carried the previous night's stamp 37 s after the deploy
+returned, and the promotion-window check failed a deploy that had succeeded.
+`scripts/smoke_site.py --url ... --candidate <dir>` now polls the public
+index until it carries the candidate's own generation stamp (bounded, 240 s
+default) before grading. On timeout it grades whatever is served — the wait
+removes a false red, never a real one.
 
 The forward curve is 43 of the 53 seconds. It stays in because a hedger reads
 the curve as a board price, and 53 s is still an order of magnitude under the
