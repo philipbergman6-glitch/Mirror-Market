@@ -19,14 +19,21 @@ name: Refresh Prices
 #
 # So the single daily build publishes FX and the Brazilian physical leg a day
 # behind on any early landing. This run exists to close the FX half of that
-# gap: 21:30 UTC nominal, which after the same +64 to +298 minute scheduler
-# delay lands 22:34-02:28 UTC — past the FX close on both sides of US DST, and
-# a backstop for the board if the daily build landed early or failed.
+# gap: 20:07 UTC nominal. The scheduler delay on this slot, measured over the
+# thirteen runs of 2026-09-11 to 2026-09-29, was +1h54 to +3h35, so it lands
+# 22:01-23:42 UTC — past the FX close on both sides of US DST, and a backstop
+# for the board if the daily build landed early or failed.
 #
-# 21:30 rather than later is a two-sided choice. Earlier risks landing on the
-# EST close (22:00 UTC) with the bar barely finished; later pushes the board's
-# settlement-to-fetch interval past its six-hour objective for nothing, since
-# FX is already covered.
+# 20:07 is a two-sided choice and the window is narrow. The board objective
+# is six hours from an 18:15 UTC settlement, so the fetch must land by 00:15
+# UTC (01:15 in EST); FX needs it after 21:00 UTC (22:00 in EST). The slot
+# was 21:30 until 2026-09-30: the delay grew from about +2h15 to +3h35 and
+# +3h07 on 2026-09-28/29, both runs landed after 00:15, and both went red on
+# a board breach after a deploy that had succeeded. 83 minutes earlier puts
+# the worst observed delay at 23:42. An early landing (before the FX close)
+# publishes D-1 FX, correctly, and the 23:30 catch-up picks FX up. The
+# off-the-hour minute is deliberate: GitHub names the start of every hour as
+# its highest-load, most-delayed moment.
 #
 # It also depends on the settlement-guard fix shipped alongside it. This run
 # lands at 17:34-21:28 Chicago, and the CME overnight session opens 19:00 CT
@@ -35,26 +42,38 @@ name: Refresh Prices
 # bar as the day's close. The rule is now "drop every bar after the newest
 # finished session", which is what makes this slot safe at all.
 #
-# THREE SLOTS, TWO JOBS
+# ONE DISPATCH, THREE SLOTS
 #
-#   08:00 UTC — DCE only. Dalian closes 15:00 CST = 07:00 UTC and Sina's
-#               daily file carries the settle by evening CST (probed live
-#               2026-08-19), so an evening-only fetch is 13-17h late against
-#               the 6h board objective — a guaranteed daily breach nothing
-#               about the evening schedule can fix. 08:00 + the observed
-#               +64/+298 min scheduler delay lands 09:04-12:58 UTC: inside
-#               6h even at the worst tail, and before the 21:00 CST night
-#               session opens (13:00 UTC) — though Sina's daily endpoint was
-#               observed NOT to emit a next-trade-date row from the night
-#               session, so a late landing is a breach risk, not a bad-data
-#               risk. An early landing that finds no settled row yet stores
-#               D-1 and passes the gates — a wasted run, never a wrong
-#               number — and shows up as a dce breach in the latency gate,
-#               which is the signal to shift this cron later.
-#   21:30 UTC — the FX/board refresh described above.
+#   dispatch  — DCE, on time. Dalian closes 15:00 CST = 07:00 UTC, so an
+#               evening-only fetch is 13-17h late against the 6h board
+#               objective, and the fetch has to land by 13:00 UTC. GitHub's
+#               scheduler cannot do that: the `0 8` cron was started at
+#               13:15-16:38 UTC on every weekday from 2026-09-21 to
+#               2026-09-29 (+5h15 to +8h38) and went red on a dce breach
+#               each time. The delay is wider than the window, so no cron
+#               time fixes it. The on-time run is therefore a
+#               `workflow_dispatch` with `layers=dce`, fired by a scheduler
+#               outside GitHub: cron-job.org, 10:30 UTC on weekdays. Not
+#               earlier, because Sina serves a mix of day-D and day-D-1
+#               rows until about two hours after the close (measured
+#               2026-09-30, LATENCY.md §4). A dispatch that lands before
+#               any settled row exists stores D-1 and passes the pipeline
+#               gates — a wasted run, never a wrong number — and reads as a
+#               dce breach in the latency gate, which is the signal to fire
+#               it later.
+#   08:00 UTC — the DCE backstop, and the alarm on that outside scheduler.
+#               If a dispatched dce run already succeeded today this slot
+#               does nothing: fetching again hours later would re-stamp an
+#               on-time number as a late one. If none did, it fetches dce
+#               itself and is gated on it — late by construction, so red,
+#               which is the point: the outside trigger did not fire. Sina's
+#               daily endpoint was observed NOT to emit a next-trade-date
+#               row from the 21:00 CST night session (probed 2026-08-19), so
+#               a late landing is a breach risk, not a bad-data risk.
+#   20:07 UTC — the FX/board refresh described above.
 #   23:30 UTC — a catch-up. The gates make a redundant run a safe no-op, so
 #               this exists purely to give FX and the board a second shot on
-#               a day the 21:30 run failed or landed absurdly late.
+#               a day the 20:07 run failed or landed absurdly late.
 #
 # It deliberately does NOT re-scrape the physical origin legs. Those are
 # scrapers against unfriendly upstreams and doubling their request rate
@@ -62,10 +81,16 @@ name: Refresh Prices
 # blackout is the standing example). CEPEA staying D-1 is a known, stated
 # product latency, not an oversight — LATENCY.md says so plainly.
 
+# The dispatched DCE run is told apart from every other run by its name: the
+# 08:00 backstop looks for a successful "Refresh Prices (dce)" today.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && inputs.layers != ''
+  && format('Refresh Prices ({0})', inputs.layers) || 'Refresh Prices' }}
+
 on:
   schedule:
     - cron: '0 8 * * 1-5'
-    - cron: '30 21 * * 1-5'
+    - cron: '7 20 * * 1-5'
     - cron: '30 23 * * 1-5'
   workflow_dispatch:
     inputs:
@@ -77,6 +102,7 @@ on:
         default: ''
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -90,28 +116,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  refresh:
+  slot:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 5
+    outputs:
+      layers: ${{ steps.slot.outputs.layers }}
+      gate: ${{ steps.slot.outputs.gate }}
+      skip: ${{ steps.slot.outputs.skip }}
     steps:
-      - uses: actions/checkout@v4
-
       # Which layers this slot fetches, and which layers its latency gate is
       # allowed to fail on. The gate is scoped to the layers the run just
       # fetched: an unscoped gate would be red every day on layers whose
       # acquisition breaches structurally (COT carries a 3-day provider
       # delay against a 24h target; the evening daily build re-stamps dce
       # 13-17h after the Dalian close).
+      #
+      # The 08:00 slot is a backstop: it stands down when the dispatched DCE
+      # run has already succeeded today, and a failed lookup fails the run
+      # rather than guessing either way.
       - name: Select layers for this slot
         id: slot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
+          SKIP=false
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             LAYERS="${{ inputs.layers }}"
           elif [[ "${{ github.event.schedule }}" == "0 8 * * 1-5" ]]; then
             LAYERS="dce"
+            ON_TIME=$(gh run list --workflow refresh-prices.yml \
+              --event workflow_dispatch --status success \
+              --created ">=$(date -u +%F)" --limit 50 --json displayTitle \
+              --jq '[.[] | select(.displayTitle == "Refresh Prices (dce)")] | length')
+            if [[ "$ON_TIME" -gt 0 ]]; then
+              SKIP=true
+              echo "::notice::dce was refreshed on time by a dispatched run today — backstop stands down"
+            else
+              echo "::warning::no successful dispatched dce refresh today — the outside scheduler did not fire; fetching dce late"
+            fi
           else
             LAYERS=""
           fi
@@ -121,7 +164,7 @@ jobs:
             # The catch-up slot publishes; it does not prove latency. CBOT
             # settles 18:15 UTC and the board objective is six hours, so a
             # 23:30 cron that lands after 00:15 UTC — every observed run,
-            # 2026-09-05 to 2026-09-19 landed 01:11-01:38 — breaches by
+            # 2026-09-05 to 2026-09-29 landed 01:11-02:38 — breaches by
             # construction, after the deploy has already succeeded. A red
             # that cannot be green is a red nobody reads (#176). The report
             # still prints; only the exit code is ungated.
@@ -129,9 +172,23 @@ jobs:
           else
             GATE="prices,currencies,forward_curve"
           fi
-          echo "layers=$LAYERS" >> "$GITHUB_OUTPUT"
-          echo "gate=$GATE" >> "$GITHUB_OUTPUT"
-          echo "fetching: ${LAYERS:-default (prices,currencies,forward_curve)} | gating on: $GATE"
+          {
+            echo "layers=$LAYERS"
+            echo "gate=$GATE"
+            echo "skip=$SKIP"
+          } >> "$GITHUB_OUTPUT"
+          echo "fetching: ${LAYERS:-default (prices,currencies,forward_curve)} | gating on: $GATE | skip: $SKIP"
+
+  refresh:
+    needs: slot
+    if: needs.slot.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
@@ -169,8 +226,8 @@ jobs:
         id: refresh
         run: |
           EXTRA=()
-          if [[ -n "${{ steps.slot.outputs.layers }}" ]]; then
-            EXTRA+=(--layers "${{ steps.slot.outputs.layers }}")
+          if [[ -n "${{ needs.slot.outputs.layers }}" ]]; then
+            EXTRA+=(--layers "${{ needs.slot.outputs.layers }}")
           fi
           python scripts/refresh_prices.py \
             --output-dir "$RUNNER_TEMP/mirror-market-candidate" \
@@ -220,7 +277,7 @@ jobs:
       # published edition, which is fresher than not deploying it would be.
       - name: Gate the published edition's latency
         run: |
-          GATE="${{ steps.slot.outputs.gate }}"
+          GATE="${{ needs.slot.outputs.gate }}"
           python scripts/latency_report.py \
             --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
             ${GATE:+--fail-on-breach-layers "$GATE"}
