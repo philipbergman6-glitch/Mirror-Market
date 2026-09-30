@@ -322,7 +322,7 @@ def test_manifest_round_trips_through_json(tmp_path):
 
 
 def test_refresh_threads_an_explicit_layer_set_into_the_pipeline(monkeypatch, tmp_path):
-    """The 08:00 UTC slot passes ('dce',); it must reach main.run verbatim."""
+    """The DCE morning run passes ('dce',); it must reach main.run verbatim."""
     import scripts.refresh_prices as refresh_mod
 
     monkeypatch.setattr(refresh_mod, "setup_logging", lambda: None)

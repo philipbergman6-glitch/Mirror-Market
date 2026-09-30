@@ -93,9 +93,10 @@ and ~6 seconds at 1mo.
 | | Cron | Observed landing |
 |---|---|---|
 | Daily build | `0 19 * * 1-5` | 20:00–24:00 UTC (workflow's own note: +64 to +298 min over 30 runs, median +138) |
-| DCE refresh | `0 8 * * 1-5` | expected 09:04–12:58 UTC by the same delay envelope; not yet observed |
-| Fast refresh | `30 21 * * 1-5` | 22:34–02:28 UTC |
-| Catch-up refresh | `30 23 * * 1-5` | expected 00:34–04:28 UTC; a second shot for FX and the board on a day the 21:30 run failed |
+| DCE refresh | none — `workflow_dispatch` with `layers=dce`, fired at **10:30 UTC** weekdays by cron-job.org | on time by construction; GitHub's scheduler is not in the path |
+| DCE backstop | `0 8 * * 1-5` | 13:15–16:38 UTC (+5h15 to +8h38, seven runs 2026-09-21 to 09-29) — past the 13:00 UTC deadline every time, which is why it is only a backstop |
+| Fast refresh | `7 20 * * 1-5` | 22:01–23:42 UTC expected, from the +1h54 to +3h35 delay this slot showed over thirteen runs, 2026-09-11 to 09-29, while it was still `30 21` |
+| Catch-up refresh | `30 23 * * 1-5` | 01:11–02:38 UTC; a second shot for FX and the board on a day the 20:07 run failed |
 
 ---
 
@@ -148,16 +149,34 @@ the site converts through it, so a stale rate is a stale landed cost on every
 physical origin, not merely a stale FX cell. Deliberately excluded:
 
 - **DCE** — closes 15:00 CST = 07:00 UTC, hours before either evening slot,
-  so it gets its own morning run instead: the 08:00 UTC cron passes
-  `--layers dce` and fetches nothing else. Without it the only DCE fetch was
-  the evening daily build, 13–17h after the close — a guaranteed daily breach
-  of the 6h board objective. Probed live 2026-08-19: Sina's daily endpoint
-  carried the day's settled bar by evening CST and did **not** emit a
-  next-trade-date row from the 21:00 CST night session, so a late landing
-  risks only a breach verdict, never a partial bar. When the first row
-  appears after the 15:00 CST close is not yet measured; an early landing
-  that misses it stores D−1, passes the gates, and reads as a dce breach in
-  the latency gate — the signal to shift the cron later.
+  so it gets its own morning run instead, which passes `--layers dce` and
+  fetches nothing else. Without it the only DCE fetch was the evening daily
+  build, 13–17h after the close — a guaranteed daily breach of the 6h board
+  objective. That run is **dispatched from outside GitHub**, not scheduled
+  inside it: the fetch has to land in 07:00–13:00 UTC, and the `0 8` cron
+  was started 13:15–16:38 UTC on all seven weekdays from 2026-09-21 to
+  09-29 — a delay wider than the window, so no cron time fixes it.
+  cron-job.org calls the `workflow_dispatch` API with `layers=dce` at
+  **10:30 UTC** on weekdays, using a fine-grained token that can do nothing
+  but read and trigger this repository's Actions. The `0 8` cron stays as
+  the backstop and as the alarm on that outside dependency: it looks for a
+  successful `Refresh Prices (dce)` run today, stands down if there is one
+  (a second fetch hours later would re-stamp an on-time number as a late
+  one), and otherwise fetches DCE itself and goes red on the breach —
+  which says, correctly, that the outside trigger did not fire.
+  Probed live 2026-08-19: Sina's daily endpoint carried the day's settled
+  bar by evening CST and did **not** emit a next-trade-date row from the
+  21:00 CST night session, so a late landing risks only a breach verdict,
+  never a partial bar. **Why 10:30 and not straight after the close:**
+  measured 2026-09-30, polling all eight contracts every three to five
+  minutes, the first day-D row appeared between 08:11 and 08:16 UTC, and
+  until 08:57 the endpoint served day D and day D−1 for the same contract
+  on alternating requests; every contract carried day D on every poll from
+  09:00 UTC. That is one day's measurement. A fetch inside that window
+  stores a mixed set — some contracts D, some D−1 — which the gates pass,
+  because the layer's `observed_at` is the newest date the run received.
+  10:30 is ninety minutes clear of it and two and a half hours inside the
+  13:00 UTC deadline.
 - **The scraped physical legs** (CEPEA, AgRural, Gulf bids, MAGyP, mandi) —
   they publish once a day, and doubling the request rate on unfriendly
   upstreams trades reliability for freshness that is not there. The 2026-08-11
@@ -172,7 +191,7 @@ whose acquisition breaches structurally (COT carries a 3-day provider delay
 against a 24h target; the evening daily build re-stamps `dce` 13–17h after
 the Dalian close, overwriting the morning run's on-time stamps until the next
 morning). One slot is ungated: the 23:30 UTC catch-up. It lands after 00:15
-UTC on every observed run (01:11–01:38, 2026-09-05 to 2026-09-19), which is
+UTC on every observed run (01:11–02:38, 2026-09-05 to 2026-09-29), which is
 past settlement-plus-six-hours by construction, so its gate could never be
 green and was red every night after a deploy that had succeeded. The report
 still prints for that slot; only the exit code is ungated.
@@ -308,12 +327,13 @@ Not the provider's. This is what a reader gets.
 
 **Board price (CBOT, forward curve).** A settlement at 18:15 UTC is publicly
 readable in **1 h 45 m at best, 5 h 45 m typical worst case** via the daily
-build, with the 21:30 UTC refresh as a backstop. Never fresher than 1 h 15 m,
+build, with the 20:07 UTC refresh as a backstop. Never fresher than 1 h 15 m,
 because the settlement guard will not publish an unfinished bar. Meets the 6 h
 objective on the observed scheduler envelope.
 
-**FX.** The 17:00 New York close is publicly readable in **0 h 34 m to 5 h 28 m**
-via the fast refresh — where before this work it was **either D−1 or, worse,
+**FX.** The 17:00 New York close is publicly readable in **minutes to 2 h 42 m**
+via the fast refresh (a 22:01–23:42 UTC landing against a 21:00 UTC close in
+EDT, 22:00 in EST; the 23:30 catch-up covers a landing that beats the close) — where before this work it was **either D−1 or, worse,
 a partial bar mislabelled as the close**. Meets the 6 h objective.
 
 **Physical origin legs.** Fetched once a day by the daily build. AMS Gulf bids

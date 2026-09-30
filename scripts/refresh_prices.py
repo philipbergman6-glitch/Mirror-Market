@@ -11,8 +11,9 @@ workflow steps.
    build with two arguments different, so the settlement guard, the cleaners
    and the freshness grading cannot diverge between the two paths.
    ``--layers`` overrides the layer set for schedule-specific runs — the
-   08:00 UTC slot passes ``dce``, because Dalian closes 15:00 CST (07:00
-   UTC) and an evening fetch is 13-17h late against a 6h objective.
+   dispatched morning run (and its 08:00 UTC backstop) passes ``dce``,
+   because Dalian closes 15:00 CST (07:00 UTC) and an evening fetch is
+   13-17h late against a 6h objective.
 2. Generate the whole site into a private candidate directory.
 3. Gate it twice: the existing structural contract
    (``verify_site_candidate``), and then

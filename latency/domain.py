@@ -167,9 +167,11 @@ OBJECTIVES: dict[LatencyClass, LatencyObjective] = {
             "on D, which is 21:00 UTC in EDT and 22:00 UTC in EST. The daily build "
             "lands 20:00-24:00 UTC, so on a summer evening it can straddle the close "
             "and on a winter one it usually misses it — publishing D-1 FX, correctly, "
-            "because the guard drops the open bar. The 21:30 UTC fast refresh lands "
+            "because the guard drops the open bar. The fast refresh was first scheduled "
+            "at 21:30 UTC against a +64 to +298 minute scheduler delay, landing "
             "22:34-02:28 UTC, past the close on both sides of US DST, giving 0h34m to "
-            "5h28m. Six hours is that envelope, and it is a target a single daily "
+            "5h28m. Six hours is that envelope (the slot has since moved to 20:07 UTC "
+            "and lands inside it), and it is a target a single daily "
             "build cannot meet — which is precisely why the fast path exists."
         ),
     ),
