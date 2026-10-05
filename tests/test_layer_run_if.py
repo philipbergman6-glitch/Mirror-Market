@@ -42,11 +42,12 @@ import pytest
 import main
 from config import LAYER_MIN_KEYS
 
-# The two API-key-gated dict layers → the fetcher module and key constant
-# each layer's run_if predicate reads.
+# The API-key-gated dict layers → the fetcher module and key constant each
+# layer's run_if predicate reads.
 GATED_LAYERS = {
     "export_sales": ("fetchers.export_sales", "FAS_API_KEY"),
     "eia": ("fetchers.eia", "EIA_API_KEY"),
+    "us_processor_cash": ("fetchers.processor_cash", "MARS_API_KEY"),
 }
 
 
@@ -101,11 +102,14 @@ def test_unconfigured_layer_writes_no_freshness_row(key, monkeypatch, freshness_
 def test_configured_layer_returning_nothing_is_an_outage(key, monkeypatch, freshness_calls):
     """F3c: the key is set and the upstream answered with nothing at all.
 
-    Both layers have a LAYER_MIN_KEYS floor of 2+, so #175's derivation
-    grades all-empty as a failure — provided we get there at all, which is
-    exactly what a result-shaped skip could prevent.
+    Export sales and EIA have a LAYER_MIN_KEYS floor of 2+, so #175's
+    derivation grades all-empty as a failure; Layer 30 is one frame with no
+    floor and opts in with ``empty_fails=True`` instead. Either way — provided
+    we get there at all, which is exactly what a result-shaped skip could
+    prevent.
     """
-    assert LAYER_MIN_KEYS[key] >= 2  # the derivation this test leans on
+    # the derivation (or the explicit opt-in) this test leans on
+    assert LAYER_MIN_KEYS.get(key, 1) >= 2 or _layer(key).empty_fails is True
 
     _set_key(monkeypatch, key, present=True)
     layer, fetches = _stubbed(_layer(key), {})
