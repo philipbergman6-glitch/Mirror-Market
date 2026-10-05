@@ -17,8 +17,10 @@ Source history:
     ≤1% (16/17; the miss a 6-mandi Sunday); every one of 202 MSAMB (the
     Maharashtra board) market-days carried the same modal price here.
     **MH ``Volume`` steps up ~20–35% at the switch**: Agmarknet carries MH
-    rows the data.gov.in snapshot never held. Prices join cleanly; the
-    mandi count does not, so never compare MH Volume across the switch.
+    rows the data.gov.in snapshot never held. The first run re-read from
+    2026-09-01, so that is where the step sits in stored history. Prices
+    join cleanly; the row count does not, so never compare MH Volume
+    across that date.
 
 Licence:
     Agmarknet's website policy: "Information featured on this website may
@@ -106,6 +108,7 @@ import pandas as pd
 import requests
 
 from config import (
+    LAYER_MAX_DATA_AGE_DAYS,
     MANDI_API_URL,
     MANDI_COMMODITY,
     MANDI_COMMODITY_ID,
@@ -287,7 +290,8 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
     """Distill per-mandi rows into one median-modal row per arrival date.
 
     Returns the ``clean_india_domestic``/``save_india_domestic`` shape:
-    Date (ISO), Open/High/Low/Close (INR/MT), Volume (mandi count), Unit.
+    Date (ISO), Open/High/Low/Close (INR/MT), Volume (row count: one per
+    mandi × variety lot, so it runs above the mandi count), Unit.
     Open/High/Low are NaN by design — see the module docstring; only the
     median modal is a defensible daily number.
 
@@ -359,7 +363,9 @@ def fetch_mandi_prices(today: date | None = None) -> FetchResult:
 
     A guard failure (ScraperShapeError) in any state is ``failed`` with no
     rows: the report format is shared, so a break in one state means the
-    source changed for all.
+    source changed for all. A state whose newest completed day is older than
+    the layer's ``LAYER_MAX_DATA_AGE_DAYS`` budget is ``failed`` too, with
+    its rows kept.
 
     Transport exhaustion on **any** state is ``failed``, even when another
     state returned a full set — but the surviving state's rows are still
@@ -390,6 +396,18 @@ def fetch_mandi_prices(today: date | None = None) -> FetchResult:
             int(df["Volume"].iloc[-1]),
         )
         data[series] = df
+        # The layer's freshness budget reads the newest date across both
+        # states, so one state could go quiet for weeks behind the other.
+        # Its rows are still real history and are kept; the verdict fails.
+        newest = date.fromisoformat(df["Date"].iloc[-1])
+        floor = today - timedelta(
+            days=MANDI_MIN_AGE_DAYS + LAYER_MAX_DATA_AGE_DAYS["india_domestic"]
+        )
+        if newest < floor:
+            errors.append(
+                f"{state}: newest completed day {newest} is older than {floor} — "
+                "the state stopped reporting"
+            )
 
     if errors:
         reason = "; ".join(errors)
