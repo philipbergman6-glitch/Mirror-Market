@@ -335,12 +335,13 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
     LayerLatency(
         "india_domestic", LatencyClass.PHYSICAL_ORIGIN,
         ObservationClock("Asia/Kolkata", (18, 0)),
-        timedelta(0),
-        "Agmarknet arrivals are reported through the trading day and the API "
-        "serves the current day only; 18:00 IST is the working close of "
-        "reporting. The daily number is a cross-sectional median of whichever "
-        "mandis have reported, so it firms up during the day rather than "
-        "arriving at an instant — an uncertainty no timestamp would remove.",
+        timedelta(hours=6),
+        "Agmarknet arrivals are reported through the trading day; 18:00 IST is "
+        "the working close of reporting. The fetcher stores a day only once it "
+        "has ended in IST (MANDI_MIN_AGE_DAYS), so the earliest a row can be "
+        "stored is midnight IST — six hours after the clock. Late uploads are "
+        "folded in by the next run's month-long re-read, so the stored median "
+        "can still firm up the day after.",
     ),
     LayerLatency(
         "conab_precos", LatencyClass.PHYSICAL_ORIGIN, ObservationClock(),

@@ -176,9 +176,9 @@ class ReproductionCheck:
 
     Three separate answers, because the remedies are different. Code drift is
     fixed by a checkout. Data drift is not fixable at all for most layers —
-    ``india_domestic`` serves the current day only, so an edition whose mandi
-    rows have rolled off is gone — and the honest report is that the finding can
-    be re-read but not re-run. A stamp that was dirty when taken cannot be
+    ``india_domestic`` re-reads only a trailing month, so an edition whose mandi
+    rows have since been revised or rolled off is gone — and the honest report
+    is that the finding can be re-read but not re-run. A stamp that was dirty when taken cannot be
     reproduced by any mechanism, and saying so is the whole value of having
     recorded it.
     """

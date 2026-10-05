@@ -829,7 +829,7 @@ def test_partial_scraper_result_records_failed(freshness_calls):
 
 
 def test_partial_scraper_result_still_saves_the_rows_it_got(freshness_calls):
-    """The resource serves the current day only — a dropped day is permanent."""
+    """States are never pooled, so the state that answered is still a real number."""
     saved: list = []
     _run_partial_mandi(saved=saved)
 

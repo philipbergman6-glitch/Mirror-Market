@@ -1024,3 +1024,25 @@ def test_mandi_one_state_failing_transport_keeps_the_other_states_rows(
     assert result.has_rows
     assert set(result.data) == {"Soybean (Mandi MP)"}
     assert "Maharashtra" in (result.error or "") and "HTTP 503" in (result.error or "")
+
+
+def test_mandi_one_state_going_quiet_fails_the_layer_but_keeps_its_rows(
+    monkeypatch,
+) -> None:
+    """The layer's freshness budget reads the newest date across *both*
+    states, so MH could stop uploading for weeks behind a fresh MP. Each
+    state is held to the budget itself; its older rows are still real
+    history and are kept."""
+    def reports(state, year, month):
+        if state == "Maharashtra":
+            if month == 9:
+                return _agm_report(state, year, month, {"Latur APMC": {"20/09/2026": [5800.0]}})
+            return _agm_report(state, year, month, {})
+        return _two_ordinary_months(state, year, month)
+
+    _serve_agmarknet(monkeypatch, reports)
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "failed"
+    assert set(result.data) == {"Soybean (Mandi MP)", "Soybean (Mandi MH)"}
+    assert "Maharashtra" in (result.error or "") and "2026-09-20" in (result.error or "")

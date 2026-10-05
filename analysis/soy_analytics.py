@@ -162,6 +162,24 @@ def _pct_chg(series: pd.Series, sessions: int) -> float | None:
     return float((series.iloc[-1] - prev) / prev * 100)
 
 
+def _pct_chg_calendar_days(rows: pd.DataFrame, days: int) -> float | None:
+    """% change of the last ``Close`` against the last print on or before
+    ``days`` calendar days earlier, or None if there is none.
+
+    For series that print on weekends (India mandis), where a session count
+    is not a calendar span."""
+    if rows.empty:
+        return None
+    dates = pd.to_datetime(rows["Date"])
+    base = rows[dates <= dates.iloc[-1] - pd.Timedelta(days=days)]
+    if base.empty:
+        return None
+    prev = base["Close"].iloc[-1]
+    if pd.isna(prev) or prev == 0:
+        return None
+    return float((rows["Close"].iloc[-1] - prev) / prev * 100)
+
+
 _SAGIS_YOY_AVERAGE_SEASONS = 3
 
 
@@ -1571,7 +1589,8 @@ def emerging_markets_analysis() -> dict:
                                 aligned[0], 2
                             )
 
-                    weekly = _pct_chg(mandi_rows["Close"], _WEEKLY_SESSIONS)
+                    # Mandi rows include weekends: a week is 7 calendar days.
+                    weekly = _pct_chg_calendar_days(mandi_rows, 7)
                     if weekly is not None:
                         india_domestic_entry["weekly_chg_pct"] = round(weekly, 2)
 

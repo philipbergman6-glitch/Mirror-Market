@@ -14,8 +14,8 @@ name: Retry Failed Pipeline
 # `repository_dispatch` back to deploy-dashboard.yml for one full re-run.
 # On a green day it exits in seconds having touched no upstream, which is
 # why this is a conditional trigger rather than a second unconditional cron
-# (a second cron would double the load on the still-anonymous data.gov.in
-# sample key every single day, including the days nothing was wrong).
+# (a second cron would double the load on every scraped upstream every
+# single day, including the days nothing was wrong).
 #
 # WHY THIS SLOT
 #   The daily build is scheduled 19:00 UTC and lands 20:04-23:58 after
