@@ -101,6 +101,22 @@ def points_to_cents_per_lb(value: float) -> float:
     return value / 100
 
 
+# Customs statistics publish net weight in kilograms (MDIC Comex Stat,
+# Layer 31). A mass conversion, not a price one — kept here so the repo still
+# has exactly one place that turns a stored quantity into metric tons.
+KG_PER_METRIC_TON = 1000.0
+
+
+def kg_to_metric_tons(kg: float) -> float:
+    """Net kilograms → metric tons."""
+    return kg / KG_PER_METRIC_TON
+
+
+def kg_to_million_metric_tons(kg: float) -> float:
+    """Net kilograms → million metric tons, the scale monthly trade flows read in."""
+    return kg_to_metric_tons(kg) / 1_000_000.0
+
+
 def to_metric_tons(value: float, commodity: str) -> float | None:
     """
     Convert a single price value from native exchange units to USD/MT.

@@ -44,6 +44,7 @@ from config import (
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
+from fetchers.comexstat import fetch_brazil_exports
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.contract_history import fetch_all_contract_bars
@@ -80,6 +81,7 @@ from fetchers.yfinance import fetch_all as fetch_prices
 from fetchers.yfinance import fetch_currencies
 from latency import clock as run_clock
 from pipeline.clean import (
+    clean_brazil_exports,
     clean_brazil_spot,
     clean_conab,
     clean_contract_bars,
@@ -112,6 +114,7 @@ from pipeline.store import (
     init_database,
     save_argentina_fob,
     save_brazil_estimates,
+    save_brazil_exports,
     save_brazil_spot,
     save_cec_estimates,
     save_contract_bars,
@@ -749,6 +752,16 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             # the download, the parse, or the stale-file guard broke, never
             # "the Commission published nothing this week".
             empty_fails=True,
+        ),
+        DictLayer(
+            "comexstat", "Layer 31", "MDIC Comex Stat Brazil soy-complex exports",
+            fetch=lambda: fetch_brazil_exports(),
+            save=lambda n, d: save_brazil_exports(n, d),
+            clean=lambda n, d: clean_brazil_exports(d),
+            # No empty_fails override: the LAYER_MIN_KEYS floor of 3 already
+            # derives it — zero products back is an outage, never a month
+            # MDIC skipped. The not-yet-released month is handled upstream of
+            # grading: the fetcher bounds the data at MDIC's declared month.
         ),
         DictLayer(
             "gtr_ocean_freight", "Layer 26", "AMS GTR ocean freight to Japan",

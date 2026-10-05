@@ -68,6 +68,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_psd_all": empty_dict,
         "fetch_worldbank_prices": empty_dict,
         "fetch_ec_oilseed_prices": empty_dict,
+        "fetch_brazil_exports": empty_dict,
         "fetch_gtr_ocean_freight": empty_dict,
         "fetch_gtr_vessel_activity": empty_dict,
         "fetch_nwps_gauges": empty_dict,

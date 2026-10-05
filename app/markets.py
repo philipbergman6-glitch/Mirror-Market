@@ -419,6 +419,11 @@ class Market:
     # no absent reason for that reason; a *configured* gauge with no rows
     # still says so, which is the distinction M1 constraint 2 is about.
     river_gauges: tuple[str, ...] = ()
+    # Layer 31 (#351). A key into config.CUSTOMS_EXPORTS — monthly customs
+    # export flows rendered inside block 07. None is the ordinary case: only
+    # an origin whose customs agency publishes open, CI-reachable monthly data
+    # has one, so no absent reason is owed for its absence.
+    customs_exports: str | None = None
     absent_reasons: dict[str, str] = field(default_factory=dict)
     # Wired in a second pass by `load_markets()` — a leg names another market,
     # so every market has to exist before any ledger can be resolved.
@@ -643,6 +648,11 @@ def _market(slug: str, raw: dict) -> Market:
         raise ValueError(
             f"market {slug!r} names river gauge(s) not in RIVER_GAUGES: {sorted(unknown_gauges)}"
         )
+    customs = raw.get("customs_exports")
+    if customs is not None and customs not in config.CUSTOMS_EXPORTS:
+        raise ValueError(
+            f"market {slug!r} customs_exports {customs!r} is not in CUSTOMS_EXPORTS"
+        )
     if raw.get("currency_pair") and raw["currency_pair"] not in config.CURRENCY_TICKERS:
         raise ValueError(
             f"market {slug!r} currency_pair {raw['currency_pair']!r} is not in CURRENCY_TICKERS"
@@ -665,6 +675,7 @@ def _market(slug: str, raw: dict) -> Market:
         weather_regions=tuple(weather_roles),
         weather_roles=weather_roles,
         river_gauges=tuple(raw.get("river_gauges") or ()),
+        customs_exports=customs,
         psd_country=raw.get("psd_country"),
         players_country=raw.get("players_country"),
         absent_reasons=reasons,

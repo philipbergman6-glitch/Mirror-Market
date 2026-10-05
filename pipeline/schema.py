@@ -140,6 +140,23 @@ CREATE TABLE IF NOT EXISTS ec_oilseed_prices (
 );
 """
 
+# Layer 31 — MDIC Comex Stat monthly exports (#351). Raw published figures:
+# net kg and FOB USD exactly as MDIC prints them; tonnes and the customs unit
+# value are derived at read time (pipeline/units.py), never stored.
+_CREATE_BRAZIL_EXPORTS = """
+CREATE TABLE IF NOT EXISTS brazil_exports (
+    month_end   TEXT    NOT NULL,
+    ncm         TEXT    NOT NULL,
+    product     TEXT    NOT NULL,
+    country     TEXT    NOT NULL,
+    state       TEXT    NOT NULL,
+    kg          INTEGER NOT NULL,
+    fob_usd     INTEGER NOT NULL,
+    qty_stat    INTEGER,
+    PRIMARY KEY (month_end, ncm, country, state)
+);
+"""
+
 _CREATE_DCE_FUTURES = """
 CREATE TABLE IF NOT EXISTS dce_futures (
     commodity       TEXT NOT NULL,
@@ -747,6 +764,7 @@ ALL_SCHEMAS = (
     _CREATE_CURRENCIES,
     _CREATE_WORLDBANK,
     _CREATE_EC_OILSEED_PRICES,
+    _CREATE_BRAZIL_EXPORTS,
     _CREATE_DCE_FUTURES,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,

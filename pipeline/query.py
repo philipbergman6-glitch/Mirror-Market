@@ -154,6 +154,17 @@ def read_ec_oilseed_prices(series: str | None = None) -> pd.DataFrame:
     return _read_table("ec_oilseed_prices", "series", series, date_cols=("Date",))
 
 
+def read_brazil_exports(product: str | None = None) -> pd.DataFrame:
+    """Read MDIC Comex Stat monthly exports (Layer 31) from SQLite.
+
+    Raw published figures — net ``kg`` and ``fob_usd`` per (month, NCM,
+    destination, state of production). Convert kg through pipeline/units.py;
+    a ``state`` of "Não Declarada" is bulk cargo MDIC has not yet allocated,
+    not a state.
+    """
+    return _read_table("brazil_exports", "product", product, date_cols=("month_end",))
+
+
 def read_ocean_freight_rates(route: str | None = None) -> pd.DataFrame:
     """Read GTR monthly bulk grain ocean freight rates from SQLite.
 
