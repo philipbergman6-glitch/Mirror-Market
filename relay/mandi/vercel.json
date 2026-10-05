@@ -1,6 +1,10 @@
 {
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "functions": {
-    "api/mandi.js": { "maxDuration": 60 }
+    "api/*.js": {
+      "maxDuration": 60
+    }
   }
 }
