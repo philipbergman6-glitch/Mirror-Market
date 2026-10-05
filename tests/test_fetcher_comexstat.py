@@ -63,13 +63,25 @@ _OIL_ZERO_KG_JUN26 = {
 }
 
 
-def _soy_row(year: int, month: int, kg: int = 1_000_000_000, country: str = "China") -> dict:
+def _row(ncm: str, year: int, month: int, kg: int, country: str, state: str = "Goiás") -> dict:
     return {
-        "coNcm": "12019000", "year": str(year), "monthNumber": f"{month:02d}",
-        "ncm": "Soybeans, whether or not crushed, except for sowing",
-        "country": country, "state": "Mato Grosso",
+        "coNcm": ncm, "year": str(year), "monthNumber": f"{month:02d}",
+        "ncm": "(description)", "country": country, "state": state,
         "metricFOB": str(kg // 2), "metricKG": str(kg), "metricStatistic": str(kg // 1000),
     }
+
+
+def _soy_row(year: int, month: int, kg: int = 1_000_000_000, country: str = "China") -> dict:
+    return _row("12019000", year, month, kg, country)
+
+
+def _month_rows(year: int, month: int) -> list[dict]:
+    """One row of each product — Brazil ships all three every month."""
+    return [
+        _soy_row(year, month),
+        _row("23040090", year, month, 500_000_000, "Spain"),
+        _row("15071000", year, month, 50_000_000, "Bangladesh"),
+    ]
 
 
 def _payload(rows: list[dict]) -> dict:
@@ -78,10 +90,10 @@ def _payload(rows: list[dict]) -> dict:
 
 
 def _window(start: str, declared: tuple[int, int], extra: list[dict] | None = None) -> list[dict]:
-    """One soybean row for every month in [start, declared], plus extras."""
+    """One row per product for every month in [start, declared], plus extras."""
     rows = []
     for period in pd.period_range(start, f"{declared[0]}-{declared[1]:02d}", freq="M"):
-        rows.append(_soy_row(period.year, period.month))
+        rows.extend(_month_rows(period.year, period.month))
     return rows + (extra or [])
 
 
@@ -127,16 +139,18 @@ def test_parse_keeps_published_rows_verbatim_by_product():
     assert row["qty_stat"] == 681_142
     # The undeclared-state row is a real published row and is kept as such.
     assert "Não Declarada" in set(soy["state"])
-    assert frames["Soybean Meal"]["kg"].tolist() == [46_184_865]
-    assert frames["Soybean Oil"]["fob_usd"].tolist() == [62_845_464]
+    meal, oil = frames["Soybean Meal"], frames["Soybean Oil"]
+    assert meal.loc[meal["country"] == "Netherlands", "kg"].tolist() == [46_184_865]
+    assert oil.loc[oil["country"] == "India", "fob_usd"].tolist() == [62_845_464]
 
 
 def test_a_published_zero_kilogram_row_is_kept_as_zero_not_dropped():
     rows = _window("2026-06", (2026, 8), extra=[_OIL_ZERO_KG_JUN26])
     frames = comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2026-06")
     oil = frames["Soybean Oil"]
-    assert oil["kg"].tolist() == [0]
-    assert oil["fob_usd"].tolist() == [767]
+    greece = oil[oil["country"] == "Greece"]
+    assert greece["kg"].tolist() == [0]
+    assert greece["fob_usd"].tolist() == [767]
 
 
 def test_a_row_past_the_declared_month_hard_fails():
@@ -147,13 +161,28 @@ def test_a_row_past_the_declared_month_hard_fails():
 
 def test_a_months_of_year_window_that_dropped_whole_months_hard_fails():
     """What the API returned for from=2021-01 to=2026-08: Jan–Aug of each year."""
-    rows = [_soy_row(y, m) for y in (2025, 2026) for m in range(1, 9)]
+    rows = [r for y in (2025, 2026) for m in range(1, 9) for r in _month_rows(y, m)]
     with pytest.raises(ScraperShapeError, match="2025-09"):
         comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2025-01")
 
 
+def test_a_published_month_missing_meal_or_oil_hard_fails():
+    """Brazil ships all three products every month (68 of 68 months live)."""
+    rows = [_soy_row(2026, 8), _MEAL_NL_AUG26]  # no oil row
+    with pytest.raises(ScraperShapeError, match="Soybean Oil"):
+        comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2026-08")
+
+
+def test_a_duplicate_key_hard_fails_rather_than_silently_dropping_tonnage():
+    """Destinations and states arrive as names, not codes. Two rows on one
+    (month, NCM, country, state) key would otherwise be deduplicated away."""
+    rows = _window("2026-08", (2026, 8), extra=[_CHINA_MT_AUG26, dict(_CHINA_MT_AUG26)])
+    with pytest.raises(ScraperShapeError, match="duplicate"):
+        comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2026-08")
+
+
 def test_a_published_month_with_no_soybean_rows_hard_fails():
-    rows = [_soy_row(2026, 6), _soy_row(2026, 8)]  # July missing
+    rows = _month_rows(2026, 6) + _month_rows(2026, 8)  # July missing
     with pytest.raises(ScraperShapeError, match="2026-07"):
         comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2026-06")
 
@@ -238,7 +267,7 @@ def _install(monkeypatch, fake):
     monkeypatch.setattr(comexstat, "COMEXSTAT_START_YEAR", 2026)
 
 
-def test_fetch_requests_whole_years_and_keeps_only_published_months(monkeypatch, sleeps):
+def test_fetch_requests_whole_years_bounded_by_the_declared_month(monkeypatch, sleeps):
     """`period` is years × months-of-year. Asking for 2021-01..2026-08 drops
     Sep–Dec from every earlier year (live, 2026-10-05), so the request spans
     January of the start year to December of the declared year, and the
@@ -288,6 +317,30 @@ def test_fetch_hard_fails_on_a_non_rate_limit_http_error_without_retrying(monkey
     assert sleeps == []
 
 
+def test_the_dates_call_also_waits_out_a_rate_limit(monkeypatch, sleeps):
+    """It shares the data call's budget, and runner IPs are shared too."""
+    ok = _Resp(200, _payload(_window("2026-01", (2026, 8))))
+    fake = _FakeRequests([_RATE_LIMITED, _UPDATED_AUG], [ok])
+    _install(monkeypatch, fake)
+
+    frames = comexstat.fetch_brazil_exports()
+
+    assert sleeps == [config.COMEXSTAT_RATE_LIMIT_WAITS[0]]
+    assert not frames["Soybeans"].empty
+
+
+def test_a_month_published_between_the_two_calls_hard_fails(monkeypatch, sleeps):
+    """Release-day race: dates/updated still says August, the data already
+    carries September. The source's own statement bounds the data; the next
+    run, after dates/updated moves, stores it."""
+    rows = _window("2026-01", (2026, 8), extra=[_soy_row(2026, 9)])
+    fake = _FakeRequests([_UPDATED_AUG], [_Resp(200, _payload(rows))])
+    _install(monkeypatch, fake)
+
+    with pytest.raises(ScraperShapeError, match="2026-09"):
+        comexstat.fetch_brazil_exports()
+
+
 @pytest.mark.parametrize("body", [
     {"data": {"updated": "2026-09-04", "year": "2026"}, "success": True},
     {"data": {"updated": "2026-09-04", "year": "2026", "monthNumber": "13"}, "success": True},
@@ -327,7 +380,7 @@ def test_store_and_read_round_trip(patched_db):
     assert china["fob_usd"] == 301_478_563
     assert china["state"] == "Mato Grosso"
     assert pd.Timestamp(china["month_end"]) == pd.Timestamp("2026-08-31")
-    assert set(out["product"]) == {"Soybeans", "Soybean Meal"}
+    assert set(out["product"]) == set(config.COMEXSTAT_PRODUCTS)
 
 
 def test_a_revised_window_replaces_rows_mdic_has_revised_away(patched_db):
@@ -339,17 +392,53 @@ def test_a_revised_window_replaces_rows_mdic_has_revised_away(patched_db):
     first = _window("2026-07", (2026, 8), extra=[_CHINA_UNDECLARED_AUG26])
     _stored(comexstat.parse_general(_payload(first), declared=(2026, 8), start="2026-07"))
 
-    reassigned = dict(_CHINA_UNDECLARED_AUG26, state="Goiás")
+    reassigned = dict(_CHINA_UNDECLARED_AUG26, state="Bahia")
     second = _window("2026-07", (2026, 8), extra=[reassigned])
     _stored(comexstat.parse_general(_payload(second), declared=(2026, 8), start="2026-07"))
 
     aug = read_brazil_exports()
     aug = aug[pd.to_datetime(aug["month_end"]) == pd.Timestamp("2026-08-31")]
     assert "Não Declarada" not in set(aug["state"])
-    assert (aug["state"] == "Goiás").sum() == 1
+    assert (aug["state"] == "Bahia").sum() == 1
 
 
-def test_months_outside_the_incoming_window_are_left_alone(patched_db):
+def test_a_month_mdic_withdraws_does_not_survive_as_the_newest(patched_db):
+    """Rows after the incoming window's newest month are cleared too: the
+    window runs to MDIC's declared month, so anything stored later is a month
+    the publisher no longer declares."""
+    from pipeline.query import read_brazil_exports
+
+    _stored(comexstat.parse_general(_payload(_window("2026-07", (2026, 8))),
+                                    declared=(2026, 8), start="2026-07"))
+    _stored(comexstat.parse_general(_payload(_window("2026-07", (2026, 7))),
+                                    declared=(2026, 7), start="2026-07"))
+
+    newest = pd.to_datetime(read_brazil_exports()["month_end"]).max()
+    assert newest == pd.Timestamp("2026-07-31")
+
+
+def test_a_failed_rewrite_leaves_the_stored_window_intact(patched_db, monkeypatch):
+    """The clear and the rewrite are one transaction: a write that fails must
+    not leave the product's whole history deleted until the next good run."""
+    from pipeline import store
+    from pipeline.query import read_brazil_exports
+
+    _stored(comexstat.parse_general(_payload(_window("2026-07", (2026, 8))),
+                                    declared=(2026, 8), start="2026-07"))
+    before = len(read_brazil_exports())
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(store, "upsert_dataframe", broken)
+    with pytest.raises(RuntimeError):
+        _stored(comexstat.parse_general(_payload(_window("2026-07", (2026, 8))),
+                                        declared=(2026, 8), start="2026-07"))
+
+    assert len(read_brazil_exports()) == before
+
+
+def test_months_before_the_incoming_window_are_left_alone(patched_db):
     from pipeline.query import read_brazil_exports
 
     old = _window("2026-05", (2026, 6))

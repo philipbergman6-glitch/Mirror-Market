@@ -1905,9 +1905,9 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # Comex Stat publishes month M on a set calendar date early in month M+1 —
     # 2026: 4 Sep (Aug), 6 Oct (Sep), 6 Nov, 4 Dec — so the newest month_end
     # is ~4 days old at release and ~37 the day before the next one. 75 is
-    # that worst case plus one missed release; the month not yet released
-    # is never fetched (fetchers/comexstat.py cuts at MDIC's own declared
-    # month), so the lag alone can never grade this layer stale.
+    # that worst case plus one missed release; the data is bounded by MDIC's
+    # own declared month (fetchers/comexstat.py), so the unreleased month is
+    # never stored as a zero and the lag alone can never grade this stale.
     "comexstat": 75,
     # Wednesday-dated assessment published the following day, so the newest
     # row is normally 1-8 days old. 21 tolerates exactly one missed release

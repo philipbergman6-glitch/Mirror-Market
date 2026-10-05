@@ -112,6 +112,11 @@ def kg_to_metric_tons(kg: float) -> float:
     return kg / KG_PER_METRIC_TON
 
 
+def kg_to_million_metric_tons(kg: float) -> float:
+    """Net kilograms → million metric tons, the scale monthly trade flows read in."""
+    return kg_to_metric_tons(kg) / 1_000_000.0
+
+
 def to_metric_tons(value: float, commodity: str) -> float | None:
     """
     Convert a single price value from native exchange units to USD/MT.

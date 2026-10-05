@@ -19,12 +19,16 @@ Traps this module exists to survive (all probed live 2026-10-05):
 
 1.  **The API says how far its numbers run — believe it.** `GET
     /general/dates/updated` names the last published month (2026-08 on
-    2026-10-05, released 2026-09-04). The data request stops there, so the
-    month MDIC has not released yet is never asked for and can never read as
-    a collapse to zero. Inside the published window, every month must carry
-    soybean rows: Brazil has shipped beans every month on record, so a hole
-    is our fetch, not the market, and the layer hard-fails rather than
-    storing it.
+    2026-10-05, released 2026-09-04), and that month bounds the data: the
+    request has to span whole years (trap 2), so later months of the year
+    are asked for and come back empty, and a row past the declared month —
+    MDIC publishing between our two calls on release day — hard-fails rather
+    than being stored ahead of the source's own statement. The unreleased
+    month can therefore never read as a collapse to zero. Inside the window,
+    every month must carry all three products: Brazil ships beans, meal and
+    oil every month (68 of 68 live), so a hole is our fetch, not the market,
+    and the layer hard-fails rather than storing it. Duplicate keys hard-fail
+    too — destinations and states arrive as names, not codes.
 
 2.  **`period` is years × months-of-year, not a range.** `from 2021-01 to
     2026-08` returns January–August of *every* year and silently drops
@@ -64,7 +68,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from datetime import date
+from typing import Any
 
 import pandas as pd
 import requests
@@ -85,8 +91,6 @@ logger = logging.getLogger(__name__)
 
 _HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; MirrorMarket/1.0)"}
 
-# Soybeans are the coverage proof: present in every published month.
-_COVERAGE_NCM = "12019000"
 
 _METRICS = {"metricKG": "kg", "metricFOB": "fob_usd", "metricStatistic": "qty_stat"}
 
@@ -166,16 +170,31 @@ def parse_general(payload: object, *, declared: tuple[int, int], start: str) -> 
 
     frame = pd.DataFrame.from_records(records, columns=list(EXPORT_COLUMNS))
 
-    covered = {
-        (ts.year, ts.month)
-        for ts in frame.loc[frame["ncm"] == _COVERAGE_NCM, "month_end"]
-    }
-    for period in pd.period_range(start, _label(declared), freq="M"):
-        if (period.year, period.month) not in covered:
-            raise ScraperShapeError(
-                f"Comex Stat: published month {period} has no soybean export rows — "
-                "Brazil ships beans every month, so this is a fetch hole, not the market"
-            )
+    # Names, not codes: two rows on one key would be deduplicated away later
+    # and their tonnage lost without a sound.
+    key = ["month_end", "ncm", "country", "state"]
+    duplicated = frame[frame.duplicated(subset=key, keep=False)]
+    if not duplicated.empty:
+        first_dup = duplicated.iloc[0]
+        raise ScraperShapeError(
+            f"Comex Stat: {len(duplicated)} rows share a duplicate key, e.g. "
+            f"{first_dup['month_end'].date()} {first_dup['ncm']} "
+            f"{first_dup['country']}/{first_dup['state']}"
+        )
+
+    # Brazil ships beans, meal and oil every month (68 of 68 months live), so
+    # a published month missing any of them is a fetch hole, not the market.
+    for product in COMEXSTAT_PRODUCTS:
+        covered = {
+            (ts.year, ts.month)
+            for ts in frame.loc[frame["product"] == product, "month_end"]
+        }
+        for period in pd.period_range(start, _label(declared), freq="M"):
+            if (period.year, period.month) not in covered:
+                raise ScraperShapeError(
+                    f"Comex Stat: published month {period} has no {product} export rows — "
+                    "Brazil ships it every month, so this is a fetch hole, not the market"
+                )
 
     out: dict[str, pd.DataFrame] = {}
     for product in COMEXSTAT_PRODUCTS:
@@ -185,11 +204,35 @@ def parse_general(payload: object, *, declared: tuple[int, int], start: str) -> 
     return out
 
 
+def _with_rate_limit(send: Callable[[], Any], label: str) -> Any:
+    """Send, waiting out 429s on the configured schedule; any other non-200 raises.
+
+    Both endpoints share one budget (the dates call counts against it), and a
+    GitHub runner's IP is shared with strangers, so either call can draw a 429
+    on its first attempt.
+    """
+    waits = list(config.COMEXSTAT_RATE_LIMIT_WAITS)
+    while True:
+        resp = send()
+        if resp.status_code == 200:
+            return resp
+        if resp.status_code == 429 and waits:
+            wait = waits.pop(0)
+            logger.warning("Comex Stat %s rate-limited (429); waiting %ss", label, wait)
+            _sleep(wait)
+            continue
+        raise RuntimeError(
+            f"Comex Stat {label}: HTTP {resp.status_code} "
+            f"(rate-limit retries left: {len(waits)}): {resp.text[:200]}"
+        )
+
+
 def _declared_month(today: date) -> tuple[int, int]:
     """The last month MDIC says it has published, from its own endpoint."""
-    resp = requests.get(COMEXSTAT_UPDATED_URL, headers=_HEADERS, timeout=REQUEST_TIMEOUT)
-    if resp.status_code != 200:
-        raise ScraperShapeError(f"Comex Stat dates/updated: HTTP {resp.status_code}")
+    resp = _with_rate_limit(
+        lambda: requests.get(COMEXSTAT_UPDATED_URL, headers=_HEADERS, timeout=REQUEST_TIMEOUT),
+        "dates/updated",
+    )
     body = resp.json()
     data = body.get("data") if isinstance(body, dict) else None
     if not isinstance(data, dict) or "year" not in data or "monthNumber" not in data:
@@ -204,24 +247,14 @@ def _declared_month(today: date) -> tuple[int, int]:
 
 def _post_general(body: dict) -> dict:
     """POST the data request, waiting out 429s on the configured schedule."""
-    waits = list(config.COMEXSTAT_RATE_LIMIT_WAITS)
-    url = COMEXSTAT_GENERAL_URL
-    while True:
-        resp = requests.post(
-            url, json=body, params={"language": COMEXSTAT_LANGUAGE},
+    resp = _with_rate_limit(
+        lambda: requests.post(
+            COMEXSTAT_GENERAL_URL, json=body, params={"language": COMEXSTAT_LANGUAGE},
             headers=_HEADERS, timeout=REQUEST_TIMEOUT * 4,
-        )
-        if resp.status_code == 200:
-            return resp.json()
-        if resp.status_code == 429 and waits:
-            wait = waits.pop(0)
-            logger.warning("Comex Stat rate-limited (429); waiting %ss", wait)
-            _sleep(wait)
-            continue
-        raise RuntimeError(
-            f"Comex Stat general: HTTP {resp.status_code} "
-            f"(rate-limit retries left: {len(waits)}): {resp.text[:200]}"
-        )
+        ),
+        "general",
+    )
+    return resp.json()
 
 
 def fetch_brazil_exports(today: date | None = None) -> dict[str, pd.DataFrame]:

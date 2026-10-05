@@ -365,8 +365,20 @@ def upsert_dataframe(conn, table: str, df: pd.DataFrame, key_cols: list[str]) ->
     return len(rows)
 
 
-def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
+def _save(
+    table: str,
+    df: pd.DataFrame,
+    key_cols: list[str],
+    label: str,
+    *,
+    clear: tuple[str, tuple] | None = None,
+) -> int:
     """Open a connection and run a transactional upsert. Logs result.
+
+    ``clear`` is an optional ``(sql, params)`` DELETE run inside the same
+    transaction, before the upsert — for tables whose rewrite replaces a
+    window rather than merging into it. One transaction means a failed write
+    rolls the delete back too, instead of leaving the window empty.
 
     Every table write passes through here, which is why the same-PK
     divergence screen (T19 · F9, #67) hangs off this function rather than
@@ -382,6 +394,10 @@ def _save(table: str, df: pd.DataFrame, key_cols: list[str], label: str) -> int:
     with managed_connection(get_connection()) as conn:
         conn.execute("BEGIN")
         try:
+            if clear is not None:
+                removed = conn.execute(*clear).rowcount
+                if removed:
+                    logger.info("%s: cleared %d stored row(s) before rewriting", label, removed)
             df, held = divergence.screen(conn, table, df, key_cols, label)
             divergence.record(conn, held)
             n = upsert_dataframe(conn, table, df, key_cols)
@@ -612,8 +628,11 @@ def save_brazil_exports(product: str, df: pd.DataFrame):
     its February re-issue, and a revision can *move* a row — bulk cargo first
     filed under "Não Declarada" is later allocated to its real state. An
     upsert would keep the old row beside the new one and double-count it, so
-    this product's stored rows inside the incoming window are cleared first
-    and the window rewritten whole. Months outside the window are untouched.
+    this product's stored rows from the incoming window's first month onward
+    are cleared and the window rewritten whole, in one transaction. Open-ended
+    at the top: the window runs to MDIC's declared month, so a stored month
+    after it is one the publisher no longer declares. Earlier months are
+    untouched.
     """
     if df.empty:
         return
@@ -623,25 +642,14 @@ def save_brazil_exports(product: str, df: pd.DataFrame):
     missing = [c for c in _BRAZIL_EXPORT_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"save_brazil_exports: frame missing columns {missing}")
-    _replace_export_window(product, df["month_end"].min(), df["month_end"].max())
-    _save("brazil_exports", df[_BRAZIL_EXPORT_COLUMNS],
-          ["month_end", "ncm", "country", "state"], f"comexstat/{product}")
-
-
-def _replace_export_window(product: str, first: str, last: str) -> None:
-    """Clear one product's rows for [first, last] before the window is rewritten."""
-    with managed_connection(get_connection()) as conn:
-        cursor = conn.execute(
-            "DELETE FROM brazil_exports WHERE product = ? AND month_end BETWEEN ? AND ?",
-            (product, first, last),
-        )
-        removed = cursor.rowcount if cursor.rowcount is not None else 0
-        if removed:
-            logger.info(
-                "brazil_exports/%s: cleared %d stored row(s) %s..%s before rewriting the window",
-                product, removed, first, last,
-            )
-        maybe_sync(conn)
+    _save(
+        "brazil_exports", df[_BRAZIL_EXPORT_COLUMNS],
+        ["month_end", "ncm", "country", "state"], f"comexstat/{product}",
+        clear=(
+            "DELETE FROM brazil_exports WHERE product = ? AND month_end >= ?",
+            (product, df["month_end"].min()),
+        ),
+    )
 
 
 def save_ocean_freight(route: str, df: pd.DataFrame):

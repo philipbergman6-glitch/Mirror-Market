@@ -41,8 +41,8 @@
 <table class="dtable">
   <thead>
     <tr>
-      <th>Product</th><th class="num">Total, Mt</th><th class="num">To {{ xd.focus_destination }}, Mt</th>
-      <th class="num">Share</th><th class="num">Rest of world, Mt</th>
+      <th>Product</th><th class="num">Total, million t</th><th class="num">To {{ xd.focus_destination }}, million t</th>
+      <th class="num">Share</th><th class="num">Rest of world, million t</th>
       <th class="num">Total vs {{ xd.year_ago_label }}</th><th class="num">{{ xd.focus_destination }} vs {{ xd.year_ago_label }}</th>
       {% if xd.unit_value_trend is defined %}<th class="num">Unit value, USD/MT</th>{% endif %}
     </tr>
@@ -51,10 +51,10 @@
     {% for r in xd.rows %}
     <tr>
       <td>{{ r.product }}</td>
-      <td class="num">{{ f.num(r.tonnes / 1000000, 2) }}</td>
-      <td class="num">{{ f.num(r.focus_tonnes / 1000000, 2) }}</td>
+      <td class="num">{{ f.num(r.million_t, 2) }}</td>
+      <td class="num">{{ f.num(r.focus_million_t, 2) }}</td>
       <td class="num">{% if r.focus_share_pct is none %}<span class="muted">—</span>{% else %}{{ '{:.0f}'.format(r.focus_share_pct) }}%{% endif %}</td>
-      <td class="num">{{ f.num(r.rest_tonnes / 1000000, 2) }}</td>
+      <td class="num">{{ f.num(r.rest_million_t, 2) }}</td>
       <td class="num">{{ f.pct(r.yoy_pct) }}</td>
       <td class="num">{{ f.pct(r.focus_yoy_pct) }}</td>
       {% if xd.unit_value_trend is defined %}<td class="num">{{ f.usd(r.unit_value_usd_mt) }}</td>{% endif %}
@@ -63,6 +63,7 @@
   </tbody>
 </table>
 </div>
+{{ f.asof(xd.as_of, xd.age_days) }}
 <div class="caption">{{ xd.unreleased_note }}. {{ xd.revision_note }}</div>
 {% if xd.unit_value_caveat is defined %}<div class="caption">{{ xd.unit_value_caveat }}</div>{% endif %}
 {% if xd.withheld_note is defined %}<div class="caption muted">{{ xd.withheld_note }}</div>{% endif %}

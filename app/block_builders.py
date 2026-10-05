@@ -46,7 +46,7 @@ from app.blocks import (
     make_block,
 )
 from app.markets import Market, Source, TierResult, _ingest_status
-from pipeline.units import kg_to_metric_tons
+from pipeline.units import kg_to_metric_tons, kg_to_million_metric_tons
 from pricing.semantics import quote_kind_label
 
 log = logging.getLogger(__name__)
@@ -1976,16 +1976,33 @@ def _customs_exports(market: Market, ctx: SiteContext) -> dict | None:
     layer, focus = spec["layer"], spec["focus_destination"]
     publish_unit_value = bool(getattr(config, spec["unit_value_gate"]))
     monthly = _customs_monthly(ctx, spec["table"], focus)
+    # Our ingest is asked first, rows or no rows: stored rows can outlive the
+    # run that wrote them, and drawing them under the "release calendar, not
+    # an outage" note below would blame the publisher for our own failure.
+    ingest = _ingest_status(ctx.conn, layer) if ctx.conn is not None else None
+    if ingest:
+        return {"state": STATE_EMPTY, "reason": ingest, "data": {}}
     if not monthly:
-        ingest = _ingest_status(ctx.conn, layer) if ctx.conn is not None else None
         return {
             "state": STATE_EMPTY,
-            "reason": ingest or f"the {layer} layer holds no {spec['publisher']} export rows",
+            "reason": f"the {layer} layer holds no {spec['publisher']} export rows",
             "data": {},
         }
 
     months = sorted({month for month, _ in monthly})
     latest = months[-1]
+    as_of = _month_end(latest)
+    age_days = _age_days(ctx.today, as_of)
+    budget = config.LAYER_MAX_DATA_AGE_DAYS[layer]
+    if age_days is not None and age_days > budget:
+        return {
+            "state": STATE_EMPTY,
+            "reason": (
+                f"the newest {spec['publisher']} month we hold is {_month_iso(latest)}, "
+                f"{age_days} days old — past the layer's {budget}-day budget"
+            ),
+            "data": {},
+        }
     year_ago = latest - 12
     unreleased = latest + 1
     rows = []
@@ -2001,6 +2018,9 @@ def _customs_exports(market: Market, ctx: SiteContext) -> dict | None:
             "tonnes": tonnes,
             "focus_tonnes": focus_tonnes,
             "rest_tonnes": tonnes - focus_tonnes,
+            "million_t": kg_to_million_metric_tons(now["kg"]),
+            "focus_million_t": kg_to_million_metric_tons(now["focus_kg"]),
+            "rest_million_t": kg_to_million_metric_tons(now["kg"] - now["focus_kg"]),
             "focus_share_pct": (100.0 * focus_tonnes / tonnes) if tonnes else None,
             "yoy_pct": _pct_change(now["kg"], was["kg"] if was else None),
             "focus_yoy_pct": _pct_change(now["focus_kg"], was["focus_kg"] if was else None),
@@ -2015,6 +2035,8 @@ def _customs_exports(market: Market, ctx: SiteContext) -> dict | None:
         "cadence": "monthly",
         "month": _month_iso(latest),
         "month_label": _month_label(latest),
+        "as_of": as_of.isoformat(),
+        "age_days": age_days,
         "year_ago_label": _month_label(year_ago),
         "preliminary": True,
         "unreleased_note": (
@@ -2057,6 +2079,11 @@ def _month_iso(index: int) -> str:
 
 def _month_label(index: int) -> str:
     return date(index // 12, index % 12 + 1, 1).strftime("%b %Y")
+
+
+def _month_end(index: int) -> date:
+    following = index + 1
+    return date(following // 12, following % 12 + 1, 1) - _days(1)
 
 
 def _customs_monthly(ctx: SiteContext, table: str, focus: str) -> dict:

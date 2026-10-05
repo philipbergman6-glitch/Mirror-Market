@@ -167,13 +167,48 @@ def test_attribution_reaches_the_markup(ctx):
     assert "Comex Stat" in html
     assert "CC BY-ND 3.0" in html
     assert "preliminary" in html
-    assert "8,000,000" in html or "8.0" in html
+    assert ">8.00<" in html          # total, million tonnes
+    assert ">7.00<" in html          # to China
+    assert "million t" in html       # never "Mt", which reads as USD/MT's MT
 
 
 def test_no_rows_withholds_with_a_reason(ctx):
     _, exports = _exports(ctx)
     assert exports["state"] == "empty"
     assert "comexstat" in exports["reason"]
+
+
+@pytest.mark.parametrize("status", ["failed", "stale", "incomplete"])
+def test_stored_rows_behind_a_broken_ingest_are_withheld_not_blamed_on_the_calendar(ctx, status):
+    """Rows can outlive the run that stored them (a local DB, a partial run).
+    Rendering them under "not yet published — the release calendar, not an
+    outage" would blame MDIC for our own failure."""
+    _seed(ctx.conn)
+    ctx.conn.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?,?,?,?,?)", ("comexstat", "2026-04-01", "2026-10-05T20:00:00", 0, status))
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "empty"
+    assert "our comexstat ingest" in exports["reason"]
+
+
+def test_a_newest_month_past_the_age_budget_is_withheld(ctx):
+    old = pd.Period(TODAY, freq="M") - 6
+    _insert(ctx.conn, old, "12019000", "Soybeans", "China", 1_000_000_000, 400_000_000)
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "empty"
+    assert str(old) in exports["reason"]
+    assert "budget" in exports["reason"]
+
+
+def test_the_newest_month_carries_its_own_age(ctx):
+    _seed(ctx.conn)
+    _, exports = _exports(ctx)
+    data = exports["data"]
+    assert data["as_of"] == _month_end(LATEST)
+    assert data["age_days"] == (TODAY - LATEST.end_time.date()).days
 
 
 def test_a_failed_ingest_is_blamed_on_us_not_the_market(ctx):

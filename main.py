@@ -761,7 +761,7 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             # No empty_fails override: the LAYER_MIN_KEYS floor of 3 already
             # derives it — zero products back is an outage, never a month
             # MDIC skipped. The not-yet-released month is handled upstream of
-            # grading: the fetcher stops at MDIC's own declared month.
+            # grading: the fetcher bounds the data at MDIC's declared month.
         ),
         DictLayer(
             "gtr_ocean_freight", "Layer 26", "AMS GTR ocean freight to Japan",
