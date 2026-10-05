@@ -810,7 +810,7 @@ def _run_partial_mandi(saved: list) -> bool:
     from pipeline.results import FetchResult
 
     return main._run_scraper_layer(
-        "india_domestic", "Layer 16", "India mandi soy prices (data.gov.in)",
+        "india_domestic", "Layer 16", "India mandi soy prices (Agmarknet)",
         fetch=lambda: FetchResult.partial(
             {"Soybean (Mandi MP)": _dated_frame(0, rows=1)},
             "Maharashtra: offset 60 failed after 3 attempts (HTTP 429)",

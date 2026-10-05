@@ -67,8 +67,9 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # and fetchers/river.py cuts the forecast trace to dates strictly after
     # the newest observation so it can never overwrite one.
     "river_levels": ("gauge", "Date"),
-    # data.gov.in mandi resource is a current-day snapshot — the arrival_date
-    # filter is ignored upstream, so history exists only where we keep it.
+    # Agmarknet 2.0 serves only dates since its 2025-11-07 go-live, and the
+    # 2026-08 → 09-24 rows came from data.gov.in's current-day snapshot, which
+    # no source can reproduce — so history exists only where we keep it.
     "india_domestic_prices": ("Date", "commodity"),
     # One full curve per fetched_date — term-structure history.
     "forward_curve": ("fetched_date", "commodity", "contract_month"),
