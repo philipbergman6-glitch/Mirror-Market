@@ -1,0 +1,77 @@
+{# 06 Supply & demand — US biofuel policy (EPA RFS, Layer 29, #353).
+   `s` is the section's data (app/sections.py rfs_section).
+
+   Rendered under "Biofuel & Energy": EIA says how much biodiesel was made,
+   this says what the obligation requires and what a credit is worth. RIN
+   prices are USD per RIN — never USD/MT, and never labelled as one. #}
+{% import 'sections/_cards.html.j2' as c %}
+{% set g = s.generation %}
+{% if g %}
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">D4 RINs generated, {{ g.year }} to date</div>
+    <div class="mc-val">{{ '%.2f'|format(g.ytd_rins / 1e9) }} <span class="muted" style="font-size:14px;">bn RINs</span></div>
+    <div class="mc-delta muted">Jan–{{ g.through }}{% if g.latest_preliminary %} · {{ g.through }} preliminary{% endif %}</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">vs biomass-based diesel obligation</div>
+    {% if g.pace_pct is not none %}
+    <div class="mc-val">{{ '%.0f'|format(g.pace_pct) }}%</div>
+    <div class="mc-delta muted">of straight-line pace: {{ '%.2f'|format(g.pace_rins / 1e9) }} of {{ '%.2f'|format(g.obligation_rins / 1e9) }} bn RINs × {{ g.months }}/12</div>
+    <div class="caption">{{ g.citation }}</div>
+    {% else %}
+    <div class="mc-val muted">—</div>
+    <div class="caption">{{ g.pace_reason }}</div>
+    {% endif %}
+  </div>
+  <div class="mc">
+    <div class="mc-label">D4 RINs, {{ g.through }}</div>
+    <div class="mc-val">{{ '%.0f'|format(g.latest_month_rins / 1e6) }} <span class="muted" style="font-size:14px;">m RINs</span></div>
+    <div class="mc-delta muted">{{ c.pct(g.latest_month_yoy_pct) }} vs same month a year earlier</div>
+  </div>
+</div>
+<div class="caption">The pace is our straight-line yardstick, not EPA's — generation is not even through a year. D4 RINs also count toward the advanced and total obligations, so D4 running above the BBD pace is normal and is not by itself a surplus. EPA revises recent months; the newest is preliminary.</div>
+{% endif %}
+
+{% set p = s.prices %}
+{% if p %}
+<hr class="divider">
+<div class="subhdr" style="font-size:14px;">RIN prices (USD per RIN)</div>
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">D4 biomass-based diesel</div>
+    <div class="mc-val">${{ '%.2f'|format(p.d4) }}</div>
+    <div class="mc-delta muted">{{ c.signed(p.d4_chg, 2) }} vs {{ p.lookback_weeks }} weeks earlier</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">D6 conventional</div>
+    <div class="mc-val">${{ '%.2f'|format(p.d6) }}</div>
+    <div class="mc-delta muted">{{ c.signed(p.d6_chg, 2) }} vs {{ p.lookback_weeks }} weeks earlier</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">D4 − D6</div>
+    <div class="mc-val {{ 'up' if p.spread > 0 else 'down' if p.spread < 0 else '' }}">{{ c.signed(p.spread, 2) }}</div>
+    <div class="mc-delta muted">a premium: the BBD/advanced requirement binds on its own; near zero: D4 is filling the conventional gap</div>
+  </div>
+</div>
+<div class="caption">Week of {{ p.week }} · EPA weekly volume-weighted average of separated-RIN trades, after EPA's outlier filters. EPA reloads monthly, so the newest week is typically about a month old.</div>
+{% if p.chart_html %}<div class="chart-box">{{ p.chart_html | safe }}</div>{% endif %}
+{% endif %}
+
+{% if s.rvo %}
+<hr class="divider">
+<div class="subhdr" style="font-size:14px;">Renewable volume obligations (bn RINs)</div>
+<div style="overflow-x:auto;">
+<table class="dtable">
+  <thead>
+    <tr><th>Year</th><th>Category</th><th class="num">Base</th><th class="num">SRE reallocation</th><th class="num">Total</th></tr>
+  </thead>
+  <tbody>
+  {% for r in s.rvo %}
+    <tr><td>{{ r.year }}</td><td>{{ r.category }}</td><td class="num">{{ '%.2f'|format(r.base_bn) }}</td><td class="num">{{ '%.2f'|format(r.realloc_bn) }}</td><td class="num strong">{{ '%.2f'|format(r.total_bn) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="caption">Final rule {{ s.rvo[0].citation }}; totals confirmed against the obligation EPA reports on each run. Biomass-based diesel is set in RINs from 2026 — earlier years were physical gallons and are not comparable. Proposed rules are never shown.</div>
+{% endif %}
