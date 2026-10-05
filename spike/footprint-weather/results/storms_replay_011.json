@@ -1,0 +1,256 @@
+{
+ "storms": {},
+ "places": {
+  "P-NOLA": {
+   "state": "flag",
+   "nearest_km": 99,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 23,
+   "nearest_ts_km": 99,
+   "band": 34,
+   "level": "ts_force",
+   "storm": "al062024 adv 011",
+   "first_tau_h": 21,
+   "first_34_tau_h": 21
+  },
+  "P-PNG": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "P-UPR": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "P-NCN": {
+   "state": "clear",
+   "nearest_km": 11468,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 11761
+  },
+  "P-DUR": {
+   "state": "clear",
+   "nearest_km": 14491,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 24,
+   "nearest_ts_km": 14491
+  },
+  "P-MOS": {
+   "state": "clear",
+   "nearest_km": 7547,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 7777
+  },
+  "P-CBOT": {
+   "state": "clear",
+   "nearest_km": 755,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 1063
+  },
+  "P-RFT": {
+   "state": "clear",
+   "nearest_km": 14039,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 36,
+   "nearest_ts_km": 14043
+  },
+  "P-IDR": {
+   "state": "clear",
+   "nearest_km": 13401,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 13711
+  },
+  "P-PKG": {
+   "state": "clear",
+   "nearest_km": 15585,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 15891
+  },
+  "P-PGU": {
+   "state": "clear",
+   "nearest_km": 15671,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 15967
+  },
+  "P-PEN": {
+   "state": "clear",
+   "nearest_km": 15352,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 15662
+  },
+  "G-IA": {
+   "state": "clear",
+   "nearest_km": 797,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 1107
+  },
+  "G-IL": {
+   "state": "clear",
+   "nearest_km": 543,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 863
+  },
+  "G-NE": {
+   "state": "clear",
+   "nearest_km": 943,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 1190
+  },
+  "G-MT": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-PR": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-RS": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-PAM": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-COR": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-BAS": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-PY": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-FR": {
+   "state": "clear",
+   "nearest_km": 7449,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 7674
+  },
+  "G-DE": {
+   "state": "clear",
+   "nearest_km": 7687,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 7940
+  },
+  "G-RO": {
+   "state": "clear",
+   "nearest_km": 9118,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 9365
+  },
+  "G-SK": {
+   "state": "clear",
+   "nearest_km": 2275,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 2561
+  },
+  "G-AB": {
+   "state": "clear",
+   "nearest_km": 2641,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 2913
+  },
+  "G-RIAU": {
+   "state": "clear",
+   "nearest_km": 15866,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 16168
+  },
+  "G-SBH": {
+   "state": "clear",
+   "nearest_km": 14674,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 14928
+  },
+  "G-MP": {
+   "state": "clear",
+   "nearest_km": 13401,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 13711
+  },
+  "G-MH": {
+   "state": "clear",
+   "nearest_km": 13718,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 14028
+  },
+  "G-HL": {
+   "state": "clear",
+   "nearest_km": 10073,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 10366
+  },
+  "G-FS": {
+   "state": "clear",
+   "nearest_km": 14022,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 24,
+   "nearest_ts_km": 14022
+  },
+  "G-MPU": {
+   "state": "clear",
+   "nearest_km": 14219,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 36,
+   "nearest_ts_km": 14225
+  },
+  "G-BEN": {
+   "state": "clear",
+   "nearest_km": 10302,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 10364
+  },
+  "G-KAD": {
+   "state": "clear",
+   "nearest_km": 10023,
+   "nearest_storm": "al062024 adv 011",
+   "nearest_tau_h": 60,
+   "nearest_ts_km": 10093
+  }
+ },
+ "legs": {
+  "CBOT Soybeans": "flag at ['P-NOLA']",
+  "CBOT Soybean Oil / Meal": "clear",
+  "US Gulf CIF": "flag at ['P-NOLA']",
+  "DCE Soybean No.2 / oil / meal": "flag at ['P-NOLA'] | not covered: ['P-PNG', 'G-MT']",
+  "DCE Soybean No.1": "clear",
+  "CEPEA/ESALQ Parana": "not_covered",
+  "ESALQ/B3 Paranagua": "not_covered",
+  "AgRural Paranagua FOB": "not_covered",
+  "MAGyP FOB soy/oil/meal": "not_covered",
+  "MAGyP FOB Sunflower Oil": "not_covered",
+  "India mandi MP": "clear",
+  "India mandi MH": "clear",
+  "EU Rapeseed (Moselle)": "clear",
+  "SAFEX Soybean": "clear",
+  "SAFEX Sunflower": "clear",
+  "SAGIS deliveries": "clear",
+  "Palm Oil (CPO=F)": "clear",
+  "CZCE Rapeseed Oil": "no_places_listed"
+ },
+ "seconds": 0.0
+}

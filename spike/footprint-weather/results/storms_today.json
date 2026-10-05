@@ -1,0 +1,305 @@
+{
+ "storms": {
+  "ep182026": {
+   "source": "NHC",
+   "lastUpdate": "2026-10-05T15:00:00.000Z",
+   "intensity_kt": "75"
+  },
+  "ep1526": {
+   "source": "JTWC",
+   "name": "NOLO",
+   "issued": "2026100512",
+   "t0": [
+    25.6,
+    176.2
+   ],
+   "vmax_kt": 105,
+   "max_tau_h": 120,
+   "dropped_as_nhc_duplicate": false
+  },
+  "ep1826": {
+   "source": "JTWC",
+   "name": "RACHEL",
+   "issued": "2026100512",
+   "t0": [
+    20.4,
+    -115.8
+   ],
+   "vmax_kt": 75,
+   "max_tau_h": 120,
+   "dropped_as_nhc_duplicate": true
+  },
+  "wp2626": {
+   "source": "JTWC",
+   "name": "CHOI-WAN",
+   "issued": "2026100512",
+   "t0": [
+    27.3,
+    145.9
+   ],
+   "vmax_kt": 110,
+   "max_tau_h": 48,
+   "dropped_as_nhc_duplicate": false
+  },
+  "wp2726": {
+   "source": "JTWC",
+   "name": "KOGUMA",
+   "issued": "2026100512",
+   "t0": [
+    11.5,
+    167.9
+   ],
+   "vmax_kt": 35,
+   "max_tau_h": 120,
+   "dropped_as_nhc_duplicate": false
+  }
+ },
+ "places": {
+  "P-NOLA": {
+   "state": "clear",
+   "nearest_km": 2828,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 2828
+  },
+  "P-PNG": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "P-UPR": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "P-NCN": {
+   "state": "clear",
+   "nearest_km": 2488,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 12,
+   "nearest_ts_km": 2488
+  },
+  "P-DUR": {
+   "state": "clear",
+   "nearest_km": 13738,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 13738
+  },
+  "P-MOS": {
+   "state": "clear",
+   "nearest_km": 9129,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 48,
+   "nearest_ts_km": 9129
+  },
+  "P-CBOT": {
+   "state": "clear",
+   "nearest_km": 3608,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 3608
+  },
+  "P-RFT": {
+   "state": "clear",
+   "nearest_km": 13943,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 13943
+  },
+  "P-IDR": {
+   "state": "clear",
+   "nearest_km": 6940,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 12,
+   "nearest_ts_km": 6940
+  },
+  "P-PKG": {
+   "state": "clear",
+   "nearest_km": 5441,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 5441
+  },
+  "P-PGU": {
+   "state": "clear",
+   "nearest_km": 5316,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 5316
+  },
+  "P-PEN": {
+   "state": "clear",
+   "nearest_km": 5390,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 5390
+  },
+  "G-IA": {
+   "state": "clear",
+   "nearest_km": 3213,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 3213
+  },
+  "G-IL": {
+   "state": "clear",
+   "nearest_km": 3364,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 3364
+  },
+  "G-NE": {
+   "state": "clear",
+   "nearest_km": 2833,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 2833
+  },
+  "G-MT": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-PR": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-RS": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-PAM": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-COR": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-BAS": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-PY": {
+   "state": "not_covered",
+   "reason": "South Atlantic: no publishable cyclone source (R2)"
+  },
+  "G-FR": {
+   "state": "clear",
+   "nearest_km": 9212,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 48,
+   "nearest_ts_km": 9212
+  },
+  "G-DE": {
+   "state": "clear",
+   "nearest_km": 8512,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 48,
+   "nearest_ts_km": 8512
+  },
+  "G-RO": {
+   "state": "clear",
+   "nearest_km": 8966,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 48,
+   "nearest_ts_km": 8966
+  },
+  "G-SK": {
+   "state": "clear",
+   "nearest_km": 3601,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 120,
+   "nearest_ts_km": 3601
+  },
+  "G-AB": {
+   "state": "clear",
+   "nearest_km": 3494,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 120,
+   "nearest_ts_km": 3494
+  },
+  "G-RIAU": {
+   "state": "clear",
+   "nearest_km": 5587,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 5587
+  },
+  "G-SBH": {
+   "state": "clear",
+   "nearest_km": 3923,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 3923
+  },
+  "G-MP": {
+   "state": "clear",
+   "nearest_km": 6939,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 12,
+   "nearest_ts_km": 6939
+  },
+  "G-MH": {
+   "state": "clear",
+   "nearest_km": 7087,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 12,
+   "nearest_ts_km": 7087
+  },
+  "G-HL": {
+   "state": "clear",
+   "nearest_km": 2224,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 31,
+   "nearest_ts_km": 2224
+  },
+  "G-FS": {
+   "state": "clear",
+   "nearest_km": 14169,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 14169
+  },
+  "G-MPU": {
+   "state": "clear",
+   "nearest_km": 13700,
+   "nearest_storm": "JTWC wp2626 CHOI-WAN",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 13700
+  },
+  "G-BEN": {
+   "state": "clear",
+   "nearest_km": 13213,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 13213
+  },
+  "G-KAD": {
+   "state": "clear",
+   "nearest_km": 12958,
+   "nearest_storm": "NHC ep182026 Rachel",
+   "nearest_tau_h": 0,
+   "nearest_ts_km": 12958
+  }
+ },
+ "legs": {
+  "CBOT Soybeans": "clear",
+  "CBOT Soybean Oil / Meal": "clear",
+  "US Gulf CIF": "clear",
+  "DCE Soybean No.2 / oil / meal": "clear | not covered: ['P-PNG', 'G-MT']",
+  "DCE Soybean No.1": "clear",
+  "CEPEA/ESALQ Parana": "not_covered",
+  "ESALQ/B3 Paranagua": "not_covered",
+  "AgRural Paranagua FOB": "not_covered",
+  "MAGyP FOB soy/oil/meal": "not_covered",
+  "MAGyP FOB Sunflower Oil": "not_covered",
+  "India mandi MP": "clear",
+  "India mandi MH": "clear",
+  "EU Rapeseed (Moselle)": "clear",
+  "SAFEX Soybean": "clear",
+  "SAFEX Sunflower": "clear",
+  "SAGIS deliveries": "clear",
+  "Palm Oil (CPO=F)": "clear",
+  "CZCE Rapeseed Oil": "no_places_listed"
+ },
+ "seconds": 4.2
+}

@@ -1,0 +1,25 @@
+{
+ "BR-MT": {
+  "spam_cells": 10853,
+  "ecmwf_points": 1278,
+  "spam_soy_t": 34503665,
+  "cells_with_soy_pct": 81.1,
+  "soy_weight_in_top_quarter_of_points_pct": 69.9
+ },
+ "US-IA": {
+  "spam_cells": 2276,
+  "ecmwf_points": 274,
+  "spam_soy_t": 14602912,
+  "cells_with_soy_pct": 100.0,
+  "counties_with_data": 98,
+  "counties_missing": [
+   "Adams"
+  ],
+  "other_combined_rows": [
+   "19998"
+  ],
+  "cells_outside_counties": 2,
+  "soy_weight_in_top_quarter_of_points_pct": 36.3
+ },
+ "build_seconds": 0.5
+}
