@@ -12,6 +12,7 @@ continue to pass against the snapshot — that's the alert signal.
 
 from __future__ import annotations
 
+import calendar
 import contextlib
 import gzip
 from datetime import date
@@ -19,17 +20,13 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import requests
 from bs4 import BeautifulSoup
 
-from config import MANDI_SORT_FIELD
 from fetchers.agrural import _parse_agrural_table, fetch_agrural
 from fetchers.cepea import _parse_cepea_tables
 from fetchers.conab_precos import _parse_farmgate, _validate_download, _week_end_date
 from fetchers.india_domestic import _extract_soy_prices
 from fetchers.mandi import _aggregate as _mandi_aggregate
-from fetchers.mandi import _collect_records as _mandi_collect
-from fetchers.mandi import _fetch_page as _mandi_fetch_page
 from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import _parse_indicator_page
 from fetchers.safex import _parse_safex_table
@@ -485,7 +482,7 @@ def test_ams_inspections_raises_when_grain_row_has_too_few_numbers() -> None:
         _parse_inspections(text, today=_AMS_FIXTURE_TODAY)
 
 
-# ── data.gov.in Mandi Price API (India, Layer 16 rebuild) ───────────────────
+# ── Agmarknet 2.0 mandi report (India, Layer 16) ────────────────────────────
 
 def _mandi_record(**overrides) -> dict:
     rec = {
@@ -500,36 +497,6 @@ def _mandi_record(**overrides) -> dict:
     }
     rec.update(overrides)
     return rec
-
-
-# The live envelope ships the resource's own field catalog on every
-# response, empty ones included (probed 2026-08-12) — that catalog is what
-# _assert_fields_exist reads, so a payload fixture without it is not a
-# payload the API ever returns.
-_MANDI_FIELD_CATALOG = [
-    {"name": "State", "id": "state", "type": "keyword"},
-    {"name": "District", "id": "district", "type": "keyword"},
-    {"name": "Market", "id": "market", "type": "keyword"},
-    {"name": "Commodity", "id": "commodity", "type": "keyword"},
-    {"name": "Variety", "id": "variety", "type": "keyword"},
-    {"name": "Grade", "id": "grade", "type": "keyword"},
-    {"name": "Arrival_Date", "id": "arrival_date", "type": "date"},
-    {"name": "Min_x0020_Price", "id": "min_price", "type": "double"},
-    {"name": "Max_x0020_Price", "id": "max_price", "type": "double"},
-    {"name": "Modal_x0020_Price", "id": "modal_price", "type": "double"},
-]
-
-
-def _mandi_payload(records: list[dict], total: int | None = None, **overrides) -> dict:
-    payload = {
-        "total": len(records) if total is None else total,
-        "count": len(records),
-        "message": "Resource lists ok",
-        "records": records,
-        "field": [dict(f) for f in _MANDI_FIELD_CATALOG],
-    }
-    payload.update(overrides)
-    return payload
 
 
 def test_mandi_aggregate_takes_median_modal_in_inr_mt() -> None:
@@ -624,263 +591,139 @@ def test_mandi_aggregate_empty_records_returns_empty_frame() -> None:
     assert _mandi_aggregate([]).empty
 
 
-def test_mandi_collect_paginates_until_total(monkeypatch) -> None:
-    markets = iter(f"market-{i}" for i in range(25))
-    pages = [
-        _mandi_payload([_mandi_record(market=next(markets)) for _ in range(10)], total=25),
-        _mandi_payload([_mandi_record(market=next(markets)) for _ in range(10)], total=25),
-        _mandi_payload([_mandi_record(market=next(markets)) for _ in range(5)], total=25),
-    ]
-    calls: list[int] = []
-
-    def fake_fetch(offset: int, state: str) -> dict:
-        calls.append(offset)
-        return pages[len(calls) - 1]
-
-    monkeypatch.setattr("fetchers.mandi._fetch_page", fake_fetch)
-    records = _mandi_collect("Madhya Pradesh")
-    assert len(records) == 25
-    assert calls == [0, 10, 20]
+# Shapes below are the live Agmarknet 2.0 date-wise report as served on
+# 2026-10-05 (`/v1/prices-and-arrivals/date-wise/specific-commodity`):
+# markets → dates → per-variety rows, prices Rs./Quintal, title naming the
+# month, commodity and state the server actually answered for.
+_AGM_COLUMNS = [
+    {"key": "arrivalDate", "title": "Arrival Date"},
+    {"key": "arrivals", "title": "Arrivals (Metric Tonnes)"},
+    {"key": "variety", "title": "Variety"},
+    {"key": "minimumPrice", "title": "Minimum Price (Rs./Quintal)"},
+    {"key": "maximumPrice", "title": "Maximum Price (Rs./Quintal)"},
+    {"key": "modalPrice", "title": "Modal Price (Rs./Quintal)"},
+]
+_AGM_STATE_IDS = {19: "Madhya Pradesh", 20: "Maharashtra"}
 
 
-def test_mandi_collect_drops_rows_repeated_across_pages(monkeypatch) -> None:
-    """Unsorted offset paging served ~20 of 115 MP rows twice (#206).
+def _agm_report(
+    state: str, year: int, month: int, markets: dict[str, dict[str, list[float]]],
+    **overrides,
+) -> dict:
+    """``markets`` is {market: {"dd/mm/yyyy": [modal, ...one per variety row]}}."""
+    payload = {
+        "success": True,
+        "message": "Data fetched successfully.",
+        "title": (
+            "Date Wise Prices for Specified Commodity on "
+            f"{calendar.month_name[month]}, {year} for Commodity : Soyabean, "
+            f"State/UT : {state}"
+        ),
+        "columns": [dict(c) for c in _AGM_COLUMNS],
+        "markets": [
+            {
+                "marketName": name,
+                "dates": [
+                    {
+                        "arrivalDate": day,
+                        "total_arrivals": 10.0 * len(modals),
+                        "data": [
+                            {
+                                "arrivals": 10.0,
+                                "variety": "Yellow",
+                                "minimumPrice": modal - 500,
+                                "maximumPrice": modal + 200,
+                                "modalPrice": modal,
+                            }
+                            for modal in modals
+                        ],
+                    }
+                    for day, modals in days.items()
+                ],
+            }
+            for name, days in markets.items()
+        ],
+    }
+    payload.update(overrides)
+    return payload
 
-    The duplicates left the median alone but inflated Volume — the
-    reporting-mandi count — by 21%, and each repeat stands for a real
-    mandi the walk never served at all.
-    """
-    dupe = _mandi_record(market="Mandsaur", modal_price="6600")
-    pages = [
-        _mandi_payload([dupe, _mandi_record(market="Indore")], total=3),
-        _mandi_payload([dupe], total=3),
-    ]
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page", lambda offset, state: pages[offset // 10]
-    )
-    records = _mandi_collect("Madhya Pradesh")
-    assert len(records) == 2
-    assert _mandi_aggregate(records).iloc[0]["Volume"] == 2.0
+
+class _AgmResponse:
+    def __init__(self, status_code: int, payload: dict | None = None) -> None:
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self) -> dict:
+        if self._payload is None:
+            raise ValueError("not JSON")
+        return self._payload
 
 
-def test_mandi_page_request_is_sorted(monkeypatch) -> None:
-    """A stable sort is what makes offset paging total-ordered here."""
-    seen: dict = {}
-
-    class _Resp:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict:
-            return {"total": 0, "records": []}
-
-    def fake_get(url, params=None, headers=None, timeout=None):
-        seen.update(params or {})
-        return _Resp()
-
-    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
-    _mandi_fetch_page(0, "Madhya Pradesh")
-    assert seen[f"sort[{MANDI_SORT_FIELD}]"] == "asc"
-
-
-def test_mandi_rate_limit_envelope_is_retried_not_a_schema_error(monkeypatch) -> None:
-    """The shared sample key answers HTTP 200 ``{"error": "Rate limit exceeded"}``.
-
-    Handed on to ``_collect_records`` that reads as a missing ``records``
-    key — "the schema changed" — and hard-fails the whole layer over a
-    throttle that clears in seconds (observed twice live, 2026-08-12).
-    """
-    payloads = [
-        {"error": "Rate limit exceeded"},
-        {"total": 1, "records": [_mandi_record()]},
-    ]
-
-    class _Resp:
-        status_code = 200
-
-        def __init__(self, payload: dict) -> None:
-            self._payload = payload
-
-        def json(self) -> dict:
-            return self._payload
-
-    calls: list[int] = []
+def _serve_agmarknet(monkeypatch, reports) -> list[dict]:
+    """Stub the HTTP call. ``reports(state, year, month)`` returns a payload
+    dict or an int HTTP status. Returns the list of params each call sent."""
+    sent: list[dict] = []
 
     def fake_get(url, params=None, headers=None, timeout=None):
-        calls.append(1)
-        return _Resp(payloads[len(calls) - 1])
+        sent.append(dict(params))
+        state = _AGM_STATE_IDS[int(params["stateId"])]
+        answer = reports(state, int(params["year"]), int(params["month"]))
+        if isinstance(answer, int):
+            return _AgmResponse(answer)
+        return _AgmResponse(200, answer)
 
     monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
     monkeypatch.setattr("fetchers.mandi.retry_sleep", lambda attempt: None)
-    payload = _mandi_fetch_page(0, "Madhya Pradesh")
-    assert payload["total"] == 1
-    assert len(calls) == 2
+    return sent
 
 
-def test_mandi_wrong_filter_payload_is_retried_before_it_can_pollute_state(
-    monkeypatch,
-) -> None:
-    """A throttled edge has returned a cached page for a different state."""
-    payloads = [
-        _mandi_payload([_mandi_record(state="Uttar Pradesh")], total=1),
-        _mandi_payload([_mandi_record(state="Madhya Pradesh")], total=1),
-    ]
-
-    class _Resp:
-        status_code = 200
-
-        def __init__(self, payload: dict) -> None:
-            self._payload = payload
-
-        def json(self) -> dict:
-            return self._payload
-
-    calls: list[int] = []
-
-    def fake_get(url, params=None, headers=None, timeout=None):
-        calls.append(1)
-        return _Resp(payloads[len(calls) - 1])
-
-    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
-    monkeypatch.setattr("fetchers.mandi.retry_sleep", lambda attempt: None)
-
-    payload = _mandi_fetch_page(0, "Madhya Pradesh")
-
-    assert payload["records"][0]["state"] == "Madhya Pradesh"
-    assert len(calls) == 2
+def _two_ordinary_months(state: str, year: int, month: int) -> dict:
+    if month == 9:
+        return _agm_report(state, year, month, {
+            "Agar APMC": {"30/09/2026": [5300.0]},
+            "Ujjain APMC": {"30/09/2026": [5400.0]},
+        })
+    return _agm_report(state, year, month, {
+        "Agar APMC": {"03/10/2026": [5760.0], "05/10/2026": [9000.0]},
+        "A lot APMC": {"03/10/2026": [5500.0]},
+        "Ujjain APMC": {"03/10/2026": [5700.0]},
+    })
 
 
-def test_mandi_collect_raises_on_missing_records_key(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page",
-        lambda offset, state: {"message": "invalid key"},
-    )
-    with pytest.raises(ScraperShapeError, match="records"):
-        _mandi_collect("Madhya Pradesh")
+def test_mandi_stores_one_median_per_completed_indian_day(monkeypatch) -> None:
+    """The median of every variety row's modal, ×10 into INR/MT, per state —
+    and never the Indian day still in progress, which fills mandi by mandi
+    until late evening (#243: 83% of MP's mandis at 17:08 IST)."""
+    _serve_agmarknet(monkeypatch, _two_ordinary_months)
+
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "ok"
+    mp = result.data["Soybean (Mandi MP)"]
+    assert list(mp["Date"]) == ["2026-09-30", "2026-10-03"]   # 05/10 is today
+    assert list(mp["Close"]) == [53_500.0, 57_000.0]
+    assert list(mp["Volume"]) == [2.0, 3.0]
+    assert set(result.data) == {"Soybean (Mandi MP)", "Soybean (Mandi MH)"}
 
 
-@pytest.mark.parametrize("renamed", ["state", "commodity", "arrival_date", "modal_price"])
-def test_mandi_collect_rejects_a_renamed_field_on_an_empty_day(
-    monkeypatch, renamed: str
-) -> None:
-    """A renamed filter field is answered with 0 rows, not with an error.
-
-    Probed live 2026-08-12: ``filters[commodity_name]=Soyabean``,
-    ``filters[Commodity]=Soyabean`` and ``filters[state_name]=Tamil Nadu``
-    each returned HTTP 200, ``message: "Resource lists ok"``, ``total: 0``
-    against a resource holding 6,421 rows that second — the unknown field
-    is neither rejected nor ignored-and-unfiltered. So a rename reads as a
-    closed-mandi day, which ``india_domestic`` grades as a success.
-
-    The empty payload is the whole point of the fixture: this is the case
-    a record-level check cannot see, because there are no records.
-    """
-    catalog = [f for f in _MANDI_FIELD_CATALOG if f["id"] != renamed]
-    catalog.append({"name": renamed, "id": f"{renamed}_name", "type": "keyword"})
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page",
-        lambda offset, state: _mandi_payload([], total=0, field=catalog),
-    )
-    with pytest.raises(ScraperShapeError, match=f"no longer exposes field.*{renamed}"):
-        _mandi_collect("Madhya Pradesh")
-
-
-def test_mandi_collect_accepts_an_empty_day_with_the_catalog_intact() -> None:
-    """Sunday, holiday, or pre-arrival hours — empty is not a shape error.
-
-    Guards the check above from over-firing: the whole reason the layer
-    grades empty as a success is that most of a mandi week legitimately
-    looks like this.
-    """
-    import fetchers.mandi as mandi_mod
-
-    mandi_mod._assert_fields_exist(_mandi_payload([], total=0))
-
-
-def test_mandi_collect_ignores_extra_fields_appearing_in_the_catalog() -> None:
-    """A field the resource adds is not a break; only a missing one is."""
-    import fetchers.mandi as mandi_mod
-
-    extra = [*_MANDI_FIELD_CATALOG, {"name": "Tehsil", "id": "tehsil", "type": "keyword"}]
-    mandi_mod._assert_fields_exist(_mandi_payload([], total=0, field=extra))
-
-
-def test_mandi_collect_raises_when_the_envelope_drops_the_field_catalog(
-    monkeypatch,
-) -> None:
-    """No catalog means the rename check is blind — fail rather than trust."""
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page",
-        lambda offset, state: {"total": 0, "count": 0, "records": []},
-    )
-    with pytest.raises(ScraperShapeError, match="no 'field' catalog"):
-        _mandi_collect("Madhya Pradesh")
-
-
-@pytest.mark.parametrize(
-    "stray, match",
-    [
-        ({"state": "Tamil Nadu"}, "state filter is no longer applied"),
-        ({"commodity": "Paddy(Common)"}, "commodity filter is no longer applied"),
-    ],
-)
-def test_mandi_collect_rejects_rows_outside_the_requested_filters(
-    monkeypatch, stray: dict, match: str
-) -> None:
-    """The other half of the defence: rows we did not ask for.
-
-    Today this API answers an unknown filter with nothing rather than with
-    everything (see the rename test), so this path is unreachable live —
-    which is exactly why it is pinned. If the filter ever stops being
-    applied, the result is not an outage but a median over every commodity
-    in every state, stored under ``Soybean (Mandi MP)`` and shaped like a
-    real number.
-    """
-    pages = [_mandi_payload([_mandi_record(), _mandi_record(**stray)], total=2)]
-    monkeypatch.setattr("fetchers.mandi._fetch_page", lambda offset, state: pages[0])
-    with pytest.raises(ScraperShapeError, match=match):
-        _mandi_collect("Madhya Pradesh")
-
-
-def test_mandi_collect_accepts_filter_values_differing_only_in_case() -> None:
-    """The API matches filter values case-insensitively (``soyabean`` → 9 rows,
-    probed 2026-08-12), so the returned casing is not a contract."""
-    import fetchers.mandi as mandi_mod
-
-    mandi_mod._assert_filters_honoured(
-        [_mandi_record(state="madhya pradesh", commodity="SOYABEAN")],
-        "Madhya Pradesh",
+def test_mandi_requests_every_month_the_lookback_window_touches(monkeypatch) -> None:
+    """Each run re-reads the trailing window, so a mandi uploading late is
+    picked up by the next run instead of being lost — across a year end too."""
+    sent = _serve_agmarknet(
+        monkeypatch,
+        lambda state, year, month: _agm_report(
+            state, year, month,
+            {"Agar APMC": {f"02/{month:02d}/{year}": [5600.0]}},
+        ),
     )
 
+    fetch_mandi_prices(today=date(2027, 1, 10))
 
-def test_mandi_never_sends_a_python_user_agent(monkeypatch) -> None:
-    """api.data.gov.in blackholes Python-identifying User-Agents.
-
-    It does not 403 — it accepts the connection and never answers, so the
-    failure surfaces as a read timeout and the layer goes silently dark
-    (that is exactly what happened between 2026-08-07 and 2026-08-10).
-    requests' default UA is ``python-requests/x.y``, so an explicit header
-    is the whole fix; this test fails if it is ever dropped.
-    """
-    seen: dict[str, object] = {}
-
-    class _Resp:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict:
-            return {"total": 0, "records": []}
-
-    def fake_get(url, params=None, headers=None, timeout=None):
-        seen["headers"] = headers or {}
-        return _Resp()
-
-    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
-    _mandi_fetch_page(0, "Madhya Pradesh")
-
-    ua = str(seen["headers"].get("User-Agent", ""))
-    assert ua, "mandi requests must carry an explicit User-Agent"
-    assert "python" not in ua.lower()
+    asked = {(p["stateId"], p["year"], p["month"]) for p in sent}
+    assert asked == {
+        (19, 2026, 12), (19, 2027, 1), (20, 2026, 12), (20, 2027, 1),
+    }
+    assert {p["commodityId"] for p in sent} == {13}
 
 
 # ── CONAB weekly farmgate prices (Layer 15b) ────────────────────────────────
@@ -1094,108 +937,90 @@ def test_noticias_kg_quote_raises() -> None:
         _parse_indicator_page(html)
 
 
-# ── #212: a partial mandi walk is a wrong number, not a missing one ─────────
-#
-# The daily India price is a *median across the reporting mandis*. That makes
-# truncation uniquely dangerous here: a walk that ends early still produces a
-# well-formed, plausible price — computed over whichever pages survived, with
-# nothing in its shape marking it partial. #206 traced three different closes
-# for MP on the same date (Rs 67,430 / 67,250 / 67,360) to exactly this.
 
-
-def test_mandi_collect_hard_fails_when_the_page_cap_truncates(monkeypatch) -> None:
-    """MANDI_MAX_PAGES used to log a warning and return the truncated set."""
-    monkeypatch.setattr("fetchers.mandi.MANDI_MAX_PAGES", 2)
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page",
-        lambda offset, state: _mandi_payload(
-            [_mandi_record(market=f"m-{offset}-{i}") for i in range(10)], total=100
-        ),
-    )
-    with pytest.raises(requests.RequestException, match=r"truncated at 20/100"):
-        _mandi_collect("Madhya Pradesh")
-
-
-def test_mandi_collect_hard_fails_when_a_page_empties_early(monkeypatch) -> None:
-    """A zero-record page before ``total`` broke the loop as if complete."""
-    pages = [
-        _mandi_payload(
-            [_mandi_record(market=f"m{i}") for i in range(10)], total=30
-        ),
-        _mandi_payload([], total=30),
-    ]
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page", lambda offset, state: pages[offset // 10]
-    )
-    with pytest.raises(requests.RequestException, match=r"truncated at 10/30"):
-        _mandi_collect("Madhya Pradesh")
-
-
-def test_mandi_collect_accepts_a_complete_walk(monkeypatch) -> None:
-    """The guard must not fire on the ordinary case."""
-    monkeypatch.setattr(
-        "fetchers.mandi._fetch_page",
-        lambda offset, state: _mandi_payload(
-            [
-                _mandi_record(market=f"m-{offset}-{i}")
-                for i in range(10 if offset == 0 else 5)
-            ],
-            total=15,
-        ),
-    )
-    assert len(_mandi_collect("Madhya Pradesh")) == 15
-
-
-def test_mandi_one_state_failing_grades_the_layer_failed_but_keeps_its_rows(
-    monkeypatch,
-) -> None:
-    """A state that failed transport was never answered — not "absent".
-
-    ``india_domestic`` carries no LAYER_MIN_KEYS floor, so a plain
-    ``FetchResult.ok`` here would stamp a fresh ``last_success`` with half
-    the layer dark and nothing downstream to notice (#212). The rows that
-    did arrive are still returned: the resource serves the current day
-    only, so discarding them punches a permanent hole in history.
-    """
-
-    def fake_collect(state: str) -> list[dict]:
+def test_mandi_report_for_an_unknown_state_fails_the_layer(monkeypatch) -> None:
+    """Observed live 2026-10-05: an unknown state id answers ``success: true``
+    for "State/UT : N/A" with no markets. Trusting ``success`` would store
+    nothing and call it a closed day."""
+    def reports(state, year, month):
         if state == "Maharashtra":
-            raise requests.RequestException("offset 60 failed after 3 attempts (HTTP 429)")
-        return [_mandi_record(market="Indore", modal_price="6725")]
+            return _agm_report("N/A", year, month, {})
+        return _two_ordinary_months(state, year, month)
 
-    monkeypatch.setattr("fetchers.mandi._collect_records", fake_collect)
-    result = fetch_mandi_prices()
+    _serve_agmarknet(monkeypatch, reports)
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
 
-    assert result.status == "failed"
-    assert result.has_rows                      # rows survive the failed verdict
-    assert set(result.data) == {"Soybean (Mandi MP)"}
-    assert "Maharashtra" in (result.error or "")
-
-
-def test_mandi_one_state_empty_is_still_a_success(monkeypatch) -> None:
-    """Empty is asked-and-answered (a state holiday); failed is never-answered.
-
-    MP and MH keep different local calendars, so one-state-empty is an
-    ordinary day and must not be graded like a 429.
-    """
-
-    def fake_collect(state: str) -> list[dict]:
-        if state == "Maharashtra":
-            return []
-        return [_mandi_record(market="Indore", modal_price="6725")]
-
-    monkeypatch.setattr("fetchers.mandi._collect_records", fake_collect)
-    result = fetch_mandi_prices()
-
-    assert result.status == "ok"
-    assert set(result.data) == {"Soybean (Mandi MP)"}
-
-
-def test_mandi_all_states_failing_is_failed_with_no_rows(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "fetchers.mandi._collect_records",
-        lambda state: (_ for _ in ()).throw(requests.RequestException("HTTP 429")),
-    )
-    result = fetch_mandi_prices()
     assert result.status == "failed"
     assert not result.has_rows
+    assert "N/A" in (result.error or "")
+
+
+def test_mandi_modal_price_unit_change_fails_the_layer(monkeypatch) -> None:
+    """₹/kg parses as cleanly as ₹/quintal; only the column label tells them apart."""
+    def reports(state, year, month):
+        payload = _two_ordinary_months(state, year, month)
+        payload["columns"][-1]["title"] = "Modal Price (Rs./Kg)"
+        return payload
+
+    _serve_agmarknet(monkeypatch, reports)
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "failed"
+    assert "unit changed" in (result.error or "")
+
+
+def test_mandi_rows_outside_the_requested_month_fail_the_layer(monkeypatch) -> None:
+    """A month parameter the server stops applying would hand back the
+    same rows for every month — and double-count them in the median."""
+    def reports(state, year, month):
+        return _agm_report(state, year, month, {"Agar APMC": {"15/08/2026": [5600.0]}})
+
+    _serve_agmarknet(monkeypatch, reports)
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "failed"
+    assert "month was not applied" in (result.error or "")
+
+
+def test_mandi_unsuccessful_envelope_fails_the_layer(monkeypatch) -> None:
+    def reports(state, year, month):
+        return _two_ordinary_months(state, year, month) | {"success": False}
+
+    _serve_agmarknet(monkeypatch, reports)
+    assert fetch_mandi_prices(today=date(2026, 10, 5)).status == "failed"
+
+
+def test_mandi_window_without_a_completed_day_is_failed_not_closed(monkeypatch) -> None:
+    """A month-sized window never closes for MP or MH; an empty one means the
+    request stopped meaning what the code thinks — even when only today's
+    unfinished rows came back."""
+    def reports(state, year, month):
+        if month == 10:
+            return _agm_report(state, year, month, {"Agar APMC": {"05/10/2026": [5600.0]}})
+        return _agm_report(state, year, month, {})
+
+    _serve_agmarknet(monkeypatch, reports)
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "failed"
+    assert "no completed" in (result.error or "")
+
+
+def test_mandi_one_state_failing_transport_keeps_the_other_states_rows(
+    monkeypatch,
+) -> None:
+    """A state never answered is not an absent state: the verdict is failed
+    (no LAYER_MIN_KEYS floor would notice half the layer dark, #212), but
+    the state that did answer keeps its rows."""
+    def reports(state, year, month):
+        if state == "Maharashtra":
+            return 503
+        return _two_ordinary_months(state, year, month)
+
+    _serve_agmarknet(monkeypatch, reports)
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "failed"
+    assert result.has_rows
+    assert set(result.data) == {"Soybean (Mandi MP)"}
+    assert "Maharashtra" in (result.error or "") and "HTTP 503" in (result.error or "")

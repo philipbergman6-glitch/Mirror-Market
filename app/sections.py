@@ -586,8 +586,8 @@ def _country_notes(name: str, info: dict) -> list[str]:
     market day, and saying so beats omitting the series silently (#155).
     """
     if name == "India" and not info.get("india_domestic"):
-        return ["Mandi domestic price (Agmarknet via data.gov.in): no session data — "
-                "feed throttled or mandis closed"]
+        return ["Mandi domestic price (Agmarknet): no completed day stored — "
+                "the feed failed this run"]
     return []
 
 

@@ -103,9 +103,9 @@ def test_india_mandi_roundtrips_through_history(
 ) -> None:
     """India is snapshot-only and MUST stay in the round-trip set.
 
-    The data.gov.in resource serves the current day only — its
-    arrival_date filter is ignored upstream — so the committed CSV is the
-    single record of India's history. Drop this table from HISTORY_TABLES
+    The 2026-08 → 09-24 rows came from data.gov.in's current-day snapshot
+    and Agmarknet 2.0 serves nothing before 2025-11-07, so the committed
+    CSV is the single record of India's history. Drop this table from HISTORY_TABLES
     and every CI fetch is discarded at the end of the run, leaving India
     permanently unable to build a series (#155).
     """

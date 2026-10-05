@@ -55,7 +55,7 @@ python scripts/generate_site.py --only cbot   # one page (headline | players |
 
 ## Environment variables
 
-`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, `DATA_GOV_IN_API_KEY` (required in CI; degraded fallback locally). Most layers need no key. Details, degraded modes, and the User-Agent trap: `LAYERS.md` → "API keys".
+`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` (required in CI; degraded fallback locally). Most layers need no key. Details, degraded modes, and the User-Agent trap: `LAYERS.md` → "API keys".
 
 ## Invariants — never break these
 
