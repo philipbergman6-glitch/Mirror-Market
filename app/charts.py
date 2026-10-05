@@ -365,6 +365,27 @@ def build_oil_meal_ratio_chart(omr: dict) -> go.Figure:
     return fig
 
 
+def build_rin_price_chart(series: pd.DataFrame) -> go.Figure:
+    """Weekly D4 and D6 separated-RIN prices, USD per RIN (Layer 29).
+
+    Args:
+        series: frame indexed by transfer week with D4 and D6 columns, only
+            weeks where both printed.
+    """
+    fig = go.Figure()
+    for code, name, color in (
+        ("D4", "D4 biomass-based diesel", COLORS["soy_oil"]),
+        ("D6", "D6 conventional", COLORS["neutral"]),
+    ):
+        fig.add_trace(go.Scatter(
+            x=series.index, y=series[code], mode="lines", name=name,
+            line=dict(color=color),
+        ))
+    fig.update_layout(height=300, yaxis_title="USD per RIN", **_BASE_LAYOUT)
+    fig.update_layout(legend=dict(orientation="h", y=1.12, x=0))
+    return fig
+
+
 def build_bean_corn_ratio_chart(bcr: dict) -> go.Figure:
     """Bean/Corn ratio with 1Y average and range.
 

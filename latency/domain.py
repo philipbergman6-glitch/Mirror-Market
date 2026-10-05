@@ -382,6 +382,12 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "monthly, assessed by a broker for the prior period.",
     ),
     LayerLatency(
+        "epa_rfs", LatencyClass.FUNDAMENTALS, ObservationClock(), timedelta(days=45),
+        "EPA posts each production month's RIN generation around the middle "
+        "of the next month and reloads its weekly RIN prices monthly, about "
+        "four weeks behind the transfer week.",
+    ),
+    LayerLatency(
         "gtr_vessels", LatencyClass.FUNDAMENTALS, ObservationClock(), timedelta(days=4),
         "The GTR vessel lineup is weekly, published for the week just ended.",
     ),

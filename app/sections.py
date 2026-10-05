@@ -452,6 +452,33 @@ def forward_curves_section(data: dict | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# 06 Supply & demand — US biofuel policy (EPA RFS, Layer 29, #353)
+# ---------------------------------------------------------------------------
+def rfs_section(data: dict | None) -> dict:
+    """The RFS block beside EIA biodiesel: D4 pace, D4/D6 RIN prices, RVOs.
+
+    Each part degrades on its own — a missing price feed leaves the pace and
+    the obligation readable — and the section is empty only when Layer 29
+    has never landed at all.
+    """
+    from app.charts import build_rin_price_chart
+
+    if not data:
+        return _empty("EPA RFS data (Layer 29) has not landed yet")
+
+    out: dict[str, Any] = {"generation": data.get("generation"), "rvo": data.get("rvo") or []}
+    prices = data.get("prices")
+    if prices:
+        out["prices"] = {
+            **{k: v for k, v in prices.items() if k != "series"},
+            "chart_html": _chart(lambda: build_rin_price_chart(prices["series"]), "RIN prices"),
+        }
+    else:
+        out["prices"] = None
+    return section("ok", **out)
+
+
+# ---------------------------------------------------------------------------
 # 07 Seasonal
 # ---------------------------------------------------------------------------
 def seasonal_section(data: dict | None) -> dict:

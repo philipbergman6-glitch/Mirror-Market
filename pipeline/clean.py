@@ -774,6 +774,26 @@ def clean_ec_oilseeds(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_epa_rfs(key: str, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean one Layer 29 key.
+
+    The fetcher has already validated header, units and bounds and raised on
+    anything ambiguous; this only types the columns. Nothing is dropped here:
+    a generation or price row with no value never leaves the fetcher, and
+    the RVO rows are a fixed reference table.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+    df = df.copy()
+    if key in ("rin_generation", "rin_prices"):
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values(["d_code", "Date"]).reset_index(drop=True)
+    return df
+
+
 def clean_ocean_freight(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean GTR monthly ocean freight rates (Layer 26).

@@ -33,6 +33,7 @@ from app.sections import (  # noqa: E402
     emerging_markets_section,
     forward_curves_section,
     relative_value_section,
+    rfs_section,
     risk_monitor_section,
     seasonal_section,
 )
@@ -883,6 +884,7 @@ def generate(
     # Load analysts
     from analysis.briefing import generate_briefing
     from analysis.health import run_health_check
+    from analysis.rfs import rfs_policy_analysis
     from analysis.soy_analytics import (
         command_center,
         demand_analysis,
@@ -906,6 +908,7 @@ def generate(
     seasonal_data = _safe_call(seasonal_analysis, "seasonal")
     fc_data = _safe_call(forward_curve_analysis, "forward_curves")
     em_data = _safe_call(emerging_markets_analysis, "emerging_markets")
+    rfs_data = _safe_call(rfs_policy_analysis, "rfs")
 
     log.info("Generating briefing...")
     briefing_text = _safe_call(generate_briefing, "briefing") or ""
@@ -958,6 +961,7 @@ def generate(
         "risk_monitor": risk_monitor_section(risk_data),
         "forward_curves": forward_curves_section(fc_data),
         "seasonal": seasonal_section(seasonal_data),
+        "rfs": rfs_section(rfs_data),
         # M19 #223: the eight-row ledger, built from the same registry and the
         # same builder the market pages use — one implementation, so the
         # headline and a page can never disagree about who has repriced.

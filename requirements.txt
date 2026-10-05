@@ -13,6 +13,10 @@ beautifulsoup4~=4.15.0
 xlrd~=2.0.2
 pypdf~=6.14.2
 pyyaml~=6.0.3
+# Layer 29 (EPA RFS) reads RIN prices from EPA's Qlik Sense engine, which
+# speaks JSON-RPC over a websocket and nothing else. Already in the tree via
+# yfinance; pinned here because fetchers/epa_rfs.py imports it directly.
+websockets~=16.1.1
 # Loads the local .env before config.py binds its key constants. Inert in CI,
 # which sets its keys from GitHub secrets and ships no .env.
 python-dotenv~=1.2.3
