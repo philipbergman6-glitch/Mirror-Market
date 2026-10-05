@@ -47,7 +47,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 14 | USDA* | How many beans got crushed, how many got shipped |
 | 15 | CONAB | Brazil's official crop estimates (their version of the USDA) |
 | 15b | CONAB | Weekly Paraná farmgate prices |
-| 16 | data.gov.in / Agmarknet | India domestic bean prices at the mandis (Madhya Pradesh + Maharashtra) |
+| 16 | Agmarknet 2.0 | India domestic bean prices at the mandis (Madhya Pradesh + Maharashtra) |
 | 17 | CEPEA via Notícias Agrícolas | Brazil farm-gate and Paranaguá soy indicators |
 | 18 | JSE SAFEX via Grain SA | South Africa's soy futures exchange |
 | 19 | AgRural | Soy prices at Brazil's main export port |
@@ -58,7 +58,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 24 | SAGIS | South Africa monthly soybean supply & demand balance (incl. crush volume) |
 | 25 | Crop Estimates Committee (SA) | South Africa's official monthly crop estimate, with its in-season revision path |
 
-\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, `MARS_API_KEY` for Layer 30, and optionally `DATA_GOV_IN_API_KEY`). **27 of 35 operational layers need no private key**, and if any one contextual source fails, the rest still run and the degradation remains visible.
+\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, and `MARS_API_KEY` for Layer 30). **27 of 35 operational layers need no private key**, and if any one contextual source fails, the rest still run and the degradation remains visible.
 
 ## What the Analysis Actually Tells You
 

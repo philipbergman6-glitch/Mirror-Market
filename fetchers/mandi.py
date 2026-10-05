@@ -1,11 +1,32 @@
 """
-Layer 16 — India domestic soybean spot via the data.gov.in Mandi Price API.
+Layer 16 — India domestic soybean spot from the Agmarknet 2.0 report API.
 
-Official Agmarknet feed (Ministry of Agriculture) republished on the Open
-Government Data platform under the GODL licence. Replaces the NCDEX Bhav
-Copy source (``fetchers/india_domestic.py``, kept on disk as a dormant
-fallback): NCDEX soy derivatives are SEBI-suspended to at least 2027-03-31
-and its spot pages sit behind a fingerprint anti-bot wall.
+The official Agmarknet mandi feed (Directorate of Marketing & Inspection,
+Ministry of Agriculture), read from the keyless JSON backend behind
+agmarknet.gov.in. Replaces the NCDEX Bhav Copy source
+(``fetchers/india_domestic.py``, kept on disk as a dormant fallback): NCDEX
+soy derivatives are SEBI-suspended to at least 2027-03-31.
+
+Source history:
+    2026-08 → 2026-09-24 this layer read the same Agmarknet feed as
+    republished on data.gov.in. From ~2026-09-24 api.data.gov.in refuses
+    TCP from every non-Indian address, so the layer went dark. Re-sourced
+    2026-10-05 to ``api.agmarknet.gov.in``, which answers from anywhere.
+    Validated that day before the switch: on complete days the MP median
+    matched our stored data.gov.in values to ≤0.23% (6/6 days) and MH to
+    ≤1% (16/17; the miss a 6-mandi Sunday); every one of 202 MSAMB (the
+    Maharashtra board) market-days carried the same modal price here.
+    **MH ``Volume`` steps up ~20–35% at the switch**: Agmarknet carries MH
+    rows the data.gov.in snapshot never held. The first run re-read from
+    2026-09-01, so that is where the step sits in stored history. Prices
+    join cleanly; the row count does not, so never compare MH Volume
+    across that date.
+
+Licence:
+    Agmarknet's website policy: "Information featured on this website may
+    be reproduced free of charge … reproduced accurately and not … in a
+    misleading context … the source must be prominently acknowledged."
+    The state median is this project's calculation, not a DMI figure.
 
 Why it matters:
     India is the world's #4 soybean consumer. Maharashtra (Latur, Vidarbha)
@@ -17,13 +38,22 @@ Why it matters:
 
 Series construction:
     One series per configured state (``MANDI_STATES``), one row per
-    arrival date — the MEDIAN of ``modal_price`` across all reporting
-    mandis in that state (~115/day in MP), robust to single-mandi
-    outliers. Prices arrive in INR/quintal (100 kg) and are stored as
-    INR/MT (×10). Volume is the distinct reporting-mandi row count.
-    USD conversion happens at the analysis layer. Series are stored
-    per-state and never pooled — a cross-state median would put a level
-    break on the existing MP history.
+    *completed* Indian arrival date — the MEDIAN of the modal price across
+    every per-variety row the report carries for that state and day (~115
+    rows/day in MP), robust to single-mandi outliers. Prices arrive in
+    INR/quintal (100 kg) and are stored as INR/MT (×10). Volume is the
+    row count. USD conversion happens at the analysis layer. Series are
+    stored per-state and never pooled — a cross-state median would put a
+    level break on the existing MP history.
+
+Completed days and the lookback (#243):
+    The current IST day fills mandi by mandi until late evening, so a run
+    during it would store a plausible, unfinished median. Only dates at
+    least ``MANDI_MIN_AGE_DAYS`` old are kept. Every run re-reads the
+    trailing ``MANDI_LOOKBACK_DAYS`` (as whole months — the report is
+    month-granular), so a mandi uploading after a run is picked up by the
+    next one and a missed run backfills itself. The upsert on
+    (Date, commodity) makes the re-read idempotent.
 
 Level validation (#206, 2026-08-12):
     The mandi level is *correct* and its ~+66% premium over CBOT is
@@ -52,60 +82,42 @@ Why there is no High/Low:
     median per day, and Open/High/Low are all left NaN rather than
     filled with a number that reads like a trading range and is not one.
 
-Key handling:
-    ``DATA_GOV_IN_API_KEY`` is used when set; otherwise the published
-    sample key (a public testing credential). The sample key caps every
-    response at 10 rows and shares a global throttle, so pagination and
-    429-retry are load-bearing here, not defensive.
-
-Parser strategy:
-    The API returns JSON with ``total`` and ``records``. A response
-    missing those, or records missing the price/date fields, raises
-    ScraperShapeError — the schema changed and silence would be worse
-    than a crash. Zero records for the filter is a normal holiday/Sunday
-    outcome (mandis closed), not an error.
-
-    That last sentence is what makes a *field* rename dangerous rather
-    than loud: filtering on a field this resource no longer exposes
-    returns HTTP 200 with zero rows, which is indistinguishable from a
-    closed mandi day. Every response also carries the resource's own
-    field catalog, empty ones included, so ``_assert_fields_exist``
-    checks the catalog on every page — the only check that can see a
-    rename on a day with no records. ``_assert_filters_honoured``
-    covers the opposite failure, rows arriving that we never asked for.
-
-User-Agent:
-    api.data.gov.in **blackholes** any request whose User-Agent names
-    Python — the connection is accepted and then never answered, so it
-    surfaces as a read timeout rather than a 403 (verified 2026-08-10:
-    ``python-requests/2.32.3`` and ``Python/3.11 aiohttp/3.9`` both hang
-    until the client gives up; ``Mirror-Market/…`` and curl's default
-    both return 200 in ~1.2s from the same IP, same second). requests'
-    default UA is exactly that string, so the layer had been dark on
-    every run since it shipped. The honest project UA below is not a
-    spoof and is load-bearing — do not drop it.
+Guards — why the report is checked against the request:
+    Agmarknet answers a request it cannot honour with ``success: true``.
+    Probed 2026-10-05: an unknown state id returns a report titled
+    "State/UT : N/A" with no markets, and a future month or a state with no
+    soybean returns an empty report — indistinguishable in shape from a
+    closed day. So every response must carry ``success: true``, a title
+    naming exactly the month, commodity and state asked for, the
+    ``arrivalDate``/``modalPrice`` columns with the modal column declaring
+    ``MANDI_PRICE_UNIT``, and only arrival dates inside the month asked
+    for. Any miss raises ScraperShapeError. A trailing month-sized window
+    with no completed rows at all is a failure too, never "mandis closed":
+    MP and MH trade soybean every week of the year.
 """
 
 from __future__ import annotations
 
+import calendar
 import logging
-import os
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
 
 from config import (
+    LAYER_MAX_DATA_AGE_DAYS,
     MANDI_API_URL,
     MANDI_COMMODITY,
-    MANDI_MAX_PAGES,
+    MANDI_COMMODITY_ID,
+    MANDI_LOOKBACK_DAYS,
+    MANDI_MIN_AGE_DAYS,
     MANDI_MODAL_MAX_INR_QUINTAL,
     MANDI_MODAL_MIN_INR_QUINTAL,
-    MANDI_PAGE_LIMIT,
-    MANDI_PAGE_LIMIT_PERSONAL,
-    MANDI_SAMPLE_API_KEY,
-    MANDI_SORT_FIELD,
+    MANDI_PRICE_UNIT,
+    MANDI_STATE_IDS,
     MANDI_STATES,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
@@ -116,55 +128,44 @@ from pipeline.results import FetchResult, ScraperShapeError
 logger = logging.getLogger(__name__)
 
 _QUINTAL_TO_MT = 10.0  # INR/quintal (100 kg) → INR/MT
+_IST = ZoneInfo("Asia/Kolkata")
 
-# See the User-Agent note in the module docstring: a Python-identifying UA
-# is silently blackholed by api.data.gov.in. Identifies the project
-# honestly rather than impersonating a browser — the endpoint only rejects
-# Python, not non-browsers.
 _HEADERS = {
     "User-Agent": (
         "Mirror-Market/1.0 "
         "(+https://github.com/philipbergman6-glitch/Mirror-Market)"
     ),
+    "Accept": "application/json",
 }
 
-
-def _api_key() -> str:
-    return os.environ.get("DATA_GOV_IN_API_KEY") or MANDI_SAMPLE_API_KEY
-
-
-def _page_limit() -> int:
-    """Sample key is hard-capped at 10 rows/page; a personal key supports
-    larger pages, cutting request count (and 429 exposure) ~10×."""
-    if os.environ.get("DATA_GOV_IN_API_KEY"):
-        return MANDI_PAGE_LIMIT_PERSONAL
-    return MANDI_PAGE_LIMIT
+# Column keys this module parses. Extra columns appearing is not a break.
+_REQUIRED_COLUMN_KEYS = frozenset({"arrivalDate", "modalPrice"})
 
 
-def _fetch_page(offset: int, state: str) -> dict:
-    """Fetch one page of the mandi resource for one state. Raises on
-    exhausted retries.
+def _ist_today() -> date:
+    return datetime.now(_IST).date()
 
-    429s are expected on the shared-throttle sample key and retried with
-    backoff like any transport failure. So is the throttle's *other*
-    shape: an HTTP 200 carrying ``{"error": "Rate limit exceeded"}`` and
-    no records, which is a transport condition wearing a payload's
-    clothes — retried here rather than being handed on to
-    ``_collect_records``, where a missing ``records`` key means "the
-    schema changed" and hard-fails the whole layer (observed twice
-    against the shared sample key, 2026-08-12).
 
-    Pagination is sorted (``MANDI_SORT_FIELD``): unsorted offset paging
-    on this resource repeats rows across pages and drops others entirely.
-    """
+def _window_months(today: date) -> list[tuple[int, int]]:
+    """Every (year, month) the trailing lookback window touches, oldest first."""
+    start = today - timedelta(days=MANDI_LOOKBACK_DAYS)
+    months: list[tuple[int, int]] = []
+    year, month = start.year, start.month
+    while (year, month) <= (today.year, today.month):
+        months.append((year, month))
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return months
+
+
+def _fetch_month(state: str, year: int, month: int) -> dict:
+    """Fetch one state's date-wise report for one month. Raises on
+    exhausted retries."""
     params: dict[str, str | int] = {
-        "api-key": _api_key(),
-        "format": "json",
-        "limit": _page_limit(),
-        "offset": offset,
-        "filters[commodity]": MANDI_COMMODITY,
-        "filters[state]": state,
-        f"sort[{MANDI_SORT_FIELD}]": "asc",
+        "year": year,
+        "month": month,
+        "stateId": MANDI_STATE_IDS[state],
+        "commodityId": MANDI_COMMODITY_ID,
+        "includeExcel": "false",
     }
     last_error = "no attempts made"
     for attempt in range(1, MAX_RETRIES + 1):
@@ -176,205 +177,121 @@ def _fetch_page(offset: int, state: str) -> dict:
                 timeout=REQUEST_TIMEOUT,
             )
             if resp.status_code == 200:
-                payload = resp.json()
-                if "records" in payload or not payload.get("error"):
-                    records = payload.get("records")
-                    if isinstance(records, list):
-                        try:
-                            _assert_filters_honoured(records, state)
-                        except ScraperShapeError as exc:
-                            # The throttled edge has occasionally served a
-                            # cached page for another state after 429s. Keep
-                            # the fail-closed check, but retry at the transport
-                            # boundary before declaring the whole layer bad.
-                            last_error = str(exc)
-                        else:
-                            return payload
-                    else:
-                        return payload
-                if payload.get("error"):
-                    last_error = f"API error: {payload['error']}"
-            else:
-                last_error = f"HTTP {resp.status_code}"
-            logger.warning(
-                "Mandi API: %s at offset %d (attempt %d)",
-                last_error, offset, attempt,
-            )
+                return resp.json()
+            last_error = f"HTTP {resp.status_code}"
         except (requests.RequestException, ValueError) as exc:
             last_error = str(exc)
-            logger.warning(
-                "Mandi API attempt %d failed at offset %d: %s", attempt, offset, exc
-            )
+        logger.warning(
+            "Agmarknet: %s %04d-%02d attempt %d failed: %s",
+            state, year, month, attempt, last_error,
+        )
         if attempt < MAX_RETRIES:
             retry_sleep(attempt)
     raise requests.RequestException(
-        f"Mandi API: offset {offset} failed after {MAX_RETRIES} attempts ({last_error})"
+        f"Agmarknet: {state} {year:04d}-{month:02d} failed after "
+        f"{MAX_RETRIES} attempts ({last_error})"
     )
 
 
-def _dedupe(records: list[dict]) -> list[dict]:
-    """Drop rows that are identical in every field, preserving order.
-
-    Belt-and-braces behind ``MANDI_SORT_FIELD``: an unsorted page walk
-    served the same mandi twice and skipped another, which inflated
-    Volume (the reporting-mandi count) without moving the median. A
-    market legitimately appears more than once per day under different
-    variety/grade rows — those differ in a field and are kept.
-    """
-    seen: set[tuple] = set()
-    unique: list[dict] = []
-    for rec in records:
-        key = tuple(sorted((k, str(v)) for k, v in rec.items()))
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(rec)
-    if len(unique) < len(records):
-        logger.warning(
-            "Mandi API: dropped %d duplicate row(s) of %d — paging overlap",
-            len(records) - len(unique), len(records),
-        )
-    return unique
-
-
-# The field ids this module filters on and parses. Deliberately narrower
-# than the resource's catalog — see _assert_fields_exist.
-_REQUIRED_FIELD_IDS = frozenset({"state", "commodity", "arrival_date", "modal_price"})
-
-
-def _assert_fields_exist(payload: dict) -> None:
-    """Check the resource still exposes the field ids we filter and parse on.
-
-    The failure mode this exists for is **silent emptiness**, and it is
-    only visible here. Verified live 2026-08-12: an unrecognised filter
-    field is not rejected and does not degrade to unfiltered — the API
-    answers HTTP 200, ``message: "Resource lists ok"``, ``total: 0``,
-    ``records: []``. ``filters[commodity_name]``, ``filters[Commodity]``
-    and ``filters[state_name]`` each returned 0 against a resource
-    holding 6,421 rows that second. So the day data.gov.in renames
-    ``state`` or ``commodity``, this layer does not break — it goes
-    quiet, and a quiet mandi day is an ordinary one (Sunday, holiday,
-    pre-arrival hours), which is why ``india_domestic`` grades empty as
-    a success. The 7-day ``LAYER_MAX_DATA_AGE_DAYS`` budget would
-    eventually notice, a week of dark data later, and would blame
-    staleness rather than a rename.
-
-    Every response carries the resource's own field catalog — including
-    the zero-record ones (verified on the same probe) — so the rename is
-    detectable on an empty day at no extra request. That is the whole
-    point: a check that only fires when rows come back cannot see this.
-
-    Only the ids the code actually depends on are required. Extra fields
-    appearing is not a break, and ``variety``/``grade``/``district`` are
-    carried by the records but never read.
-    """
-    catalog = payload.get("field")
-    if not isinstance(catalog, list):
+def _assert_report_is_the_one_requested(
+    payload: dict, state: str, year: int, month: int
+) -> None:
+    """Raise unless the report is for exactly the month, commodity and state
+    asked for, in the expected unit. See "Guards" in the module docstring."""
+    if payload.get("success") is not True:
         raise ScraperShapeError(
-            "Mandi API: response carries no 'field' catalog — envelope changed "
-            f"(keys: {sorted(payload)[:12]})"
+            f"Agmarknet: {state} {year:04d}-{month:02d} answered without "
+            f"success:true (message: {payload.get('message')!r})"
         )
-    ids = {f.get("id") for f in catalog if isinstance(f, dict)}
-    missing = sorted(_REQUIRED_FIELD_IDS - ids)
+    title = str(payload.get("title", ""))
+    expected = (
+        f"on {calendar.month_name[month]}, {year} for Commodity : "
+        f"{MANDI_COMMODITY}, State/UT : {state}"
+    )
+    if not title.endswith(expected):
+        raise ScraperShapeError(
+            f"Agmarknet: asked for {expected!r}, report is titled {title!r} — "
+            "the server answered a different request"
+        )
+    columns = payload.get("columns")
+    if not isinstance(columns, list):
+        raise ScraperShapeError(
+            f"Agmarknet: report carries no 'columns' list (keys: {sorted(payload)[:12]})"
+        )
+    titles = {c.get("key"): str(c.get("title", "")) for c in columns if isinstance(c, dict)}
+    missing = sorted(_REQUIRED_COLUMN_KEYS - titles.keys())
     if missing:
         raise ScraperShapeError(
-            f"Mandi API: resource no longer exposes field(s) {missing} — renamed "
-            f"or dropped (exposed: {sorted(i for i in ids if i)}). Filters on a "
-            "renamed field return 0 rows at HTTP 200, so this would otherwise "
-            "read as a closed-mandi day"
+            f"Agmarknet: report no longer carries column(s) {missing} "
+            f"(carries: {sorted(k for k in titles if k)})"
         )
+    if MANDI_PRICE_UNIT not in titles["modalPrice"]:
+        raise ScraperShapeError(
+            f"Agmarknet: modal price column is {titles['modalPrice']!r}, not "
+            f"{MANDI_PRICE_UNIT} — the unit changed"
+        )
+    if not isinstance(payload.get("markets"), list):
+        raise ScraperShapeError("Agmarknet: report carries no 'markets' list")
 
 
-def _assert_filters_honoured(records: list[dict], state: str) -> None:
-    """Check the rows we were handed are the rows we asked for.
-
-    Complements ``_assert_fields_exist`` from the other side. The
-    probe above found this API answers an unknown filter with nothing
-    rather than with everything, so today a filter that stops being
-    applied cannot reach ``_aggregate``. That is a behaviour of the
-    upstream, not a guarantee from it, and the consequence if it ever
-    changes is not an outage but a **wrong number**: a median over every
-    commodity in every state, stored under ``Soybean (Mandi MP)``,
-    indistinguishable in shape from a real one. Cheap to pin, so pinned.
-
-    Raises rather than filtering the offending rows out. A response that
-    mixes states is not a response with some bad rows in it — it means
-    the request no longer means what the code thinks it means, and the
-    rows that *did* match are then a partial set of unknown size.
-    """
-    for rec in records:
-        got_state = str(rec.get("state", "")).strip()
-        got_commodity = str(rec.get("commodity", "")).strip()
-        if got_state.casefold() != state.casefold():
-            raise ScraperShapeError(
-                f"Mandi API: asked for state {state!r}, got a row for "
-                f"{got_state!r} — the state filter is no longer applied"
-            )
-        if got_commodity.casefold() != MANDI_COMMODITY.casefold():
-            raise ScraperShapeError(
-                f"Mandi API: asked for commodity {MANDI_COMMODITY!r}, got a row "
-                f"for {got_commodity!r} — the commodity filter is no longer applied"
-            )
+def _report_records(payload: dict, year: int, month: int) -> list[dict]:
+    """Flatten markets → dates → variety rows into ``_aggregate``'s record shape."""
+    records: list[dict] = []
+    try:
+        for market in payload["markets"]:
+            for day in market["dates"]:
+                arrival = datetime.strptime(str(day["arrivalDate"]), "%d/%m/%Y").date()
+                if (arrival.year, arrival.month) != (year, month):
+                    raise ScraperShapeError(
+                        f"Agmarknet: {year:04d}-{month:02d} report carries "
+                        f"arrival date {arrival} — the month was not applied"
+                    )
+                for row in day["data"]:
+                    records.append({
+                        "market": market["marketName"],
+                        "variety": row.get("variety"),
+                        "arrival_date": day["arrivalDate"],
+                        "modal_price": row["modalPrice"],
+                    })
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ScraperShapeError(
+            f"Agmarknet: report rows no longer parse ({type(exc).__name__}: {exc})"
+        ) from exc
+    return records
 
 
-def _collect_records(state: str) -> list[dict]:
-    """Paginate through the state-filtered resource until ``total`` rows are in hand.
+def _collect_records(state: str, today: date) -> list[dict]:
+    """Every completed-day variety row for ``state`` across the lookback window.
 
-    A walk that ends short of the resource's own ``total`` raises. The
-    daily number this feeds is a **median across the reporting mandis**,
-    so a truncated walk does not produce a missing number — it produces a
-    *plausible wrong one*, computed over whichever pages happened to
-    survive, with nothing in its shape to mark it as partial. That is the
-    failure mode #206 traced: three different closes for MP on the same
-    date (₹67,430 / ₹67,250 / ₹67,360) were three different surviving
-    subsets, not three different markets.
-
-    Two ways the walk can end short, both previously silent:
-      * the page cap (``MANDI_MAX_PAGES``) — logged a warning and returned
-        the truncated set;
-      * a page answering zero records before ``total`` is reached, which
-        broke the loop as if the set were complete.
-    Both now raise. A truncated median is worse than no row at all.
+    Raises ScraperShapeError when the window holds no completed rows at all:
+    see "Guards" in the module docstring.
     """
     records: list[dict] = []
-    total: int | None = None
+    for year, month in _window_months(today):
+        payload = _fetch_month(state, year, month)
+        _assert_report_is_the_one_requested(payload, state, year, month)
+        records.extend(_report_records(payload, year, month))
 
-    for page in range(MANDI_MAX_PAGES):
-        payload = _fetch_page(page * _page_limit(), state)
-        if "records" not in payload or "total" not in payload:
-            raise ScraperShapeError(
-                "Mandi API: response missing 'records'/'total' — schema changed "
-                f"(keys: {sorted(payload)[:10]})"
-            )
-        _assert_fields_exist(payload)
-        total = int(payload["total"])
-        page_records = payload["records"]
-        records.extend(page_records)
-        if len(records) >= total or not page_records:
-            break
-
-    # Measured before _dedupe: a shortfall here means pages we never
-    # received, which is the truncation that corrupts the median. Paging
-    # *overlap* (raw ≥ total, distinct < total) is a different and much
-    # milder defect — it inflates the mandi count without moving the
-    # median — and _dedupe keeps warning about it rather than raising,
-    # because a source that legitimately repeats an identical row would
-    # otherwise hard-fail the layer every day.
-    if total is not None and len(records) < total:
-        raise requests.RequestException(
-            f"Mandi API: {state} walk truncated at {len(records)}/{total} records "
-            f"after {page + 1} page(s) of {_page_limit()} — a median over a "
-            "partial mandi set is a wrong number, not a missing one (#206)"
+    cutoff = today - timedelta(days=MANDI_MIN_AGE_DAYS)
+    completed = [
+        rec for rec in records
+        if datetime.strptime(rec["arrival_date"], "%d/%m/%Y").date() <= cutoff
+    ]
+    if not completed:
+        raise ScraperShapeError(
+            f"Agmarknet: no completed {MANDI_COMMODITY} rows for {state} in the "
+            f"{MANDI_LOOKBACK_DAYS} days to {cutoff} — {len(records)} row(s) "
+            "in total; a month-sized window is never a closure"
         )
-    _assert_filters_honoured(records, state)
-    return _dedupe(records)
+    return completed
 
 
 def _aggregate(records: list[dict]) -> pd.DataFrame:
     """Distill per-mandi rows into one median-modal row per arrival date.
 
     Returns the ``clean_india_domestic``/``save_india_domestic`` shape:
-    Date (ISO), Open/High/Low/Close (INR/MT), Volume (mandi count), Unit.
+    Date (ISO), Open/High/Low/Close (INR/MT), Volume (row count: one per
+    mandi × variety lot, so it runs above the mandi count), Unit.
     Open/High/Low are NaN by design — see the module docstring; only the
     median modal is a defensible daily number.
 
@@ -414,10 +331,10 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
         volume=("modal", "size"),
     ).reset_index()
 
-    for date, median in zip(agg["date"], agg["close"], strict=True):
+    for day, median in zip(agg["date"], agg["close"], strict=True):
         if not MANDI_MODAL_MIN_INR_QUINTAL <= median <= MANDI_MODAL_MAX_INR_QUINTAL:
             raise ScraperShapeError(
-                f"Mandi API: {date} median modal_price ₹{median:,.0f}/quintal is "
+                f"Mandi API: {day} median modal_price ₹{median:,.0f}/quintal is "
                 f"outside the plausible band ₹{MANDI_MODAL_MIN_INR_QUINTAL:,}–"
                 f"₹{MANDI_MODAL_MAX_INR_QUINTAL:,} — the source's price unit "
                 "likely changed (see #206)"
@@ -438,80 +355,70 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
     return df.sort_values("Date").reset_index(drop=True)
 
 
-def fetch_mandi_prices() -> FetchResult:
-    """Fetch the soybean mandi set for each configured state.
+def fetch_mandi_prices(today: date | None = None) -> FetchResult:
+    """Fetch the soybean mandi series for each configured state.
 
-    Returns one series per state in ``MANDI_STATES``. A schema change
-    (ScraperShapeError) in any state is ``failed`` — the resource is
-    shared, so a shape break in one state means the source changed for
-    all. Zero matching records everywhere is ``empty`` (mandis closed —
-    Sunday/holiday).
+    ``today`` is the Indian calendar date (default: now in IST); dates on or
+    after ``today - MANDI_MIN_AGE_DAYS + 1`` are not stored.
+
+    A guard failure (ScraperShapeError) in any state is ``failed`` with no
+    rows: the report format is shared, so a break in one state means the
+    source changed for all. A state whose newest completed day is older than
+    the layer's ``LAYER_MAX_DATA_AGE_DAYS`` budget is ``failed`` too, with
+    its rows kept.
 
     Transport exhaustion on **any** state is ``failed``, even when another
-    state returned a full set. Why the whole layer and not just that
-    state:
-
-      * States are never pooled (see ``MANDI_STATES``), so a missing state
-        does not corrupt the surviving state's number. The rows that did
-        arrive are therefore still worth storing — hence
-        ``FetchResult.partial``, which saves them and grades the run
-        failed, rather than ``FetchResult.failed``, which would discard
-        them. The resource serves the current day only, so a discarded
-        day is a permanent hole.
-      * But the *verdict* has to be the failure. ``india_domestic`` has no
-        ``LAYER_MIN_KEYS`` floor, so nothing downstream would notice half
-        the layer going dark; it would stamp a fresh ``last_success``
-        against a state that was never asked. That is precisely the
-        empty-success inversion LAYERS.md's "Success also requires rows"
-        section exists to prevent.
-      * An empty state and a failed state are not the same thing and are
-        not treated the same here. Empty means asked and answered with
-        nothing (a state holiday — MP and MH keep different local
-        calendars, so one-state-empty is an ordinary day) and does not
-        contribute an error. Failed means never answered, so its absence
-        carries no information about whether data existed.
+    state returned a full set — but the surviving state's rows are still
+    returned (``FetchResult.partial``). States are never pooled, so a
+    missing state does not corrupt the other's number, and ``india_domestic``
+    has no ``LAYER_MIN_KEYS`` floor: a plain ``ok`` would stamp a fresh
+    ``last_success`` with half the layer dark (#212).
     """
+    today = today or _ist_today()
     data: dict[str, pd.DataFrame] = {}
     errors: list[str] = []
     for state, series in MANDI_STATES.items():
         logger.info(
-            "Fetching %s mandi prices for %s from data.gov.in ...",
-            MANDI_COMMODITY, state,
+            "Fetching %s mandi prices for %s from Agmarknet ...", MANDI_COMMODITY, state,
         )
         try:
-            records = _collect_records(state)
-            df = _aggregate(records)
+            df = _aggregate(_collect_records(state, today))
         except ScraperShapeError as exc:
-            logger.error("Mandi API: %s", exc)
+            logger.error("Agmarknet: %s", exc)
             return FetchResult.failed(str(exc))
         except requests.RequestException as exc:
             errors.append(f"{state}: {exc}")
             continue
 
-        if df.empty:
-            logger.info("Mandi API: no %s rows for %s today", MANDI_COMMODITY, state)
-            continue
-
         logger.info(
-            "Mandi API: %s — %d session row(s), latest ₹%.0f/MT across %d mandis",
-            state, len(df), df["Close"].iloc[-1], int(df["Volume"].iloc[-1]),
+            "Agmarknet: %s — %d completed day(s), latest %s ₹%.0f/MT across %d rows",
+            state, len(df), df["Date"].iloc[-1], df["Close"].iloc[-1],
+            int(df["Volume"].iloc[-1]),
         )
         data[series] = df
+        # The layer's freshness budget reads the newest date across both
+        # states, so one state could go quiet for weeks behind the other.
+        # Its rows are still real history and are kept; the verdict fails.
+        newest = date.fromisoformat(df["Date"].iloc[-1])
+        floor = today - timedelta(
+            days=MANDI_MIN_AGE_DAYS + LAYER_MAX_DATA_AGE_DAYS["india_domestic"]
+        )
+        if newest < floor:
+            errors.append(
+                f"{state}: newest completed day {newest} is older than {floor} — "
+                "the state stopped reporting"
+            )
 
     if errors:
         reason = "; ".join(errors)
         if data:
             logger.error(
-                "Mandi API: partial result — %s of %d state(s) failed: %s",
+                "Agmarknet: partial result — %d of %d state(s) failed: %s",
                 len(errors), len(MANDI_STATES), reason,
             )
             return FetchResult.partial(data, reason)
         return FetchResult.failed(reason)
-    if data:
-        return FetchResult.ok(data)
-    return FetchResult.empty(
-        f"no {MANDI_COMMODITY} rows for any of {', '.join(MANDI_STATES)} today"
-    )
+    return FetchResult.ok(data)
 
 
 __all__: Sequence[str] = ("_aggregate", "_collect_records", "fetch_mandi_prices")

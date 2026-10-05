@@ -813,7 +813,7 @@ def _run_partial_mandi(saved: list) -> bool:
     from pipeline.results import FetchResult
 
     return main._run_scraper_layer(
-        "india_domestic", "Layer 16", "India mandi soy prices (data.gov.in)",
+        "india_domestic", "Layer 16", "India mandi soy prices (Agmarknet)",
         fetch=lambda: FetchResult.partial(
             {"Soybean (Mandi MP)": _dated_frame(0, rows=1)},
             "Maharashtra: offset 60 failed after 3 attempts (HTTP 429)",
@@ -832,7 +832,7 @@ def test_partial_scraper_result_records_failed(freshness_calls):
 
 
 def test_partial_scraper_result_still_saves_the_rows_it_got(freshness_calls):
-    """The resource serves the current day only — a dropped day is permanent."""
+    """States are never pooled, so the state that answered is still a real number."""
     saved: list = []
     _run_partial_mandi(saved=saved)
 

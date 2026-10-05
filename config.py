@@ -142,7 +142,7 @@ PRODUCTION_LAYERS = (
     ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
     ("conab", "15", "CONAB", "Monthly", "Brazil crop estimates"),
     ("conab_precos", "15b", "CONAB", "Weekly", "Paraná farmgate prices"),
-    ("india_domestic", "16", "data.gov.in (Agmarknet)", "Daily", "MP and Maharashtra mandi soy"),
+    ("india_domestic", "16", "Agmarknet 2.0", "Daily", "MP and Maharashtra mandi soy"),
     ("cepea", "17", "CEPEA via Notícias Agrícolas", "Daily", "Brazil soy indicators"),
     ("safex", "18", "JSE SAFEX via Grain SA", "Daily", "South Africa soy futures"),
     ("agrural", "19", "AgRural", "Daily", "Paranaguá FOB soy"),
@@ -187,7 +187,7 @@ PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 #                   running them more often trades their reliability for
 #                   freshness they do not have (Layer 16's 2026-08-11 rate-limit
 #                   blackout is the standing example).
-#   india_domestic— shares that hazard and the shared-key throttle explicitly.
+#   india_domestic— shares that hazard, and re-reads a month per call.
 #
 # So: what moves, and only what moves.
 FAST_REFRESH_LAYERS = ("prices", "currencies", "forward_curve")
@@ -1200,7 +1200,7 @@ CONAB_FARMGATE_SERIES = "Soybean (CONAB PR farmgate)"
 # NCDEX Bhav Copy: daily settlement prices in INR/quintal or INR/MT
 #
 # Dormant since 2026-05 (fingerprint anti-bot wall on the spot pages) and
-# superseded 2026-08 by the data.gov.in mandi API below: NCDEX soy
+# superseded 2026-08 by the Agmarknet mandi feed below: NCDEX soy
 # derivatives are SEBI-suspended to at least 2027-03-31, so the bhavcopy
 # carries no soy contracts even where it downloads. Constants kept for
 # fetchers/india_domestic.py, the dormant fallback module.
@@ -1227,32 +1227,49 @@ NCDEX_UNIT_MULTIPLIER = {
 }
 
 # ---------------------------------------------------------------------------
-# Layer 16 (2026-08 rebuild) — India domestic soy spot via data.gov.in
-# Mandi Price API (official Agmarknet feed, Ministry of Agriculture).
-# Bean-only: the resource has no soy meal commodity and its soy-oil rows
+# Layer 16 — India domestic soy spot from Agmarknet 2.0 (Directorate of
+# Marketing & Inspection, Ministry of Agriculture), read from the keyless
+# report API behind agmarknet.gov.in.
+# Bean-only: Agmarknet has no soy meal commodity and its soy-oil rows
 # carry inconsistent units across mandis, so the old NCDEX oil/meal legs
 # (and the India crush margin built on them) are retired until NCDEX
 # derivatives return (SEBI suspension runs to at least 2027-03-31).
 #
-# The published sample key is officially for testing, caps responses at
-# 10 rows/request, and shares a global throttle (occasional 429s) — but
-# ~8 paginated requests/day cover the full Madhya Pradesh soybean set.
-# A personal key via the DATA_GOV_IN_API_KEY env var is a drop-in upgrade.
+# Re-sourced 2026-10-05. The 2026-08 build read the same Agmarknet feed as
+# republished on data.gov.in; from ~2026-09-24 api.data.gov.in refuses TCP
+# from every non-Indian address (US runners, Israel, check-host US/IL nodes
+# all refused; Mumbai/Rajpura accepted), and even from India its shared
+# sample key hangs >55 s. This endpoint answers from anywhere (US/IL/IN all
+# HTTP 200, no key, no special headers) — only the agmarknet.gov.in site
+# itself and the API host's bare root 403 outside India.
 # ---------------------------------------------------------------------------
-MANDI_API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
-# Published in the data.gov.in API docs — a public testing credential, not a secret.
-MANDI_SAMPLE_API_KEY = "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b"  # public-sample-key: not a secret
-MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling
-MANDI_PAGE_LIMIT = 10             # sample-key hard cap per request
-MANDI_PAGE_LIMIT_PERSONAL = 100   # personal keys allow bigger pages → fewer throttle hits
-MANDI_MAX_PAGES = 30              # safety stop: 30 × 10 rows ≫ any single-state daily set
-# Elasticsearch-style offset paging over an *unsorted* index is not stable:
-# without this the same mandi comes back on two pages while another is never
-# served at all (verified 2026-08-12: 115 MP rows fetched, only 95 distinct,
-# so ~20 real mandis were silently missing and Volume over-counted by 21%).
-# ``market.keyword`` is an exposed keyword field — see the resource's
-# ``field_exposed`` block — and gives a total order across pages.
-MANDI_SORT_FIELD = "market.keyword"
+MANDI_API_URL = (
+    "https://api.agmarknet.gov.in/v1/prices-and-arrivals/date-wise/specific-commodity"
+)
+MANDI_COMMODITY = "Soyabean"      # Agmarknet's spelling, as the report title prints it
+MANDI_COMMODITY_ID = 13           # Agmarknet commodity id (/v1/daily-price-arrival/filters)
+# Agmarknet state ids, keyed by the name its report title prints. An unknown
+# id is NOT rejected: it answers success:true for "State/UT : N/A" with no
+# markets (probed 2026-10-05) — which is why the fetcher checks the title.
+MANDI_STATE_IDS = {
+    "Madhya Pradesh": 19,
+    "Maharashtra": 20,
+}
+# Every run re-reads this many trailing days (as whole months), so a mandi
+# that uploads after a run is picked up by the next one rather than lost,
+# and a missed run backfills itself. Agmarknet 2.0 serves dates back to its
+# 2025-11-07 go-live.
+MANDI_LOOKBACK_DAYS = 31
+# An arrival date is stored only once it is at least this many Indian
+# calendar days old: 1 = yesterday and earlier. The current IST day fills
+# mandi by mandi until late evening (#243: MP 95 → 115 mandis between
+# 17:08 and 23:37 IST), so storing it is storing an unfinished median.
+# Late uploads for yesterday are repaired by the next run's lookback; 2
+# would trade a day of latency for never publishing a revisable day.
+MANDI_MIN_AGE_DAYS = 1
+# The unit the report must declare on its modal-price column. A different
+# label is a unit change and fails the layer rather than restating the level.
+MANDI_PRICE_UNIT = "Rs./Quintal"
 # Unit guard, ₹/quintal. ``modal_price`` is quoted per quintal (100 kg) and
 # multiplied by 10 into INR/MT; a source that switched to ₹/kg (~67) or
 # ₹/MT (~67,000) would still parse cleanly and silently restate the level
@@ -1328,14 +1345,12 @@ MARS_API_KEY: str = os.getenv("MARS_API_KEY", "")
 # Key visibility — a degraded run must say so at the top, not only per layer
 # ---------------------------------------------------------------------------
 # Every env var any layer reads, with the layers it gates. Read at call time
-# rather than off the constants above, because fetchers.mandi reads its key
-# from os.environ directly and has no constant here.
+# rather than off the constants above, so a key exported after import counts.
 API_KEY_LAYERS: dict[str, str] = {
     "USDA_API_KEY": "Layers 2, 14",
     "FRED_API_KEY": "Layer 3",
     "FAS_API_KEY": "Layer 10",
     "EIA_API_KEY": "Layer 13",
-    "DATA_GOV_IN_API_KEY": "Layer 16 (degrades to the shared sample key)",
     "MARS_API_KEY": "Layer 20b backfill, Layer 30",
 }
 
@@ -1848,13 +1863,14 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # and the layer would stay green. Same long-weekend-plus-holiday budget as
     # the other daily exchange legs (#157).
     "safex": 7,
-    # Agmarknet mandi spot. The API serves the *current day only*, so history
-    # exists only as rows we already stored — a frozen or silently-emptied
-    # upstream leaves the newest Date standing still while the layer keeps
-    # returning 200. Same long-weekend-plus-holiday budget as the other daily
-    # legs. Two enforcement points off one number: main.py stops stamping
-    # last_success, and app/markets.py's tier probe demotes the India page to a
-    # brief within the week rather than on the 14-day default (M19 #222).
+    # Agmarknet mandi spot. Each run re-reads a trailing month of completed
+    # days, so the newest Date normally trails today by one Indian day; a
+    # frozen or silently-emptied upstream leaves it standing still while the
+    # layer keeps returning 200. Same long-weekend-plus-holiday budget as the
+    # other daily legs. Two enforcement points off one number: main.py stops
+    # stamping last_success, and app/markets.py's tier probe demotes the India
+    # page to a brief within the week rather than on the 14-day default (M19
+    # #222).
     #
     # Known risk, deliberately accepted (#212): India's closure calendar is the
     # longest of any daily leg here, and the Diwali stretch (Dhanteras through
@@ -1862,10 +1878,9 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # exceed 7 and fire a false stale, demoting the India page over an ordinary
     # festival week. 7 is kept anyway because a *full* blackout needs every one
     # of ~115 reporting mandis per state shut, not just the Indore hub, which
-    # makes the real worst case very likely shorter. Nothing settles this from
-    # our own data yet: history starts 2026-08-10 and the resource serves only
-    # the current day, so there is no observed multi-day gap to measure.
-    # Revisit at the first Diwali (Oct 2026) with a real gap in hand.
+    # makes the real worst case very likely shorter. Agmarknet 2.0 now serves
+    # past days (since 2025-11-07), so the 2025 Diwali gap is measurable —
+    # revisit with it before the first Diwali (Oct 2026).
     "india_domestic": 7,
     # River gauges. Both are fixed-URL sources — nothing rotates, so a feed
     # that stops being refreshed answers 200 forever with the same stage and

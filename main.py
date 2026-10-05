@@ -158,7 +158,7 @@ CRITICAL_LAYERS = ("prices", "fred")
 
 # Layers deliberately switched off (upstream anti-bot walls) — excluded from
 # the failed-layer count so they don't trip the systemic-outage backstop.
-# Empty since 2026-08: Layer 16 came back on the data.gov.in mandi API.
+# Empty since 2026-08: Layer 16 came back on the Agmarknet mandi feed.
 DISABLED_LAYERS: frozenset[str] = frozenset()
 
 
@@ -933,18 +933,19 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
     )
 
     # ── Layer 16: India Mandi Domestic Soy Prices ─────────────────
-    # Rebuilt 2026-08 on the data.gov.in Mandi Price API (official
-    # Agmarknet feed) after NCDEX became unusable (SEBI derivatives
-    # suspension to ≥2027-03 + fingerprint wall on the spot pages;
-    # fetchers/india_domestic.py kept on disk as a dormant fallback).
-    # Mandis close on Sundays/holidays, so an empty day is a normal
-    # empty-success, not a failure.
+    # The official Agmarknet feed, rebuilt 2026-08 after NCDEX became
+    # unusable (SEBI derivatives suspension to ≥2027-03 + fingerprint wall
+    # on the spot pages; fetchers/india_domestic.py kept on disk as a
+    # dormant fallback) and re-sourced 2026-10 from data.gov.in to the
+    # Agmarknet 2.0 API when data.gov.in began refusing non-Indian
+    # addresses. Each run re-reads a trailing month of completed days, and
+    # MP/MH trade soybean every week, so empty is never a closed-mandi day.
     results["india_domestic"] = _run_scraper_layer(
-        "india_domestic", "Layer 16", "India mandi soy prices (data.gov.in)",
+        "india_domestic", "Layer 16", "India mandi soy prices (Agmarknet)",
         fetch=lambda: fetch_mandi_prices(),
         save=lambda n, d: save_india_domestic(n, d),
         clean=lambda d: clean_india_domestic(d),
-        empty_fails=False,
+        empty_fails=True,
     )
 
     # ── Layers 17-20: FetchResult scraper layers ──────────────────
