@@ -1197,6 +1197,19 @@ def _crush_margin(legs: dict[str, float], yields: dict[str, float]) -> float:
 
 
 def crush_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
+    state, reason, data = _board_crush_block(market, ctx)
+    if state == STATE_OK:
+        # The physical oil and meal legs ride beside the margin as their own
+        # envelope (#352) — a cash premium over the board, never folded into
+        # the margin and never labelled as one. None where the registry
+        # declares no cash leg for this market.
+        from analysis.processor_cash import cash_leg_panel
+
+        data["cash"] = cash_leg_panel(ctx.conn, market.slug, today=ctx.today)
+    return state, reason, data
+
+
+def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict]:
     # Same narrowing contract as price_block: absent_reason() gates dispatch.
     crush = market.crush
     assert crush is not None, f"crush_block dispatched for {market.slug} with no crush source"

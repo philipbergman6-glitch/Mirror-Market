@@ -44,3 +44,56 @@
 {% if d.provisional %}
 <div class="alert alert-warn">{{ d.provisional_note }}</div>
 {% endif %}
+{# The cash leg (#352): physical oil and meal beside the board margin, as a
+   premium over the board — never a margin. Its own envelope, so a withheld
+   cash leg says why without touching the board crush above. The board and
+   premium cells exist only on the session AMS's own arithmetic proves it
+   struck against (invariant 8); otherwise they are blank and the caption
+   says why, while the ask itself still renders. #}
+{% set cash = d.cash %}
+{% if cash %}
+<div class="cash-leg">
+  <div class="mc-label">{{ cash.data.label }} <span class="kind">{{ cash.data.kind_label if cash.state == 'ok' else 'withheld' }}</span></div>
+  {% if cash.state != 'ok' %}
+  <div class="caption">Not shown: {{ cash.reason }}.</div>
+  {% else %}
+  {% set c = cash.data %}
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Location</th>
+        <th>Terms</th>
+        <th class="num">Ask avg</th>
+        <th class="num">Ask range</th>
+        <th class="num">Board</th>
+        <th class="num">Premium over board</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in c.rows %}
+      <tr>
+        <td>{{ r.product }}</td>
+        <td>{{ r.location }}</td>
+        <td>{{ r.terms }}</td>
+        <td class="num">{{ f.usd(r.cash_avg) }}</td>
+        <td class="num">{{ f.usd(r.cash_low) }} – {{ f.usd(r.cash_high) }}</td>
+        <td class="num">{% for b in r.board %}{% if not loop.first %} · {% endif %}{{ b.contract }} {{ f.usd(b.usd_mt) }}{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td class="num">{% if r.has_basis %}{{ f.signed(r.premium_low) }} to {{ f.signed(r.premium_high) }}{% else %}<span class="muted">—</span>{% endif %}{% if r.premium_note %}<div class="caption">{{ r.premium_note }}</div>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="caption">
+    USD/MT. Week {{ c.week_start }} – {{ c.week_end }}, published {{ c.published_at }} — {{ c.source }}.
+    A range of processor <em>asks</em> a market reporter collected over the week: not a trade, not a settlement, and not firm to us.
+    {% if c.strike_session %}Board legs are CBOT closes of {{ c.strike_session }}, the session AMS struck its basis against ({{ c.strike_note }}); the premium is ask less board on that one session.
+    {% else %}Board and premium withheld: {{ c.strike_note }}.{% endif %}
+    This is the processor's cash premium, not a crush margin — no interior processor bean bid is ingested, and the Gulf bean bid is a different location.
+  </div>
+  {{ f.asof(c.week_end, c.age_days) }}
+  {% endif %}
+</div>
+{% endif %}

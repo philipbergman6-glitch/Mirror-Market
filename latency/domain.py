@@ -317,6 +317,13 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "own scheduling note. Published bids are the observation.",
     ),
     LayerLatency(
+        "us_processor_cash", LatencyClass.PHYSICAL_ORIGIN, ObservationClock(),
+        timedelta(0),
+        "AMS 3511 collects processor asks Monday-Friday and publishes Friday "
+        "afternoon; the row is keyed by that Friday. MARS stamps the publication "
+        "with a time of day but not a zone, so no hour is claimed here.",
+    ),
+    LayerLatency(
         "magyp_fob", LatencyClass.PHYSICAL_ORIGIN,
         ObservationClock("America/Argentina/Buenos_Aires", (12, 5)),
         timedelta(0),
