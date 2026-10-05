@@ -27,6 +27,13 @@
 {# `.empty-state` moved to _base.html.j2 with M16 #208: the headline crush
    board renders it too, same one-owner rule as `.kind` above. #}
 
+/* ---- cash leg under the board crush (block 03, #352) ----
+   The existing .dtable inside the block, set off by a rule so the cash premium
+   reads as a second claim beside the margin rather than a row of it. Only the
+   CBOT page renders one, hence here and not in _base.html.j2. */
+.cash-leg { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--rule); }
+.cash-leg .mc-label { display: flex; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+
 /* ---- river gauges (block 06, M25 #272 / M26 #273) ----
    DESIGN.md's "Key/value watch row": muted label left, mono value right,
    dotted rule between. Defined here rather than in _base.html.j2 because only

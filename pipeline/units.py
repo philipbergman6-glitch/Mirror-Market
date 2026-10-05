@@ -66,6 +66,41 @@ CONVERSION_FACTORS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Unit-named conversions (Layer 29, #352)
+#
+# The factors above are keyed by *commodity*, which is right for an exchange
+# whose unit is fixed by the contract. A physical report is not a contract: AMS
+# 3511 prints soybean oil in cents/lb and meal in dollars per short ton, and
+# says so per row. These are keyed by the unit the row names, so a reader can
+# check each one against the report rather than against a commodity table.
+# They are the same factors — the tests pin that.
+# ---------------------------------------------------------------------------
+POUNDS_PER_MT = 2204.62
+MT_PER_SHORT_TON = 0.907185
+
+
+def cents_per_lb_to_usd_mt(value: float) -> float:
+    """cents/lb → USD/MT."""
+    return value * POUNDS_PER_MT / 100
+
+
+def usd_per_short_ton_to_usd_mt(value: float) -> float:
+    """USD per US short ton (2,000 lb) → USD/MT."""
+    return value / MT_PER_SHORT_TON
+
+
+def points_to_cents_per_lb(value: float) -> float:
+    """Soybean oil basis points → cents/lb. One point is 1/100 of a cent.
+
+    AMS 3511 heads its oil basis column "¢/Lb" and fills it with points:
+    ``-50.00V`` beside a 66.47 ¢/lb price over a 66.97 October close. Read as
+    cents, 94% of the archive's same-contract rows fail to reconcile their own
+    price and basis; read as points, 97% reconcile exactly (measured 2026-10-05).
+    """
+    return value / 100
+
+
 def to_metric_tons(value: float, commodity: str) -> float | None:
     """
     Convert a single price value from native exchange units to USD/MT.

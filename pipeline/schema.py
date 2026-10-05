@@ -313,6 +313,39 @@ CREATE TABLE IF NOT EXISTS gulf_bids (
 );
 """
 
+# Layer 29 (#352). One row per (week, location, freight, transport mode) —
+# unique across the whole AMS 3511 archive, and each is its own series: FOB
+# and delivered, truck and rail, are never pooled. Native units, named per row
+# (`price_unit`, `basis_unit`), because the oil basis is in points under a
+# "cents/lb" label at source and a reader must not have to know that.
+# Futures months are nullable on purpose: AMS sometimes prints a basis with
+# only one leg's contract, and the other is never learned, not borrowed.
+_CREATE_US_PROCESSOR_CASH = """
+CREATE TABLE IF NOT EXISTS us_processor_cash (
+    week_end            TEXT NOT NULL,
+    commodity           TEXT NOT NULL,
+    location            TEXT NOT NULL,
+    freight             TEXT NOT NULL,
+    trans_mode          TEXT NOT NULL,
+    week_start          TEXT NOT NULL,
+    published_at        TEXT,
+    sale_type           TEXT,
+    protein             TEXT,
+    price_low           REAL,
+    price_high          REAL,
+    price_avg           REAL,
+    price_unit          TEXT NOT NULL,
+    basis_low           REAL,
+    basis_high          REAL,
+    basis_unit          TEXT,
+    futures_month_low   INTEGER,
+    futures_month_high  INTEGER,
+    cadence             TEXT,
+    quote_kind          TEXT,
+    PRIMARY KEY (week_end, commodity, location, freight, trans_mode)
+);
+"""
+
 _CREATE_EIA_ENERGY = """
 CREATE TABLE IF NOT EXISTS eia_energy (
     series_name TEXT NOT NULL,
@@ -679,6 +712,7 @@ ALL_SCHEMAS = (
     _CREATE_INSPECTION_DESTINATIONS,
     _CREATE_ARGENTINA_FOB,
     _CREATE_GULF_BIDS,
+    _CREATE_US_PROCESSOR_CASH,
     _CREATE_EIA_ENERGY,
     _CREATE_BRAZIL_ESTIMATES,
     _CREATE_DATA_FRESHNESS,

@@ -112,7 +112,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 32 operational layers across 28
+# independently runnable sub-layer, hence 33 operational layers across 29
 # numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
@@ -147,6 +147,7 @@ PRODUCTION_LAYERS = (
     ("gtr_vessels", "26b", "USDA AMS (Grain Transport Report)", "Weekly", "Gulf and PNW grain vessel lineups"),
     ("river_us", "27", "NOAA NWPS (stage via USACE/USGS)", "Daily + forecast", "Mississippi at Memphis and St. Louis"),
     ("river_ar", "28", "Argentina INA (Prefectura reading)", "Daily", "Paraná at Rosario"),
+    ("us_processor_cash", "29", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
@@ -1116,7 +1117,7 @@ API_KEY_LAYERS: dict[str, str] = {
     "FAS_API_KEY": "Layer 10",
     "EIA_API_KEY": "Layer 13",
     "DATA_GOV_IN_API_KEY": "Layer 16 (degrades to the shared sample key)",
-    "MARS_API_KEY": "Layer 20b backfill only",
+    "MARS_API_KEY": "Layer 20b backfill, Layer 29",
 }
 
 
@@ -1143,6 +1144,36 @@ MARS_GULF_BIDS_ARCHIVE_START = "2020-02-24"
 # 30s REQUEST_TIMEOUT every daily fetcher uses would cut off mid-archive —
 # a timeout is the right answer for a daily leg and the wrong one here.
 MARS_ARCHIVE_TIMEOUT = 600
+
+# ---------------------------------------------------------------------------
+# Layer 29 — US processor cash soybean oil and meal (AMS 3511 over MARS, #352)
+# ---------------------------------------------------------------------------
+# "National Grain and Oilseed Processor Feedstuff Report": weekly processor
+# ask ranges per trade location, flat price and basis over a named CBOT month.
+# Report Detail answers a `commodity=` filter (one value per request — a
+# `;`-joined list is HTTP 400), so the layer pulls its two commodities' whole
+# archive (2022-02-07 →, ~3,400 rows, ~1.6 s per request measured 2026-10-05)
+# on every run. That makes the table self-healing on an empty CI database, the
+# way Layers 22 and 26 are, and keeps it out of data/history/.
+#
+# The monthly sibling, report 3668, is deliberately not used: it starts later
+# (2022-03) than the weekly report it would back-fill, and it carries no basis
+# fields at all, so it adds neither history nor the premium over the board.
+MARS_PROCESSOR_CASH_SLUG = 3511
+PROCESSOR_CASH_COMMODITIES = ("Soybean Oil", "Soybean Meal")
+# The rows are AMS's survey of processor *asks*: an offer range a reporter
+# collected over the week, not a trade and not a settlement. Stamped on every
+# row like Layers 22 and 26, so the label travels with the number.
+PROCESSOR_CASH_CADENCE = "weekly"
+PROCESSOR_CASH_QUOTE_KIND = "weekly processor ask"
+# Same-contract rows must reconcile their own arithmetic: price_low - basis_low
+# and price_high - basis_high are the same futures level when both legs name
+# one contract. 2.6% of 2,947 such rows fail that in the archive (measured
+# 2026-10-05, clustered on expiry months — AMS's own, not ours). A pull above
+# this rate means the basis unit or the column mapping moved, and the whole
+# pull is discarded: under a moved mapping the rows that happen to reconcile
+# are no more trustworthy than the ones that do not (the GTR rule, Layer 26).
+PROCESSOR_CASH_MAX_RECONCILE_FAILURE_RATE = 0.10
 
 # ---------------------------------------------------------------------------
 # Layer 21 — Argentina official FOB prices (MAGyP, free JSON, no API key)
@@ -1527,6 +1558,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "sagis": 12,
     "ec_oilseeds": 12,
     "gtr_vessels": 12,
+    "us_processor_cash": 12,
     # Monthly publications — allow ~6 weeks.
     "gtr_ocean_freight": 42,
     # Monthly publications — allow ~6 weeks.
@@ -1670,6 +1702,14 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # budget is the only thing standing between a frozen link and a layer
     # that reports success on 2026 numbers in 2027.
     "gtr_vessels": 21,
+    # AMS 3511 is weekly: asks collected Monday-Friday, published Friday
+    # afternoon, keyed here by the Friday (`week_end`). The newest row is 0-6
+    # days old on a normal week. 21 tolerates two missed releases, because AMS
+    # does miss them and catches up: the weeks ending 2026-08-21 and 08-28 were
+    # both published on 2026-09-03, which left the newest week_end 19 days old
+    # the day before. Anything tighter fails the layer on an AMS backlog that
+    # resolves itself; anything looser lets a dead key-gated feed sit green.
+    "us_processor_cash": 21,
     # GTR ocean freight is monthly and the month is stamped to its first day,
     # so the newest row is ~30 days old the moment it publishes and ~60 the
     # day before the next one. 75 is that worst case plus a little slack, and
@@ -2879,16 +2919,22 @@ PHYSICAL_CRUSH: dict[str, dict[str, Any]] = {
         ),
     },
     "cbot": {
-        "label": "US Gulf physical legs",
+        "label": "US physical legs",
         "kind": "physical",
+        # Layer 29 (#352) brought US cash oil and meal — and still does not make
+        # a physical crush. Its legs are *interior processor* asks (FOB a plant
+        # in Illinois, Iowa, ...), weekly; the only US cash bean here is a CIF
+        # NOLA *export* bid (Layer 20), daily. A margin across them would buy
+        # beans at the Gulf and sell products at Decatur on different days.
         "absent_reason": (
-            "only the bean leg is ingested. AMS report 3147 gives a CIF NOLA barge "
-            "soybean bid (Layer 20), but no free daily US cash soybean oil or meal "
-            "assessment is ingested by this stack, so the oil and meal legs of a US "
-            "physical crush do not exist here. The board crush above is a paper "
-            "margin and is labelled as one."
+            "the cash oil and meal legs exist (AMS 3511, Layer 29) but the bean leg "
+            "does not: they are weekly asks FOB interior processors, and the only US "
+            "cash bean ingested is a CIF NOLA export bid (AMS 3147, Layer 20) — a "
+            "different location on a different cadence. No interior processor "
+            "soybean bid is ingested, so no US physical crush is struck. The board "
+            "crush above is a paper margin and is labelled as one."
         ),
-        "missing_legs": ("oil", "meal"),
+        "missing_legs": ("bean",),
     },
     "brazil": {
         "label": "Paranaguá physical legs",
@@ -2908,6 +2954,29 @@ PHYSICAL_CRUSH: dict[str, dict[str, Any]] = {
             "ingested here"
         ),
         "missing_legs": ("bean", "oil", "meal"),
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# CRUSH_CASH_LEGS — physical oil and meal priced beside a board crush (#352)
+#
+# Not a crush. A cash leg answers "what does the product trade at off the
+# board, and by how much" — the processor's cash premium — and it is rendered
+# beside the board margin, never folded into it: PHYSICAL_CRUSH above records
+# why no US physical margin exists. Keyed by market slug so the crush block
+# reads a descriptor rather than knowing which market has one (invariant 5).
+# ---------------------------------------------------------------------------
+CRUSH_CASH_LEGS: dict[str, dict[str, Any]] = {
+    "cbot": {
+        "label": "US processor cash — soybean oil and 46.5–48% meal",
+        "layer": "us_processor_cash",
+        "table": "us_processor_cash",
+        "source": "USDA AMS report 3511 (National Grain and Oilseed Processor Feedstuff Report)",
+        "quote_kind": "weekly_ask",
+        # The board months AMS quotes basis over are CBOT's, so the board leg
+        # is read from the same named-contract store the crush above uses.
+        "board_commodities": {"Soybean Oil": "Soybean Oil", "Soybean Meal": "Soybean Meal"},
     },
 }
 

@@ -24,6 +24,8 @@ from config import (
     GTR_VESSEL_ATTRIBUTION,
     GTR_VESSEL_CADENCE,
     GTR_VESSEL_UNIT,
+    PROCESSOR_CASH_CADENCE,
+    PROCESSOR_CASH_QUOTE_KIND,
     STORAGE_DIR,
 )
 from pipeline import divergence
@@ -323,6 +325,7 @@ def clear_database():
         "currencies", "worldbank_prices", "dce_futures", "crop_progress",
         "export_sales", "forward_curve", "wasde", "inspections",
         "inspection_port_flows", "inspection_destinations", "gulf_bids",
+        "us_processor_cash",
         "argentina_fob",
         "eia_energy", "brazil_estimates", "data_freshness",
         "commodity_freshness", "india_domestic_prices",
@@ -880,6 +883,36 @@ def save_gulf_bids(df: pd.DataFrame):
         ]],
         ["report_date", "commodity", "location", "delivery"],
         "gulf_bids",
+    )
+
+
+def save_processor_cash(_name: str, df: pd.DataFrame):
+    """Write AMS 3511 US processor cash oil and meal → 'us_processor_cash'.
+
+    cadence and quote_kind are stamped per row like Layers 22 and 26: a weekly
+    processor *ask* shares a USD/MT axis with daily board closes on the CBOT
+    page, and the label has to travel with the number to survive that.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    for col in ("week_end", "week_start"):
+        df[col] = _date(df[col])
+    df["cadence"] = PROCESSOR_CASH_CADENCE
+    df["quote_kind"] = PROCESSOR_CASH_QUOTE_KIND
+    for col in ("futures_month_low", "futures_month_high"):
+        df[col] = df[col].astype(object).where(df[col].notna(), None)
+    _save(
+        "us_processor_cash",
+        df[[
+            "week_end", "commodity", "location", "freight", "trans_mode",
+            "week_start", "published_at", "sale_type", "protein",
+            "price_low", "price_high", "price_avg", "price_unit",
+            "basis_low", "basis_high", "basis_unit",
+            "futures_month_low", "futures_month_high", "cadence", "quote_kind",
+        ]],
+        ["week_end", "commodity", "location", "freight", "trans_mode"],
+        "us_processor_cash",
     )
 
 

@@ -104,6 +104,7 @@ CRUSH_YIELD_SETS = {
 #   physical           cash/spot assessment (CEPEA, mandi)
 #   administered       official minimum export value (Argentina, Ley 21.453)
 #   weekly_assessment  weekly physical assessment (EC Oilseeds Observatory)
+#   weekly_ask         weekly processor ask range (AMS 3511, Layer 29)
 QUOTE_KINDS = frozenset(QUOTE_KIND_PRICE_TYPE)
 
 CADENCES = frozenset({"daily", "weekly", "monthly"})

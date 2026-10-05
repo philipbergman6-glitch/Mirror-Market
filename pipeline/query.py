@@ -270,6 +270,19 @@ def read_gulf_bids(commodity: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_processor_cash(commodity: str | None = None) -> pd.DataFrame:
+    """Read AMS 3511 weekly US processor cash oil and meal (Layer 29).
+
+    Native units, named on each row: oil price in cents/lb and its basis in
+    *points*; meal price and basis in dollars per short ton. Convert through
+    ``pipeline.units`` only.
+    """
+    return _read_table(
+        "us_processor_cash", "commodity", commodity,
+        date_cols=("week_end", "week_start"),
+    )
+
+
 def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
     """Read EIA energy data from SQLite."""
     return _read_table("eia_energy", "series_name", series_name)

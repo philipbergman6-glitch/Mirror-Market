@@ -109,6 +109,7 @@ class QuoteKind(str, Enum):
     PHYSICAL = "physical"
     ADMINISTERED = "administered"
     WEEKLY_ASSESSMENT = "weekly_assessment"
+    WEEKLY_ASK = "weekly_ask"
 
 
 # `Confidence` and the worst-wins helper are the canonical ones from

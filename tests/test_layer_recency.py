@@ -488,6 +488,9 @@ def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers(
                      series back to 1884 and a river has a level every day,
                      so empty means the request or the parse broke, never
                      "nothing to report today" (M26 #273)
+      us_processor_cash — one frame; the AMS 3511 archive carries 230+
+                     weeks on every pull, so empty means the pull, the
+                     mapping or the reconciliation broke (#352)
     """
     opted_in = {
         layer.key
@@ -495,7 +498,7 @@ def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers(
         if layer.empty_fails is not None
     }
 
-    assert opted_in == {"worldbank", "wasde", "ec_oilseeds", "river_ar"}
+    assert opted_in == {"worldbank", "wasde", "ec_oilseeds", "river_ar", "us_processor_cash"}
     assert not opted_in & set(LAYER_MIN_KEYS)  # nothing floored needs an override
 
 

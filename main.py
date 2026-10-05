@@ -60,6 +60,8 @@ from fetchers.gulf_bids import fetch_gulf_bids
 from fetchers.magyp_fob import fetch_magyp_fob
 from fetchers.mandi import fetch_mandi_prices
 from fetchers.noticias_agricolas import fetch_noticias_agricolas
+from fetchers.processor_cash import fetch_processor_cash
+from fetchers.processor_cash import is_configured as processor_cash_configured
 from fetchers.psd import fetch_psd_all
 from fetchers.river import fetch_ina_gauges, fetch_nwps_gauges
 from fetchers.safex import fetch_safex
@@ -129,6 +131,7 @@ from pipeline.store import (
     save_port_flows,
     save_port_vessel_activity,
     save_price_data,
+    save_processor_cash,
     save_psd_data,
     save_river_levels,
     save_safex,
@@ -755,6 +758,19 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             fetch=lambda: fetch_gtr_vessel_activity(),
             save=lambda n, d: save_port_vessel_activity(n, d),
             clean=lambda n, d: clean_port_vessel_activity(d),
+        ),
+        DictLayer(
+            "us_processor_cash", "Layer 29", "AMS 3511 US processor cash oil and meal",
+            fetch=lambda: fetch_processor_cash(),
+            save=lambda n, d: save_processor_cash(n, d),
+            # Key-gated like Layers 10 and 13: no MARS_API_KEY is "never ran",
+            # recorded as such, never a failure and never an empty success.
+            run_if=processor_cash_configured,
+            skip_msg="US processor cash skipped (MARS_API_KEY not set)",
+            # One frame, so no LAYER_MIN_KEYS floor to derive from. The archive
+            # carries 230+ weeks on every pull — empty means the pull, the
+            # mapping or the reconciliation broke, never "nothing published".
+            empty_fails=True,
         ),
         DictLayer(
             "dce", "Layer 9", "DCE futures (AKShare)",
