@@ -795,11 +795,15 @@ EC_OILSEEDS_QUOTE_KIND = "physical FOB assessment"
 COMEXSTAT_GENERAL_URL = "https://api-comexstat.mdic.gov.br/general"
 COMEXSTAT_UPDATED_URL = "https://api-comexstat.mdic.gov.br/general/dates/updated"
 
-# First month requested. Five-plus years gives every month a same-month-last-
-# year comparison and a multi-season unit-value trend; the whole window is
-# ~5 MB in one request, re-downloaded every run (self-healing, so no
-# data/history/ round-trip).
-COMEXSTAT_START_MONTH = "2021-01"
+# First calendar year requested. Five-plus years gives every month a same-
+# month-last-year comparison and a multi-season unit-value trend; the whole
+# window is ~26k rows / ~6 MB in one request, re-downloaded every run (self-
+# healing, so no data/history/ round-trip). A *year*, not a month, because the
+# API reads `period` as years × months-of-year, not as a continuous range:
+# from 2021-01 to 2026-08 returns Jan–Aug of every year and silently drops
+# Sep–Dec of 2021–2025 (live, 2026-10-05). The request therefore always
+# spans whole years, January of this one to December of MDIC's declared year.
+COMEXSTAT_START_YEAR = 2021
 
 # Seconds to wait before each retry of a rate-limited (429) data request.
 COMEXSTAT_RATE_LIMIT_WAITS = (15, 30, 60, 120)
@@ -836,6 +840,36 @@ COMEXSTAT_ATTRIBUTION = "Source: MDIC/SECEX — Comex Stat (CC BY-ND 3.0)"
 # internal use, withheld from the public page until MDIC confirms in writing
 # (decided 2026-10-05, #351) — the same gate shape as AFEX_PUBLISH_RAW.
 COMEXSTAT_PUBLISH_UNIT_VALUE = False
+
+# Customs export feeds a market page can name (descriptor key
+# "customs_exports"). A registry, like RIVER_GAUGES, so the block builder
+# reads a pointer and never learns which country it is drawing (invariant 5).
+# Rendered inside block 07 beside the PSD balance sheet: monthly, stamped as
+# monthly, never a ledger row (M10 #151 — the ledger is daily-only).
+CUSTOMS_EXPORTS: dict[str, dict[str, Any]] = {
+    "comexstat": {
+        "layer": "comexstat",
+        "table": "brazil_exports",
+        "label": "Customs exports",
+        "publisher": "MDIC/SECEX Comex Stat",
+        "products": COMEXSTAT_PRODUCTS,
+        # The one destination split out against the rest of the world.
+        "focus_destination": "China",
+        "attribution": COMEXSTAT_ATTRIBUTION,
+        "revision_note": (
+            "MDIC revises every month of the current year until its February re-issue."
+        ),
+        # Name of the config flag gating the unit value, read at render time
+        # so flipping it needs no code; and what the page says while gated.
+        "unit_value_gate": "COMEXSTAT_PUBLISH_UNIT_VALUE",
+        "unit_value_withheld_note": (
+            "The customs unit value (FOB ÷ tonnes) is withheld until MDIC confirms "
+            "its CC BY-ND licence permits publishing it."
+        ),
+        # Months of unit-value history carried when the gate is open.
+        "trend_months": 13,
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Layer 9 — DCE (Dalian Commodity Exchange) futures via AKShare (no API key)
@@ -2277,6 +2311,8 @@ MARKETS: dict[str, dict[str, Any]] = {
             ("Brazil Rio Grande do Sul", "domestic crop — the La Niña swing state"),
         ],
         "psd_country": "Brazil",
+        # Layer 29 (#351): where Brazil's cargo actually went, by month.
+        "customs_exports": "comexstat",
         "players_country": "BR",
     },
     "argentina": {

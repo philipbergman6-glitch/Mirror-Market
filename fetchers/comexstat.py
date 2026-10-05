@@ -26,22 +26,30 @@ Traps this module exists to survive (all probed live 2026-10-05):
     is our fetch, not the market, and the layer hard-fails rather than
     storing it.
 
-2.  **The rate limit lies about its window.** HTTP 429 says "tente novamente
+2.  **`period` is years × months-of-year, not a range.** `from 2021-01 to
+    2026-08` returns January–August of *every* year and silently drops
+    September–December of 2021–2025 — 20 of 68 months gone, HTTP 200, no
+    warning (live, 2026-10-05; caught by the coverage check in trap 1, not by
+    the Jul/Aug cross-check, which sat inside the surviving months). The
+    request always spans whole years: January of the start year to December
+    of the declared year. Months after the declared one come back empty.
+
+3.  **The rate limit lies about its window.** HTTP 429 says "tente novamente
     em 10 segundos"; retries at 12 s and 65 s still drew 429, and the dates
     call counts against the same budget. One data request per run, waited
     out on config.COMEXSTAT_RATE_LIMIT_WAITS, and a loud failure when the
     schedule runs out — never a partial window.
 
-3.  **Not the bulk CSV.** balanca.economia.gov.br serves an expired leaf
+4.  **Not the bulk CSV.** balanca.economia.gov.br serves an expired leaf
     certificate (notAfter 2026-10-03) with no intermediate. It is only
     reachable with TLS verification off, and invariant 11 says a wrong
     number is worse than a gap.
 
-4.  **Metrics are strings.** `"metricKG": "3163089014"`. A missing or
+5.  **Metrics are strings.** `"metricKG": "3163089014"`. A missing or
     unparsable metric is a shape break, never a zero. A *published* zero is
     real (a refined-oil pack whose net weight rounds to 0 kg) and is kept.
 
-5.  **"Não Declarada" is not a state.** Bulk cargo ships before its invoice
+6.  **"Não Declarada" is not a state.** Bulk cargo ships before its invoice
     exists, so MDIC records it under an undeclared state and reallocates
     later (Comex Stat manual §6.3.4): the newest months' state split is
     systematically understated. Rows are stored as published; country
@@ -67,7 +75,7 @@ from config import (
     COMEXSTAT_LANGUAGE,
     COMEXSTAT_NCM,
     COMEXSTAT_PRODUCTS,
-    COMEXSTAT_START_MONTH,
+    COMEXSTAT_START_YEAR,
     COMEXSTAT_UPDATED_URL,
     REQUEST_TIMEOUT,
 )
@@ -217,14 +225,16 @@ def _post_general(body: dict) -> dict:
 
 
 def fetch_brazil_exports(today: date | None = None) -> dict[str, pd.DataFrame]:
-    """Fetch the whole window, start month → MDIC's declared month, in one request."""
+    """Fetch the whole window, start year → MDIC's declared month, in one request."""
     today = today or date.today()
     declared = _declared_month(today)
-    start = COMEXSTAT_START_MONTH
+    start = f"{COMEXSTAT_START_YEAR}-01"
     body = {
         "flow": "export",
         "monthDetail": True,
-        "period": {"from": start, "to": _label(declared)},
+        # Whole years: the API filters months-of-year, so a `to` short of
+        # December would drop those months from every earlier year (trap 2).
+        "period": {"from": start, "to": f"{declared[0]}-12"},
         "filters": [{"filter": "ncm", "values": sorted(COMEXSTAT_NCM)}],
         "details": ["ncm", "country", "state"],
         "metrics": list(_METRICS),

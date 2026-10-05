@@ -45,7 +45,8 @@ from app.blocks import (
     absent_reason,
     make_block,
 )
-from app.markets import Market, Source, TierResult
+from app.markets import Market, Source, TierResult, _ingest_status
+from pipeline.units import kg_to_metric_tons
 from pricing.semantics import quote_kind_label
 
 log = logging.getLogger(__name__)
@@ -1862,10 +1863,11 @@ def weather_alert(temp_max, precip) -> str | None:
 def supply_demand_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     rows = _psd_rows(ctx, market.psd_country)
     flows = _flows(market, ctx)
-    if not rows and not flows:
+    exports = _customs_exports(market, ctx)
+    if not rows and not flows and (exports is None or exports["state"] != STATE_OK):
         return STATE_EMPTY, (
             f"the PSD layer holds no soybean balance sheet for {market.psd_country}"
-        ), {}
+        ), ({"exports": exports} if exports else {})
 
     lines = []
     if rows:
@@ -1892,6 +1894,7 @@ def supply_demand_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str
         # cadence-stamped context, never as a row that reads like an outage.
         "cadence_note": "USDA PSD, annual marketing years — this does not move daily",
         "flows": flows,
+        "exports": exports,
     }
 
 
@@ -1951,6 +1954,142 @@ def _flows(market: Market, ctx: SiteContext) -> dict | None:
         "attribution": getattr(config, "SAGIS_ATTRIBUTION", None)
         if source.layer == "sagis" else None,
     }
+
+
+def _customs_exports(market: Market, ctx: SiteContext) -> dict | None:
+    """The newest published month of customs exports, as a sub-envelope.
+
+    Monthly, so it sits in block 07 beside the balance sheet and is stamped
+    monthly (M10 #151) — never a ledger row. Per product: tonnes, the focus
+    destination against the rest of the world, and the same month a year
+    earlier. The newest month is preliminary by the publisher's own rule
+    (MDIC revises the current year until February), and the month after it
+    is named as unreleased rather than drawn as a zero.
+
+    The customs unit value (FOB ÷ tonnes) is computed only when the feed's
+    publish gate is open: it is our arithmetic on figures licensed CC BY-ND,
+    and a gated number must not reach the page data at all (#351).
+    """
+    if market.customs_exports is None:
+        return None
+    spec = config.CUSTOMS_EXPORTS[market.customs_exports]
+    layer, focus = spec["layer"], spec["focus_destination"]
+    publish_unit_value = bool(getattr(config, spec["unit_value_gate"]))
+    monthly = _customs_monthly(ctx, spec["table"], focus)
+    if not monthly:
+        ingest = _ingest_status(ctx.conn, layer) if ctx.conn is not None else None
+        return {
+            "state": STATE_EMPTY,
+            "reason": ingest or f"the {layer} layer holds no {spec['publisher']} export rows",
+            "data": {},
+        }
+
+    months = sorted({month for month, _ in monthly})
+    latest = months[-1]
+    year_ago = latest - 12
+    unreleased = latest + 1
+    rows = []
+    for product in spec["products"]:
+        now = monthly.get((latest, product))
+        if now is None:
+            continue
+        was = monthly.get((year_ago, product))
+        tonnes = kg_to_metric_tons(now["kg"])
+        focus_tonnes = kg_to_metric_tons(now["focus_kg"])
+        row = {
+            "product": product,
+            "tonnes": tonnes,
+            "focus_tonnes": focus_tonnes,
+            "rest_tonnes": tonnes - focus_tonnes,
+            "focus_share_pct": (100.0 * focus_tonnes / tonnes) if tonnes else None,
+            "yoy_pct": _pct_change(now["kg"], was["kg"] if was else None),
+            "focus_yoy_pct": _pct_change(now["focus_kg"], was["focus_kg"] if was else None),
+        }
+        if publish_unit_value:
+            row["unit_value_usd_mt"] = _unit_value(now)
+        rows.append(row)
+
+    data: dict[str, Any] = {
+        "label": spec["label"],
+        "publisher": spec["publisher"],
+        "cadence": "monthly",
+        "month": _month_iso(latest),
+        "month_label": _month_label(latest),
+        "year_ago_label": _month_label(year_ago),
+        "preliminary": True,
+        "unreleased_note": (
+            f"{_month_iso(unreleased)} ({_month_label(unreleased)}) not yet published by "
+            f"{spec['publisher']} — "
+            "the release calendar, not an outage"
+        ),
+        "focus_destination": focus,
+        "rows": rows,
+        "attribution": spec["attribution"],
+        "revision_note": spec["revision_note"],
+    }
+    if publish_unit_value:
+        window = months[-spec["trend_months"]:]
+        data["unit_value_trend"] = {
+            product: [
+                (_month_iso(month), _unit_value(monthly[(month, product)]))
+                for month in window
+                if (month, product) in monthly
+            ]
+            for product in spec["products"]
+        }
+        data["unit_value_caveat"] = (
+            "Customs unit value: FOB USD ÷ net tonnes, an average over every "
+            "contract that cleared in the month, struck weeks earlier — not a price."
+        )
+    else:
+        data["withheld_note"] = spec["unit_value_withheld_note"]
+    return {"state": STATE_OK, "reason": "", "data": data}
+
+
+def _month_index(when: date) -> int:
+    """A calendar month as one integer, so "a year earlier" is just −12."""
+    return when.year * 12 + when.month - 1
+
+
+def _month_iso(index: int) -> str:
+    return f"{index // 12}-{index % 12 + 1:02d}"
+
+
+def _month_label(index: int) -> str:
+    return date(index // 12, index % 12 + 1, 1).strftime("%b %Y")
+
+
+def _customs_monthly(ctx: SiteContext, table: str, focus: str) -> dict:
+    """{(month index, product): {kg, fob_usd, focus_kg}} — sums over every row."""
+    def build():
+        if ctx.conn is None:
+            return {}
+        try:
+            fetched = ctx.conn.execute(
+                f"SELECT month_end, product, SUM(kg), SUM(fob_usd), "  # noqa: S608 — table comes from the registry
+                f"SUM(CASE WHEN country = ? THEN kg ELSE 0 END) "
+                f"FROM {table} GROUP BY month_end, product",
+                (focus,),
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001 — a missing table is data, not a crash
+            log.debug("block read: %s unavailable (%s)", table, exc)
+            return {}
+        out = {}
+        for month_end, product, kg, fob, focus_kg in fetched:
+            parsed = _parse_date(month_end)
+            if parsed is None:
+                continue
+            out[(_month_index(parsed), str(product))] = {
+                "kg": int(kg), "fob_usd": int(fob), "focus_kg": int(focus_kg),
+            }
+        return out
+    return ctx.cached(("customs", table, focus), build)
+
+
+def _unit_value(month: dict) -> float | None:
+    """FOB USD over net tonnes — a ratio of the month's sums, never a mean of ratios."""
+    tonnes = kg_to_metric_tons(month["kg"])
+    return month["fob_usd"] / tonnes if tonnes else None
 
 
 # ---------------------------------------------------------------------------

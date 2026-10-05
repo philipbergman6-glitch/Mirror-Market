@@ -145,6 +145,13 @@ def test_a_row_past_the_declared_month_hard_fails():
         comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2026-07")
 
 
+def test_a_months_of_year_window_that_dropped_whole_months_hard_fails():
+    """What the API returned for from=2021-01 to=2026-08: Jan–Aug of each year."""
+    rows = [_soy_row(y, m) for y in (2025, 2026) for m in range(1, 9)]
+    with pytest.raises(ScraperShapeError, match="2025-09"):
+        comexstat.parse_general(_payload(rows), declared=(2026, 8), start="2025-01")
+
+
 def test_a_published_month_with_no_soybean_rows_hard_fails():
     rows = [_soy_row(2026, 6), _soy_row(2026, 8)]  # July missing
     with pytest.raises(ScraperShapeError, match="2026-07"):
@@ -227,12 +234,16 @@ def sleeps(monkeypatch):
 
 def _install(monkeypatch, fake):
     monkeypatch.setattr(comexstat, "requests", fake)
-    monkeypatch.setattr(config, "COMEXSTAT_START_MONTH", "2026-07")
-    monkeypatch.setattr(comexstat, "COMEXSTAT_START_MONTH", "2026-07")
+    monkeypatch.setattr(config, "COMEXSTAT_START_YEAR", 2026)
+    monkeypatch.setattr(comexstat, "COMEXSTAT_START_YEAR", 2026)
 
 
-def test_fetch_requests_only_up_to_the_month_mdic_says_is_published(monkeypatch, sleeps):
-    fake = _FakeRequests([_UPDATED_AUG], [_Resp(200, _payload(_window("2026-07", (2026, 8))))])
+def test_fetch_requests_whole_years_and_keeps_only_published_months(monkeypatch, sleeps):
+    """`period` is years × months-of-year. Asking for 2021-01..2026-08 drops
+    Sep–Dec from every earlier year (live, 2026-10-05), so the request spans
+    January of the start year to December of the declared year, and the
+    declared month is what bounds the data."""
+    fake = _FakeRequests([_UPDATED_AUG], [_Resp(200, _payload(_window("2026-01", (2026, 8))))])
     _install(monkeypatch, fake)
 
     frames = comexstat.fetch_brazil_exports()
@@ -240,14 +251,14 @@ def test_fetch_requests_only_up_to_the_month_mdic_says_is_published(monkeypatch,
     body = fake.posts[0]
     assert body["flow"] == "export"
     assert body["monthDetail"] is True
-    assert body["period"] == {"from": "2026-07", "to": "2026-08"}
+    assert body["period"] == {"from": "2026-01", "to": "2026-12"}
     assert sorted(body["filters"][0]["values"]) == sorted(config.COMEXSTAT_NCM)
     assert set(body["details"]) == {"ncm", "country", "state"}
     assert frames["Soybeans"]["month_end"].max() == pd.Timestamp("2026-08-31")
 
 
 def test_fetch_waits_out_a_rate_limit_then_succeeds(monkeypatch, sleeps):
-    ok = _Resp(200, _payload(_window("2026-07", (2026, 8))))
+    ok = _Resp(200, _payload(_window("2026-01", (2026, 8))))
     fake = _FakeRequests([_UPDATED_AUG], [_RATE_LIMITED, _RATE_LIMITED, ok])
     _install(monkeypatch, fake)
 
