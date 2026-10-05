@@ -622,7 +622,7 @@ _BRAZIL_EXPORT_COLUMNS = [
 
 
 def save_brazil_exports(product: str, df: pd.DataFrame):
-    """Write MDIC Comex Stat monthly exports → 'brazil_exports' (Layer 29).
+    """Write MDIC Comex Stat monthly exports → 'brazil_exports' (Layer 31).
 
     Not a plain upsert. MDIC revises every month of the current year until
     its February re-issue, and a revision can *move* a row — bulk cargo first

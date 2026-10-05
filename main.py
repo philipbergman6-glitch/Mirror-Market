@@ -754,7 +754,7 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             empty_fails=True,
         ),
         DictLayer(
-            "comexstat", "Layer 29", "MDIC Comex Stat Brazil soy-complex exports",
+            "comexstat", "Layer 31", "MDIC Comex Stat Brazil soy-complex exports",
             fetch=lambda: fetch_brazil_exports(),
             save=lambda n, d: save_brazil_exports(n, d),
             clean=lambda n, d: clean_brazil_exports(d),

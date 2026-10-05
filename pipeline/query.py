@@ -155,7 +155,7 @@ def read_ec_oilseed_prices(series: str | None = None) -> pd.DataFrame:
 
 
 def read_brazil_exports(product: str | None = None) -> pd.DataFrame:
-    """Read MDIC Comex Stat monthly exports (Layer 29) from SQLite.
+    """Read MDIC Comex Stat monthly exports (Layer 31) from SQLite.
 
     Raw published figures — net ``kg`` and ``fob_usd`` per (month, NCM,
     destination, state of production). Convert kg through pipeline/units.py;

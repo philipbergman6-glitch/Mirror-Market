@@ -2311,7 +2311,7 @@ MARKETS: dict[str, dict[str, Any]] = {
             ("Brazil Rio Grande do Sul", "domestic crop — the La Niña swing state"),
         ],
         "psd_country": "Brazil",
-        # Layer 29 (#351): where Brazil's cargo actually went, by month.
+        # Layer 31 (#351): where Brazil's cargo actually went, by month.
         "customs_exports": "comexstat",
         "players_country": "BR",
     },

@@ -419,7 +419,7 @@ class Market:
     # no absent reason for that reason; a *configured* gauge with no rows
     # still says so, which is the distinction M1 constraint 2 is about.
     river_gauges: tuple[str, ...] = ()
-    # Layer 29 (#351). A key into config.CUSTOMS_EXPORTS — monthly customs
+    # Layer 31 (#351). A key into config.CUSTOMS_EXPORTS — monthly customs
     # export flows rendered inside block 07. None is the ordinary case: only
     # an origin whose customs agency publishes open, CI-reachable monthly data
     # has one, so no absent reason is owed for its absence.

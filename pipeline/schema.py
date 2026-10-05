@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS ec_oilseed_prices (
 );
 """
 
-# Layer 29 — MDIC Comex Stat monthly exports (#351). Raw published figures:
+# Layer 31 — MDIC Comex Stat monthly exports (#351). Raw published figures:
 # net kg and FOB USD exactly as MDIC prints them; tonnes and the customs unit
 # value are derived at read time (pipeline/units.py), never stored.
 _CREATE_BRAZIL_EXPORTS = """

@@ -1,5 +1,5 @@
 """
-Layer 29 — Brazil customs exports from MDIC/SECEX Comex Stat (#351).
+Layer 31 — Brazil customs exports from MDIC/SECEX Comex Stat (#351).
 
 Monthly exports of soybeans, soybean meal and soybean oil by destination
 country and by state of production — tonnage (net kg) and FOB USD, straight
