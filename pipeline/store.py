@@ -600,6 +600,50 @@ def save_ec_oilseed_prices(series: str, df: pd.DataFrame):
     )
 
 
+_BRAZIL_EXPORT_COLUMNS = [
+    "month_end", "ncm", "product", "country", "state", "kg", "fob_usd", "qty_stat",
+]
+
+
+def save_brazil_exports(product: str, df: pd.DataFrame):
+    """Write MDIC Comex Stat monthly exports → 'brazil_exports' (Layer 29).
+
+    Not a plain upsert. MDIC revises every month of the current year until
+    its February re-issue, and a revision can *move* a row — bulk cargo first
+    filed under "Não Declarada" is later allocated to its real state. An
+    upsert would keep the old row beside the new one and double-count it, so
+    this product's stored rows inside the incoming window are cleared first
+    and the window rewritten whole. Months outside the window are untouched.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["product"] = product
+    df["month_end"] = _date(df["month_end"])
+    missing = [c for c in _BRAZIL_EXPORT_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_brazil_exports: frame missing columns {missing}")
+    _replace_export_window(product, df["month_end"].min(), df["month_end"].max())
+    _save("brazil_exports", df[_BRAZIL_EXPORT_COLUMNS],
+          ["month_end", "ncm", "country", "state"], f"comexstat/{product}")
+
+
+def _replace_export_window(product: str, first: str, last: str) -> None:
+    """Clear one product's rows for [first, last] before the window is rewritten."""
+    with managed_connection(get_connection()) as conn:
+        cursor = conn.execute(
+            "DELETE FROM brazil_exports WHERE product = ? AND month_end BETWEEN ? AND ?",
+            (product, first, last),
+        )
+        removed = cursor.rowcount if cursor.rowcount is not None else 0
+        if removed:
+            logger.info(
+                "brazil_exports/%s: cleared %d stored row(s) %s..%s before rewriting the window",
+                product, removed, first, last,
+            )
+        maybe_sync(conn)
+
+
 def save_ocean_freight(route: str, df: pd.DataFrame):
     """Write GTR monthly ocean freight rates → 'ocean_freight_rates'.
 

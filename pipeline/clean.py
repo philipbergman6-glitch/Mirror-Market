@@ -794,6 +794,29 @@ def clean_epa_rfs(key: str, df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def clean_brazil_exports(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean MDIC Comex Stat monthly exports (Layer 31).
+
+    The fetcher has already hard-failed on every shape break, so this only
+    normalises: month_end to datetime, metrics to integers, one row per
+    primary key, sorted. Published zeros are kept — a refined-oil pack whose
+    net weight rounds to 0 kg is a real row, not a gap.
+
+    Returns cleaned copy (original is not mutated).
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    df["month_end"] = pd.to_datetime(df["month_end"])
+    for column in ("kg", "fob_usd"):
+        df[column] = df[column].astype("int64")
+    df = df.drop_duplicates(subset=["month_end", "ncm", "country", "state"], keep="last")
+    df = df.sort_values(["month_end", "ncm", "country", "state"]).reset_index(drop=True)
+    return df
+
+
 def clean_ocean_freight(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean GTR monthly ocean freight rates (Layer 26).

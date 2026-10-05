@@ -96,6 +96,10 @@ LAYER_MIN_KEYS = {
     # while the run stayed green.
     "gtr_ocean_freight": 2,  # of 2 routes
     "gtr_vessels": 2,        # of 2 port regions
+    # Beans, meal and oil come back in one Comex Stat response. Brazil exports
+    # all three every month, so a missing product is a parse or filter fault,
+    # never a quiet month.
+    "comexstat": 3,          # of 3 products
     # Both Mississippi gauges come out of the same NWPS API on the same run.
     # One gauge answering while the other does not is our transport or a
     # renamed LID, never "that stretch of river had nothing to report" — a
@@ -117,7 +121,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 34 operational layers across 30
+# independently runnable sub-layer, hence 35 operational layers across 31
 # numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
@@ -154,6 +158,7 @@ PRODUCTION_LAYERS = (
     ("river_ar", "28", "Argentina INA (Prefectura reading)", "Daily", "Paraná at Rosario"),
     ("epa_rfs", "29", "US EPA (Renewable Fuel Standard)", "Monthly", "RIN generation, RIN prices and RVOs"),
     ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
+    ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
@@ -772,6 +777,65 @@ EC_OILSEEDS_SERIES = {
 # it up.
 EC_OILSEEDS_CADENCE = "weekly"
 EC_OILSEEDS_QUOTE_KIND = "physical FOB assessment"
+
+# ---------------------------------------------------------------------------
+# Layer 31 — Brazil customs exports, MDIC/SECEX Comex Stat (no API key, #351)
+#
+# Monthly soybean, meal and oil exports by destination country and by state
+# of production. The API, not the bulk CSV: on 2026-10-05 both answered from
+# a GitHub Actions runner, but the bulk host (balanca.economia.gov.br) serves
+# an expired leaf certificate with no intermediate, and fetching it would
+# mean turning TLS verification off — a wrong number is worse than a gap.
+# The API sits behind Cloudflare with a valid chain. It rate-limits hard
+# (HTTP 429 "tente novamente em 10 segundos", but 10 s is not enough — 12 s
+# and 65 s retries still drew 429), so the layer makes one data request per
+# run and waits out a 429 on the schedule below. HEAD and body-less requests
+# get a Cloudflare 403; only GET dates/updated and POST general are used.
+# ---------------------------------------------------------------------------
+COMEXSTAT_GENERAL_URL = "https://api-comexstat.mdic.gov.br/general"
+COMEXSTAT_UPDATED_URL = "https://api-comexstat.mdic.gov.br/general/dates/updated"
+
+# First month requested. Five-plus years gives every month a same-month-last-
+# year comparison and a multi-season unit-value trend; the whole window is
+# ~5 MB in one request, re-downloaded every run (self-healing, so no
+# data/history/ round-trip).
+COMEXSTAT_START_MONTH = "2021-01"
+
+# Seconds to wait before each retry of a rate-limited (429) data request.
+COMEXSTAT_RATE_LIMIT_WAITS = (15, 30, 60, 120)
+
+# 8-digit NCM → product. Verified against MDIC's NCM.csv descriptions and
+# numerically against the bulk CSV (exact kg/FOB agreement, Jul+Aug 2026).
+# 12011000 (beans *for sowing*) is deliberately absent — seed trade, not the
+# crush/feed cargo a buyer prices. Both meal codes are meal: 23040010 is
+# "farinhas e pellets", 23040090 "bagaços e outros resíduos sólidos", and
+# Brazil ships most of its meal under the second. All four oil codes are
+# soybean oil: crude/degummed, then three refined lines.
+COMEXSTAT_NCM = {
+    "12019000": "Soybeans",
+    "23040010": "Soybean Meal",
+    "23040090": "Soybean Meal",
+    "15071000": "Soybean Oil",
+    "15079011": "Soybean Oil",
+    "15079019": "Soybean Oil",
+    "15079090": "Soybean Oil",
+}
+COMEXSTAT_PRODUCTS = ("Soybeans", "Soybean Meal", "Soybean Oil")
+
+# The API names destinations in the requested language rather than by code
+# (?language=en); "China" is CO_PAIS 160 in the bulk files (verified equal).
+# Hong Kong, Macau and Taiwan are separate destinations and are not folded in.
+COMEXSTAT_LANGUAGE = "en"
+
+# CC BY-ND 3.0 on MDIC's site (bulk-data page and FAQ footer). Attribution
+# is mandatory and travels with every rendered number.
+COMEXSTAT_ATTRIBUTION = "Source: MDIC/SECEX — Comex Stat (CC BY-ND 3.0)"
+
+# The customs unit value (FOB USD ÷ net tonnes) is our arithmetic on MDIC's
+# figures, and "no derivatives" may cover it. Computed at read time for
+# internal use, withheld from the public page until MDIC confirms in writing
+# (decided 2026-10-05, #351) — the same gate shape as AFEX_PUBLISH_RAW.
+COMEXSTAT_PUBLISH_UNIT_VALUE = False
 
 # ---------------------------------------------------------------------------
 # Layer 9 — DCE (Dalian Commodity Exchange) futures via AKShare (no API key)
@@ -1682,6 +1746,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "us_processor_cash": 12,
     # Monthly publications — allow ~6 weeks.
     "gtr_ocean_freight": 42,
+    "comexstat": 42,
     # Monthly publications — allow ~6 weeks.
     "sagis_smd": 42,
     "wasde": 42,
@@ -1803,6 +1868,13 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # is that worst case plus one missed publication. The season file's URL
     # rotates monthly, so a frozen link is a live risk here too.
     "sagis_smd": 90,
+    # Comex Stat publishes month M on a set calendar date early in month M+1 —
+    # 2026: 4 Sep (Aug), 6 Oct (Sep), 6 Nov, 4 Dec — so the newest month_end
+    # is ~4 days old at release and ~37 the day before the next one. 75 is
+    # that worst case plus one missed release; the month not yet released
+    # is never fetched (fetchers/comexstat.py cuts at MDIC's own declared
+    # month), so the lag alone can never grade this layer stale.
+    "comexstat": 75,
     # Wednesday-dated assessment published the following day, so the newest
     # row is normally 1-8 days old. 21 tolerates exactly one missed release
     # and fails on two — and the cadence has never actually missed one:
@@ -1877,6 +1949,7 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     # river_ar is deliberately absent: one gauge, and 1/1 is noise.
     "river_us": RIVER_GAUGES_NWPS,
     "epa_rfs": EPA_RFS_KEYS,
+    "comexstat": dict.fromkeys(COMEXSTAT_PRODUCTS),
 }
 
 

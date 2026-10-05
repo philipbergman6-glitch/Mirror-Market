@@ -395,6 +395,12 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "four weeks behind the transfer week.",
     ),
     LayerLatency(
+        "comexstat", LatencyClass.FUNDAMENTALS, ObservationClock(), timedelta(days=4),
+        "MDIC releases a month's customs exports on a set calendar date early "
+        "in the following month (2026: 4 Sep, 6 Oct, 6 Nov, 4 Dec), dated by "
+        "month_end and carrying no time.",
+    ),
+    LayerLatency(
         "gtr_vessels", LatencyClass.FUNDAMENTALS, ObservationClock(), timedelta(days=4),
         "The GTR vessel lineup is weekly, published for the week just ended.",
     ),
