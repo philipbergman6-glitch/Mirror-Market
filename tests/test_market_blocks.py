@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -586,11 +586,18 @@ def test_every_weather_card_carries_the_role_that_puts_it_on_this_page(seeded, r
 
 def test_an_out_of_season_card_is_tagged_not_hidden(seeded, registry):
     """August in Mato Grosso: nothing in the ground. The reading still
-    renders — the tag prices it (M14 #207)."""
+    renders — the tag prices it (M14 #207).
+
+    Pinned to a July session, never TODAY: Mato Grosso is in season Oct–Mar,
+    so a wall-clock anchor turned this red on 2026-10-01 and took the daily
+    deploy down with it (#349).
+    """
+    july = date(TODAY.year - 1, 7, 15)
     seeded.conn.execute(
         "INSERT INTO weather (region, Date, temp_max, temp_min, precipitation) "
-        "VALUES (?,?,?,?,?)", ("Brazil Mato Grosso", _day(0), 30.0, 18.0, 5.0))
-    weather = _block(_build("brazil", seeded, registry), "weather")
+        "VALUES (?,?,?,?,?)", ("Brazil Mato Grosso", july.isoformat(), 30.0, 18.0, 5.0))
+    ctx = SiteContext(conn=seeded.conn, today=july)
+    weather = _block(_build("brazil", ctx, registry), "weather")
     card = next(r for r in weather.data["regions"] if r["region"] == "Brazil Mato Grosso")
     assert card["season_note"] == "out of season — planting ~Oct"
     assert card["temp_max"] == 30.0
