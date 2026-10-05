@@ -102,6 +102,11 @@ LAYER_MIN_KEYS = {
     # river always has a level. A floor of 1 would let the Memphis leg, which
     # is the one the basis trades off, go dark behind a green St. Louis.
     "river_us": 2,           # of 2 gauges
+    # Three keys from two EPA surfaces (a CSV and the Qlik app). Each answers
+    # a different question — how much was made, what it is worth, what is
+    # required — so losing any one leaves the block unable to say what it is
+    # for. Every key is required.
+    "epa_rfs": 3,            # of 3 keys
 }
 
 # Systemic-outage backstop: exit non-zero when more than this many active
@@ -112,7 +117,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 33 operational layers across 29
+# independently runnable sub-layer, hence 34 operational layers across 30
 # numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
@@ -147,14 +152,15 @@ PRODUCTION_LAYERS = (
     ("gtr_vessels", "26b", "USDA AMS (Grain Transport Report)", "Weekly", "Gulf and PNW grain vessel lineups"),
     ("river_us", "27", "NOAA NWPS (stage via USACE/USGS)", "Daily + forecast", "Mississippi at Memphis and St. Louis"),
     ("river_ar", "28", "Argentina INA (Prefectura reading)", "Daily", "Paraná at Rosario"),
-    ("us_processor_cash", "29", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
+    ("epa_rfs", "29", "US EPA (Renewable Fuel Standard)", "Monthly", "RIN generation, RIN prices and RVOs"),
+    ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
 # ---------------------------------------------------------------------------
 # Fast refresh — the price-only path (`python main.py --fast`)
 #
-# The daily build re-downloads all 31 layers, and the measured cost of that is
+# The daily build re-downloads every layer, and the measured cost of that is
 # dominated by one thing: DEFAULT_HISTORY_PERIOD is 15 years, and a 15-year
 # yfinance pull benchmarked at 24-32 s per ticker against 1-3 s for a short
 # window (2026-08-19, see LATENCY.md). Twenty tickers of history is most of the
@@ -950,6 +956,121 @@ EIA_SERIES = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 29 — EPA Renewable Fuel Standard (RIN generation, RIN prices, RVOs)
+#
+# Layer 13 measures how much biodiesel is made; this layer carries the policy
+# lever that makes it worth making. Three keys, one layer:
+#
+#   rin_generation — EMTS RINs generated per production month by D-code.
+#       A monthly CSV whose URL rotates (`/system/files/other-files/<YYYY-MM>/
+#       rindata_<mon><yyyy>.csv`), so it is resolved from the landing page
+#       every run (invariant 10). Every file carries the full history back to
+#       July 2010, so the layer self-heals and needs no data/history/ CSV.
+#   rin_prices     — weekly volume-weighted average price of separated RINs,
+#       USD per RIN. EPA publishes it only inside a Qlik Sense app; the fetcher
+#       asks that app's engine for the same measure its own chart draws.
+#   rvo            — the final-rule volume requirements below, cross-checked
+#       against the obligation EPA's app reports for the same year.
+#
+# Probed 2026-10-05 (#353): rindata_aug2026.csv sat in the 2026-09 folder;
+# the Qlik app was last reloaded 2026-09-21 with transfer weeks to 2026-08-24.
+# ---------------------------------------------------------------------------
+EPA_RFS_GENERATION_LANDING_URL = (
+    "https://www.epa.gov/fuels-registration-reporting-and-compliance-help/"
+    "spreadsheet-rin-generation-and-renewable-fuel"
+)
+EPA_RFS_QLIK_BASE = "https://edap.epa.gov/public"
+EPA_RFS_QLIK_APP_ID = "73b2b6a5-70c6-4820-b3fa-186ac094f10d"
+# EPA's own "RIN Price Trend" chart measure, read off the app on 2026-10-05.
+# Fetching this expression (rather than re-aggregating raw trades ourselves)
+# keeps the stored number EPA's number, outlier filters included.
+EPA_RFS_PRICE_MEASURE = (
+    'Sum({$<[Price_FUEL_CD]={"3","4","5","6"}>}Price_INTERMEDIATE_PRICE)'
+    '/Sum({$<[Price_FUEL_CD]={"3","4","5","6"}>}Price_TOTAL_RINS)'
+)
+EPA_RFS_ATTRIBUTION = "US EPA, Renewable Fuel Standard public data (EMTS)"
+
+# D-codes carried. D4 is the soy-oil lever (biomass-based diesel); D6 is the
+# conventional (corn ethanol) RIN it is priced against; D5 is advanced. D3 and
+# D7 (cellulosic) are stored by the generation file but not rendered.
+EPA_RFS_D_CODES = ("D3", "D4", "D5", "D6", "D7")
+
+# EPA filters each D-code's prices to a band before averaging (D4/D5/D6 to
+# $0.05-$3.00 since 2020, D3 to $3.50, D6 down to $0.01 before 2020), so a
+# value outside this envelope is a changed field or a unit change, not a
+# trade — it fails the fetch rather than being stored.
+EPA_RFS_PRICE_BOUNDS_USD_PER_RIN = (0.0, 3.5)
+
+# Per-key age budgets. The layer-wide recency check in main.py dates a layer
+# by its *newest* row, so a frozen price feed would hide behind a fresh
+# generation file; each key is therefore aged on its own in the fetcher and
+# dropped when stale, and the LAYER_MIN_KEYS floor turns that into a failure.
+#   generation: month M is stamped to its first day and published around the
+#     middle of M+1, so it is ~45 days old on arrival and ~80 the day before
+#     the next file. 100 leaves a slack fortnight.
+#   prices: refreshed monthly with a ~4-week lag (the 2026-09-21 reload ended
+#     on the week of 2026-08-24), so ~60 days old before the next reload.
+EPA_RFS_KEY_MAX_AGE_DAYS = {
+    "rin_generation": 100,
+    "rin_prices": 75,
+}
+
+# Final-rule volume requirements, in RINs. Only rules published as FINAL in
+# the Federal Register belong here — a proposal is never entered (#353).
+#
+# BBD is denominated in RINs only from 2026 (91 FR 16388: "we are specifying
+# the BBD volume requirement in RINs, rather than gallons ... in contrast to
+# establishing the 2025 BBD volume requirement at 3.35 billion physical
+# gallons"). An earlier year's BBD number is gallons and is not comparable
+# with D4 RIN generation, which is why 2025 and earlier are not entered.
+#
+# `total` = base requirement + the 70% reallocation of 2023-2025 small
+# refinery exemptions finalized in the same rule (EPA, "Final Renewable Fuel
+# Standards for 2026 and 2027"). EPA has said it will propose a further
+# reallocation of 2025 exempted volumes into 2026-2027; if that is finalized
+# the obligation EPA's app reports will move off `total`, the cross-check in
+# fetchers/epa_rfs.py fails the rvo key, and these rows need the new rule.
+EPA_RFS_RVO_RULE = {
+    "citation": "91 FR 16388",
+    "title": "RFS Program: Standards for 2026 and 2027 (Set 2)",
+    "status": "final",
+    "published": "2026-04-01",
+    "effective": "2026-06-15",
+}
+EPA_RFS_RVO_REFERENCE = {
+    # year: {category: (base RINs, SRE reallocation RINs, total RINs)}
+    2026: {
+        "Cellulosic biofuel": (1.36e9, 0.0, 1.36e9),
+        "Biomass-based diesel": (8.86e9, 0.21e9, 9.07e9),
+        "Advanced biofuel": (10.82e9, 0.28e9, 11.10e9),
+        "Total renewable fuel": (25.82e9, 0.99e9, 26.81e9),
+    },
+    2027: {
+        "Cellulosic biofuel": (1.43e9, 0.0, 1.43e9),
+        "Biomass-based diesel": (8.95e9, 0.25e9, 9.20e9),
+        "Advanced biofuel": (10.98e9, 0.34e9, 11.32e9),
+        "Total renewable fuel": (25.98e9, 1.04e9, 27.02e9),
+    },
+}
+# Qlik RVO_T2 column → category, in the order the engine returns them
+# (AB, BD, CB, RF — read off the app on 2026-10-05).
+EPA_RFS_QLIK_RVO_COLUMNS = {
+    "RVO_T2_AB": "Advanced biofuel",
+    "RVO_T2_BD": "Biomass-based diesel",
+    "RVO_T2_CB": "Cellulosic biofuel",
+    "RVO_T2_RF": "Total renewable fuel",
+}
+# EPA rounds its published volumes to 0.01 billion; anything further apart
+# than half of that is a different number, not a rounding difference.
+EPA_RFS_RVO_TOLERANCE_RINS = 0.005e9
+
+EPA_RFS_KEYS = {
+    "rin_generation": "EMTS RIN generation by D-code (monthly)",
+    "rin_prices": "Separated-RIN weekly VWA price (USD/RIN)",
+    "rvo": "Final-rule renewable volume obligations",
+}
+
+# ---------------------------------------------------------------------------
 # Layer 14 — USDA Crush/Processing + Export Inspections
 # Crush = domestic demand, Inspections = actual export shipments
 # ---------------------------------------------------------------------------
@@ -1117,7 +1238,7 @@ API_KEY_LAYERS: dict[str, str] = {
     "FAS_API_KEY": "Layer 10",
     "EIA_API_KEY": "Layer 13",
     "DATA_GOV_IN_API_KEY": "Layer 16 (degrades to the shared sample key)",
-    "MARS_API_KEY": "Layer 20b backfill, Layer 29",
+    "MARS_API_KEY": "Layer 20b backfill, Layer 30",
 }
 
 
@@ -1146,7 +1267,7 @@ MARS_GULF_BIDS_ARCHIVE_START = "2020-02-24"
 MARS_ARCHIVE_TIMEOUT = 600
 
 # ---------------------------------------------------------------------------
-# Layer 29 — US processor cash soybean oil and meal (AMS 3511 over MARS, #352)
+# Layer 30 — US processor cash soybean oil and meal (AMS 3511 over MARS, #352)
 # ---------------------------------------------------------------------------
 # "National Grain and Oilseed Processor Feedstuff Report": weekly processor
 # ask ranges per trade location, flat price and basis over a named CBOT month.
@@ -1569,6 +1690,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "cec": 42,
     "worldbank": 42,
     "eia": 42,
+    "epa_rfs": 42,
     "usda": 400,  # annual NASS crop data
 }
 
@@ -1721,6 +1843,9 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # GUID keeps serving a frozen file with HTTP 200. One number, one
     # meaning, two enforcement points.
     "worldbank": 100,
+    # The layer-wide guard is the loosest per-key budget; the per-key budgets
+    # in EPA_RFS_KEY_MAX_AGE_DAYS are enforced inside fetchers/epa_rfs.py.
+    "epa_rfs": max(EPA_RFS_KEY_MAX_AGE_DAYS.values()),
 }
 
 # Key coverage (#182): which config catalog each multi-key layer iterates.
@@ -1751,6 +1876,7 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "gtr_vessels": GTR_PORT_REGIONS,
     # river_ar is deliberately absent: one gauge, and 1/1 is noise.
     "river_us": RIVER_GAUGES_NWPS,
+    "epa_rfs": EPA_RFS_KEYS,
 }
 
 
@@ -2921,13 +3047,13 @@ PHYSICAL_CRUSH: dict[str, dict[str, Any]] = {
     "cbot": {
         "label": "US physical legs",
         "kind": "physical",
-        # Layer 29 (#352) brought US cash oil and meal — and still does not make
+        # Layer 30 (#352) brought US cash oil and meal — and still does not make
         # a physical crush. Its legs are *interior processor* asks (FOB a plant
         # in Illinois, Iowa, ...), weekly; the only US cash bean here is a CIF
         # NOLA *export* bid (Layer 20), daily. A margin across them would buy
         # beans at the Gulf and sell products at Decatur on different days.
         "absent_reason": (
-            "the cash oil and meal legs exist (AMS 3511, Layer 29) but the bean leg "
+            "the cash oil and meal legs exist (AMS 3511, Layer 30) but the bean leg "
             "does not: they are weekly asks FOB interior processors, and the only US "
             "cash bean ingested is a CIF NOLA export bid (AMS 3147, Layer 20) — a "
             "different location on a different cadence. No interior processor "

@@ -1,4 +1,4 @@
-"""The US processor cash leg, priced beside the board crush (Layer 29, #352).
+"""The US processor cash leg, priced beside the board crush (Layer 30, #352).
 
 What this answers: what does crude soybean oil and 46.5–48% meal cost off a US
 processor this week, and how far over the board is that — the processor's cash
@@ -188,7 +188,7 @@ def cash_leg_panel(conn, market_slug: str, *, today: date, provider=None) -> dic
     rows = _newest_week(conn)
     if not rows:
         return withheld(
-            "no AMS 3511 rows are stored — Layer 29 needs MARS_API_KEY and records as "
+            "no AMS 3511 rows are stored — Layer 30 needs MARS_API_KEY and records as "
             "skipped without it"
         )
 

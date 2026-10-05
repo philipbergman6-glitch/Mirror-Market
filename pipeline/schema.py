@@ -313,7 +313,7 @@ CREATE TABLE IF NOT EXISTS gulf_bids (
 );
 """
 
-# Layer 29 (#352). One row per (week, location, freight, transport mode) —
+# Layer 30 (#352). One row per (week, location, freight, transport mode) —
 # unique across the whole AMS 3511 archive, and each is its own series: FOB
 # and delivered, truck and rail, are never pooled. Native units, named per row
 # (`price_unit`, `basis_unit`), because the oil basis is in points under a
@@ -353,6 +353,52 @@ CREATE TABLE IF NOT EXISTS eia_energy (
     value       REAL,
     unit        TEXT,
     PRIMARY KEY (series_name, Date)
+);
+"""
+
+# Layer 29 — EPA RFS. Three tables because the three keys answer three
+# questions on three grains (production month, transfer week, compliance
+# year). A RIN price is USD per RIN, never USD/MT — the unit column says so on
+# every row rather than leaving it to a reader's assumption.
+_CREATE_RIN_GENERATION = """
+CREATE TABLE IF NOT EXISTS rin_generation (
+    d_code           TEXT NOT NULL,
+    Date             TEXT NOT NULL,
+    rins             REAL,
+    batch_volume_gal REAL,
+    preliminary      INTEGER NOT NULL,
+    attribution      TEXT,
+    PRIMARY KEY (d_code, Date)
+);
+"""
+
+_CREATE_RIN_PRICES = """
+CREATE TABLE IF NOT EXISTS rin_prices (
+    d_code            TEXT NOT NULL,
+    Date              TEXT NOT NULL,
+    price_usd_per_rin REAL,
+    rins_in_average   REAL,
+    unit              TEXT NOT NULL,
+    attribution       TEXT,
+    PRIMARY KEY (d_code, Date)
+);
+"""
+
+_CREATE_RFS_RVO = """
+CREATE TABLE IF NOT EXISTS rfs_rvo (
+    compliance_year       INTEGER NOT NULL,
+    category              TEXT NOT NULL,
+    base_rins             REAL,
+    sre_reallocation_rins REAL,
+    total_rins            REAL,
+    epa_reported_rins     REAL,
+    unit                  TEXT NOT NULL,
+    rule_status           TEXT NOT NULL,
+    rule_citation         TEXT NOT NULL,
+    rule_published        TEXT,
+    rule_effective        TEXT,
+    attribution           TEXT,
+    PRIMARY KEY (compliance_year, category)
 );
 """
 
@@ -714,6 +760,9 @@ ALL_SCHEMAS = (
     _CREATE_GULF_BIDS,
     _CREATE_US_PROCESSOR_CASH,
     _CREATE_EIA_ENERGY,
+    _CREATE_RIN_GENERATION,
+    _CREATE_RIN_PRICES,
+    _CREATE_RFS_RVO,
     _CREATE_BRAZIL_ESTIMATES,
     _CREATE_DATA_FRESHNESS,
     _CREATE_COMMODITY_FRESHNESS,

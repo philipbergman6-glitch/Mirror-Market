@@ -103,7 +103,7 @@ def test_configured_layer_returning_nothing_is_an_outage(key, monkeypatch, fresh
     """F3c: the key is set and the upstream answered with nothing at all.
 
     Export sales and EIA have a LAYER_MIN_KEYS floor of 2+, so #175's
-    derivation grades all-empty as a failure; Layer 29 is one frame with no
+    derivation grades all-empty as a failure; Layer 30 is one frame with no
     floor and opts in with ``empty_fails=True`` instead. Either way — provided
     we get there at all, which is exactly what a result-shaped skip could
     prevent.

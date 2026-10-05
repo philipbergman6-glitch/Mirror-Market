@@ -205,7 +205,7 @@ QUOTE_KIND_PRICE_TYPE: dict[str, PriceType] = {
     "physical": PriceType.ASSESSMENT,
     "administered": PriceType.ADMINISTERED,
     "weekly_assessment": PriceType.ASSESSMENT,
-    # AMS 3511 (Layer 29, #352): the range of asks a market reporter collected
+    # AMS 3511 (Layer 30, #352): the range of asks a market reporter collected
     # from processors over a week. An offer, not a done trade, and published by
     # AMS rather than by anyone selling — so an assessment, INDICATIVE at best,
     # with the label saying which side of the market it reports. Not a new

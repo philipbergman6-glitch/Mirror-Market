@@ -67,7 +67,7 @@ CONVERSION_FACTORS = {
 
 
 # ---------------------------------------------------------------------------
-# Unit-named conversions (Layer 29, #352)
+# Unit-named conversions (Layer 30, #352)
 #
 # The factors above are keyed by *commodity*, which is right for an exchange
 # whose unit is fixed by the contract. A physical report is not a contract: AMS

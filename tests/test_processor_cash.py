@@ -1,4 +1,4 @@
-"""Layer 29 — US processor cash soybean oil and meal (AMS 3511 over MARS, #352).
+"""Layer 30 — US processor cash soybean oil and meal (AMS 3511 over MARS, #352).
 
 The decisive fixture is the week of 2026-09-28: its prices less its basis
 reproduce the CBOT closes of Thu 2026-10-01 to the cent. That one identity is
@@ -248,7 +248,7 @@ def test_unset_key_is_unconfigured_not_broken(monkeypatch: pytest.MonkeyPatch) -
 def test_layer_is_registered_with_a_weekly_budget() -> None:
     assert "us_processor_cash" in config.PRODUCTION_LAYER_KEYS
     assert config.LAYER_MAX_DATA_AGE_DAYS["us_processor_cash"] == 21
-    assert "Layer 29" in config.API_KEY_LAYERS["MARS_API_KEY"]
+    assert "Layer 30" in config.API_KEY_LAYERS["MARS_API_KEY"]
 
 
 def test_the_cbot_physical_crush_still_withholds() -> None:

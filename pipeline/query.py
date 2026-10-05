@@ -271,7 +271,7 @@ def read_gulf_bids(commodity: str | None = None) -> pd.DataFrame:
 
 
 def read_processor_cash(commodity: str | None = None) -> pd.DataFrame:
-    """Read AMS 3511 weekly US processor cash oil and meal (Layer 29).
+    """Read AMS 3511 weekly US processor cash oil and meal (Layer 30).
 
     Native units, named on each row: oil price in cents/lb and its basis in
     *points*; meal price and basis in dollars per short ton. Convert through
@@ -286,6 +286,21 @@ def read_processor_cash(commodity: str | None = None) -> pd.DataFrame:
 def read_eia_data(series_name: str | None = None) -> pd.DataFrame:
     """Read EIA energy data from SQLite."""
     return _read_table("eia_energy", "series_name", series_name)
+
+
+def read_rin_generation(d_code: str | None = None) -> pd.DataFrame:
+    """Read EPA monthly RIN generation (Layer 29) from SQLite."""
+    return _read_table("rin_generation", "d_code", d_code)
+
+
+def read_rin_prices(d_code: str | None = None) -> pd.DataFrame:
+    """Read EPA weekly separated-RIN prices, USD/RIN (Layer 29)."""
+    return _read_table("rin_prices", "d_code", d_code)
+
+
+def read_rfs_rvo() -> pd.DataFrame:
+    """Read the final-rule RFS volume requirements (Layer 29)."""
+    return _read_table("rfs_rvo", date_cols=())
 
 
 def read_brazil_estimates(commodity: str | None = None) -> pd.DataFrame:

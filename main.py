@@ -51,6 +51,7 @@ from fetchers.cot import fetch_cot_recent
 from fetchers.ec_oilseeds import fetch_ec_oilseed_prices
 from fetchers.eia import fetch_all_eia
 from fetchers.eia import is_configured as eia_configured
+from fetchers.epa_rfs import fetch_epa_rfs
 from fetchers.export_sales import fetch_all_export_sales
 from fetchers.export_sales import is_configured as export_sales_configured
 from fetchers.forward_curve import fetch_all_forward_curves
@@ -86,6 +87,7 @@ from pipeline.clean import (
     clean_dce_futures,
     clean_ec_oilseeds,
     clean_eia,
+    clean_epa_rfs,
     clean_export_sales,
     clean_forward_curve,
     clean_fred_series,
@@ -119,6 +121,7 @@ from pipeline.store import (
     save_dce_futures_data,
     save_ec_oilseed_prices,
     save_eia_data,
+    save_epa_rfs,
     save_export_sales,
     save_forward_curve,
     save_fred_data,
@@ -760,7 +763,7 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             clean=lambda n, d: clean_port_vessel_activity(d),
         ),
         DictLayer(
-            "us_processor_cash", "Layer 29", "AMS 3511 US processor cash oil and meal",
+            "us_processor_cash", "Layer 30", "AMS 3511 US processor cash oil and meal",
             fetch=lambda: fetch_processor_cash(),
             save=lambda n, d: save_processor_cash(n, d),
             # Key-gated like Layers 10 and 13: no MARS_API_KEY is "never ran",
@@ -819,6 +822,12 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             clean=lambda n, d: clean_eia(d),
             run_if=eia_configured,
             skip_msg="EIA skipped (EIA_API_KEY not set)",
+        ),
+        DictLayer(
+            "epa_rfs", "Layer 29", "EPA RFS (RIN generation, RIN prices, RVOs)",
+            fetch=lambda: fetch_epa_rfs(),
+            save=lambda n, d: save_epa_rfs(n, d),
+            clean=lambda n, d: clean_epa_rfs(n, d),
         ),
     ]
 

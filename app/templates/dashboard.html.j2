@@ -254,6 +254,13 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
     {{ demand.biofuel_html | safe }}
     {% endif %}
     {% endif %}
+    <hr class="divider">
+    <div class="subhdr">US Biofuel Policy (EPA RFS)</div>
+    {% if rfs.state == 'ok' %}
+    {% with s = rfs.data %}{% include 'sections/rfs.html.j2' %}{% endwith %}
+    {% else %}
+    <div class="alert alert-warn">{{ rfs.reason }}</div>
+    {% endif %}
   </div>
 
   <div class="tab-panel" data-tabpanel="sd-2">

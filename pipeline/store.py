@@ -929,6 +929,48 @@ def save_eia_data(series_name: str, df: pd.DataFrame):
           ["series_name", "Date"], f"eia/{series_name}")
 
 
+def save_epa_rfs(key: str, df: pd.DataFrame):
+    """Write one Layer 29 key → rin_generation | rin_prices | rfs_rvo.
+
+    None of these tables is in HISTORY_TABLES: the generation file and the
+    Qlik app both re-serve their whole history on every fetch, and the RVOs
+    come from config, so a fresh CI database rebuilds all three.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    if key == "rin_generation":
+        df["Date"] = _date(df["Date"])
+        _save(
+            "rin_generation",
+            df[["d_code", "Date", "rins", "batch_volume_gal", "preliminary", "attribution"]],
+            ["d_code", "Date"],
+            "epa_rfs/rin_generation",
+        )
+    elif key == "rin_prices":
+        df["Date"] = _date(df["Date"])
+        df["unit"] = "USD/RIN"
+        _save(
+            "rin_prices",
+            df[["d_code", "Date", "price_usd_per_rin", "rins_in_average", "unit", "attribution"]],
+            ["d_code", "Date"],
+            "epa_rfs/rin_prices",
+        )
+    elif key == "rvo":
+        _save(
+            "rfs_rvo",
+            df[[
+                "compliance_year", "category", "base_rins", "sre_reallocation_rins",
+                "total_rins", "epa_reported_rins", "unit", "rule_status",
+                "rule_citation", "rule_published", "rule_effective", "attribution",
+            ]],
+            ["compliance_year", "category"],
+            "epa_rfs/rvo",
+        )
+    else:
+        raise ValueError(f"unknown epa_rfs key {key!r}")
+
+
 def save_brazil_estimates(df: pd.DataFrame):
     """Write CONAB estimates → 'brazil_estimates'."""
     if df.empty:

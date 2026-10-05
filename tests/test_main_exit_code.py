@@ -77,6 +77,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_all_forward_curves": empty_dict,
         "fetch_wasde_estimates": empty_dict,
         "fetch_all_eia": empty_dict,
+        "fetch_epa_rfs": empty_dict,
         "fetch_crush_data": empty_df,
         "fetch_export_inspections": FetchResult.empty(),
         "fetch_conab_estimates": empty_df,
