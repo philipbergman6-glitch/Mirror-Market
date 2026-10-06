@@ -352,3 +352,27 @@ def test_the_private_table_never_reaches_the_public_history_export() -> None:
 
     assert config.SEA_PUBLISH is False
     assert "sea_india_rates" not in HISTORY_TABLES
+
+
+def test_paging_past_the_last_listing_page_ends_the_listing(monkeypatch) -> None:
+    """WordPress answers a page past the end with HTTP 400. A deep backfill
+    whose window outlasts a full page must stop there, not fail."""
+    page_one = [_item("DR261001", "2026-10-01")] + [
+        _item(f"Photo {i}", "2026-09-30", name=f"photo{i}", mime="image/png") for i in range(99)
+    ]
+    sent: list[int] = []
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        if url == _MEDIA:
+            sent.append(params["page"])
+            return _Response(payload=page_one) if params["page"] == 1 else _Response(400)
+        return _Response(content=_sheet("1st Oct 2026").encode())
+
+    monkeypatch.setattr("fetchers.sea.requests.get", fake_get)
+    monkeypatch.setattr("fetchers.sea.retry_sleep", lambda attempt: None)
+    monkeypatch.setattr("fetchers.sea._pdf_text", lambda content: content.decode())
+
+    result = fetch_sea_rates(today=date(2026, 10, 6), lookback_days=400)
+
+    assert result.status == "ok"
+    assert sent == [1, 2]

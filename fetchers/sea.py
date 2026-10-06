@@ -207,14 +207,23 @@ def _ist_today() -> date:
     return datetime.now(_IST).date()
 
 
-def _get(url: str, params: dict | None = None) -> requests.Response:
-    """GET with retries. Raises requests.RequestException once they run out."""
+def _get(
+    url: str, params: dict | None = None, *, end_status: int | None = None,
+) -> requests.Response | None:
+    """GET with retries. Raises requests.RequestException once they run out.
+
+    ``end_status`` is a status that answers the question rather than failing
+    it — WordPress's HTTP 400 for a listing page past the last — and returns
+    None at once instead of being retried.
+    """
     last_error = "no attempts made"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             resp = requests.get(url, params=params, headers=_HEADERS, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200:
                 return resp
+            if end_status is not None and resp.status_code == end_status:
+                return None
             last_error = f"HTTP {resp.status_code}"
         except requests.RequestException as exc:
             last_error = str(exc)
@@ -250,7 +259,9 @@ def _list_uploads(since: date) -> list[_Upload]:
             "search": SEA_MEDIA_SEARCH, "per_page": _PER_PAGE, "page": page,
             "orderby": "date", "order": "desc",
             "_fields": "date,source_url,title,mime_type",
-        })
+        }, end_status=400 if page > 1 else None)
+        if resp is None:
+            break   # past the last page of a listing that filled every page
         try:
             payload = resp.json()
         except ValueError as exc:
@@ -283,7 +294,10 @@ def _list_uploads(since: date) -> list[_Upload]:
 
 def _read(upload: _Upload) -> RateSheet:
     """Download and parse one sheet; check its printed date against its upload."""
-    sheet = parse_rate_sheet(_pdf_text(_get(upload.url).content))
+    resp = _get(upload.url)
+    if resp is None:  # unreachable without an end_status; never let it pass silently
+        raise requests.RequestException(f"{upload.url}: no response")
+    sheet = parse_rate_sheet(_pdf_text(resp.content))
     lag = (upload.uploaded - sheet.as_on).days
     if not 0 <= lag <= SEA_MAX_UPLOAD_LAG_DAYS:
         raise ScraperShapeError(
