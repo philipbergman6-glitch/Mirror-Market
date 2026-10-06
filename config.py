@@ -121,7 +121,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 35 operational layers across 31
+# independently runnable sub-layer, hence 36 operational layers across 32
 # numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
@@ -159,6 +159,7 @@ PRODUCTION_LAYERS = (
     ("epa_rfs", "29", "US EPA (Renewable Fuel Standard)", "Monthly", "RIN generation, RIN prices and RVOs"),
     ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
     ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
+    ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India meal FAS and oil import legs (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
@@ -870,6 +871,121 @@ CUSTOMS_EXPORTS: dict[str, dict[str, Any]] = {
         "trend_months": 13,
     },
 }
+
+# ---------------------------------------------------------------------------
+# Layer 32 — SEA India weekly comparative rates (no API key, #72)
+#
+# The Solvent Extractors' Association of India publishes a weekly PDF,
+# "Comparative rate as registered as on <date>", carrying the India legs no
+# other source in the stack has: soymeal FAS Kandla in USD (the export price
+# India's meal competes on) and crude degummed soy oil CIF Mumbai in USD (the
+# import price domestic oil competes against), beside the domestic INR legs.
+#
+# Read the PDF, never the HTML post. The post "Weekly Comparative Rate as of
+# <date>" is rewritten in place under a 2020 slug, and on 2026-10-06 its table
+# carried the PDF's *month-ago* figures (soybean Indore ₹59,000 vs the PDF's
+# ₹55,000, degum CIF $1,310 vs $1,300) under the current title. Each PDF stays
+# in the WordPress media library, so the listing is the archive (2018 →).
+#
+# Identity is the date printed inside the PDF, never the file name: names
+# flipped from DRddmmyy (DR020525 = 2 May 2025) to DRyymmdd (DR261001), and
+# DR250102 holds 2 Jan 2026. SEA re-uploads: 27 Mar 2026 exists three times,
+# and of the two 26 Jun 2026 files one has a blank current column with every
+# change printed as -100.00 — the "-1" re-upload is the correction. Validated
+# 2026-10-06 over 64 files (57 dates, 2025-09 → 2026-10): every date parsed,
+# every printed % change reproduced from its own columns, every duplicate
+# identical, each sheet's week-ago column equal to the previous sheet's value
+# on 55/56 weeks (the miss a sheet comparing against a different date).
+#
+# Licence: "Copyright © 2018 Solvent Extractors' Association of India. All
+# Rights Reserved." No reuse grant, so nothing here is published until SEA
+# agrees in writing: the table is NOT in pipeline/history.py's export (the
+# repo is public — a committed CSV is a publication) and no site page reads
+# it. Each run re-reads the trailing window instead, which loses nothing:
+# SEA keeps every past sheet online.
+# ---------------------------------------------------------------------------
+SEA_MEDIA_URL = "https://seaofindia.com/wp-json/wp/v2/media"
+# WordPress full-text search over media titles; the title pattern below is
+# what actually decides membership.
+SEA_MEDIA_SEARCH = "DR"
+SEA_TITLE_PATTERN = r"DR\d{6}(?:-\d+)?"
+
+# Days of sheets re-read each run (13 weekly sheets). A local run can pass a
+# longer window to fetch_sea_rates() to backfill from the archive.
+SEA_LOOKBACK_DAYS = 91
+
+# A sheet is uploaded on or within days after its "as on" date (0-3 days
+# observed; Friday sheets often land the next Monday). A file further from
+# its upload than this is a different document filed under a DR title.
+SEA_MAX_UPLOAD_LAG_DAYS = 7
+
+# Series key → where it sits on the sheet. ``section`` is a regex over the
+# section heading, which also states the unit — so a unit change moves the
+# heading and the parse fails instead of storing rupees as dollars.
+# ``label`` is matched ignoring whitespace, exactly as printed (SEA's own
+# spelling; the FAS and FOR meal lines differ only in punctuation).
+SEA_SERIES: dict[str, dict[str, str]] = {
+    "Soybean Indore": {
+        "section": r"I\.\s*OILSEEDS\s*\(Rs\./M\.T\)",
+        "label": "Soyabean seed (Indore)",
+        "unit": "INR/MT",
+    },
+    "Soybean Meal Ex-Indore": {
+        "section": r"\(A\)\s*LOCAL EX-MILL\s*\(Rs\./MT\)",
+        "label": "Soya Ext.( Ex-Indore) 48/2.5",
+        "unit": "INR/MT",
+    },
+    "Soybean Meal FAS Kandla": {
+        "section": r"\(B\)\s*EXPORT\s*\(FAS\)\s*\(US\$\s*/\s*MT\)",
+        "label": "Soyabean Ext(Bulk)Yellow (Ex-Kandla)48/2.5",
+        "unit": "USD/MT",
+    },
+    "Soybean Meal FOR Kandla": {
+        "section": r"\(C\)\s*EXPORT\s*\(FOR\)\s*Ports\s*\(Rs\./MT\)",
+        "label": "Soyabean Ext.(Bulk)Yellow(Ex-Kandla) 48/2.5",
+        "unit": "INR/MT",
+    },
+    "Soybean Oil CIF Mumbai": {
+        "section": r"V\.\s*INTERNATIONAL OILS\s*\(US\$/M\.T\)",
+        "label": "Soya Degum Oil(Crude) CIF Mumbai",
+        "unit": "USD/MT",
+    },
+    "Soybean Oil Ex-Mumbai": {
+        "section": r"\(b\)\s*Imported Oils\s*\(Rs\./M\.T\.\)",
+        "label": "Crude Degummed Soybean Oil (Ex-Mumbai)",
+        "unit": "INR/MT",
+    },
+    "Soybean Oil SE Indore": {
+        "section": r"VII\.\s*SOLVENT EXTRACTED OILS\s*\(Rs\./MT\.\)",
+        "label": "SE Soyabean Oil (Indore)",
+        "unit": "INR/MT",
+    },
+    "Soybean Oil Refined": {
+        "section": r"VIII\.\s*REFINED OIL\s*\(Excl\.ST\)\s*\(Rs\./MT\)",
+        "label": "Refined Soyabean Oil",
+        "unit": "INR/MT",
+    },
+}
+
+SEA_ATTRIBUTION = (
+    "Source: The Solvent Extractors' Association of India (SEA), weekly comparative rates"
+)
+
+# Publish gate. False until SEA grants reproduction in writing (#72). While
+# False the table stays out of the public history export and off every page;
+# tests/test_fetcher_sea.py pins the export half.
+SEA_PUBLISH = False
+
+# India's effective import duty on crude soybean oil: (in force from, rate,
+# source). Basic customs duty + 5% AIDC + a 10% Social Welfare Surcharge on
+# the two. Before the first entry the duty is not modelled and parity is
+# withheld rather than struck at a guessed rate. India assesses duty on
+# CBIC's fortnightly *tariff value*, not the invoice; applying the rate to
+# SEA's CIF is the conventional trade approximation and is labelled as one.
+INDIA_CRUDE_SOY_OIL_DUTY: tuple[tuple[_date, float, str], ...] = (
+    (_date(2025, 5, 31), 0.165, "BCD 20% → 10% from 31 May 2025 (+ AIDC 5%, SWS 10%)"),
+    (_date(2026, 9, 24), 0.11, "Notification 31/2026-Customs: BCD 10% → 5% from 24 Sep 2026"),
+)
 
 # ---------------------------------------------------------------------------
 # Layer 9 — DCE (Dalian Commodity Exchange) futures via AKShare (no API key)
@@ -1793,6 +1909,7 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "ec_oilseeds": 12,
     "gtr_vessels": 12,
     "us_processor_cash": 12,
+    "sea_india": 12,
     # Monthly publications — allow ~6 weeks.
     "gtr_ocean_freight": 42,
     "comexstat": 42,
@@ -1953,6 +2070,11 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # the day before. Anything tighter fails the layer on an AMS backlog that
     # resolves itself; anything looser lets a dead key-gated feed sit green.
     "us_processor_cash": 21,
+    # SEA's weekly sheet is dated on its "as on" day and uploaded 0-3 days
+    # later, so the newest row is 0-10 days old on a normal week. 17 tolerates
+    # one missed sheet and fails on two (the 57 sheets from 2025-09 to 2026-10
+    # never skipped a week; the widest gap was 8 days).
+    "sea_india": 17,
     # GTR ocean freight is monthly and the month is stamped to its first day,
     # so the newest row is ~30 days old the moment it publishes and ~60 the
     # day before the next one. 75 is that worst case plus a little slack, and

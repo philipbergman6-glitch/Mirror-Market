@@ -165,6 +165,15 @@ def read_brazil_exports(product: str | None = None) -> pd.DataFrame:
     return _read_table("brazil_exports", "product", product, date_cols=("month_end",))
 
 
+def read_sea_india_rates(series: str | None = None) -> pd.DataFrame:
+    """Read SEA weekly comparative rates (Layer 32) from SQLite.
+
+    ``value`` is in the row's own ``unit`` (USD/MT or INR/MT, as the sheet's
+    section heading states). Private while config.SEA_PUBLISH is False.
+    """
+    return _read_table("sea_india_rates", "series", series, date_cols=("Date",))
+
+
 def read_ocean_freight_rates(route: str | None = None) -> pd.DataFrame:
     """Read GTR monthly bulk grain ocean freight rates from SQLite.
 

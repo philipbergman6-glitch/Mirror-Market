@@ -135,7 +135,7 @@ Two of these deserve their reasoning stated here:
 ## 4. The fast refresh
 
 `python main.py --fast` — `config.FAST_REFRESH_LAYERS` (`prices`, `currencies`,
-`forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) instead of all 35
+`forward_curve`) over `FAST_REFRESH_HISTORY_PERIOD` (`1mo`) instead of all 36
 layers over `15y`.
 
 It is the **same code** as the daily build with two arguments different, not a
