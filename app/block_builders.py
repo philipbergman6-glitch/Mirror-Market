@@ -34,7 +34,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
+import pandas as pd
+
 import config
+from analysis import weather_alerts
 from app.blocks import (
     BLOCK_IDS,
     GENERATION_ERROR,
@@ -436,8 +439,6 @@ def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
     if len(rows) < 60:
         return []
     try:
-        import pandas as pd
-
         from analysis.signals import (
             detect_ma_crossovers,
             detect_macd_crossover,
@@ -1649,37 +1650,49 @@ def currency_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dic
 # 06 Weather
 # ---------------------------------------------------------------------------
 def weather_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
-    regions = []
+    """This market's pins, graded by the shared rule set (#355).
+
+    The card is the latest *observed* day and the alerts are the briefing's
+    six rules on the same rows, so the page and the briefing cannot disagree
+    about a pin. A rule the stored history cannot answer is withheld with its
+    reason rather than read as a clear day.
+    """
+    regions: list[dict[str, Any]] = []
+    alerts: list[dict[str, Any]] = []
+    withheld: list[weather_alerts.Withheld] = []
     for region in market.weather_regions:
-        rows = _weather_rows(ctx, region)
-        if not rows:
+        assessed = weather_alerts.assess_region(region, _weather_rows(ctx, region))
+        if assessed is None:
             continue
-        when, temp_max, temp_min, precip = rows[-1]
-        recent = [row[3] for row in rows[-7:] if row[3] is not None]
+        precip_7d = assessed.observed["precipitation"].tail(7).dropna()
+        region_alerts = [alert.as_dict() for alert in assessed.alerts]
         regions.append({
             "region": region,
             # Why this pin is on this page (M14 #207) — "import origin",
             # "rapeseed, not soy". Without it Europe's pins read as soy.
             "role": market.weather_roles[region],
-            "as_of": when.isoformat(),
-            "age_days": _age_days(ctx.today, when),
-            "temp_max": temp_max,
-            "temp_min": temp_min,
-            "precip_mm": precip,
-            "precip_7d_mm": sum(recent) if recent else None,
-            "alert": weather_alert(temp_max, precip),
+            "as_of": assessed.as_of.isoformat(),
+            "age_days": _age_days(ctx.today, assessed.as_of),
+            "temp_max": assessed.temp_max,
+            "temp_min": assessed.temp_min,
+            "precip_mm": assessed.precip,
+            "precip_7d_mm": float(precip_7d.sum()) if not precip_7d.empty else None,
+            "alerts": region_alerts,
             # None when the crop is in the ground. The card renders either way.
             "season_note": out_of_season_note(region, ctx.today),
         })
+        alerts.extend(region_alerts)
+        withheld.extend(assessed.withheld)
     rivers = _river_rows(market, ctx)
     if not regions and not any(r["state"] == "ok" for r in rivers):
         return STATE_EMPTY, (
-            "the weather layer holds no rows for "
+            "the weather layer holds no observed rows for "
             + ", ".join(market.weather_regions)
         ), {}
     return STATE_OK, "", {
         "regions": regions,
-        "alerts": [r for r in regions if r["alert"]],
+        "alerts": alerts,
+        "withheld": weather_alerts.group_withheld(withheld),
         "rivers": rivers,
         "river_alerts": [r for r in rivers if r.get("low_water_breach")],
     }
@@ -1800,26 +1813,24 @@ def _river_readings(ctx: SiteContext, gauge: str):
     return ctx.cached(("river_levels", gauge), build)
 
 
-def _weather_rows(ctx: SiteContext, region: str):
+def _weather_rows(ctx: SiteContext, region: str) -> pd.DataFrame:
+    """One region's weather rows, forecast included (the assessor drops it),
+    reaching back as far as the slowest rule needs."""
     def build():
+        empty = pd.DataFrame(columns=["Date", "temp_max", "temp_min", "precipitation", "is_forecast"])
         if ctx.conn is None:
-            return []
-        cutoff = (ctx.today - _days(120)).isoformat()
+            return empty
+        cutoff = (ctx.today - _days(weather_alerts.LOOKBACK_DAYS)).isoformat()
         try:
             rows = ctx.conn.execute(
-                "SELECT Date, temp_max, temp_min, precipitation FROM weather "
+                "SELECT Date, temp_max, temp_min, precipitation, is_forecast FROM weather "
                 "WHERE region = ? AND Date >= ? ORDER BY Date",
                 (region, cutoff),
             ).fetchall()
         except Exception as exc:  # noqa: BLE001
             log.debug("block read: weather unavailable (%s)", exc)
-            return []
-        out = []
-        for raw_date, tmax, tmin, precip in rows:
-            parsed = _parse_date(raw_date)
-            if parsed is not None:
-                out.append((parsed, tmax, tmin, precip))
-        return out
+            return empty
+        return pd.DataFrame(rows, columns=list(empty.columns))
     return ctx.cached(("weather", region), build)
 
 
@@ -1844,17 +1855,6 @@ def out_of_season_note(region: str, today: date) -> str | None:
     if not months or today.month in months:
         return None
     return f"out of season — planting ~{_MONTH_NAMES[months[0] - 1]}"
-
-
-def weather_alert(temp_max, precip) -> str | None:
-    """Same thresholds and same precedence as the briefing's weather section."""
-    if temp_max is not None and temp_max > config.WEATHER_EXTREME_HEAT_C:
-        return "Extreme heat"
-    if precip is not None and precip > config.WEATHER_HEAVY_RAIN_MM:
-        return "Heavy rain"
-    if precip is not None and precip < config.WEATHER_DRY_THRESHOLD_MM:
-        return "Dry"
-    return None
 
 
 # ---------------------------------------------------------------------------

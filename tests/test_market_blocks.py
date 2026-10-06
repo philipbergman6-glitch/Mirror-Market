@@ -572,8 +572,9 @@ def test_news_is_never_ok(seeded, registry):
 def test_weather_alerts_use_the_configured_thresholds(seeded, registry):
     weather = _block(_build("cbot", seeded, registry), "weather")
     assert weather.state == "ok"
-    # 41C is over WEATHER_EXTREME_HEAT_C, and heat outranks the dry reading.
-    assert weather.data["alerts"][0]["alert"] == "Extreme heat"
+    # 41C is over WEATHER_EXTREME_HEAT_C; the dry reading is its own alert,
+    # as it is in the briefing (#355) — heat no longer swallows it.
+    assert {a["alert"] for a in weather.data["alerts"]} >= {"Extreme heat", "Dry conditions"}
 
 
 def test_every_weather_card_carries_the_role_that_puts_it_on_this_page(seeded, registry):
@@ -711,7 +712,7 @@ _SAMPLE_SECTION_INPUT = {
                 "psd": {"Production": {"value": 2000.0, "unit": "1000 MT", "yoy_pct": 4.0}},
                 "psd_year": 2026,
                 "currency": {"pair": "ZAR/USD", "close": 0.055, "weekly_chg": -0.4},
-                "weather": [{"region": "South Africa Free State", "alert": None}],
+                "weather": [{"region": "South Africa Free State", "alerts": []}],
                 "south_africa_domestic": {
                     "soybean_safex_zar": 8000.0, "soybean_safex_usd": 440.0,
                     "safex_cbot_basis_usd": 54.0, "soybean_safex_date": "2026-08-11",
@@ -908,7 +909,7 @@ def test_the_headline_carries_a_competing_oil_weather_strip(stub_weather):
         "Indonesia Riau (Sumatra)", "Malaysia Sabah (Borneo)",
     ]
     # 41C is over WEATHER_EXTREME_HEAT_C.
-    assert palm["regions"][0]["alert"] == "Extreme heat"
+    assert [a["alert"] for a in palm["regions"][0]["alerts"]] == ["Extreme heat"]
     assert palm["regions"][0]["as_of"] == "2026-08-11"
 
 

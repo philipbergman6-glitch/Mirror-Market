@@ -8,11 +8,15 @@ indicators applied) produced by the prices section.
 import pandas as pd
 
 from analysis.forward_curve import analyze_curve
+from analysis.weather_alerts import (
+    RULE_HEAT,
+    RULE_HEAVY_RAIN,
+    RULE_POD_FILL_HEAT,
+    assess_region,
+)
 from config import (
     RSI_OVERBOUGHT,
     RSI_OVERSOLD,
-    WEATHER_EXTREME_HEAT_C,
-    WEATHER_HEAVY_RAIN_MM,
 )
 from pipeline.query import (
     read_brazil_estimates,
@@ -26,6 +30,9 @@ from pipeline.query import (
     read_weather,
 )
 from pipeline.units import to_metric_tons
+
+# Weather rules that can put a premium on the crop this week.
+_PREMIUM_RULES = frozenset({RULE_HEAT, RULE_POD_FILL_HEAT, RULE_HEAVY_RAIN})
 
 
 def format(  # noqa: A001
@@ -76,19 +83,15 @@ def format(  # noqa: A001
 
     weather_data = read_weather()
     if not weather_data.empty:
+        # The shared rule set (#355), narrowed to the rules that put a
+        # premium on a crop — heat and a downpour, as this line always read.
         active_alerts = []
-        for region in weather_data["region"].unique():
-            subset = weather_data[weather_data["region"] == region].sort_values("Date")
-            if subset.empty:
-                continue
-            latest = subset.iloc[-1]
-            precip = latest.get("precipitation", 0)
-            temp_max = latest.get("temp_max", None)
-
-            if (pd.notna(precip) and precip > WEATHER_HEAVY_RAIN_MM) or (
-                pd.notna(temp_max) and temp_max > WEATHER_EXTREME_HEAT_C
+        for region, subset in weather_data.groupby("region", sort=False):
+            assessed = assess_region(str(region), subset)
+            if assessed is not None and any(
+                alert.rule in _PREMIUM_RULES for alert in assessed.alerts
             ):
-                active_alerts.append(region)
+                active_alerts.append(str(region))
 
         if active_alerts:
             for commodity in ["Soybeans"]:

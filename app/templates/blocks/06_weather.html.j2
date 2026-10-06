@@ -20,10 +20,14 @@
   </div>
   {% endfor %}
 </div>
-{% for r in d.alerts %}
-<div class="alert alert-warn">{{ r.region }}: {{ r.alert }} — max {{ f.num(r.temp_max, 0) }}°C, precip {{ f.num(r.precip_mm, 0) }} mm</div>
+{% for a in d.alerts %}
+<div class="alert alert-warn">{{ a.region }}: {{ a.text }}</div>
 {% else %}
 <div class="alert alert-ok">No threshold breach in {{ d.regions|length }} region{{ 's' if d.regions|length != 1 }}</div>
+{% endfor %}
+{# A rule the stored history cannot answer is named, never read as clear (#355). #}
+{% for w in d.withheld %}
+<div class="caption">{{ w.label }} not assessed ({{ w.regions|join(', ') }}): {{ w.reason }}</div>
 {% endfor %}
 {% endif %}
 {% if d.rivers %}

@@ -27,6 +27,7 @@ from typing import Any
 
 import pandas as pd
 
+from analysis import weather_alerts
 from analysis.forward_curve import analyze_curve, calendar_spread
 from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.nass_crush import latest_crush
@@ -48,9 +49,6 @@ from config import (
     MANDI_SERIES,
     MANDI_SERIES_MH,
     SAGIS_ATTRIBUTION,
-    WEATHER_DRY_THRESHOLD_MM,
-    WEATHER_EXTREME_HEAT_C,
-    WEATHER_HEAVY_RAIN_MM,
 )
 from pipeline.query import (
     read_brazil_estimates,
@@ -1245,44 +1243,30 @@ def risk_analysis() -> dict:
                     entry["spec_net_chg"] = latest["noncommercial_net"] - prev["noncommercial_net"]
             cot_summary[leg] = entry
 
-    # --- Weather ---
+    # --- Weather --- one rule set with the briefing and block 06 (#355).
     weather = read_weather()
-    weather_alerts = []
+    alerts: list[dict[str, Any]] = []
+    withheld: list[weather_alerts.Withheld] = []
     if not weather.empty:
         for region in SOY_WEATHER_REGIONS:
-            subset = weather[weather["region"] == region].sort_values("Date")
-            if subset.empty:
+            assessed = weather_alerts.assess_region(region, weather[weather["region"] == region])
+            if assessed is None:
                 continue
-            latest = subset.iloc[-1]
-            precip = latest.get("precipitation", 0)
-            temp_max = latest.get("temp_max")
-            temp_min = latest.get("temp_min")
-
-            # Heat outranks rain conditions; elif chain keeps one alert per
-            # region without a later check silently overwriting an earlier one.
-            alert_type = None
-            if pd.notna(temp_max) and temp_max > WEATHER_EXTREME_HEAT_C:
-                alert_type = "Extreme Heat"
-            elif pd.notna(precip) and precip > WEATHER_HEAVY_RAIN_MM:
-                alert_type = "Heavy Rain"
-            elif pd.notna(precip) and precip < WEATHER_DRY_THRESHOLD_MM:
-                alert_type = "Dry"
-
-            entry = {
-                "region": region,
-                "temp_max": temp_max,
-                "temp_min": temp_min,
-                "precip": precip,
-                "date": latest["Date"],
-                "alert": alert_type,
-            }
-            if alert_type:
-                weather_alerts.append(entry)
+            withheld.extend(assessed.withheld)
+            for alert in assessed.alerts:
+                alerts.append({
+                    **alert.as_dict(),
+                    "temp_max": assessed.temp_max,
+                    "temp_min": assessed.temp_min,
+                    "precip": assessed.precip,
+                    "date": assessed.as_of.isoformat(),
+                })
 
     return {
         "currencies": currency_summary,
         "cot": cot_summary,
-        "weather_alerts": weather_alerts,
+        "weather_alerts": alerts,
+        "weather_withheld": weather_alerts.group_withheld(withheld),
     }
 
 
@@ -1515,37 +1499,29 @@ def emerging_markets_analysis() -> dict:
                 currency_info["monthly_chg"] = monthly
             entry["currency"] = currency_info
 
-        # --- Weather ---
+        # --- Weather --- one rule set with the briefing and block 06 (#355).
         regions = EMERGING_MARKET_WEATHER.get(country, [])
-        weather_alerts: list[dict[str, Any]] = []
+        region_weather: list[dict[str, Any]] = []
+        weather_withheld: list[weather_alerts.Withheld] = []
         if not weather.empty:
             for region in regions:
-                w_subset = weather[weather["region"] == region].sort_values("Date")
-                if w_subset.empty:
+                assessed = weather_alerts.assess_region(
+                    region, weather[weather["region"] == region]
+                )
+                if assessed is None:
                     continue
-                w_latest = w_subset.iloc[-1]
-                precip = w_latest.get("precipitation", 0)
-                temp_max = w_latest.get("temp_max")
-
-                alert_type = None
-                if pd.notna(temp_max) and temp_max > WEATHER_EXTREME_HEAT_C:
-                    alert_type = "Extreme Heat"
-                elif pd.notna(precip) and precip > WEATHER_HEAVY_RAIN_MM:
-                    alert_type = "Heavy Rain"
-                elif pd.notna(precip) and precip < WEATHER_DRY_THRESHOLD_MM:
-                    alert_type = "Dry"
-
-                weather_entry = {
+                region_weather.append({
                     "region": region,
-                    "temp_max": temp_max,
-                    "temp_min": w_latest.get("temp_min"),
-                    "precip": precip,
-                    "date": w_latest["Date"],
-                    "alert": alert_type,
-                }
-                weather_alerts.append(weather_entry)
+                    "temp_max": assessed.temp_max,
+                    "temp_min": assessed.temp_min,
+                    "precip": assessed.precip,
+                    "date": assessed.as_of.isoformat(),
+                    "alerts": [alert.as_dict() for alert in assessed.alerts],
+                })
+                weather_withheld.extend(assessed.withheld)
 
-        entry["weather"] = weather_alerts
+        entry["weather"] = region_weather
+        entry["weather_withheld"] = weather_alerts.group_withheld(weather_withheld)
 
         # --- India mandi domestic bean price + CBOT bean premium ---
         # Bean-only since the 2026-08 Layer 16 rebuild: the mandi source

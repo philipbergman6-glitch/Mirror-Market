@@ -85,7 +85,7 @@
 {% if s.competing_oil_weather %}
 <hr class="divider"><div class="subhdr">Competing-Oil Weather</div>
 {% for b in s.competing_oil_weather.belts %}
-{% set alerting = b.regions | selectattr('alert') | list %}
+{% set alerting = b.regions | selectattr('alerts') | list %}
 <div class="sig">
   <span class="badge {{ 'badge-warning' if alerting else 'badge-info' }}">{{ b.belt }}</span>
   <span class="sig-commodity">{{ b.leg }}</span>
@@ -93,11 +93,12 @@
     {%- for r in b.regions -%}
     {%- if not loop.first %} · {% endif -%}
     {{ r.region }} {{ c.num(r.temp_max, 0) }}°C / {{ c.num(r.precip_mm, 1) }} mm
-    {%- if r.alert %} <span class="down">{{ r.alert }}</span>{% endif -%}
+    {%- for a in r.alerts %} <span class="down">{{ a.alert }}</span>{% endfor -%}
     {%- if r.season_note %} <span class="kind">off-season</span>{% endif -%}
     {%- if r.as_of %} <span class="muted">({{ r.as_of }})</span>{% endif -%}
     {%- endfor -%}
     {%- if b.missing %}{% if b.regions %} · {% endif %}<span class="muted">no observed rows for {{ b.missing | join(', ') }}</span>{% endif -%}
+    {%- for w in b.withheld %} · <span class="muted">{{ w.label }} not assessed: {{ w.reason }}</span>{% endfor -%}
   </span>
 </div>
 <div class="caption">{{ b.note }}</div>
