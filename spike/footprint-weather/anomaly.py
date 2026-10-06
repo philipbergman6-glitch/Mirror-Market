@@ -8,6 +8,11 @@ lsm = D["fields"][("lsm", None, 0)]["v"]
 BOX = {"BR-MT": "MT", "US-IA": "IA"}
 
 def open_all(pattern):
+    if "_era5_" in pattern:  # CDS zipped instant + accum streams despite download_format=unarchived
+        parts = []
+        for d in sorted(glob.glob(pattern.replace("clim/", "clim/x/").replace(".nc", ""))):
+            parts.append(xr.merge([xr.open_dataset(f).drop_vars(["expver", "number"], errors="ignore") for f in sorted(glob.glob(d + "/*.nc"))], compat="override"))
+        return xr.concat(parts, dim="valid_time").sortby("valid_time") if parts else None
     fs = sorted(glob.glob(pattern))
     if not fs: return None
     return xr.open_mfdataset(fs, combine="by_coords") if len(fs) > 1 else xr.open_dataset(fs[0])

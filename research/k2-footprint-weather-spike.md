@@ -12,6 +12,7 @@ Ticket: [#361](https://github.com/philipbergman6-glitch/Mirror-Market/issues/361
 |---|---|---|
 | **Footprint shape** | Admin-1 polygon (Natural Earth), **SPAM 2020 production-weighted inside**. No county/município layer. Official stats only to weight *between* footprints if a belt total is ever wanted. | SPAM vs plain area: ≤6.2 % on MT 15-day rain over 4 runs. NASS county vs SPAM in Iowa: ≤0.2 mm (≤1 %) in all 4 runs. |
 | **Beside vs replace** | **Replace the pin *forecast* with the footprint forecast. Keep the pin *observed* 30 days for now** (it feeds the observed-only agronomic alerts) until an observed footprint source is chosen (new ticket). | Pin 15-day rain vs its own footprint: Iowa −98 %…+55 %, MT −12 %…+48 % over 4 runs; the pin sat at the 33rd–95th percentile of its own state. Open-Meteo vs ECMWF *at the same pin* (days 2–7) is the smaller error: ≤2.6 mm, Tmax MAE 0.3–1.1 °C. |
+| **15-day anomaly** | Render **tercile + rank vs ERA5 1991–2020**, with % of mean secondary; one-off reference build. | 10-05 run: MT soy **+30 %, upper tercile** (pin: +7 %, middle); IA soy **−69 %, 6th driest of 31**, Tmax +5.1 °C (pin: middle tercile). |
 | **Alert rules** | Forecast alerts are a **separate class**, labelled "forecast · ECMWF 00z", capped at `warning`, never merged with observed-row alerts. Reuse `WEATHER_DRY_SPELL_ALERT_DAYS`, `WEATHER_PRECIP_DEFICIT_ALERT_PCT`, `WEATHER_POD_FILL_HEAT_C`, `WEATHER_EXTREME_HEAT_C`, `WEATHER_HEAVY_RAIN_MM` but apply them to **share of production-weighted area**, not to the area mean. **No soil-moisture alert** in v1. | A dry day (< 1 mm) on an area mean is a different event from one at a point: Iowa pin dry-run 11 and 15 days on two runs, where only 35 % / 56 % of the soy area was dry ≥10 days. |
 | **Hazard flags** | Flag a **port/pricing point** when it falls inside an NHC/JTWC forecast **34/50/64-kt quadrant radius** at any time ≤120 h (track + radii interpolated hourly). Band → severity: 64 kt = `alert`, 34/50 kt ≤72 h = `warning`, 34/50 kt 72–120 h = `info`. Growing areas get no radius flag (agency radii are "valid over open water only"); their storm rain is the footprint rain. South Atlantic places = `not_covered`. | Hurricane Francine 2024 replay: NOLA flagged on advisories 8–12, first TS-force wind 33 h → 11 h ahead. Today: 5 storms live, 0 rendered places within 2,200 km; 9 places `not_covered`. |
 | **Attach-to-leg** | A `LEG_PLACES` registry keyed by the existing ledger `leg_id` (`"us_gulf:cif"` …), validated at load like `config.LEDGERS`; `_ledger_row` gets a `hazard` field; every ledger that includes the leg inherits it. | K1 matrix encoded as 18 legs → places in `storms.py`; leg roll-up computed. |
@@ -79,7 +80,26 @@ Where they disagree:
 
 ## 4. 15-day anomaly vs ERA5 1991–2020 [M]
 
-ANOMALY_SECTION
+`results/anomaly.json`. Forecast = 2026-10-05 00z, UTC days Oct 5–19. Normal = the same 15 UTC days in each of 1991–2020 from ERA5 hourly `tp` (daily = sum of hourly accumulations ending 01…24 UTC) and `2t` (daily max of hourly samples), weighted with the same footprint weights; ERA5 0.25° points coincide with the ECMWF 0.25° grid, every footprint point was inside the box (hard-fail otherwise).
+
+| Footprint | 15-day rain fc | ERA5 normal (mean / median) | terciles | **anomaly vs mean** | rank of fc in 31 | mean Tmax fc | normal (σ) | **Tmax anomaly** |
+|---|---|---|---|---|---|---|---|---|
+| MT soy | 74.1 mm | 57.0 / 49.3 mm | 43.4 / 72.1 | **+30 %** (upper tercile) | 23 | 33.3 °C | 32.8 (1.6) | +0.4 °C |
+| MT area | 72.8 | 59.4 / 53.9 | 45.4 / 71.7 | +23 % (upper) | 22 | 33.5 | 32.7 (1.4) | +0.8 |
+| MT pin | 65.6 | 61.4 / 55.9 | 46.9 / 76.2 | **+7 %** (middle) | 19 | 33.9 | 32.8 (1.6) | +1.1 |
+| IA soy | 10.6 mm | 34.3 / 28.4 mm | 17.7 / 38.4 | **−69 %** (lower tercile) | 6 | 23.0 °C | 17.9 (2.7) | **+5.1 °C** |
+| IA area | 10.5 | 34.4 / 27.7 | 18.2 / 39.3 | −70 % (lower) | 6 | 23.0 | 17.9 (2.7) | +5.1 |
+| IA county | 10.6 | 34.2 / 28.5 | 17.7 / 38.3 | −69 % (lower) | 6 | 23.0 | 17.9 (2.7) | +5.1 |
+| IA pin | 15.4 | 37.4 / 24.0 | 14.2 / 39.8 | −59 % (middle) | 12 | 23.3 | 18.2 (2.7) | +5.1 |
+
+Soil moisture, `vsw` L1 day 0 (IFS) vs ERA5-Land `swvl1` on Oct 5 (mean of 00/12 UTC), 1991–2020: MT soy 0.283 vs 0.343 → rank **5 of 31**; IA soy 0.298 vs 0.300 → rank 15.
+
+What this shows:
+- **The pin changes the call, not just the number.** Mato Grosso's pin says "near normal (+7 %, middle tercile)"; its soy footprint says "wet start, +30 %, upper tercile". Iowa's pin says "middle tercile"; the footprint says "lower tercile, 6th driest of 31". A tercile label is what a reader acts on, and the pin got it wrong for both states on this run.
+- **Normals are skewed.** Mean and median differ by 6–8 mm (MT) and 6 mm (IA); "% of mean" alone overstates a wet anomaly. Render **tercile category + rank**, with "% vs 1991–2020 mean" as the secondary number.
+- **Tmax:** Iowa's +5.1 °C is ~1.9 σ. The ERA5 normal is the max of *hourly* samples, the forecast the max of 3/6-hour window extremes, so the warm anomaly carries a small positive bias (inference: a few tenths of a °C; not measured). The label must say so, or the normal must be built from ERA5 `mx2t` instead.
+- **Soil:** see §7.3 — not a trustworthy cross-model anomaly.
+- **Only one run was scored.** ERA5 was fetched for the 10-05 run's valid days; the other three runs' windows start 1–3 days earlier.
 
 ## 5. Port rain [M]
 
@@ -146,7 +166,7 @@ All forecast alerts carry "forecast · ECMWF 00z {date}", are capped at `warning
 | Rule | Reuses | Test on the footprint | Measured on 4 runs |
 |---|---|---|---|
 | Dry spell | `WEATHER_DRY_SPELL_ALERT_DAYS = 10`, `WEATHER_DRY_THRESHOLD_MM = 1` | ≥ 50 % of production-weighted area has ≥10 consecutive forecast days < 1 mm from day 1, in a `WEATHER_GROWING_SEASON_MONTHS` month | IA 35 / 56 / 25 / 13 % → fires once (10-03); MT 0 % every run. The pin rule would have fired twice (11, 15 dry days). |
-| Rain deficit | `WEATHER_PRECIP_DEFICIT_ALERT_PCT = 40` | 15-day production-weighted total ≤ 60 % of its ERA5 1991–2020 normal for the same days | DEFICIT_MEASURED |
+| Rain deficit | `WEATHER_PRECIP_DEFICIT_ALERT_PCT = 40` | 15-day production-weighted total ≤ 60 % of its ERA5 1991–2020 normal for the same days | 10-05 run: IA soy 10.6 mm = 31 % of normal → **fires**; IA pin 15.4 mm = 41 % → also fires; MT 130 % → no. One run scored. |
 | Heavy rain | `WEATHER_HEAVY_RAIN_MM = 20` | ≥ 25 % of area has any forecast day ≥ 20 mm → `info` (harvest/planting logistics, port loading) | not tuned; port boxes hit it (P-PNG 32.3, 33.9 mm days) |
 | Pod-fill heat | `WEATHER_POD_FILL_HEAT_C = 34`, `WEATHER_SOY_POD_FILL_MONTHS` | ≥ 3 days with weighted Tmax ≥ 34 °C in a pod-fill month | MT has 4–9 such days in every run, but October is planting → gate holds, no alert |
 | Extreme heat | `WEATHER_EXTREME_HEAT_C = 38` | any day with weighted Tmax ≥ 38 °C in season | peak 36.0 °C (MT), none |
@@ -197,7 +217,8 @@ Footprint count does not change the download: every field is one global message,
 - **Traps for the build:**
   - Accumulation differences go slightly negative from 16-bit packing: worst −0.0153 mm over 4 runs × 1,552 points. Clamp to 0 down to −0.05 mm, hard-fail below.
   - NHC 5-day `pts` attributes `LAT`/`LON` are rounded to whole degrees in the DBF too, so use the geometry.
-  - Daily-statistics CDS datasets refuse 30 years in one request ("cost limits exceeded"). Hourly ERA5 1991–2020 for a footprint box took CLIM_TIME; ERA5-Land boxes took 391 s (IA) and 515 s (MT).
+  - Daily-statistics CDS datasets refuse 30 years in one request ("cost limits exceeded"). Hourly ERA5 (`tp`, `2t`) for 30 years was refused too and auto-split into decades; the six decade jobs finished 3.0–6.3 h after submission each (~15 h wall for both boxes, CDS queue plus an overnight network drop on our side). ERA5-Land `swvl1` boxes (2 times/day) took 391 s (IA) and 515 s (MT). **The normal is a one-off reference build, never a CI step.**
+  - CDS returned a **zip of two NetCDFs** (`stepType-instant`, `stepType-accum`) despite `download_format: unarchived`, still named `.nc`. The builder must sniff the format, not trust the extension.
   - NASS withholds Adams County, IA (folded into county `998`, "other combined"); a county-weighted footprint must not read that as zero production.
   - `heat35` / Tmax from ERA5 hourly `2t` sampling runs ~0.3–0.5 °C below the IFS `mx2t*` window maxima [INF, not measured]; the anomaly label must name the normal's variable.
 
