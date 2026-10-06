@@ -157,6 +157,20 @@ CREATE TABLE IF NOT EXISTS brazil_exports (
 );
 """
 
+# Layer 32 — SEA India weekly comparative rates (#72). One row per series per
+# sheet date, in the unit the sheet's section heading states (USD/MT or
+# INR/MT). Never exported to data/history/ while config.SEA_PUBLISH is False:
+# SEA's sheets are all-rights-reserved and the repo is public.
+_CREATE_SEA_INDIA_RATES = """
+CREATE TABLE IF NOT EXISTS sea_india_rates (
+    Date    TEXT NOT NULL,
+    series  TEXT NOT NULL,
+    value   REAL NOT NULL,
+    unit    TEXT NOT NULL,
+    PRIMARY KEY (Date, series)
+);
+"""
+
 _CREATE_DCE_FUTURES = """
 CREATE TABLE IF NOT EXISTS dce_futures (
     commodity       TEXT NOT NULL,
@@ -765,6 +779,7 @@ ALL_SCHEMAS = (
     _CREATE_WORLDBANK,
     _CREATE_EC_OILSEED_PRICES,
     _CREATE_BRAZIL_EXPORTS,
+    _CREATE_SEA_INDIA_RATES,
     _CREATE_DCE_FUTURES,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,

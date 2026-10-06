@@ -324,6 +324,13 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "with a time of day but not a zone, so no hour is claimed here.",
     ),
     LayerLatency(
+        "sea_india", LatencyClass.PHYSICAL_ORIGIN, ObservationClock(),
+        timedelta(days=1),
+        "SEA's weekly comparative-rate sheet is dated by its 'as on' day and "
+        "uploaded to its media library the same evening or up to three days "
+        "later (Friday sheets often the next Monday); no time of day is printed.",
+    ),
+    LayerLatency(
         "magyp_fob", LatencyClass.PHYSICAL_ORIGIN,
         ObservationClock("America/Argentina/Buenos_Aires", (12, 5)),
         timedelta(0),

@@ -159,7 +159,7 @@ PRODUCTION_LAYERS = (
     ("epa_rfs", "29", "US EPA (Renewable Fuel Standard)", "Monthly", "RIN generation, RIN prices and RVOs"),
     ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
     ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
-    ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India soymeal FAS and soy oil import legs (private)"),
+    ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India meal FAS and oil import legs (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 

@@ -338,3 +338,17 @@ def test_a_listing_with_no_sheet_in_the_window_is_a_failure(monkeypatch, listing
 
     assert result.status == "failed"
     assert not result.has_rows
+
+
+# --- the privacy gate -------------------------------------------------------
+
+
+def test_the_private_table_never_reaches_the_public_history_export() -> None:
+    """SEA's sheets are all-rights-reserved and the repo is public: a
+    committed CSV is a publication. Until SEA_PUBLISH is flipped (with SEA's
+    written permission), the table must stay out of the export."""
+    import config
+    from pipeline.history import HISTORY_TABLES
+
+    assert config.SEA_PUBLISH is False
+    assert "sea_india_rates" not in HISTORY_TABLES

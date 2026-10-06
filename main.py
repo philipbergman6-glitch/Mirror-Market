@@ -68,6 +68,7 @@ from fetchers.psd import fetch_psd_all
 from fetchers.river import fetch_ina_gauges, fetch_nwps_gauges
 from fetchers.safex import fetch_safex
 from fetchers.sagis import fetch_sagis_deliveries, fetch_sagis_supply_demand
+from fetchers.sea import fetch_sea_rates
 from fetchers.usda import (
     fetch_all_crop_progress,
     fetch_crush_data,
@@ -143,6 +144,7 @@ from pipeline.store import (
     save_safex,
     save_sagis_deliveries,
     save_sagis_smd,
+    save_sea_india_rates,
     save_usda_data,
     save_wasde,
     save_weather_data,
@@ -1014,6 +1016,17 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         "cec", "Layer 25", "CEC South Africa official crop estimates",
         fetch=lambda: fetch_cec_estimates(),
         save=lambda n, d: save_cec_estimates(n, d),
+    )
+    # Layer 32: SEA India's weekly rate sheet — meal FAS Kandla and degum CIF
+    # Mumbai, the India legs no other source carries. Private while
+    # config.SEA_PUBLISH is False: stored for the local parity read
+    # (analysis/india_parity.py), never exported to data/history/ and never
+    # rendered. SEA has published weekly since 2018 and every run re-reads a
+    # trailing quarter, so an empty return is a broken listing (empty_fails).
+    results["sea_india"] = _run_scraper_layer(
+        "sea_india", "Layer 32", "SEA India weekly rate sheet (private)",
+        fetch=lambda: fetch_sea_rates(),
+        save=lambda n, d: save_sea_india_rates(n, d),
     )
 
 

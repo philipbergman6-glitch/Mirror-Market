@@ -652,6 +652,23 @@ def save_brazil_exports(product: str, df: pd.DataFrame):
     )
 
 
+def save_sea_india_rates(series: str, df: pd.DataFrame):
+    """Write SEA weekly comparative rates → 'sea_india_rates' (Layer 32).
+
+    A plain upsert on (Date, series): a sheet re-read next run carries the
+    same values (the fetcher withholds a date whose re-uploads disagree).
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["series"] = series
+    df["Date"] = _date(df["Date"])
+    _save(
+        "sea_india_rates", df[["Date", "series", "value", "unit"]],
+        ["Date", "series"], f"sea_india/{series}",
+    )
+
+
 def save_ocean_freight(route: str, df: pd.DataFrame):
     """Write GTR monthly ocean freight rates → 'ocean_freight_rates'.
 
