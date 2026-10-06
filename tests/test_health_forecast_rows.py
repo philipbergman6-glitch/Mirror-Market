@@ -5,7 +5,7 @@ observed history. If `analysis/health.py` takes MAX(Date) over the whole
 table, a dead fetcher keeps looking fresh for as long as its last run's
 forecast reaches into the future — the outage surfaces a week late, which
 is exactly when it matters least. Mirrors the observed-only rule in
-`analysis/briefing/sections/weather.py::observed_only`.
+`analysis/weather_alerts.py::observed_only`.
 """
 
 from __future__ import annotations

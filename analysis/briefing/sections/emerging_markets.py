@@ -260,11 +260,14 @@ def format() -> str:  # noqa: A001
                 parts.append(f"week: {wk:+.1f}%")
             lines.append(f"    Currency: {', '.join(parts)}")
 
-        weather_list = info.get("weather", [])
-        active_alerts = [w for w in weather_list if w.get("alert")]
-        if active_alerts:
-            for w in active_alerts:
-                lines.append(f"    Weather: {w['region']} — {w['alert']}")
+        for w in info.get("weather", []):
+            for alert in w.get("alerts") or []:
+                lines.append(f"    Weather: {w['region']} — {alert['text']}")
+        for gap in info.get("weather_withheld") or []:
+            lines.append(
+                f"    Weather: {gap['label']} not assessed "
+                f"({', '.join(gap['regions'])}) — {gap['reason']}"
+            )
 
         dom_india = info.get("india_domestic", {})
         if dom_india:

@@ -123,6 +123,7 @@ Pure functions over the DataFrames returned by `pipeline/query.read_*()`:
 - `analysis/forward_curve.py` — Contango/backwardation, curve slope, calendar spreads
 - `analysis/stocks_to_use.py` — Stocks-to-use ratios from PSD; tight-supply alerts
 - `analysis/zscore.py` — Shared z-score helper used by COT and weather sections
+- `analysis/weather_alerts.py` — The one weather alert rule set (#355): six observed rules on config thresholds, forecast rows dropped, a rule the history cannot answer withheld with a reason. Briefing, block 06, Risk Monitor, Emerging Markets, the competing-oil strip and market drivers all grade through `assess_region`; a future forecast class (#356) is a separate assessor returning the same `WeatherAlert` with its own `basis`
 - `analysis/health.py` — Per-commodity data health checks (stale data, flat prices, missing commodities)
 
 Two consumer layers sit on top of these primitives, both pulling

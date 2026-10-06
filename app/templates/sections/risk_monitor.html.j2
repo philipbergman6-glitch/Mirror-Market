@@ -27,10 +27,13 @@
 <hr class="divider">
 {% endif %}
 
-{% if s.weather_alerts %}
+{% if s.weather_alerts or s.weather_withheld %}
 <div class="subhdr">Weather Alerts</div>
 {% for w in s.weather_alerts %}
-<div class="alert alert-warn">{{ w.region }}: {{ w.alert }} — max {{ w.temp_max if w.temp_max is not none else 'n/a' }}C, precip {{ '%.0f'|format(w.precip or 0) }}mm{% if w.as_of %} ({{ w.as_of }}){% endif %}</div>
+<div class="alert alert-warn">{{ w.region }}: {{ w.text }}{% if w.as_of %} ({{ w.as_of }}){% endif %}</div>
+{% endfor %}
+{% for w in s.weather_withheld %}
+<div class="caption">{{ w.label }} not assessed ({{ w.regions|join(', ') }}): {{ w.reason }}</div>
 {% endfor %}
 <hr class="divider">
 {% endif %}

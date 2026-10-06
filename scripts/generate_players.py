@@ -342,7 +342,7 @@ def export_sales_trend(es_df: pd.DataFrame, iso: str) -> dict | None:
 
 def weather_anomalies(region_dfs: dict[str, pd.DataFrame], iso: str) -> list[dict]:
     """Per-region 90d temp/precip z-scores; |z| >= 2 gets alert styling."""
-    from analysis.briefing.sections.weather import observed_only
+    from analysis.weather_alerts import observed_only
     from analysis.zscore import trailing_zscore
 
     regions = WEATHER_REGIONS_BY_ISO.get(iso, [])

@@ -39,11 +39,6 @@ from analysis.briefing.sections.export_sales import (
     year_ago_accumulated,
 )
 from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
-from analysis.briefing.sections.weather import (
-    consecutive_dry_days,
-    observed_only,
-    precip_deficit_30d,
-)
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
 from analysis.forward_curve import analyze_curve, curve_slope
@@ -62,6 +57,11 @@ from analysis.stocks_to_use import (
     compute_stocks_to_use,
     denominator_note,
     detect_tight_supply,
+)
+from analysis.weather_alerts import (
+    consecutive_dry_days,
+    observed_only,
+    precip_deficit_30d,
 )
 from analysis.zscore import trailing_zscore
 from pipeline.query import (

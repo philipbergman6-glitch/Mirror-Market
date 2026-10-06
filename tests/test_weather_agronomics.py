@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from analysis.briefing.sections import weather as weather_section
-from analysis.briefing.sections.weather import (
+from analysis.weather_alerts import (
     consecutive_dry_days,
     heat_threshold_for,
     observed_only,

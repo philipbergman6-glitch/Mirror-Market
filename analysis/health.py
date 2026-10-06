@@ -64,7 +64,7 @@ def _observed_filter(conn, table: str, date_col: str) -> tuple[str, list[str]]:
     - rows flagged ``is_forecast = 1`` are excluded once their date passes.
 
     NULL / missing ``is_forecast`` counts as observed — same rule as
-    ``analysis.briefing.sections.weather.observed_only`` — so tables and
+    ``analysis.weather_alerts.observed_only`` — so tables and
     DBs predating the flag behave exactly as before.
     """
     today = datetime.now(timezone.utc).date().isoformat()

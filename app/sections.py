@@ -258,32 +258,28 @@ def _competing_oil_weather_strip() -> dict | None:
         from datetime import datetime, timezone
 
         import config
-        from analysis.briefing.sections.weather import observed_only
-        from app.block_builders import out_of_season_note, weather_alert
+        from analysis.weather_alerts import assess_region, group_withheld
+        from app.block_builders import out_of_season_note
         from pipeline.query import read_weather
 
         today = datetime.now(timezone.utc).date()
         belts = []
         for spec in config.COMPETING_OIL_WEATHER_BELTS:
-            regions, missing = [], []
+            regions, missing, withheld = [], [], []
             for region in spec["regions"]:
-                # A pre-migration or absent DB returns a frame with no columns
-                # at all, so the emptiness check has to come before the sort.
-                observed = observed_only(read_weather(region))
-                if observed.empty:
+                assessed = assess_region(region, read_weather(region))
+                if assessed is None:
                     missing.append(region)
                     continue
-                row = observed.sort_values("Date").iloc[-1]
-                temp_max = _float_or_none(row.get("temp_max"))
-                precip = _float_or_none(row.get("precipitation"))
                 regions.append({
                     "region": region,
-                    "temp_max": temp_max,
-                    "precip_mm": precip,
-                    "as_of": _as_date(row.get("Date")),
-                    "alert": weather_alert(temp_max, precip),
+                    "temp_max": assessed.temp_max,
+                    "precip_mm": assessed.precip,
+                    "as_of": assessed.as_of.isoformat(),
+                    "alerts": [alert.as_dict() for alert in assessed.alerts],
                     "season_note": out_of_season_note(region, today),
                 })
+                withheld.extend(assessed.withheld)
             belts.append({
                 "belt": spec["belt"],
                 "leg": spec["leg"],
@@ -292,15 +288,13 @@ def _competing_oil_weather_strip() -> dict | None:
                 # Named, never dropped silently — a belt line with a pin
                 # missing must say which pin, not quietly narrow the belt.
                 "missing": missing,
+                # Same for a rule the pins' history cannot answer (#355).
+                "withheld": group_withheld(withheld),
             })
         return {"belts": belts} if any(b["regions"] for b in belts) else None
     except Exception:  # noqa: BLE001
         log.warning("competing-oil weather strip failed", exc_info=True)
         return None
-
-
-def _float_or_none(value) -> float | None:
-    return None if value is None or pd.isna(value) else float(value)
 
 
 # ---------------------------------------------------------------------------
@@ -343,23 +337,24 @@ def risk_monitor_section(data: dict | None) -> dict:
 
     alerts = [
         {
-            "region": alert.get("region", ""),
-            "alert": alert.get("alert", ""),
-            "temp_max": alert.get("temp_max"),
-            "precip": alert.get("precip"),
+            "region": alert["region"],
+            "alert": alert["alert"],
+            "text": alert["text"],
             "as_of": _as_date(alert.get("date")),
         }
         for alert in (data.get("weather_alerts") or [])
     ]
+    withheld = data.get("weather_withheld") or []
 
     panel = section(
         "ok",
         currencies=currencies,
         cot=cot_panel,
         weather_alerts=alerts,
+        weather_withheld=withheld,
         correlations=_correlations_panel(),
     )
-    if not (currencies or cot_panel or alerts or panel["data"]["correlations"]):
+    if not (currencies or cot_panel or alerts or withheld or panel["data"]["correlations"]):
         return _empty("no currency, positioning, weather or correlation series had rows")
     return panel
 
@@ -572,7 +567,8 @@ def emerging_markets_section(data: dict | None) -> dict:
         countries.append({
             "name": name,
             "groups": [group for group in groups if group],
-            "weather_alerts": [w for w in weather if w.get("alert")],
+            "weather_alerts": [alert for w in weather for alert in w.get("alerts") or []],
+            "weather_withheld": info.get("weather_withheld") or [],
             "weather_checked": bool(weather),
             "notes": _country_notes(name, info),
         })
