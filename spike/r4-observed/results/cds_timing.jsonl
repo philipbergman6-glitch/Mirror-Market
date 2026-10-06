@@ -1,0 +1,13 @@
+{"name": "IA_era5_incr10d", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T17:52:33Z", "status": "ok", "seconds": 84, "bytes": 384948}
+{"name": "IA_land_2026", "dataset": "reanalysis-era5-land", "submitted_utc": "2026-10-06T17:52:33Z", "status": "ok", "seconds": 179, "bytes": 619439}
+{"name": "IA_era5_202610", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T17:53:57Z", "status": "ok", "seconds": 116, "bytes": 82037}
+{"name": "MT_land_2026", "dataset": "reanalysis-era5-land", "submitted_utc": "2026-10-06T17:55:32Z", "status": "ok", "seconds": 55, "bytes": 3012582}
+{"name": "MT_era5_202610", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T17:55:53Z", "status": "ok", "seconds": 36, "bytes": 140186}
+{"name": "IA_era5_202606", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T17:56:29Z", "status": "ok", "seconds": 116, "bytes": 957418}
+{"name": "IA_era5_202607", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T17:58:25Z", "status": "ok", "seconds": 180, "bytes": 932810}
+{"name": "IA_era5_202608", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T18:01:26Z", "status": "ok", "seconds": 269, "bytes": 961659}
+{"name": "IA_era5_202609", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T18:05:55Z", "status": "ok", "seconds": 117, "bytes": 1016653}
+{"name": "MT_era5_202606", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T18:07:52Z", "status": "ok", "seconds": 181, "bytes": 3420323}
+{"name": "MT_era5_202607", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T18:10:54Z", "status": "ok", "seconds": 183, "bytes": 3264960}
+{"name": "MT_era5_202608", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T18:13:57Z", "status": "ok", "seconds": 179, "bytes": 3132557}
+{"name": "MT_era5_202609", "dataset": "reanalysis-era5-single-levels", "submitted_utc": "2026-10-06T18:16:56Z", "status": "ok", "seconds": 121, "bytes": 3598309}

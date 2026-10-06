@@ -1,0 +1,9 @@
+{
+ "runs_asked": 128,
+ "runs_ok": 128,
+ "wall_s": 31.7,
+ "mb": 844.9,
+ "per_run_serial_s_median": 2.75,
+ "host": "https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com",
+ "missing": {}
+}
