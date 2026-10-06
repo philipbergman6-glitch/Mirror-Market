@@ -1,0 +1,1243 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mirror-market-generated-at" content="2026-10-06T14:57:14.968010+00:00">
+<meta name="mirror-market-layer-count" content="0">
+<meta name="qa-overflow" content="pending">
+<title>Mirror Market — Brazil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+
+<style>
+:root {
+  --paper: #FAFAF7;
+  --card: #FFFFFF;
+  --rule: #D8DCD8;
+  --rule-heavy: #191C1A;
+  --ink: #191C1A;
+  --green: #2D6A4F;
+  --green-light: #2D6A4F;
+  --text: #191C1A;
+  --text-muted: #5D6660;
+  --text-dim: #9BA39E;
+  --bullish: #1F7A3D;
+  --bearish: #C23B2E;
+  --warning: #A8730A;
+  --info: #2F5D8F;
+  --soybean: #8B6914;
+  --soy-oil: #B05E10;
+  --soy-meal: #8A5A2B;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --display: 'Archivo', sans-serif;
+  --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--bullish); }
+.down { color: var(--bearish); }
+.muted { color: var(--text-muted); }
+
+.page { max-width: 1180px; min-width: 0; margin: 0 auto; padding: 32px 32px 64px; }
+
+/* ---- masthead ---- */
+.masthead { border-bottom: 3px solid var(--rule-heavy); padding-bottom: 18px; display: flex; align-items: flex-end; gap: 24px; }
+.masthead > *, section, .mc, .chart-box { min-width: 0; }
+.masthead h1 { font-family: var(--display); font-weight: 800; font-size: 42px; letter-spacing: -0.03em; line-height: 1; overflow-wrap: anywhere; }
+.masthead h1 em { font-style: normal; color: var(--green); }
+.mast-meta { margin-left: auto; max-width: 100%; text-align: right; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.mast-meta .day { font-family: var(--display); font-weight: 700; font-size: 14px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.mast-meta a { color: var(--green); text-decoration: none; font-weight: 500; }
+.mast-meta a:hover { text-decoration: underline; }
+.mast-critical { color: var(--bearish); font-weight: 600; }
+.stale-note { font-size: 12px; color: var(--warning); border-bottom: 1px solid var(--rule); padding: 8px 0; overflow-wrap: anywhere; }
+.stale-note b { font-weight: 600; }
+
+/* ---- market nav ----
+   DESIGN.md :63/:66 — a second thin bar in the masthead, above the page's own
+   section-anchor bar, two bars in the same visual family. Explicitly NOT a
+   sidebar: that is what the 2026-07-28 redesign removed.
+   Order is registry key order = role in the trade, and it is the same
+   declaration M2's headline ledger reads, so nav and ledger cannot disagree.
+   Stubs are dimmed; pages and briefs render identically. Every market appears
+   in every tier, or the reader cannot tell the market exists. */
+.market-nav { display: flex; gap: 18px; padding: 9px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; white-space: nowrap; align-items: baseline; }
+.market-nav .mn-label { font-family: var(--display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.market-nav > * { flex: 0 0 auto; }
+.market-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; font-weight: 500; transition: color 0.1s; }
+.market-nav a:hover { color: var(--ink); }
+.market-nav a.current { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--green); padding-bottom: 2px; }
+.market-nav a.stub { color: var(--text-dim); }
+.market-nav .mn-end { margin-left: auto; color: var(--green); font-weight: 500; }
+
+/* ---- index nav (per-page section anchors) ---- */
+.index-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 20px; padding: 10px 0; overflow-x: auto; white-space: nowrap; }
+.index-nav a { flex: 0 0 auto; text-decoration: none; color: var(--text-muted); font-size: 12px; transition: color 0.1s; }
+.index-nav a:hover { color: var(--ink); }
+.index-nav a .no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 4px; }
+
+/* ---- footer ---- */
+.footer { padding-top: 24px; font-size: 12px; color: var(--text-muted); }
+.footer a { color: var(--green); text-decoration: none; font-weight: 500; }
+.footer a:hover { text-decoration: underline; }
+
+
+/* ---- shared components (M18 #214) ----
+   Cards, alerts, signal badges and sub-headers are rendered by BOTH the
+   headline sections and the nine market blocks, so they live with the palette
+   in the one <head> owner. They were dashboard-only while the dashboard was
+   the only page that had components; a second copy in _market_css.html.j2 is
+   exactly the drift _base exists to prevent. */
+.grid { display: grid; gap: 16px; margin-bottom: 16px; align-items: start; }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+.mc { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; }
+.mc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
+.mc-val { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.2; }
+.mc-delta { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+.sig { display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px dotted var(--rule); align-items: baseline; font-size: 14px; }
+.sig:last-child { border-bottom: none; }
+.badge { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; min-width: 52px; text-align: center; flex-shrink: 0; }
+.badge-alert { background: var(--bearish); color: #fff; }
+.badge-warning { background: #E8C983; color: #4A3608; }
+.badge-info { background: #E4E8E4; color: var(--text-muted); }
+.sig-commodity { color: var(--text-muted); min-width: 96px; font-size: 13px; flex-shrink: 0; }
+
+.chart-box { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+.chart-empty { height: 160px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 13px; }
+.subhdr { font-family: var(--display); font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 12px; }
+.divider { border: none; border-top: 1px dotted var(--rule); margin: 20px 0; }
+.caption { font-size: 12px; color: var(--text-muted); margin-top: 4px; margin-bottom: 12px; }
+
+.alert { padding: 10px 16px; border-radius: 4px; font-size: 13px; margin-bottom: 12px; border-left: 3px solid; }
+.alert-ok { background: rgba(31,122,61,0.07); border-color: var(--bullish); color: var(--bullish); }
+.alert-warn { background: rgba(168,115,10,0.08); border-color: var(--warning); color: var(--warning); }
+.alert-err { background: rgba(194,59,46,0.07); border-color: var(--bearish); color: var(--bearish); }
+.alert-info { background: rgba(47,93,143,0.07); border-color: var(--info); color: var(--info); }
+
+.dtable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dtable th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--rule-heavy); }
+.dtable td { padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+.dtable th.num, .dtable td.num { text-align: right; }
+.dtable td.strong { font-weight: 600; }
+.table-scroll { width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll > .dtable { min-width: 760px; }
+
+/* ---- empty states (M1 #143 constraint 2) ----
+   A labelled statement, never a blank. `absent` reads calm (no source exists,
+   by structure); `empty` reads warm (a source exists and gave us nothing).
+   Moved out of _market_css.html.j2 by M16 #208 for the same reason `.kind`
+   was: the headline's crush board renders empty cards too, and a second copy
+   is exactly the drift the one-<head>-owner rule exists to prevent. */
+.empty-state { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; font-size: 13px; color: var(--text-muted); }
+.empty-state .es-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); display: block; margin-bottom: 3px; }
+.empty-state.state-empty { border-left: 3px solid var(--warning); }
+.empty-state.state-empty .es-label { color: var(--warning); }
+
+/* ---- quote-kind label (M3 #145 constraint 4) ----
+   Delayed board closes, physical assessments, administered minimums and weekly
+   assessments are different animals; collapsing them into one "price" label is
+   the easiest way to make the product dishonest. The chip carries the price
+   type as well as the venue — "board" alone reads as the exchange's own
+   settlement, which this stack does not have. Rendered by the market blocks AND
+   by the ledger on both surfaces, so it belongs with the palette. */
+.kind { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+
+/* ---- propagation ledger (M3 #145 / M12 #161) ----
+   The state pill is the point of the surface: a market that has not printed
+   must never read as a market that printed unchanged. `repriced` is the only
+   affirmative colour; `no print since` is deliberately quiet unless it is past
+   the gap that is normal for that leg, and `dark` is loud. `out of cadence`
+   (Europe on the headline) is neither an outage nor a print, so it is outlined
+   rather than filled — it carries no value at all. */
+.ledger .lrow.own td { background: rgba(45,106,79,0.045); }
+.ledger .lrow.ref td { color: var(--text-muted); }
+.ledger .caption { margin: 2px 0 0; font-size: 11px; }
+.pill { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
+.pill-repriced { background: rgba(45,106,79,0.12); color: var(--green); }
+.pill-no_print_since { background: #E4E8E4; color: var(--text-muted); }
+.pill-no_print_since.overdue { background: #E8C983; color: #4A3608; }
+.pill-dark { background: var(--bearish); color: #fff; }
+.pill-out_of_cadence { background: transparent; border: 1px solid var(--rule-heavy); color: var(--text-dim); }
+.fx-tag { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: rgba(47,93,143,0.12); color: var(--info); cursor: help; }
+.ledger-rule { display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; flex-wrap: wrap; }
+.rule-tag { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.ledger-good { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.ledger-note { font-size: 12px; color: var(--text-muted); border-left: 2px solid var(--rule-heavy); padding-left: 12px; margin-top: 12px; }
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .page { padding: 20px 16px 48px; }
+  .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .masthead h1 { font-size: clamp(32px, 11vw, 42px); }
+  .mast-meta { margin-left: 0; text-align: left; }
+  .market-nav .mn-end { margin-left: 0; }
+}
+
+
+/* ---- tier stamp ---- */
+.tier-stamp { display: flex; align-items: baseline; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.tier-pill { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.tier-pill.brief { background: #E4E8E4; color: var(--text-muted); }
+.tier-pill.stub { background: transparent; border: 1px solid var(--rule); color: var(--text-dim); }
+.tier-why { color: var(--text-dim); }
+.venue { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+
+
+
+/* ---- blocks ---- */
+.block { padding: 22px 0; border-bottom: 1px solid var(--rule); }
+.block:last-of-type { border-bottom: none; }
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.block-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+.block-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.block-head .why { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+@media (max-width: 768px) {
+  .tier-why { flex-basis: 100%; overflow-wrap: anywhere; }
+  .block-head .why { flex-basis: 100%; margin-left: 0; overflow-wrap: anywhere; }
+}
+
+
+
+/* ---- cash leg under the board crush (block 03, #352) ----
+   The existing .dtable inside the block, set off by a rule so the cash premium
+   reads as a second claim beside the margin rather than a row of it. Only the
+   CBOT page renders one, hence here and not in _base.html.j2. */
+.cash-leg { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--rule); }
+.cash-leg .mc-label { display: flex; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+
+/* ---- river gauges (block 06, M25 #272 / M26 #273) ----
+   DESIGN.md's "Key/value watch row": muted label left, mono value right,
+   dotted rule between. Defined here rather than in _base.html.j2 because only
+   a market block renders a river — the headline and players pages never do,
+   which is the same reason this whole file exists. */
+.river { margin-top: 14px; }
+.river-head { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
+.river-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 6px 0; border-bottom: 1px dotted var(--rule); font-size: 13px; align-items: baseline; }
+.river-row:last-child { border-bottom: none; }
+.river-row .lbl { color: var(--text-muted); min-width: 0; overflow-wrap: anywhere; }
+.river-row .val { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.river-row .caption { margin-top: 2px; }
+@media (max-width: 768px) {
+  .river-row { grid-template-columns: 1fr; }
+  .river-row .val { text-align: left; white-space: normal; }
+}
+
+/* ---- ledger row drill-down (M21 #250) ----
+   Lives here rather than in _base.html.j2 because only a market page renders
+   it: the headline ledger has no pinned leg to overlay and no drill-down, and
+   a copy of these rules in the shared <head> would invite one. Inline SVG in
+   the block's own palette — Plotly is loaded for the headline's figures and is
+   not worth shipping to eight market pages for a sparkline. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Every affordance below is gated on `.drill-ready`, which the script adds. A
+   chevron that opens nothing is worse than no chevron: with script off the
+   ledger simply loses the drill-down and keeps the rest, band included. */
+.drill-row[hidden] { display: none; }
+.drill-toggle { display: none; background: none; border: none; padding: 0 6px 0 0; margin: 0; cursor: pointer; color: var(--text-dim); font-size: 11px; line-height: 1; }
+.ledger.drill-ready .drill-toggle { display: inline-block; }
+.ledger.drill-ready .lrow.has-drill { cursor: pointer; }
+.ledger.drill-ready .lrow.has-drill:hover td { background: rgba(45,106,79,0.05); }
+.ledger .lrow.open td { background: rgba(45,106,79,0.07); }
+.lrow.open .drill-toggle .chev { display: inline-block; transform: rotate(90deg); }
+.drill-hint { color: var(--text-dim); }
+
+/* The range band, rendered server-side with the rest of the row: "high in its
+   own range" must not depend on script running. */
+.range-band { margin-top: 4px; font-size: 11px; color: var(--text-muted); font-weight: 400; }
+.range-band .rb-track { display: block; position: relative; height: 3px; margin: 0 0 3px auto; width: 78px; background: var(--rule); border-radius: 2px; }
+.range-band .rb-tick { position: absolute; top: -2px; width: 2px; height: 7px; background: var(--green); transform: translateX(-1px); }
+.range-band.no-range { color: var(--text-dim); }
+
+.drill-row > td { background: #F4F6F3; padding: 14px 16px; }
+.drill-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.drill-pane { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.drill-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 6px; }
+.drill-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.drill-flat { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.drill-flat .v { font-size: 18px; font-weight: 500; }
+.drill-windows { display: flex; gap: 6px; margin-bottom: 10px; }
+.drill-windows .dw { font-family: var(--mono); font-size: 11px; padding: 2px 9px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); color: var(--text-muted); cursor: pointer; }
+.drill-windows .dw.on { background: var(--green); border-color: var(--green); color: #fff; }
+.drill-svg { width: 100%; height: auto; display: block; }
+.drill-svg .ax { stroke: var(--rule); stroke-width: 1; }
+.drill-svg .lbl { font-family: var(--mono); font-size: 9px; fill: var(--text-dim); text-anchor: end; }
+.drill-svg .lbl.dt { text-anchor: start; }
+.drill-svg .lbl.dt.end { text-anchor: end; }
+.drill-svg .ln { fill: none; stroke-width: 1.4; }
+.drill-svg .ln.own { stroke: var(--green); }
+.drill-svg .ln.ref { stroke: var(--text-dim); stroke-dasharray: 4 3; }
+.drill-svg .ln.fx { stroke: var(--info); }
+.drill-svg .pt { stroke: none; }
+.drill-svg .pt.own { fill: var(--green); }
+.drill-svg .pt.ref { fill: var(--text-dim); }
+.drill-svg .pt.fx { fill: var(--info); }
+@media (max-width: 768px) { .drill-panes { grid-template-columns: 1fr; } }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <h1>Mirror<br><em>Brazil</em></h1>
+  <div class="mast-meta">
+    
+    <div class="day">TUESDAY 06 OCTOBER 2026</div>
+    <div>Generated 2026-10-06 14:57 UTC</div>
+    <div>CEPEA/ESALQ Paraná · Paranaguá FOB · all prices USD/MT</div>
+
+  </div>
+</header>
+
+
+<nav class="market-nav">
+  <span class="mn-label">Markets</span>
+  <a href="../index.html">Headline</a>
+  
+  <a href="../markets/cbot.html">CBOT</a>
+  
+  <a href="../markets/dalian.html">Dalian</a>
+  
+  <a href="../markets/brazil.html" class="current">Brazil</a>
+  
+  <a href="../markets/argentina.html">Argentina</a>
+  
+  <a href="../markets/india.html">India</a>
+  
+  <a href="../markets/europe.html" class="stub">Europe</a>
+  
+  <a href="../markets/south_africa.html">South Africa</a>
+  
+  <a href="../markets/nigeria.html" class="stub">Nigeria</a>
+  
+  
+  <a href="../origins.html" class="mn-end">Origins &rarr;</a>
+  <a href="../workstation.html">Workstation &rarr;</a>
+  <a href="../opportunities.html">Opportunities &rarr;</a>
+  <a href="../players.html">Players &rarr;</a>
+</nav>
+
+
+<div class="tier-stamp">
+  <span class="tier-pill">page</span>
+  <span class="venue">Brazil</span>
+  <span class="tier-why">daily leg present · 3 of 4 supporting blocks (ledger · basis · weather)</span>
+</div>
+<nav class="index-nav">
+  
+  <a href="#block-price"><span class="no">01</span>Local price</a>
+  
+  <a href="#block-ledger"><span class="no">02</span>Propagation ledger</a>
+  
+  <a href="#block-crush"><span class="no">03</span>Crush margin</a>
+  
+  <a href="#block-basis"><span class="no">04</span>Basis vs the board</a>
+  
+  <a href="#block-currency"><span class="no">05</span>Currency</a>
+  
+  <a href="#block-weather"><span class="no">06</span>Weather</a>
+  
+  <a href="#block-supply_demand"><span class="no">07</span>Supply &amp; demand</a>
+  
+  <a href="#block-news"><span class="no">08</span>News</a>
+  
+  <a href="#block-players"><span class="no">09</span>Players</a>
+  
+</nav>
+
+
+
+
+
+<section class="block" id="block-price">
+  <div class="block-head">
+    <span class="block-no">01</span>
+    <h2>Local price</h2>
+    <span class="kind">physical assessment</span>
+    <span class="why">the decision number, USD/MT over home currency</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-2">
+  
+  <div class="mc">
+    <div class="mc-label">Soybean (CEPEA) · headline</div>
+    
+    <div class="mc-val">$478.3<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="down">-2.7%</span> <span class="muted">session</span> · <span class="down">-1.2%</span> <span class="muted">21 obs</span>
+    </div>
+    
+    <div class="mc-delta muted">2,498.17 BRL/MT</div>
+    <div class="caption">as of 2026-10-05</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Soybean (ESALQ/B3 Paranaguá)</div>
+    
+    <div class="mc-val">$504.5<small class="muted"> /MT</small></div>
+    <div class="mc-delta">
+      <span class="down">-1.2%</span> <span class="muted">session</span> · <span class="down">-1.3%</span> <span class="muted">21 obs</span>
+    </div>
+    
+    <div class="mc-delta muted">2,634.83 BRL/MT</div>
+    <div class="caption">as of 2026-10-05</div>
+  </div>
+  
+</div>
+
+<div class="caption">CEPEA/ESALQ Paraná · Paranaguá FOB · daily · dates only — this stack stores no time of day</div>
+  
+</section>
+
+
+<section class="block" id="block-ledger">
+  <div class="block-head">
+    <span class="block-no">02</span>
+    <h2>Propagation ledger</h2>
+    
+    <span class="why">who has repriced, and who has not printed</span>
+  </div>
+  
+  
+
+<div class="ledger-rule">
+  <span class="rule-tag">origin</span>
+  <span>Origin page — who else is offering this cargo. These are competing physical offers, so the spread is an arbitrage a cargo can close.</span>
+</div>
+<div class="ledger-good">All rows: <strong>Soybean</strong> · Every row is the soybean. Meal and oil are a different good and would be a second ledger, not more rows here.</div>
+
+
+<div class="table-scroll">
+<table class="dtable ledger">
+  <thead>
+    <tr>
+      <th>Leg</th>
+      <th>Kind</th>
+      <th class="num">USD/MT</th>
+      <th class="num">Home print</th>
+      <th class="num">Move · USD</th>
+      <th class="num">Move · home</th>
+      <th class="num">Spread</th>
+      <th>State</th>
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr class="lrow own has-drill" data-panel="drill-brazil-cepea"><td><button type="button" class="drill-toggle" aria-expanded="false" aria-controls="drill-brazil-cepea"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show Brazil CEPEA/ESALQ Paraná history</span></button>
+        
+        <a href="../markets/brazil.html">Brazil CEPEA/ESALQ Paraná</a>
+        <div class="caption">on the Brazil page · pinned</div>
+        
+      </td>
+      <td><span class="kind">physical assessment</span></td>
+      <td class="num strong">$478.3
+        <div class="range-band" title="range of this leg's prints over the last 90 days">
+          <span class="rb-track"><span class="rb-tick" style="left:63.9%"></span></span>
+          <span class="rb-text">427–507 since 8 Jul</span>
+        </div>
+        </td>
+      <td class="num">2,498.17 <span class="muted">BRL/MT</span></td>
+      <td class="num"><span class="down">-2.7%</span></td>
+      <td class="num"><span class="down">-2.7%</span></td>
+      
+      <td class="num"><span class="muted">pinned</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-10-05, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr class="drill-row" id="drill-brazil-cepea" hidden>
+      <td colspan="8">
+        <div class="drill" data-leg="brazil:cepea"></div>
+        <script type="application/json" class="drill-data">{"d": [0, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 38, 39, 40, 45, 46, 47, 48, 49, 52, 53, 54, 55, 56, 59, 61, 62, 63, 66, 67, 68, 69, 73, 75, 76, 77, 80, 81, 82, 83, 84, 87, 88, 89, 90, 91, 94, 95, 96, 97, 98, 101, 102, 103, 105, 108, 109, 110, 111, 112, 115, 116, 117, 118, 119, 122, 123, 124, 125, 126, 129, 130, 131, 132, 133, 136, 137, 138, 139, 140, 143, 144, 145, 146, 147, 150, 151, 152, 153, 154, 157, 158, 159, 160, 161, 164, 165, 166, 167, 168, 171, 172, 173, 174, 175, 178, 179, 180, 181, 182, 185, 186, 187, 188, 189, 192, 193, 194, 195, 196, 200, 201, 202, 203, 206, 207, 208, 209, 210, 213, 214, 215, 216, 217, 220, 221, 222, 223, 224, 227], "default_days": 90, "fx_pair": "BRL/USD", "has_home_quote": true, "history_from": "2026-02-20", "history_from_label": "20 Feb 2026", "home_unit": "BRL/MT", "label": "Brazil CEPEA/ESALQ Paran\u00e1", "leg_id": "brazil:cepea", "origin": "2026-02-20", "single_currency_note": null, "usd": [388.13, 386.17, 387.49, 388.0, 391.34, 391.63, 392.04, 391.72, 382.83, 388.14, 390.49, 389.59, 390.63, 394.87, 397.69, 391.69, 382.43, 384.61, 388.51, 388.19, 394.04, 384.51, 390.86, 391.36, 394.39, 395.09, 391.37, 388.84, 393.14, 397.61, 397.08, 393.06, 398.06, 395.56, 401.5, 401.42, 403.79, 401.64, 402.4, 400.06, 401.42, 402.85, 400.57, 405.43, 406.13, 409.07, 406.84, 413.71, 411.45, 408.67, 409.48, 414.89, 417.18, 419.37, 405.71, 409.26, 406.79, 411.77, 405.88, 410.11, 410.2, 409.59, 410.75, 410.58, 409.33, 409.86, 411.87, 409.97, 411.53, 409.56, 399.59, 399.41, 403.04, 403.59, 406.38, 404.01, 406.89, 404.78, 405.69, 400.95, 406.23, 407.12, 405.98, 408.07, 409.57, 411.26, 409.86, 411.68, 408.22, 409.82, 417.7, 427.85, 427.13, 428.29, 430.41, 434.99, 430.4, 436.13, 438.49, 437.1, 441.23, 446.58, 451.56, 458.54, 458.65, 460.99, 455.53, 450.97, 448.01, 450.53, 449.01, 444.29, 443.03, 445.98, 446.88, 450.69, 448.69, 448.47, 449.08, 452.45, 452.25, 458.79, 460.37, 470.83, 470.82, 474.67, 472.36, 479.3, 483.12, 488.66, 485.79, 492.31, 493.67, 496.4, 496.96, 494.89, 499.63, 502.31, 499.14, 498.58, 498.22, 503.38, 501.37, 504.74, 503.37, 507.14, 506.77, 500.58, 495.71, 493.14, 491.11, 496.23, 496.71, 491.77, 478.29], "windows": [{"count": 20, "days": 30, "label": "30d", "starts": "2026-09-08", "starts_label": "8 Sep", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 63, "days": 90, "label": "90d", "starts": "2026-07-08", "starts_label": "8 Jul", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 155, "days": 365, "label": "1y", "starts": "2026-02-20", "starts_label": "20 Feb", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}]}</script>
+      </td>
+    </tr>
+    
+    <tr class="lrow has-drill" data-panel="drill-brazil-paranagua"><td><button type="button" class="drill-toggle" aria-expanded="false" aria-controls="drill-brazil-paranagua"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show Brazil Paranaguá FOB history</span></button>
+        
+        <a href="../markets/brazil.html">Brazil Paranaguá FOB</a>
+        <div class="caption">on the Brazil page</div>
+        
+      </td>
+      <td><span class="kind">physical assessment</span></td>
+      <td class="num strong">$491.4
+        <div class="range-band" title="range of this leg's prints over the last 90 days">
+          <span class="rb-track"><span class="rb-tick" style="left:36.8%"></span></span>
+          <span class="rb-text">470–529 since 27 Jul</span>
+        </div>
+        </td>
+      <td class="num">2,566.67 <span class="muted">BRL/MT</span></td>
+      <td class="num"><span class="down">-4.4%</span></td>
+      <td class="num"><span class="down">-4.3%</span></td>
+      
+      <td class="num"><span class="up">+13.1</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-10-05, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr class="drill-row" id="drill-brazil-paranagua" hidden>
+      <td colspan="8">
+        <div class="drill" data-leg="brazil:paranagua"></div>
+        <script type="application/json" class="drill-data">{"d": [0, 2, 3, 4, 7, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 35, 36, 37, 38, 39, 53, 56, 57, 58, 59, 60, 63, 64, 65, 67, 70], "default_days": 90, "fx_pair": "BRL/USD", "has_home_quote": true, "history_from": "2026-07-27", "history_from_label": "27 Jul 2026", "home_unit": "BRL/MT", "label": "Brazil Paranagu\u00e1 FOB", "leg_id": "brazil:paranagua", "origin": "2026-07-27", "single_currency_note": null, "usd": [482.05, 470.43, 477.85, 474.26, 473.12, 469.83, 470.31, 475.09, 477.12, 476.56, 476.79, 474.78, 480.79, 483.56, 488.55, 490.64, 497.42, 494.25, 499.61, 496.35, 510.07, 513.2, 523.14, 518.51, 521.06, 520.81, 528.53, 524.41, 526.92, 526.84, 528.33, 527.79, 522.82, 520.18, 514.06, 516.95, 515.74, 513.79, 491.41], "windows": [{"count": 11, "days": 30, "label": "30d", "starts": "2026-09-18", "starts_label": "18 Sep", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 39, "days": 90, "label": "90d", "starts": "2026-07-27", "starts_label": "27 Jul", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 39, "days": 365, "label": "1y", "starts": "2026-07-27", "starts_label": "27 Jul", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}]}</script>
+      </td>
+    </tr>
+    
+    <tr class="lrow has-drill" data-panel="drill-us_gulf-cif"><td><button type="button" class="drill-toggle" aria-expanded="false" aria-controls="drill-us_gulf-cif"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show US Gulf CIF (NOLA barge) history</span></button>
+        
+        <a href="../markets/cbot.html">US Gulf CIF (NOLA barge)</a>
+        <div class="caption">on the CBOT page</div>
+        
+      </td>
+      <td><span class="kind">physical assessment</span></td>
+      <td class="num strong">$513.1
+        <div class="range-band" title="range of this leg's prints over the last 90 days">
+          <span class="rb-track"><span class="rb-tick" style="left:74.2%"></span></span>
+          <span class="rb-text">468–529 since 8 Jul</span>
+        </div>
+        </td>
+      <td class="num">13.96 <span class="muted">USD/bu</span><div class="caption">mean of 7 quotes</div></td>
+      <td class="num"><span class="up">+0.2%</span></td>
+      <td class="num"><span class="up">+0.2%</span></td>
+      
+      <td class="num"><span class="up">+34.8</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-10-05, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr class="drill-row" id="drill-us_gulf-cif" hidden>
+      <td colspan="8">
+        <div class="drill" data-leg="us_gulf:cif"></div>
+        <script type="application/json" class="drill-data">{"d": [0, 1, 2, 3, 4, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 35, 37, 38, 39, 42, 43, 44, 45, 46, 49, 50, 51, 56, 57, 58, 59, 60, 63, 64, 65, 66, 67, 70, 71, 72, 73, 74, 77, 78, 84, 85, 86, 88, 91, 92, 93, 94, 95, 98, 99, 100, 101, 102, 106, 107, 108, 109, 112, 113, 114, 115, 116, 119, 120, 121, 122, 123, 126, 127, 128, 129, 130, 134, 135, 136, 137, 140, 141, 142, 143, 144, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 161, 162, 163, 164, 165, 168, 169, 170, 171, 172, 175, 176, 177, 178, 182, 183, 184, 185, 186, 189, 190, 191, 192, 193, 196, 197, 198, 199, 200, 203, 204, 205, 206, 207, 210, 211, 212, 213, 214, 217, 218, 219, 220, 221, 224, 225, 226, 227, 228, 232, 233, 234, 235, 238, 239, 240, 241, 242, 245, 246, 247, 248, 249, 252, 253, 254, 255, 259, 260, 261, 262, 263, 266, 267, 268, 269, 273, 274, 275, 276, 277, 280, 281, 282, 283, 284, 287, 288, 289, 290, 291, 294, 295, 296, 297, 298, 301, 302, 303, 304, 305, 308, 309, 310, 311, 312, 315, 316, 317, 318, 319, 322, 323, 324, 325, 326, 329, 330, 331, 332, 333, 347, 350, 351, 352, 354, 357, 358, 359, 361, 364], "default_days": 90, "fx_pair": null, "has_home_quote": true, "history_from": "2025-09-02", "history_from_label": "2 Sep 2025", "home_unit": "USD/bu", "label": "US Gulf CIF (NOLA barge)", "leg_id": "us_gulf:cif", "origin": "2025-10-06", "single_currency_note": "US Gulf CIF (NOLA barge) is quoted in USD/bu, already a US dollar unit. The USD/MT figure is a unit conversion, not a currency one, so there is no FX component to separate out.", "usd": [402.17, 403.42, 408.31, 406.06, 400.48, 400.77, 400.32, 401.95, 404.96, 409.65, 409.21, 410.9, 414.97, 414.09, 423.07, 427.07, 431.12, 435.32, 438.31, 445.24, 440.81, 446.55, 436.83, 440.24, 445.2, 446.76, 450.43, 443.3, 453.43, 452.97, 446.79, 441.87, 442.76, 442.07, 442.75, 444.7, 444.05, 442.88, 440.54, 441.8, 436.86, 432.91, 430.24, 431.42, 432.15, 426.18, 424.34, 421.6, 421.01, 418.64, 417.63, 419.39, 418.86, 418.6, 419.61, 414.14, 413.73, 419.8, 417.68, 424.02, 421.95, 422.41, 417.56, 413.86, 416.95, 420.61, 422.31, 420.57, 426.48, 426.56, 427.86, 425.73, 430.2, 433.1, 432.17, 429.15, 426.75, 428.51, 438.19, 445.76, 446.77, 445.33, 449.85, 450.92, 455.57, 454.15, 454.43, 455.73, 458.33, 457.28, 456.07, 458.02, 462.18, 461.75, 464.61, 462.14, 464.47, 462.2, 465.74, 473.5, 471.92, 472.47, 475.43, 480.22, 479.41, 453.69, 454.63, 455.06, 457.41, 454.8, 455.65, 452.63, 459.13, 459.83, 454.53, 454.64, 458.75, 459.74, 457.94, 459.13, 456.02, 457.31, 460.02, 463.65, 458.76, 457.12, 462.57, 461.57, 462.57, 462.11, 465.39, 462.0, 460.31, 461.59, 466.47, 465.41, 468.86, 468.61, 471.33, 478.43, 474.27, 467.59, 466.72, 472.55, 474.43, 479.3, 480.02, 468.01, 462.77, 475.46, 474.73, 470.63, 468.5, 469.16, 465.54, 466.33, 470.11, 467.67, 466.09, 460.61, 457.23, 447.94, 445.58, 443.99, 442.31, 445.16, 442.74, 442.11, 443.76, 448.51, 450.9, 447.87, 446.03, 446.41, 444.73, 452.2, 451.88, 445.51, 447.72, 451.83, 453.35, 470.45, 474.43, 475.23, 470.41, 474.68, 476.34, 474.91, 479.41, 476.85, 480.03, 488.3, 486.54, 495.89, 497.6, 501.29, 486.73, 488.62, 477.61, 476.88, 475.83, 477.7, 472.49, 471.17, 471.68, 471.15, 472.31, 468.38, 473.8, 473.53, 477.16, 485.88, 486.12, 493.64, 493.94, 495.0, 490.1, 496.01, 506.4, 507.15, 514.49, 514.52, 525.78, 522.74, 525.01, 522.62, 519.77, 528.72, 527.77, 523.52, 523.65, 512.48, 516.0, 515.33, 512.12, 513.13], "windows": [{"count": 10, "days": 30, "label": "30d", "starts": "2026-09-18", "starts_label": "18 Sep", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 53, "days": 90, "label": "90d", "starts": "2026-07-08", "starts_label": "8 Jul", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 236, "days": 365, "label": "1y", "starts": "2025-10-06", "starts_label": "6 Oct", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}]}</script>
+      </td>
+    </tr>
+    
+    <tr class="lrow has-drill" data-panel="drill-argentina-fob"><td><button type="button" class="drill-toggle" aria-expanded="false" aria-controls="drill-argentina-fob"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show Argentina official FOB history</span></button>
+        
+        <a href="../markets/argentina.html">Argentina official FOB</a>
+        <div class="caption">on the Argentina page</div>
+        
+      </td>
+      <td><span class="kind">administered minimum</span></td>
+      <td class="num strong">$499.0
+        <div class="range-band" title="range of this leg's prints over the last 90 days">
+          <span class="rb-track"><span class="rb-tick" style="left:79.1%"></span></span>
+          <span class="rb-text">452–512 since 8 Jul</span>
+        </div>
+        </td>
+      <td class="num"><span class="muted">—</span></td>
+      <td class="num"><span class="up">+0.3%</span></td>
+      <td class="num"><span class="muted">—</span></td>
+      
+      <td class="num"><span class="up">+20.7</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-10-05, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr class="drill-row" id="drill-argentina-fob" hidden>
+      <td colspan="8">
+        <div class="drill" data-leg="argentina:fob"></div>
+        <script type="application/json" class="drill-data">{"d": [0, 1, 2, 3, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 35, 36, 37, 38, 39, 42, 43, 44, 45, 50, 51, 52, 53, 56, 57, 58, 59, 60, 64, 65, 66, 67, 70, 71, 72, 73, 74, 77, 78, 81, 84, 85, 88, 91, 92, 93, 94, 95, 98, 99, 100, 101, 102, 105, 106, 107, 108, 109, 112, 113, 114, 115, 116, 119, 120, 121, 122, 123, 126, 127, 128, 129, 130, 135, 136, 137, 140, 141, 142, 143, 144, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 161, 162, 163, 164, 165, 170, 171, 172, 175, 176, 177, 182, 183, 184, 185, 186, 189, 190, 191, 192, 193, 196, 197, 198, 199, 200, 203, 204, 205, 206, 210, 211, 212, 213, 214, 217, 218, 219, 220, 221, 224, 225, 226, 227, 228, 232, 233, 234, 235, 238, 239, 240, 241, 242, 245, 246, 247, 248, 249, 253, 254, 255, 256, 259, 260, 261, 262, 263, 266, 267, 268, 269, 270, 273, 274, 275, 280, 281, 282, 283, 284, 287, 288, 289, 290, 291, 294, 295, 296, 297, 298, 301, 302, 303, 304, 305, 308, 309, 310, 311, 312, 316, 317, 318, 319, 323, 324, 325, 326, 329, 330, 331, 332, 336, 347, 350, 351, 352, 353, 354, 357, 358, 359, 361, 364], "default_days": 90, "fx_pair": null, "has_home_quote": false, "history_from": "2025-09-01", "history_from_label": "1 Sep 2025", "home_unit": "USD/MT", "label": "Argentina official FOB", "leg_id": "argentina:fob", "origin": "2025-10-06", "single_currency_note": "Argentina official FOB is quoted in USD/MT. There is no second currency between the venue\u0027s print and the number in the row, so there is no FX component to separate out \u2014 one quote, not two.", "usd": [400.4, 401.5, 403.7, 401.3, 397.0, 397.1, 397.5, 398.25, 401.0, 403.67, 403.4, 404.62, 409.0, 406.33, 414.67, 418.33, 415.0, 419.0, 422.5, 426.67, 424.17, 427.29, 417.29, 417.67, 423.4, 421.2, 423.6, 427.8, 420.83, 434.8, 432.4, 425.0, 423.67, 425.5, 427.7, 427.7, 431.56, 426.9, 425.22, 418.67, 419.17, 414.83, 413.4, 422.33, 417.86, 412.14, 412.14, 409.0, 408.0, 405.14, 404.57, 406.29, 406.0, 409.29, 404.88, 404.25, 399.0, 404.62, 401.75, 405.25, 404.0, 404.62, 402.57, 398.57, 400.57, 404.0, 405.14, 405.14, 403.4, 406.8, 407.4, 409.67, 407.6, 410.0, 412.6, 412.4, 409.0, 406.0, 408.2, 417.0, 423.17, 421.83, 416.57, 424.0, 424.43, 428.29, 427.43, 427.14, 428.0, 426.57, 425.57, 426.43, 430.29, 429.71, 429.33, 427.5, 430.33, 428.67, 432.17, 440.0, 434.83, 437.5, 441.67, 445.83, 444.6, 427.0, 425.83, 428.67, 430.17, 427.83, 432.67, 430.83, 434.5, 427.8, 432.8, 434.5, 430.8, 428.0, 429.8, 435.0, 443.67, 435.0, 434.0, 433.8, 437.75, 435.4, 435.2, 438.0, 431.0, 433.75, 432.4, 437.67, 437.67, 439.67, 438.67, 448.0, 442.8, 439.75, 438.75, 442.0, 445.75, 450.75, 452.0, 439.0, 435.5, 453.4, 451.33, 447.67, 447.0, 445.33, 441.67, 442.0, 452.0, 446.6, 445.6, 439.8, 436.2, 427.6, 426.0, 425.5, 423.0, 428.2, 426.2, 425.2, 431.4, 433.6, 432.2, 432.2, 431.0, 420.75, 427.8, 433.8, 432.2, 426.2, 433.67, 436.5, 436.25, 436.25, 452.67, 454.33, 455.0, 455.0, 455.67, 460.0, 461.5, 465.0, 472.5, 469.0, 474.5, 475.5, 477.25, 463.0, 466.67, 457.0, 457.0, 455.67, 458.33, 453.75, 453.25, 454.25, 454.0, 455.33, 451.67, 457.33, 458.0, 460.67, 471.33, 479.0, 480.5, 481.67, 482.67, 491.33, 492.33, 500.67, 501.0, 511.0, 507.67, 510.0, 508.0, 505.0, 511.5, 511.0, 508.0, 510.5, 511.5, 501.5, 505.0, 503.5, 497.5, 499.0], "windows": [{"count": 12, "days": 30, "label": "30d", "starts": "2026-09-07", "starts_label": "7 Sep", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 50, "days": 90, "label": "90d", "starts": "2026-07-08", "starts_label": "8 Jul", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 230, "days": 365, "label": "1y", "starts": "2025-10-06", "starts_label": "6 Oct", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}]}</script>
+      </td>
+    </tr>
+    
+    <tr class="lrow has-drill" data-panel="drill-cbot-board"><td><button type="button" class="drill-toggle" aria-expanded="false" aria-controls="drill-cbot-board"><span class="chev" aria-hidden="true">&#9656;</span><span class="sr-only">Show CBOT board (ZS front) history</span></button>
+        
+        <a href="../markets/cbot.html">CBOT board (ZS front)</a>
+        <div class="caption">on the CBOT page</div>
+        
+      </td>
+      <td><span class="kind">board · delayed close</span></td>
+      <td class="num strong">$470.6
+        <div class="range-band" title="range of this leg's prints over the last 90 days">
+          <span class="rb-track"><span class="rb-tick" style="left:73.8%"></span></span>
+          <span class="rb-text">422–488 since 8 Jul</span>
+        </div>
+        </td>
+      <td class="num">1,280.75 <span class="muted">cents/bu</span></td>
+      <td class="num"><span class="up">+0.2%</span></td>
+      <td class="num"><span class="up">+0.2%</span></td>
+      
+      <td class="num"><span class="down">-7.7</span></td>
+      
+      <td>
+        <span class="pill pill-repriced">repriced</span>
+        <div class="caption">printed 2026-10-05, the newest on this ledger</div>
+      </td>
+    </tr>
+    
+    <tr class="drill-row" id="drill-cbot-board" hidden>
+      <td colspan="8">
+        <div class="drill" data-leg="cbot:board"></div>
+        <script type="application/json" class="drill-data">{"d": [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 29, 30, 31, 32, 35, 36, 37, 38, 39, 42, 43, 44, 45, 46, 49, 50, 51, 53, 56, 57, 58, 59, 60, 63, 64, 65, 66, 67, 70, 71, 72, 73, 74, 77, 78, 79, 81, 84, 85, 86, 88, 91, 92, 93, 94, 95, 98, 99, 100, 101, 102, 106, 107, 108, 109, 112, 113, 114, 115, 116, 119, 120, 121, 122, 123, 126, 127, 128, 129, 130, 134, 135, 136, 137, 140, 141, 142, 143, 144, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 161, 162, 163, 164, 165, 168, 169, 170, 171, 172, 175, 176, 177, 182, 183, 184, 185, 186, 189, 190, 191, 192, 193, 196, 197, 198, 199, 200, 203, 204, 205, 206, 207, 210, 211, 212, 213, 214, 217, 218, 219, 220, 221, 224, 225, 226, 227, 228, 232, 233, 234, 235, 238, 239, 240, 241, 242, 245, 246, 247, 248, 249, 252, 253, 254, 255, 259, 260, 261, 262, 263, 266, 267, 268, 269, 273, 274, 275, 276, 277, 280, 281, 282, 283, 284, 287, 288, 289, 290, 291, 294, 295, 296, 297, 298, 301, 302, 303, 304, 305, 308, 309, 310, 311, 312, 315, 316, 317, 318, 319, 322, 323, 324, 325, 326, 329, 330, 331, 332, 333, 337, 338, 339, 340, 343, 344, 345, 346, 347, 350, 351, 352, 353, 354, 357, 358, 359, 360, 361, 364], "default_days": 90, "fx_pair": null, "has_home_quote": true, "history_from": "2025-09-02", "history_from_label": "2 Sep 2025", "home_unit": "cents/bu", "label": "CBOT board (ZS front)", "leg_id": "cbot:board", "origin": "2025-10-06", "single_currency_note": "CBOT board (ZS front) is quoted in cents/bu, already a US dollar unit. The USD/MT figure is a unit conversion, not a currency one, so there is no FX component to separate out.", "usd": [373.96, 375.52, 378.28, 375.61, 369.92, 370.28, 369.83, 369.83, 371.39, 374.6, 379.1, 378.74, 380.21, 383.88, 382.78, 392.15, 396.19, 396.92, 400.97, 404.09, 407.21, 411.44, 401.15, 404.82, 410.06, 409.05, 411.71, 415.94, 408.87, 425.22, 423.84, 417.5, 412.45, 413.37, 412.72, 413.27, 415.75, 418.05, 414.47, 413.27, 409.97, 411.35, 406.11, 401.88, 399.5, 400.97, 401.79, 395.64, 393.8, 390.49, 388.84, 386.64, 385.53, 387.0, 386.36, 390.68, 389.02, 385.63, 384.43, 378.64, 378.28, 384.8, 382.87, 386.82, 384.71, 385.26, 379.56, 375.98, 378.64, 386.91, 388.66, 386.91, 391.14, 390.95, 392.33, 390.13, 392.15, 394.99, 393.98, 391.04, 389.58, 391.6, 401.33, 408.68, 409.78, 408.13, 412.45, 413.0, 417.87, 416.31, 416.67, 416.49, 419.25, 417.96, 416.77, 418.69, 421.91, 421.73, 425.22, 422.55, 424.67, 424.21, 427.6, 435.41, 433.76, 436.24, 441.11, 445.7, 444.97, 424.48, 425.12, 426.87, 429.35, 426.69, 427.51, 424.39, 430.54, 431.28, 425.95, 426.14, 430.27, 429.35, 428.71, 425.58, 426.96, 428.16, 432.01, 427.05, 425.49, 428.8, 427.6, 428.89, 428.34, 431.55, 427.88, 426.14, 427.6, 432.57, 431.0, 434.4, 434.31, 436.42, 443.68, 439.36, 433.21, 432.47, 438.81, 440.83, 445.88, 446.53, 431.55, 432.47, 445.7, 444.42, 440.83, 438.81, 439.64, 435.78, 435.5, 438.9, 436.06, 433.85, 428.16, 424.02, 415.02, 412.08, 409.97, 409.23, 412.63, 409.69, 409.14, 411.25, 415.2, 415.94, 412.54, 409.97, 410.43, 407.4, 414.29, 413.83, 407.4, 410.34, 413.83, 415.85, 434.4, 439.73, 439.09, 433.48, 439.64, 441.66, 443.59, 441.75, 439.09, 442.58, 450.48, 448.09, 453.05, 454.7, 458.56, 444.05, 445.33, 432.84, 432.57, 430.64, 429.44, 424.39, 423.1, 425.22, 424.94, 425.4, 421.63, 427.97, 429.26, 431.28, 441.29, 441.2, 449.1, 448.55, 450.11, 446.8, 451.21, 460.86, 461.68, 468.94, 468.57, 480.15, 478.31, 479.96, 475.37, 478.59, 475.92, 483.55, 470.41, 472.25, 484.56, 485.2, 484.92, 478.95, 487.96, 487.04, 484.28, 484.1, 484.65, 473.35, 476.84, 475.1, 471.79, 469.68, 470.59], "windows": [{"count": 20, "days": 30, "label": "30d", "starts": "2026-09-08", "starts_label": "8 Sep", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 63, "days": 90, "label": "90d", "starts": "2026-07-08", "starts_label": "8 Jul", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}, {"count": 249, "days": 365, "label": "1y", "starts": "2025-10-06", "starts_label": "6 Oct", "treatment": "line", "truncated": false, "truncation_note": null, "withheld_note": null}]}</script>
+      </td>
+    </tr>
+    
+  </tbody>
+</table>
+</div>
+<div class="caption">ordered as declared in the registry — role in the trade. This stack stores no time of day, so no finer ordering than the date exists. Newest print on this ledger: 2026-10-05 (Brazil CEPEA/ESALQ Paraná, Brazil Paranaguá FOB, US Gulf CIF (NOLA barge), Argentina official FOB, CBOT board (ZS front)).</div>
+<div class="caption drill-hint" hidden>Open a row for its own history in USD/MT, against Brazil CEPEA/ESALQ Paraná (pinned, dashed). Under 8 prints a window is drawn as dots: a connecting line would assert a path between prints that was never observed.</div>
+
+<script type="application/json" id="ledger-context">{"chart_min_obs": 3, "default_days": 90, "fx_series": {"BRL/USD": {"d": [0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 35, 36, 37, 38, 39, 42, 43, 44, 45, 46, 49, 50, 51, 52, 53, 56, 57, 58, 59, 60, 63, 64, 65, 66, 67, 70, 71, 72, 73, 74, 77, 78, 79, 81, 84, 85, 86, 88, 91, 92, 93, 94, 95, 98, 99, 100, 101, 102, 105, 106, 107, 108, 109, 112, 113, 114, 115, 116, 119, 120, 121, 122, 123, 126, 127, 128, 129, 130, 133, 134, 135, 136, 137, 140, 141, 142, 143, 144, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 161, 162, 163, 164, 165, 168, 169, 170, 171, 172, 175, 176, 177, 178, 179, 182, 183, 184, 185, 186, 189, 190, 191, 192, 193, 196, 197, 198, 199, 200, 203, 204, 205, 206, 207, 210, 211, 212, 213, 214, 217, 218, 219, 220, 221, 224, 225, 226, 227, 228, 231, 232, 233, 234, 235, 238, 239, 240, 241, 242, 245, 246, 247, 248, 249, 252, 253, 254, 255, 256, 259, 260, 261, 262, 263, 266, 267, 268, 269, 270, 273, 274, 275, 276, 277, 280, 281, 282, 283, 284, 287, 288, 289, 290, 291, 294, 295, 296, 297, 298, 301, 302, 303, 304, 305, 308, 309, 310, 311, 312, 315, 316, 317, 318, 319, 322, 323, 324, 325, 326, 329, 330, 331, 332, 333, 336, 337, 338, 339, 340, 343, 344, 345, 346, 347, 350, 351, 352, 353, 354, 357, 358, 359, 360, 361, 364], "origin": "2025-10-06", "pair": "BRL/USD", "truncated": false, "truncation_note": null, "v": [0.187455, 0.188281, 0.186783, 0.187434, 0.18597, 0.181061, 0.183013, 0.182432, 0.18351, 0.183796, 0.184976, 0.186265, 0.185642, 0.185206, 0.185773, 0.185587, 0.186105, 0.186658, 0.186644, 0.185805, 0.18606, 0.186745, 0.185326, 0.186616, 0.186933, 0.187586, 0.189047, 0.189728, 0.188989, 0.188804, 0.188836, 0.187635, 0.187917, 0.187667, 0.187536, 0.185113, 0.185639, 0.185894, 0.187589, 0.186727, 0.187427, 0.186713, 0.187748, 0.188462, 0.188349, 0.183888, 0.184162, 0.184111, 0.182822, 0.184997, 0.184563, 0.184727, 0.181571, 0.181209, 0.181117, 0.180512, 0.178891, 0.181209, 0.181176, 0.180424, 0.179562, 0.182608, 0.181258, 0.184447, 0.184928, 0.18615, 0.185739, 0.185646, 0.186209, 0.186092, 0.186175, 0.185319, 0.186293, 0.1863, 0.186265, 0.186071, 0.188012, 0.189261, 0.189075, 0.189426, 0.192916, 0.192415, 0.192708, 0.190295, 0.190136, 0.190931, 0.190913, 0.189735, 0.191721, 0.192619, 0.192448, 0.192356, 0.191795, 0.191648, 0.190698, 0.191553, 0.191044, 0.191983, 0.193181, 0.19339, 0.194099, 0.195152, 0.194681, 0.194947, 0.193412, 0.189491, 0.191201, 0.189991, 0.190712, 0.192112, 0.193708, 0.194122, 0.190698, 0.187649, 0.19108, 0.192571, 0.190038, 0.191575, 0.188257, 0.191099, 0.19111, 0.190956, 0.191018, 0.190913, 0.18997, 0.192574, 0.194005, 0.193934, 0.193877, 0.194617, 0.194152, 0.196071, 0.19624, 0.1998, 0.200224, 0.20061, 0.200304, 0.200518, 0.199748, 0.201922, 0.199681, 0.200606, 0.198776, 0.20084, 0.200016, 0.200228, 0.199302, 0.201227, 0.201942, 0.20061, 0.202951, 0.202746, 0.202229, 0.203529, 0.203815, 0.203678, 0.199009, 0.199836, 0.197613, 0.199775, 0.197699, 0.199533, 0.199318, 0.198977, 0.199585, 0.198236, 0.197126, 0.197953, 0.198444, 0.198468, 0.199175, 0.196951, 0.197601, 0.193162, 0.192193, 0.192675, 0.1926, 0.195549, 0.197593, 0.19704, 0.196005, 0.195232, 0.192994, 0.194122, 0.19393, 0.192393, 0.192031, 0.192526, 0.193397, 0.192984, 0.193248, 0.191549, 0.19149, 0.192886, 0.194416, 0.19339, 0.193667, 0.194784, 0.195779, 0.194254, 0.196545, 0.196429, 0.195557, 0.195046, 0.195909, 0.19656, 0.197531, 0.196198, 0.196754, 0.195197, 0.194662, 0.195042, 0.196924, 0.197134, 0.195967, 0.194413, 0.194609, 0.195244, 0.19675, 0.195848, 0.193293, 0.192478, 0.192315, 0.191509, 0.192215, 0.19178, 0.193173, 0.192563, 0.194655, 0.194013, 0.194311, 0.194273, 0.193757, 0.192634, 0.192987, 0.194092, 0.19636, 0.19604, 0.195076, 0.195057, 0.196665, 0.195948, 0.195971, 0.195648, 0.194628, 0.194443, 0.194141, 0.195156, 0.194526, 0.195679, 0.196082, 0.193637, 0.19266, 0.192771, 0.191465, 0.192201, 0.193084, 0.191476, 0.191457]}}, "line_min_obs": 8, "reference": {"d": [0, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 38, 39, 40, 45, 46, 47, 48, 49, 52, 53, 54, 55, 56, 59, 61, 62, 63, 66, 67, 68, 69, 73, 75, 76, 77, 80, 81, 82, 83, 84, 87, 88, 89, 90, 91, 94, 95, 96, 97, 98, 101, 102, 103, 105, 108, 109, 110, 111, 112, 115, 116, 117, 118, 119, 122, 123, 124, 125, 126, 129, 130, 131, 132, 133, 136, 137, 138, 139, 140, 143, 144, 145, 146, 147, 150, 151, 152, 153, 154, 157, 158, 159, 160, 161, 164, 165, 166, 167, 168, 171, 172, 173, 174, 175, 178, 179, 180, 181, 182, 185, 186, 187, 188, 189, 192, 193, 194, 195, 196, 200, 201, 202, 203, 206, 207, 208, 209, 210, 213, 214, 215, 216, 217, 220, 221, 222, 223, 224, 227], "label": "Brazil CEPEA/ESALQ Paran\u00e1", "leg_id": "brazil:cepea", "origin": "2026-02-20", "truncated": false, "truncation_note": null, "usd": [388.13, 386.17, 387.49, 388.0, 391.34, 391.63, 392.04, 391.72, 382.83, 388.14, 390.49, 389.59, 390.63, 394.87, 397.69, 391.69, 382.43, 384.61, 388.51, 388.19, 394.04, 384.51, 390.86, 391.36, 394.39, 395.09, 391.37, 388.84, 393.14, 397.61, 397.08, 393.06, 398.06, 395.56, 401.5, 401.42, 403.79, 401.64, 402.4, 400.06, 401.42, 402.85, 400.57, 405.43, 406.13, 409.07, 406.84, 413.71, 411.45, 408.67, 409.48, 414.89, 417.18, 419.37, 405.71, 409.26, 406.79, 411.77, 405.88, 410.11, 410.2, 409.59, 410.75, 410.58, 409.33, 409.86, 411.87, 409.97, 411.53, 409.56, 399.59, 399.41, 403.04, 403.59, 406.38, 404.01, 406.89, 404.78, 405.69, 400.95, 406.23, 407.12, 405.98, 408.07, 409.57, 411.26, 409.86, 411.68, 408.22, 409.82, 417.7, 427.85, 427.13, 428.29, 430.41, 434.99, 430.4, 436.13, 438.49, 437.1, 441.23, 446.58, 451.56, 458.54, 458.65, 460.99, 455.53, 450.97, 448.01, 450.53, 449.01, 444.29, 443.03, 445.98, 446.88, 450.69, 448.69, 448.47, 449.08, 452.45, 452.25, 458.79, 460.37, 470.83, 470.82, 474.67, 472.36, 479.3, 483.12, 488.66, 485.79, 492.31, 493.67, 496.4, 496.96, 494.89, 499.63, 502.31, 499.14, 498.58, 498.22, 503.38, 501.37, 504.74, 503.37, 507.14, 506.77, 500.58, 495.71, 493.14, 491.11, 496.23, 496.71, 491.77, 478.29]}, "today": "2026-10-06"}</script>
+<script>
+/* Ledger row drill-down (M21 #250).
+
+   Everything below is presentation of numbers already decided server-side. It
+   draws no relationship the builder did not emit: the dashed overlay is a drawn
+   comparison, never an inferred one, and there is deliberately no correlation
+   or lead-lag figure anywhere in it (#145 is out of scope, #250).
+
+   Two rules this file must not soften:
+     * a series with fewer than `line_min_obs` points is drawn as dots and never
+       joined, and one with fewer than `chart_min_obs` is not drawn at all —
+       applied to EVERY series, the dashed overlay and the FX line included;
+     * an absence is stated, never left blank. A pane with nothing in it says
+       which number was missing and why.
+
+   Deliberately ES5 and DOM-only: no build step, no framework, and a market page
+   must not acquire a dependency for a sparkline. */
+(function () {
+  var block = document.getElementById('block-ledger');
+  if (!block) return;
+  var contextEl = block.querySelector('#ledger-context');
+  var table = block.querySelector('table.ledger');
+  if (!contextEl || !table) return;
+  var CTX = JSON.parse(contextEl.textContent);
+  var DAY = 86400000;
+  var TODAY = Date.parse(CTX.today);
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /* `NodeList.forEach` and `Element.closest` are not ES5, and this script runs
+     un-transpiled on whatever the reader brought. */
+  function each(list, fn) {
+    for (var i = 0; i < list.length; i++) fn(list[i], i);
+  }
+
+  var ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, function (c) { return ESCAPES[c]; });
+  }
+
+  function isInsideLink(node) {
+    while (node && node !== table) {
+      if (node.tagName === 'A') return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
+  function treatment(count) {
+    if (count >= CTX.line_min_obs) return 'line';
+    if (count >= CTX.chart_min_obs) return 'dots';
+    return 'none';
+  }
+
+  /* Parallel arrays -> [[ms, value], ...] inside the window. Nulls are prints we
+     could not convert; they are skipped rather than interpolated, and the
+     server-side note beside the chart says how many and why. */
+  function points(payload, key, from) {
+    if (!payload) return [];
+    var base = Date.parse(payload.origin);
+    var values = payload[key] || [];
+    var out = [];
+    for (var i = 0; i < payload.d.length; i++) {
+      var t = base + payload.d[i] * DAY;
+      var v = values[i];
+      if (v === null || v === undefined || t < from || t > TODAY) continue;
+      out.push([t, v]);
+    }
+    return out;
+  }
+
+  function fmt(value, places) {
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: places, maximumFractionDigits: places
+    });
+  }
+
+  /* Enough decimals that the two axis labels are different numbers. A USD/MT
+     leg lands on 0; INR/USD at ~0.0115 lands on 4. Fixed precision would print
+     "0.0115" at both ends of a chart with a visible shape — an axis asserting
+     no movement over a line that shows some. */
+  function placesFor(lo, hi) {
+    for (var p = 0; p < 6; p++) {
+      if (fmt(lo, p) !== fmt(hi, p)) return p;
+    }
+    return 6;
+  }
+
+  function shortDate(ms, withYear) {
+    var date = new Date(ms);
+    return date.getUTCDate() + ' ' + MONTHS[date.getUTCMonth()] +
+      (withYear ? ' ' + date.getUTCFullYear() : '');
+  }
+
+  var W = 600, H = 140, PAD_L = 46, PAD_R = 10, PAD_T = 12, PAD_B = 22;
+
+  /* One pane's chart. `sets` is [{points, treatment, cls}] — the leg first, the
+     dashed overlay second where there is one. */
+  function svg(sets, from, label) {
+    var drawn = [];
+    each(sets, function (s) { if (s.points.length) drawn.push(s); });
+    if (!drawn.length) return '';
+    var lo = Infinity, hi = -Infinity;
+    each(drawn, function (s) {
+      each(s.points, function (p) {
+        if (p[1] < lo) lo = p[1];
+        if (p[1] > hi) hi = p[1];
+      });
+    });
+    /* Labels state the OBSERVED extremes; the padding only buys drawing room.
+       Printing the padded bounds would put a number on the axis that no session
+       ever printed — and disagree with the range band in the collapsed row. */
+    var dataLo = lo, dataHi = hi;
+    var places = placesFor(dataLo, dataHi);
+    var pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.02 || 1;
+    lo -= pad; hi += pad;
+    /* A window wider than a season needs the year, or the 1y toggle prints the
+       same DD MMM at both ends of the axis. */
+    var withYear = (TODAY - from) > 180 * DAY;
+    var x = function (t) {
+      return PAD_L + (W - PAD_L - PAD_R) * ((t - from) / (TODAY - from || 1));
+    };
+    var y = function (v) {
+      return PAD_T + (H - PAD_T - PAD_B) * (1 - (v - lo) / (hi - lo || 1));
+    };
+    var parts = [
+      '<svg class="drill-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" ',
+      'aria-label="' + esc(label) + '" preserveAspectRatio="xMidYMid meet">',
+      '<line class="ax" x1="' + PAD_L + '" y1="' + (H - PAD_B) + '" x2="' + (W - PAD_R),
+      '" y2="' + (H - PAD_B) + '"/>',
+      '<text class="lbl" x="' + (PAD_L - 6) + '" y="' + (PAD_T + 4) + '">' + fmt(dataHi, places) + '</text>',
+      '<text class="lbl" x="' + (PAD_L - 6) + '" y="' + (H - PAD_B) + '">' + fmt(dataLo, places) + '</text>',
+      '<text class="lbl dt" x="' + PAD_L + '" y="' + (H - 6) + '">' + shortDate(from, withYear) + '</text>',
+      '<text class="lbl dt end" x="' + (W - PAD_R) + '" y="' + (H - 6) + '">' + shortDate(TODAY, withYear) + '</text>'
+    ];
+    each(drawn, function (s) {
+      var coords = [];
+      each(s.points, function (p) { coords.push(x(p[0]) + ',' + y(p[1])); });
+      if (s.treatment === 'line' && coords.length > 1) {
+        parts.push('<polyline class="ln ' + s.cls + '" points="' + coords.join(' ') + '"/>');
+      }
+      each(s.points, function (p) {
+        parts.push('<circle class="pt ' + s.cls + '" cx="' + x(p[0]) + '" cy="' + y(p[1]) + '" r="2.2"/>');
+      });
+    });
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  function pane(title, body, note) {
+    return '<div class="drill-pane"><div class="drill-title">' + esc(title) + '</div>' +
+      body + (note ? '<div class="drill-note">' + esc(note) + '</div>' : '') + '</div>';
+  }
+
+  /* Fewer than three points is not a thin chart, it is no chart: the level, the
+     print date and how little there is, stated as text. */
+  function tooSparse(win, series, unit) {
+    var last = series.length ? series[series.length - 1] : null;
+    var body = last
+      ? '<div class="drill-flat"><span class="v">' + esc(fmt(last[1], 2)) + '</span> ' +
+        esc(unit) + ' <span class="muted">on ' + esc(shortDate(last[0], false)) + '</span></div>'
+      : '<div class="drill-flat muted">nothing to draw in this window</div>';
+    return body + '<div class="drill-note">' + win.count + ' observation' +
+      (win.count === 1 ? '' : 's') +
+      (win.starts_label ? ' in this window, from ' + esc(win.starts_label) : '') +
+      ' — too few to draw a shape</div>';
+  }
+
+  /* Everything the pane knows about its own completeness, in one sentence. Each
+     clause is a separate fact and none stands in for another: what is drawn,
+     from when, how far back the page reads, what the cap removed, what could
+     not be converted. */
+  function provenance(drill, win, overlayNote) {
+    var parts = [win.count + ' observation' + (win.count === 1 ? '' : 's')];
+    if (win.starts_label) parts.push('from ' + win.starts_label);
+    if (drill.history_from_label) parts.push('page reads back to ' + drill.history_from_label);
+    if (win.truncated) parts.push(win.truncation_note);
+    if (win.withheld_note) parts.push(win.withheld_note);
+    if (overlayNote) parts.push(overlayNote);
+    if (win.treatment === 'dots') {
+      parts.push('dots only: under ' + CTX.line_min_obs +
+        ' prints a connecting line would assert a path never observed');
+    }
+    return parts.join(' · ');
+  }
+
+  function pricePane(drill, win, from) {
+    var usd = points(drill, 'usd', from);
+    if (win.treatment === 'none') {
+      return pane(drill.label + ' · USD/MT', tooSparse(win, usd, 'USD/MT'), null);
+    }
+    var sets = [{ points: usd, treatment: win.treatment, cls: 'own' }];
+    var overlay = '', overlayNote = null;
+    if (CTX.reference && CTX.reference.leg_id !== drill.leg_id) {
+      var ref = points(CTX.reference, 'usd', from);
+      var refTreatment = treatment(ref.length);
+      if (refTreatment === 'none') {
+        /* The floor is about what may be DRAWN, so it binds the overlay too —
+           two dashed dots would set the y-scale for a series they cannot
+           describe. */
+        overlayNote = 'no overlay in this window: ' + CTX.reference.label + ' has ' +
+          ref.length + ' print' + (ref.length === 1 ? '' : 's') + ' here, too few to draw';
+      } else {
+        sets.push({ points: ref, treatment: refTreatment, cls: 'ref' });
+        overlay = ' · dashed: ' + CTX.reference.label + ' (pinned)';
+        if (CTX.reference.truncated) overlayNote = CTX.reference.truncation_note;
+      }
+    }
+    return pane(
+      drill.label + ' · USD/MT' + overlay,
+      svg(sets, from, drill.label + ' in USD per metric ton over ' + win.label +
+        ', ' + win.count + ' observations'),
+      provenance(drill, win, overlayNote)
+    );
+  }
+
+  function currencyPane(drill, win, from) {
+    if (!drill.fx_pair) {
+      return pane('The currency component',
+        '<div class="drill-flat muted">' + esc(drill.single_currency_note) + '</div>', null);
+    }
+    var series = CTX.fx_series[drill.fx_pair];
+    if (!series) {
+      return pane(drill.fx_pair + ' · the currency component',
+        '<div class="drill-flat muted">no ' + esc(drill.fx_pair) + ' rate is stored inside ' +
+        'this window, so the currency component cannot be separated out</div>', null);
+    }
+    var fx = points(series, 'v', from);
+    var fxTreatment = treatment(fx.length);
+    var note = 'The row quotes ' + drill.home_unit + ' and USD/MT. This is which of the ' +
+      'two moved — a single USD line cannot say.' +
+      (series.truncated ? ' ' + series.truncation_note + '.' : '');
+    if (fxTreatment === 'none') {
+      return pane(drill.fx_pair + ' · the currency component',
+        '<div class="drill-flat muted">' + fx.length + ' rate' + (fx.length === 1 ? '' : 's') +
+        ' in this window — too few to draw</div>', note);
+    }
+    return pane(
+      drill.fx_pair + ' · the currency component',
+      svg([{ points: fx, treatment: fxTreatment, cls: 'fx' }], from,
+        drill.fx_pair + ' over ' + win.label),
+      note
+    );
+  }
+
+  function render(container, drill, days) {
+    var win = null;
+    each(drill.windows, function (w) { if (w.days === days) win = w; });
+    if (!win) win = drill.windows[0];
+    var from = TODAY - win.days * DAY;
+
+    var chips = '';
+    each(drill.windows, function (w) {
+      chips += '<button type="button" class="dw' + (w === win ? ' on' : '') +
+        '" aria-pressed="' + (w === win) + '" data-days="' + w.days + '">' +
+        esc(w.label) + '</button>';
+    });
+
+    container.innerHTML =
+      '<div class="drill-windows" role="group" aria-label="history window">' + chips +
+      '</div><div class="drill-panes">' +
+      pricePane(drill, win, from) + currencyPane(drill, win, from) + '</div>';
+
+    each(container.querySelectorAll('.dw'), function (btn) {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        render(container, drill, parseInt(btn.getAttribute('data-days'), 10));
+      });
+    });
+  }
+
+  function close(row) {
+    var panel = document.getElementById(row.getAttribute('data-panel'));
+    if (panel) panel.hidden = true;
+    var toggle = row.querySelector('.drill-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    row.classList.remove('open');
+  }
+
+  /* One open at a time — the table is the comparison, and two expansions push
+     the rows being compared off the screen. */
+  function toggle(row) {
+    var panel = document.getElementById(row.getAttribute('data-panel'));
+    if (!panel) return;
+    var opening = panel.hidden;
+    each(table.querySelectorAll('tr.lrow.open'), close);
+    if (!opening) return;
+    var container = panel.querySelector('.drill');
+    if (!container.getAttribute('data-drawn')) {
+      render(container, JSON.parse(panel.querySelector('.drill-data').textContent),
+        CTX.default_days);
+      container.setAttribute('data-drawn', '1');
+    }
+    panel.hidden = false;
+    row.classList.add('open');
+    var chevron = row.querySelector('.drill-toggle');
+    if (chevron) chevron.setAttribute('aria-expanded', 'true');
+  }
+
+  each(table.querySelectorAll('tr.lrow.has-drill'), function (row) {
+    row.addEventListener('click', function (event) {
+      /* The leg cell's link is how a reader reaches the page that explains the
+         leg; swallowing it here would trade one affordance for another. */
+      if (isInsideLink(event.target)) return;
+      toggle(row);
+    });
+  });
+
+  /* Only now is there something behind the chevron, so only now do the chevron
+     and the hint appear. Wiring first, affordances second: if anything above
+     threw, the page is left exactly as it renders without script. */
+  table.classList.add('drill-ready');
+  var hint = block.querySelector('.drill-hint');
+  if (hint) hint.hidden = false;
+})();
+</script>
+
+<div class="ledger-note">Domestic against own port is the internal-freight and export-premium gap — the most actionable line on this page. Then the two competing offers, and the reference.</div>
+  
+</section>
+
+
+<section class="block" id="block-crush">
+  <div class="block-head">
+    <span class="block-no">03</span>
+    <h2>Crush margin</h2>
+    
+    <span class="why">processor economics — board, physical or administered</span>
+  </div>
+  
+  <div class="empty-state state-absent">
+    <span class="es-label">no source</span>
+    no Brazil oil/meal cash quote is ingested — the Paranaguá premium trio is an unbuilt scrape (M7 #149)
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-basis">
+  <div class="block-head">
+    <span class="block-no">04</span>
+    <h2>Basis vs the board</h2>
+    
+    <span class="why">local minus reference, USD/MT</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">Paranaguá FOB over CBOT</div>
+    <div class="mc-val up"><span class="up">+20.8</span></div>
+    <div class="mc-delta muted">USD/MT · premium to the board</div>
+    <div class="caption">as of 2026-10-05</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Local <span class="kind">physical assessment</span></div>
+    <div class="mc-val">$491.4</div>
+    <div class="mc-delta muted">USD/MT</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">CBOT board <span class="kind">board · delayed close</span></div>
+    <div class="mc-val">$470.6</div>
+    <div class="mc-delta muted">USD/MT · same session</div>
+  </div>
+</div>
+
+
+
+<div class="caption">39 common sessions · mean <span class="up">+44.6</span> · range <span class="up">+20.8</span> to <span class="up">+54.9</span></div>
+
+  
+</section>
+
+
+<section class="block" id="block-currency">
+  <div class="block-head">
+    <span class="block-no">05</span>
+    <h2>Currency</h2>
+    
+    <span class="why">the rate every USD figure here is struck at</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-3">
+  <div class="mc">
+    <div class="mc-label">BRL/USD</div>
+    <div class="mc-val">0.1915</div>
+    <div class="mc-delta muted">USD per BRL</div>
+    <div class="caption">as of 2026-10-05</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">BRL per USD</div>
+    <div class="mc-val">5.22</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Move</div>
+    <div class="mc-val"><span class="down">-0.7%</span></div>
+    <div class="mc-delta muted">5 obs · 21 obs <span class="down">-2.3%</span></div>
+  </div>
+</div>
+<div class="caption">every USD/MT figure on this page is struck at this rate. The rate and the Brazil print are same-day, not simultaneous — this stack stores no time of day.</div>
+  
+</section>
+
+
+<section class="block" id="block-weather">
+  <div class="block-head">
+    <span class="block-no">06</span>
+    <h2>Weather</h2>
+    
+    <span class="why">this market&#39;s growing regions</span>
+  </div>
+  
+  
+
+
+
+<div class="grid grid-3">
+  
+  <div class="mc">
+    <div class="mc-label">Brazil Mato Grosso</div>
+    <div class="mc-val">37<small class="muted">°C max</small></div>
+    <div class="mc-delta muted">1.2 mm · 7d 23 mm</div>
+    <div class="caption" style="margin-bottom:2px;">domestic crop</div>
+    <div class="caption">as of 2026-10-11</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Brazil Parana</div>
+    <div class="mc-val">28<small class="muted">°C max</small></div>
+    <div class="mc-delta muted">14.4 mm · 7d 70 mm</div>
+    <div class="caption" style="margin-bottom:2px;">domestic crop</div>
+    <div class="caption">as of 2026-10-11</div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Brazil Rio Grande do Sul</div>
+    <div class="mc-val">22<small class="muted">°C max</small></div>
+    <div class="mc-delta muted">1.4 mm · 7d 96 mm</div>
+    <div class="caption" style="margin-bottom:2px;">domestic crop — the La Niña swing state</div>
+    <div class="caption">as of 2026-10-11</div>
+  </div>
+  
+</div>
+
+<div class="alert alert-ok">No threshold breach in 3 regions</div>
+
+
+
+  
+</section>
+
+
+<section class="block" id="block-supply_demand">
+  <div class="block-head">
+    <span class="block-no">07</span>
+    <h2>Supply &amp; demand</h2>
+    
+    <span class="why">annual balance sheet — does not move daily</span>
+  </div>
+  
+  
+
+
+
+<div class="grid grid-4">
+  
+  <div class="mc">
+    <div class="mc-label">Production (2026)</div>
+    <div class="mc-val">186,000</div>
+    <div class="mc-delta"><span class="up">+3.0%</span> <span class="muted">YoY · (1000 MT)</span></div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Imports (2026)</div>
+    <div class="mc-val">800</div>
+    <div class="mc-delta"><span class="down">-11.1%</span> <span class="muted">YoY · (1000 MT)</span></div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Exports (2026)</div>
+    <div class="mc-val">118,000</div>
+    <div class="mc-delta"><span class="up">+2.6%</span> <span class="muted">YoY · (1000 MT)</span></div>
+  </div>
+  
+  <div class="mc">
+    <div class="mc-label">Ending Stocks (2026)</div>
+    <div class="mc-val">36,888</div>
+    <div class="mc-delta"><span class="down">-2.1%</span> <span class="muted">YoY · (1000 MT)</span></div>
+  </div>
+  
+</div>
+<div class="caption">Brazil · USDA PSD, annual marketing years — this does not move daily</div>
+
+
+
+
+
+
+
+<div class="subhdr">Customs exports — Aug 2026 · monthly · <span class="muted">preliminary</span></div>
+<div class="table-scroll">
+<table class="dtable">
+  <thead>
+    <tr>
+      <th>Product</th><th class="num">Total, million t</th><th class="num">To China, million t</th>
+      <th class="num">Share</th><th class="num">Rest of world, million t</th>
+      <th class="num">Total vs Aug 2025</th><th class="num">China vs Aug 2025</th>
+      
+    </tr>
+  </thead>
+  <tbody>
+    
+    <tr>
+      <td>Soybeans</td>
+      <td class="num">9.81</td>
+      <td class="num">7.00</td>
+      <td class="num">71%</td>
+      <td class="num">2.81</td>
+      <td class="num"><span class="up">+5.2%</span></td>
+      <td class="num"><span class="down">-11.7%</span></td>
+      
+    </tr>
+    
+    <tr>
+      <td>Soybean Meal</td>
+      <td class="num">2.34</td>
+      <td class="num">0.01</td>
+      <td class="num">0%</td>
+      <td class="num">2.33</td>
+      <td class="num"><span class="up">+23.0%</span></td>
+      <td class="num"><span class="muted">—</span></td>
+      
+    </tr>
+    
+    <tr>
+      <td>Soybean Oil</td>
+      <td class="num">0.21</td>
+      <td class="num">0.00</td>
+      <td class="num">0%</td>
+      <td class="num">0.21</td>
+      <td class="num"><span class="up">+30.6%</span></td>
+      <td class="num"><span class="down">-100.0%</span></td>
+      
+    </tr>
+    
+  </tbody>
+</table>
+</div>
+<div class="caption">as of 2026-08-31 · 36d ago</div>
+<div class="caption">2026-09 (Sep 2026) not yet published by MDIC/SECEX Comex Stat — the release calendar, not an outage. MDIC revises every month of the current year until its February re-issue.</div>
+
+<div class="caption muted">The customs unit value (FOB ÷ tonnes) is withheld until MDIC confirms its CC BY-ND licence permits publishing it.</div>
+<div class="caption">Source: MDIC/SECEX — Comex Stat (CC BY-ND 3.0)</div>
+
+
+  
+</section>
+
+
+<section class="block" id="block-news">
+  <div class="block-head">
+    <span class="block-no">08</span>
+    <h2>News</h2>
+    
+    <span class="why">reserved — no text layer is ingested yet</span>
+  </div>
+  
+  <div class="empty-state state-absent">
+    <span class="es-label">no source</span>
+    reserved — no news layer is ingested (out of scope for map #142)
+  </div>
+  
+</section>
+
+
+<section class="block" id="block-players">
+  <div class="block-head">
+    <span class="block-no">09</span>
+    <h2>Players</h2>
+    
+    <span class="why">counterparties active in this market</span>
+  </div>
+  
+  
+
+
+<div class="grid grid-2">
+  <div class="mc">
+    <div class="mc-label">BR entries</div>
+    <div class="mc-val">17</div>
+    <div class="mc-delta muted">exporter 16 · originator 13 · crusher 12 · terminal-operator 12 · refiner 5</div>
+  </div>
+  <div class="mc">
+    <div class="mc-label">Names</div>
+    <div class="mc-delta">3tentos Agroindustrial S.A. · ADM do Brasil Ltda. · ALZ Grãos · Agrex do Brasil S.A. · Amaggi Exportação e Importação Ltda. · Bunge Global SA (incl. Viterra) · CHS Agronegócio – Indústria e Comércio Ltda. · CJ Selecta S.A. · COFCO International Brasil S.A. · Caramuru Alimentos S.A. · Cargill Agrícola S.A. · Coamo Agroindustrial Cooperativa · Cotriguaçu Cooperativa Central · Fiagril Ltda. · Louis Dreyfus Company Brasil · NovaAgri Infra-Estrutura de Armazenagem e Escoamento Agrícola · Olfar S.A. Alimento e Energia</div>
+    <div class="caption"><a href="../players.html">Full counterparty map &rarr;</a></div>
+  </div>
+</div>
+  
+</section>
+
+
+<div class="footer">
+  All prices in <strong>USD per metric ton (USD/MT)</strong>; native exchange units are converted at the display layer.
+  
+  CEPEA/ESALQ Paraná · Paranaguá FOB quotes in BRL/MT. Data delayed and provided as-is; not financial advice.
+  <br><br>
+  <a href="../index.html">&larr; Daily read</a> ·
+  <a href="../players.html">Players</a> ·
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
+</div>
+
+
+</div>
+
+<script>
+(() => {
+  const report = () => {
+    const root = document.documentElement;
+    const meta = document.querySelector('meta[name="qa-overflow"]');
+    const overflow = Math.max(root.scrollWidth, document.body.scrollWidth) - root.clientWidth;
+    meta.content = overflow > 1 ? `overflow:${overflow}` : 'ok';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(report));
+  else requestAnimationFrame(report);
+})();
+</script>
+<script src="../p1-proto.js"></script></body>
+</html>
