@@ -1,25 +1,21 @@
 #!/usr/bin/env python
 """The validation runbook, as a command line (Phase 5).
 
-Why a stub-and-edit flow rather than a question-and-answer prompt
------------------------------------------------------------------
-The brief asks for something "easy enough to complete during a real trading
-day". An interactive wizard is the obvious answer and the wrong one: it holds
-the participant hostage for the length of the form, loses everything if they are
-interrupted by a call — which, on a desk, is the normal case rather than the
-edge case — and cannot be filled in retrospectively at 16:00 when the day makes
-sense again.
+How sessions reach the record (A6 #303)
+---------------------------------------
+Participants never touch this repository. They complete a ~2-minute form after
+each decision; once a week the desk exports the form as CSV and runs
+``trial.py transcribe <export.csv>``, which appends one validated session per
+row to the gitignored day files. The transcription goes through the same
+parser as a hand-written record — same closed field set, same hard failures —
+and the release stamp is read from that trading day's own ``trial.py day``
+observation, never invented at transcription time.
 
-So ``trial.py start`` writes a **prefilled YAML stub** and prints its path. The
-stub carries the release stamp captured at that moment, the participant's handle, the
-task, the start time, and the task's own decision question and success criterion
-as comments the participant is answering. They fill it in whenever they can, in the
-editor they already have open, and ``trial.py check`` tells them if it is wrong.
-Nothing is lost to an interrupted session, because the file exists from the
-first second.
-
-``--interactive`` is still there for the first session, when nobody has seen the
-schema yet. It asks the minimum and writes the same stub.
+``trial.py start`` remains for the desk's own sessions and the first drill: it
+writes a **prefilled YAML stub** carrying the release stamp captured at that
+moment, the handle, the task, the start time, and the task's own decision
+question and success criterion as comments. ``--interactive`` asks the minimum
+and writes the same stub.
 
 What this script will not do
 ----------------------------
@@ -39,7 +35,8 @@ Usage
     python scripts/trial.py start --participant zeb --task morning_brief
     python scripts/trial.py start --interactive
     python scripts/trial.py day                      # today's availability record
-    python scripts/trial.py check                    # validate every record
+    python scripts/trial.py transcribe export.csv    # form export → session YAML
+    python scripts/trial.py check                    # validate every record; floor standing
     python scripts/trial.py metrics
     python scripts/trial.py review --week-start 2026-08-17
     python scripts/trial.py scorecard --start 2026-08-01 --end 2026-08-30
@@ -290,9 +287,15 @@ def cmd_check(args: argparse.Namespace) -> int:
     if sessions.is_empty and not days.days:
         print("No trial records found. Start one with: python scripts/trial.py start")
         return 0
+    from analysis.trial.floor import decision_floor
+
     print(f"{len(sessions.sessions)} session(s) from {len(sessions.participants)} participant(s), "
           f"{len(days.days)} day observation(s) — all parsed and validated.")
     print(f"  trading days covered: {len(sessions.trading_days)}")
+    floor = decision_floor(sessions.sessions)
+    print(f"  decision floor: {floor.reason}")
+    for line in floor.standing_lines():
+        print(f"    {line}")
     for session in sessions.sessions:
         flags = []
         if not session.release.is_reproducible:
@@ -303,6 +306,18 @@ def cmd_check(args: argparse.Namespace) -> int:
             flags.append(session.outcome.value)
         if flags:
             print(f"  {session.session_id} {session.task.value:24} {', '.join(flags)}")
+    return 0
+
+
+def cmd_transcribe(args: argparse.Namespace) -> int:
+    """Form export (CSV) → session YAML, through the record parser. All rows or none."""
+    from analysis.trial.transcribe import transcribe_csv
+
+    written = transcribe_csv(args.csv, directory=args.directory)
+    print(f"transcribed {args.csv} into {len(written)} day file(s):")
+    for path in written:
+        print(f"  {path}")
+    print("\nNext: python scripts/trial.py check")
     return 0
 
 
@@ -497,6 +512,18 @@ def build_parser() -> argparse.ArgumentParser:
     day.add_argument("--drill", default=None, help="name this day as a drill so it leaves the reliability metrics")
     day.add_argument("--note", default=None)
     day.set_defaults(func=cmd_day)
+
+    transcribe = sub.add_parser(
+        "transcribe",
+        help="append a form export (CSV, one session per row) to the session records",
+        description="One session per row. Columns: participant, task, trading_day, started_at, "
+        "ended_at, outcome, confidence, would_act (required); decision, pages_used, notes, "
+        "evidence (optional; lists split on '|'); lookup_N_* and issue_N_* groups. The release "
+        "stamp is read from that day's `trial.py day` observation — a day without one is refused. "
+        "A bad row anywhere writes nothing.",
+    )
+    transcribe.add_argument("csv", help="the form export")
+    transcribe.set_defaults(func=cmd_transcribe)
 
     check = sub.add_parser("check", help="load and validate every record")
     check.set_defaults(func=cmd_check)

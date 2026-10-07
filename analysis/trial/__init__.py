@@ -15,6 +15,8 @@ Module map, in the order the trial uses them:
     domain.py     the vocabulary — tasks, issue classes, the session record
     release.py    what code and what data produced a result, and re-checking it
     records.py    the private YAML record store (gitignored, never published)
+    transcribe.py the desk-side entry point — a form export becomes sessions
+    floor.py      the per-participant decision floor (A6): graded or reported
     metrics.py    the eleven metrics, each with its own insufficiency rule
     drills.py     the five failure drills, run against the real grading code
     backlog.py    a validated finding becomes a prioritized backlog item

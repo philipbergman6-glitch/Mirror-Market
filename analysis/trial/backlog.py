@@ -362,7 +362,9 @@ class BacklogSet:
         }
 
 
-def _promotion_rules(*, severity: Severity, classification: IssueClass, occurrences: int, participants: int) -> list[str]:
+def _promotion_rules(
+    *, severity: Severity, classification: IssueClass, occurrences: int, participants: int
+) -> list[str]:
     fired: list[str] = []
     if severity is Severity.BLOCKER:
         fired.append("blocker")

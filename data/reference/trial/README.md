@@ -20,17 +20,20 @@ therefore publish participant identity by construction, on the first green pipel
 run, with nothing in the schema to suggest it was about to. So trial records are
 files this repository never reads and git never sees.
 
-The same reasoning explains the two subdirectories: a session is written by a
-participant during the day, a day observation is computed once by the desk after the
-pipeline runs. Different authors, different times, different files.
+The same reasoning explains the two subdirectories: a session is transcribed
+by the desk from the participant's form (participants never touch this
+repository), a day observation is computed once by the desk after the pipeline
+runs. Different sources, different times, different files — and the day
+observation supplies the release stamp a transcribed session is pinned to.
 
 ## Getting started
 
 ```bash
 python scripts/trial.py protocol                        # generate the protocol
-python scripts/trial.py start --interactive             # begin a session
-python scripts/trial.py day --edition-current           # once per trading day
-python scripts/trial.py check                           # validate everything
+python scripts/trial.py day --edition-current           # once per trading day, first
+python scripts/trial.py transcribe export.csv           # weekly: form export → sessions
+python scripts/trial.py start --interactive             # a desk-side session (drills)
+python scripts/trial.py check                           # validate everything; floor standing
 python scripts/trial.py review --week-start 2026-08-17  # the weekly read
 ```
 
@@ -50,6 +53,10 @@ the task is measured.
   failure teaches nothing.
 - **An external lookup must name the question we could not answer.** That field
   is the point of the trial, and the record refuses to be built without it.
+- **A transcribed session is never stamped with a guessed release.** The stamp
+  comes from the trading day's own observation; a day without one is refused.
+- **A transcription writes all rows or none.** A bad row anywhere leaves the
+  store as it was, and a row already in the store is refused as a duplicate.
 
 ## Use a handle, not a name
 
