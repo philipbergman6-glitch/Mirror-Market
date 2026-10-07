@@ -153,9 +153,9 @@ def test_psd_signals_are_dated_by_our_own_ingest_not_by_today(tmp_db):
     rows = []
     for year, stocks in ((2021, 900), (2022, 850), (2023, 880), (2024, 870), (2025, 400)):
         rows.extend([
-            ("Oilseed, Soybean", "China", year, "Ending Stocks", stocks, "1000 MT"),
-            ("Oilseed, Soybean", "China", year, "Domestic Consumption", 10_000, "1000 MT"),
-            ("Oilseed, Soybean", "China", year, "Exports", 100, "1000 MT"),
+            ("Soybeans", "China", year, "Ending Stocks", stocks, "1000 MT"),
+            ("Soybeans", "China", year, "Domestic Consumption", 10_000, "1000 MT"),
+            ("Soybeans", "China", year, "Exports", 100, "1000 MT"),
         ])
     tmp_db.executemany(
         "INSERT INTO psd (commodity, country, year, attribute, value, unit) "
@@ -175,7 +175,7 @@ def test_psd_signals_are_dated_by_our_own_ingest_not_by_today(tmp_db):
 def test_psd_signal_is_withheld_when_we_cannot_date_it(tmp_db):
     tmp_db.executemany(
         "INSERT INTO psd (commodity, country, year, attribute, value, unit) VALUES (?,?,?,?,?,?)",
-        [("Oilseed, Soybean", "China", 2025, "Ending Stocks", 1, "1000 MT")],
+        [("Soybeans", "China", 2025, "Ending Stocks", 1, "1000 MT")],
     )
     tmp_db.commit()
     # No data_freshness row for psd: we cannot say when we learned this.
@@ -187,9 +187,9 @@ def test_exporting_countries_are_not_scanned_for_a_buyer_deficit(tmp_db):
     rows = []
     for year, stocks in ((2021, 900), (2022, 850), (2023, 880), (2024, 870), (2025, 10)):
         rows.extend([
-            ("Oilseed, Soybean", "Brazil", year, "Ending Stocks", stocks, "1000 MT"),
-            ("Oilseed, Soybean", "Brazil", year, "Domestic Consumption", 50_000, "1000 MT"),
-            ("Oilseed, Soybean", "Brazil", year, "Exports", 90_000, "1000 MT"),
+            ("Soybeans", "Brazil", year, "Ending Stocks", stocks, "1000 MT"),
+            ("Soybeans", "Brazil", year, "Domestic Consumption", 50_000, "1000 MT"),
+            ("Soybeans", "Brazil", year, "Exports", 90_000, "1000 MT"),
         ])
     tmp_db.executemany(
         "INSERT INTO psd (commodity, country, year, attribute, value, unit) VALUES (?,?,?,?,?,?)",
@@ -222,3 +222,93 @@ def test_an_empty_database_produces_no_detections_and_no_errors(tmp_db):
     assert run.detections == ()
     assert all(entry["ran"] for entry in run.coverage)
     assert {entry["rule_id"] for entry in run.coverage} == set(config.OPPORTUNITY_RULES)
+
+
+# ---------------------------------------------------------------------------
+# Crush margin: the prose carries the legs' price level (#405)
+# ---------------------------------------------------------------------------
+def _crush_result(slug: str, quote_kind: str, *, margin: float = 24.1):
+    """A gross-physical ``CrushResult`` whose three legs share one quote kind."""
+    from analysis.futures.crush import ContractBasis, CrushLevel
+    from analysis.origins.crush import CrushLeg, CrushResult
+    from analysis.origins.domain import Money, QuoteKind, SourceRef
+    from pricing.semantics import confidence_for_quote_kind
+
+    kind = QuoteKind(quote_kind)
+    legs = tuple(
+        CrushLeg(
+            name=name,
+            key=name,
+            price=Money(price),
+            native_price=price,
+            native_unit="usd_per_mt",
+            quote_kind=kind,
+            source=SourceRef(layer="magyp_fob", table="argentina_fob", key=name),
+        )
+        for name, price in (("bean", 400.0), ("oil", 900.0), ("meal", 350.0))
+    )
+    return CrushResult(
+        market=slug,
+        level=CrushLevel.GROSS_PHYSICAL,
+        label=CrushLevel.GROSS_PHYSICAL.label,
+        meaning=CrushLevel.GROSS_PHYSICAL.meaning,
+        legs=legs,
+        yields={"oil": 0.183, "meal": 0.78},
+        revenue=Money(437.7),
+        bean_cost=Money(400.0),
+        margin=Money(margin),
+        as_of=TODAY,
+        confidence=confidence_for_quote_kind(quote_kind),
+        contract_basis=(
+            ContractBasis.ADMINISTERED if quote_kind == "administered"
+            else ContractBasis.PHYSICAL
+        ),
+    )
+
+
+def _stub_crush_stack(monkeypatch, results: dict):
+    """``crush_stack`` returns the fixture for its slug and a blocked stack otherwise."""
+    import analysis.origins.crush as crush_mod
+    from analysis.futures.crush import CrushLevel
+
+    def fake(conn, slug, assumptions, *, today):
+        if slug not in results:
+            blocked = crush_mod._blocked(slug, CrushLevel.GROSS_PHYSICAL, "stubbed out")
+            return blocked, blocked, blocked
+        return results[slug], results[slug], results[slug]
+
+    monkeypatch.setattr(crush_mod, "crush_stack", fake)
+
+
+def _only(detections, slug):
+    found = [d for d in detections if d.context["market"] == slug]
+    assert len(found) == 1, [d.signal.headline for d in detections]
+    return found[0]
+
+
+def test_administered_legs_are_not_called_a_gross_physical_crush(monkeypatch):
+    _stub_crush_stack(monkeypatch, {"argentina": _crush_result("argentina", "administered")})
+
+    det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "argentina")
+
+    for text in (det.signal.headline, det.why_now, det.dislocation.label, det.economics.method):
+        assert "administered" in text.lower(), text
+        assert "gross physical" not in text.lower(), text
+    assert "room to bid" not in det.why_now
+    # The detail is the shared caveat for the level, not "cash bean against cash oil".
+    assert "decree" in det.signal.detail
+    assert "cash bean" not in det.signal.detail.lower()
+    assert det.context["level"] == "gross_physical"
+
+
+def test_traded_legs_keep_the_gross_physical_wording(monkeypatch):
+    _stub_crush_stack(monkeypatch, {"cbot": _crush_result("cbot", "physical")})
+
+    det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "cbot")
+
+    assert det.signal.headline.startswith("CBOT gross physical crush at 24.10 USD/MT")
+    assert "gross physical crush" in det.why_now
+    assert "room to bid up for beans" in det.why_now
+    assert "administered" not in det.why_now.lower()
+    assert det.signal.detail == det.economics.note
+    assert "Cash bean against cash oil and meal" in det.signal.detail

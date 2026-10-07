@@ -678,11 +678,11 @@ def test_a_zero_volume_row_is_not_an_observation_on_the_chart(seeded, registry):
             "INSERT INTO safex_prices (Date, commodity, Close, Volume) VALUES (?,?,?,?)",
             (_day(offset), "Soybean (SAFEX)", 8000.0, 0.0),
         )
-    # A rate as old as the oldest print, so this test measures the proof column
-    # and nothing else — a print predating FX coverage is withheld for a
-    # different reason, pinned by its own test below.
+    # A rate on the traded print's own date, so this test measures the proof
+    # column and nothing else — a print with no rate inside A1's 3-day cap is
+    # withheld for a different reason (#308), pinned by its own tests.
     seeded.conn.execute(
-        "INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)", ("ZAR/USD", _day(9), 0.055)
+        "INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)", ("ZAR/USD", _day(3), 0.055)
     )
     seeded.conn.commit()
     seeded._cache.clear()
@@ -939,11 +939,12 @@ def test_a_print_that_cannot_be_converted_is_not_an_observation(seeded, registry
 def test_a_print_older_than_the_fx_series_is_withheld_not_back_converted(
     seeded, registry
 ):
-    """Invariant 7: that row's own date's rate, or blank. Never a later one.
+    """Invariant 7: that row's own date's rate (or a prior one inside A1's cap),
+    or blank. Never a later one.
 
-    `SiteContext.fx_on` falls back to the oldest rate it holds, which on two
+    `SiteContext.fx_on` once fell back to the oldest rate it held, which on two
     row values is a small error and on a 260-point chart is a stretch of the
-    currency's movement drawn under the venue's name.
+    currency's movement drawn under the venue's name. #308 deleted it.
     """
     seeded.conn.execute("DELETE FROM currencies WHERE pair = 'BRL/USD'")
     seeded.conn.execute(

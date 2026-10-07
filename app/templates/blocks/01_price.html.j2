@@ -10,6 +10,11 @@
     <div class="mc-label">{{ leg.key }}{% if leg.is_headline %} · headline{% endif %}</div>
     {% if leg.label %}<div class="mc-delta muted">{{ leg.label }}</div>{% endif %}
     <div class="mc-val">{{ f.usd(leg.usd_mt) }}<small class="muted"> /MT</small></div>
+    {# A1 #298: a USD figure struck at a prior day's close says which day, and
+       one withheld for want of a rate inside the cap says why — the home print
+       below still renders either way. #}
+    {%- if leg.fx_label %}<div class="caption">struck at {{ leg.fx_label }}</div>
+    {%- elif leg.fx_reason %}<div class="caption">USD/MT withheld — {{ leg.fx_reason }}</div>{% endif %}
     <div class="mc-delta">
       {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>
       {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">21 obs</span>{% endif %}

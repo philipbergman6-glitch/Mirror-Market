@@ -345,6 +345,38 @@ def test_stocks_to_use_section_includes_meal_and_oil(patched_db: Path) -> None:
     assert signals == []  # single year -> no tight-supply detection
 
 
+def test_stocks_to_use_section_prints_us_cotton_from_domestic_use(
+    patched_db: Path,
+) -> None:
+    """PSD files cotton's consumption under 'Domestic Use', in bales. The
+    section advertised a cotton balance sheet it could never print (#238):
+    'Cotton: No data', every day, silently."""
+    bales = "1000 480 lb. Bales"
+    rows = []
+    # (MY, ending stocks, domestic use, exports) — PSD US cotton, Sep-2026
+    # vintage. PSD's own ratio for MY2024 is 29.41.
+    for my, stocks, use, exports in [
+        (2020, 3_150.0, 2_400.0, 16_350.0),
+        (2021, 4_050.0, 2_550.0, 14_600.0),
+        (2022, 4_250.0, 2_050.0, 12_750.0),
+        (2023, 3_150.0, 1_850.0, 11_750.0),
+        (2024, 4_000.0, 1_700.0, 11_900.0),
+        (2025, 4_150.0, 1_500.0, 12_300.0),
+        (2026, 3_600.0, 1_500.0, 12_300.0),
+    ]:
+        rows.extend([
+            ("Cotton", "United States", my, "Ending Stocks", stocks, bales),
+            ("Cotton", "United States", my, "Domestic Use", use, bales),
+            ("Cotton", "United States", my, "Exports", exports, bales),
+        ])
+    _seed_psd(patched_db, rows)
+
+    text, _ = stocks_to_use.format()
+
+    assert "Cotton: No data" not in text
+    assert "Cotton: 26.1% (MY 2026) | prior 5-yr range:" in text
+
+
 # ---------------------------------------------------------------------------
 # World stocks-to-use (M15 #237)
 # ---------------------------------------------------------------------------
