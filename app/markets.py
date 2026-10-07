@@ -70,14 +70,12 @@ SUPPORTING_BLOCKS = ("ledger", "crush", "basis", "weather")
 DEFAULT_MAX_AGE_DAYS = 14
 
 #: Layers graded on another layer's budget, because the two are the same venue,
-#: provider and cadence. ``forward_curve`` is deliberately absent from
-#: ``LAYER_MAX_DATA_AGE_DAYS`` — its rows are dated by *contract* month, months
-#: into the future, so a frozen curve would read as recent for a year — but
-#: that exemption is about the contract_month column, not about
-#: observation_date, which is what the site grades. Same mapping, same reason,
-#: as ``analysis.futures.providers._CURVE_AGE_LAYER``; without it the CBOT
-#: crush block would silently fall back to the 14-day default when it moved off
-#: `prices` onto named contracts.
+#: provider and cadence. ``forward_curve`` has carried its own equal budget in
+#: ``LAYER_MAX_DATA_AGE_DAYS`` since A3 #300 (keyed to observation_date, the
+#: session the legs were struck on, never the contract_month column); the
+#: mapping stays so this site and ``analysis.futures.providers._CURVE_AGE_LAYER``
+#: grade the curve on one number, and so the CBOT crush block never falls back
+#: to the 14-day default on named contracts.
 _AGE_BUDGET_LAYER = {"forward_curve": "prices"}
 
 # Crush yield factors per MT of beans, by named set. The board set is imported

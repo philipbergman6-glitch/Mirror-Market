@@ -276,6 +276,16 @@ def _build_freshness_items() -> list[dict]:
                     "incomplete": "incomplete key coverage",
                 }[row_status]
                 age_str = f"{label} · last good {age.days}d ago"
+            elif row_status == "usable_partial":
+                # Fresh and renderable but short of the catalog (A3 #300):
+                # its own amber bucket, never folded into fresh or old. The
+                # shortfall itself is the Keys column (coverage).
+                status = "partial"
+                hours = int(age.total_seconds() // 3600)
+                age_str = (
+                    f"usable partial · {hours}h ago" if age < timedelta(days=1)
+                    else f"usable partial · {age.days}d ago"
+                )
             elif row_status == "no_publication":
                 status = "no-publication"
                 age_str = f"no publication · last good {age.days}d ago"
@@ -318,8 +328,11 @@ _HEALTH_CRITICAL_NOTE = "data health critical"
 # `fresh` is sub-day, `stale` is older than a day but still inside the
 # layer's own publication cadence (`config.freshness_limit_days`) — a
 # weekly COT four days after its Friday release is not a problem, and the
-# masthead must not call it one (#179).
+# masthead must not call it one (#179). `partial` (a usable_partial row) is
+# deliberately NOT here: green counts full success only (A3 #300 §5), and it
+# is not late either — it is its own amber tally.
 _ON_SCHEDULE_STATUSES = ("fresh", "stale", "no-publication")
+_PARTIAL_STATUS = "partial"
 
 
 def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
@@ -398,12 +411,20 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
     health_summary = _apply_health_criticals(freshness_items, health)
     active = [i for i in freshness_items if i["status"] != "disabled"]
     on_schedule = [i for i in active if i["status"] in _ON_SCHEDULE_STATUSES]
-    late = [i for i in active if i["status"] not in _ON_SCHEDULE_STATUSES]
+    partial = [i for i in active if i["status"] == _PARTIAL_STATUS]
+    late = [
+        i for i in active
+        if i["status"] not in _ON_SCHEDULE_STATUSES and i["status"] != _PARTIAL_STATUS
+    ]
     return {
         "day_line": now.strftime("%A · %-d %B %Y"),
         "on_schedule_count": len(on_schedule),
         "total_layers": len(active),
         "late_layers": late,
+        # A3 #300 §5: usable_partial is a distinct amber tally, visible and
+        # never folded into green (on_schedule) or red (late).
+        "partial_count": len(partial),
+        "partial_layers": partial,
         "price_age": _price_age_label(now),
         **health_summary,
     }
