@@ -1035,6 +1035,7 @@ def _fx_aligned(
             for ts, v in zip(
                 pd.DatetimeIndex(closes.index).to_pydatetime(),
                 closes.to_numpy(dtype=float),
+                strict=True,
             )
         ),
         when.date(),
