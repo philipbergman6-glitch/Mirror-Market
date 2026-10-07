@@ -79,6 +79,7 @@ In plain terms, each piece answers a question a trader would ask:
 pip install -r requirements.txt
 
 python main.py                      # run all 39 operational layers
+python main.py --doctor             # which API keys are set, and what a missing one skips (no fetch)
 python scripts/generate_site.py     # build the whole site → docs/
 python scripts/generate_site.py --only india    # or one page, for the dev loop
 python -c "from analysis.briefing import generate_briefing; print(generate_briefing())"   # print today's briefing

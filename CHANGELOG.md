@@ -4,6 +4,25 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — `python main.py --doctor` reports API keys and what each one gates (2026-10-07)
+
+**#354**, from the God's Eye View evaluation (pattern: its `npm run doctor`).
+Invariant 1 names skipped-unconfigured as its own state, but a missing key
+only ever produced a warning scrolling past the top of a 39-layer log, and
+`DATA_GOV_IN_API_KEY` sat absent for weeks. `pipeline/doctor.py` prints, with
+no fetch and no DB, every catalogued key as set or missing — never its value
+— and for a missing one the layers it **skips** (`run_if`-gated, no freshness
+row) or **degrades** (un-gated, the empty return grades as `failed`), with a
+signup pointer. Exit 1 when a CI-required key is missing; `MARS_API_KEY` is
+optional. `config.API_KEY_LAYERS` is now derived from a structured
+`config.API_KEY_CATALOG` (the old string omitted Layer 2b from the USDA key).
+`tests/test_doctor.py` pins the catalog against the layer roster, the
+`run_if` wiring in `main._build_dict_layers`, and the deploy workflow's
+secrets, and proves no value reaches the output. The optional persistence of
+skipped-unconfigured as a freshness status is not taken here: gating
+Layers 2/2b/3 with `run_if` is a `main.py` edit held back while #309 and
+#311 edit the same file.
+
 ## Unreleased — the dormant Turso path is deleted (2026-10-07)
 
 **#318**, from the integrity map (#296). The project has one storage

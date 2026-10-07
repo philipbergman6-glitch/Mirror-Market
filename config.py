@@ -7,6 +7,7 @@ module can import them from one place.
 
 import logging
 import os
+from dataclasses import dataclass
 from datetime import date as _date
 from pathlib import Path
 from typing import Any, TypedDict
@@ -1639,15 +1640,90 @@ MARS_API_KEY: str = os.getenv("MARS_API_KEY", "")
 # ---------------------------------------------------------------------------
 # Key visibility — a degraded run must say so at the top, not only per layer
 # ---------------------------------------------------------------------------
-# Every env var any layer reads, with the layers it gates. Read at call time
-# rather than off the constants above, so a key exported after import counts.
-API_KEY_LAYERS: dict[str, str] = {
-    "USDA_API_KEY": "Layers 2, 14",
-    "FRED_API_KEY": "Layer 3",
-    "FAS_API_KEY": "Layer 10",
-    "EIA_API_KEY": "Layer 13",
-    "MARS_API_KEY": "Layer 20b backfill, Layer 30",
-}
+# Every env var any layer reads, with what it gates. One catalog, two readers:
+# `missing_api_keys()` warns at the top of a run, and `pipeline.doctor`
+# (`python main.py --doctor`, #354) reports it without fetching anything.
+# Read at call time rather than off the constants above, so a key exported
+# after import counts.
+#
+# A missing key does one of two things downstream, and the catalog says which
+# because invariant 1 makes them different states:
+#   skips    — the layer is `run_if`-gated in main.py: it never fetches and
+#              writes no freshness row ("skipped-unconfigured").
+#   degrades — the layer is not gated: its fetcher logs a warning, returns
+#              nothing, and the empty result is graded under the #175 rules,
+#              which for these layers means a `failed` freshness row. Honest
+#              about what happens today; tests/test_doctor.py pins the split
+#              against main._build_dict_layers so it cannot drift.
+# `required_in_ci` is the deploy contract: CLAUDE.md lists the keys the daily
+# run cannot do without. MARS is the exception — Layer 30 is designed to
+# withhold with a reason when it is absent (LAYERS.md → API keys).
+@dataclass(frozen=True)
+class ApiKeySpec:
+    name: str
+    unlocks: str
+    skips: tuple[str, ...] = ()
+    degrades: tuple[str, ...] = ()
+    required_in_ci: bool = True
+    signup: str = ""
+    # Consumers outside PRODUCTION_LAYERS (a backfill script), named in prose.
+    also: str = ""
+
+    @property
+    def layers(self) -> tuple[str, ...]:
+        return self.skips + self.degrades
+
+
+# A tuple built into the dict below, not a dict literal: `"NAME_API_KEY": …`
+# is the assignment shape the pre-commit secret scanner blocks on.
+_API_KEY_SPECS: tuple[ApiKeySpec, ...] = (
+    ApiKeySpec(
+        name="USDA_API_KEY",
+        unlocks="USDA NASS QuickStats: US production, area, yield, crop progress and crush",
+        degrades=("usda", "crop_progress", "crush_inspections"),
+        signup="https://quickstats.nass.usda.gov/api",
+    ),
+    ApiKeySpec(
+        name="FRED_API_KEY",
+        unlocks="FRED: dollar index, CPI, Fed funds, Treasury yields, energy PPIs",
+        degrades=("fred",),
+        signup="https://fred.stlouisfed.org/docs/api/api_key.html",
+    ),
+    ApiKeySpec(
+        name="FAS_API_KEY",
+        unlocks="USDA FAS OpenData: weekly export sales by commodity and buyer",
+        skips=("export_sales",),
+        signup="https://apps.fas.usda.gov/opendataweb/home",
+    ),
+    ApiKeySpec(
+        name="EIA_API_KEY",
+        unlocks="EIA: ethanol, biodiesel and diesel series",
+        skips=("eia",),
+        signup="https://www.eia.gov/opendata/register.php",
+    ),
+    ApiKeySpec(
+        name="MARS_API_KEY",
+        unlocks="USDA AMS Market News (MARS): processor cash oil and meal, Gulf-bid archive",
+        skips=("us_processor_cash",),
+        required_in_ci=False,
+        signup="https://mymarketnews.ams.usda.gov/mars-api/getting-started",
+        also="Layer 20b Gulf-bid backfill (scripts/backfill_gulf_bids_mars.py); the daily Layer 20 PDF leg is keyless",
+    ),
+)
+API_KEY_CATALOG: dict[str, ApiKeySpec] = {spec.name: spec for spec in _API_KEY_SPECS}
+
+# Layer key → the number printed on the site ("2b", "30"), off the roster.
+LAYER_NUMBERS: dict[str, str] = {layer[0]: layer[1] for layer in PRODUCTION_LAYERS}
+
+
+def _layers_label(spec: ApiKeySpec) -> str:
+    numbers = [LAYER_NUMBERS[key] for key in spec.layers]
+    label = f"Layer {numbers[0]}" if len(numbers) == 1 else f"Layers {', '.join(numbers)}"
+    return f"{label}; {spec.also}" if spec.also else label
+
+
+# The flat {name: "Layers 2, 2b, 14"} view the startup warning prints.
+API_KEY_LAYERS: dict[str, str] = {name: _layers_label(spec) for name, spec in API_KEY_CATALOG.items()}
 
 
 def missing_api_keys() -> dict[str, str]:

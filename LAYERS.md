@@ -31,6 +31,16 @@ still left every constant at `""` and the keyed layers skipped while the run
 looked healthy; `main.py` now warns per unset key at startup, before the layers
 run. `config.missing_api_keys()` is that list.
 
+`python main.py --doctor` (#354) prints the same catalog without running
+anything: every key as set or missing (never its value), and for a missing
+one whether its layers are **skipped** (`run_if`-gated — Layers 10, 13, 30:
+no freshness row, the layer never ran) or **degraded** (not gated — Layers 2,
+2b, 3, 14: the fetcher returns nothing and the empty result grades as
+`failed`). Exit 1 when a key the deploy workflow relies on is missing;
+`MARS_API_KEY` is optional by design. `config.API_KEY_CATALOG` is the one
+roster — a new keyed layer is added there, and `tests/test_doctor.py` pins
+the skip/degrade split against `main._build_dict_layers`.
+
 - `USDA_API_KEY` — USDA NASS QuickStats API key (Layers 2, 14)
 - `FRED_API_KEY` — Federal Reserve Economic Data API key (Layer 3)
 - `FAS_API_KEY` — USDA FAS OpenData API key (Layer 10 — export sales)
