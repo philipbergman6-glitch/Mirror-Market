@@ -1,8 +1,8 @@
 # Trial records — private, never committed
 
-This directory holds the trader-validation trial (Phase 5). **Everything in it
+This directory holds the validation trial (Phase 5). **Everything in it
 except this README is gitignored**, and that is not a convenience: session
-records carry a trader's handle, the decisions they reached, their notes and
+records carry a participant's handle, the decisions they reached, their notes and
 their evidence, and this repository is public.
 
 ```
@@ -16,12 +16,12 @@ data/reference/trial/
 Every persisted table in this project round-trips through `data/history/*.csv`
 via `pipeline/history.py`, and those CSVs are **committed to this public
 repository** by the daily deploy workflow. A `trial_sessions` table would
-therefore publish trader identity by construction, on the first green pipeline
+therefore publish participant identity by construction, on the first green pipeline
 run, with nothing in the schema to suggest it was about to. So trial records are
 files this repository never reads and git never sees.
 
 The same reasoning explains the two subdirectories: a session is written by a
-trader during the day, a day observation is computed once by the desk after the
+participant during the day, a day observation is computed once by the desk after the
 pipeline runs. Different authors, different times, different files.
 
 ## Getting started

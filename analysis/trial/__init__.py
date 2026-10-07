@@ -1,8 +1,8 @@
-"""Phase 5 — the trader validation trial.
+"""Phase 5 — the validation trial.
 
 A 30-trading-day shadow trial of the whole product, not of any one feature.
-Phases 1-4 each shipped a surface; this phase measures whether a professional
-soy trader, working real days, reaches for Mirror Market instead of a terminal —
+Phases 1-4 each shipped a surface; this phase measures whether a participant — a
+physical buyer, working real days — reaches for Mirror Market instead of a terminal —
 and whether doing so costs them anything in decision risk.
 
 Nothing in this package invents a participant, a session, a lookup or a

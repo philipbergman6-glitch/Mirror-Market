@@ -4,7 +4,7 @@ Requirement 1 asks for a versioned protocol with instructions, definitions,
 confidentiality boundaries and success criteria. It is *generated* rather than
 written, and that is the whole point: a protocol living in a markdown file drifts
 from the enum the metrics are computed over, and the drift is invisible because
-both halves keep working. A trader told to spend ten minutes on the morning brief
+both halves keep working. A participant told to spend ten minutes on the morning brief
 while ``TaskId.MORNING_BRIEF.target_minutes`` says fifteen produces a timeliness
 score that means nothing, and nothing in either file would ever say so.
 
@@ -79,14 +79,14 @@ def protocol_markdown() -> str:
 
     version = protocol_version()
     window = getattr(config, "TRIAL_WINDOW_TRADING_DAYS", 30)
-    min_traders = getattr(config, "TRIAL_MIN_TRADERS", 2)
+    min_participants = getattr(config, "TRIAL_MIN_PARTICIPANTS", 2)
     min_obs = getattr(config, "TRIAL_MIN_OBSERVATIONS", 10)
     scale = getattr(config, "TRIAL_CONFIDENCE_SCALE", (1, 2, 3, 4, 5))
     record_dir = _repo_relative(getattr(config, "TRIAL_RECORD_DIR", "data/reference/trial"))
     private_dir = _repo_relative(getattr(config, "TRIAL_PRIVATE_OUTPUT_DIR", "data/workspace/trial"))
 
     lines: list[str] = [
-        f"# Mirror Market — trader validation protocol v{version}",
+        f"# Mirror Market — validation protocol v{version}",
         "",
         "*This document is generated from `analysis/trial/` by "
         "`python scripts/trial.py protocol`. Do not edit it by hand: the task "
@@ -101,7 +101,7 @@ def protocol_markdown() -> str:
         "spreadsheet use without increasing decision risk?**",
         "",
         "Two halves, and both must hold. A product that halves the lookups while "
-        "producing one wrong number a trader would have sized off has failed, and "
+        "producing one wrong number a participant would have sized off has failed, and "
         "the metrics are built so that it cannot pass by trading one against the "
         "other — correctness rates are graded separately from lookup counts and "
         "neither is blended into a single score.",
@@ -109,12 +109,12 @@ def protocol_markdown() -> str:
         "## Shape of the trial",
         "",
         f"- **{window} trading days.**",
-        f"- **At least {min_traders} professional soy traders.** One trader's habits are "
+        f"- **At least {min_participants} participants (physical buyers).** One participant's habits are "
         "not a finding.",
         f"- **At least {min_obs} sessions** before any metric is graded at all; below "
         "that the metric reports `insufficient` rather than a number.",
         "- **Ten recurring tasks**, listed below. Each is framed as a *decision*, "
-        "not as a page to look at: the test is whether the trader can answer the "
+        "not as a page to look at: the test is whether the participant can answer the "
         "question, not whether the page loaded.",
         "- **One session record per task attempt**, including the attempts that "
         "fail. An abandoned session is data; a session nobody logged is not.",
@@ -147,7 +147,7 @@ def protocol_markdown() -> str:
         "",
         "| Field | Meaning |",
         "|---|---|",
-        "| trader | Your handle. Never a full name. See confidentiality below. |",
+        "| participant | Your handle. Never a full name. See confidentiality below. |",
         "| task | One of the ten above. |",
         "| trading_day / start / end | The session's own clock. Timestamps must "
         "carry a timezone. |",
@@ -172,7 +172,7 @@ def protocol_markdown() -> str:
         "Every time you go outside Mirror Market to finish a task, log it — with "
         "**the question the product could not answer**. That question is the single "
         "most valuable output of this trial, and the record refuses to be saved "
-        "without one. A lookup count tells us a trader left; the question tells us "
+        "without one. A lookup count tells us a participant left; the question tells us "
         "why, and it is the input to the backlog.",
         "",
         "Tools: " + ", ".join(f"`{tool.value}`" for tool in ExternalTool) + ". Use "
@@ -208,15 +208,15 @@ def protocol_markdown() -> str:
         "",
         "## Confidentiality — binding",
         "",
-        "- **Do not publish trader names, positions, counterparties, contact notes "
+        "- **Do not publish participant names, positions, counterparties, contact notes "
         "or commercial decisions.** Anywhere, in any form.",
-        "- Use a **handle**, not a name, in the `trader` field. Three characters "
+        "- Use a **handle**, not a name, in the `participant` field. Three characters "
         "minimum. Pick something that is not a substring of ordinary English — the "
         "leak guard searches free text for it.",
         f"- Trial records live in `{record_dir}` and are **gitignored**. They are "
         "YAML files, not database rows, specifically because every table in this "
         "project round-trips through `data/history/*.csv`, which is committed to a "
-        "public repository. A trial table would publish trader identity by "
+        "public repository. A trial table would publish participant identity by "
         "construction.",
         f"- Generated private output goes to `{private_dir}` — outside `docs/`, and "
         "absent from the site promotion contract, so it can never reach GitHub "
@@ -239,7 +239,7 @@ def protocol_markdown() -> str:
         "",
         "A metric between the two bars is `hold`. Two overrides sit above the "
         "arithmetic: **any open blocker is a no-go** whatever the rates say, and a "
-        f"window with fewer than {min_traders} traders or {min_obs} sessions returns "
+        f"window with fewer than {min_participants} participants or {min_obs} sessions returns "
         "`insufficient` rather than a verdict.",
         "",
         "## Weekly and final output",
@@ -249,7 +249,7 @@ def protocol_markdown() -> str:
         "for wider use. `python scripts/trial.py review`.",
         f"- **Final**: a {window}-day scorecard across precision, accuracy, "
         "reliability, timeliness, physical usefulness, futures usefulness, "
-        "opportunity usefulness, UX and trader trust. Every dimension states the "
+        "opportunity usefulness, UX and participant trust. Every dimension states the "
         "arithmetic behind it, and a dimension without enough observations scores "
         "nothing at all rather than a default. `python scripts/trial.py scorecard`.",
         "",
@@ -271,8 +271,8 @@ def protocol_markdown() -> str:
         "`python scripts/trial.py drills`. They touch no production database, write "
         "nothing into `docs/`, and make no network call.",
         "",
-        "Each drill carries a **trader prompt**: show the degraded surface to a "
-        "trader who has not been told what broke, and record what they can tell. "
+        "Each drill carries a **participant prompt**: show the degraded surface to a "
+        "participant who has not been told what broke, and record what they can tell. "
         "That answer is the drill's real result; the assertions only prove the "
         "mechanism fired.",
         "",

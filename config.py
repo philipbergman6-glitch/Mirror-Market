@@ -3854,10 +3854,10 @@ OPPORTUNITY_COUNTERPARTY_LIMIT = 6
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 — the trader validation trial
+# Phase 5 — the validation trial
 #
 # A 30-trading-day shadow trial measuring one thing: does Mirror Market reduce
-# a professional soy trader's reliance on an external terminal, a broker call or
+# a participant's (a physical buyer's) reliance on an external terminal, a broker call or
 # a spreadsheet, WITHOUT increasing decision risk. Both halves matter. A tool
 # that answers everything and is wrong twice is worse than one that answers half
 # and says so.
@@ -3877,11 +3877,11 @@ TRIAL_PROTOCOL_VERSION = "1.0.0"
 # because a session on a day the board is shut measures nothing.
 TRIAL_WINDOW_TRADING_DAYS = 30
 
-# The minimum number of independent traders. Two is the floor stated in the
-# brief; one trader's preference is a taste, not a finding.
-TRIAL_MIN_TRADERS = 2
+# The minimum number of independent participants. Two is the floor stated in the
+# brief; one participant's preference is a taste, not a finding.
+TRIAL_MIN_PARTICIPANTS = 2
 
-# Where the private trial records live: trader ids, session notes, decisions,
+# Where the private trial records live: participant ids, session notes, decisions,
 # counterparties, and every commercial judgement made during the window. This
 # directory is gitignored and is NEVER read by any builder that writes into
 # docs/ — see data/reference/trial/README.md.
@@ -3896,13 +3896,13 @@ TRIAL_RECORD_DIR = os.getenv("MIRROR_TRIAL_DIR") or os.path.join(
 
 # Where the private trial dashboard is rendered. Outside docs/ on purpose, and
 # for the same reason the private opportunity edition is: docs/ is what the
-# Pages deploy uploads, so anything carrying a trader's own words must not be
+# Pages deploy uploads, so anything carrying a participant's own words must not be
 # able to land in it by a path mistake. Gitignored.
 TRIAL_PRIVATE_OUTPUT_DIR = os.getenv("MIRROR_TRIAL_PRIVATE_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "workspace", "trial"
 )
 
-# Trader confidence is recorded on a 1-5 scale. It is an ordinal opinion, not a
+# Participant confidence is recorded on a 1-5 scale. It is an ordinal opinion, not a
 # measurement, and is reported as a median and a distribution — never a mean,
 # which would invent a precision the scale does not carry.
 TRIAL_CONFIDENCE_SCALE = (1, 2, 3, 4, 5)
@@ -3922,16 +3922,16 @@ TRIAL_DECISION_THRESHOLDS: dict[str, dict[str, float]] = {
     # External lookups per completed task. The headline number of the whole
     # trial: it is the reduction in terminal reliance, measured.
     "external_lookups_per_task": {"go": 1.0, "no_go": 2.5},
-    # Share of sessions in which the trader hit a number that was wrong or past
+    # Share of sessions in which the participant hit a number that was wrong or past
     # its own cadence without the page saying so. This is the risk half, and its
     # bar is deliberately the strictest on the board.
     "wrong_or_stale_rate": {"go": 0.02, "no_go": 0.10},
     # Alerts that fired on nothing, or failed to fire on something.
     "false_alert_rate": {"go": 0.05, "no_go": 0.20},
     "missed_alert_rate": {"go": 0.05, "no_go": 0.20},
-    # Would the trader act on the output, unaided.
+    # Would the participant act on the output, unaided.
     "would_act_rate": {"go": 0.75, "no_go": 0.50},
-    # Median trader confidence, 1-5.
+    # Median participant confidence, 1-5.
     "median_confidence": {"go": 4.0, "no_go": 3.0},
     # Share of the 30 windows in which the promoted edition was the day's, and
     # every critical source was inside its own cadence budget.
@@ -3957,7 +3957,7 @@ TRIAL_MIN_OBSERVATIONS = 10
 
 # The nine rubric dimensions of the final scorecard, each scored 0-5 against the
 # same strict professional rubric the earlier audits used. Order is the order a
-# trader would ask them in.
+# participant would ask them in.
 TRIAL_SCORECARD_DIMENSIONS = (
     "precision",
     "accuracy",
@@ -3967,16 +3967,16 @@ TRIAL_SCORECARD_DIMENSIONS = (
     "futures_usefulness",
     "opportunity_usefulness",
     "ux",
-    "trader_trust",
+    "participant_trust",
 )
 
 
-# The layers a soy trader's daily decisions actually rest on. Availability is
+# The layers a participant's daily decisions actually rest on. Availability is
 # measured against THIS set rather than all 27, because a CEC release slipping a
 # week is not the same event as the CBOT board going dark, and averaging them
 # produces an availability number that stays green through an outage that
 # matters. main.CRITICAL_LAYERS is a different and narrower list — it decides
-# the pipeline's exit code, not what a trader needs on screen.
+# the pipeline's exit code, not what a participant needs on screen.
 TRIAL_CRITICAL_LAYERS = (
     "prices",         # the board itself
     "currencies",     # every non-USD leg is unreadable without it

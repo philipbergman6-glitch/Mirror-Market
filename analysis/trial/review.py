@@ -8,7 +8,7 @@ questions, the metrics trend, recommended changes, and a go/no-go for broader
 use. Requirement 10 asks a final 30-day scorecard on the same strict rubric the
 earlier audits of this project used: precision, accuracy, reliability,
 timeliness, physical usefulness, futures usefulness, opportunity usefulness, UX,
-trader trust.
+participant trust.
 
 Four rules hold both together.
 
@@ -20,7 +20,7 @@ because a scorecard averaging four of nine dimensions and printing "B" is worse
 than one that admits it does not know.
 
 **Every dimension names its inputs.** Each is a stated arithmetic over named
-metrics and issue classes, and carries those inputs in ``basis`` so a trader who
+metrics and issue classes, and carries those inputs in ``basis`` so a participant who
 disagrees with a score can check the derivation rather than argue with a letter.
 Nothing here is a judgement call rendered as a number.
 
@@ -32,7 +32,7 @@ as ``new`` rather than flat.
 in ``config.TRIAL_DECISION_THRESHOLDS`` so the answer to "why did it say no-go"
 is a lookup. This module applies them and adds exactly two overrides a metric
 average cannot express: an open blocker is a no-go whatever the rates say, and a
-window that has not met its trader or observation minimum is ``insufficient``
+window that has not met its participant or observation minimum is ``insufficient``
 rather than a verdict.
 
 Nothing in this module invents a participant, a session, a lookup or a result.
@@ -82,7 +82,7 @@ __all__ = [
 ]
 
 #: The verdicts a review can reach. ``INSUFFICIENT`` is a first-class answer, not
-#: an error: a fortnight with one trader and six sessions has not earned a
+#: an error: a fortnight with one participant and six sessions has not earned a
 #: go/no-go, and forcing one would be the single most misleading thing this
 #: module could do.
 VERDICT_GO = "go"
@@ -142,8 +142,8 @@ DIMENSION_SOURCES: dict[str, str] = {
         "share of sessions free of a misleading-UX or workflow-friction issue, and the "
         "external lookups those sessions still needed"
     ),
-    "trader_trust": (
-        "median confidence against the 1-5 scale, and the share of sessions where the trader "
+    "participant_trust": (
+        "median confidence against the 1-5 scale, and the share of sessions where the participant "
         "would act on the answer"
     ),
 }
@@ -216,7 +216,7 @@ class Recommendation:
     Recommendations are the one output that *must* quote the evidence to be
     worth reading — "this question was asked elsewhere twice and is still
     unanswered here" is actionable only with the question attached. But that
-    question is free text a trader typed mid-session, and the most valuable ones
+    question is free text a participant typed mid-session, and the most valuable ones
     are the most disclosing: "can we still ship Nov from Santos" names a position
     by implication.
 
@@ -246,7 +246,7 @@ class WeeklyReview:
 
     Deliberately holds both the metric set and the free-text material. The
     aggregate projection drops the second — unmet questions and issue summaries
-    are typed by a trader mid-session and may name a cargo or a counterparty.
+    are typed by a participant mid-session and may name a cargo or a counterparty.
     """
 
     week_start: date
@@ -260,7 +260,7 @@ class WeeklyReview:
     backlog: BacklogSet | None = None
     verdict: str = VERDICT_INSUFFICIENT
     verdict_reason: str = ""
-    trader_count: int = 0
+    participant_count: int = 0
     session_count: int = 0
 
     @property
@@ -273,7 +273,7 @@ class WeeklyReview:
             "week_end": self.week_end.isoformat(),
             "verdict": self.verdict,
             "verdict_reason": self.verdict_reason,
-            "trader_count": self.trader_count,
+            "participant_count": self.participant_count,
             "session_count": self.session_count,
             "metrics": self.metrics.to_dict(audience=audience),
             "trend": [entry.to_dict() for entry in self.trend],
@@ -304,24 +304,24 @@ def _in_window(day: date, start: date, end: date) -> bool:
     return start <= day <= end
 
 
-def _verdict(metrics: MetricSet, backlog: BacklogSet, *, traders: int, sessions: int) -> tuple[str, str]:
+def _verdict(metrics: MetricSet, backlog: BacklogSet, *, participants: int, sessions: int) -> tuple[str, str]:
     """Apply the config bars, plus the two overrides an average cannot express."""
     import config
 
-    min_traders = getattr(config, "TRIAL_MIN_TRADERS", 2)
+    min_participants = getattr(config, "TRIAL_MIN_PARTICIPANTS", 2)
     min_obs = getattr(config, "TRIAL_MIN_OBSERVATIONS", 10)
-    if traders < min_traders or sessions < min_obs:
+    if participants < min_participants or sessions < min_obs:
         return (
             VERDICT_INSUFFICIENT,
-            f"{sessions} session(s) from {traders} trader(s); the protocol asks for at least "
-            f"{min_obs} sessions from {min_traders} traders before a verdict is meaningful",
+            f"{sessions} session(s) from {participants} participant(s); the protocol asks for at least "
+            f"{min_obs} sessions from {min_participants} participants before a verdict is meaningful",
         )
 
     blockers = backlog.blockers
     if blockers:
         return (
             VERDICT_NO_GO,
-            f"{len(blockers)} open blocker(s) — a trader could size a real trade wrongly off "
+            f"{len(blockers)} open blocker(s) — a participant could size a real trade wrongly off "
             f"this surface: {'; '.join(item.key for item in blockers)}",
         )
 
@@ -354,7 +354,7 @@ def _what_worked(sessions: Sequence[SessionRecord], metrics: MetricSet) -> tuple
         )
     would_act = [s for s in completed if s.would_act]
     if would_act:
-        worked.append(f"the trader would have acted on {len(would_act)} of {len(completed)} completed session(s)")
+        worked.append(f"the participant would have acted on {len(would_act)} of {len(completed)} completed session(s)")
     for metric in metrics.graded:
         if metric.status == STATUS_GO:
             worked.append(f"{metric.label}: {metric.display} (at or above the go bar)")
@@ -390,7 +390,7 @@ def _unmet_questions(sessions: Iterable[SessionRecord]) -> tuple[tuple[str, int]
 
     This is the single most valuable output of the whole trial and the reason
     :class:`~analysis.trial.domain.ExternalLookup` refuses to be constructed
-    without one. A lookup count says the trader left; the question says why.
+    without one. A lookup count says the participant left; the question says why.
     """
     counter: Counter[str] = Counter()
     for session in sessions:
@@ -405,7 +405,7 @@ def _recommendations(
     """Concrete next actions derived from what failed. Never generic advice.
 
     Each is built with its shareable form decided here, at the point where it is
-    known whether the text quotes a trader. A blocker's summary and an unmet
+    known whether the text quotes a participant. A blocker's summary and an unmet
     question both do, so their shareable forms name the item and the count and
     stop there; a metric falling below its bar quotes only numbers this module
     computed, so it shares whole.
@@ -420,7 +420,7 @@ def _recommendations(
         )
     for metric in metrics.graded:
         if metric.status == STATUS_NO_GO:
-            # Numbers this module computed, and a note it wrote. Nothing a trader
+            # Numbers this module computed, and a note it wrote. Nothing a participant
             # typed, so the private and shareable forms are the same string.
             text = f"{metric.label} is below the no-go bar at {metric.display}. {metric.note}"
             out.append(Recommendation(text=text, shareable=text))
@@ -481,8 +481,8 @@ def weekly_review(
         )
         for metric in metrics.metrics
     )
-    traders = len({s.trader for s in window})
-    verdict, reason = _verdict(metrics, backlog, traders=traders, sessions=len(window))
+    participants = len({s.participant for s in window})
+    verdict, reason = _verdict(metrics, backlog, participants=participants, sessions=len(window))
     return WeeklyReview(
         week_start=week_start,
         week_end=end,
@@ -495,7 +495,7 @@ def weekly_review(
         backlog=backlog,
         verdict=verdict,
         verdict_reason=reason,
-        trader_count=traders,
+        participant_count=participants,
         session_count=len(window),
     )
 
@@ -555,7 +555,7 @@ class Scorecard:
     window_end: date
     dimensions: tuple[ScorecardDimension, ...]
     session_count: int
-    trader_count: int
+    participant_count: int
     day_count: int
     trading_days_covered: int
     verdict: str
@@ -587,7 +587,7 @@ class Scorecard:
 
         return (
             self.trading_days_covered >= getattr(config, "TRIAL_WINDOW_TRADING_DAYS", 30)
-            and self.trader_count >= getattr(config, "TRIAL_MIN_TRADERS", 2)
+            and self.participant_count >= getattr(config, "TRIAL_MIN_PARTICIPANTS", 2)
         )
 
     def to_dict(self, *, audience: str = AUDIENCE_PRIVATE) -> dict[str, Any]:
@@ -601,7 +601,7 @@ class Scorecard:
             "is_complete": self.is_complete,
             "trading_days_covered": self.trading_days_covered,
             "session_count": self.session_count,
-            "trader_count": self.trader_count,
+            "participant_count": self.participant_count,
             "day_count": self.day_count,
             "verdict": self.verdict,
             "verdict_reason": self.verdict_reason,
@@ -802,7 +802,7 @@ def scorecard(
         )
     )
 
-    # trader_trust — confidence and whether they would act
+    # participant_trust — confidence and whether they would act
     confidence = _metric_value(metrics, "median_confidence")
     act_rate = _metric_value(metrics, "would_act_rate")
     trust_parts: list[float] = []
@@ -818,10 +818,10 @@ def scorecard(
     trust = sum(trust_parts) / len(trust_parts) if trust_parts else None
     dims.append(
         ScorecardDimension(
-            key="trader_trust",
+            key="participant_trust",
             score=trust,
             observations=total,
-            source=DIMENSION_SOURCES["trader_trust"],
+            source=DIMENSION_SOURCES["participant_trust"],
             basis=tuple(trust_basis),
             min_observations=floor,
         )
@@ -838,15 +838,15 @@ def scorecard(
     ordered = tuple(by_key[key] for key in ordered_keys)
 
     backlog = draft_backlog(window)
-    traders = len({s.trader for s in window})
+    participants = len({s.participant for s in window})
     covered = len({s.trading_day for s in window} | {d.trading_day for d in live_days})
-    verdict, reason = _verdict(metrics, backlog, traders=traders, sessions=total)
+    verdict, reason = _verdict(metrics, backlog, participants=participants, sessions=total)
     return Scorecard(
         window_start=window_start,
         window_end=window_end,
         dimensions=ordered,
         session_count=total,
-        trader_count=traders,
+        participant_count=participants,
         day_count=len(window_days),
         trading_days_covered=covered,
         verdict=verdict,
@@ -866,7 +866,7 @@ def review_markdown(review: WeeklyReview, *, audience: str = AUDIENCE_PRIVATE) -
         "",
         f"**Verdict: {review.verdict.upper()}** — {review.verdict_reason}",
         "",
-        f"{review.session_count} session(s) from {review.trader_count} trader(s).",
+        f"{review.session_count} session(s) from {review.participant_count} participant(s).",
     ]
     if audience == AUDIENCE_PRIVATE:
         lines.append("*Private record. Do not paste into a public tracker.*")
@@ -903,7 +903,7 @@ def review_markdown(review: WeeklyReview, *, audience: str = AUDIENCE_PRIVATE) -
     lines += [f"- {text}" for text in rendered if text] or ["- None."]
     withheld = sum(1 for item in review.recommendations if item.shareable is None)
     if audience == AUDIENCE_AGGREGATE and withheld:
-        lines.append(f"- *({withheld} recommendation(s) withheld: they quote a trader's own words.)*")
+        lines.append(f"- *({withheld} recommendation(s) withheld: they quote a participant's own words.)*")
     return "\n".join(lines)
 
 
@@ -918,7 +918,7 @@ def scorecard_markdown(card: Scorecard, *, audience: str = AUDIENCE_PRIVATE) -> 
         "",
         f"**Verdict: {card.verdict.upper()}** — {card.verdict_reason}",
         "",
-        f"{card.session_count} session(s), {card.trader_count} trader(s), "
+        f"{card.session_count} session(s), {card.participant_count} participant(s), "
         f"{card.trading_days_covered} trading day(s) covered.",
     ]
     if not card.is_complete:

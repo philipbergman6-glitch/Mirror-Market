@@ -4,7 +4,7 @@ A drill simulates a failure and then checks that the product *degrades the way
 it claims to*. That is a different exercise from a unit test, and both are
 needed: the unit tests pin each mechanism in isolation, and the drills assert
 that the whole chain — grading, freshness, page, promotion contract — reaches
-the trader as a visible degradation rather than as a silently wrong number.
+the participant as a visible degradation rather than as a silently wrong number.
 
 The five, and what each is really testing:
 
@@ -78,7 +78,7 @@ class DrillResult:
 
     ``expected`` and ``observed`` are both recorded even when the drill passes.
     A drill result that only says "pass" is unreadable six weeks later, and the
-    whole point of running these inside the trial is that a trader is shown the
+    whole point of running these inside the trial is that a participant is shown the
     degraded product and asked what they can tell.
     """
 
@@ -89,7 +89,7 @@ class DrillResult:
     observed: str
     passed: bool
     evidence: tuple[str, ...] = ()
-    trader_prompt: str = ""
+    participant_prompt: str = ""
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -114,7 +114,7 @@ class DrillResult:
             "passed": self.passed,
             "verdict": self.verdict,
             "evidence": list(self.evidence),
-            "trader_prompt": self.trader_prompt,
+            "participant_prompt": self.participant_prompt,
         }
 
 
@@ -219,7 +219,7 @@ def drill_critical_source_outage() -> DrillResult:
         ),
         passed=passed,
         evidence=(f"main._finalize_layer('prices', {{}}) -> {success!r}", f"freshness row: {row}"),
-        trader_prompt=(
+        participant_prompt=(
             "Open the headline and the CBOT page. Without being told what broke: can you say "
             "which number is missing, how old the last good one is, and whether you would "
             "quote off this page?"
@@ -303,7 +303,7 @@ def drill_partial_key_coverage() -> DrillResult:
             f"below-floor freshness row: {low_row}",
             f"LAYER_MIN_KEYS['weather'] = {floor}, catalog = {expected_keys} regions",
         ),
-        trader_prompt=(
+        participant_prompt=(
             "Open the headline weather section. Can you tell that regions are missing, "
             "or does it read like a complete picture with a quiet week?"
         ),
@@ -350,7 +350,7 @@ def drill_stale_payload(layer: str = "safex") -> DrillResult:
         ),
         passed=passed,
         evidence=(f"freshness row: {row}", f"LAYER_MAX_DATA_AGE_DAYS[{layer!r}] = {budget}"),
-        trader_prompt=(
+        participant_prompt=(
             f"Open the market page fed by '{layer}'. Does the page tell you the number is a "
             "month old, and does the propagation ledger show that leg as dark rather than flat?"
         ),
@@ -414,7 +414,7 @@ def drill_page_generation_failure(output_dir: str | Path | None = None) -> Drill
             f"tombstone written to {path}",
             f"contract failures: {list(verdict.failures)[:4]}",
         ),
-        trader_prompt=(
+        participant_prompt=(
             "You have been given yesterday's public site because today's was blocked. Can you "
             "tell from the page that it is not today's, and would you have noticed unprompted?"
         ),
@@ -470,7 +470,7 @@ def drill_deployment_failure() -> DrillResult:
     """An incomplete candidate must be refused, which is what keeps yesterday live.
 
     Two things are checked, and the second is the one that actually protects a
-    trader. First: a candidate missing a page fails the contract. Second: the
+    participant. First: a candidate missing a page fails the contract. Second: the
     private editions — the desk opportunity board and the private trial
     dashboard — are not in ``expected_site_paths()`` at all, so no deploy path
     can carry them even on a day when everything else works.
@@ -522,7 +522,7 @@ def drill_deployment_failure() -> DrillResult:
             f"expected_site_paths() -> {len(paths)} URLs",
             f"private dirs: {[str(d) for d in private_dirs]}",
         ),
-        trader_prompt=(
+        participant_prompt=(
             "Today's edition never deployed. Looking at the site you have, can you tell how old "
             "it is, and did anything tell you it was not refreshed?"
         ),
@@ -538,7 +538,7 @@ def _is_within(path: Path, root: Path) -> bool:
 
 
 #: Drill id -> callable. The order is the order the protocol runs them in, one
-#: per week of the trial, so a trader meets each failure mode once and cold.
+#: per week of the trial, so a participant meets each failure mode once and cold.
 DRILLS: dict[str, Callable[[], DrillResult]] = {
     "critical_source_outage": drill_critical_source_outage,
     "partial_key_coverage": drill_partial_key_coverage,

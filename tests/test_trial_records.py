@@ -28,7 +28,7 @@ from analysis.trial.records import (
 )
 from tests.trial_fixtures import (
     MARK,
-    SYNTHETIC_TRADERS,
+    SYNTHETIC_PARTICIPANTS,
     day_observation,
     full_window,
     issue,
@@ -55,7 +55,7 @@ def test_a_session_survives_a_round_trip_through_yaml_unchanged() -> None:
     document = session_to_document(original)
     restored = parse_sessions([document], where="test")[0]
 
-    assert restored.trader == original.trader
+    assert restored.participant == original.participant
     assert restored.task is original.task
     assert restored.started_at == original.started_at
     assert restored.ended_at == original.ended_at
@@ -93,7 +93,7 @@ def test_the_whole_fixture_window_round_trips_through_disk(tmp_path: Path) -> No
     loaded_days = load_day_observations(tmp_path)
     assert len(loaded.sessions) == len(sessions)
     assert len(loaded_days.days) == len(days)
-    assert set(loaded.traders) == set(SYNTHETIC_TRADERS)
+    assert set(loaded.participants) == set(SYNTHETIC_PARTICIPANTS)
 
 
 # --- refusals -------------------------------------------------------------
@@ -136,7 +136,7 @@ def test_a_non_boolean_would_act_is_refused_rather_than_coerced() -> None:
 
 def test_a_document_that_is_not_a_list_of_sessions_is_refused() -> None:
     with pytest.raises(TrialError):
-        parse_sessions({"trader": "zephyr"}, where="test")  # type: ignore[arg-type]
+        parse_sessions({"participant": "zephyr"}, where="test")  # type: ignore[arg-type]
 
 
 def test_a_malformed_file_raises_rather_than_loading_as_an_empty_trial(tmp_path: Path) -> None:
@@ -154,7 +154,7 @@ def test_a_missing_directory_is_an_empty_set_not_an_error(tmp_path: Path) -> Non
 
 
 def test_two_sessions_with_the_same_identity_are_refused(tmp_path: Path) -> None:
-    # Same trader, same task, same start: one session logged twice. Counting it
+    # Same participant, same task, same start: one session logged twice. Counting it
     # twice would inflate every denominator in the trial.
     document = session_to_document(session())
     _write(tmp_path, SESSIONS_SUBDIR, "2026-08-18.yml", [document, dict(document)])
@@ -179,11 +179,11 @@ def test_the_error_names_the_file_it_came_from(tmp_path: Path) -> None:
 
 
 # --- containers -----------------------------------------------------------
-def test_a_session_set_filters_by_trader_task_and_window() -> None:
+def test_a_session_set_filters_by_participant_task_and_window() -> None:
     sessions, _ = full_window()
     container = SessionSet(sessions=tuple(sessions))
-    assert set(container.traders) == set(SYNTHETIC_TRADERS)
-    assert all(s.trader == SYNTHETIC_TRADERS[0] for s in container.for_trader(SYNTHETIC_TRADERS[0]))
+    assert set(container.participants) == set(SYNTHETIC_PARTICIPANTS)
+    assert all(s.participant == SYNTHETIC_PARTICIPANTS[0] for s in container.for_participant(SYNTHETIC_PARTICIPANTS[0]))
     assert all(s.task is TaskId.MORNING_BRIEF for s in container.for_task(TaskId.MORNING_BRIEF))
     window = container.between(date(2026, 8, 10), date(2026, 8, 14))
     assert window.sessions

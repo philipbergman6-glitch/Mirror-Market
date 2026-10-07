@@ -1,9 +1,9 @@
 """Builders for the Phase 5 trial tests. **Every record here is SYNTHETIC.**
 
-No trader in these fixtures is a person, no decision is a decision anyone made,
+No participant in these fixtures is a person, no decision is a decision anyone made,
 and no metric produced from them is a trial result. That is stated in the module
 docstring, repeated in the ``SYNTHETIC`` prefix on every free-text field, and
-enforced by :data:`SYNTHETIC_TRADERS` being handles no desk would use — because
+enforced by :data:`SYNTHETIC_PARTICIPANTS` being handles no desk would use — because
 the one genuinely dangerous failure mode of a validation harness is a fabricated
 result being read later as a real one.
 
@@ -36,7 +36,7 @@ MARK = "SYNTHETIC"
 #: Deliberately not names. Three characters or more, and not substrings of
 #: ordinary English, because ``sanitize.assert_no_identifiers`` searches free
 #: text for them and would otherwise fire on the word "adjusted".
-SYNTHETIC_TRADERS = ("zephyr", "quartz")
+SYNTHETIC_PARTICIPANTS = ("zephyr", "quartz")
 
 TODAY = date(2026, 8, 18)
 WINDOW_START = date(2026, 7, 20)
@@ -115,7 +115,7 @@ BLOCKER_ISSUE = issue(
 
 
 def session(
-    trader: str = SYNTHETIC_TRADERS[0],
+    participant: str = SYNTHETIC_PARTICIPANTS[0],
     task: TaskId = TaskId.MORNING_BRIEF,
     trading_day: date = TODAY,
     *,
@@ -131,7 +131,7 @@ def session(
 ) -> SessionRecord:
     started = datetime.combine(trading_day, datetime.min.time(), tzinfo=timezone.utc).replace(hour=hour)
     return SessionRecord(
-        trader=trader,
+        participant=participant,
         task=task,
         trading_day=trading_day,
         started_at=started,
@@ -184,7 +184,7 @@ def trading_days(start: date = WINDOW_START, end: date = TODAY) -> list[date]:
 
 
 def full_window() -> tuple[list[SessionRecord], list[DayObservation]]:
-    """A complete, healthy 30-ish-day window: two traders, all ten tasks, few issues.
+    """A complete, healthy 30-ish-day window: two participants, all ten tasks, few issues.
 
     Shaped to clear every observation floor so that tests of the *grading* logic
     are not accidentally testing the insufficiency path. Tests that want a thin
@@ -194,13 +194,13 @@ def full_window() -> tuple[list[SessionRecord], list[DayObservation]]:
     sessions: list[SessionRecord] = []
     days: list[DayObservation] = []
     for index, day in enumerate(trading_days()):
-        for offset, trader in enumerate(SYNTHETIC_TRADERS):
+        for offset, participant in enumerate(SYNTHETIC_PARTICIPANTS):
             issues: tuple[Issue, ...] = ()
             if index % 6 == 0 and offset == 0:
                 issues = (issue(),)
             sessions.append(
                 session(
-                    trader=trader,
+                    participant=participant,
                     task=tasks[(index + offset) % len(tasks)],
                     trading_day=day,
                     minutes=9 + (index % 5),

@@ -42,8 +42,8 @@ def test_every_task_appears_with_its_question_criterion_target_and_cadence() -> 
         assert str(task.target_minutes) in DOC
 
 
-def test_every_issue_class_and_severity_is_defined_for_the_trader() -> None:
-    # A trader classifying a finding needs the definition in front of them, or
+def test_every_issue_class_and_severity_is_defined_for_the_participant() -> None:
+    # A participant classifying a finding needs the definition in front of them, or
     # the classification metric measures how each person guessed.
     for kind in IssueClass:
         assert kind.value in DOC
@@ -75,7 +75,7 @@ def test_the_protocol_states_the_window_and_the_participation_floors() -> None:
     import config
 
     assert str(config.TRIAL_WINDOW_TRADING_DAYS) in DOC
-    assert str(config.TRIAL_MIN_TRADERS) in DOC
+    assert str(config.TRIAL_MIN_PARTICIPANTS) in DOC
     assert str(config.TRIAL_MIN_OBSERVATIONS) in DOC
 
 

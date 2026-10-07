@@ -1,4 +1,4 @@
-"""The vocabulary of the trader validation trial (Phase 5).
+"""The vocabulary of the validation trial (Phase 5).
 
 Standard library only: persistence lives in ``records.py``, the git and SQLite
 reads in ``release.py``, presentation in ``app/``. Same separation
@@ -7,7 +7,7 @@ that can read a database grows a database's opinions.
 
 Five ideas carry this module, and each exists because getting it wrong produces
 a *believable* trial result rather than a crash. A wrong number on a dashboard
-gets caught by the trader looking at it. A wrong number in the evidence that
+gets caught by the participant looking at it. A wrong number in the evidence that
 decides whether the product is trustworthy gets caught by nobody.
 
 **A record is a measurement, not a diary.** Every field a metric reads is typed
@@ -17,7 +17,7 @@ and closed-set. ``issues`` is one list of :class:`Issue`, each carrying an
 disagree with each other about the same event, and the metrics would have to
 pick a winner.
 
-**An abandoned session is data.** A task the trader gave up on is the single
+**An abandoned session is data.** A task the participant gave up on is the single
 most informative record in the trial, so :class:`SessionRecord` refuses to be
 built as abandoned or blocked without at least one issue saying why. The
 failure mode this prevents is a trial that reports 100% completion because the
@@ -30,13 +30,13 @@ Mirror Market did not have — because that field, aggregated, *is* the product
 backlog.
 
 **Every result is stamped with what produced it.** :class:`ReleaseStamp` pins
-the code revision and a fingerprint of the data the trader was actually looking
+the code revision and a fingerprint of the data the participant was actually looking
 at. Without it, "the crush number was wrong on Tuesday" is unreproducible by
 Thursday, and the finding has to be taken on trust — which is precisely what
 this phase exists not to do.
 
 **Private and aggregate are different objects, not different templates.**
-A trader's identity, their decision, their notes and their evidence live on the
+A participant's identity, their decision, their notes and their evidence live on the
 record and are never serialised into anything shareable.
 :meth:`SessionRecord.to_dict` with ``audience=AUDIENCE_AGGREGATE`` does not
 build those keys at all — see ``sanitize.py``, which pins it.
@@ -84,7 +84,7 @@ class TrialError(ValueError):
 # Audiences — the privacy boundary, declared before anything uses it
 # ---------------------------------------------------------------------------
 
-#: The full record, including everything a trader typed. Never leaves the
+#: The full record, including everything a participant typed. Never leaves the
 #: machine it was written on.
 AUDIENCE_PRIVATE = "private"
 
@@ -95,7 +95,7 @@ AUDIENCE_AGGREGATE = "aggregate"
 #: Field names that carry a human's own words or identity. ``sanitize.py``
 #: asserts that none of them appears in an aggregate payload, at any depth.
 PRIVATE_FIELD_NAMES = frozenset({
-    "trader",
+    "participant",
     "decision",
     "notes",
     "evidence",
@@ -106,7 +106,7 @@ PRIVATE_FIELD_NAMES = frozenset({
     # denies every field that happens to end up called that — it caught
     # Metric.detail, a per-task breakdown of numbers this project computed — and
     # a guard that fires on public data gets loosened, which is how the guard
-    # stops guarding. The private field is the one that names a trader's tool.
+    # stops guarding. The private field is the one that names a participant's tool.
     "tool_detail",
     "counterparty",
     "owner",
@@ -114,7 +114,7 @@ PRIVATE_FIELD_NAMES = frozenset({
 
 
 # ---------------------------------------------------------------------------
-# The ten recurring tasks — requirement "two or more traders, these tasks"
+# The ten recurring tasks — requirement "two or more participants, these tasks"
 #
 # This enum is the single source of truth for the protocol document as well as
 # for the record store: docs/trial/PROTOCOL.md is generated from it, so a task
@@ -122,12 +122,12 @@ PRIVATE_FIELD_NAMES = frozenset({
 # the metrics.
 # ---------------------------------------------------------------------------
 class TaskId(str, Enum):
-    """A recurring job a soy trader actually does, framed as a decision.
+    """A recurring job a participant actually does, framed as a decision.
 
     Each member names a task the trial runs repeatedly across the window. They
     are decisions rather than features on purpose: "use the origins page" is not
     a task, it is an instruction, and a trial that instructs where to look
-    cannot measure whether the trader would have gone there.
+    cannot measure whether the participant would have gone there.
     """
 
     MORNING_BRIEF = "morning_brief"
@@ -154,7 +154,7 @@ class TaskId(str, Enum):
 
     @property
     def decision_question(self) -> str:
-        """The question the trader must answer. Not "what to look at"."""
+        """The question the participant must answer. Not "what to look at"."""
         return _TASK_SPECS[self]["question"]
 
     @property
@@ -164,7 +164,7 @@ class TaskId(str, Enum):
 
     @property
     def target_minutes(self) -> int:
-        """The time this task takes on the tools the trader uses today.
+        """The time this task takes on the tools the participant uses today.
 
         The baseline is stated per task rather than measured, and it is stated
         as a *target*, not a benchmark: this project has no instrumented
@@ -188,7 +188,7 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
             "which of those changes anything I hold or intend to do today?"
         ),
         "success": (
-            "The trader can state the overnight move in the soy complex, name at "
+            "The participant can state the overnight move in the soy complex, name at "
             "least one market that has NOT yet repriced, and say whether the day's "
             "plan changes — without opening a second tool first."
         ),
@@ -204,7 +204,7 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
         ),
         "success": (
             "A ranked landed cost with every cost component visible, the shipment "
-            "window stated, and the trader able to name the one input that most "
+            "window stated, and the participant able to name the one input that most "
             "moves the ranking."
         ),
         "target_minutes": 20,
@@ -219,7 +219,7 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
         "success": (
             "A sized hedge in whole contracts against a stated tonnage, a named "
             "contract month with its expiry and first notice day, and a shocked P&L "
-            "the trader can reproduce from the numbers on the page."
+            "the participant can reproduce from the numbers on the page."
         ),
         "target_minutes": 25,
         "cadence": "at least twice a week",
@@ -232,7 +232,7 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
         ),
         "success": (
             "Month-over-month revisions for the US and world balance sheets, with "
-            "stocks-to-use, read off the product within the session; the trader can "
+            "stocks-to-use, read off the product within the session; the participant can "
             "say whether the move looks over- or under-done."
         ),
         "target_minutes": 20,
@@ -273,7 +273,7 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
         ),
         "success": (
             "A ranked lane with named candidate counterparties, its blockers stated, "
-            "and the trader able to say whether it is workable today or merely worth "
+            "and the participant able to say whether it is workable today or merely worth "
             "a phone call."
         ),
         "target_minutes": 15,
@@ -284,10 +284,10 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
         "question": (
             "When a source dies, a payload freezes, a page fails to build or a "
             "deploy fails, does the product say so — and is the last good edition "
-            "still what the trader sees?"
+            "still what the participant sees?"
         ),
         "success": (
-            "The trader, shown a degraded edition without being told which drill "
+            "The participant, shown a degraded edition without being told which drill "
             "ran, can name what is missing and say whether they would still trade "
             "off the page."
         ),
@@ -298,7 +298,7 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
         "title": "Price and calculation audit",
         "question": (
             "Pick a displayed number at random: what exactly is it, where did it "
-            "come from, and can the trader reproduce it?"
+            "come from, and can the participant reproduce it?"
         ),
         "success": (
             "The number's product, venue, price type, currency, unit, contract or "
@@ -306,17 +306,17 @@ _TASK_SPECS: dict[TaskId, dict[str, Any]] = {
             "any derived figure reproduces by hand from its stated inputs."
         ),
         "target_minutes": 15,
-        "cadence": "at least three times a week, on a number chosen by the trader",
+        "cadence": "at least three times a week, on a number chosen by the participant",
     },
     TaskId.TICKET_REVIEW: {
         "title": "Proposed hedge / trade-ticket review",
         "question": (
-            "Is this proposed ticket one the trader would send to a broker, and if "
+            "Is this proposed ticket one the participant would send to a broker, and if "
             "not, what is wrong with it?"
         ),
         "success": (
             "Every leg carries a named contract, a side, a quantity in whole "
-            "contracts and a price basis; the trader states accept, amend or reject "
+            "contracts and a price basis; the participant states accept, amend or reject "
             "with a reason."
         ),
         "target_minutes": 10,
@@ -333,7 +333,7 @@ class IssueClass(str, Enum):
 
     The set is deliberately split along the line that matters for the trial's
     own verdict. ``NUMERICAL_ERROR``, ``SEMANTIC_MISMATCH`` and ``STALE_DATA``
-    mean the product told the trader something untrue, and they are the numerator
+    mean the product told the participant something untrue, and they are the numerator
     of the decision-risk metric. ``MISSING_COVERAGE``, ``MISLEADING_UX`` and
     ``WORKFLOW_FRICTION`` mean it failed to help, which is a different and much
     less dangerous failure. Collapsing the two groups into "issues" would let a
@@ -391,7 +391,7 @@ _ISSUE_MEANING = {
         "all. The most common issue class, and the one that becomes the roadmap."
     ),
     IssueClass.MISLEADING_UX: (
-        "The number is correct and the trader read it wrongly anyway. Treated as a "
+        "The number is correct and the participant read it wrongly anyway. Treated as a "
         "product defect, not a user error."
     ),
     IssueClass.WORKFLOW_FRICTION: (
@@ -399,7 +399,7 @@ _ISSUE_MEANING = {
         "calculation to reach."
     ),
     IssueClass.FALSE_ALERT: (
-        "An alert or signal fired and the trader, having checked, judged there was "
+        "An alert or signal fired and the participant, having checked, judged there was "
         "nothing there."
     ),
     IssueClass.MISSED_ALERT: (
@@ -411,7 +411,7 @@ _ISSUE_MEANING = {
         "explicitly not counted as this product being wrong."
     ),
     IssueClass.REQUESTED_ENHANCEMENT: (
-        "Nothing is broken; the trader wants something that does not exist. Kept "
+        "Nothing is broken; the participant wants something that does not exist. Kept "
         "separate from missing coverage, which is a gap in what is already claimed."
     ),
 }
@@ -421,7 +421,7 @@ class Severity(str, Enum):
     """How much a finding matters, judged by the decision it affects.
 
     Severity is about the *decision*, never about the effort to fix. A one-line
-    label fix on a number a trader would hedge off is a blocker; a missing page
+    label fix on a number a participant would hedge off is a blocker; a missing page
     nobody needed is minor.
     """
 
@@ -437,7 +437,7 @@ class Severity(str, Enum):
     def meaning(self) -> str:
         return {
             Severity.BLOCKER: (
-                "A trader could place or size a real trade wrongly off this. Stop "
+                "A participant could place or size a real trade wrongly off this. Stop "
                 "the trial for this surface until it is fixed."
             ),
             Severity.MAJOR: (
@@ -445,7 +445,7 @@ class Severity(str, Enum):
                 "external check every time. Fix inside the window."
             ),
             Severity.MINOR: (
-                "Friction, polish, or a gap the trader routed around without risk."
+                "Friction, polish, or a gap the participant routed around without risk."
             ),
         }[self]
 
@@ -454,7 +454,7 @@ class Outcome(str, Enum):
     """How the session ended.
 
     ``ABANDONED`` and ``BLOCKED`` differ in where the wall was: abandoned means
-    the trader stopped (too slow, not worth it), blocked means the product could
+    the participant stopped (too slow, not worth it), blocked means the product could
     not answer at all. Both require an issue on the record saying which.
     """
 
@@ -468,7 +468,7 @@ class Outcome(str, Enum):
 
 
 class ExternalTool(str, Enum):
-    """Where the trader went instead. Closed set, with ``OTHER`` named in text."""
+    """Where the participant went instead. Closed set, with ``OTHER`` named in text."""
 
     BLOOMBERG = "bloomberg"
     BROKER = "broker"
@@ -485,7 +485,7 @@ class ExternalTool(str, Enum):
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ReleaseStamp:
-    """What code, and what data, produced the thing the trader was looking at.
+    """What code, and what data, produced the thing the participant was looking at.
 
     Requirement 6 in one object. Three parts, and all three are needed:
 
@@ -623,7 +623,7 @@ class Issue:
     ``evidence``          how to see it again — a page, a number, a screenshot
                           path, a query. A finding nobody can reproduce cannot be
                           fixed and cannot be closed.
-    ``affected_decision`` what the trader would have got wrong. This is what
+    ``affected_decision`` what the participant would have got wrong. This is what
                           sets the severity, and a finding that affects no
                           decision is a note, not an issue.
 
@@ -687,32 +687,32 @@ class Issue:
 # The session record — requirement 2
 # ---------------------------------------------------------------------------
 def session_identity_key(
-    trading_day: date, trader: str, task: TaskId, started_at: datetime
+    trading_day: date, participant: str, task: TaskId, started_at: datetime
 ) -> tuple[str, str, str, str]:
     """What makes two session records the same session.
 
-    The start timestamp is in the key because a trader legitimately runs the
+    The start timestamp is in the key because a participant legitimately runs the
     same task twice in one day — a second morning brief after a WASDE release is
     a different session, not a correction of the first.
     """
-    return (trading_day.isoformat(), trader.strip().lower(), task.value, started_at.isoformat())
+    return (trading_day.isoformat(), participant.strip().lower(), task.value, started_at.isoformat())
 
 
-def session_id(trading_day: date, trader: str, task: TaskId, started_at: datetime) -> str:
+def session_id(trading_day: date, participant: str, task: TaskId, started_at: datetime) -> str:
     """``TS-YYYYMMDD-<8 hex>``. Deterministic, so a re-read is the same session.
 
-    The trader id is hashed into it rather than printed: a session id ends up in
+    The participant id is hashed into it rather than printed: a session id ends up in
     backlog items and review output, and those circulate further than the record
     store does.
     """
-    key = "|".join(session_identity_key(trading_day, trader, task, started_at))
+    key = "|".join(session_identity_key(trading_day, participant, task, started_at))
     digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
     return f"TS-{trading_day.strftime('%Y%m%d')}-{digest}"
 
 
 @dataclass(frozen=True)
 class SessionRecord:
-    """One trader, one task, one sitting. The atom of the whole trial.
+    """One participant, one task, one sitting. The atom of the whole trial.
 
     Every field requirement 2 asks for is here and typed. Three of them are
     derived rather than stored, because a stored duration can disagree with its
@@ -722,11 +722,11 @@ class SessionRecord:
     The validation rules are all of the same kind: they refuse records whose
     parts contradict each other, rather than records that are merely incomplete.
     An abandoned session with no issue is contradictory — something stopped the
-    trader and the record does not say what. A session marked ``would_act`` that
+    participant and the record does not say what. A session marked ``would_act`` that
     never completed is contradictory — there was no output to act on.
     """
 
-    trader: str
+    participant: str
     task: TaskId
     trading_day: date
     started_at: datetime
@@ -745,16 +745,16 @@ class SessionRecord:
     source_file: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
-        if not self.trader.strip():
-            raise TrialError("a session needs a trader id (a pseudonym — never a real name)")
+        if not self.participant.strip():
+            raise TrialError("a session needs a participant id (a pseudonym — never a real name)")
         if self.started_at.tzinfo is None or self.ended_at.tzinfo is None:
             raise TrialError(
-                f"{self.trader}/{self.task.value}: start and end must be timezone-aware — "
+                f"{self.participant}/{self.task.value}: start and end must be timezone-aware — "
                 "a trial spanning Chicago, London and Singapore cannot subtract naive clocks"
             )
         if self.ended_at <= self.started_at:
             raise TrialError(
-                f"{self.trader}/{self.task.value}: ended_at {self.ended_at.isoformat()} is not "
+                f"{self.participant}/{self.task.value}: ended_at {self.ended_at.isoformat()} is not "
                 f"after started_at {self.started_at.isoformat()}"
             )
         if self.confidence not in (1, 2, 3, 4, 5):
@@ -763,25 +763,25 @@ class SessionRecord:
             )
         if self.outcome.is_complete and not self.decision.strip():
             raise TrialError(
-                f"{self.trader}/{self.task.value}: a completed session must record the decision "
+                f"{self.participant}/{self.task.value}: a completed session must record the decision "
                 "or output it reached — completion with no output is not completion"
             )
         if not self.outcome.is_complete and not self.issues:
             raise TrialError(
-                f"{self.trader}/{self.task.value}: an {self.outcome.value} session must carry at "
+                f"{self.participant}/{self.task.value}: an {self.outcome.value} session must carry at "
                 "least one issue saying what stopped it. A trial that records only its "
                 "successes measures nothing."
             )
         if self.would_act and not self.outcome.is_complete:
             raise TrialError(
-                f"{self.trader}/{self.task.value}: would_act cannot be true on an "
+                f"{self.participant}/{self.task.value}: would_act cannot be true on an "
                 f"{self.outcome.value} session — there was no output to act on"
             )
 
     # -- derived ------------------------------------------------------------
     @property
     def session_id(self) -> str:
-        return session_id(self.trading_day, self.trader, self.task, self.started_at)
+        return session_id(self.trading_day, self.participant, self.task, self.started_at)
 
     @property
     def duration_minutes(self) -> float:
@@ -855,7 +855,7 @@ class SessionRecord:
         }
         if audience == AUDIENCE_PRIVATE:
             payload.update({
-                "trader": self.trader,
+                "participant": self.participant,
                 "decision": self.decision,
                 "notes": list(self.notes),
                 "evidence": list(self.evidence),
@@ -874,9 +874,9 @@ class DayObservation:
     """What the product itself did on one trading day, independent of any session.
 
     Two of the eleven metrics — source availability and deployment reliability —
-    are properties of the *product*, not of a trader's sitting. They cannot be
+    are properties of the *product*, not of a participant's sitting. They cannot be
     derived from session records, because a day on which the site failed to
-    deploy is precisely a day on which no trader logged a session, and a metric
+    deploy is precisely a day on which no participant logged a session, and a metric
     that only sees the days somebody worked would report perfect reliability
     through a week-long outage.
 
@@ -924,7 +924,7 @@ class DayObservation:
 
     @property
     def deployment_ok(self) -> bool:
-        """Did the trader see today's edition today? Both halves, or neither."""
+        """Did the participant see today's edition today? Both halves, or neither."""
         return self.edition_published and self.edition_current
 
     @property
