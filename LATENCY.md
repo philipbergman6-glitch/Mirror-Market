@@ -130,6 +130,22 @@ Two of these deserve their reasoning stated here:
   deploy path carries all of them. Five copies of one fact would be five things
   to keep in step.
 
+**A fourth verdict: `closed`** (2026-10-07, #399). A board-price objective
+counts hours after a session's close; on a day the venue held no session there
+is nothing to be late for, and the newest bar we hold is the newest bar that
+exists. Golden Week 2026 showed the gap: every scoped DCE refresh from 2 to 7
+October was red on correct data. So a venue may carry a declared closure
+calendar (`latency/calendars.py`, DCE 2026 from the exchange's own notice), and
+an acquisition breach becomes `closed` only when all three hold: the calendar
+covers the days in question, the observed bar is the newest session that had
+closed by the fetch, and at least one declared weekday holiday lies between
+them. Weekends are not closures (every schedule already runs around them); a
+pipeline breach is ours and is never excused; a year with no calendar entered
+falls back to `breaches`, because an unknown calendar must not excuse anything.
+The gate (`--fail-on-breach-layers`) does not fail on `closed`, and both reports
+print the layer with the calendar's source line. Entering the next year's
+notice is a maintenance act: the DCE publishes it each December.
+
 ---
 
 ## 4. The fast refresh

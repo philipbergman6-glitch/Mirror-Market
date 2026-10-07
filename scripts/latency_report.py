@@ -80,6 +80,15 @@ def _report_from_manifest(source: str, as_json: bool) -> tuple[str, list[str]]:
             f"acquisition={format_delta(_td(row.get('acquisition_s'))):>10}  "
             f"{row.get('verdict')}"
         )
+    # A venue holiday is not a breach and does not fail the gate, but it is
+    # said out loud with its source so a quiet week is never mistaken for a
+    # green one (#399).
+    for row in block.get("layers", []):
+        if row.get("verdict") == Verdict.CLOSED.value:
+            lines.append(
+                f"venue closed: {row['layer']} — "
+                f"{row.get('closure_basis') or 'calendar basis missing from manifest'}"
+            )
     return "\n".join(lines), breaching
 
 

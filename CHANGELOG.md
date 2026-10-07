@@ -4,6 +4,25 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — venue holidays read `closed`, not breached; technicals figures lose 60 % of their weight (2026-10-07)
+
+Two findings from the post-merge walk of the wayfinding pass (#393).
+**#399:** every scoped DCE refresh from 2 to 7 October was red on correct
+data — the Dalian exchange was shut for Golden Week and the latency gate
+had no way to know. `latency/calendars.py` now carries the DCE's declared
+2026 closures from the exchange's own notice; `ObservationClock` names its
+`venue`; and an acquisition breach becomes `Verdict.CLOSED` only when the
+calendar covers the days, the observed bar is the newest completed
+session, and a weekday holiday lies between it and the fetch. Weekends are
+not closures, a pipeline breach is never excused, and a year with no
+calendar entered still reads `breaches`. The gate ignores `closed`; both
+reports print it with its source. **#400:** `index.html` was 1.17 MB after
+the briefing moved out, 852 KB of it three inline Plotly figures whose
+eleven traces each carried the same 504 dates as 26-character microsecond
+timestamps. `app.charts.axis_dates` serialises daily bars as `YYYY-MM-DD`
+strings; Plotly draws the same chart from them. Nothing visual changed and
+the drawn window (`CHART_WINDOW_SESSIONS`, two years) is untouched.
+
 ## Unreleased — technicals ride a named continuous series; near-roll signals suppressed (2026-08-23)
 
 A4 (#301) decided, B4 (#310) built. Three pieces. **Layer 11b

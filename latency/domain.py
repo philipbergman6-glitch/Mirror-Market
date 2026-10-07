@@ -85,6 +85,11 @@ class Verdict(str, Enum):
     MEETS = "meets"
     BREACHES = "breaches"
     UNKNOWN = "unknown"  # a stamp is missing; never silently "meets"
+    # The venue held no session since the bar we hold, by its own declared
+    # calendar (latency.calendars). Nothing to be late for, and nothing to
+    # pass: not MEETS, because no objective was met, and not BREACHES,
+    # because the newest bar that exists is the one on the page (#399).
+    CLOSED = "closed"
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +233,10 @@ class ObservationClock:
 
     timezone: str | None = None
     close_local: tuple[int, int] | None = None
+    # A key into latency.calendars, for venues whose holidays are declared.
+    # None means no calendar: a closed day is indistinguishable from an
+    # outage and reads as a breach, which is the honest default.
+    venue: str | None = None
 
     @property
     def granularity(self) -> Granularity:
@@ -241,6 +250,54 @@ class ObservationClock:
             return None
         return datetime.combine(
             observed_on, time(*self.close_local), tzinfo=ZoneInfo(self.timezone)
+        )
+
+    def local_date(self, at: datetime) -> date | None:
+        """``at`` as a venue-local calendar date, or None without a timezone."""
+        if self.timezone is None:
+            return None
+        return at.astimezone(ZoneInfo(self.timezone)).date()
+
+    def is_closure(self, day: date) -> bool | None:
+        """True if ``day`` is a declared holiday; None if the calendar is unknown.
+
+        Weekends are not closures: they need no calendar and every
+        board-price schedule already runs around them.
+        """
+        if self.venue is None:
+            return None
+        from latency.calendars import venue_closures
+
+        closures = venue_closures(self.venue, day.year)
+        if closures is None:
+            return None
+        return day in closures
+
+    def latest_completed_session(self, at: datetime) -> date | None:
+        """The newest session whose close is at or before ``at``.
+
+        None where it cannot be known: a day-granular clock, no venue
+        calendar, or a calendar that does not cover the days walked. Walks
+        back at most 45 days — longer than any declared closure plus its
+        weekends — and raises past that, because a calendar claiming six
+        weeks without a session is wrong, not quiet.
+        """
+        if self.timezone is None or self.close_local is None or self.venue is None:
+            return None
+        day = at.astimezone(ZoneInfo(self.timezone)).date()
+        for _ in range(45):
+            closed = self.is_closure(day)
+            if closed is None:
+                return None
+            if day.weekday() < 5 and not closed:
+                close = self.instant(day)
+                assert close is not None
+                if close <= at:
+                    return day
+            day -= timedelta(days=1)
+        raise ValueError(
+            f"no {self.venue} session found in the 45 days before {at.isoformat()}; "
+            "the closure calendar is wrong"
         )
 
 
@@ -283,7 +340,7 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
     LayerLatency("forward_curve", LatencyClass.BOARD_PRICE, _CBOT, timedelta(minutes=30), _YAHOO_BASIS),
     LayerLatency(
         "dce", LatencyClass.BOARD_PRICE,
-        ObservationClock("Asia/Shanghai", (15, 0)),
+        ObservationClock("Asia/Shanghai", (15, 0), venue="dce"),
         timedelta(hours=2),
         "AKShare republishes the DCE/CZCE daily file after the 15:00 CST close; "
         "no publication timestamp is exposed, so two hours is a stated working "
@@ -544,16 +601,73 @@ class LayerMeasurement:
         return self._verdict(self.end_to_end, self.spec.objective.end_to_end_target)
 
     @property
+    def venue_closed(self) -> bool:
+        """The venue has held no session since the bar we hold, per its calendar.
+
+        True only when all three hold: the clock has a declared calendar
+        covering the days in question; the observed bar is the newest
+        session that had closed by the time we fetched; and at least one
+        declared closure day (a weekday holiday, not a weekend) lies between
+        that session and the fetch. A weekend alone is not a closure here —
+        every board-price schedule already runs around weekends, and a
+        Monday fetch holding Friday's bar is a schedule question, not a
+        holiday. False whenever any of that cannot be established: an
+        unknown calendar never excuses a breach.
+        """
+        observed, fetched = self.stamps.observed_at, self.stamps.fetch_completed_at
+        if observed is None or fetched is None:
+            return False
+        clock = self.spec.clock
+        latest = clock.latest_completed_session(fetched)
+        if latest is None:
+            return False
+        observed_on = clock.local_date(observed)
+        fetched_on = clock.local_date(fetched)
+        if observed_on != latest or fetched_on is None:
+            return False
+        day = observed_on + timedelta(days=1)
+        while day <= fetched_on:
+            closed = clock.is_closure(day)
+            if closed is None:
+                return False
+            if closed and day.weekday() < 5:
+                return True
+            day += timedelta(days=1)
+        return False
+
+    @property
+    def closure_basis(self) -> str | None:
+        """Where the calendar behind a CLOSED verdict came from; None otherwise."""
+        if not self.venue_closed:
+            return None
+        clock = self.spec.clock
+        fetched = self.stamps.fetch_completed_at
+        assert clock.venue is not None and fetched is not None
+        from latency.calendars import closure_basis
+
+        year = clock.local_date(fetched)
+        assert year is not None
+        return closure_basis(clock.venue, year.year)
+
+    @property
     def verdict(self) -> Verdict:
         """The layer's overall standing — the worst of its parts.
 
         UNKNOWN outranks MEETS: a chain with a missing stamp has not been
-        shown to meet anything.
+        shown to meet anything. CLOSED replaces an acquisition breach only
+        when the venue's own calendar says it held no session to be late
+        for; a pipeline breach is ours and is never excused by a holiday.
         """
-        parts = (self.acquisition_verdict, self.pipeline_verdict)
-        if Verdict.BREACHES in parts:
+        acquisition, pipeline = self.acquisition_verdict, self.pipeline_verdict
+        if pipeline is Verdict.BREACHES:
             return Verdict.BREACHES
-        if Verdict.UNKNOWN in parts:
+        if acquisition is Verdict.BREACHES:
+            if not self.venue_closed:
+                return Verdict.BREACHES
+            # The holiday excuses acquisition; it says nothing about our own
+            # leg, so an unmeasured pipeline stays unmeasured.
+            return Verdict.CLOSED if pipeline is Verdict.MEETS else Verdict.UNKNOWN
+        if Verdict.UNKNOWN in (acquisition, pipeline):
             return Verdict.UNKNOWN
         return Verdict.MEETS
 

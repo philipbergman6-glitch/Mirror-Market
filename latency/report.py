@@ -59,6 +59,9 @@ def measurement_to_dict(measurement: LayerMeasurement, now: datetime) -> dict[st
         "acquisition_verdict": measurement.acquisition_verdict.value,
         "pipeline_verdict": measurement.pipeline_verdict.value,
         "verdict": measurement.verdict.value,
+        # Set only under a CLOSED verdict: the calendar that excused the
+        # acquisition breach, so the excuse is never read without its source.
+        "closure_basis": measurement.closure_basis,
     }
 
 
@@ -86,6 +89,7 @@ _VERDICT_MARK = {
     Verdict.MEETS: "ok  ",
     Verdict.BREACHES: "MISS",
     Verdict.UNKNOWN: "?   ",
+    Verdict.CLOSED: "shut",
 }
 
 
@@ -137,12 +141,16 @@ def to_text(measurements: list[LayerMeasurement], now: datetime) -> str:
 
     breaches = [m for m in measurements if m.verdict is Verdict.BREACHES]
     unknown = [m for m in measurements if m.verdict is Verdict.UNKNOWN]
+    closed = [m for m in measurements if m.verdict is Verdict.CLOSED]
     lines.append(
-        f"{len(measurements) - len(breaches) - len(unknown)} meeting objective, "
-        f"{len(breaches)} breaching, {len(unknown)} unmeasured"
+        f"{len(measurements) - len(breaches) - len(unknown) - len(closed)} meeting "
+        f"objective, {len(breaches)} breaching, {len(unknown)} unmeasured, "
+        f"{len(closed)} venue closed"
     )
     if breaches:
         lines.append("breaching: " + ", ".join(m.layer for m in breaches))
     if unknown:
         lines.append("unmeasured: " + ", ".join(m.layer for m in unknown))
+    for m in closed:
+        lines.append(f"venue closed: {m.layer} — {m.closure_basis}")
     return "\n".join(lines)
