@@ -131,7 +131,8 @@ def test_green_run_without_open_alert_is_a_noop(tmp_path, gh_calls):
 
     alerter.main(["prog", str(path)])
 
-    assert _commands(calls) == [("issue", "list")]
+    # One lookup per rolling issue (outage, catalog drift); nothing written.
+    assert _commands(calls) == [("issue", "list"), ("issue", "list")]
 
 
 def test_quarantine_raises_an_alert_on_an_otherwise_green_run(tmp_path, gh_calls):

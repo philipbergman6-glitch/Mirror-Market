@@ -8,7 +8,7 @@ directory:
 
 They are separate directories rather than two shapes in one file because they
 are written at different times by different people: a session is written by a
-trader when they finish a task, a day observation is computed by the operator
+participant when they finish a task, a day observation is computed by the operator
 once, after the deploy. One file holding both would mean every session write
 had to re-read and re-write the day's product state.
 
@@ -26,7 +26,7 @@ Same contract, and the same reasoning, as
 
 Why YAML on disk and not a SQLite table: every table this project persists
 round-trips through ``data/history/*.csv``, which is **committed to a public
-git repository**. A trial record carries a trader's identity, their decision and
+git repository**. A trial record carries a participant's identity, their decision and
 their notes, so a table is the wrong shape by construction — the persistence
 mechanism would publish it. That is not a rule this module enforces; it is the
 reason this module exists instead of a ``save_trial_sessions``.
@@ -79,7 +79,7 @@ SESSIONS_SUBDIR = "sessions"
 DAYS_SUBDIR = "days"
 
 SESSION_FIELDS = frozenset({
-    "trader",
+    "participant",
     "task",
     "trading_day",
     "started_at",
@@ -324,7 +324,7 @@ def _parse_session(raw: Any, where: str, *, source_file: str | None) -> SessionR
         raise TrialError(f"{where}: issues must be a list")
 
     return SessionRecord(
-        trader=_as_text(_require(data, "trader", where), "trader", where),
+        participant=_as_text(_require(data, "participant", where), "participant", where),
         task=_enum(TaskId, data.get("task"), "task", where),
         trading_day=_as_date(_require(data, "trading_day", where), "trading_day", where),
         started_at=_as_datetime(_require(data, "started_at", where), "started_at", where),
@@ -383,7 +383,7 @@ def parse_sessions(
 class SessionSet:
     """Every session recorded so far, and where each came from.
 
-    Duplicate session ids raise. Two records with the same trader, task, day and
+    Duplicate session ids raise. Two records with the same participant, task, day and
     start time are the same sitting written twice — most likely a file copied and
     edited — and silently keeping both would double-count that session in every
     rate the trial is judged on.
@@ -397,7 +397,7 @@ class SessionSet:
         duplicates = sorted({key for key in ids if ids.count(key) > 1})
         if duplicates:
             raise TrialError(
-                f"duplicate session record(s) {duplicates} — the same trader, task, day and "
+                f"duplicate session record(s) {duplicates} — the same participant, task, day and "
                 "start time recorded twice would be counted twice in every trial metric"
             )
 
@@ -406,16 +406,16 @@ class SessionSet:
         return not self.sessions
 
     @property
-    def traders(self) -> tuple[str, ...]:
-        return tuple(sorted({session.trader for session in self.sessions}))
+    def participants(self) -> tuple[str, ...]:
+        return tuple(sorted({session.participant for session in self.sessions}))
 
     @property
     def trading_days(self) -> tuple[date, ...]:
         return tuple(sorted({session.trading_day for session in self.sessions}))
 
-    def for_trader(self, trader: str) -> tuple[SessionRecord, ...]:
-        key = trader.strip().lower()
-        return tuple(s for s in self.sessions if s.trader.strip().lower() == key)
+    def for_participant(self, participant: str) -> tuple[SessionRecord, ...]:
+        key = participant.strip().lower()
+        return tuple(s for s in self.sessions if s.participant.strip().lower() == key)
 
     def for_task(self, task: TaskId) -> tuple[SessionRecord, ...]:
         return tuple(s for s in self.sessions if s.task is task)
@@ -462,7 +462,7 @@ def _load_yaml(path: Path) -> Any:
 
     PyYAML's own ``ScannerError`` is perfectly informative about *where in the
     text* it gave up, and says nothing about which trial file it was reading or
-    what the operator should do about it. A trader running ``trial.py check``
+    what the operator should do about it. A participant running ``trial.py check``
     between calls needs the filename first.
     """
     import yaml
@@ -604,7 +604,7 @@ def session_to_document(session: SessionRecord) -> dict[str, Any]:
     nothing reads.
     """
     document: dict[str, Any] = {
-        "trader": session.trader,
+        "participant": session.participant,
         "task": session.task.value,
         "trading_day": session.trading_day.isoformat(),
         "started_at": session.started_at.isoformat(),

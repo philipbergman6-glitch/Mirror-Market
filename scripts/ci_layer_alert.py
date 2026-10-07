@@ -11,7 +11,17 @@ data/storage/pipeline_status.json and:
 
 One rolling issue (label `ci-alert`) carries the whole outage: created on
 the first failing run, commented on subsequent ones, closed by the first
-green run. Uses the gh CLI with the workflow-provided GH_TOKEN. Exits
+green run.
+
+A second, distinct rolling issue (label `ci-catalog-drift`) carries
+*catalog drift* (A3 #300 §6): a layer graded `usable_partial` for
+`config.USABLE_PARTIAL_ESCALATION_RUNS` consecutive runs, named with the
+catalog keys it keeps missing. main.py decides the threshold and writes
+the verdict as `classifications.catalog_drift`; this script only relays
+it. A first or second partial run opens nothing — amber means transient
+until it has not been. The fix for drift is a catalog edit (a delisted
+contract, a renamed region), which is why it is not folded into the
+outage issue. Uses the gh CLI with the workflow-provided GH_TOKEN. Exits
 non-zero on gh errors; the workflow step is continue-on-error so a broken
 alerter never blocks the dashboard deploy.
 
@@ -37,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 ALERT_LABEL = "ci-alert"
 ALERT_TITLE = "CI: data pipeline layer failures"
+DRIFT_LABEL = "ci-catalog-drift"
+DRIFT_TITLE = "CI: catalog drift — keys missing for consecutive runs"
 DEFAULT_STATUS_PATH = Path(__file__).resolve().parent.parent / "data" / "storage" / "pipeline_status.json"
 
 
@@ -100,31 +112,62 @@ def build_alert_body(status: dict | None) -> str:
     return "\n".join(lines)
 
 
-def find_open_alert_issue() -> int | None:
+def build_drift_body(status: dict) -> str:
+    """Markdown body for the catalog-drift issue / follow-up comment."""
+    classes = status.get("classifications") or {}
+    detail = status.get("usable_partial_detail") or {}
+    lines = [
+        "Layers have graded `usable_partial` for enough consecutive runs to "
+        "stop being transient. The fix is a catalog edit — a delisted contract, "
+        "a renamed region — not a retry:",
+        "",
+    ]
+    for layer in classes.get("catalog_drift", []):
+        info = detail.get(layer, {})
+        runs = info.get("consecutive_runs")
+        keys = info.get("missing_keys") or []
+        run_word = f"{runs} consecutive runs" if runs is not None else "consecutive runs"
+        lines.append(f"**`{layer}`** — partial for {run_word}; missing keys:")
+        lines += [f"- `{key}`" for key in keys] or ["- (keys not recorded)"]
+        lines.append("")
+    lines += [f"Run: {run_url()}"]
+    return "\n".join(lines)
+
+
+def find_open_issue(label: str) -> int | None:
     out = _gh(
-        "issue", "list", "--label", ALERT_LABEL, "--state", "open",
+        "issue", "list", "--label", label, "--state", "open",
         "--json", "number", "--limit", "1",
     )
     issues = json.loads(out)
     return issues[0]["number"] if issues else None
 
 
-def raise_alert(body: str) -> None:
-    existing = find_open_alert_issue()
+def find_open_alert_issue() -> int | None:
+    return find_open_issue(ALERT_LABEL)
+
+
+def _raise(label: str, title: str, description: str, color: str, body: str) -> None:
+    existing = find_open_issue(label)
     if existing is not None:
-        logger.info("Commenting on open alert issue #%d", existing)
+        logger.info("Commenting on open %s issue #%d", label, existing)
         _gh("issue", "comment", str(existing), "--body", body)
         return
     # --force makes label creation idempotent (updates if it exists)
-    _gh(
-        "label", "create", ALERT_LABEL, "--force",
-        "--description", "Automated pipeline-outage alert",
-        "--color", "D93F0B",
-    )
-    logger.info("Opening new alert issue")
-    _gh(
-        "issue", "create", "--title", ALERT_TITLE,
-        "--label", ALERT_LABEL, "--body", body,
+    _gh("label", "create", label, "--force", "--description", description, "--color", color)
+    logger.info("Opening new %s issue", label)
+    _gh("issue", "create", "--title", title, "--label", label, "--body", body)
+
+
+def raise_alert(body: str) -> None:
+    _raise(ALERT_LABEL, ALERT_TITLE, "Automated pipeline-outage alert", "D93F0B", body)
+
+
+def raise_drift(body: str) -> None:
+    _raise(
+        DRIFT_LABEL, DRIFT_TITLE,
+        "Automated catalog-drift alert: a layer partial for consecutive runs",
+        "E8C983", body,
     )
 
 
@@ -138,6 +181,18 @@ def clear_alert(status: dict) -> None:
         "issue", "close", str(existing), "--comment",
         f"All layers recovered in a green run ({len(status.get('succeeded', []))} "
         f"succeeded, 0 hard failures).\n\nRun: {run_url()}",
+    )
+
+
+def clear_drift() -> None:
+    existing = find_open_issue(DRIFT_LABEL)
+    if existing is None:
+        return
+    logger.info("No catalog drift this run — closing drift issue #%d", existing)
+    _gh(
+        "issue", "close", str(existing), "--comment",
+        f"Every layer is back to full catalog coverage, or below the escalation "
+        f"threshold.\n\nRun: {run_url()}",
     )
 
 
@@ -160,6 +215,17 @@ def main(argv: list[str]) -> int:
         raise_alert(build_alert_body(status))
     else:
         clear_alert(status)
+
+    classes = status.get("classifications") or {}
+    drift = classes.get("catalog_drift", [])
+    partial = classes.get("usable_partial", [])
+    if drift:
+        logger.warning("Catalog drift this run: %s", ", ".join(drift))
+        raise_drift(build_drift_body(status))
+    else:
+        if partial:
+            logger.info("Usable partial (below escalation): %s", ", ".join(partial))
+        clear_drift()
     return 0
 
 

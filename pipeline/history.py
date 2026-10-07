@@ -57,6 +57,9 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # Without this row the same wrongly-held correction would be re-held
     # every morning forever. Never rendered — see query.read_quarantined_revisions.
     "quarantined_revisions": ("table_name", "row_key", "value_column", "incoming_value"),
+    # The usable_partial streak (A3 #300 §6): "three consecutive runs" is a
+    # fact about previous runners, so it has to ride along with data_freshness.
+    "layer_partial_streak": ("layer_name",),
     # AgRural Paranaguá FOB (1 row/day, the Brazil basis source) + CEPEA
     # via Notícias Agrícolas (~10 sessions deep — only recent self-heals).
     "brazil_spot_prices": ("Date", "commodity"),

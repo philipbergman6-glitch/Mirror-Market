@@ -2148,27 +2148,24 @@ def freshness_limit_days(layer: str) -> int:
 # fresh last_success forever and no surface downstream can tell.
 #
 # A layer whose newest observation exceeds its budget is recorded with
-# status='failed', which preserves the previous last_success. That is the
-# mechanism: last_success stops advancing, so the layer ages out of its
-# FRESHNESS_WARNING_DAYS_BY_LAYER window on its own and shows up stale on
-# every surface that already reads freshness.
+# status='stale' (main._mark_stale), which preserves the previous
+# last_success. That is the mechanism: last_success stops advancing, so the
+# layer ages out of its FRESHNESS_WARNING_DAYS_BY_LAYER window on its own
+# and shows up stale on every surface that already reads freshness. The
+# word is 'stale', not 'failed': the vocabulary is pipeline/grading.py (A3
+# #300) and a frozen upstream is a distinct state from a broken one.
 #
 # Budgets are calendar days from the newest observation date and are sized
 # to survive the layer's normal quiet periods (weekends, exchange holidays,
 # publication lag) — a threshold that cries wolf gets ignored, which is the
 # failure mode this whole block exists to avoid.
 #
-# NOT LISTED = NOT CHECKED. A layer is only listed when "newest observation
-# date" is a meaningful quantity for it:
-#   psd, wasde, usda  — keyed by marketing year / crop year, no date column
-#                       at all (verified against the live schema), so there
-#                       is nothing to measure.
-#   forward_curve     — rows are dated by *contract month*, i.e. months in
-#                       the future; a frozen curve stays "recent" for a year.
-#   crop_progress     — seasonal by design; NASS publishes nothing between
-#                       roughly December and March, so any budget short
-#                       enough to be useful fires every winter.
-# These four are covered by the run-cadence window, not by data recency.
+# EVERY PRODUCTION LAYER IS LISTED HERE OR IN LAYER_AGE_BUDGET_EXEMPT
+# (A3 #300 §7, enforced by validate_age_budgets below at import time). The
+# old rule, "not listed = not checked", let a new layer ship with no recency
+# verdict by omission; now an unlisted layer is a config error, and a layer
+# that genuinely has no measurable observation date has to say so in
+# writing. The exemptions and their reasons are in LAYER_AGE_BUDGET_EXEMPT.
 LAYER_MAX_DATA_AGE_DAYS = {
     # Daily exchange/market data — a long weekend plus a holiday.
     "prices": 7,
@@ -2177,6 +2174,39 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # budget is what catches a run of listed tickers all going quietly
     # stale while the layer keeps answering with old history.
     "contract_bars": 7,
+    # The forward curve's rows are keyed by *contract month* — dates in the
+    # future — which is why it was exempt for a year. It is dated by the
+    # session every leg was observed on instead (`observation_date`, one per
+    # curve, enforced by fetchers/forward_curve.py and last in
+    # main._DATE_COLUMNS), and that is a board session date on the same
+    # venue and cadence as prices: same long-weekend-plus-holiday budget
+    # (A3 #300 §7).
+    "forward_curve": 7,
+    # Daily physical quote legs. Each is one page or one PDF a day that
+    # re-serves (or 404s) on a quiet day; a frozen page answers 200 with
+    # last week's number forever, which is exactly what the budget catches.
+    # Long weekend plus a holiday, like the exchange legs (A3 #300 §7).
+    "cepea": 7,       # CEPEA/ESALQ indicators via Notícias Agrícolas
+    "agrural": 7,     # AgRural Paranaguá FOB
+    "gulf_bids": 7,   # AMS 3147 Gulf export bids (daily PDF)
+    # MAGyP publishes the official FOB daily but posts it with an official
+    # lag of several working days, and skips Argentine holidays; 14 is that
+    # lag plus a long weekend (A3 #300 §7).
+    "magyp_fob": 14,
+    # FGIS export inspections are weekly: the Monday report covers the week
+    # ending the previous Thursday, so the newest week_ending is ~4 days old
+    # at release and ~11 the day before the next one. 21 tolerates one
+    # missed release (a federal holiday Monday) and fails on two.
+    "crush_inspections": 21,
+    # CONAB's monthly survey; `report_date` is the file's own publication
+    # date (HTTP Last-Modified), so the newest row is 0 days old at release
+    # and ~35 the day before the next one. 75 is that worst case plus one
+    # missed survey, the same shape as the other monthlies below.
+    "conab": 75,
+    # CONAB's weekly farmgate sheet (PrecosSemanalUF.txt) is dated by the
+    # week it covers and posted the following week, so the newest Date is
+    # ~2-9 days old on a normal week. 21 tolerates one missed sheet.
+    "conab_precos": 21,
     # SAFEX is a *stale-serving* page: on a non-trading day Grain SA re-serves
     # the previous session's rows rather than emptying (verified 2026-08-02 and
     # 2026-08-08). So "rows came back" says nothing about whether the JSE/BVG
@@ -2292,6 +2322,90 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # in EPA_RFS_KEY_MAX_AGE_DAYS are enforced inside fetchers/epa_rfs.py.
     "epa_rfs": max(EPA_RFS_KEY_MAX_AGE_DAYS.values()),
 }
+
+# Layers with NO recency budget, each with the reason "newest observation
+# date" is not a measurable quantity for it. Being listed here is a
+# decision, not an omission: validate_age_budgets refuses a production layer
+# that is in neither map, and one that is in both.
+LAYER_AGE_BUDGET_EXEMPT: dict[str, str] = {
+    "psd": (
+        "keyed by marketing year with no date column (verified against the live "
+        "schema); covered by the run-cadence window, not by data recency"
+    ),
+    "wasde": (
+        "keyed by marketing year with no date column; covered by the run-cadence "
+        "window, not by data recency"
+    ),
+    "usda": (
+        "NASS annual statistics keyed by crop year with no date column; covered by "
+        "the run-cadence window, not by data recency"
+    ),
+    "crop_progress": (
+        "seasonal by design: NASS publishes nothing between roughly December and "
+        "March, so any budget short enough to be useful fires every winter; the "
+        "off-season records no_publication instead"
+    ),
+    "sopa_crop": (
+        "one kharif estimate per crop year, keyed by crop_year with no observation "
+        "date — the page is re-read whole each run and a frozen estimate is "
+        "indistinguishable from the published one until the next Soy Conclave"
+    ),
+    "cyclones_nhc": (
+        "the status frame is dated today by construction, so a day budget would "
+        "pass trivially and prove nothing; each advisory's age is graded in hours "
+        "by analysis/hazards.py (docs/specs/cyclone-hazard-flags.md)"
+    ),
+    "cyclones_jtwc": (
+        "same as cyclones_nhc: today-dated status frame, advisory age graded in "
+        "hours by the hazard assessment"
+    ),
+}
+
+# A3 #300 §6: a layer graded usable_partial for this many consecutive runs
+# is a catalog-drift alert (a delisted contract, a renamed region — the fix is
+# a catalog edit), not a transient. Below it, amber is informational only.
+USABLE_PARTIAL_ESCALATION_RUNS = 3
+
+
+def validate_age_budgets(
+    production_layers: tuple[str, ...] | None = None,
+    budgets: dict[str, int] | None = None,
+    exemptions: dict[str, str] | None = None,
+) -> None:
+    """Every production layer carries a budget XOR a written exemption (A3 §7).
+
+    Runs at import time against the real registries; the arguments exist so
+    the rule itself can be tested against a synthetic roster. Invariant 1:
+    a layer that would ship with no recency verdict is a hard fail here, not
+    a quiet pass in main._check_layer_recency.
+    """
+    layers = PRODUCTION_LAYER_KEYS if production_layers is None else production_layers
+    budget_map = LAYER_MAX_DATA_AGE_DAYS if budgets is None else budgets
+    exempt_map = LAYER_AGE_BUDGET_EXEMPT if exemptions is None else exemptions
+    unlisted = [k for k in layers if k not in budget_map and k not in exempt_map]
+    if unlisted:
+        raise ValueError(
+            "LAYER_MAX_DATA_AGE_DAYS: unlisted production layer(s) "
+            f"{unlisted} — add a recency budget or a written exemption in "
+            "LAYER_AGE_BUDGET_EXEMPT (A3 #300 §7: not listed is not allowed)"
+        )
+    both = sorted(set(budget_map) & set(exempt_map))
+    if both:
+        raise ValueError(
+            f"layer(s) {both} are both budgeted and exempt — a layer has one "
+            "recency rule, not two"
+        )
+    unreasoned = [k for k, why in exempt_map.items() if not isinstance(why, str) or len(why) <= 20]
+    if unreasoned:
+        raise ValueError(
+            f"LAYER_AGE_BUDGET_EXEMPT: exemption(s) {unreasoned} carry no written reason"
+        )
+    bad_budget = [k for k, v in budget_map.items() if not isinstance(v, int) or v <= 0]
+    if bad_budget:
+        raise ValueError(f"LAYER_MAX_DATA_AGE_DAYS: non-positive budget(s) for {bad_budget}")
+
+
+validate_age_budgets()
 
 # Key coverage (#182): which config catalog each multi-key layer iterates.
 # `keys_expected` is len(catalog), so adding a ticker/region/series moves a
@@ -3229,6 +3343,13 @@ CRUSH_BOARD = ("cbot", "dalian", "brazil", "argentina")
 # See analysis/origins/assumptions.py — an entered number with an owner and an
 # expiry beats a fabricated one with neither.
 #
+# Two tiers (B12 #409): this directory is the committed tier and holds policy
+# rates only; its gitignored `private/` subdirectory holds every desk-sourced
+# component. The subdirectory is derived from this root by
+# analysis.origins.assumptions.private_assumptions_dir, never configured on its
+# own, so no override can point the private tier at a committed path.
+# load_assumptions() reads the private tier only for the private audience.
+#
 # MIRROR_ASSUMPTIONS_DIR overrides the location. It exists for the dev loop and
 # for tests — rendering the page against a populated fixture set is the only way
 # to look at the success path on a clone whose real assumptions are (correctly)
@@ -3867,10 +3988,10 @@ OPPORTUNITY_COUNTERPARTY_LIMIT = 6
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 — the trader validation trial
+# Phase 5 — the validation trial
 #
 # A 30-trading-day shadow trial measuring one thing: does Mirror Market reduce
-# a professional soy trader's reliance on an external terminal, a broker call or
+# a participant's (a physical buyer's) reliance on an external terminal, a broker call or
 # a spreadsheet, WITHOUT increasing decision risk. Both halves matter. A tool
 # that answers everything and is wrong twice is worse than one that answers half
 # and says so.
@@ -3884,17 +4005,42 @@ OPPORTUNITY_COUNTERPARTY_LIMIT = 6
 # Bumped whenever the session-record schema, a metric's formula, or a decision
 # threshold changes. Stamped on every captured session, so a result recorded in
 # week 1 can be read against the protocol that was in force when it was taken.
-TRIAL_PROTOCOL_VERSION = "1.0.0"
+TRIAL_PROTOCOL_VERSION = "2.0.0"
 
 # The trial window, in *trading* days — weekends and CBOT holidays do not count,
 # because a session on a day the board is shut measures nothing.
 TRIAL_WINDOW_TRADING_DAYS = 30
 
-# The minimum number of independent traders. Two is the floor stated in the
-# brief; one trader's preference is a taste, not a finding.
-TRIAL_MIN_TRADERS = 2
+# The minimum number of independent participants *at the decision floor*. Two
+# is the floor stated in the brief and confirmed by A6 (#303); one participant's
+# preference is a taste, not a finding.
+TRIAL_MIN_PARTICIPANTS = 2
 
-# Where the private trial records live: trader ids, session notes, decisions,
+# The per-participant decision floor (A6 #303). A participant's sessions are
+# graded only once they have logged at least `sessions` sessions over the
+# window, across at least `tasks` distinct tasks, including at least
+# `real_decisions` completed sessions in the real cargo/basis tasks named in
+# TRIAL_REAL_DECISION_TASKS. A participant below the floor is reported, not
+# graded; fewer than TRIAL_MIN_PARTICIPANTS at the floor returns `insufficient`
+# — no verdict. Supersedes the protocol v1 flat ten-sessions-total floor.
+# Read only by analysis/trial/floor.py.
+TRIAL_DECISION_FLOOR: dict[str, int] = {
+    "sessions": 20,
+    "tasks": 5,
+    "real_decisions": 8,
+}
+
+# The tasks whose completed session is a real cargo/basis decision: origin
+# comparison, crush/hedge, and counterparty/opportunity identification (tasks
+# 2, 3 and 7 in the protocol's order). Values are TaskId values; a name that
+# is not one raises at read time rather than counting nothing.
+TRIAL_REAL_DECISION_TASKS: tuple[str, ...] = (
+    "origin_comparison",
+    "crush_hedge",
+    "counterparty_id",
+)
+
+# Where the private trial records live: participant ids, session notes, decisions,
 # counterparties, and every commercial judgement made during the window. This
 # directory is gitignored and is NEVER read by any builder that writes into
 # docs/ — see data/reference/trial/README.md.
@@ -3909,13 +4055,13 @@ TRIAL_RECORD_DIR = os.getenv("MIRROR_TRIAL_DIR") or os.path.join(
 
 # Where the private trial dashboard is rendered. Outside docs/ on purpose, and
 # for the same reason the private opportunity edition is: docs/ is what the
-# Pages deploy uploads, so anything carrying a trader's own words must not be
+# Pages deploy uploads, so anything carrying a participant's own words must not be
 # able to land in it by a path mistake. Gitignored.
 TRIAL_PRIVATE_OUTPUT_DIR = os.getenv("MIRROR_TRIAL_PRIVATE_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "workspace", "trial"
 )
 
-# Trader confidence is recorded on a 1-5 scale. It is an ordinal opinion, not a
+# Participant confidence is recorded on a 1-5 scale. It is an ordinal opinion, not a
 # measurement, and is reported as a median and a distribution — never a mean,
 # which would invent a precision the scale does not carry.
 TRIAL_CONFIDENCE_SCALE = (1, 2, 3, 4, 5)
@@ -3935,16 +4081,16 @@ TRIAL_DECISION_THRESHOLDS: dict[str, dict[str, float]] = {
     # External lookups per completed task. The headline number of the whole
     # trial: it is the reduction in terminal reliance, measured.
     "external_lookups_per_task": {"go": 1.0, "no_go": 2.5},
-    # Share of sessions in which the trader hit a number that was wrong or past
+    # Share of sessions in which the participant hit a number that was wrong or past
     # its own cadence without the page saying so. This is the risk half, and its
     # bar is deliberately the strictest on the board.
     "wrong_or_stale_rate": {"go": 0.02, "no_go": 0.10},
     # Alerts that fired on nothing, or failed to fire on something.
     "false_alert_rate": {"go": 0.05, "no_go": 0.20},
     "missed_alert_rate": {"go": 0.05, "no_go": 0.20},
-    # Would the trader act on the output, unaided.
+    # Would the participant act on the output, unaided.
     "would_act_rate": {"go": 0.75, "no_go": 0.50},
-    # Median trader confidence, 1-5.
+    # Median participant confidence, 1-5.
     "median_confidence": {"go": 4.0, "no_go": 3.0},
     # Share of the 30 windows in which the promoted edition was the day's, and
     # every critical source was inside its own cadence budget.
@@ -3963,14 +4109,15 @@ TRIAL_LOWER_IS_BETTER = frozenset({
     "missed_alert_rate",
 })
 
-# A metric with fewer than this many observations reports `insufficient` rather
-# than a rate. Three sessions do not make a completion rate, and a go/no-go read
-# off one is worse than no go/no-go at all.
+# A *metric* with fewer than this many observations reports `insufficient`
+# rather than a rate. Three sessions do not make a completion rate. This is a
+# per-metric rule and is not the trial's decision floor — that is
+# TRIAL_DECISION_FLOOR, read per participant.
 TRIAL_MIN_OBSERVATIONS = 10
 
 # The nine rubric dimensions of the final scorecard, each scored 0-5 against the
 # same strict professional rubric the earlier audits used. Order is the order a
-# trader would ask them in.
+# participant would ask them in.
 TRIAL_SCORECARD_DIMENSIONS = (
     "precision",
     "accuracy",
@@ -3980,16 +4127,16 @@ TRIAL_SCORECARD_DIMENSIONS = (
     "futures_usefulness",
     "opportunity_usefulness",
     "ux",
-    "trader_trust",
+    "participant_trust",
 )
 
 
-# The layers a soy trader's daily decisions actually rest on. Availability is
+# The layers a participant's daily decisions actually rest on. Availability is
 # measured against THIS set rather than all 27, because a CEC release slipping a
 # week is not the same event as the CBOT board going dark, and averaging them
 # produces an availability number that stays green through an outage that
 # matters. main.CRITICAL_LAYERS is a different and narrower list — it decides
-# the pipeline's exit code, not what a trader needs on screen.
+# the pipeline's exit code, not what a participant needs on screen.
 TRIAL_CRITICAL_LAYERS = (
     "prices",         # the board itself
     "currencies",     # every non-USD leg is unreadable without it

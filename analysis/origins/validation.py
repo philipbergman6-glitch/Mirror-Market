@@ -72,7 +72,7 @@ DESTINATION_SCOPED_COMPONENTS = frozenset({
 })
 
 # `origin` on a crush-plant cost is a MARKET SLUG, not a port key (see
-# data/reference/assumptions/crush_plant.yml). Those components are scoped, but
+# data/reference/assumptions/private/crush_plant.yml). Those components are scoped, but
 # against a different catalog, so the port-key check must not be applied to them.
 _MARKET_SCOPED_COMPONENTS = frozenset({
     CostComponent.PROCESSING_COST,

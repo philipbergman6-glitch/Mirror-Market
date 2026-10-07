@@ -708,6 +708,24 @@ CREATE TABLE IF NOT EXISTS data_freshness (
 );
 """
 
+_CREATE_LAYER_PARTIAL_STREAK = """
+CREATE TABLE IF NOT EXISTS layer_partial_streak (
+    -- How many consecutive runs a layer has graded 'usable_partial' (A3 #300
+    -- §6). Written by save_freshness on EVERY freshness write: a partial run
+    -- increments, any other status deletes the row, so the count can only
+    -- describe an unbroken run. scripts/ci_layer_alert.py escalates a streak
+    -- at config.USABLE_PARTIAL_ESCALATION_RUNS into a catalog-drift issue
+    -- naming missing_keys. Round-trips through data/history/ with
+    -- data_freshness: "three consecutive runs" cannot be measured on a
+    -- runner that forgets.
+    layer_name        TEXT    NOT NULL PRIMARY KEY,
+    consecutive_runs  INTEGER NOT NULL,
+    missing_keys      TEXT    NOT NULL,   -- JSON list of catalog keys absent this run
+    first_seen        TEXT    NOT NULL,
+    last_seen         TEXT    NOT NULL
+);
+"""
+
 _CREATE_COMMODITY_FRESHNESS = """
 CREATE TABLE IF NOT EXISTS commodity_freshness (
     commodity       TEXT    NOT NULL,
@@ -916,6 +934,7 @@ ALL_SCHEMAS = (
     _CREATE_RFS_RVO,
     _CREATE_BRAZIL_ESTIMATES,
     _CREATE_DATA_FRESHNESS,
+    _CREATE_LAYER_PARTIAL_STREAK,
     _CREATE_COMMODITY_FRESHNESS,
     _CREATE_INDIA_DOMESTIC,
     _CREATE_BRAZIL_SPOT,

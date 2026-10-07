@@ -1,4 +1,4 @@
-# Trader validation — operating plan
+# validation — operating plan
 
 Companion to `docs/trial/PROTOCOL.md`. The protocol is generated from
 `analysis/trial/` and defines *what* is measured; this file is hand-written and
@@ -15,10 +15,10 @@ disagrees with the protocol, the protocol wins.
 | Five failure drills | **mechanism half passed 5/5** (`scripts/trial.py drills`) — see below |
 | Session records | **none** |
 | Day observations | **none** |
-| Traders onboarded | **none** |
+| Participants onboarded | **none** |
 
 The trial has **not started**. Days 1–30 begin on the first trading day after
-two professional soy traders are onboarded and have handles.
+two participants (physical buyers) are onboarded and have handles.
 
 ## The window
 
@@ -49,17 +49,27 @@ against the next release (Fri 2026-10-09) or task 4 scores nothing.
 
 ## Who
 
-Minimum two professional soy traders (`config.TRIAL_MIN_TRADERS = 2`). What
-"professional" has to mean for a finding to count:
+Minimum two **participants** at the decision floor (`config.TRIAL_MIN_PARTICIPANTS = 2`;
+terms decided by A6, #303). A participant is a **physical buyer**:
 
-- prices, hedges or executes physical soybean, meal or oil business as their job;
+- prices or books physical soybean, meal or oil product at least weekly —
+  procurement, origination, or the physical desk at an importer, crusher, feed
+  miller or trading house; futures-only traders, brokers and analysts do not
+  qualify;
 - currently pays for at least one of the tools this product claims to displace
   (terminal, broker portal, subscription assessment) — otherwise the external
   lookup count measures habit rather than substitution;
-- can commit ~45 min/day for six weeks.
+- can commit ≤15 min/day of form-filling plus one 30-min weekly debrief.
+
+Unpaid in both directions. They get a private desk edition for the trial and six
+months after, and a vote on the first-screen contract (A12); the warmest recruit
+is the **design partner** who settles that contract before day 1. Each signs a
+one-page **participation letter** (what is recorded, where it lives, aggregate
+only is shared, right to withdraw and be deleted). No NDA. Recruitment is A15
+(#411); names and firms never appear on the tracker.
 
 They must be **independent of each other** — same desk is acceptable, same book
-is not, because two traders reading one position produce one opinion twice.
+is not, because two participants reading one position produce one opinion twice.
 
 Each picks a handle: 3+ characters, not a substring of ordinary English
 (`assert_no_identifiers` greps shared output for it — `art` would fire on
@@ -67,7 +77,7 @@ Each picks a handle: 3+ characters, not a substring of ordinary English
 
 ## Per-week load
 
-Straight from the protocol's cadences, per trader per week:
+Straight from the protocol's cadences, per participant per week:
 
 | Task | Per week |
 |---|---|
@@ -83,26 +93,33 @@ Straight from the protocol's cadences, per trader per week:
 
 Task 4 is event-driven (day 16 only). Task 8 is the five drills, below.
 
-Over six weeks and two traders that is roughly 230 sessions against a floor of
-10 — the floor is not the binding constraint, attendance is. **A missed day is
-recorded as a missed day**; it is never backfilled from memory, because a
-session reconstructed after the fact cannot honestly report its own external
-lookups.
+Over six weeks that is roughly 115 sessions per participant against the
+**decision floor** of 20 sessions / 5 tasks / 8 real decisions per participant
+(`config.TRIAL_DECISION_FLOOR`) — the floor is not the binding constraint,
+attendance is. **A missed day is recorded as a missed day**; it is never
+backfilled from memory, because a session reconstructed after the fact cannot
+honestly report its own external lookups.
+
+Sessions are captured on a ~2-minute form and transcribed weekly by the desk
+with `python scripts/trial.py transcribe <export.csv>`; participants never touch
+the repository. A transcribed session takes its release stamp from that day's
+`trial.py day` observation, so **the day record must exist before the week's
+transcription** or those rows are refused.
 
 ## Task 9 — random audits
 
-The number is chosen **by the trader, at the moment of the session**, from
+The number is chosen **by the participant, at the moment of the session**, from
 whatever page they happen to have open. Do not pre-select the numbers and do not
 let the desk suggest one: an audit list assembled by the people who built the
-product tests the numbers they already trust. Three per trader per week, ~36 per
-trader over the window.
+product tests the numbers they already trust. Three per participant per week, ~36 per
+participant over the window.
 
 ## Task 8 — the five drills
 
 `scripts/trial.py drills` runs all five with no network, no production database
 and no write into `docs/`. Run on 2026-08-19 against `feat/gtr-transport`:
 
-| Drill | Mechanism | Trader half |
+| Drill | Mechanism | Participant half |
 |---|---|---|
 | `critical_source_outage` | **pass** — `status='failed'`, no fresh `last_success` | open |
 | `partial_key_coverage` | **pass** — 14/19 records coverage, 13/19 demotes to `incomplete` | open |
@@ -111,9 +128,9 @@ and no write into `docs/`. Run on 2026-08-19 against `feat/gtr-transport`:
 | `deployment_failure` | **pass** — candidate refused, last good edition stays live, no private path in the contract | open |
 
 The assertions only prove the mechanism fired. **The drill's actual result is
-the trader's blind read** — show the degraded surface to a trader who has not
-been told what broke and record what they can name. All five trader halves are
-outstanding, and no drill counts as run until its trader half is recorded.
+the participant's blind read** — show the degraded surface to a participant who has not
+been told what broke and record what they can name. All five participant halves are
+outstanding, and no drill counts as run until its participant half is recorded.
 
 Place one drill per failure mode across the window, avoiding day 16 (WASDE):
 
@@ -130,7 +147,7 @@ deliberate outage counted as downtime would understate the product's real
 availability, which is the mirror image of the mistake the protocol refuses in
 the other direction (`upstream_outage` is not a correctness class).
 
-Do not tell the traders which day is a drill day, or the blind read is not blind.
+Do not tell the participants which day is a drill day, or the blind read is not blind.
 
 ## Daily desk runbook
 
@@ -206,9 +223,10 @@ python scripts/trial.py scorecard
 ```
 
 Nine dimensions — precision, accuracy, reliability, timeliness, physical
-usefulness, futures usefulness, opportunity usefulness, UX, trader trust — each
+usefulness, futures usefulness, opportunity usefulness, UX, participant trust — each
 stating its own arithmetic, each scoring nothing rather than a default where the
 observations are short. Then the go/hold/no-go against the $20,000/year
 single-client question, with the two overrides applied: an open blocker is a
-no-go, and fewer than 2 traders or 10 sessions returns `insufficient` rather
-than a verdict.
+no-go, and fewer than 2 participants at the decision floor returns
+`insufficient` rather than a verdict. A participant below the floor is listed
+in the private review with each shortfall — reported, not graded.

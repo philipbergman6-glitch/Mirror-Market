@@ -1,0 +1,30 @@
+# FIXTURE VALUES — invented for tests. See README.md in this directory.
+# Never copy any of these numbers into data/reference/assumptions/.
+#
+# The committed tier of the fixture set: the two destination-scoped policy
+# rates. These stand in for the shipped china_import_policy.yml and are the
+# only components the loader allows at this level — see the private/ subdir.
+
+- id: fixture.import_duty.cn_north
+  component: import_duty
+  value: 0.03
+  unit: fraction
+  destination: cn_north
+  basis: FIXTURE — stands in for the policy rate; do not read as authoritative
+  source: fixture
+  entered_by: fixture
+  entered_at: 2026-08-01
+  expires_on: 2027-12-31
+  confidence: indicative
+
+- id: fixture.import_vat.cn_north
+  component: import_vat
+  value: 0.09
+  unit: fraction
+  destination: cn_north
+  basis: FIXTURE — stands in for the policy rate; do not read as authoritative
+  source: fixture
+  entered_by: fixture
+  entered_at: 2026-08-01
+  expires_on: 2027-12-31
+  confidence: indicative

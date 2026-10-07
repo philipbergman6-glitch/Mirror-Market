@@ -34,6 +34,20 @@ mean somebody entered the same thing twice and one of them is stale.
 Files live in ``data/reference/assumptions/*.yml`` and are validated on load;
 an invalid file raises rather than being skipped, because a silently ignored
 assumption file is the same failure as an expired one with better manners.
+
+**Two tiers, one loader** (B12 #409). The directory has a committed tier and a
+gitignored ``private/`` subdirectory. A *policy rate* (China's import duty and
+VAT) is a published administered number with public provenance and lives in
+the committed tier. Everything else — a broker's freight indication, the desk's
+own cost of funds, a quality differential it negotiated — is a **desk
+assumption**: it names an owner, a broker and a number nobody else published,
+so it is a client record under invariant 4 and may only ever sit in
+``private/``. The loader draws that line itself: a desk component found in a
+committed-tier file is a load error, not a warning, because the next push
+would publish it. ``load_assumptions`` takes an ``audience`` and the default
+is **public**, which reads the committed tier only — every builder that
+renders into ``docs/`` calls it bare and is therefore safe by construction;
+the entry CLI and the private origins edition opt into ``private``.
 """
 
 from __future__ import annotations
@@ -42,10 +56,12 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import yaml
 
+from analysis.futures.privacy import AUDIENCE_PRIVATE, AUDIENCE_PUBLIC, AUDIENCES
 from analysis.origins.domain import (
     AD_VALOREM_COMPONENTS,
     RATE_TIME_COMPONENTS,
@@ -76,6 +92,35 @@ REQUIRED_UNIT: dict[CostComponent, str] = {
     )
     for component in CostComponent
 }
+
+# The tier line. A policy rate is a published administered number whose
+# provenance is public; it is committed. A desk assumption is somebody's own
+# number with their name on it; it is a client record and lives only in the
+# gitignored private tier. The split is written as "policy, and everything
+# else is desk" so that a component added later defaults to private — the
+# safe direction — rather than to committed.
+POLICY_COMPONENTS: frozenset[CostComponent] = frozenset({
+    CostComponent.IMPORT_DUTY,
+    CostComponent.IMPORT_VAT,
+})
+DESK_COMPONENTS: frozenset[CostComponent] = (
+    frozenset(CostComponent) - POLICY_COMPONENTS - {CostComponent.ORIGIN_PRICE}
+)
+
+# The gitignored subdirectory of the assumptions directory. Derived from the
+# configured root rather than configured on its own, so an override cannot
+# point the private tier at a committed path.
+PRIVATE_SUBDIR = "private"
+
+
+def private_assumptions_dir(root: str | os.PathLike[str] | None = None) -> Path:
+    """Where desk assumptions are written and read: ``<root>/private``."""
+    if root is None:
+        import config
+
+        root = config.ASSUMPTIONS_DIR
+    return Path(root) / PRIVATE_SUBDIR
+
 
 # Confidence values that describe an *observed market price* and can never
 # describe something a person typed into a YAML file. `board_reference` joined
@@ -389,8 +434,55 @@ class AssumptionSet:
         }
 
 
-def load_assumptions(directory: str | os.PathLike[str] | None = None) -> AssumptionSet:
-    """Read and validate every ``*.yml`` in the assumptions directory.
+def _read_tier(root: str, *, prefix: str, committed: bool) -> tuple[list[Assumption], list[str]]:
+    """Parse every ``*.yml`` directly inside ``root`` (never recursing).
+
+    ``committed`` marks the public tier: a desk component found there is
+    refused at load, because that file is what git tracks and the next push
+    would publish the owner, the broker and the number.
+    """
+    parsed: list[Assumption] = []
+    files: list[str] = []
+    for name in sorted(os.listdir(root)):
+        if not name.endswith((".yml", ".yaml")):
+            continue
+        path = os.path.join(root, name)
+        shown = f"{prefix}{name}"
+        with open(path, encoding="utf-8") as handle:
+            document = yaml.safe_load(handle)
+        if document is None:
+            files.append(shown)
+            continue
+        if not isinstance(document, list):
+            raise AssumptionError(f"{shown}: expected a YAML list of assumptions")
+        for index, raw in enumerate(document):
+            assumption = parse_assumption(raw, where=f"{shown}[{index}]")
+            if committed and assumption.component in DESK_COMPONENTS:
+                raise AssumptionError(
+                    f"{shown}[{index}]: {assumption.id} is a {assumption.component.value} — a "
+                    "desk assumption with an owner and a basis — in a committed-tier file. "
+                    f"Desk components may only live in {PRIVATE_SUBDIR}/ (gitignored); move "
+                    "the entry there, or re-enter it with scripts/enter_assumption.py, which "
+                    "routes it correctly. Invariant 4: the next push would publish it."
+                )
+            parsed.append(assumption)
+        files.append(shown)
+    return parsed, files
+
+
+def load_assumptions(
+    directory: str | os.PathLike[str] | None = None,
+    *,
+    audience: str = AUDIENCE_PUBLIC,
+) -> AssumptionSet:
+    """Read and validate the assumption directory for one audience.
+
+    ``audience`` is ``public`` (the default) or ``private``. Public reads the
+    committed tier only — the policy rates — and never looks inside
+    ``private/``; private reads both. The default is public because the leak
+    path *is* the default: the builders that render into ``docs/`` call this
+    bare, and a bare call must not be able to cost a route from a broker's
+    indication.
 
     A missing directory is an empty set — a fresh clone has entered nothing,
     and that is a legitimate state whose consequence (every landed cost
@@ -400,27 +492,22 @@ def load_assumptions(directory: str | os.PathLike[str] | None = None) -> Assumpt
     """
     import config
 
+    if audience not in AUDIENCES:
+        raise ValueError(f"audience must be one of {AUDIENCES}, got {audience!r}")
+
     root = str(directory) if directory is not None else config.ASSUMPTIONS_DIR
     if not os.path.isdir(root):
         log.info("No assumptions directory at %s — every costed leg will block", root)
         return AssumptionSet(assumptions=())
 
-    parsed: list[Assumption] = []
-    files: list[str] = []
-    for name in sorted(os.listdir(root)):
-        if not name.endswith((".yml", ".yaml")):
-            continue
-        path = os.path.join(root, name)
-        with open(path, encoding="utf-8") as handle:
-            document = yaml.safe_load(handle)
-        if document is None:
-            files.append(name)
-            continue
-        if not isinstance(document, list):
-            raise AssumptionError(f"{name}: expected a YAML list of assumptions")
-        for index, raw in enumerate(document):
-            parsed.append(parse_assumption(raw, where=f"{name}[{index}]"))
-        files.append(name)
+    parsed, files = _read_tier(root, prefix="", committed=True)
+    private_root = private_assumptions_dir(root)
+    if audience == AUDIENCE_PRIVATE and private_root.is_dir():
+        more, more_files = _read_tier(
+            str(private_root), prefix=f"{PRIVATE_SUBDIR}/", committed=False
+        )
+        parsed.extend(more)
+        files.extend(more_files)
 
     result = AssumptionSet(assumptions=tuple(parsed), loaded_from=tuple(files))
 
@@ -439,11 +526,17 @@ def load_assumptions(directory: str | os.PathLike[str] | None = None) -> Assumpt
             + "\n  ".join(f"{issue}\n    remedy: {issue.remedy}" for issue in faults)
         )
 
-    log.info("Loaded %d assumption(s) from %s (set %s)", len(parsed), root, result.set_id)
+    log.info(
+        "Loaded %d assumption(s) from %s for the %s audience (set %s)",
+        len(parsed), root, audience, result.set_id,
+    )
     return result
 
 
 __all__ = [
+    "DESK_COMPONENTS",
+    "POLICY_COMPONENTS",
+    "PRIVATE_SUBDIR",
     "REQUIRED_UNIT",
     "UNIT_FRACTION",
     "UNIT_RATE_PER_ANNUM",
@@ -454,4 +547,5 @@ __all__ = [
     "AssumptionSet",
     "load_assumptions",
     "parse_assumption",
+    "private_assumptions_dir",
 ]

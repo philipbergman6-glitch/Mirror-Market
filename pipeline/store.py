@@ -9,6 +9,7 @@ key columns), then delegates to `_save` for the transactional write.
 import json
 import logging
 import os
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,7 +30,7 @@ from config import (
     PROCESSOR_CASH_QUOTE_KIND,
     STORAGE_DIR,
 )
-from pipeline import divergence
+from pipeline import divergence, grading
 from pipeline.connection import get_connection, managed_connection
 from pipeline.schema import ALL_SCHEMAS, INDEXES
 
@@ -365,7 +366,7 @@ def clear_database():
         "inspection_port_flows", "inspection_destinations", "gulf_bids",
         "us_processor_cash",
         "argentina_fob",
-        "eia_energy", "brazil_estimates", "data_freshness",
+        "eia_energy", "brazil_estimates", "data_freshness", "layer_partial_streak",
         "commodity_freshness", "india_domestic_prices",
         "brazil_spot_prices", "safex_prices", "sagis_deliveries", "briefings",
         "quarantined_revisions",
@@ -1539,8 +1540,16 @@ def save_freshness(
     keys_returned: int | None = None,
     keys_expected: int | None = None,
     clock: Any = None,
+    missing_keys: Sequence[str] | None = None,
 ) -> None:
-    """Record a freshness row. Only success stamps last_success; other states preserve it.
+    """Record a freshness row. ``success`` and ``usable_partial`` stamp last_success; other states preserve it.
+
+    The vocabulary is ``pipeline.grading.FRESHNESS_STATUSES`` (A3 #300). A
+    ``usable_partial`` write must name the catalog keys it is partial on
+    (``missing_keys``) and no other status may carry them — the streak that
+    escalates a persistent partial into a catalog-drift alert is advanced or
+    cleared here, on every write, so it can never outlive a run that graded
+    anything else.
 
     'disabled' marks a layer intentionally short-circuited (e.g. an upstream
     anti-bot wall) — distinct from 'failed' so it doesn't read as an outage,
@@ -1570,12 +1579,19 @@ def save_freshness(
     the size of the hole, and withholding it there would leave the surfaces
     reporting an outage with no measure of it.
     """
-    valid_statuses = {
-        "success", "failed", "disabled", "no_publication", "stale", "incomplete"
-    }
-    if status not in valid_statuses:
+    if status not in grading.FRESHNESS_STATUSES:
         raise ValueError(
-            f"status must be one of {sorted(valid_statuses)}, got {status!r}"
+            f"status must be one of {sorted(grading.FRESHNESS_STATUSES)}, got {status!r}"
+        )
+    if status == grading.STATUS_USABLE_PARTIAL and not missing_keys:
+        raise ValueError(
+            f"{layer_name}: status='usable_partial' requires missing_keys — the "
+            "catalog keys the run did not answer for"
+        )
+    if status != grading.STATUS_USABLE_PARTIAL and missing_keys:
+        raise ValueError(
+            f"{layer_name}: missing_keys is only meaningful with "
+            f"status='usable_partial', got status={status!r}"
         )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1601,7 +1617,7 @@ def save_freshness(
 
     with managed_connection(get_connection()) as conn:
         prior_success: str | None
-        if status == "success":
+        if status in grading.ADVANCES_LAST_SUCCESS:
             prior_success = now
         else:
             row = conn.execute(
@@ -1619,6 +1635,7 @@ def save_freshness(
              keys_returned, keys_expected,
              observed_at, fetch_started_at, fetch_completed_at, stored_at),
         )
+        grading.update_partial_streak(conn, layer_name, status, missing_keys, now=now)
     logger.debug(
         "Freshness recorded for %s at %s (status=%s, %d rows, keys=%s/%s, observed=%s)",
         layer_name, now, status, rows_fetched, keys_returned, keys_expected, observed_at,
