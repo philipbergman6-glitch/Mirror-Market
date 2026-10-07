@@ -70,6 +70,23 @@ def delta_str(val: float | None) -> str:
 # Chart builders
 # ---------------------------------------------------------------------------
 
+def axis_dates(index: pd.Index) -> list[str] | pd.Index:
+    """Daily bars' x-axis as ``YYYY-MM-DD`` strings; anything else untouched.
+
+    Plotly serialises a ``DatetimeIndex`` as 26-character microsecond
+    timestamps and repeats the array on every trace: in a technicals figure
+    that is eleven copies of the same 504 dates, 156 KB of a 255 KB figure
+    (#400). Plotly parses a bare date string onto the same date axis, so the
+    drawn chart is identical. An index with a time component, or a timezone,
+    is not a daily bar and is passed through as it is rather than rounded.
+    """
+    if not isinstance(index, pd.DatetimeIndex) or index.tz is not None or len(index) == 0:
+        return index
+    if not (index.normalize() == index).all():
+        return index
+    return index.strftime("%Y-%m-%d").tolist()
+
+
 def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     """Price + RSI + MACD subplots for one soy leg.
 
@@ -85,6 +102,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
       surface without its method (analysis/futures/continuous.py).
     """
     has_ohlc = {"Open", "High", "Low"}.issubset(df.columns)
+    x_dates = axis_dates(df.index)
     fig = make_subplots(
         rows=3, cols=1,
         shared_xaxes=True,
@@ -96,7 +114,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     if has_ohlc:
         fig.add_trace(
             go.Candlestick(
-                x=df.index, open=df["Open"], high=df["High"],
+                x=x_dates, open=df["Open"], high=df["High"],
                 low=df["Low"], close=df["Close"], name="Price",
                 increasing_line_color=COLORS["bullish"],
                 decreasing_line_color=COLORS["bearish"],
@@ -106,7 +124,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     else:
         fig.add_trace(
             go.Scatter(
-                x=df.index, y=df["Close"], name="Close",
+                x=x_dates, y=df["Close"], name="Close",
                 line=dict(width=1.5, color=COLORS["info"]),
             ),
             row=1, col=1,
@@ -124,19 +142,19 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     for ma, color in ma_colors.items():
         if ma in df.columns:
             fig.add_trace(
-                go.Scatter(x=df.index, y=df[ma], name=ma, line=dict(width=1, color=color)),
+                go.Scatter(x=x_dates, y=df[ma], name=ma, line=dict(width=1, color=color)),
                 row=1, col=1,
             )
 
     # Bollinger Bands
     if "BB_Upper" in df.columns and "BB_Lower" in df.columns:
         fig.add_trace(
-            go.Scatter(x=df.index, y=df["BB_Upper"], name="BB Upper",
+            go.Scatter(x=x_dates, y=df["BB_Upper"], name="BB Upper",
                        line=dict(width=1, dash="dot", color=COLORS["text_dim"])),
             row=1, col=1,
         )
         fig.add_trace(
-            go.Scatter(x=df.index, y=df["BB_Lower"], name="BB Lower",
+            go.Scatter(x=x_dates, y=df["BB_Lower"], name="BB Lower",
                        line=dict(width=1, dash="dot", color=COLORS["text_dim"]),
                        fill="tonexty", fillcolor="rgba(155,163,158,0.12)"),
             row=1, col=1,
@@ -153,7 +171,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
             vol_colors = [COLORS["bullish"] if c >= p else COLORS["bearish"]
                           for c, p in zip(closes, closes.shift(1).fillna(closes), strict=False)]
         fig.add_trace(
-            go.Bar(x=df.index, y=df["Volume"], name="Volume",
+            go.Bar(x=x_dates, y=df["Volume"], name="Volume",
                    marker_color=vol_colors, opacity=0.3),
             row=1, col=1,
         )
@@ -161,7 +179,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     # RSI
     if "RSI" in df.columns:
         fig.add_trace(
-            go.Scatter(x=df.index, y=df["RSI"], name="RSI",
+            go.Scatter(x=x_dates, y=df["RSI"], name="RSI",
                        line=dict(color=COLORS["info"])),
             row=2, col=1,
         )
@@ -171,13 +189,13 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
     # MACD
     if "MACD" in df.columns:
         fig.add_trace(
-            go.Scatter(x=df.index, y=df["MACD"], name="MACD",
+            go.Scatter(x=x_dates, y=df["MACD"], name="MACD",
                        line=dict(color=COLORS["info"])),
             row=3, col=1,
         )
         if "MACD_Signal" in df.columns:
             fig.add_trace(
-                go.Scatter(x=df.index, y=df["MACD_Signal"], name="Signal",
+                go.Scatter(x=x_dates, y=df["MACD_Signal"], name="Signal",
                            line=dict(color=COLORS["soy_oil"])),
                 row=3, col=1,
             )
@@ -185,7 +203,7 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
             hist_colors = [COLORS["bullish"] if v >= 0 else COLORS["bearish"]
                            for v in df["MACD_Histogram"]]
             fig.add_trace(
-                go.Bar(x=df.index, y=df["MACD_Histogram"], name="Histogram",
+                go.Bar(x=x_dates, y=df["MACD_Histogram"], name="Histogram",
                        marker_color=hist_colors),
                 row=3, col=1,
             )
