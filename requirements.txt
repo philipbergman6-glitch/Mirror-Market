@@ -17,6 +17,9 @@ pyyaml~=6.0.3
 # speaks JSON-RPC over a websocket and nothing else. Already in the tree via
 # yfinance; pinned here because fetchers/epa_rfs.py imports it directly.
 websockets~=16.1.1
+# Layer 33 (NOAA NHC) publishes its forecast track and wind radii as zipped
+# ESRI shapefiles. Pure Python, no compiled wheel.
+pyshp~=3.1.6
 # Loads the local .env before config.py binds its key constants. Inert in CI,
 # which sets its keys from GitHub secrets and ships no .env.
 python-dotenv~=1.2.3

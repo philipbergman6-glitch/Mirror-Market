@@ -429,6 +429,16 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "morning of the same day; the probe on 2026-08-21 carried the series "
         "to 2026-08-20, so one day is the working assumption, not zero.",
     ),
+    LayerLatency(
+        "cyclones_nhc", LatencyClass.WEATHER, ObservationClock(), timedelta(hours=12),
+        "The advisory in hand at the daily read; agencies re-issue every 6 h "
+        "(12 h in the Southern Hemisphere).",
+    ),
+    LayerLatency(
+        "cyclones_jtwc", LatencyClass.WEATHER, ObservationClock(), timedelta(hours=12),
+        "The advisory in hand at the daily read; agencies re-issue every 6 h "
+        "(12 h in the Southern Hemisphere).",
+    ),
 )
 
 LATENCY_CLASS_BY_LAYER: dict[str, LatencyClass] = {

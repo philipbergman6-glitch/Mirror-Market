@@ -49,6 +49,7 @@ from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
 from fetchers.contract_history import fetch_all_contract_bars
 from fetchers.cot import fetch_cot_recent
+from fetchers.cyclones import fetch_jtwc_storms, fetch_nhc_storms
 from fetchers.ec_oilseeds import fetch_ec_oilseed_prices
 from fetchers.eia import fetch_all_eia
 from fetchers.eia import is_configured as eia_configured
@@ -87,6 +88,7 @@ from pipeline.clean import (
     clean_conab,
     clean_contract_bars,
     clean_cot,
+    clean_cyclone_frame,
     clean_dce_futures,
     clean_ec_oilseeds,
     clean_eia,
@@ -122,6 +124,7 @@ from pipeline.store import (
     save_cot_data,
     save_crop_progress,
     save_currency_data,
+    save_cyclone_frame,
     save_dce_futures_data,
     save_ec_oilseed_prices,
     save_eia_data,
@@ -722,6 +725,29 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             # this series back to 1884 and a river has a level every day —
             # an empty return means the request or the parse broke, never
             # "nothing to report today".
+            empty_fails=True,
+        ),
+        # Storm wind is tradeable weather for the river's reason. Two run units
+        # on the 27/28 precedent: the agencies fail independently, and a JTWC
+        # outage must not turn the US Gulf reading `failed`. A source that
+        # answered always yields a one-row `status` frame — "asked, none
+        # active" is the answer a clear port depends on, so it passes the shape
+        # gate and stamps last_success. An empty dict is therefore never a
+        # quiet basin. No LAYER_MAX_DATA_AGE_DAYS: the status row is dated
+        # today by construction, so a day budget would prove nothing; each
+        # advisory's age is graded in hours by the assessment instead.
+        DictLayer(
+            "cyclones_nhc", "Layer 33", "tropical-cyclone forecasts (NOAA NHC)",
+            fetch=lambda: fetch_nhc_storms(),
+            save=lambda n, d: save_cyclone_frame("NHC", n, d),
+            clean=lambda n, d: clean_cyclone_frame(n, d),
+            empty_fails=True,
+        ),
+        DictLayer(
+            "cyclones_jtwc", "Layer 34", "tropical-cyclone forecasts (JTWC)",
+            fetch=lambda: fetch_jtwc_storms(),
+            save=lambda n, d: save_cyclone_frame("JTWC", n, d),
+            clean=lambda n, d: clean_cyclone_frame(n, d),
             empty_fails=True,
         ),
         DictLayer(
