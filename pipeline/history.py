@@ -137,6 +137,16 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # layer does not fetch — so a season rolling off the landing page is
     # gone from an ephemeral CI database, permanently. ~12 rows/season/year.
     "sagis_supply_demand": ("commodity", "season_year", "month_number"),
+    # Tropical-cyclone forecasts (Layers 34/35). Neither agency's live index
+    # serves a past advisory and JTWC keeps no public per-advisory archive, so
+    # what was in hand on a given day exists only here. The status table is
+    # what lets a later read tell "asked, none active" from "never asked".
+    # Both legitimately sit empty out of season — export_history's "is empty —
+    # CSV left untouched" warning for cyclone_storms is expected then, not a
+    # defect. `cyclone_track_points` stays out ([P1 #6]: summary rows only;
+    # NHC's own archive can replay an Atlantic/East Pacific track).
+    "cyclone_source_status": ("source", "Date"),
+    "cyclone_storms": ("source", "storm_id", "issued_at"),
 }
 
 

@@ -15,6 +15,7 @@ from typing import Any
 import pandas as pd
 
 from config import (
+    CYCLONE_ATTRIBUTION,
     DB_PATH,
     EC_OILSEEDS_CADENCE,
     EC_OILSEEDS_QUOTE_KIND,
@@ -713,6 +714,106 @@ def save_sopa_crop_estimates(name: str, df: pd.DataFrame):
         "sopa_crop_estimates", df[_SOPA_COLUMNS],
         ["crop_year", "state", "fetched_date"], f"sopa/{name}",
     )
+
+
+# Layers 34/35 — frame name → (table, primary key, columns), spec §3.2.
+_CYCLONE_RADII = [f"r{band}_{q}" for band in (34, 50, 64) for q in ("ne", "se", "sw", "nw")]
+_CYCLONE_TABLES: dict[str, tuple[str, list[str], list[str]]] = {
+    "status": (
+        "cyclone_source_status", ["source", "Date"],
+        ["source", "Date", "checked_at", "storms_listed", "storms_parsed",
+         "products_absent", "index_last_modified", "attribution"],
+    ),
+    "storms": (
+        "cyclone_storms", ["source", "storm_id", "issued_at"],
+        ["source", "storm_id", "issued_at", "synoptic_at", "checked_at", "basin_prefix",
+         "storm_number", "season", "name", "classification", "advisory", "lat", "lon",
+         "vmax_kt", "max_tau_h", "track_state", "attribution"],
+    ),
+    "track": (
+        "cyclone_track_points", ["source", "storm_id", "issued_at", "tau_h"],
+        ["source", "storm_id", "issued_at", "tau_h", "lat", "lon", "vmax_kt",
+         *_CYCLONE_RADII, "is_forecast"],
+    ),
+}
+# A read track ('ok') has all of these; only an absent JTWC product may not.
+_CYCLONE_OK_REQUIRED = ("lat", "lon", "vmax_kt", "max_tau_h", "synoptic_at")
+
+
+def save_cyclone_frame(source: str, name: str, df: pd.DataFrame):
+    """Write one cyclone frame (Layers 34/35) — spec §3.3.
+
+    ``status`` and ``storms`` upsert. ``track`` is **window-replaced**: every
+    stored point for ``source`` is deleted and the incoming frame inserted, in
+    one transaction — and that runs on an *empty* frame too, so a source that
+    answered "no storms" clears yesterday's tracks rather than leaving a
+    dissipated storm on the map. A failed write rolls the delete back.
+
+    Hard-fails (``ValueError``) on an unknown source, a row that says another
+    source, a missing attribution, or a read track (``track_state = 'ok'``)
+    with no position, wind, horizon or synoptic time.
+    """
+    if source not in CYCLONE_ATTRIBUTION:
+        raise ValueError(
+            f"save_cyclone_frame: unknown cyclone source {source!r} — "
+            f"expected one of {sorted(CYCLONE_ATTRIBUTION)}"
+        )
+    if name not in _CYCLONE_TABLES:
+        raise ValueError(f"save_cyclone_frame: unknown cyclone frame {name!r}")
+    table, key, columns = _CYCLONE_TABLES[name]
+    label = f"{table}/{source}"
+
+    df = df.copy()
+    if not df.empty:
+        missing = [c for c in columns if c not in df.columns]
+        if missing:
+            raise ValueError(f"save_cyclone_frame({label}): frame is missing columns {missing}")
+        others = sorted(set(df["source"].astype(str)) - {source})
+        if others:
+            raise ValueError(
+                f"save_cyclone_frame({label}): rows say source {others}, saved as {source!r}"
+            )
+        if "attribution" in columns:
+            attribution = df["attribution"]
+            if attribution.isna().any() or (attribution.astype(str).str.strip() == "").any():
+                raise ValueError(f"save_cyclone_frame({label}): every row must carry its attribution")
+        if name == "storms":
+            states = sorted(set(df["track_state"].astype(str)) - {"ok", "absent"})
+            if states:
+                raise ValueError(f"save_cyclone_frame({label}): unknown track_state {states}")
+            read = df[df["track_state"] == "ok"]
+            for column in _CYCLONE_OK_REQUIRED:
+                if read[column].isna().any():
+                    raise ValueError(
+                        f"save_cyclone_frame({label}): a read track (track_state='ok') "
+                        f"has no {column}"
+                    )
+        if name == "status":
+            df["Date"] = _date(df["Date"])
+
+    if name != "track":
+        if df.empty:
+            return
+        _save(table, df[columns], key, label)
+        return
+
+    clear = ("DELETE FROM cyclone_track_points WHERE source = ?", (source,))
+    if not df.empty:
+        _save(table, df[columns], key, label, clear=clear)
+        return
+    # _save returns early on an empty frame, so the empty answer's clear runs here.
+    with managed_connection(get_connection()) as conn:
+        conn.execute("BEGIN")
+        try:
+            removed = conn.execute(*clear).rowcount
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            logger.error("Clearing %s failed — rolled back", label)
+            raise
+        maybe_sync(conn)
+    if removed:
+        logger.info("%s: no active storm — cleared %d stored track point(s)", label, removed)
 
 
 def save_ocean_freight(route: str, df: pd.DataFrame):

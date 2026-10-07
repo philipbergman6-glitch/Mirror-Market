@@ -890,3 +890,137 @@ def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values("Date").reset_index(drop=True)
     df = df.dropna(subset=["price"])
     return df
+
+
+# ---------------------------------------------------------------------------
+# Layers 34/35 — tropical-cyclone forecasts (NOAA NHC, JTWC)
+# ---------------------------------------------------------------------------
+# Per frame: primary key, columns that must be present on every row, and the
+# integer / real columns to coerce. A coerced value that comes back NaN where
+# the source printed something is a parse fault and raises — nothing is
+# dropped silently, and a NULL the fetcher stored on purpose (an unpublished
+# radius, an absent JTWC track) stays NULL.
+_CYCLONE_RADII = tuple(
+    f"r{band}_{quadrant}" for band in (34, 50, 64) for quadrant in ("ne", "se", "sw", "nw")
+)
+_CYCLONE_FRAMES: dict[str, dict[str, tuple[str, ...]]] = {
+    "status": {
+        "key": ("source", "Date"),
+        "required": ("source", "Date", "checked_at", "storms_listed", "storms_parsed",
+                     "products_absent", "attribution"),
+        "int": ("storms_listed", "storms_parsed", "products_absent"),
+        "real": (),
+    },
+    "storms": {
+        "key": ("source", "storm_id", "issued_at"),
+        "required": ("source", "storm_id", "issued_at", "checked_at", "basin_prefix",
+                     "storm_number", "season", "track_state", "attribution"),
+        "int": ("storm_number", "season", "vmax_kt", "max_tau_h"),
+        "real": ("lat", "lon"),
+    },
+    "track": {
+        "key": ("source", "storm_id", "issued_at", "tau_h"),
+        "required": ("source", "storm_id", "issued_at", "tau_h", "lat", "lon", "vmax_kt",
+                     "is_forecast"),
+        "int": ("tau_h", "vmax_kt", "is_forecast"),
+        "real": ("lat", "lon", *_CYCLONE_RADII),
+    },
+}
+
+
+def _cyclone_bounds() -> dict[str, tuple[float, float]]:
+    from config import CYCLONE_MAX_RADIUS_NM, CYCLONE_MAX_TAU_H, CYCLONE_MAX_WIND_KT
+
+    unbounded = float("inf")
+    bounds: dict[str, tuple[float, float]] = {
+        "lat": (-90.0, 90.0),
+        "lon": (-180.0, 180.0),
+        "vmax_kt": (0, CYCLONE_MAX_WIND_KT),
+        "tau_h": (0, CYCLONE_MAX_TAU_H),
+        "max_tau_h": (0, CYCLONE_MAX_TAU_H),
+        "storms_listed": (0, unbounded),
+        "storms_parsed": (0, unbounded),
+        "products_absent": (0, unbounded),
+        "is_forecast": (0, 1),
+    }
+    for column in _CYCLONE_RADII:
+        bounds[column] = (0, CYCLONE_MAX_RADIUS_NM)
+    return bounds
+
+
+def clean_cyclone_frame(name: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Type and bound one cyclone frame (Layers 34/35) — spec §3.4.
+
+    Coerces types and hard-fails, naming the column, on a latitude outside
+    ±90, a longitude outside ±180 *after* normalising it to that range, a wind
+    outside 0–250 kt, a radius outside 0–1,000 nm, a forecast hour outside
+    0–240, a missing required value, or a duplicate primary key. Drops
+    nothing: every row the fetcher read is either stored or the run fails.
+
+    Returns a cleaned copy; the original is not mutated.
+    """
+    spec = _CYCLONE_FRAMES.get(name)
+    if spec is None:
+        raise ValueError(
+            f"clean_cyclone_frame: unknown cyclone frame {name!r} — "
+            f"expected one of {sorted(_CYCLONE_FRAMES)}"
+        )
+    df = df.copy()
+    if df.empty:
+        return df
+
+    missing = [column for column in spec["required"] if column not in df.columns]
+    if missing:
+        raise ValueError(f"clean_cyclone_frame({name}): frame is missing columns {missing}")
+
+    for column in spec["int"] + spec["real"]:
+        if column not in df.columns:
+            continue
+        coerced = pd.to_numeric(df[column], errors="coerce")
+        unreadable = coerced.isna() & df[column].notna()
+        if unreadable.any():
+            raise ValueError(
+                f"clean_cyclone_frame({name}): {column} holds non-numeric values "
+                f"{df.loc[unreadable, column].tolist()[:3]}"
+            )
+        if column in spec["int"]:
+            fractional = coerced.notna() & (coerced != coerced.round())
+            if fractional.any():
+                raise ValueError(
+                    f"clean_cyclone_frame({name}): {column} holds non-integer values "
+                    f"{coerced[fractional].tolist()[:3]}"
+                )
+            df[column] = coerced.round().astype("Int64")
+        else:
+            df[column] = coerced.astype("float64")
+
+    if "lon" in df.columns:
+        # Normalise first (181.0E and 179.0W are one meridian), then bound.
+        df["lon"] = ((df["lon"] + 180.0) % 360.0) - 180.0
+
+    blank = [column for column in spec["required"] if df[column].isna().any()]
+    if blank:
+        raise ValueError(f"clean_cyclone_frame({name}): required columns have missing values: {blank}")
+
+    for column, (low, high) in _cyclone_bounds().items():
+        if column not in df.columns:
+            continue
+        values = df[column]
+        outside = values.notna() & ((values < low) | (values > high))
+        if outside.any():
+            raise ValueError(
+                f"clean_cyclone_frame({name}): {column} outside {low}..{high}: "
+                f"{values[outside].tolist()[:3]}"
+            )
+
+    if name == "status":
+        df["Date"] = pd.to_datetime(df["Date"])
+
+    key = list(spec["key"])
+    duplicated = df.duplicated(subset=key, keep=False)
+    if duplicated.any():
+        raise ValueError(
+            f"clean_cyclone_frame({name}): duplicate primary key {key}: "
+            f"{df.loc[duplicated, key].drop_duplicates().values.tolist()[:3]}"
+        )
+    return df.sort_values(key).reset_index(drop=True)

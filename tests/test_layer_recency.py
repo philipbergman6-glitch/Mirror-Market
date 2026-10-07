@@ -491,6 +491,10 @@ def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers(
       us_processor_cash — one frame; the AMS 3511 archive carries 230+
                      weeks on every pull, so empty means the pull, the
                      mapping or the reconciliation broke (#352)
+      cyclones_nhc / cyclones_jtwc — a source whose index answered always
+                     yields a one-row `status` frame, even with no storm
+                     active ("asked, none active" is the success a clear port
+                     depends on), so `{}` can only mean the fetch broke (#387)
     """
     opted_in = {
         layer.key
@@ -498,7 +502,10 @@ def test_empty_fails_opt_ins_are_exactly_the_floorless_always_publishing_layers(
         if layer.empty_fails is not None
     }
 
-    assert opted_in == {"worldbank", "wasde", "ec_oilseeds", "river_ar", "us_processor_cash"}
+    assert opted_in == {
+        "worldbank", "wasde", "ec_oilseeds", "river_ar", "us_processor_cash",
+        "cyclones_nhc", "cyclones_jtwc",
+    }
     assert not opted_in & set(LAYER_MIN_KEYS)  # nothing floored needs an override
 
 

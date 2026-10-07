@@ -161,6 +161,10 @@ PRODUCTION_LAYERS = (
     ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
     ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India meal FAS and oil import legs (private)"),
     ("sopa_crop", "33", "SOPA (state-wise crop estimate)", "Annual", "India soybean crop by state (private)"),
+    ("cyclones_nhc", "34", "NOAA NHC", "Per advisory, read daily",
+     "Tropical-cyclone forecast tracks and wind radii — Atlantic, East/Central Pacific"),
+    ("cyclones_jtwc", "35", "JTWC", "Per advisory, read daily",
+     "Tropical-cyclone forecast tracks and wind radii — West Pacific, Indian Ocean, Southern Hemisphere"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
@@ -542,6 +546,57 @@ RIVER_GAUGES_NWPS = {
 RIVER_GAUGES_INA = {
     name: spec for name, spec in RIVER_GAUGES.items() if spec["provider"] == "ina"
 }
+
+# ---------------------------------------------------------------------------
+# Layers 34 / 35 — tropical-cyclone forecasts (S2 #374, slice 1 #387)
+#
+# Storm wind is tradeable weather for the same reason river water is: a
+# hurricane over the lower Mississippi or a typhoon off Qingdao stops the
+# loading that a cash bid prices. These layers only *read* the agencies'
+# active-storm forecast tracks and quadrant wind radii; grading a port against
+# them is analysis/hazards.py's job (slice 3), not the fetcher's.
+#
+#   33  NOAA NHC — North Atlantic, East and Central Pacific
+#   34  JTWC     — West Pacific, North Indian, all Southern Hemisphere (and a
+#                  duplicate of every East/Central Pacific storm NHC carries)
+#
+# TWO LAYERS, NOT ONE, on the Layer 27/28 precedent: the sources fail
+# independently, and a JTWC outage must not turn the US Gulf reading `failed`.
+# Both are US-government sources with the same 1-minute wind convention, so
+# one threshold vocabulary works globally — never mix in an agency that
+# averages winds differently (JMA, BoM and La Réunion use 10 minutes).
+#
+# Every wind is knots and every radius nautical miles, exactly as published.
+# Nothing here is a price and nothing passes through `to_usd_mt`.
+# ---------------------------------------------------------------------------
+CYCLONE_NHC_INDEX_URL = "https://www.nhc.noaa.gov/CurrentStorms.json"
+# `{product}` is `5day` (track points) or `fcst` (wind radii). `_latest` is an
+# alias of the newest numbered advisory, so the advisory number inside each zip
+# is asserted against the index's — a half-published advisory must not pair a
+# new index with an old track (spec §12 trap 7).
+CYCLONE_NHC_PRODUCT_URL = (
+    "https://www.nhc.noaa.gov/gis/forecast/archive/{storm_id}_{product}_latest.zip"
+)
+CYCLONE_JTWC_INDEX_URL = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss"
+CYCLONE_JTWC_PRODUCT_URL = "https://www.metoc.navy.mil/jtwc/products/{storm_id}.tcw"
+
+# Stamped on every stored status and storm row. JTWC is DoD guidance, not the
+# WMO regional centre for any basin, and must never read as a national warning.
+CYCLONE_ATTRIBUTION = {
+    "NHC": "NOAA National Hurricane Center",
+    "JTWC": "Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning",
+}
+
+# ATCF basin codes either agency can issue. `sh` (JTWC Southern Hemisphere) was
+# not observed live — the basin was out of season when the sources were
+# researched — so an id outside this set hard-fails, naming itself, rather
+# than landing as a storm no basin claims.
+CYCLONE_ID_PREFIXES = ("al", "ep", "cp", "wp", "io", "sh")
+
+# Sanity bands: a value outside one is a parse fault, not a storm.
+CYCLONE_MAX_WIND_KT = 250
+CYCLONE_MAX_RADIUS_NM = 1000
+CYCLONE_MAX_TAU_H = 240
 
 # ---------------------------------------------------------------------------
 # Layer 6 — USDA FAS PSD (global supply/demand, bulk CSV, no API key)

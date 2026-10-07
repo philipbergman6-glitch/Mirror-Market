@@ -191,6 +191,35 @@ def read_sopa_crop_estimates(crop_year: int | None = None) -> pd.DataFrame:
     )
 
 
+def read_cyclone_status(source: str | None = None) -> pd.DataFrame:
+    """Read each cyclone source's per-run answer (Layers 34/35).
+
+    One row per source per day the index answered. ``storms_listed == 0`` is
+    a real answer — asked, none active — not a gap. Times other than ``Date``
+    stay UTC ISO-8601 text, as stored.
+    """
+    return _read_table("cyclone_source_status", "source", source, date_cols=("Date",))
+
+
+def read_cyclone_storms(source: str | None = None) -> pd.DataFrame:
+    """Read every storm advisory read (Layers 34/35).
+
+    ``track_state = 'absent'`` is a JTWC storm listed with no readable product:
+    its position and wind are NULL because they were never learned. Forecast
+    hours count from ``synoptic_at``, not ``issued_at``.
+    """
+    return _read_table("cyclone_storms", "source", source, date_cols=())
+
+
+def read_cyclone_track(source: str | None = None) -> pd.DataFrame:
+    """Read the latest forecast track per source (Layers 34/35).
+
+    A NULL radius is a band the agency did not publish at that hour (NHC 64 kt
+    beyond 72 h); ``0`` was published as zero. Knots and nautical miles.
+    """
+    return _read_table("cyclone_track_points", "source", source, date_cols=())
+
+
 def read_ocean_freight_rates(route: str | None = None) -> pd.DataFrame:
     """Read GTR monthly bulk grain ocean freight rates from SQLite.
 

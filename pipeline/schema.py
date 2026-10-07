@@ -192,6 +192,87 @@ CREATE TABLE IF NOT EXISTS sopa_crop_estimates (
 );
 """
 
+# Layers 34/35 — tropical-cyclone forecasts, NOAA NHC and JTWC (S2 #374,
+# docs/specs/cyclone-hazard-flags.md §3.2). Times are UTC ISO-8601 text, winds
+# knots, radii nautical miles, exactly as the agencies publish; nothing here is
+# a price. One row per source per run that the source answered — `0` storms
+# listed is a real answer ("asked, none active"), which a clear reading of a
+# port depends on.
+_CREATE_CYCLONE_SOURCE_STATUS = """
+CREATE TABLE IF NOT EXISTS cyclone_source_status (
+    source              TEXT    NOT NULL,
+    Date                TEXT    NOT NULL,
+    checked_at          TEXT    NOT NULL,
+    storms_listed       INTEGER NOT NULL,
+    storms_parsed       INTEGER NOT NULL,
+    products_absent     INTEGER NOT NULL,
+    index_last_modified TEXT,
+    attribution         TEXT    NOT NULL,
+    PRIMARY KEY (source, Date)
+);
+"""
+
+# One row per storm per advisory read. The five position/wind/time columns are
+# nullable only because a JTWC storm whose product answered 403 has no track
+# to read (track_state = 'absent', NULL = never learned); save_cyclone_frame
+# refuses a NULL in any of them on an 'ok' row. `synoptic_at` is the time the
+# forecast hours count from — up to ~3 h before `issued_at` (NHC's tau 12 is
+# valid at synoptic + 12 h) — so an absolute time is never struck off the
+# issue clock.
+_CREATE_CYCLONE_STORMS = """
+CREATE TABLE IF NOT EXISTS cyclone_storms (
+    source          TEXT    NOT NULL,
+    storm_id        TEXT    NOT NULL,
+    issued_at       TEXT    NOT NULL,
+    synoptic_at     TEXT,
+    checked_at      TEXT    NOT NULL,
+    basin_prefix    TEXT    NOT NULL,
+    storm_number    INTEGER NOT NULL,
+    season          INTEGER NOT NULL,
+    name            TEXT,
+    classification  TEXT,
+    advisory        TEXT,
+    lat             REAL,
+    lon             REAL,
+    vmax_kt         INTEGER,
+    max_tau_h       INTEGER,
+    track_state     TEXT    NOT NULL,
+    attribution     TEXT    NOT NULL,
+    PRIMARY KEY (source, storm_id, issued_at)
+);
+"""
+
+# The forecast track of each source's latest read only — window-replaced per
+# source on every save, so an answer of "no storms" clears yesterday's tracks.
+# NULL radius = the agency published no radius for that band at that hour
+# (NHC 64 kt beyond 72 h; any band above the storm's wind); 0 = published as
+# zero (invariant 2).
+_CREATE_CYCLONE_TRACK_POINTS = """
+CREATE TABLE IF NOT EXISTS cyclone_track_points (
+    source      TEXT    NOT NULL,
+    storm_id    TEXT    NOT NULL,
+    issued_at   TEXT    NOT NULL,
+    tau_h       INTEGER NOT NULL,
+    lat         REAL    NOT NULL,
+    lon         REAL    NOT NULL,
+    vmax_kt     INTEGER NOT NULL,
+    r34_ne      REAL,
+    r34_se      REAL,
+    r34_sw      REAL,
+    r34_nw      REAL,
+    r50_ne      REAL,
+    r50_se      REAL,
+    r50_sw      REAL,
+    r50_nw      REAL,
+    r64_ne      REAL,
+    r64_se      REAL,
+    r64_sw      REAL,
+    r64_nw      REAL,
+    is_forecast INTEGER NOT NULL,
+    PRIMARY KEY (source, storm_id, issued_at, tau_h)
+);
+"""
+
 _CREATE_DCE_FUTURES = """
 CREATE TABLE IF NOT EXISTS dce_futures (
     commodity       TEXT NOT NULL,
@@ -803,6 +884,9 @@ ALL_SCHEMAS = (
     _CREATE_BRAZIL_EXPORTS,
     _CREATE_SEA_INDIA_RATES,
     _CREATE_SOPA_CROP_ESTIMATES,
+    _CREATE_CYCLONE_SOURCE_STATUS,
+    _CREATE_CYCLONE_STORMS,
+    _CREATE_CYCLONE_TRACK_POINTS,
     _CREATE_DCE_FUTURES,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,
