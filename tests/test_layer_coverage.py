@@ -42,7 +42,7 @@ def freshness_calls(monkeypatch):
     calls: list[dict] = []
 
     def _capture(layer_name, rows_fetched=0, status="success",
-                 keys_returned=None, keys_expected=None):
+                 keys_returned=None, keys_expected=None, missing_keys=None):
         calls.append({
             "layer": layer_name,
             "rows": rows_fetched,
@@ -191,13 +191,17 @@ def test_catalogless_layer_records_null_coverage_on_success(freshness_calls):
     assert call["keys_expected"] is None
 
 
-def test_coverage_does_not_grade(freshness_calls):
-    """Above the floor but below full coverage is still a success (#182 d1)."""
+def test_coverage_below_full_is_usable_partial_not_a_failure(freshness_calls):
+    """Above the floor but below full coverage is usable_partial (A3 #300).
+
+    #182 d1 called this a success; A3 narrowed `success` to the full catalog.
+    What #182 pinned still holds — the layer is usable, not a hard failure.
+    """
     keys = LAYER_MIN_KEYS["weather"]
     assert keys < len(LAYER_KEY_CATALOGS["weather"])
 
     assert main._finalize_layer("weather", _payload(keys)) is True
-    assert freshness_calls[0]["status"] == "success"
+    assert freshness_calls[0]["status"] == "usable_partial"
     assert "weather" not in main._HARD_FAILURES
 
 

@@ -44,9 +44,10 @@ One module per data source. Each fetcher returns
 `dict[str, pd.DataFrame]` keyed by commodity/region/pair, and uses
 `fetchers/_backoff.py` for retry policy. Failures raise — they don't
 return empty silently — so `main.py` can record the layer as `failed` in
-the freshness table. The layer catalog, run-state grading rules
-(`failed` / `no_publication` / `stale` / `incomplete` / skipped), and every
-source's traps are documented in `LAYERS.md`.
+the freshness table. The layer catalog, run-state grading rules (one axis,
+`pipeline/grading.py`: `success` / `usable_partial` / `incomplete` / `stale`
+/ `failed` / `no_publication` / `disabled`, plus skipped-unconfigured, which
+writes no row), and every source's traps are documented in `LAYERS.md`.
 
 ### Clean (`pipeline/clean.py`)
 

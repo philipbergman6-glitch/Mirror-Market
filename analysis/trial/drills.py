@@ -140,6 +140,7 @@ def _captured_freshness() -> Iterator[list[dict[str, Any]]]:
         keys_returned: int | None = None,
         keys_expected: int | None = None,
         clock: Any = None,
+        missing_keys: Any = None,
     ) -> None:
         # `clock` is accepted and ignored: these drills grade the freshness
         # *verdict*, and the latency stamps riding along with it are a
@@ -152,6 +153,7 @@ def _captured_freshness() -> Iterator[list[dict[str, Any]]]:
             "status": status,
             "keys_returned": keys_returned,
             "keys_expected": keys_expected,
+            "missing_keys": missing_keys,
         })
 
     original = main.save_freshness
@@ -161,6 +163,7 @@ def _captured_freshness() -> Iterator[list[dict[str, Any]]]:
         main._NO_PUBLICATION,
         main._STALE_LAST_KNOWN_GOOD,
         main._INCOMPLETE_KEY_COVERAGE,
+        main._USABLE_PARTIAL,
     ):
         bucket.clear()
     try:
@@ -172,6 +175,7 @@ def _captured_freshness() -> Iterator[list[dict[str, Any]]]:
             main._NO_PUBLICATION,
             main._STALE_LAST_KNOWN_GOOD,
             main._INCOMPLETE_KEY_COVERAGE,
+            main._USABLE_PARTIAL,
         ):
             bucket.clear()
 
@@ -235,16 +239,19 @@ def drill_partial_key_coverage() -> DrillResult:
 
     A partial run has two legitimate verdicts and the distinction is the whole
     point of the check. Above the floor the layer is still usable, so it grades
-    ``success`` — but the coverage pair must record what actually came back,
+    ``usable_partial`` (A3 #300): it renders, ``last_success`` advances, and the
+    coverage pair plus the named missing keys record what actually came back,
     because the failure this guards against is a fetcher self-reporting
     fourteen-of-fourteen when five regions were never asked (the shape of #212).
     Below the floor the layer is not usable and must demote to ``incomplete``.
+    Only the full catalog grades ``success``.
 
-    Asserting only the first half would pass against a build that had lost the
-    demotion entirely; asserting only the second would pass against one that
-    demoted every partial run and made the weather layer permanently red. So the
-    drill runs the layer twice — at the floor and one key under it — and passes
-    only if the two verdicts differ in the direction the config calls for.
+    Asserting only one half would pass against a build that had lost the
+    demotion entirely, or against one that demoted every partial run and made
+    the weather layer permanently red, or against one that still called a
+    23-of-24 run a success. So the drill runs the layer three times — the full
+    catalog, at the floor and one key under it — and passes only if the three
+    verdicts differ in the direction the config calls for.
     """
     import config
     import main
@@ -261,15 +268,20 @@ def drill_partial_key_coverage() -> DrillResult:
             demoted = "weather" in main._INCOMPLETE_KEY_COVERAGE
         return graded, (calls[-1] if calls else {}), demoted
 
-    # Above (or at) the floor: usable, but coverage must not claim a full house.
+    # The full catalog: the only run allowed to call itself a success.
+    full_graded, full_row, full_demoted = _run(expected_keys)
+    full_ok = full_graded is True and full_row.get("status") == "success" and not full_demoted
+
+    # At the floor: usable, but neither a success nor a full house.
     at_floor = max(1, min(floor, expected_keys))
     ok_graded, ok_row, ok_demoted = _run(at_floor)
     above_ok = (
         ok_graded is True
-        and ok_row.get("status") == "success"
+        and ok_row.get("status") == "usable_partial"
         and not ok_demoted
         and ok_row.get("keys_returned") == at_floor
         and ok_row.get("keys_expected") == expected_keys
+        and sorted(ok_row.get("missing_keys") or []) == sorted(names[at_floor:])
     )
 
     # One key under the floor: not usable, must demote rather than grade green.
@@ -281,24 +293,28 @@ def drill_partial_key_coverage() -> DrillResult:
         drill="partial_key_coverage",
         title="Part of a layer never answers",
         simulated=(
-            f"Layer 5 (weather) run twice against a floor of {floor}: once returning "
-            f"{at_floor} of {expected_keys} regions, once returning {under}. The absent "
+            f"Layer 5 (weather) run three times against a floor of {floor}: returning "
+            f"all {expected_keys} regions, then {at_floor}, then {under}. The absent "
             "regions failed transport rather than returning zero rows."
         ),
         expected=(
-            f"At {at_floor} keys: status='success' but coverage recorded as "
-            f"{at_floor}/{expected_keys}, not a self-reported full house. At {under} keys: "
+            f"At {expected_keys} keys: status='success'. At {at_floor} keys: "
+            f"status='usable_partial' with coverage {at_floor}/{expected_keys} and the "
+            f"missing regions named, not a self-reported full house. At {under} keys: "
             "status='incomplete', the run demoted, and no fresh last_success stamped."
         ),
         observed=(
+            f"full -> status={full_row.get('status')!r}, returned {full_graded!r}; "
             f"at floor -> status={ok_row.get('status')!r}, "
             f"coverage={ok_row.get('keys_returned')}/{ok_row.get('keys_expected')}, "
+            f"missing={len(ok_row.get('missing_keys') or [])}, "
             f"returned {ok_graded!r}; below floor -> status={low_row.get('status')!r}, "
             f"coverage={low_row.get('keys_returned')}/{low_row.get('keys_expected')}, "
             f"returned {low_graded!r}, demoted={low_demoted!r}."
         ),
-        passed=above_ok and below_ok,
+        passed=full_ok and above_ok and below_ok,
         evidence=(
+            f"full-catalog freshness row: {full_row}",
             f"at-floor freshness row: {ok_row}",
             f"below-floor freshness row: {low_row}",
             f"LAYER_MIN_KEYS['weather'] = {floor}, catalog = {expected_keys} regions",

@@ -2148,27 +2148,24 @@ def freshness_limit_days(layer: str) -> int:
 # fresh last_success forever and no surface downstream can tell.
 #
 # A layer whose newest observation exceeds its budget is recorded with
-# status='failed', which preserves the previous last_success. That is the
-# mechanism: last_success stops advancing, so the layer ages out of its
-# FRESHNESS_WARNING_DAYS_BY_LAYER window on its own and shows up stale on
-# every surface that already reads freshness.
+# status='stale' (main._mark_stale), which preserves the previous
+# last_success. That is the mechanism: last_success stops advancing, so the
+# layer ages out of its FRESHNESS_WARNING_DAYS_BY_LAYER window on its own
+# and shows up stale on every surface that already reads freshness. The
+# word is 'stale', not 'failed': the vocabulary is pipeline/grading.py (A3
+# #300) and a frozen upstream is a distinct state from a broken one.
 #
 # Budgets are calendar days from the newest observation date and are sized
 # to survive the layer's normal quiet periods (weekends, exchange holidays,
 # publication lag) — a threshold that cries wolf gets ignored, which is the
 # failure mode this whole block exists to avoid.
 #
-# NOT LISTED = NOT CHECKED. A layer is only listed when "newest observation
-# date" is a meaningful quantity for it:
-#   psd, wasde, usda  — keyed by marketing year / crop year, no date column
-#                       at all (verified against the live schema), so there
-#                       is nothing to measure.
-#   forward_curve     — rows are dated by *contract month*, i.e. months in
-#                       the future; a frozen curve stays "recent" for a year.
-#   crop_progress     — seasonal by design; NASS publishes nothing between
-#                       roughly December and March, so any budget short
-#                       enough to be useful fires every winter.
-# These four are covered by the run-cadence window, not by data recency.
+# EVERY PRODUCTION LAYER IS LISTED HERE OR IN LAYER_AGE_BUDGET_EXEMPT
+# (A3 #300 §7, enforced by validate_age_budgets below at import time). The
+# old rule, "not listed = not checked", let a new layer ship with no recency
+# verdict by omission; now an unlisted layer is a config error, and a layer
+# that genuinely has no measurable observation date has to say so in
+# writing. The exemptions and their reasons are in LAYER_AGE_BUDGET_EXEMPT.
 LAYER_MAX_DATA_AGE_DAYS = {
     # Daily exchange/market data — a long weekend plus a holiday.
     "prices": 7,
@@ -2177,6 +2174,39 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # budget is what catches a run of listed tickers all going quietly
     # stale while the layer keeps answering with old history.
     "contract_bars": 7,
+    # The forward curve's rows are keyed by *contract month* — dates in the
+    # future — which is why it was exempt for a year. It is dated by the
+    # session every leg was observed on instead (`observation_date`, one per
+    # curve, enforced by fetchers/forward_curve.py and last in
+    # main._DATE_COLUMNS), and that is a board session date on the same
+    # venue and cadence as prices: same long-weekend-plus-holiday budget
+    # (A3 #300 §7).
+    "forward_curve": 7,
+    # Daily physical quote legs. Each is one page or one PDF a day that
+    # re-serves (or 404s) on a quiet day; a frozen page answers 200 with
+    # last week's number forever, which is exactly what the budget catches.
+    # Long weekend plus a holiday, like the exchange legs (A3 #300 §7).
+    "cepea": 7,       # CEPEA/ESALQ indicators via Notícias Agrícolas
+    "agrural": 7,     # AgRural Paranaguá FOB
+    "gulf_bids": 7,   # AMS 3147 Gulf export bids (daily PDF)
+    # MAGyP publishes the official FOB daily but posts it with an official
+    # lag of several working days, and skips Argentine holidays; 14 is that
+    # lag plus a long weekend (A3 #300 §7).
+    "magyp_fob": 14,
+    # FGIS export inspections are weekly: the Monday report covers the week
+    # ending the previous Thursday, so the newest week_ending is ~4 days old
+    # at release and ~11 the day before the next one. 21 tolerates one
+    # missed release (a federal holiday Monday) and fails on two.
+    "crush_inspections": 21,
+    # CONAB's monthly survey; `report_date` is the file's own publication
+    # date (HTTP Last-Modified), so the newest row is 0 days old at release
+    # and ~35 the day before the next one. 75 is that worst case plus one
+    # missed survey, the same shape as the other monthlies below.
+    "conab": 75,
+    # CONAB's weekly farmgate sheet (PrecosSemanalUF.txt) is dated by the
+    # week it covers and posted the following week, so the newest Date is
+    # ~2-9 days old on a normal week. 21 tolerates one missed sheet.
+    "conab_precos": 21,
     # SAFEX is a *stale-serving* page: on a non-trading day Grain SA re-serves
     # the previous session's rows rather than emptying (verified 2026-08-02 and
     # 2026-08-08). So "rows came back" says nothing about whether the JSE/BVG
@@ -2292,6 +2322,90 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # in EPA_RFS_KEY_MAX_AGE_DAYS are enforced inside fetchers/epa_rfs.py.
     "epa_rfs": max(EPA_RFS_KEY_MAX_AGE_DAYS.values()),
 }
+
+# Layers with NO recency budget, each with the reason "newest observation
+# date" is not a measurable quantity for it. Being listed here is a
+# decision, not an omission: validate_age_budgets refuses a production layer
+# that is in neither map, and one that is in both.
+LAYER_AGE_BUDGET_EXEMPT: dict[str, str] = {
+    "psd": (
+        "keyed by marketing year with no date column (verified against the live "
+        "schema); covered by the run-cadence window, not by data recency"
+    ),
+    "wasde": (
+        "keyed by marketing year with no date column; covered by the run-cadence "
+        "window, not by data recency"
+    ),
+    "usda": (
+        "NASS annual statistics keyed by crop year with no date column; covered by "
+        "the run-cadence window, not by data recency"
+    ),
+    "crop_progress": (
+        "seasonal by design: NASS publishes nothing between roughly December and "
+        "March, so any budget short enough to be useful fires every winter; the "
+        "off-season records no_publication instead"
+    ),
+    "sopa_crop": (
+        "one kharif estimate per crop year, keyed by crop_year with no observation "
+        "date — the page is re-read whole each run and a frozen estimate is "
+        "indistinguishable from the published one until the next Soy Conclave"
+    ),
+    "cyclones_nhc": (
+        "the status frame is dated today by construction, so a day budget would "
+        "pass trivially and prove nothing; each advisory's age is graded in hours "
+        "by analysis/hazards.py (docs/specs/cyclone-hazard-flags.md)"
+    ),
+    "cyclones_jtwc": (
+        "same as cyclones_nhc: today-dated status frame, advisory age graded in "
+        "hours by the hazard assessment"
+    ),
+}
+
+# A3 #300 §6: a layer graded usable_partial for this many consecutive runs
+# is a catalog-drift alert (a delisted contract, a renamed region — the fix is
+# a catalog edit), not a transient. Below it, amber is informational only.
+USABLE_PARTIAL_ESCALATION_RUNS = 3
+
+
+def validate_age_budgets(
+    production_layers: tuple[str, ...] | None = None,
+    budgets: dict[str, int] | None = None,
+    exemptions: dict[str, str] | None = None,
+) -> None:
+    """Every production layer carries a budget XOR a written exemption (A3 §7).
+
+    Runs at import time against the real registries; the arguments exist so
+    the rule itself can be tested against a synthetic roster. Invariant 1:
+    a layer that would ship with no recency verdict is a hard fail here, not
+    a quiet pass in main._check_layer_recency.
+    """
+    layers = PRODUCTION_LAYER_KEYS if production_layers is None else production_layers
+    budget_map = LAYER_MAX_DATA_AGE_DAYS if budgets is None else budgets
+    exempt_map = LAYER_AGE_BUDGET_EXEMPT if exemptions is None else exemptions
+    unlisted = [k for k in layers if k not in budget_map and k not in exempt_map]
+    if unlisted:
+        raise ValueError(
+            "LAYER_MAX_DATA_AGE_DAYS: unlisted production layer(s) "
+            f"{unlisted} — add a recency budget or a written exemption in "
+            "LAYER_AGE_BUDGET_EXEMPT (A3 #300 §7: not listed is not allowed)"
+        )
+    both = sorted(set(budget_map) & set(exempt_map))
+    if both:
+        raise ValueError(
+            f"layer(s) {both} are both budgeted and exempt — a layer has one "
+            "recency rule, not two"
+        )
+    unreasoned = [k for k, why in exempt_map.items() if not isinstance(why, str) or len(why) <= 20]
+    if unreasoned:
+        raise ValueError(
+            f"LAYER_AGE_BUDGET_EXEMPT: exemption(s) {unreasoned} carry no written reason"
+        )
+    bad_budget = [k for k, v in budget_map.items() if not isinstance(v, int) or v <= 0]
+    if bad_budget:
+        raise ValueError(f"LAYER_MAX_DATA_AGE_DAYS: non-positive budget(s) for {bad_budget}")
+
+
+validate_age_budgets()
 
 # Key coverage (#182): which config catalog each multi-key layer iterates.
 # `keys_expected` is len(catalog), so adding a ticker/region/series moves a
