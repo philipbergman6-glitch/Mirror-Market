@@ -117,6 +117,16 @@ def kg_to_million_metric_tons(kg: float) -> float:
     return kg_to_metric_tons(kg) / 1_000_000.0
 
 
+# SOPA prints its crop in lakh tonnes (Layer 33): one lakh is 100,000, so a
+# 110.267 lakh t crop is 11.03 million MT.
+MT_PER_LAKH_TONNE = 100_000.0
+
+
+def lakh_tonnes_to_metric_tons(lakh_t: float) -> float:
+    """Lakh tonnes → metric tons."""
+    return lakh_t * MT_PER_LAKH_TONNE
+
+
 def to_metric_tons(value: float, commodity: str) -> float | None:
     """
     Convert a single price value from native exchange units to USD/MT.

@@ -121,7 +121,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 36 operational layers across 32
+# independently runnable sub-layer, hence 37 operational layers across 33
 # numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
@@ -160,6 +160,7 @@ PRODUCTION_LAYERS = (
     ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
     ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
     ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India meal FAS and oil import legs (private)"),
+    ("sopa_crop", "33", "SOPA (state-wise crop estimate)", "Annual", "India soybean crop by state (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 
@@ -975,6 +976,55 @@ SEA_ATTRIBUTION = (
 # False the table stays out of the public history export and off every page;
 # tests/test_fetcher_sea.py pins the export half.
 SEA_PUBLISH = False
+
+# ---------------------------------------------------------------------------
+# Layer 33 — SOPA all-India state-wise soybean crop estimate (no API key)
+#
+# The Soybean Processors Association of India's kharif estimate — sowing
+# area, expected yield and estimated production by state (MP/MH division and
+# district detail beneath) — on one page per crop year. Years 2007 → are
+# online. Probed 2026-10-07 from a non-India address: keyless, no geo-block,
+# User-Agent-insensitive, robots.txt permits. Every response opens with an
+# injected <style>/<script> preamble before the doctype; the table is
+# selected out of the document, never read off its head. wp-json carries
+# nothing for the page — only the HTML has the table.
+#
+# No unit is printed: the columns are lakh ha, kg/ha and lakh t, and the
+# parser proves it on every row (area × yield / 1000 = production to the
+# printed rounding) before storing anything.
+#
+# The page is overwritten in place — kharif 2025 opened at 105.36 lakh t and
+# read 110.267 on 2026-10-07 — so each run's reading is kept under its own
+# fetched_date. The next kharif is presented at the Soy Conclave (Indore,
+# 16-17 Oct 2026); until then its page has no table and SOPA's own
+# "Found 0 posts" comment, which is no_publication, not a failure.
+#
+# Licence: SOPA's terms reserve "all rights not otherwise claimed". No reuse
+# grant, so the raw table is NOT in pipeline/history.py's export (the repo
+# is public — a committed CSV is a publication) and no page renders it.
+# What may be shown publicly is derived — year-on-year change, state shares
+# — plus at most one attributed headline total. Private tables are not
+# exported, so the revision snapshots persist only in a local DB.
+# ---------------------------------------------------------------------------
+SOPA_URL = "https://sopa.org/all-india-state-wise-soybean-area-production-and-productivity/"
+
+# Kharifs read each run, ending in the current calendar year: the one being
+# revised and the one about to be estimated. Pass a longer tuple of years to
+# fetch_sopa_estimates() to backfill the archive locally.
+SOPA_YEARS_READ = 2
+
+# The label the all-India total row is stored under (SOPA prints "Total").
+SOPA_ALL_INDIA = "All India"
+
+SOPA_ATTRIBUTION = (
+    "Source: The Soybean Processors Association of India (SOPA), kharif crop estimate"
+)
+
+# Publish gate. False until SOPA grants reproduction in writing. While False
+# the raw table stays out of the public history export and off every page;
+# only derived figures and one attributed headline total may render.
+# tests/test_fetcher_sopa.py pins the export half.
+SOPA_PUBLISH = False
 
 # India's effective import duty on crude soybean oil: (in force from, rate,
 # source). Basic customs duty + 5% AIDC + a 10% Social Welfare Surcharge on
@@ -1942,6 +1992,11 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "eia": 42,
     "epa_rfs": 42,
     "usda": 400,  # annual NASS crop data
+    # One kharif estimate a year (mid-October), revised in place over the
+    # following months. The newest reading is re-stamped on every run that
+    # finds the table, so the budget here only has to outlast the gap
+    # between the page going dark and the next release.
+    "sopa_crop": 400,
 }
 
 

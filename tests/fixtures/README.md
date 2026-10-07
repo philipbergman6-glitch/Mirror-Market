@@ -24,6 +24,8 @@ parsing without hitting the network.
 | `conab_serie_historica_graos.txt.gz` | CONAB `https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt` (gzip of the verbatim 2,722,833-byte body; latin-1) | live download 2026-08-11 |
 | `conab_serie_historica_graos.headers.txt` | response headers of that same download (carries `Last-Modified: Tue, 11 Aug 2026 11:00:16 GMT` — the survey's publication date) | live download 2026-08-11 |
 | `conab_precos_semanal_uf.txt.gz` | CONAB `PrecosSemanalUF.txt` — `https://portaldeinformacoes.conab.gov.br/downloads/arquivos/PrecosSemanalUF.txt` | live download 2026-08-11 (HTTP 200, 13,608,731 bytes, 89,700 lines; gzipped verbatim for the repo, latin-1) |
+| `sopa_2025.html` | SOPA `https://sopa.org/all-india-state-wise-soybean-area-production-and-productivity/?search_type=search_by_year&select_year=2025` — the kharif 2025 state-wise estimate (revised: 110.267 lakh t), verbatim including the injected pre-doctype `<style>`/`<script>` preamble and `<!-- Debug: Found 90 posts -->` | live download 2026-10-07 |
+| `sopa_2026_no_posts.html` | Same page for `select_year=2026`, before the kharif 2026 estimate is released: no `table.export-table`, `<!-- Debug: Found 0 posts -->` — the no-publication shape | live download 2026-10-07 |
 
 The CONAB missing-Mato-Grosso case in `tests/test_fetcher_conab.py` is
 derived at test time by deleting the real `MT` rows from a copy of that
