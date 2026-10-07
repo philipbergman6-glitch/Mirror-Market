@@ -29,6 +29,7 @@ from config import (
     FRESHNESS_WARNING_DAYS_BY_LAYER,
     LAYER_MAX_DATA_AGE_DAYS,
     LAYER_MIN_KEYS,
+    layer_expected_keys,
 )
 
 
@@ -45,8 +46,12 @@ def _indexed_frame(days_ago: float, rows: int = 5) -> pd.DataFrame:
 
 
 def _price_layer(days_ago: float) -> dict:
-    """A `prices`-shaped payload that clears the LAYER_MIN_KEYS floor."""
-    return {f"C{i}": _indexed_frame(days_ago) for i in range(LAYER_MIN_KEYS["prices"])}
+    """A `prices`-shaped payload with every catalog key answering.
+
+    Full coverage, because since A3 #300 only the full catalog grades
+    `success`; these tests are about recency, not coverage.
+    """
+    return {f"C{i}": _indexed_frame(days_ago) for i in range(layer_expected_keys("prices") or 1)}
 
 
 # ── The core F3 behaviour ──────────────────────────────────────────────────
@@ -56,7 +61,7 @@ def test_fresh_layer_stamps_success(freshness_calls):
     assert main._finalize_layer("prices", _price_layer(days_ago=1)) is True
 
     assert freshness_calls == [
-        {"layer": "prices", "rows": 5 * LAYER_MIN_KEYS["prices"], "status": "success"}
+        {"layer": "prices", "rows": 5 * (layer_expected_keys("prices") or 1), "status": "success"}
     ]
     assert not main._HARD_FAILURES
 
@@ -99,18 +104,22 @@ def test_boundary_exactly_at_budget_still_passes(freshness_calls):
     assert freshness_calls[0]["status"] == "success"
 
 
-def test_unlisted_layer_is_not_recency_checked(freshness_calls):
-    """NOT LISTED = NOT CHECKED.
+def test_exempt_layer_is_not_recency_checked(freshness_calls):
+    """A written exemption passes recency without reading a date (A3 #300 §7).
 
     psd/wasde/usda are keyed by marketing year and carry no date column at
-    all; forward_curve is dated by contract month. They must pass through
-    untouched rather than tripping the "no date found" branch.
+    all. They must pass through untouched rather than tripping the "no date
+    found" branch — and they are listed, with a reason, in
+    LAYER_AGE_BUDGET_EXEMPT; "not listed = not checked" no longer exists.
     """
+    from config import LAYER_AGE_BUDGET_EXEMPT
+
     assert "psd" not in LAYER_MAX_DATA_AGE_DAYS
+    assert "psd" in LAYER_AGE_BUDGET_EXEMPT
 
     payload = {
         f"c{i}": pd.DataFrame({"year": [2019], "value": [1.0]})
-        for i in range(LAYER_MIN_KEYS["psd"])
+        for i in range(layer_expected_keys("psd") or 1)
     }
 
     assert main._finalize_layer("psd", payload) is True
@@ -185,7 +194,7 @@ def test_fred_series_shape_is_datable(freshness_calls):
         f"s{i}": pd.Series(
             range(5), index=pd.date_range(end=end, periods=5, freq="D")
         )
-        for i in range(LAYER_MIN_KEYS["fred"])
+        for i in range(layer_expected_keys("fred") or 1)
     }
 
     assert main._finalize_layer("fred", fresh) is True
@@ -623,9 +632,10 @@ def test_stale_scraper_rows_are_still_saved(freshness_calls):
     assert saved == ["Soybean (SAFEX)"]
 
 
-def test_scraper_layer_without_a_budget_is_not_checked(freshness_calls):
-    """"Not listed in LAYER_MAX_DATA_AGE_DAYS = not checked" still holds."""
-    assert "agrural" not in LAYER_MAX_DATA_AGE_DAYS
+def test_daily_scraper_layer_is_recency_checked(freshness_calls):
+    """A3 #300 §7: the daily physical legs carry a budget, so a frozen page
+    that re-serves a 400-day-old quote grades stale instead of success."""
+    assert LAYER_MAX_DATA_AGE_DAYS["agrural"] == 7
 
     ok = main._run_scraper_layer(
         "agrural", "Layer 19", "AgRural Paranagua FOB",
@@ -633,8 +643,8 @@ def test_scraper_layer_without_a_budget_is_not_checked(freshness_calls):
         save=lambda n, d: None,
     )
 
-    assert ok is True
-    assert [c["status"] for c in freshness_calls] == ["success"]
+    assert ok is False
+    assert [c["status"] for c in freshness_calls] == ["stale"]
 
 
 # ── Layer 23 (SAGIS): the observation date lives in `week_end` ─────────────

@@ -31,7 +31,7 @@ from tests.trial_fixtures import (
     CLEAN_STAMP,
     DIRTY_STAMP,
     MARK,
-    SYNTHETIC_TRADERS,
+    SYNTHETIC_PARTICIPANTS,
     TODAY,
     day_observation,
     issue,
@@ -124,7 +124,7 @@ def test_a_non_correctness_issue_may_be_minor() -> None:
 def test_a_completed_session_must_state_what_was_decided() -> None:
     with pytest.raises(TrialError, match="decision"):
         SessionRecord(
-            trader=SYNTHETIC_TRADERS[0],
+            participant=SYNTHETIC_PARTICIPANTS[0],
             task=TaskId.MORNING_BRIEF,
             trading_day=TODAY,
             started_at=datetime(2026, 8, 18, 7, tzinfo=timezone.utc),
@@ -148,7 +148,7 @@ def test_an_abandoned_session_with_an_issue_is_a_legal_record() -> None:
     assert record.issues
 
 
-def test_a_trader_cannot_say_they_would_act_on_a_session_they_did_not_complete() -> None:
+def test_a_participant_cannot_say_they_would_act_on_a_session_they_did_not_complete() -> None:
     with pytest.raises(TrialError, match="would_act"):
         session(outcome=Outcome.BLOCKED, issues=(issue(),), would_act=True)
 
@@ -156,7 +156,7 @@ def test_a_trader_cannot_say_they_would_act_on_a_session_they_did_not_complete()
 def test_a_naive_timestamp_is_refused_because_desks_span_continents() -> None:
     with pytest.raises(TrialError, match="timezone"):
         SessionRecord(
-            trader=SYNTHETIC_TRADERS[0],
+            participant=SYNTHETIC_PARTICIPANTS[0],
             task=TaskId.MORNING_BRIEF,
             trading_day=TODAY,
             started_at=datetime(2026, 8, 18, 7),
@@ -173,7 +173,7 @@ def test_a_session_that_ended_before_it_started_is_refused() -> None:
     start = datetime(2026, 8, 18, 7, tzinfo=timezone.utc)
     with pytest.raises(TrialError):
         SessionRecord(
-            trader=SYNTHETIC_TRADERS[0],
+            participant=SYNTHETIC_PARTICIPANTS[0],
             task=TaskId.MORNING_BRIEF,
             trading_day=TODAY,
             started_at=start,
@@ -196,15 +196,15 @@ def test_duration_is_measured_from_the_sessions_own_clock() -> None:
     assert session(minutes=17).duration_minutes == pytest.approx(17.0)
 
 
-def test_the_session_id_is_stable_and_does_not_print_the_trader() -> None:
-    args = (TODAY, SYNTHETIC_TRADERS[0], TaskId.MORNING_BRIEF, datetime(2026, 8, 18, 7, tzinfo=timezone.utc))
+def test_the_session_id_is_stable_and_does_not_print_the_participant() -> None:
+    args = (TODAY, SYNTHETIC_PARTICIPANTS[0], TaskId.MORNING_BRIEF, datetime(2026, 8, 18, 7, tzinfo=timezone.utc))
     first = session_id(*args)
     assert first == session_id(*args)
-    assert SYNTHETIC_TRADERS[0] not in first
+    assert SYNTHETIC_PARTICIPANTS[0] not in first
     assert first.startswith("TS-20260818-")
 
 
-def test_a_different_trader_gets_a_different_session_id() -> None:
+def test_a_different_participant_gets_a_different_session_id() -> None:
     started = datetime(2026, 8, 18, 7, tzinfo=timezone.utc)
     assert session_id(TODAY, "zephyr", TaskId.MORNING_BRIEF, started) != session_id(
         TODAY, "quartz", TaskId.MORNING_BRIEF, started
@@ -220,7 +220,7 @@ def test_the_aggregate_projection_of_a_session_builds_no_private_key() -> None:
 
 def test_the_private_projection_of_a_session_keeps_everything() -> None:
     payload = session().to_dict(audience=AUDIENCE_PRIVATE)
-    assert payload["trader"] == SYNTHETIC_TRADERS[0]
+    assert payload["participant"] == SYNTHETIC_PARTICIPANTS[0]
     assert MARK in payload["decision"]
 
 

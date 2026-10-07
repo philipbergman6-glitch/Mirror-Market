@@ -83,6 +83,15 @@ data/reference/import_profiles/*.yml
 data/reference/import_profiles/*.yaml
 data/reference/import_profiles/*.csv
 
+# B12 (#409) — desk assumptions. Ocean freight, elevation, port costs,
+# financing, quality differentials and crush-plant costs are entered with an
+# owner's email and the broker in `basis`, so a tracked file would publish a
+# client record on the next push. Policy rates (China duty/VAT) stay committed
+# one level up in data/reference/assumptions/; the README here stays tracked;
+# no entry does.
+data/reference/assumptions/private/*.yml
+data/reference/assumptions/private/*.yaml
+
 # Concurrent-session git worktrees (each is its own checkout, never content)
 .worktrees/
 

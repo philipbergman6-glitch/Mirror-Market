@@ -33,10 +33,13 @@ from config import (
     DEFAULT_HISTORY_PERIOD,
     FAST_REFRESH_HISTORY_PERIOD,
     FAST_REFRESH_LAYERS,
+    LAYER_AGE_BUDGET_EXEMPT,
+    LAYER_KEY_CATALOGS,
     LAYER_MAX_DATA_AGE_DAYS,
     LAYER_MIN_KEYS,
     MAX_FAILED_LAYERS,
     PRODUCTION_LAYER_KEYS,
+    USABLE_PARTIAL_ESCALATION_RUNS,
     layer_expected_keys,
     missing_api_keys,
     setup_logging,
@@ -111,6 +114,7 @@ from pipeline.clean import (
     clean_weather,
     clean_worldbank,
 )
+from pipeline.grading import missing_catalog_keys, read_partial_streaks
 from pipeline.history import HistoryImportError, export_history, import_history
 from pipeline.query import captured_contract_tickers, read_prices
 from pipeline.results import FetchResult
@@ -175,6 +179,10 @@ _HARD_FAILURES: set[str] = set()
 _NO_PUBLICATION: set[str] = set()
 _STALE_LAST_KNOWN_GOOD: set[str] = set()
 _INCOMPLETE_KEY_COVERAGE: set[str] = set()
+# Above the floor, inside the age budget, short of the full catalog (A3 #300).
+# Not a hard failure: the layer rendered and last_success advanced. Carried
+# separately so the run summary can tally amber apart from green and red.
+_USABLE_PARTIAL: set[str] = set()
 
 
 def _mark_failed(
@@ -269,10 +277,10 @@ _DATE_COLUMNS = (
     # session is the curve's real observation date, and without it a
     # board-price layer reports a NULL observation and no measurable age.
     #
-    # It changes no recency verdict: forward_curve is deliberately absent
-    # from LAYER_MAX_DATA_AGE_DAYS (a curve dated by contract month stays
-    # "recent" for a year), so _check_layer_recency returns before reading
-    # this. It is here for the latency chain alone.
+    # It is also the date forward_curve's recency verdict is made on: the
+    # layer carries a LAYER_MAX_DATA_AGE_DAYS budget (A3 #300 §7) keyed to
+    # this session date, which is a board session on the same venue and
+    # cadence as prices. The contract_month column never dates anything.
     "observation_date",
 )
 
@@ -343,14 +351,19 @@ def _check_layer_recency(
 ) -> bool:
     """True if the layer's data is recent enough for 'success' to be honest.
 
-    Layers absent from LAYER_MAX_DATA_AGE_DAYS are not checked and always
-    pass — see the config block for why each exclusion is deliberate.
+    Every production layer is either budgeted in LAYER_MAX_DATA_AGE_DAYS or
+    listed with a reason in LAYER_AGE_BUDGET_EXEMPT — config.validate_age_budgets
+    hard-fails at import otherwise (A3 #300 §7). An exempt layer passes here
+    without reading a date; a layer in neither map can only be a test double.
 
     The counts are pass-through: both failure paths here run against a real
     payload, so they record what it contained rather than defaulting to zero.
     """
+    if layer in LAYER_AGE_BUDGET_EXEMPT:
+        return True
     budget = LAYER_MAX_DATA_AGE_DAYS.get(layer)
     if budget is None:
+        logger.debug("[%s] no recency budget and no exemption — not a production layer", layer)
         return True
 
     latest = _latest_observation_date(data)
@@ -411,6 +424,33 @@ def _mark_incomplete(
         logger.exception("Could not record incomplete freshness row for %s", layer)
 
 
+def _mark_usable_partial(
+    layer: str,
+    rows_fetched: int,
+    keys_returned: int,
+    keys_expected: int,
+    missing_keys: list[str],
+) -> None:
+    """Record a fresh, above-floor run that is short of the full catalog (A3 §3).
+
+    Advances last_success — the data is renderable and fresh — and is not a
+    hard failure. The shortfall travels as the status word, the coverage
+    pair and the named keys; save_freshness advances the streak that turns
+    a persistent partial into a catalog-drift alert.
+    """
+    _USABLE_PARTIAL.add(layer)
+    logger.warning(
+        "[%s] usable partial: %d/%d keys returned data, missing %s — fresh and "
+        "renderable, recording usable_partial",
+        layer, keys_returned, keys_expected, ", ".join(missing_keys),
+    )
+    save_freshness(
+        layer, rows_fetched=rows_fetched, status="usable_partial",
+        keys_returned=keys_returned, keys_expected=keys_expected,
+        missing_keys=missing_keys,
+    )
+
+
 def _write_pipeline_status(payload: dict) -> None:
     """Write the run summary JSON next to the DB (data/storage/ — gitignored).
 
@@ -447,18 +487,21 @@ def _empty_is_failure(layer: str, empty_fails: bool | None) -> bool:
 def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> bool:
     """Record freshness for a dict-of-frames layer; return overall success.
 
-    Three gates stand between a fetch and a stamped last_success:
+    The gates are the vocabulary's precedence (A3 #300 §4, pipeline/grading.py):
 
     1. Shape — the per-layer expected-count floor from LAYER_MIN_KEYS. A
        layer where only 1 of 13 keys returned data is an outage, not a
-       success, so below-floor runs are recorded as failed freshness (which
-       preserves last_success for staleness display). All-empty is recorded
-       as no-publication only for layers that can legitimately publish
-       nothing — see _empty_is_failure; critical layers never can.
+       success, so below-floor runs are recorded as `incomplete` (which
+       preserves last_success for staleness display); recency is not judged.
+       All-empty is recorded as no-publication only for layers that can
+       legitimately publish nothing — see _empty_is_failure; critical layers
+       never can.
     2. Recency — LAYER_MAX_DATA_AGE_DAYS (audit F3). Rows arriving is not
        the same as *new* rows arriving; a frozen upstream clears gate 1
-       every day forever.
-    3. Only then does the run count as a success.
+       every day forever. Past budget is `stale` even when also partial.
+    3. Coverage — a fresh run above the floor is `success` only when every
+       catalog key answered; short of that it is `usable_partial`, which
+       still advances last_success and still returns True.
 
     It also stamps the run clock's observation date on the way through. This
     is the only place in the pipeline that has both the cleaned frames and
@@ -501,6 +544,12 @@ def _finalize_layer(layer: str, data: dict, empty_fails: bool | None = None) -> 
         return False
     if not _check_layer_recency(layer, data, total_rows, returned, expected):
         return False
+    # Gate 3, coverage: the verdict is by count against the catalog (#182's
+    # denominator); the missing keys are named for the drift alert.
+    if returned is not None and expected is not None and returned < expected:
+        missing = missing_catalog_keys(LAYER_KEY_CATALOGS[layer], data)
+        _mark_usable_partial(layer, total_rows, returned, expected, missing)
+        return True
     save_freshness(
         layer, total_rows, keys_returned=returned, keys_expected=expected,
     )
@@ -919,8 +968,22 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
             total_14 += len(dest_df)
 
         if total_14 > 0:
-            results["crush_inspections"] = True
-            save_freshness("crush_inspections", total_14)
+            # Same shape → recency gates as every dict layer: the report is
+            # weekly and a frozen PDF link would otherwise stamp success
+            # forever (A3 #300 §7 made the budget universal).
+            # The inspections tables are the dated leg (week_ending); the
+            # annual crush frame has no date and rides along undated, so a
+            # run with crush rows but no inspections report cannot certify
+            # recency and grades failed rather than fresh.
+            frames = {
+                "crush": crush_df, "inspections": insp_df,
+                "port_flows": flows_df, "destinations": dest_df,
+            }
+            results["crush_inspections"] = _finalize_layer(
+                "crush_inspections",
+                {k: (v if v is not None else pd.DataFrame()) for k, v in frames.items()},
+                empty_fails=False,
+            )
         elif insp_result.status == "failed":
             logger.error("[Layer 14] Inspections failed: %s", insp_result.error)
             _mark_failed("crush_inspections")
@@ -940,8 +1003,9 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         if not conab_df.empty:
             conab_df = clean_conab(conab_df)
             save_brazil_estimates(conab_df)
-            results["conab"] = True
-            save_freshness("conab", len(conab_df))
+            # report_date is the file's publication date, so the universal
+            # recency gate (A3 #300 §7) is what notices a survey that stops.
+            results["conab"] = _finalize_layer("conab", {"national": conab_df}, empty_fails=True)
         else:
             # CONAB's file carries the whole survey history every fetch, so
             # an empty national frame means the download or the UF
@@ -1196,7 +1260,9 @@ def run(
             )
 
     # ── Final summary ────────────────────────────────────────────
-    succeeded = [name for name, ok in results.items() if ok]
+    usable_partial = sorted(_USABLE_PARTIAL)
+    # Green is full success only (A3 #300 §5); usable_partial is its own tally.
+    succeeded = [name for name, ok in results.items() if ok and name not in _USABLE_PARTIAL]
     no_publication = sorted(_NO_PUBLICATION)
     stale_last_known_good = sorted(_STALE_LAST_KNOWN_GOOD)
     incomplete_key_coverage = sorted(_INCOMPLETE_KEY_COVERAGE)
@@ -1213,6 +1279,10 @@ def run(
     logger.info("-" * 60)
     if succeeded:
         logger.info("Succeeded (%d/%d): %s", len(succeeded), len(results), ", ".join(succeeded))
+    if usable_partial:
+        logger.warning(
+            "Usable partial (%d/%d): %s", len(usable_partial), len(results), ", ".join(usable_partial),
+        )
     if disabled:
         logger.info("Disabled (%d/%d): %s", len(disabled), len(results), ", ".join(disabled))
     if no_publication:
@@ -1245,6 +1315,21 @@ def run(
     critical_failures = [
         name for name in CRITICAL_LAYERS if name in results and not results[name]
     ]
+    # The streak save_freshness advanced this run, read back so the alerter
+    # sees one number: which partials have persisted long enough to be
+    # catalog drift (A3 #300 §6), and which keys each is missing.
+    streaks = read_partial_streaks()
+    usable_partial_detail = {
+        name: {
+            "missing_keys": streaks[name].missing_keys,
+            "consecutive_runs": streaks[name].consecutive_runs,
+        }
+        for name in usable_partial if name in streaks
+    }
+    catalog_drift = sorted(
+        name for name in usable_partial
+        if name in streaks and streaks[name].escalates(USABLE_PARTIAL_ESCALATION_RUNS)
+    )
     _write_pipeline_status({
         "mode": mode,
         "layers_requested": list(selected),
@@ -1259,7 +1344,10 @@ def run(
             "no_publication": no_publication,
             "stale_last_known_good": stale_last_known_good,
             "incomplete_key_coverage": incomplete_key_coverage,
+            "usable_partial": usable_partial,
+            "catalog_drift": catalog_drift,
         },
+        "usable_partial_detail": usable_partial_detail,
     })
 
     # ── Exit code ────────────────────────────────────────────────

@@ -4,7 +4,7 @@ Requirement 1 asks for a versioned protocol with instructions, definitions,
 confidentiality boundaries and success criteria. It is *generated* rather than
 written, and that is the whole point: a protocol living in a markdown file drifts
 from the enum the metrics are computed over, and the drift is invisible because
-both halves keep working. A trader told to spend ten minutes on the morning brief
+both halves keep working. A participant told to spend ten minutes on the morning brief
 while ``TaskId.MORNING_BRIEF.target_minutes`` says fifteen produces a timeliness
 score that means nothing, and nothing in either file would ever say so.
 
@@ -33,6 +33,7 @@ from analysis.trial.domain import (
     Severity,
     TaskId,
 )
+from analysis.trial.floor import floor_spec, real_decision_tasks
 
 __all__ = ["protocol_markdown", "protocol_version", "task_reference", "write_protocol"]
 
@@ -79,14 +80,19 @@ def protocol_markdown() -> str:
 
     version = protocol_version()
     window = getattr(config, "TRIAL_WINDOW_TRADING_DAYS", 30)
-    min_traders = getattr(config, "TRIAL_MIN_TRADERS", 2)
+    min_participants = getattr(config, "TRIAL_MIN_PARTICIPANTS", 2)
     min_obs = getattr(config, "TRIAL_MIN_OBSERVATIONS", 10)
+    floor = floor_spec()
+    real_tasks = real_decision_tasks()
+    real_task_refs = ", ".join(
+        f"`{task.value}` (task {list(TaskId).index(task) + 1})" for task in real_tasks
+    )
     scale = getattr(config, "TRIAL_CONFIDENCE_SCALE", (1, 2, 3, 4, 5))
     record_dir = _repo_relative(getattr(config, "TRIAL_RECORD_DIR", "data/reference/trial"))
     private_dir = _repo_relative(getattr(config, "TRIAL_PRIVATE_OUTPUT_DIR", "data/workspace/trial"))
 
     lines: list[str] = [
-        f"# Mirror Market — trader validation protocol v{version}",
+        f"# Mirror Market — participant validation protocol v{version}",
         "",
         "*This document is generated from `analysis/trial/` by "
         "`python scripts/trial.py protocol`. Do not edit it by hand: the task "
@@ -101,27 +107,68 @@ def protocol_markdown() -> str:
         "spreadsheet use without increasing decision risk?**",
         "",
         "Two halves, and both must hold. A product that halves the lookups while "
-        "producing one wrong number a trader would have sized off has failed, and "
+        "producing one wrong number a participant would have sized off has failed, and "
         "the metrics are built so that it cannot pass by trading one against the "
         "other — correctness rates are graded separately from lookup counts and "
         "neither is blended into a single score.",
         "",
+        "**The comparison baseline is self-reported.** There is no instrumented "
+        "terminal session to measure against and none is being built; the "
+        "`external_lookups_per_task` metric — every screen switch a participant "
+        "logs, with the question that forced it — is the baseline and the "
+        "headline number at once.",
+        "",
+        "## Who takes part — a participant",
+        "",
+        "A **participant** is a **physical buyer**: someone who prices or books "
+        "physical soy product (beans, meal, oil) at least weekly — procurement, "
+        "origination, or the physical desk at an importer, crusher, feed miller "
+        "or trading house. Futures-only traders, brokers and analysts are not "
+        "participants. Participation is unpaid in both directions; a participant "
+        "gets a private desk edition for the trial and six months after it, and a "
+        "vote on the first-screen contract.",
+        "",
         "## Shape of the trial",
         "",
         f"- **{window} trading days.**",
-        f"- **At least {min_traders} professional soy traders.** One trader's habits are "
-        "not a finding.",
-        f"- **At least {min_obs} sessions** before any metric is graded at all; below "
-        "that the metric reports `insufficient` rather than a number.",
+        f"- **At least {min_participants} participants (physical buyers) at the "
+        "decision floor** (below). One participant's habits are not a finding.",
+        f"- **At least {min_obs} observations** before any single metric is graded; "
+        "below that the metric reports `insufficient` rather than a number.",
+        "- **Sessions are captured on a form and transcribed by the desk.** "
+        "Participants never touch the repository: after each decision they "
+        "complete a ~2-minute form (≤15 minutes a day), and once a week the desk "
+        "transcribes the export with `python scripts/trial.py transcribe "
+        "<export.csv>` into the private record — through the same validation a "
+        "hand-written record gets. One 30-minute weekly debrief.",
         "- **Ten recurring tasks**, listed below. Each is framed as a *decision*, "
-        "not as a page to look at: the test is whether the trader can answer the "
+        "not as a page to look at: the test is whether the participant can answer the "
         "question, not whether the page loaded.",
         "- **One session record per task attempt**, including the attempts that "
         "fail. An abandoned session is data; a session nobody logged is not.",
         "- **One day observation per trading day**, whether or not anyone ran a "
         "session. This is the only way availability and deployment reliability get "
         "measured, because the days the product broke are exactly the days nobody "
-        "logs a session.",
+        "logs a session. It also carries the release stamp a transcribed session "
+        "is pinned to, so a day without one cannot be transcribed.",
+        "",
+        "## The decision floor — what \"means anything\"",
+        "",
+        "Per participant, over the window:",
+        "",
+        f"- **at least {floor.sessions} logged sessions**,",
+        f"- **covering at least {floor.tasks} of the ten tasks**,",
+        f"- **including at least {floor.real_decisions} real cargo/basis decisions** — "
+        f"completed sessions in {real_task_refs}. An abandoned session in one of "
+        "those tasks is a session, not a decision.",
+        "",
+        f"Trial-wide: **at least {floor.required_participants} participants at the "
+        "floor**, else the verdict is `insufficient` — no verdict at all. A "
+        "participant below the floor is **reported, not graded**: their standing "
+        "and each shortfall appear in the private weekly review, and nothing of "
+        "theirs is averaged into a verdict. The floor supersedes the v1 "
+        "ten-sessions-total rule; it lives in `config.TRIAL_DECISION_FLOOR` and "
+        "`config.TRIAL_REAL_DECISION_TASKS`.",
         "",
         "## The ten tasks",
         "",
@@ -147,7 +194,7 @@ def protocol_markdown() -> str:
         "",
         "| Field | Meaning |",
         "|---|---|",
-        "| trader | Your handle. Never a full name. See confidentiality below. |",
+        "| participant | The participant's handle. Never a full name. See confidentiality below. |",
         "| task | One of the ten above. |",
         "| trading_day / start / end | The session's own clock. Timestamps must "
         "carry a timezone. |",
@@ -172,7 +219,7 @@ def protocol_markdown() -> str:
         "Every time you go outside Mirror Market to finish a task, log it — with "
         "**the question the product could not answer**. That question is the single "
         "most valuable output of this trial, and the record refuses to be saved "
-        "without one. A lookup count tells us a trader left; the question tells us "
+        "without one. A lookup count tells us a participant left; the question tells us "
         "why, and it is the input to the backlog.",
         "",
         "Tools: " + ", ".join(f"`{tool.value}`" for tool in ExternalTool) + ". Use "
@@ -208,15 +255,26 @@ def protocol_markdown() -> str:
         "",
         "## Confidentiality — binding",
         "",
-        "- **Do not publish trader names, positions, counterparties, contact notes "
-        "or commercial decisions.** Anywhere, in any form.",
-        "- Use a **handle**, not a name, in the `trader` field. Three characters "
+        "- **Every participant signs a one-page participation letter** before their "
+        "first session. It states what is recorded, where it lives, that only the "
+        "aggregate projection is ever shared, and their right to withdraw and have "
+        "their records deleted. No NDA. The letter sits on top of the enforced "
+        "handle-only, gitignored, aggregate-projection regime below; it does not "
+        "replace it.",
+        "- **The design partner** — the warmest recruit — decides the first-screen "
+        "contract with the desk before the trial starts. That is onboarding, not a "
+        "different confidentiality standing: the same letter, the same handle, the "
+        "same record.",
+        "- **Do not publish participant names, firms, positions, counterparties, "
+        "contact notes or commercial decisions.** Anywhere, in any form — including "
+        "the public issue tracker, which records roles only.",
+        "- Use a **handle**, not a name, in the `participant` field. Three characters "
         "minimum. Pick something that is not a substring of ordinary English — the "
         "leak guard searches free text for it.",
         f"- Trial records live in `{record_dir}` and are **gitignored**. They are "
         "YAML files, not database rows, specifically because every table in this "
         "project round-trips through `data/history/*.csv`, which is committed to a "
-        "public repository. A trial table would publish trader identity by "
+        "public repository. A trial table would publish participant identity by "
         "construction.",
         f"- Generated private output goes to `{private_dir}` — outside `docs/`, and "
         "absent from the site promotion contract, so it can never reach GitHub "
@@ -239,17 +297,19 @@ def protocol_markdown() -> str:
         "",
         "A metric between the two bars is `hold`. Two overrides sit above the "
         "arithmetic: **any open blocker is a no-go** whatever the rates say, and a "
-        f"window with fewer than {min_traders} traders or {min_obs} sessions returns "
-        "`insufficient` rather than a verdict.",
+        f"window with fewer than {min_participants} participants at the decision "
+        "floor returns `insufficient` rather than a verdict.",
         "",
         "## Weekly and final output",
         "",
-        "- **Weekly**: what worked, what failed, the top unmet questions, the "
-        "metric trend against the prior week, recommended changes, and a go/no-go "
-        "for wider use. `python scripts/trial.py review`.",
+        "- **Weekly**: each participant's standing against the decision floor, "
+        "what worked, what failed, the top unmet questions, the metric trend "
+        "against the prior week, recommended changes, and a go/no-go for wider "
+        "use — read against the floor, so it says `insufficient` until the "
+        "window holds enough. `python scripts/trial.py review`.",
         f"- **Final**: a {window}-day scorecard across precision, accuracy, "
         "reliability, timeliness, physical usefulness, futures usefulness, "
-        "opportunity usefulness, UX and trader trust. Every dimension states the "
+        "opportunity usefulness, UX and participant trust. Every dimension states the "
         "arithmetic behind it, and a dimension without enough observations scores "
         "nothing at all rather than a default. `python scripts/trial.py scorecard`.",
         "",
@@ -271,8 +331,8 @@ def protocol_markdown() -> str:
         "`python scripts/trial.py drills`. They touch no production database, write "
         "nothing into `docs/`, and make no network call.",
         "",
-        "Each drill carries a **trader prompt**: show the degraded surface to a "
-        "trader who has not been told what broke, and record what they can tell. "
+        "Each drill carries a **participant prompt**: show the degraded surface to a "
+        "participant who has not been told what broke, and record what they can tell. "
         "That answer is the drill's real result; the assertions only prove the "
         "mechanism fired.",
         "",

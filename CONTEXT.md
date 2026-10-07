@@ -73,6 +73,6 @@ _Avoid_: NDA (a vendor instrument this effort does not use), consent form
 
 ## Flagged ambiguities
 
-- "trader" in `docs/trial/PROTOCOL.md` and `analysis/trial/` vs "physical buyer" in the mission — resolved 2026-10-07 (A6): the canonical term is **participant**, a physical buyer; the code wording is a pending backlog change.
+- "trader" in `docs/trial/PROTOCOL.md` and `analysis/trial/` vs "physical buyer" in the mission — resolved 2026-10-07 (A6): the canonical term is **participant**, a physical buyer; code and protocol v2 follow it (#412).
 
 - "belt" was about to mean an area outline (2026-10-05 God's Eye View map) — resolved: it keeps its existing meaning (set of pins); the outline is a **footprint**.

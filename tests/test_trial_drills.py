@@ -86,13 +86,13 @@ def test_all_five_drills_pass_against_the_current_grading_code() -> None:
 
 def test_every_drill_records_what_it_expected_and_what_it_saw() -> None:
     # A drill result that only says "pass" is unreadable six weeks later, and a
-    # trader is meant to be shown the degraded product and asked what they can
+    # participant is meant to be shown the degraded product and asked what they can
     # tell — which needs the prompt.
     for result in run_all_drills():
         assert result.simulated.strip()
         assert result.expected.strip()
         assert result.observed.strip()
-        assert result.trader_prompt.strip()
+        assert result.participant_prompt.strip()
         assert result.verdict == "pass"
 
 

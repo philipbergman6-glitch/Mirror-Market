@@ -56,8 +56,11 @@ def format() -> str:  # noqa: A001 — module-scope name, no conflict with built
             if coverage:
                 returned, expected = coverage
                 level = "WARNING" if status in {"failed", "stale", "incomplete"} else "NOTE"
+                # usable_partial (A3 #300): fresh, rendered, short of the
+                # catalog — a note that says which state it is, never a warning.
+                suffix = " — usable partial, fresh" if status == "usable_partial" else ""
                 layer_warnings.append(
-                    f"  {level}: {layer} returned {returned} of {expected} keys"
+                    f"  {level}: {layer} returned {returned} of {expected} keys{suffix}"
                 )
 
             # A failed latest attempt means the briefing is showing whatever

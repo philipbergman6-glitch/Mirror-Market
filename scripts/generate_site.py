@@ -194,26 +194,63 @@ def _render_origins(output_dir: Path, nav: list[dict], *, ctx, now, markets, **_
     database through one connection — and, more importantly, so a price this
     page ranks on is the same row the owning market page renders.
     """
+    from analysis.futures.privacy import AUDIENCE_PUBLIC
     from app.origins_page import build_view
+
+    def render(view: dict, root: str) -> str:
+        return _env().get_template("origins.html.j2").render(
+            origins=view,
+            root=root,
+            market_nav=nav_items_at(nav, root),
+            current_page="origins",
+            current_market=None,
+            day_line=now.strftime("%A %d %B %Y").upper(),
+            generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+            generated_at_iso=now.isoformat(),
+        )
 
     relpath = "origins.html"
     root = relative_root(relpath)
     # S2 #374 §7.3: the hazard views the ledger rows carry, computed once on
     # the shared context and handed over — this page never builds a ledger row.
-    view = build_view(ctx.conn, today=now.date(), hazards=ledger_hazard_views(markets, ctx))
-    html = _env().get_template("origins.html.j2").render(
-        origins=view,
-        root=root,
-        market_nav=nav_items_at(nav, root),
-        current_page="origins",
-        current_market=None,
-        day_line=now.strftime("%A %d %B %Y").upper(),
-        generated_at=now.strftime("%Y-%m-%d %H:%M UTC"),
-        generated_at_iso=now.isoformat(),
-    )
-    path = _write(output_dir, relpath, html)
+    hazards = ledger_hazard_views(markets, ctx)
+    # The public edition reads the committed assumption tier only — policy
+    # rates — so it is blocked by design on every machine, the desk's included
+    # (B12 #409). A costed chain renders only in the private edition below.
+    view = build_view(ctx.conn, today=now.date(), audience=AUDIENCE_PUBLIC, hazards=hazards)
+    path = _write(output_dir, relpath, render(view, root))
     _archive_origin_rankings(view)
+    _write_private_origins(ctx, now, render, hazards)
     return path
+
+
+def _write_private_origins(ctx, now, render, hazards=None) -> None:
+    """The desk's costed edition. Isolated: it must never fail the public page.
+
+    Reads the private assumption tier (``data/reference/assumptions/private/``,
+    gitignored) on top of the policy rates, and writes to ``data/workspace/``
+    through :func:`app.origins_page.private_origins_target`, the same path
+    guard the private workstation and opportunity editions use, so a moved
+    constant cannot land a broker's freight indication inside ``docs/``.
+
+    It is **not archived**: ``origin_rankings`` round-trips through
+    ``data/history/*.csv``, which is committed, so an archived private ranking
+    would publish the desk's numbers by construction (invariant 4).
+    """
+    from analysis.futures.privacy import AUDIENCE_PRIVATE
+    from app.origins_page import build_view, private_origins_target
+
+    try:
+        target = private_origins_target()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        view = build_view(ctx.conn, today=now.date(), audience=AUDIENCE_PRIVATE, hazards=hazards)
+        # Root is "" rather than a computed prefix: the private file does not
+        # sit inside docs/, so its relative links back to the public site would
+        # be wrong at any depth.
+        target.write_text(render(view, ""), encoding="utf-8")
+        log.info("wrote the private origins edition to %s", target)
+    except Exception:  # noqa: BLE001 — the workspace must never fail the site
+        log.warning("could not write the private origins edition", exc_info=True)
 
 
 def _archive_origin_rankings(view: dict) -> None:

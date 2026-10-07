@@ -120,6 +120,11 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
     ("stale", "Stale",
      "A layer past its publishing budget (`LAYER_MAX_DATA_AGE_DAYS`). Its last rows still "
      "render, dated; nothing is padded forward."),
+    ("partial", "Partial",
+     "A layer that answered fresh and above its floor but short of its full catalog "
+     "(one region or contract of many missing). It renders and counts as current data, "
+     "tallied amber on the masthead apart from on-schedule; the Keys column names the "
+     "shortfall."),
     ("d_minus_1", "D−1",
      "Yesterday's session. The fastest path from a CBOT close to this page is 1 h 15 m, "
      "floored by the settlement guard; nothing here is intraday."),

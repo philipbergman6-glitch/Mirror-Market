@@ -84,7 +84,7 @@ def test_an_untracked_file_also_makes_the_stamp_dirty(tmp_path: Path) -> None:
 
 
 def test_no_repository_reports_unknown_and_dirty_rather_than_raising(tmp_path: Path) -> None:
-    # A trader mid-session must not lose a record because git is unavailable —
+    # A participant mid-session must not lose a record because git is unavailable —
     # and "unknown" must never be confusable with a commit, nor reproducible.
     sha, dirty = git_code_revision(tmp_path / "not-a-repo")
     assert sha == UNKNOWN_REVISION
@@ -194,7 +194,7 @@ def test_the_check_serialises_both_stamps_so_the_comparison_is_inspectable() -> 
 
 
 def test_a_stamp_matches_on_code_and_data_and_ignores_when_it_was_taken() -> None:
-    # Two traders stamping the same edition an hour apart stamped one edition.
+    # Two participants stamping the same edition an hour apart stamped one edition.
     from datetime import datetime, timezone
 
     later = replace(CLEAN_STAMP, captured_at=datetime(2027, 1, 1, tzinfo=timezone.utc))

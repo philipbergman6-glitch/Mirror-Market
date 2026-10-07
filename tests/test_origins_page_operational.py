@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 from bs4 import BeautifulSoup
 
+from analysis.futures.privacy import AUDIENCE_PRIVATE
 from analysis.origins.assumptions import AssumptionSet, load_assumptions
 from app.origins_page import build_view
 from pipeline import schema
@@ -133,7 +134,9 @@ def test_the_declared_leg_with_no_price_series_says_so_rather_than_listing_input
 @pytest.fixture
 def complete(monkeypatch):
     monkeypatch.setenv("MIRROR_ASSUMPTIONS_DIR", str(FIXTURE_SET))
-    return load_assumptions(FIXTURE_SET)
+    # The desk stack sits in the fixture's private/ tier; only the private
+    # audience reads it (B12 #409), exactly as the desk edition does.
+    return load_assumptions(FIXTURE_SET, audience=AUDIENCE_PRIVATE)
 
 
 def test_every_supported_route_reads_ready_once_its_inputs_are_entered(db, complete):
