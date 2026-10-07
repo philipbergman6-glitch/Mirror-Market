@@ -1,0 +1,36 @@
+footprint,iso_3166_2,ne_adm1_code,wikidata_id,boundary_source
+US Midwest (Iowa),US-IA,USA-3529,Q1546,natural_earth_5.1.2
+US Illinois,US-IL,USA-3546,Q1204,natural_earth_5.1.2
+US Nebraska,US-NE,USA-3532,Q1553,natural_earth_5.1.2
+Brazil Mato Grosso,BR-MT,BRA-602,Q42824,natural_earth_5.1.2
+Brazil Parana,BR-PR,BRA-613,Q15499,natural_earth_5.1.2
+Brazil Rio Grande do Sul,BR-RS,BRA-612,Q40030,natural_earth_5.1.2
+Argentina Pampas,AR-B,ARG-1295,Q44754,natural_earth_5.1.2
+Argentina Pampas,AR-S,ARG-1310,Q44823,natural_earth_5.1.2
+Argentina Cordoba,AR-X,ARG-1299,Q44759,natural_earth_5.1.2
+Paraguay Alto Parana,PY-10,PRY-616,Q682654,natural_earth_5.1.2
+Paraguay Alto Parana,PY-7,PRY-620,Q222564,natural_earth_5.1.2
+Paraguay Alto Parana,PY-14,PRY-619,Q279085,natural_earth_5.1.2
+Argentina Buenos Aires (sunflower),AR-B,ARG-1295,Q44754,natural_earth_5.1.2
+India Madhya Pradesh,IN-MP,IND-3261,Q1188,natural_earth_5.1.2
+India Maharashtra,IN-MH,IND-2447,Q1191,natural_earth_5.1.2
+China Heilongjiang,CN-HL,CHN-1839,Q19206,natural_earth_5.1.2
+France Champagne (Grand Est),FR-08,FRA-5268,Q3164,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-10,FRA-5270,Q3194,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-51,FRA-5323,Q12594,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-52,FRA-5300,Q12607,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-54,FRA-5325,Q12626,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-55,FRA-5326,Q12631,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-57,FRA-5328,Q12652,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-67,FRA-5273,Q12717,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-68,FRA-5296,Q12722,natural_earth_5.1.2 dissolve region_cod=FR-GES
+France Champagne (Grand Est),FR-88,FRA-5355,Q3105,natural_earth_5.1.2 dissolve region_cod=FR-GES
+Germany Mecklenburg-Vorpommern,DE-MV,DEU-3488,Q1196,natural_earth_5.1.2
+Romania Baragan (Danube plain),RO-BR,ROU-313,Q188503,natural_earth_5.1.2
+Romania Baragan (Danube plain),RO-CT,ROU-133,Q188505,natural_earth_5.1.2
+Romania Baragan (Danube plain),RO-IL,ROU-132,Q193044,natural_earth_5.1.2
+Romania Baragan (Danube plain),RO-CL,ROU-129,Q188948,natural_earth_5.1.2
+South Africa Free State,ZA-FS,ZAF-1206,Q160284,natural_earth_5.1.2
+South Africa Mpumalanga,ZA-MP,ZAF-1209,Q132410,natural_earth_5.1.2
+Nigeria Benue,NG-BE,NGA-2846,Q429908,natural_earth_5.1.2
+Nigeria Kaduna,NG-KD,NGA-2864,Q878284,natural_earth_5.1.2

@@ -63,8 +63,8 @@ BOXES: dict[str, tuple[float, float, float, float]] = {
     "south_america": (-6.5, -67.0, -42.0, -47.0),  # MT, PR, RS, Pampas, Córdoba, BA, E. Paraguay
     "europe": (55.5, 2.5, 43.0, 30.5),           # Grand Est, Mecklenburg-Vorpommern, Bărăgan
     "india": (27.5, 72.0, 15.0, 83.5),           # Madhya Pradesh, Maharashtra
-    "china": (54.0, 121.0, 43.0, 135.5),         # Heilongjiang
-    "southern_africa": (-24.0, 24.0, -31.0, 32.5),  # Free State, Mpumalanga
+    "china": (54.5, 120.5, 42.5, 136.0),         # Heilongjiang
+    "southern_africa": (-23.5, 23.5, -31.5, 33.0),  # Free State, Mpumalanga
     "west_africa": (12.0, 5.5, 6.0, 10.5),       # Benue, Kaduna
 }
 
@@ -197,8 +197,8 @@ def _fetch(client, box: str, years: tuple[int, int], month: int | None, root: Pa
 
 
 def download(boxes: list[str]) -> None:
-    from dotenv import load_dotenv
     import cdsapi
+    from dotenv import load_dotenv
 
     load_dotenv(PROJECT_ROOT / ".env")
     key = os.environ.get("CDSAPI_KEY")

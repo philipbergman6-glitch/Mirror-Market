@@ -424,6 +424,98 @@ GROWING_REGIONS = {
     "Nigeria Kaduna":             {"lat": 10.52,  "lon": 7.43},    # Nigeria soy belt
 }
 
+# ---------------------------------------------------------------------------
+# Footprint weather — the area each crop region's forecast is averaged over
+# (docs/specs/footprint-weather.md §4.1). Keyed by the GROWING_REGIONS name so
+# every weather_regions list keeps working; `units` are ISO 3166-2 codes joined
+# to Natural Earth admin-1 and verified against data/reference/footprints/
+# crosswalk.csv. G-FR dissolves Grand Est's ten departments. `crop` is the
+# SPAM 2020 crop code that weights the area: SOYB soy, SUNF sunflower, RAPE
+# rapeseed.
+# ---------------------------------------------------------------------------
+FOOTPRINTS = {
+    "US Midwest (Iowa)": {
+        "place_id": "G-IA", "label": "Iowa", "crop": "SOYB",
+        "units": ("US-IA",),
+    },
+    "US Illinois": {
+        "place_id": "G-IL", "label": "Illinois", "crop": "SOYB",
+        "units": ("US-IL",),
+    },
+    "US Nebraska": {
+        "place_id": "G-NE", "label": "Nebraska", "crop": "SOYB",
+        "units": ("US-NE",),
+    },
+    "Brazil Mato Grosso": {
+        "place_id": "G-MT", "label": "Mato Grosso", "crop": "SOYB",
+        "units": ("BR-MT",),
+    },
+    "Brazil Parana": {
+        "place_id": "G-PR", "label": "Paraná", "crop": "SOYB",
+        "units": ("BR-PR",),
+    },
+    "Brazil Rio Grande do Sul": {
+        "place_id": "G-RS", "label": "Rio Grande do Sul", "crop": "SOYB",
+        "units": ("BR-RS",),
+    },
+    "Argentina Pampas": {
+        "place_id": "G-PAM", "label": "Pampas (Buenos Aires + Santa Fe)", "crop": "SOYB",
+        "units": ("AR-B", "AR-S"),
+    },
+    "Argentina Cordoba": {
+        "place_id": "G-COR", "label": "Córdoba", "crop": "SOYB",
+        "units": ("AR-X",),
+    },
+    "Paraguay Alto Parana": {
+        "place_id": "G-PY", "label": "Eastern Paraguay", "crop": "SOYB",
+        "units": ("PY-10", "PY-7", "PY-14"),
+    },
+    "Argentina Buenos Aires (sunflower)": {
+        "place_id": "G-BAS", "label": "Buenos Aires", "crop": "SUNF",
+        "units": ("AR-B",),
+    },
+    "India Madhya Pradesh": {
+        "place_id": "G-MP", "label": "Madhya Pradesh", "crop": "SOYB",
+        "units": ("IN-MP",),
+    },
+    "India Maharashtra": {
+        "place_id": "G-MH", "label": "Maharashtra", "crop": "SOYB",
+        "units": ("IN-MH",),
+    },
+    "China Heilongjiang": {
+        "place_id": "G-HL", "label": "Heilongjiang", "crop": "SOYB",
+        "units": ("CN-HL",),
+    },
+    "France Champagne (Grand Est)": {
+        "place_id": "G-FR", "label": "Grand Est", "crop": "RAPE",
+        "units": ("FR-GES",),
+    },
+    "Germany Mecklenburg-Vorpommern": {
+        "place_id": "G-DE", "label": "Mecklenburg-Vorpommern", "crop": "RAPE",
+        "units": ("DE-MV",),
+    },
+    "Romania Baragan (Danube plain)": {
+        "place_id": "G-RO", "label": "Bărăgan", "crop": "RAPE",
+        "units": ("RO-BR", "RO-CT", "RO-IL", "RO-CL"),
+    },
+    "South Africa Free State": {
+        "place_id": "G-FS", "label": "Free State", "crop": "SOYB",
+        "units": ("ZA-FS",),
+    },
+    "South Africa Mpumalanga": {
+        "place_id": "G-MPU", "label": "Mpumalanga", "crop": "SOYB",
+        "units": ("ZA-MP",),
+    },
+    "Nigeria Benue": {
+        "place_id": "G-BEN", "label": "Benue", "crop": "SOYB",
+        "units": ("NG-BE",),
+    },
+    "Nigeria Kaduna": {
+        "place_id": "G-KAD", "label": "Kaduna", "crop": "SOYB",
+        "units": ("NG-KD",),
+    },
+}
+
 WEATHER_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum"
 
 # ---------------------------------------------------------------------------
