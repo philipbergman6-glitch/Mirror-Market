@@ -48,7 +48,6 @@ from datetime import date, timedelta
 from typing import Any
 
 from analysis.trial.backlog import BacklogSet, draft_backlog
-from analysis.trial.floor import FloorResult, decision_floor
 from analysis.trial.domain import (
     AUDIENCE_AGGREGATE,
     AUDIENCE_PRIVATE,
@@ -59,6 +58,7 @@ from analysis.trial.domain import (
     TaskId,
     TrialError,
 )
+from analysis.trial.floor import FloorResult, decision_floor
 from analysis.trial.metrics import (
     STATUS_GO,
     STATUS_HOLD,

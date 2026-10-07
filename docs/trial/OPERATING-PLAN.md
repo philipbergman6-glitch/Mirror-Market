@@ -49,14 +49,24 @@ against the next release (Fri 2026-10-09) or task 4 scores nothing.
 
 ## Who
 
-Minimum two participants (physical buyers) (`config.TRIAL_MIN_PARTICIPANTS = 2`). What
-"professional" has to mean for a finding to count:
+Minimum two **participants** at the decision floor (`config.TRIAL_MIN_PARTICIPANTS = 2`;
+terms decided by A6, #303). A participant is a **physical buyer**:
 
-- prices, hedges or executes physical soybean, meal or oil business as their job;
+- prices or books physical soybean, meal or oil product at least weekly —
+  procurement, origination, or the physical desk at an importer, crusher, feed
+  miller or trading house; futures-only traders, brokers and analysts do not
+  qualify;
 - currently pays for at least one of the tools this product claims to displace
   (terminal, broker portal, subscription assessment) — otherwise the external
   lookup count measures habit rather than substitution;
-- can commit ~45 min/day for six weeks.
+- can commit ≤15 min/day of form-filling plus one 30-min weekly debrief.
+
+Unpaid in both directions. They get a private desk edition for the trial and six
+months after, and a vote on the first-screen contract (A12); the warmest recruit
+is the **design partner** who settles that contract before day 1. Each signs a
+one-page **participation letter** (what is recorded, where it lives, aggregate
+only is shared, right to withdraw and be deleted). No NDA. Recruitment is A15
+(#411); names and firms never appear on the tracker.
 
 They must be **independent of each other** — same desk is acceptable, same book
 is not, because two participants reading one position produce one opinion twice.
@@ -83,11 +93,18 @@ Straight from the protocol's cadences, per participant per week:
 
 Task 4 is event-driven (day 16 only). Task 8 is the five drills, below.
 
-Over six weeks and two participants that is roughly 230 sessions against a floor of
-10 — the floor is not the binding constraint, attendance is. **A missed day is
-recorded as a missed day**; it is never backfilled from memory, because a
-session reconstructed after the fact cannot honestly report its own external
-lookups.
+Over six weeks that is roughly 115 sessions per participant against the
+**decision floor** of 20 sessions / 5 tasks / 8 real decisions per participant
+(`config.TRIAL_DECISION_FLOOR`) — the floor is not the binding constraint,
+attendance is. **A missed day is recorded as a missed day**; it is never
+backfilled from memory, because a session reconstructed after the fact cannot
+honestly report its own external lookups.
+
+Sessions are captured on a ~2-minute form and transcribed weekly by the desk
+with `python scripts/trial.py transcribe <export.csv>`; participants never touch
+the repository. A transcribed session takes its release stamp from that day's
+`trial.py day` observation, so **the day record must exist before the week's
+transcription** or those rows are refused.
 
 ## Task 9 — random audits
 
@@ -210,5 +227,6 @@ usefulness, futures usefulness, opportunity usefulness, UX, participant trust �
 stating its own arithmetic, each scoring nothing rather than a default where the
 observations are short. Then the go/hold/no-go against the $20,000/year
 single-client question, with the two overrides applied: an open blocker is a
-no-go, and fewer than 2 participants or 10 sessions returns `insufficient` rather
-than a verdict.
+no-go, and fewer than 2 participants at the decision floor returns
+`insufficient` rather than a verdict. A participant below the floor is listed
+in the private review with each shortfall — reported, not graded.
