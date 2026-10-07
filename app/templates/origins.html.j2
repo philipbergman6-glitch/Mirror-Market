@@ -10,11 +10,17 @@
   static, so every offered window was costed at build time. Sections that vary
   with the window carry `data-window`; sections that do not (crush,
   counterparties, inputs) are rendered once.
+
+  Both editions render from this one file (B12 #409). The PRIVATE edition is
+  built from the desk's own assumption tier and written outside docs/; the
+  public build's context never contains those entries at all, so a forgotten
+  `{% if %}` here cannot leak a freight indication. `v.is_private` only
+  labels the edition.
 #}
 {% import 'blocks/_macros.html.j2' as f %}
 {% set v = origins %}
 
-{% block title %}Mirror Market — Origin Comparison{% endblock %}
+{% block title %}Mirror Market — Origin Comparison{% if v.is_private %} (private){% endif %}{% endblock %}
 
 {% block brand %}<h1>Mirror<br><em>Origins</em></h1>{% endblock %}
 
@@ -22,11 +28,14 @@
     <div class="day">{{ day_line }}</div>
     <div>Generated {{ generated_at }}</div>
     <div>Landed cost method v{{ v.method_version }} · assumptions {{ v.assumption_set_id }}</div>
-    <div>all figures USD/MT</div>
+    <div>all figures USD/MT · {% if v.is_private %}PRIVATE EDITION — not published{% else %}public edition · policy rates only{% endif %}</div>
 {% endblock %}
 
 {% block page_css %}
 {% include '_market_css.html.j2' %}
+
+/* ---- private banner: this edition must never be mistaken for the public one ---- */
+.private-banner { background: #E8C983; color: #4A3608; border-radius: 3px; padding: 10px 14px; margin: 14px 0 0; font-size: 13px; font-weight: 500; }
 
 /* ---- selector bar ----
    Two controls, and the page states what they can and cannot offer. A static
@@ -112,6 +121,16 @@
   .selectors { gap: 12px; }
   .sel-group { gap: 6px; }
 }
+{% endblock %}
+
+{% block prenav %}
+{% if v.is_private %}
+<div class="private-banner">
+  PRIVATE EDITION — written outside <code>docs/</code> and gitignored. It is costed from the
+  desk's own assumption tier (<code>data/reference/assumptions/private/</code>): broker
+  indications, cost of funds, quality differentials, each with its owner. Do not publish this file.
+</div>
+{% endif %}
 {% endblock %}
 
 {% block subnav %}

@@ -43,27 +43,50 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import config  # noqa: E402
+from analysis.futures.privacy import AUDIENCE_PRIVATE  # noqa: E402
 from analysis.origins.assumptions import (  # noqa: E402
+    DESK_COMPONENTS,
+    PRIVATE_SUBDIR,
     REQUIRED_UNIT,
     AssumptionError,
+    AssumptionSet,
     load_assumptions,
     parse_assumption,
+    private_assumptions_dir,
 )
 from analysis.origins.domain import Confidence, CostComponent, ShipmentWindow  # noqa: E402
 
-# Where a component's entries are written when --file is not given. Keeping
-# policy rates out of the freight file matters: they have different lifetimes
-# and different provenance, and a reviewer should be able to see the freight
-# file's whole contents at once.
+# Where a component's entries are written when --file is not given. Two
+# things are decided here. Policy rates stay out of the freight file because
+# they have different lifetimes and provenance, and a reviewer should see the
+# freight file's whole contents at once. And every DESK component is routed
+# under private/ — the gitignored tier — because an entry carries the owner's
+# email and the broker in `basis`, and a tracked file would publish both on
+# the next push (B12 #409). `_target_file` refuses to route a desk component
+# anywhere else, --file included.
 DEFAULT_FILE_BY_COMPONENT = {
     CostComponent.IMPORT_DUTY: "china_import_policy.yml",
     CostComponent.IMPORT_VAT: "china_import_policy.yml",
-    CostComponent.PROCESSING_COST: "crush_plant.yml",
-    CostComponent.ENERGY_COST: "crush_plant.yml",
-    CostComponent.PLANT_FREIGHT_IN: "crush_plant.yml",
-    CostComponent.WORKING_CAPITAL: "crush_plant.yml",
+    CostComponent.PROCESSING_COST: f"{PRIVATE_SUBDIR}/crush_plant.yml",
+    CostComponent.ENERGY_COST: f"{PRIVATE_SUBDIR}/crush_plant.yml",
+    CostComponent.PLANT_FREIGHT_IN: f"{PRIVATE_SUBDIR}/crush_plant.yml",
+    CostComponent.WORKING_CAPITAL: f"{PRIVATE_SUBDIR}/crush_plant.yml",
 }
-FALLBACK_FILE = "freight_and_logistics.yml"
+FALLBACK_FILE = f"{PRIVATE_SUBDIR}/freight_and_logistics.yml"
+
+
+class DeskComponentInCommittedTier(ValueError):
+    """A desk assumption was about to be written where git could see it."""
+
+
+def _load() -> AssumptionSet:
+    """The desk's whole set: committed policy rates plus the private tier.
+
+    The CLI is the one reader that always wants both — it is how the private
+    tier is written. Every page builder calls the loader bare and gets the
+    public tier only.
+    """
+    return load_assumptions(audience=AUDIENCE_PRIVATE)
 
 # Assumptions lapsing inside this many days are called out by --list. Two weeks
 # is about how long it takes to get a fresh freight indication, which is the
@@ -92,8 +115,18 @@ def _slug(component: CostComponent, origin: str | None, destination: str | None,
 
 
 def _target_file(component: CostComponent, explicit: str | None) -> Path:
+    """The file an entry is appended to. A desk component may only land under private/."""
     name = explicit or DEFAULT_FILE_BY_COMPONENT.get(component, FALLBACK_FILE)
-    return Path(config.ASSUMPTIONS_DIR) / name
+    target = (Path(config.ASSUMPTIONS_DIR) / name).resolve()
+    private_root = private_assumptions_dir().resolve()
+    if component in DESK_COMPONENTS and target.parent != private_root:
+        raise DeskComponentInCommittedTier(
+            f"{component.value} is a desk assumption and may only be written under "
+            f"{PRIVATE_SUBDIR}/ (gitignored) — {name!r} is in the committed tier, and the "
+            "next push would publish the owner, the basis and the number. Drop --file or "
+            f"pass --file {PRIVATE_SUBDIR}/{Path(name).name}."
+        )
+    return target
 
 
 def _yaml_block(entry: dict) -> str:
@@ -146,7 +179,13 @@ def add(args: argparse.Namespace) -> int:
         print(f"REJECTED: {exc}", file=sys.stderr)
         return 1
 
-    existing = load_assumptions()
+    try:
+        path = _target_file(component, args.file)
+    except DeskComponentInCommittedTier as exc:
+        print(f"REJECTED: {exc}", file=sys.stderr)
+        return 1
+
+    existing = _load()
     if any(item.id == parsed.id for item in existing.assumptions):
         print(
             f"REJECTED: an assumption with id {parsed.id!r} already exists. "
@@ -156,7 +195,6 @@ def add(args: argparse.Namespace) -> int:
         )
         return 1
 
-    path = _target_file(component, args.file)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         path.write_text("[]\n", encoding="utf-8")
@@ -178,17 +216,17 @@ def add(args: argparse.Namespace) -> int:
     print(f"  {parsed.value} {parsed.unit}, expires {parsed.expires_on.isoformat()}")
     # Re-load the whole set: the single most useful thing this command can do
     # after writing is prove the file it just touched still parses.
-    reloaded = load_assumptions()
+    reloaded = _load()
     print(f"  set now holds {len(reloaded.assumptions)} assumption(s), id {reloaded.set_id}")
     return 0
 
 
 def listing(_: argparse.Namespace) -> int:
     today = _today()
-    assumptions = load_assumptions()
+    assumptions = _load()
     if not assumptions.assumptions:
         print("No assumptions entered. Every costed leg will block — see")
-        print("data/reference/assumptions/README.md")
+        print(f"data/reference/assumptions/README.md and {PRIVATE_SUBDIR}/README.md")
         return 0
     horizon = today + timedelta(days=EXPIRY_WARNING_DAYS)
     for assumption in sorted(assumptions.assumptions, key=lambda a: (a.component.value, a.id)):
@@ -221,8 +259,10 @@ def check(args: argparse.Namespace) -> int:
     from analysis.origins.validation import Severity, validate_set
 
     try:
-        assumptions = load_assumptions()
+        assumptions = _load()
     except AssumptionError as exc:
+        # Includes a desk component found in a committed-tier file: the loader
+        # refuses that at parse, so it fails here before anything else is said.
         print(f"INVALID: {exc}", file=sys.stderr)
         return 1
     today = _today()
@@ -230,12 +270,45 @@ def check(args: argparse.Namespace) -> int:
         assumptions, on=today, expiry_horizon_days=args.horizon or EXPIRY_WARNING_DAYS
     )
     print(f"OK: {len(assumptions.assumptions)} assumption(s) parse, set {assumptions.set_id}")
+    failed = False
     for issue in issues:
         marker = "ERROR" if issue.severity is Severity.ERROR else "note "
         print(f"  {marker} {issue}")
         if issue.remedy:
             print(f"        remedy: {issue.remedy}")
-    return 1 if any(issue.severity is Severity.ERROR for issue in issues) else 0
+        failed = failed or issue.severity is Severity.ERROR
+    # The private tier must be invisible to git. A tracked file under it means
+    # somebody force-added one, or the ignore rule was edited; either way the
+    # desk's numbers are one push from public.
+    tracked = _tracked_private_files(private_assumptions_dir())
+    if tracked is None:
+        print("  note  git unavailable or the assumptions directory is outside the repo; "
+              "tracked-file check skipped")
+    elif tracked:
+        for name in tracked:
+            print(f"  ERROR {name} is TRACKED by git — a desk assumption file must never be")
+        print(f"        remedy: git rm --cached -- {' '.join(tracked)}  (the ignore rule is "
+              f"data/reference/assumptions/{PRIVATE_SUBDIR}/*.yml)")
+        failed = True
+    return 1 if failed else 0
+
+
+def _tracked_private_files(private_dir: Path) -> list[str] | None:
+    """Files under the private tier that git tracks. ``None`` when git cannot answer."""
+    import subprocess
+
+    try:
+        relative = private_dir.resolve().relative_to(PROJECT_ROOT)
+    except ValueError:
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--", str(relative)],
+            cwd=PROJECT_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return [name for name in out.split("\n") if name and not name.endswith("README.md")]
 
 
 def _window_arg(args: argparse.Namespace):
@@ -261,7 +334,7 @@ def onboarding(args: argparse.Namespace) -> int:
     today = _today()
     window = _window_arg(args)
     destination = args.destination or next(iter(config.DESTINATION_PORTS))
-    assumptions = load_assumptions()
+    assumptions = _load()
 
     print(f"Route readiness · {config.DESTINATION_PORTS[destination]['name']} · "
           f"{window.describe()} · as of {today.isoformat()}")
@@ -313,7 +386,7 @@ def review(args: argparse.Namespace) -> int:
     today = _today()
     horizon = args.horizon or 30
     result = expiry_review(
-        load_assumptions(),
+        _load(),
         today=today,
         horizon_days=horizon,
         window=_window_arg(args),
@@ -344,11 +417,13 @@ def gaps(_: argparse.Namespace) -> int:
 
     today = _today()
     window = default_window(today)
+    assumptions = _load()
     conn = sqlite3.connect(config.DB_PATH) if Path(config.DB_PATH).exists() else None
     try:
         for destination in config.DESTINATION_PORTS:
             ranking = build_ranking(
-                conn, destination_key=destination, window=window, today=today
+                conn, destination_key=destination, window=window, today=today,
+                assumptions=assumptions,
             )
             print(f"\n{destination} · {window.describe()}")
             if not ranking.rows:
@@ -406,7 +481,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--citation")
     parser.add_argument("--id", help="defaults to component.origin.destination.window")
-    parser.add_argument("--file", help="target YAML file name inside the assumptions directory")
+    parser.add_argument(
+        "--file",
+        help="target YAML file name inside the assumptions directory; a desk component "
+             f"must be under {PRIVATE_SUBDIR}/",
+    )
 
     args = parser.parse_args(argv)
     if args.list:
