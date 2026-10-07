@@ -87,7 +87,9 @@ def test_static_site_candidate_renderer_writes_candidate_dashboard_without_touch
     artifacts = renderer(cache_path, candidate_dir, object())
 
     dashboard = candidate_dir / "index.html"
-    assert artifacts == {"dashboard": dashboard}
+    # The briefing page rides along (wayfinding pass, 2026-10-07): same
+    # context, same call, so the two pages cannot disagree.
+    assert artifacts == {"dashboard": dashboard, "briefing_page": candidate_dir / "briefing.html"}
     assert dashboard.is_file()
     html = dashboard.read_text(encoding="utf-8")
     assert "Public Trust Metadata" in html
@@ -153,7 +155,7 @@ def test_static_artifact_contract_exposes_trust_metadata_without_prohibited_raw_
 
     candidate_html = (candidate_dir / "index.html").read_text(encoding="utf-8")
     public_html = (public_dir / "index.html").read_text(encoding="utf-8")
-    assert evidence == ("deployed.dashboard.index.html",)
+    assert evidence == ("deployed.briefing_page.briefing.html", "deployed.dashboard.index.html")
     assert public_html == candidate_html
     assert trust_state.edition_id in public_html
     assert "2026-08-10T12:33:00+00:00" in public_html

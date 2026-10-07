@@ -94,7 +94,7 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
    declaration M2's headline ledger reads, so nav and ledger cannot disagree.
    Stubs are dimmed; pages and briefs render identically. Every market appears
    in every tier, or the reader cannot tell the market exists. */
-.market-nav { display: flex; gap: 18px; padding: 9px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; white-space: nowrap; align-items: baseline; }
+.market-nav { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 9px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; align-items: baseline; }
 .market-nav .mn-label { font-family: var(--display); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
 .market-nav > * { flex: 0 0 auto; }
 .market-nav a { text-decoration: none; color: var(--text-muted); font-size: 12px; font-weight: 500; transition: color 0.1s; }
@@ -102,6 +102,57 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .market-nav a.current { color: var(--ink); font-weight: 600; border-bottom: 2px solid var(--green); padding-bottom: 2px; }
 .market-nav a.stub { color: var(--text-dim); }
 .market-nav .mn-end { margin-left: auto; color: var(--green); font-weight: 500; }
+/* Wayfinding pass (2026-10-07): the bar is two labelled groups — places
+   (Headline + markets) and desk tools — separated by a short vertical rule,
+   so four task pages stop reading as four more markets. Same bar, same
+   family, still no sidebar. The utilities at the right end (Briefing, How to
+   read) are reading aids, not places, hence dim. */
+.market-nav .mn-group { display: inline-flex; gap: 16px; align-items: baseline; }
+.market-nav .mn-sep { width: 1px; height: 14px; background: var(--rule-heavy); opacity: 0.35; align-self: center; }
+.market-nav .mn-util { color: var(--text-dim); font-size: 12px; }
+.market-nav .mn-util:hover { color: var(--ink); }
+
+/* ---- how to read (wayfinding pass) ----
+   Collapsed on every page, opened from the nav. Reuses the live components
+   (.kind, .pill, .es-label, .tier-pill) as its swatches so the key cannot
+   drift from the page. Sits between the two nav bars so it opens where the
+   reader is looking, and never pushes the index nav off a phone screen while
+   closed. */
+.how-to-read { border-bottom: 1px solid var(--rule); font-size: 13px; }
+.how-to-read summary { list-style: none; cursor: pointer; padding: 8px 0; color: var(--text-muted); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.how-to-read summary::-webkit-details-marker { display: none; }
+.how-to-read summary::before { content: "\25B8"; font-size: 10px; color: var(--text-dim); }
+.how-to-read[open] summary::before { content: "\25BE"; }
+.how-to-read .htr-no { font-family: var(--mono); font-size: 11px; color: var(--green); font-weight: 500; }
+.how-to-read .htr-sub { color: var(--text-dim); font-size: 12px; }
+.how-to-read .htr-body { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 32px; padding: 6px 0 18px; }
+.how-to-read .htr-group h3 { font-family: var(--display); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+.how-to-read .htr-lede { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.how-to-read dl { margin: 0; }
+.how-to-read .htr-row { display: grid; grid-template-columns: 176px 1fr; gap: 10px; padding: 5px 0; border-top: 1px dotted var(--rule); align-items: baseline; }
+.how-to-read dt .kind, .how-to-read dt .pill, .how-to-read dt .tier-pill { white-space: nowrap; }
+.how-to-read dt { min-width: 0; }
+.how-to-read dd { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.how-to-read .htr-word { font-family: var(--mono); font-size: 11px; color: var(--ink); }
+.how-to-read .es-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+.how-to-read .es-label.state-empty { color: var(--warning); }
+.how-to-read .tier-pill { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }
+.how-to-read .tier-pill.brief { background: #E4E8E4; color: var(--text-muted); }
+.how-to-read .tier-pill.stub { background: transparent; border: 1px solid var(--rule); color: var(--text-dim); }
+.how-to-read .htr-foot { grid-column: 1 / -1; font-size: 12px; color: var(--text-dim); }
+.how-to-read .htr-foot a { color: var(--green); text-decoration: none; }
+.how-to-read code { font-family: var(--mono); font-size: 11px; }
+
+/* ---- deeper (wayfinding pass) ----
+   The last line of a headline section: the market-page block that carries
+   the same subject in depth. One line, dotted top rule, mono block number in
+   green like every other section number on the site. */
+.deeper { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-top: 14px; padding-top: 8px; border-top: 1px dotted var(--rule); font-size: 12px; color: var(--text-muted); }
+.deeper .dp-label { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.deeper .dp-no { font-family: var(--mono); font-size: 11px; color: var(--green); margin-right: 2px; }
+.deeper a { color: var(--green); text-decoration: none; font-weight: 500; }
+.deeper a:hover { text-decoration: underline; }
+.deeper .dp-sep { color: var(--text-dim); }
 
 /* ---- index nav (per-page section anchors) ---- */
 .index-nav { position: sticky; top: 0; z-index: 20; background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; gap: 20px; padding: 10px 0; overflow-x: auto; white-space: nowrap; }
@@ -210,7 +261,10 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
   .masthead { flex-direction: column; align-items: flex-start; gap: 8px; }
   .masthead h1 { font-size: clamp(32px, 11vw, 42px); }
   .mast-meta { margin-left: 0; text-align: left; }
+  .market-nav { flex-wrap: nowrap; overflow-x: auto; }
   .market-nav .mn-end { margin-left: 0; }
+  .how-to-read .htr-body { grid-template-columns: 1fr; }
+  .how-to-read .htr-row { grid-template-columns: 1fr; gap: 2px; }
 }
 {% block page_css %}{% endblock %}
 </style>
@@ -227,19 +281,36 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 {% block prenav %}{% endblock %}
 
 <nav class="market-nav">
+  <span class="mn-group">
   <span class="mn-label">Markets</span>
   <a href="{{ root }}index.html"{% if current_page == 'headline' %} class="current"{% endif %}>Headline</a>
   {% for m in market_nav %}
   {%- set cls = ('current' if current_market == m.slug else '') ~ (' stub' if m.tier == 'stub' else '') %}
   <a href="{{ m.href }}"{% if cls.strip() %} class="{{ cls.strip() }}"{% endif %}>{{ m.name }}</a>
   {% endfor %}
-  {# Origins, Workstation and Players are cross-market surfaces rather than
-     markets, so they sit after the market list, pushed right. #}
-  <a href="{{ root }}origins.html" class="mn-end{% if current_page == 'origins' %} current{% endif %}">Origins &rarr;</a>
-  <a href="{{ root }}workstation.html"{% if current_page == 'workstation' %} class="current"{% endif %}>Workstation &rarr;</a>
-  <a href="{{ root }}opportunities.html"{% if current_page == 'opportunities' %} class="current"{% endif %}>Opportunities &rarr;</a>
-  <a href="{{ root }}players.html"{% if current_page == 'players' %} class="current"{% endif %}>Players &rarr;</a>
+  </span>
+  <span class="mn-sep" aria-hidden="true"></span>
+  {# Origins, Workstation, Opportunities and Players are tasks, not places:
+     cross-market surfaces a buyer opens to *do* something. Labelled as a
+     second group (wayfinding pass) so they stop reading as four more
+     markets. #}
+  <span class="mn-group">
+  <span class="mn-label">Desk</span>
+  <a href="{{ root }}origins.html"{% if current_page == 'origins' %} class="current"{% endif %}>Origins</a>
+  <a href="{{ root }}workstation.html"{% if current_page == 'workstation' %} class="current"{% endif %}>Workstation</a>
+  <a href="{{ root }}opportunities.html"{% if current_page == 'opportunities' %} class="current"{% endif %}>Opportunities</a>
+  <a href="{{ root }}players.html"{% if current_page == 'players' %} class="current"{% endif %}>Players</a>
+  </span>
+  {# Reading aids, pushed right: the full text report and the key. #}
+  <a href="{{ root }}briefing.html" class="mn-end mn-util{% if current_page == 'briefing' %} current{% endif %}">Briefing</a>
+  <a href="#how-to-read" class="mn-util" data-open-key>How to read</a>
 </nav>
+{# The key renders on every page. `how_to_read` is a global installed by
+   app.templating.site_environment; every production renderer goes through
+   that factory (tests/test_wayfinding.py pins it). A bare Environment in a
+   focused test does not, and must still render the page, so the include is
+   guarded rather than failing on an undefined global. #}
+{% if how_to_read is defined %}{% include '_how_to_read.html.j2' %}{% endif %}
 {% block subnav %}{% endblock %}
 
 {% block content %}{% endblock %}
@@ -248,6 +319,13 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 {% block scripts %}{% endblock %}
 <script>
 (() => {
+  // "How to read" in the nav opens the key rather than merely jumping to a
+  // closed <details>; the hash still lands on it.
+  const key = document.getElementById('how-to-read');
+  for (const a of document.querySelectorAll('[data-open-key]')) {
+    a.addEventListener('click', () => { if (key) key.open = true; });
+  }
+  if (key && location.hash === '#how-to-read') key.open = true;
   const report = () => {
     const root = document.documentElement;
     const meta = document.querySelector('meta[name="qa-overflow"]');

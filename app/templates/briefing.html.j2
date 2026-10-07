@@ -1,0 +1,66 @@
+{% extends "_base.html.j2" %}
+{#
+  The full daily briefing, on its own page (wayfinding pass, 2026-10-07).
+
+  Until this existed the complete text report — ~7,500 words — sat as section
+  11 of the headline, below ten sections a scan reader rarely got past, and
+  every reader paid its weight. The headline keeps section 11 as a pointer
+  (count, generation time, link, download); the text lives here. Same
+  masthead, same nav, same `.briefing` block the promotion gate reads
+  (trust/site_promotion.py looks for `#briefing .briefing` on this page).
+#}
+{% block title %}Mirror Market — The Full Briefing{% endblock %}
+
+{% block page_css %}
+.briefing { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 20px; font-family: var(--mono); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-x: auto; }
+.sec-head { display: flex; align-items: baseline; gap: 12px; margin: 26px 0 16px; flex-wrap: wrap; }
+.sec-no { font-family: var(--mono); font-size: 12px; color: var(--green); font-weight: 500; }
+.sec-head h2 { font-family: var(--display); font-weight: 700; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
+.sec-head .why { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+.dl { display: inline-flex; align-items: center; gap: 6px; color: var(--green); text-decoration: none; font-size: 13px; font-weight: 500; margin-right: 16px; }
+.dl:hover { text-decoration: underline; }
+@media (max-width: 768px) {
+  .sec-head .why { flex-basis: 100%; margin-left: 0; overflow-wrap: anywhere; }
+}
+{% endblock %}
+
+{% block brand %}<h1>Mirror<br><em>Briefing</em></h1>{% endblock %}
+
+{% block mast_meta %}
+    <div class="day">{{ masthead.day_line }}</div>
+    <div>Generated {{ generated_at }} · {{ masthead.on_schedule_count }}/{{ masthead.total_layers }} layers on schedule{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
+    {% if masthead.price_age %}<div>Board and FX priced from data <b>{{ masthead.price_age }}</b> old · <a href="manifest.json">latency detail</a></div>{% endif %}
+    <div>Soy complex + competing crops · all prices USD/MT</div>
+{% endblock %}
+
+{% block prenav %}
+{% if masthead.late_layers %}
+<div class="stale-note"><b>Stale:</b>
+  {%- for s in masthead.late_layers %} {{ s.name }} ({{ s.age }}){{ "," if not loop.last }}{% endfor %} — everything else current.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<section id="briefing">
+  <div class="sec-head"><span class="sec-no">11</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text — same number as the headline's section 11</span></div>
+  {% if briefing_text %}
+  {#- Escaped and colorized by _build_briefing_text — a trusted fragment,
+      not raw upstream text, hence the explicit safe. -#}
+  <div class="briefing">{{ briefing_text | safe }}</div>
+  <div style="margin-top: 16px;">
+    {% if briefing_uri %}<a class="dl" href="{{ briefing_uri }}" download="mirror_market_briefing.txt">&#8595; Download briefing as TXT</a>{% endif %}
+    <a class="dl" href="{{ root }}index.html#briefing">&larr; Back to the daily read</a>
+  </div>
+  {% else %}
+  <div class="alert alert-warn">No briefing data. Run the pipeline first.</div>
+  {% endif %}
+</section>
+
+<div class="footer">
+  All prices in <strong>USD per metric ton (USD/MT)</strong>. Data delayed and provided as-is; not financial advice.
+  <br><br>
+  <a href="{{ root }}index.html">&larr; Daily read</a> ·
+  <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">View source on GitHub</a>
+</div>
+{% endblock %}

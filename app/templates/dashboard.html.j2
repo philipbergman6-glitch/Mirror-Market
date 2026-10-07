@@ -97,6 +97,27 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
 {% endblock %}
 
 {% block content %}
+{#- Wayfinding pass (2026-10-07): every section closes with the market-page
+    block that carries its subject in depth. `deeper` is built by
+    scripts/generate_html.py from app.wayfinding against the rendered nav, so
+    a brief never gets a link to a block it does not render. A focused test
+    that omits it renders no line rather than failing. -#}
+{% set _deeper = deeper|default({}, true) %}
+{% macro deeper_line(section_id) -%}
+{%- set groups = _deeper.get(section_id, []) -%}
+{%- if groups %}
+  <div class="deeper"><span class="dp-label">Deeper</span>
+    {%- for g in groups %}
+    {%- if g.kind == 'block' %}
+    <span><span class="dp-no">{{ g.no }}</span>{{ g.title }}: {% for m in g.markets %}<a href="{{ m.href }}">{{ m.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</span>
+    {%- else %}
+    <span><a href="{{ g.href }}">{{ g.label }} &rarr;</a></span>
+    {%- endif %}
+    {%- if not loop.last %}<span class="dp-sep">|</span>{% endif %}
+    {%- endfor %}
+  </div>
+{%- endif %}
+{%- endmacro %}
 {#- The five ported sections (M18 #214) arrive as {state, reason, data}. A
     render that omits one — a focused test, a partial context — treats it as an
     empty section with that stated, rather than raising on a missing key. -#}
@@ -145,6 +166,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">No price data. Run the pipeline first.</div>
   {% endif %}
+  {{ deeper_line('overnight') }}
 </section>
 
 {# ================================================================ #}
@@ -165,6 +187,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-ok">No active signals — quiet tape.</div>
   {% endif %}
+  {{ deeper_line('signals') }}
 </section>
 
 {# ================================================================ #}
@@ -177,6 +200,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">{{ ledger.reason }}</div>
   {% endif %}
+  {{ deeper_line('propagation') }}
 </section>
 
 {# ================================================================ #}
@@ -189,6 +213,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">{{ crush_board.reason }}</div>
   {% endif %}
+  {{ deeper_line('crush-board') }}
 </section>
 
 {# ================================================================ #}
@@ -201,6 +226,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">{{ relative_value.reason }}</div>
   {% endif %}
+  {{ deeper_line('relative-value') }}
 </section>
 
 {# ================================================================ #}
@@ -281,6 +307,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">No supply/demand data available.</div>
   {% endif %}
+  {{ deeper_line('supply-demand') }}
 </section>
 
 {# ================================================================ #}
@@ -293,6 +320,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">{{ risk_monitor.reason }}</div>
   {% endif %}
+  {{ deeper_line('risk') }}
 </section>
 
 {# ================================================================ #}
@@ -305,6 +333,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">{{ forward_curves.reason }}</div>
   {% endif %}
+  {{ deeper_line('forward-curves') }}
 </section>
 
 {# ================================================================ #}
@@ -317,6 +346,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">{{ seasonal.reason }}</div>
   {% endif %}
+  {{ deeper_line('seasonal') }}
 </section>
 
 {# ================================================================ #}
@@ -352,22 +382,30 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">No technical data available.</div>
   {% endif %}
+  {{ deeper_line('technicals') }}
 </section>
 
 {# ================================================================ #}
 {# 10 — THE FULL BRIEFING                                           #}
 {# ================================================================ #}
 <section id="briefing">
-  <div class="sec-head"><span class="sec-no">11</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text</span></div>
+  <div class="sec-head"><span class="sec-no">11</span><h2>The Full Briefing</h2><span class="why">the complete daily report, in text — on its own page</span></div>
+  {#- Wayfinding pass (2026-10-07): the ~7,500-word report moved to
+      briefing.html. This slot keeps its number and becomes the pointer: how
+      long the report is, when it was generated, and the two ways to open it.
+      Deliberately NOT a summary or a lede — that is an editorial judgement
+      the owner chose to hold until a trader has read the site. -#}
   {% if briefing_text %}
-  {#- Escaped and colorized by _build_briefing_text — a trusted fragment,
-      not raw upstream text, hence the explicit safe. -#}
-  <div class="briefing">{{ briefing_text | safe }}</div>
-  {% if briefing_uri %}
-  <div style="margin-top: 16px;">
-    <a class="dl" href="{{ briefing_uri }}" download="mirror_market_briefing.txt">&#8595; Download briefing as TXT</a>
+  <div class="mc briefing-pointer">
+    <div class="mc-label">Today's report</div>
+    <div><span class="num">{{ briefing_lines|default(0) }}</span> lines, generated {{ generated_at }}. Every section of the site above, in prose, with the numbers behind each reading.</div>
+    <div style="margin-top: 12px;">
+      {#- The TXT download lives on briefing.html only: as a data: URI it
+          embeds the whole report in base64, which is the weight this slot
+          exists to take off the front page. -#}
+      <a class="dl" href="{{ root }}briefing.html">Read the full briefing &rarr;</a>
+    </div>
   </div>
-  {% endif %}
   {% if health_html %}
   <details style="margin-top: 16px;">
     <summary>Data Health Check</summary>
@@ -377,6 +415,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
   {% else %}
   <div class="alert alert-warn">No briefing data. Run the pipeline first.</div>
   {% endif %}
+  {{ deeper_line('briefing') }}
 </section>
 
 {# ================================================================ #}
@@ -522,6 +561,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
     <br><br>
     <a class="dl" href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank">View source on GitHub</a>
   </div>
+  {{ deeper_line('about') }}
 </section>
 {% endblock %}
 
