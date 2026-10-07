@@ -161,3 +161,123 @@ def test_config_cross_oilseed_entries():
     assert PSD_TARGET_COMMODITIES["Rapeseed Oil"] == "4239100"
     assert PSD_TARGET_COMMODITIES["Rapeseed Meal"] == "813600"
     assert "Canada" in PSD_TARGET_COUNTRIES
+
+
+# ── B8 #402: the spread is one session's number (invariant 8) ───────────
+
+def _stub_rv_inputs_dated(monkeypatch, *, oil_dates, oil_closes, rapeseed_df, fx_dates, fx_closes):
+    oil = _close_df(oil_dates, oil_closes)
+    currencies = {"CNY/USD": _close_df(fx_dates, fx_closes)} if fx_dates else {}
+    monkeypatch.setattr(soy_analytics, "_load_soy_prices", lambda: {"Soybean Oil": oil})
+    monkeypatch.setattr(soy_analytics, "_load_currency_data", lambda: currencies)
+    monkeypatch.setattr(soy_analytics, "read_dce_futures", lambda commodity=None: rapeseed_df)
+    return oil
+
+
+_OIL_RUN = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06"]
+_GOLDEN_WEEK_RAPESEED = ["2026-09-24", "2026-09-25", "2026-09-28", "2026-09-29", "2026-09-30"]
+
+
+def test_the_spread_is_withheld_when_the_legs_last_printed_on_different_sessions(monkeypatch):
+    """Live headline 2026-10-06: soy oil dated 10-06 against CZCE dated 09-30
+    (Golden Week) still printed a spread. Two dates subtracted is a calendar
+    gap dressed as a market move — withhold, keep both prices, say why."""
+    rapeseed = _rapeseed_df(_GOLDEN_WEEK_RAPESEED, [9000.0, 9100.0, 9200.0, 9300.0, 9400.0])
+    _stub_rv_inputs_dated(
+        monkeypatch,
+        oil_dates=_OIL_RUN, oil_closes=[45.0, 45.5, 46.0, 46.5, 47.0, 47.5, 48.0],
+        rapeseed_df=rapeseed,
+        fx_dates=_OIL_RUN, fx_closes=[0.14] * len(_OIL_RUN),
+    )
+
+    ovr = soy_analytics.relative_value_analysis()["oil_vs_rapeseed"]
+
+    assert ovr["spread_usd_mt"] is None
+    assert ovr["struck_on"] is None
+    assert ovr["spread_reason_code"] == "no_common_session"
+    assert "2026-10-06" in ovr["spread_reason"] and "2026-09-30" in ovr["spread_reason"]
+    # Both independently dated prices stay on the page.
+    assert ovr["soy_oil_as_of"] == "2026-10-06"
+    assert ovr["rapeseed_oil_as_of"] == "2026-09-30"
+    assert ovr["soy_oil"] is not None
+    assert ovr["rapeseed_oil"] == pytest.approx(9400.0 * 0.14)
+
+
+def test_the_spread_is_struck_on_the_latest_common_session_not_the_latest_rows(monkeypatch):
+    """Oil prints through 10-06, CZCE through 10-05: the spread is 10-05's
+    number on both legs, stamped 10-05, while each leg still shows its own
+    latest print."""
+    rapeseed = _rapeseed_df(_OIL_RUN[:-1], [9000.0, 9100.0, 9200.0, 9300.0, 9400.0, 9500.0])
+    oil = _stub_rv_inputs_dated(
+        monkeypatch,
+        oil_dates=_OIL_RUN, oil_closes=[45.0, 45.5, 46.0, 46.5, 47.0, 47.5, 48.0],
+        rapeseed_df=rapeseed,
+        fx_dates=_OIL_RUN, fx_closes=[0.14, 0.14, 0.14, 0.14, 0.14, 0.15, 0.16],
+    )
+
+    ovr = soy_analytics.relative_value_analysis()["oil_vs_rapeseed"]
+
+    assert ovr["struck_on"] == "2026-10-05"
+    assert ovr["spread_reason"] is None
+    expected = 9500.0 * 0.15 - to_metric_tons(oil["Close"].loc["2026-10-05"], "Soybean Oil")
+    assert ovr["spread_usd_mt"] == pytest.approx(expected)
+    assert ovr["spread_fx_observed_on"] == "2026-10-05"
+    assert ovr["soy_oil_as_of"] == "2026-10-06"
+    assert ovr["rapeseed_oil_as_of"] == "2026-10-05"
+
+
+def test_the_fx_leg_follows_a1_a_labelled_prior_close_inside_the_cap(monkeypatch):
+    """A1 #298: no CNY/USD close on the strike session → the newest prior
+    close inside 3 calendar days, with its own date carried."""
+    rapeseed = _rapeseed_df(_OIL_RUN, [9000.0, 9100.0, 9200.0, 9300.0, 9400.0, 9500.0, 9600.0])
+    _stub_rv_inputs_dated(
+        monkeypatch,
+        oil_dates=_OIL_RUN, oil_closes=[45.0, 45.5, 46.0, 46.5, 47.0, 47.5, 48.0],
+        rapeseed_df=rapeseed,
+        fx_dates=["2026-10-02", "2026-10-03"], fx_closes=[0.14, 0.15],
+    )
+
+    ovr = soy_analytics.relative_value_analysis()["oil_vs_rapeseed"]
+
+    assert ovr["struck_on"] == "2026-10-06"
+    assert ovr["spread_fx_observed_on"] == "2026-10-03"
+    assert ovr["cny_usd"] == pytest.approx(0.15)
+    assert ovr["spread_usd_mt"] is not None
+
+
+def test_the_spread_is_withheld_when_fx_is_older_than_the_a1_cap(monkeypatch):
+    """Common session exists, but the newest CNY/USD close is older than
+    A1's 3-calendar-day cap → `fx_gap_exceeded`, never a stale rate."""
+    rapeseed = _rapeseed_df(_OIL_RUN, [9000.0, 9100.0, 9200.0, 9300.0, 9400.0, 9500.0, 9600.0])
+    _stub_rv_inputs_dated(
+        monkeypatch,
+        oil_dates=_OIL_RUN, oil_closes=[45.0, 45.5, 46.0, 46.5, 47.0, 47.5, 48.0],
+        rapeseed_df=rapeseed,
+        fx_dates=["2026-09-30", "2026-10-01"], fx_closes=[0.14, 0.14],
+    )
+
+    ovr = soy_analytics.relative_value_analysis()["oil_vs_rapeseed"]
+
+    assert ovr["spread_usd_mt"] is None
+    assert ovr["spread_reason_code"] == "fx_gap_exceeded"
+    assert "fx_gap_exceeded" in ovr["spread_reason"]
+    assert ovr["struck_on"] == "2026-10-06"
+    assert ovr["soy_oil_as_of"] == "2026-10-06"
+    assert ovr["rapeseed_oil_as_of"] == "2026-10-06"
+
+
+def test_a_later_dated_fx_rate_is_never_used(monkeypatch):
+    """A1 point 4: a rate from the price's own future is a different number
+    wearing the right currency."""
+    rapeseed = _rapeseed_df(_OIL_RUN, [9000.0] * len(_OIL_RUN))
+    _stub_rv_inputs_dated(
+        monkeypatch,
+        oil_dates=_OIL_RUN, oil_closes=[45.0] * len(_OIL_RUN),
+        rapeseed_df=rapeseed,
+        fx_dates=["2026-10-07"], fx_closes=[0.14],
+    )
+
+    ovr = soy_analytics.relative_value_analysis()["oil_vs_rapeseed"]
+
+    assert ovr["spread_usd_mt"] is None
+    assert ovr["spread_reason_code"] == "fx_gap_exceeded"

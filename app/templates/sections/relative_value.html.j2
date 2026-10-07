@@ -69,11 +69,21 @@
   </div>
   {% endfor %}
 </div>
+{# B8 #402: a spread is one session's number — struck on the session both legs
+   printed and stamped with it (and with the FX date where that differs, A1
+   #298). No common session, or FX past the cap, renders the reason, not a
+   number; the two dated legs above stay. Palm carries neither and skips. #}
 {% if panel.spread_usd_mt is not none %}
 <div class="mc" style="margin-bottom:24px;">
   <div class="mc-label">Rapeseed − soy oil spread</div>
   <div class="mc-val {{ 'up' if panel.spread_usd_mt > 0 else 'down' }}">{{ c.signed(panel.spread_usd_mt) }}</div>
-  <div class="caption">{{ panel.spread_note }}</div>
+  <div class="caption">{% if panel.struck_on %}struck {{ panel.struck_on }}{% if panel.spread_fx_observed_on and panel.spread_fx_observed_on != panel.struck_on %} · FX {{ panel.spread_fx_observed_on }}{% endif %} · {% endif %}{{ panel.spread_note }}</div>
+</div>
+{% elif panel.spread_reason %}
+<div class="mc" style="margin-bottom:24px;">
+  <div class="mc-label">Rapeseed − soy oil spread</div>
+  <div class="mc-val muted">n/a</div>
+  <div class="caption">{{ panel.spread_reason }} · {{ panel.spread_note }}</div>
 </div>
 {% endif %}
 {% endif %}

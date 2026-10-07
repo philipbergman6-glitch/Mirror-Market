@@ -291,6 +291,23 @@ SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
 FX_SESSION_TIMEZONE = "America/New_York"
 FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
 
+# A1 #298 — the FX-date rule. A home-currency leg converts at its own date's
+# FX close when one exists, else at a *labelled prior* close at most this many
+# calendar days older (a weekend plus one holiday), else renders blank with
+# reason `fx_gap_exceeded`. Never a later-dated rate: a price converted at a
+# rate from its own future is a different number wearing the right currency.
+# The reason doubles as a frozen-FX-feed alarm. First enforced on the
+# cross-venue oil spread (B8 #402); B2 #308 generalises it across readers.
+FX_ALIGNMENT_MAX_GAP_DAYS = 3
+
+# B8 #402 — a cross-venue spread is one session's number (invariant 8): both
+# price legs on the latest session *both* printed. That common session must
+# be no more than this many calendar days behind the newer leg's own latest
+# print, or the spread is withheld with the reason and each leg keeps its own
+# dated price. Three days is a weekend plus one holiday; a week-long closure
+# (Golden Week) is a gap, not a number.
+CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS = 3
+
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
 # Sign up: https://quickstats.nass.usda.gov/api

@@ -957,3 +957,46 @@ def test_the_strip_says_nothing_when_the_weather_layer_is_unreadable(
     result = relative_value_section({"oil_vs_palm": _oil_pair()})
     assert "competing_oil_weather" not in result["data"]
     assert result["data"]["oil_vs_palm"]
+
+
+# ---------------------------------------------------------------------------
+# B8 #402 — the rapeseed spread renders its strike session, or its reason
+# ---------------------------------------------------------------------------
+def test_the_rapeseed_spread_renders_struck_on_beside_the_number():
+    result = relative_value_section({
+        "oil_vs_rapeseed": {
+            "soy_oil": 1_150.0, "soy_oil_as_of": "2026-10-06",
+            "rapeseed_oil": 1_310.0, "rapeseed_oil_as_of": "2026-10-05",
+            "rapeseed_oil_cny": 9_400.0,
+            "spread_usd_mt": 160.0, "struck_on": "2026-10-05",
+            "spread_fx_observed_on": "2026-10-03",
+            "spread_reason": None, "spread_reason_code": None,
+        },
+    })
+    panel = result["data"]["oil_vs_rapeseed"]
+    assert panel["struck_on"] == "2026-10-05"
+    html = _render_section("relative_value", result["data"])
+    assert "+160.0" in html
+    assert "struck 2026-10-05" in html
+    assert "FX 2026-10-03" in html
+
+
+def test_a_withheld_rapeseed_spread_renders_its_reason_not_a_number():
+    result = relative_value_section({
+        "oil_vs_rapeseed": {
+            "soy_oil": 1_150.0, "soy_oil_as_of": "2026-10-06",
+            "rapeseed_oil": 1_310.0, "rapeseed_oil_as_of": "2026-09-30",
+            "rapeseed_oil_cny": 9_400.0,
+            "spread_usd_mt": None, "struck_on": None,
+            "spread_fx_observed_on": None,
+            "spread_reason_code": "no_common_session",
+            "spread_reason": "no common session: soy oil last printed 2026-10-06, CZCE rapeseed oil 2026-09-30",
+        },
+    })
+    html = _render_section("relative_value", result["data"])
+    assert "Rapeseed − soy oil spread" in html
+    assert "no common session" in html
+    assert "2026-09-30" in html
+    assert "+160.0" not in html
+    # Both legs still on the page.
+    assert "1,150.00" in html and "1,310.00" in html
