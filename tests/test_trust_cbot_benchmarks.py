@@ -611,3 +611,125 @@ def test_the_trusted_frame_returns_one_session_not_a_stitched_curve(tmp_path) ->
     frame = trusted_curve_frame(store, "Soybeans")
     assert list(frame["observation_date"]) == ["2026-08-12"]
     assert list(frame["ticker"]) == ["ZSU26.CBT"]
+
+
+# ---------------------------------------------------------------------------
+# #331: the adapter sees the unfinished bar, so settlement.confirmed can fire
+# ---------------------------------------------------------------------------
+
+
+def test_the_adapter_downloads_unguarded_so_its_own_settlement_rule_can_fire(monkeypatch) -> None:
+    """Mirror of ``test_the_guard_sits_in_fetch_one_not_in_the_download``.
+
+    ``fetch_one`` drops the session in progress before returning, so an
+    adapter fetching through it captures frames that structurally cannot
+    contain the bar ``settlement.confirmed`` exists to reject — the rule
+    passes while proving nothing. The default downloader has to be the
+    unguarded ``download_bars``.
+    """
+    import fetchers.yfinance as yf_module
+
+    called: list[str] = []
+    frame = pd.DataFrame(
+        {"Close": [1150.25]}, index=pd.DatetimeIndex([pd.Timestamp("2026-08-12")])
+    )
+
+    def unguarded(ticker, period="5d", max_retries=3):
+        called.append("download_bars")
+        return frame
+
+    def guarded(ticker, period="5d", rule=None, max_retries=3):
+        called.append("fetch_one")
+        return frame
+
+    monkeypatch.setattr(yf_module, "download_bars", unguarded)
+    monkeypatch.setattr(yf_module, "fetch_one", guarded)
+
+    fetch_cbot_benchmark_artifact("Soybeans", today=date(2026, 8, 13), retrieved_at=AFTER_SETTLEMENT)
+
+    assert set(called) == {"download_bars"}
+
+
+def test_the_artifact_captures_every_bar_in_the_window_not_only_the_last() -> None:
+    """One bar per ticker cannot reconcile pre-cutoff: the newest bar is the
+    open session, which the rule rejects, and the ledger would then hold no
+    session at all while v1's guard falls back to the previous bar. Capturing
+    the window gives the ledger the same finished session v1 publishes."""
+
+    def download(ticker: str, period: str = "5d") -> pd.DataFrame:
+        return pd.DataFrame(
+            {"Open": [1140.0, 1145.0], "High": [1150.0, 1155.0], "Low": [1138.0, 1142.0],
+             "Close": [1148.0, 1150.25], "Volume": [8000.0, 9000.0]},
+            index=pd.DatetimeIndex([pd.Timestamp("2026-08-12"), pd.Timestamp("2026-08-13")]),
+        )
+
+    replay = fetch_cbot_benchmark_artifact(
+        "Soybeans", today=date(2026, 8, 13), download=download, retrieved_at=BEFORE_SETTLEMENT
+    )
+
+    bars = json.loads(replay.content)["bars"]
+    sessions = {(b["symbol"], b["session_date"]) for b in bars}
+    assert ("ZSU26.CBT", "2026-08-12") in sessions
+    assert ("ZSU26.CBT", "2026-08-13") in sessions
+    assert len(bars) == 12  # six contracts, two sessions each
+
+
+def test_an_undated_bar_anywhere_in_the_window_hard_fails() -> None:
+    def download(ticker: str, period: str = "5d") -> pd.DataFrame:
+        return pd.DataFrame(
+            {"Close": [1148.0, 1150.25]},
+            index=pd.DatetimeIndex([pd.NaT, pd.Timestamp("2026-08-13")]),
+        )
+
+    with pytest.raises(BenchmarkShapeError, match="undated"):
+        fetch_cbot_benchmark_artifact("Soybeans", today=date(2026, 8, 13), download=download)
+
+
+def test_a_pre_cutoff_window_rejects_the_open_session_and_accepts_the_finished_one(tmp_path) -> None:
+    store = repository(tmp_path)
+    replay = artifact_from_bars(
+        "Soybeans",
+        [
+            bar("ZSU26.CBT", day=date(2026, 8, 12), close="1148.00"),
+            bar("ZSU26.CBT", day=date(2026, 8, 13), close="1150.25"),
+        ],
+        retrieved_at=BEFORE_SETTLEMENT,
+    )
+
+    ingestion = ingest_cbot_benchmark_replays(store, [replay], ingested_at=BEFORE_SETTLEMENT)
+
+    dataset = ingestion.dataset("Soybeans")
+    assert len(dataset.accepted_revision_ids) == 1
+    assert len(dataset.rejected_revision_ids) == 1
+    assert dict(dataset.rejected_by_rule) == {"settlement.confirmed": 1}
+    # The ledger's curve is the finished session — the one v1's guard keeps.
+    frame = trusted_curve_frame(store, "Soybeans")
+    assert list(frame["observation_date"]) == ["2026-08-12"]
+    assert list(frame["close"]) == [1148.0]
+
+
+def test_daily_move_within_one_window_is_judged_against_the_prior_session_in_that_window(tmp_path) -> None:
+    """A window arrives as one batch. On a fresh ledger nothing earlier is
+    stored, so unless the batch chains its own accepted sessions the move
+    rule would skip every session but the first — silently, on every CI run,
+    because the reconciler's repository is a scratch directory."""
+    store = repository(tmp_path)
+    replay = artifact_from_bars(
+        "Soybeans",
+        [
+            bar("ZSU26.CBT", day=date(2026, 8, 10), close="1000.00"),
+            bar("ZSU26.CBT", day=date(2026, 8, 11), close="1010.00"),
+            bar("ZSU26.CBT", day=date(2026, 8, 12), close="1300.00"),  # +28.7% on the day
+        ],
+        retrieved_at=AFTER_SETTLEMENT,
+    )
+
+    ingestion = ingest_cbot_benchmark_replays(store, [replay], ingested_at=AFTER_SETTLEMENT)
+
+    dataset = ingestion.dataset("Soybeans")
+    assert len(dataset.accepted_revision_ids) == 2
+    assert len(dataset.quarantined_revision_ids) == 1
+    assert dict(dataset.rejected_by_rule) == {}
+    # The quarantined session does not displace the accepted one before it.
+    frame = trusted_curve_frame(store, "Soybeans")
+    assert list(frame["observation_date"]) == ["2026-08-11"]
