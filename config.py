@@ -653,8 +653,45 @@ PSD_TARGET_COUNTRIES = [
 PSD_TARGET_ATTRIBUTES = [
     "Production", "Imports", "Exports", "Crush",
     "Ending Stocks", "Domestic Consumption",
+    "Domestic Use",  # 142 — cotton's consumption line; see below (#238)
     "Beginning Stocks", "Total Supply", "Total Distribution",
 ]
+
+# The PSD attribute that is a commodity's total domestic consumption. PSD
+# names it "Domestic Consumption" (125) for every oilseed and grain and
+# "Domestic Use" (142) for cotton — cotton has no 125 row at all, so an
+# attribute filter on the single name dropped cotton's consumption silently
+# and no cotton stocks-to-use could ever print (#238). Verified attribute by
+# attribute against the Sep-2026 bulk CSVs for all ten commodities.
+#
+# Explicit per commodity on purpose: a coalesce ("whichever of the two
+# exists") would quietly pick a wrong column the day PSD adds one. A
+# commodity missing here, or mapped to a name the fetcher does not request,
+# fails at import.
+PSD_CONSUMPTION_ATTRIBUTE = {
+    "Soybeans":      "Domestic Consumption",
+    "Soybean Oil":   "Domestic Consumption",
+    "Soybean Meal":  "Domestic Consumption",
+    "Palm Oil":      "Domestic Consumption",
+    "Corn":          "Domestic Consumption",
+    "Wheat":         "Domestic Consumption",
+    "Cotton":        "Domestic Use",
+    "Rapeseed":      "Domestic Consumption",
+    "Rapeseed Oil":  "Domestic Consumption",
+    "Rapeseed Meal": "Domestic Consumption",
+}
+if set(PSD_CONSUMPTION_ATTRIBUTE) != set(PSD_TARGET_COMMODITIES):
+    raise ValueError(
+        "PSD_CONSUMPTION_ATTRIBUTE must name a consumption attribute for "
+        "exactly the PSD_TARGET_COMMODITIES — mismatch: "
+        f"{sorted(set(PSD_CONSUMPTION_ATTRIBUTE) ^ set(PSD_TARGET_COMMODITIES))}"
+    )
+if not set(PSD_CONSUMPTION_ATTRIBUTE.values()) <= set(PSD_TARGET_ATTRIBUTES):
+    raise ValueError(
+        "PSD_CONSUMPTION_ATTRIBUTE maps to an attribute PSD_TARGET_ATTRIBUTES "
+        "does not request: "
+        f"{sorted(set(PSD_CONSUMPTION_ATTRIBUTE.values()) - set(PSD_TARGET_ATTRIBUTES))}"
+    )
 
 # ---------------------------------------------------------------------------
 # Layer 7 — Currency pairs via yfinance (export competitiveness)
