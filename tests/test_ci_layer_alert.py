@@ -133,3 +133,41 @@ def test_green_run_without_open_alert_is_a_noop(tmp_path, gh_calls):
 
     # One lookup per rolling issue (outage, catalog drift); nothing written.
     assert _commands(calls) == [("issue", "list"), ("issue", "list")]
+
+
+def test_quarantine_raises_an_alert_on_an_otherwise_green_run(tmp_path, gh_calls):
+    """A fetch contradicting stored data is the known-gap follow-up (A2 #299)."""
+    calls, _ = gh_calls
+    path = _status_file(tmp_path, {
+        "succeeded": ["prices"],
+        "hard_failures": [],
+        "critical_failures": [],
+        "quarantine": {
+            "held": 1, "released": 0,
+            "by_table": {"prices": {"held": 1, "released": 0}},
+            "events": [
+                {"table": "prices", "label": "prices/Soybeans", "kind": "daily_move",
+                 "series": "Soybeans", "date": "2026-01-09", "divergence": 0.99,
+                 "released": False},
+            ],
+        },
+    })
+
+    assert alerter.main(["prog", str(path)]) == 0
+
+    create = next(c for c in calls if c[:2] == ("issue", "create"))
+    body = create[create.index("--body") + 1]
+    assert "prices" in body and "Soybeans" in body and "2026-01-09" in body
+
+
+def test_a_release_only_run_does_not_alert(tmp_path, gh_calls):
+    calls, _ = gh_calls
+    path = _status_file(tmp_path, {
+        "succeeded": ["prices"],
+        "hard_failures": [],
+        "critical_failures": [],
+        "quarantine": {"held": 0, "released": 1, "by_table": {}, "events": []},
+    })
+
+    assert alerter.main(["prog", str(path)]) == 0
+    assert ("issue", "create") not in _commands(calls)

@@ -78,8 +78,13 @@ def _drop_partial_bars(df: pd.DataFrame, price_cols: list[str], label: str = "")
     a broken candle — neither is filled, both are dropped with a reason
     (invariant 2: absence never becomes an assumption).
 
-    TODO(#299): interim treatment. If A2 decides quarantine over rejection,
-    dropped bars should be stored flagged instead of discarded here.
+    Rejection is final (A2 #299, ratifying B1 #307): a partial bar is
+    suspicion about the *fetch*, and nothing a later review could release
+    — a bar missing its Close can never become a full bar. Self-healing
+    layers refetch it next run. Log-only by decision: holiday half-bars are
+    routine upstream noise, and a masthead that ambered on them would train
+    readers to ignore amber. Contrast the quarantine rules in
+    `pipeline.divergence`, which hold what *might* be true.
     """
     present = [c for c in price_cols if c in df.columns]
     if not present:
@@ -97,7 +102,7 @@ def _drop_partial_bars(df: pd.DataFrame, price_cols: list[str], label: str = "")
             dates += f", … and {int(partial.sum()) - 10} more"
         logger.warning(
             "%sDropped %d partial bar(s) with missing price values (%s) — "
-            "never filled; see #299 for quarantine semantics",
+            "rejected, never filled (A2 #299)",
             prefix, int(partial.sum()), dates,
         )
         df = df[~partial]

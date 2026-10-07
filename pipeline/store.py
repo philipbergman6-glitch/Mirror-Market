@@ -313,6 +313,25 @@ def _migrate_contract_bars_ohlc(conn) -> None:
                 logger.warning("Could not add %s column to contract_bars: %s", column, exc)
 
 
+def _migrate_quarantined_revisions(conn) -> None:
+    """Add the A2 (#299) verdict columns to quarantined_revisions if absent.
+
+    Idempotent. A local DB created before B5 (#311) has the narrow shape and
+    the release rule needs `run_id` to tell an independent fetch from a
+    replay — without the column every re-serve would look like the same run.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(quarantined_revisions)").fetchall()}
+    except Exception:
+        return
+    for column in ("kind", "run_id", "released_at", "released_run_id"):
+        if cols and column not in cols:
+            try:
+                conn.execute(f"ALTER TABLE quarantined_revisions ADD COLUMN {column} TEXT")
+            except Exception as exc:
+                logger.warning("Could not add %s column to quarantined_revisions: %s", column, exc)
+
+
 def init_database():
     """Create tables + unique indexes if missing. Idempotent."""
     _ensure_storage_dir()
@@ -330,6 +349,7 @@ def init_database():
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
         _migrate_contract_bars_ohlc(conn)
+        _migrate_quarantined_revisions(conn)
         for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -405,8 +425,10 @@ def _save(
     guard the next ``save_*`` forgets. Tables not in
     ``divergence.GUARDED_TABLES`` pass through untouched.
 
-    The screen and the quarantine record share the write's transaction, so
-    a rolled-back save leaves no record of a rejection that never happened.
+    The screen, the quarantine record and any confirmation release share
+    the write's transaction, so a rolled-back save leaves no record of a
+    rejection that never happened — nor of a release whose value never
+    stored.
     """
     if df.empty:
         return 0
@@ -417,8 +439,9 @@ def _save(
                 removed = conn.execute(*clear).rowcount
                 if removed:
                     logger.info("%s: cleared %d stored row(s) before rewriting", label, removed)
-            df, held = divergence.screen(conn, table, df, key_cols, label)
+            df, held, released = divergence.screen(conn, table, df, key_cols, label)
             divergence.record(conn, held)
+            divergence.release(conn, released)
             n = upsert_dataframe(conn, table, df, key_cols)
             conn.execute("COMMIT")
         except Exception:

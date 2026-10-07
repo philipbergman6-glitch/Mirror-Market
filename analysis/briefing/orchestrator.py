@@ -47,6 +47,7 @@ from analysis.briefing.snapshot import build_snapshot
 from analysis.briefing.types import BriefingData
 from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.signals import suppress_near_roll_signals
+from pipeline import quarantine
 from pipeline.store import save_briefing
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,11 @@ def generate_briefing_data(*, archive: bool = True) -> BriefingData:
 
     stu_text, stu_signals = stocks_to_use.format()
     signal_list.extend(stu_signals)
+
+    # Rows the store held or released in the last pipeline run (A2 #299):
+    # a fetch contradicting stored data is the "can I trust this number"
+    # question, so it rides the signals block as a warning.
+    signal_list.extend(quarantine.briefing_signals(quarantine.read_run_summary()))
 
     # Suppress provider-series near-roll technicals ONCE, before the list
     # fans out — the signals section, BriefingData.signals, signals_json, and

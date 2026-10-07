@@ -38,6 +38,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from pipeline import quarantine  # noqa: E402 — needs the project root on sys.path
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s — %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -88,7 +92,7 @@ def build_alert_body(status: dict | None) -> str:
         ("stale_last_known_good", "Stale last-known-good data"),
         ("incomplete_key_coverage", "Incomplete key coverage"),
     )
-    lines = ["The data pipeline finished with degraded production layers:", ""]
+    lines = ["The data pipeline finished with degraded production layers or held-back revisions:", ""]
     for key, heading in labels:
         layers = classes.get(key, [])
         if layers:
@@ -100,6 +104,7 @@ def build_alert_body(status: dict | None) -> str:
             *[f"- `{layer}`" for layer in no_publication],
             "",
         ]
+    lines += quarantine.alert_lines(status.get("quarantine"))
     critical = status.get("critical_failures", [])
     if critical:
         lines += ["", f"**Critical layers failed:** {', '.join(critical)} — the deploy was blocked."]
@@ -201,8 +206,12 @@ def main(argv: list[str]) -> int:
         return 0
 
     hard_failures = status.get("hard_failures", [])
-    if hard_failures:
-        logger.warning("Hard failures this run: %s", ", ".join(hard_failures))
+    held = int((status.get("quarantine") or {}).get("held") or 0)
+    if hard_failures or held:
+        if hard_failures:
+            logger.warning("Hard failures this run: %s", ", ".join(hard_failures))
+        if held:
+            logger.warning("Quarantined revisions this run: %d", held)
         raise_alert(build_alert_body(status))
     else:
         clear_alert(status)

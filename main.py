@@ -86,6 +86,7 @@ from fetchers.worldbank import fetch_worldbank_prices
 from fetchers.yfinance import fetch_all as fetch_prices
 from fetchers.yfinance import fetch_currencies
 from latency import clock as run_clock
+from pipeline import quarantine
 from pipeline.clean import (
     clean_brazil_exports,
     clean_brazil_spot,
@@ -1167,6 +1168,7 @@ def run(
     _NO_PUBLICATION.clear()
     _STALE_LAST_KNOWN_GOOD.clear()
     _INCOMPLETE_KEY_COVERAGE.clear()
+    quarantine.reset()
     run_clock.reset()
 
     selected = tuple(layer_keys) if layer_keys is not None else PRODUCTION_LAYER_KEYS
@@ -1302,6 +1304,9 @@ def run(
             "Incomplete key coverage (%d/%d): %s",
             len(incomplete_key_coverage), len(results), ", ".join(incomplete_key_coverage),
         )
+    quarantine_summary = quarantine.summary()
+    if quarantine_summary["held"] or quarantine_summary["released"]:
+        logger.warning(quarantine.describe(quarantine_summary))
     logger.info("Database saved to: data/storage/mirror_market.db")
 
     # ── Machine-readable run summary ─────────────────────────────
@@ -1347,6 +1352,9 @@ def run(
             "usable_partial": usable_partial,
             "catalog_drift": catalog_drift,
         },
+        # Held / released revisions this run (A2 #299): the store's verdicts,
+        # tallied by pipeline.quarantine for the CI alert and the briefing.
+        "quarantine": quarantine_summary,
         "usable_partial_detail": usable_partial_detail,
     })
 
