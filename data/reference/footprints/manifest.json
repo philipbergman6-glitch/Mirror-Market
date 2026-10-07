@@ -15,6 +15,7 @@
  "footprints": {
   "US Midwest (Iowa)": {
    "nodes": 274,
+   "weight_basis": "production",
    "production_t": 14602912,
    "land_weight": 1.0,
    "top_quarter_share": 0.3627,
@@ -22,6 +23,7 @@
   },
   "US Illinois": {
    "nodes": 287,
+   "weight_basis": "production",
    "production_t": 16194900,
    "land_weight": 1.0,
    "top_quarter_share": 0.4023,
@@ -29,6 +31,7 @@
   },
   "US Nebraska": {
    "nodes": 388,
+   "weight_basis": "production",
    "production_t": 8352171,
    "land_weight": 1.0,
    "top_quarter_share": 0.7476,
@@ -36,6 +39,7 @@
   },
   "Brazil Mato Grosso": {
    "nodes": 1278,
+   "weight_basis": "production",
    "production_t": 34503665,
    "land_weight": 1.0,
    "top_quarter_share": 0.699,
@@ -43,6 +47,7 @@
   },
   "Brazil Parana": {
    "nodes": 315,
+   "weight_basis": "production",
    "production_t": 19620129,
    "land_weight": 0.9975,
    "top_quarter_share": 0.5463,
@@ -50,6 +55,7 @@
   },
   "Brazil Rio Grande do Sul": {
    "nodes": 461,
+   "weight_basis": "production",
    "production_t": 16517978,
    "land_weight": 0.9936,
    "top_quarter_share": 0.6033,
@@ -57,6 +63,7 @@
   },
   "Argentina Pampas": {
    "nodes": 773,
+   "weight_basis": "production",
    "production_t": 24896525,
    "land_weight": 0.9982,
    "top_quarter_share": 0.7205,
@@ -64,6 +71,7 @@
   },
   "Argentina Cordoba": {
    "nodes": 283,
+   "weight_basis": "production",
    "production_t": 14105173,
    "land_weight": 0.994,
    "top_quarter_share": 0.5068,
@@ -71,6 +79,7 @@
   },
   "Paraguay Alto Parana": {
    "nodes": 84,
+   "weight_basis": "production",
    "production_t": 2437574,
    "land_weight": 0.9968,
    "top_quarter_share": 0.5472,
@@ -78,6 +87,7 @@
   },
   "Argentina Buenos Aires (sunflower)": {
    "nodes": 552,
+   "weight_basis": "production",
    "production_t": 2013979,
    "land_weight": 0.9936,
    "top_quarter_share": 0.7896,
@@ -85,6 +95,7 @@
   },
   "India Madhya Pradesh": {
    "nodes": 499,
+   "weight_basis": "production",
    "production_t": 5446589,
    "land_weight": 1.0,
    "top_quarter_share": 0.7693,
@@ -92,6 +103,7 @@
   },
   "India Maharashtra": {
    "nodes": 475,
+   "weight_basis": "production",
    "production_t": 4793447,
    "land_weight": 0.9814,
    "top_quarter_share": 0.661,
@@ -99,6 +111,7 @@
   },
   "China Heilongjiang": {
    "nodes": 964,
+   "weight_basis": "production",
    "production_t": 7655560,
    "land_weight": 1.0,
    "top_quarter_share": 0.7538,
@@ -106,6 +119,7 @@
   },
   "France Champagne (Grand Est)": {
    "nodes": 136,
+   "weight_basis": "production",
    "production_t": 570113,
    "land_weight": 1.0,
    "top_quarter_share": 0.4614,
@@ -113,6 +127,7 @@
   },
   "Germany Mecklenburg-Vorpommern": {
    "nodes": 73,
+   "weight_basis": "production",
    "production_t": 632166,
    "land_weight": 0.9288,
    "top_quarter_share": 0.4841,
@@ -120,6 +135,7 @@
   },
   "Romania Baragan (Danube plain)": {
    "nodes": 52,
+   "weight_basis": "production",
    "production_t": 167213,
    "land_weight": 1.0,
    "top_quarter_share": 0.5625,
@@ -127,6 +143,7 @@
   },
   "South Africa Free State": {
    "nodes": 218,
+   "weight_basis": "production",
    "production_t": 722951,
    "land_weight": 1.0,
    "top_quarter_share": 0.7906,
@@ -134,13 +151,15 @@
   },
   "South Africa Mpumalanga": {
    "nodes": 140,
+   "weight_basis": "area",
    "production_t": 7236,
    "land_weight": 1.0,
-   "top_quarter_share": 0.7278,
+   "top_quarter_share": 0.3234,
    "nodata_share": 0.09068
   },
   "Nigeria Benue": {
    "nodes": 52,
+   "weight_basis": "production",
    "production_t": 102976,
    "land_weight": 1.0,
    "top_quarter_share": 0.6487,
@@ -148,6 +167,7 @@
   },
   "Nigeria Kaduna": {
    "nodes": 76,
+   "weight_basis": "production",
    "production_t": 68637,
    "land_weight": 1.0,
    "top_quarter_share": 0.4837,

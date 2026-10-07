@@ -431,7 +431,9 @@ GROWING_REGIONS = {
 # to Natural Earth admin-1 and verified against data/reference/footprints/
 # crosswalk.csv. G-FR dissolves Grand Est's ten departments. `crop` is the
 # SPAM 2020 crop code that weights the area: SOYB soy, SUNF sunflower, RAPE
-# rapeseed.
+# rapeseed. `weight_basis` (default "production") is "area" where SPAM's
+# within-country allocation is not credible: every cell then counts by its
+# cos-latitude area, the spike's admin1_area method.
 # ---------------------------------------------------------------------------
 FOOTPRINTS = {
     "US Midwest (Iowa)": {
@@ -502,9 +504,11 @@ FOOTPRINTS = {
         "place_id": "G-FS", "label": "Free State", "crop": "SOYB",
         "units": ("ZA-FS",),
     },
+    # SPAM 2020 puts 7 kt here, 0.5 % of its 1.4 Mt South African total, for
+    # the #2 soy province; production weights would follow a handful of cells.
     "South Africa Mpumalanga": {
         "place_id": "G-MPU", "label": "Mpumalanga", "crop": "SOYB",
-        "units": ("ZA-MP",),
+        "units": ("ZA-MP",), "weight_basis": "area",
     },
     "Nigeria Benue": {
         "place_id": "G-BEN", "label": "Benue", "crop": "SOYB",

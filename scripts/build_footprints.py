@@ -216,12 +216,18 @@ def build(skip_ports: bool) -> None:
         area = np.cos(np.radians(lat))
         nodata_share = float(area[missing].sum() / area.sum())
         r, c = node_of(lat, lon)
-        nodes = collapse(r, c, prod)
+        basis = spec.get("weight_basis", "production")
+        if basis == "production":
+            nodes = collapse(r, c, prod)
+        elif basis == "area":
+            nodes = collapse(r, c, area)
+        else:
+            raise SystemExit(f"{key}: unknown weight_basis {basis!r}")
         land_weight = sum(w for rr, cc, w in nodes if lsm[rr, cc] >= LAND_LSM)
         if land_weight < MIN_LAND_WEIGHT:
             raise SystemExit(f"{key}: land weight {land_weight:.2f} < {MIN_LAND_WEIGHT}")
         ws = np.sort([w for _, _, w in nodes])[::-1]
-        stats[key] = {"nodes": len(nodes), "production_t": round(float(total)),
+        stats[key] = {"nodes": len(nodes), "weight_basis": basis, "production_t": round(float(total)),
                       "land_weight": round(land_weight, 4),
                       "top_quarter_share": round(float(ws[: max(1, len(ws) // 4)].sum()), 4),
                       "nodata_share": round(nodata_share, 5)}
