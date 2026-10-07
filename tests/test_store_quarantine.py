@@ -288,7 +288,7 @@ def test_a_duplicate_index_label_does_not_drop_a_good_row(patched_db):
     )
     conn = sqlite3.connect(str(patched_db))
     try:
-        accepted, held = divergence.screen(
+        accepted, held, released = divergence.screen(
             conn, "prices", frame, ["commodity", "Date"], "prices/Soybeans"
         )
     finally:
@@ -334,11 +334,11 @@ def test_screen_returns_the_frame_untouched_when_nothing_is_stored(patched_db):
             {"commodity": ["Soybeans"], "Date": ["2026-01-02"], "Open": [1.0],
              "High": [1.0], "Low": [1.0], "Close": [1200.0], "Volume": [1.0]}
         )
-        accepted, held = divergence.screen(
+        accepted, held, released = divergence.screen(
             conn, "prices", frame, ["commodity", "Date"], "prices/Soybeans"
         )
     finally:
         conn.close()
 
-    assert held == []
+    assert held == [] and released == []
     assert accepted is frame

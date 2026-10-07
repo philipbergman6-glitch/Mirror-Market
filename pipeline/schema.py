@@ -852,6 +852,13 @@ CREATE TABLE IF NOT EXISTS briefings (
 # incoming_value is in the key so a re-run of the same corrupted fetch rewrites
 # one row rather than accumulating, while a *different* bad value is kept
 # beside it — two distinct corruptions are two distinct facts.
+#
+# A2 (#299) added the verdict's shape: `kind` says which rule held the row
+# ('same_pk_revision' or 'daily_move'), `run_id` which pipeline process did,
+# and `released_at` / `released_run_id` record a confirmation release — a
+# later, independent run re-serving the same value (pipeline.divergence).
+# A released row is history, not a live hold; it stays so the audit can
+# show that the value was once doubted and why the doubt was dropped.
 _CREATE_QUARANTINED_REVISIONS = """
 CREATE TABLE IF NOT EXISTS quarantined_revisions (
     table_name      TEXT    NOT NULL,
@@ -864,6 +871,10 @@ CREATE TABLE IF NOT EXISTS quarantined_revisions (
     row_json        TEXT    NOT NULL,
     label           TEXT,
     detected_at     TEXT    NOT NULL,
+    kind            TEXT,
+    run_id          TEXT,
+    released_at     TEXT,
+    released_run_id TEXT,
     PRIMARY KEY (table_name, row_key, value_column, incoming_value)
 );
 """

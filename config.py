@@ -2394,6 +2394,19 @@ HISTORY_DIR = os.path.join(os.path.dirname(__file__), "data", "history")
 # way here — the stored value is not a gap).
 SAME_PK_DIVERGENCE_QUARANTINE_THRESHOLD = 0.20
 
+# The same 20% also governs the day-over-day rule on a *fresh* date (A2 #299,
+# built by B5 #311): a move past it against the latest earlier accepted
+# session cannot be a legitimate session either, so it is held with no
+# stored same-PK contradiction needed. One threshold, one semantic, both
+# paths — the trust ledger's DAILY_MOVE_QUARANTINE_THRESHOLD is this number.
+#
+# Confirmation release (the one carve-out from evidence-only release): a
+# later, independent fetch that re-serves a held value within this relative
+# tolerance of it is a second observation agreeing against one stored value,
+# and the held value stores. 0.1% absorbs float round-off and a provider's
+# own re-rounding; it does not let a *different* bad value confirm the first.
+QUARANTINE_CONFIRMATION_TOLERANCE = 0.001
+
 # ---------------------------------------------------------------------------
 # MARKETS — the site's market registry (M8 #150, built by M17 #213)
 #

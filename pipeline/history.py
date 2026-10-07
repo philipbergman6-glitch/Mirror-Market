@@ -50,6 +50,13 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # Operational state must survive the ephemeral CI runner so a failed run
     # can report the real age of its last known good predecessor.
     "data_freshness": ("layer_name",),
+    # The store layer's held-back revisions (pipeline/divergence.py). Here
+    # because the release rule is evidence-only: a held value is released
+    # when a *later, independent* run re-serves it (A2 #299), and on an
+    # ephemeral runner "later run" only exists if yesterday's verdict does.
+    # Without this row the same wrongly-held correction would be re-held
+    # every morning forever. Never rendered — see query.read_quarantined_revisions.
+    "quarantined_revisions": ("table_name", "row_key", "value_column", "incoming_value"),
     # AgRural Paranaguá FOB (1 row/day, the Brazil basis source) + CEPEA
     # via Notícias Agrícolas (~10 sessions deep — only recent self-heals).
     "brazil_spot_prices": ("Date", "commodity"),
