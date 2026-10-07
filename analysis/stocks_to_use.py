@@ -16,18 +16,42 @@ from datetime import date
 
 import pandas as pd
 
+from config import PSD_CONSUMPTION_ATTRIBUTE
+
 # PSD attribute strings — see config.PSD_TARGET_ATTRIBUTES.
-# For a single country, total use is Domestic Consumption + Exports: a cargo
+# For a single country, total use is domestic consumption + Exports: a cargo
 # leaving the country is an offtake against its own balance sheet. PSD's
 # "Total Distribution" is NOT usable here: it equals Total Supply (Beginning
 # Stocks + Production + Imports), which understates the ratio's denominator
 # meaning.
 #
+# The consumption attribute is named per commodity (#238): PSD files cotton's
+# line as "Domestic Use" (142) and every other tracked commodity's as
+# "Domestic Consumption" (125). `consumption_attribute` is the one lookup;
+# the pivot below carries a single `_CONSUMPTION` column resolved through it.
+#
 # That reasoning inverts at world level — see _AGGREGATE_REGIONS below.
 _ENDING_STOCKS = "Ending Stocks"
-_DOMESTIC_CONSUMPTION = "Domestic Consumption"
+_CONSUMPTION = "consumption"
 _EXPORTS = "Exports"
 _IMPORTS = "Imports"
+_CONSUMPTION_ATTRIBUTES = frozenset(PSD_CONSUMPTION_ATTRIBUTE.values())
+
+
+def consumption_attribute(commodity: str) -> str:
+    """PSD's name for `commodity`'s total-domestic-consumption line.
+
+    Raises for a commodity the map does not know: defaulting would pick a
+    column by luck, and the wrong one yields a plausible percentage.
+    """
+    try:
+        return PSD_CONSUMPTION_ATTRIBUTE[commodity]
+    except KeyError:
+        raise ValueError(
+            f"No PSD consumption attribute is mapped for {commodity!r} — add "
+            f"it to config.PSD_CONSUMPTION_ATTRIBUTE (known: "
+            f"{sorted(PSD_CONSUMPTION_ATTRIBUTE)})"
+        ) from None
 
 # The synthetic regions fetchers/psd.py writes (M15 #237). The denominator
 # depends on the region, and getting it wrong is silent: both formulas
@@ -60,12 +84,11 @@ WASDE_USE_ADJUSTED_COMMODITIES = frozenset({"Corn", "Wheat"})
 # choice is made once here and stated by `denominator_note`.
 WORLD_GRAIN_ADJUSTMENT = True
 
-# World balance sheets we publish. Cotton is absent on purpose: PSD's cotton
-# consumption attribute is "Domestic Use" (142), which
-# config.PSD_TARGET_ATTRIBUTES does not yet request, so no cotton ratio —
-# US or world — is computable today. Padding or substituting a denominator
-# to make the row appear is the exact failure the withhold-with-a-reason
-# rule exists to prevent.
+# World balance sheets we publish. Cotton joined with #238, once its
+# "Domestic Use" line was requested: world ending stocks over world domestic
+# use reads 62.8 % on the Sep-2026 vintage (MY2024), the consumption-only
+# convention WASDE prints (63.1 % in WASDE-673). Its levels are in
+# 1000 480-lb bales, never tonnes — the `unit` column says so on every row.
 WORLD_COMMODITIES = (
     "Soybeans",
     "Soybean Meal",
@@ -73,6 +96,7 @@ WORLD_COMMODITIES = (
     "Palm Oil",
     "Corn",
     "Wheat",
+    "Cotton",
     "Rapeseed",
     "Rapeseed Oil",
     "Rapeseed Meal",
@@ -99,7 +123,8 @@ def denominator_note(
     if country not in _AGGREGATE_REGIONS:
         return (
             f"{country} balance sheet — denominator = Domestic Consumption "
-            f"+ Exports (a cargo leaving the country is an offtake)."
+            f"+ Exports (a cargo leaving the country is an offtake); "
+            f"cotton's consumption line is PSD's 'Domestic Use'."
         )
 
     if country == WORLD:
@@ -130,7 +155,8 @@ def denominator_note(
     )
     return (
         f"{country} — region: {region}; denominator = Domestic Consumption "
-        f"only ({why}); {grain}."
+        f"only ({why}; cotton's consumption line is PSD's 'Domestic Use'); "
+        f"{grain}."
     )
 
 
@@ -139,15 +165,43 @@ def _pivot_region(psd_df: pd.DataFrame, country: str) -> pd.DataFrame | None:
 
     None when the region has no rows at all. Absent attributes are present
     as all-NULL columns so callers can decide per branch what is required.
+
+    The consumption column is resolved per commodity through
+    `consumption_attribute` into one `consumption` column. Two things
+    hard-fail here rather than thin the frame silently:
+
+    - a commodity present in the region with *no* row under its mapped
+      consumption attribute in any year — that is a PSD rename (or a wrong
+      map entry), and the alternative is the row quietly reverting to
+      "No data" (#238). One missing year is an ordinary gap and is dropped
+      downstream like any other missing component;
+    - a unit column that is absent, or a commodity quoted in two units
+      within the region — cotton is in bales, everything else in 1000 MT,
+      and a level with an unknown unit is not a level.
     """
+    if "unit" not in psd_df.columns:
+        raise ValueError(
+            "PSD frame has no `unit` column — refusing to compute levels "
+            "whose unit is unknown (cotton is in bales, not 1000 MT)"
+        )
     df = psd_df[
         (psd_df["country"] == country)
         & (psd_df["attribute"].isin(
-            [_ENDING_STOCKS, _DOMESTIC_CONSUMPTION, _EXPORTS, _IMPORTS]
+            [_ENDING_STOCKS, _EXPORTS, _IMPORTS, *_CONSUMPTION_ATTRIBUTES]
         ))
     ]
     if df.empty:
         return None
+
+    units = df.groupby("commodity")["unit"].agg(
+        lambda s: sorted(set(s.dropna().astype(str)))
+    )
+    mixed = {name: u for name, u in units.items() if len(u) != 1}
+    if mixed:
+        raise ValueError(
+            f"{country}: more than one unit (or none) inside a single "
+            f"commodity — {mixed}; a ratio across units is not a ratio"
+        )
 
     wide = df.pivot_table(
         index=["commodity", "year"],
@@ -157,9 +211,24 @@ def _pivot_region(psd_df: pd.DataFrame, country: str) -> pd.DataFrame | None:
     ).reset_index()
     wide.columns.name = None
     wide = wide.rename(columns={_ENDING_STOCKS: "ending_stocks"})
-    for col in ("ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS, _IMPORTS):
+    for col in ("ending_stocks", _EXPORTS, _IMPORTS, *_CONSUMPTION_ATTRIBUTES):
         if col not in wide.columns:
             wide[col] = pd.NA
+
+    wide[_CONSUMPTION] = pd.NA
+    for commodity in wide["commodity"].unique():
+        attr = consumption_attribute(str(commodity))
+        mask = wide["commodity"] == commodity
+        values = wide.loc[mask, attr]
+        if values.isna().all():
+            raise ValueError(
+                f"{country}: PSD carries no {attr!r} row for {commodity} in "
+                f"any marketing year — has PSD renamed the attribute? "
+                f"config.PSD_CONSUMPTION_ATTRIBUTE says {commodity} → {attr!r}"
+            )
+        wide.loc[mask, _CONSUMPTION] = values
+    wide[_CONSUMPTION] = pd.to_numeric(wide[_CONSUMPTION], errors="coerce")
+    wide["unit"] = wide["commodity"].map(lambda c: units[c][0])
     return wide
 
 
@@ -209,9 +278,20 @@ def compute_stocks_to_use(
     Returns
     -------
     pd.DataFrame
-        Columns: commodity, year, ending_stocks, total_use, ratio.
+        Columns: commodity, year, ending_stocks, total_use, ratio, unit.
         Rows where any component is missing or total_use<=0 are
-        dropped. The ratio is a fraction (0.082 represents 8.2%).
+        dropped. The ratio is a fraction (0.082 represents 8.2%); `unit`
+        is the PSD unit the two levels are quoted in — "(1000 MT)" for
+        grains and oilseeds, "1000 480 lb. Bales" for cotton — and travels
+        with them so bales are never read as tonnes.
+
+    Raises
+    ------
+    ValueError
+        For a commodity with no mapped consumption attribute, a commodity
+        whose mapped attribute PSD no longer carries at all, a missing
+        `unit` column, or two units inside one commodity. Each of those
+        used to surface as a quiet "No data".
     """
     is_aggregate = country in _AGGREGATE_REGIONS
     if wasde_grain_adjustment and not is_aggregate:
@@ -221,7 +301,7 @@ def compute_stocks_to_use(
             f"adjusts world and foreign use, never a single country's."
         )
 
-    empty_cols = ["commodity", "year", "ending_stocks", "total_use", "ratio"]
+    empty_cols = ["commodity", "year", "ending_stocks", "total_use", "ratio", "unit"]
     if psd_df.empty:
         return pd.DataFrame(columns=empty_cols)
 
@@ -230,8 +310,8 @@ def compute_stocks_to_use(
         return pd.DataFrame(columns=empty_cols)
 
     if is_aggregate:
-        wide = wide.dropna(subset=["ending_stocks", _DOMESTIC_CONSUMPTION])
-        wide["total_use"] = wide[_DOMESTIC_CONSUMPTION]
+        wide = wide.dropna(subset=["ending_stocks", _CONSUMPTION])
+        wide["total_use"] = wide[_CONSUMPTION]
         if wasde_grain_adjustment:
             # The gap is always the *world* one, even for World Less China.
             # WASDE carries its world (exports − imports) into the less-China
@@ -251,12 +331,12 @@ def compute_stocks_to_use(
             adjusted = wide["commodity"].isin(WASDE_USE_ADJUSTED_COMMODITIES)
             if adjusted.any():
                 wide.loc[adjusted, "total_use"] = (
-                    wide.loc[adjusted, _DOMESTIC_CONSUMPTION]
+                    wide.loc[adjusted, _CONSUMPTION]
                     + wide.loc[adjusted, "_gap"]
                 )
     else:
-        wide = wide.dropna(subset=["ending_stocks", _DOMESTIC_CONSUMPTION, _EXPORTS])
-        wide["total_use"] = wide[_DOMESTIC_CONSUMPTION] + wide[_EXPORTS]
+        wide = wide.dropna(subset=["ending_stocks", _CONSUMPTION, _EXPORTS])
+        wide["total_use"] = wide[_CONSUMPTION] + wide[_EXPORTS]
 
     wide = wide[wide["total_use"] > 0]
     if wide.empty:
