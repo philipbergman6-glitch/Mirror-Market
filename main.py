@@ -1398,7 +1398,23 @@ def main(argv: list[str] | None = None) -> int:
             "same cleaners, same freshness grading."
         ),
     )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help=(
+            "setup check only: report every API key as set or missing (never its "
+            "value) and the layers a missing one skips or degrades, then exit 1 if a "
+            "CI-required key is missing. Fetches nothing, writes nothing."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.doctor:
+        # Imported here, not at the top: the doctor is the one entry point
+        # that must work before anything else does, and main's import graph
+        # is the thing a broken install trips over.
+        from pipeline.doctor import run_doctor
+
+        return run_doctor()
     if args.fast:
         return run(
             layer_keys=FAST_REFRESH_LAYERS,

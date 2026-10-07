@@ -45,6 +45,7 @@ pip install -r requirements-dev.txt      # tests, lint, type-check
 
 python main.py                           # full pipeline (all layers)
 python main.py --fast                    # prices/FX/curve only, ~1 min
+python main.py --doctor                  # API keys set/missing + what each skips; exit 1 if a CI-required key is missing
 
 python -m analysis.briefing              # daily market briefing
 
@@ -55,7 +56,7 @@ python scripts/generate_site.py --only cbot   # one page (headline | players |
 
 ## Environment variables
 
-`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` (required in CI; degraded fallback locally). Most layers need no key. Details, degraded modes, and the User-Agent trap: `LAYERS.md` → "API keys".
+`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY` (required in CI; degraded fallback locally). Most layers need no key. `python main.py --doctor` lists every key as set/missing and the layers each one gates, without fetching; `config.API_KEY_CATALOG` is the one roster. Details, degraded modes, and the User-Agent trap: `LAYERS.md` → "API keys".
 
 ## Invariants — never break these
 
