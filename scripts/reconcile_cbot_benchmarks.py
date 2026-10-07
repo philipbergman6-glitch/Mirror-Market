@@ -10,7 +10,16 @@ Fetching once is the whole design. Yahoo answers each contract with its own
 last bar and both paths would otherwise resolve their own session; a
 divergence could then mean "different download" rather than "different
 parse", which makes the report worthless as cutover evidence. So a memoising
-downloader is installed for the run and both paths draw from it.
+downloader is shared by both paths for the run.
+
+The download is deliberately the **unguarded** one (#331). ``download_bars``
+returns the provider frame including the session in progress; the v1 half
+then applies its own settlement guard (``drop_unsettled_session``, at the
+run's instant) over ``fetchers.forward_curve.build_curve``, and the trusted
+half lets its ``settlement.confirmed`` rule judge the same bar. Handing both
+paths a frame ``fetch_one`` had already trimmed left that rule unable to fire
+on any live run, green and proving nothing — the same reasoning as
+``scripts/reconcile_fx.py``.
 
 Usage:
     python scripts/reconcile_cbot_benchmarks.py
@@ -41,13 +50,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import fetchers.forward_curve as forward_curve  # noqa: E402
+import fetchers.yfinance as yfinance_fetcher  # noqa: E402
+from fetchers._settlement import EXCHANGE_SESSION, drop_unsettled_session  # noqa: E402
+from fetchers.forward_curve import build_curve, curve_contracts  # noqa: E402
 from trust.cbot_benchmarks import (  # noqa: E402
     BENCHMARK_COMMODITIES,
     BenchmarkArtifactReplay,
     bars_from_replay,
     dual_write_cbot_benchmarks,
     fetch_cbot_benchmark_artifact,
+    trusted_curve_frame,
 )
 from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS  # noqa: E402
 from trust.reconciliation import ReconciliationReport  # noqa: E402
@@ -73,7 +85,7 @@ EXIT_UNAVAILABLE = 2
 
 
 class _MemoisingDownloader:
-    """One download per ticker, shared by both parsers.
+    """One unguarded download per ticker, shared by both parsers.
 
     Not a performance optimisation. Both paths must read the *same* bars or a
     reported difference cannot be attributed to the parse, and the settlement
@@ -82,7 +94,7 @@ class _MemoisingDownloader:
     """
 
     def __init__(self, download=None) -> None:
-        self._download = download or forward_curve.fetch_one
+        self._download = download or yfinance_fetcher.download_bars
         self._frames: dict[str, pd.DataFrame] = {}
 
     def __call__(self, ticker: str, period: str = "5d") -> pd.DataFrame:
@@ -125,6 +137,7 @@ class ReconciliationRun:
     quarantined_revision_ids: tuple[str, ...]
     checked_at: datetime
     dataset_keys: tuple[str, ...] = CBOT_BENCHMARK_DATASET_KEYS
+    rejected_by_rule: tuple[tuple[str, int], ...] = ()
 
     @property
     def exit_code(self) -> int:
@@ -145,6 +158,11 @@ class ReconciliationRun:
             # here because a cutover should not be enabled on a day the ledger
             # is holding legs back without the operator knowing.
             "quarantined_revision_ids": list(self.quarantined_revision_ids),
+            # Also reported, never graded. A pre-cutoff run *must* show
+            # ``settlement.confirmed`` here — the open session rejected by the
+            # ledger and dropped by v1's guard is the two paths agreeing, and
+            # the line that proves the rule fires live (#331).
+            "rejected_by_rule": dict(self.rejected_by_rule),
             "commodities": [item.to_dict() for item in self.commodities],
         }
 
@@ -167,12 +185,14 @@ def reconcile_once(
     for commodity in commodities:
         replay = fetch_cbot_benchmark_artifact(commodity, today=today, download=downloader)
         replays.append(replay)
-        legacy_frames[commodity] = _legacy_frame(commodity, downloader, today=today)
+        legacy_frames[commodity] = _legacy_frame(commodity, downloader, today=today, now=checked_at)
 
     if not any(bars_from_replay(replay) for replay in replays):
-        # Every leg empty means the provider published no session — a weekend,
-        # a holiday, or a run before the settlement guard's cutoff. Grading
-        # that as a failure would fire the job every Saturday.
+        # Every leg empty means the provider published nothing for any
+        # contract — a weekend or holiday with no window at all, or an outage
+        # answering empty. Grading that as a failure would fire the job every
+        # Saturday. A pre-cutoff run is *not* this case: the window carries
+        # the open session, which both paths then refuse in their own way.
         log.info("CBOT benchmarks: no session published for any leg")
         return ReconciliationRun(
             status=STATUS_NO_SESSION,
@@ -184,9 +204,16 @@ def reconcile_once(
 
     with _repository_dir(repository_root) as root:
         repository = TemporaryDirectoryTrustRepository(root)
-        result = dual_write_cbot_benchmarks(repository, replays, legacy_frames)
+        # Ingested at the run's instant, the same clock the v1 half's guard
+        # was given: the settlement rule and the guard must judge the newest
+        # bar at one moment or a run straddling the cutoff would report the
+        # difference as a divergence.
+        result = dual_write_cbot_benchmarks(repository, replays, legacy_frames, ingested_at=checked_at)
+        # The rows the trusted *curve* has — the frame that was compared —
+        # not the accepted revisions, which since #331 span every finished
+        # session in the provider window and the report is about one.
         trusted_counts = {
-            item.commodity: len(item.accepted_revision_ids) for item in result.ingestion.datasets
+            replay.commodity: len(trusted_curve_frame(repository, replay.commodity)) for replay in replays
         }
 
     items = tuple(
@@ -206,24 +233,35 @@ def reconcile_once(
         commodities=items,
         quarantined_revision_ids=result.ingestion.quarantined_revision_ids,
         checked_at=checked_at,
+        rejected_by_rule=result.ingestion.rejected_by_rule,
     )
 
 
-def _legacy_frame(commodity: str, download, *, today: date | None) -> pd.DataFrame:
-    """The v1 parse of the same bars, with its own downloader swapped out.
+def _legacy_frame(commodity: str, download, *, today: date | None, now: datetime) -> pd.DataFrame:
+    """The v1 half of the dual write: the shared bars under v1's own guard.
 
-    ``fetch_forward_curve`` imports ``fetch_one`` into its own namespace at
-    import time, so the substitution has to happen on that name. It is
-    restored unconditionally: leaving a memoising downloader installed would
-    freeze the module's view of the market for the rest of the process.
+    This is ``fetch_forward_curve``'s body with the download already made —
+    the same ``drop_unsettled_session`` call, the same ``EXCHANGE_SESSION``
+    rule, then ``build_curve`` — rather than a call to ``fetch_forward_curve``
+    itself, for one reason: the guard's clock has to be the *run's* instant.
+    ``fetch_one`` reads the wall clock, so a run straddling the 14:30 Chicago
+    cutoff would judge the two paths at two different moments and report the
+    difference as a divergence. Nothing else about v1's policy is restated
+    here; the rule, the drop and the parse are all imported, and no module
+    global is rebound for the run.
     """
 
-    original = forward_curve.fetch_one
-    forward_curve.fetch_one = download
-    try:
-        return forward_curve.fetch_forward_curve(commodity, today=today)
-    finally:
-        forward_curve.fetch_one = original
+    contracts = curve_contracts(commodity, today=today)
+    frames = {
+        entry["ticker"]: drop_unsettled_session(
+            download(entry["ticker"], period="5d"),
+            label=entry["ticker"],
+            rule=EXCHANGE_SESSION,
+            now=now,
+        )
+        for entry in contracts
+    }
+    return build_curve(commodity, contracts, frames)
 
 
 class _repository_dir:
@@ -276,6 +314,12 @@ def _log_summary(run: ReconciliationRun) -> None:
         )
         for diff in report.field_differences[:10]:
             log.error("  %s %s: v1=%r trusted=%r", diff["key"], diff["field"], diff["legacy"], diff["trusted"])
+    if run.rejected_by_rule:
+        log.info(
+            "CBOT benchmarks: ledger rejected %d revision(s) this run — %s",
+            sum(count for _rule, count in run.rejected_by_rule),
+            ", ".join(f"{rule}: {count}" for rule, count in run.rejected_by_rule),
+        )
     if run.quarantined_revision_ids:
         log.warning(
             "CBOT benchmarks: %d leg(s) quarantined by the ledger this run — "
