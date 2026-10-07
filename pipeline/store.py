@@ -813,6 +813,43 @@ def save_cyclone_frame(source: str, name: str, df: pd.DataFrame):
         logger.info("%s: no active storm — cleared %d stored track point(s)", label, removed)
 
 
+_HAZARD_FLAG_COLUMNS = [
+    "run_date", "place_id", "source", "storm_id", "state", "severity", "band_kt",
+    "storm_name", "advisory", "issued_at", "first_arrival_tau_h", "first_arrival_at",
+    "closest_km", "closest_tau_h", "place_lat", "place_lon", "legs",
+]
+_HAZARD_FLAG_KEY = ["run_date", "place_id", "source", "storm_id"]
+_HAZARD_FLAG_PUBLISHED_STATES = ("flag", "watch")
+
+
+def save_hazard_flags(rows: list[dict]) -> int:
+    """Write what the site published → 'hazard_flags' (spec §3.2 / §7.4).
+
+    Called from the site generator after the market pages render, never from
+    a fetcher: the table records a *publication*, so only ``flag`` and
+    ``watch`` rows belong here — a ``clear`` or ``not_covered`` place was not
+    published as a hazard and is refused rather than stored as one. An empty
+    list is a quiet day, not an error. ``INSERT OR REPLACE`` on the run date,
+    so a second render of the same edition is idempotent.
+    """
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows)
+    missing = [c for c in _HAZARD_FLAG_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_hazard_flags: rows are missing columns {missing}")
+    states = set(df["state"].astype(str))
+    if not states <= set(_HAZARD_FLAG_PUBLISHED_STATES):
+        raise ValueError(
+            f"save_hazard_flags: only {_HAZARD_FLAG_PUBLISHED_STATES} are published flags, "
+            f"got {sorted(states - set(_HAZARD_FLAG_PUBLISHED_STATES))}"
+        )
+    for column in ("legs", "severity", "run_date", "place_id", "source", "storm_id"):
+        if df[column].isna().any() or (df[column].astype(str).str.strip() == "").any():
+            raise ValueError(f"save_hazard_flags: every row needs a non-empty {column}")
+    return _save("hazard_flags", df[_HAZARD_FLAG_COLUMNS], _HAZARD_FLAG_KEY, "hazard_flags")
+
+
 def save_ocean_freight(route: str, df: pd.DataFrame):
     """Write GTR monthly ocean freight rates → 'ocean_freight_rates'.
 

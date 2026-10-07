@@ -147,6 +147,11 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # NHC's own archive can replay an Atlantic/East Pacific track).
     "cyclone_source_status": ("source", "Date"),
     "cyclone_storms": ("source", "storm_id", "issued_at"),
+    # The flags the site actually published (slice 4, #390): a function of
+    # that day's advisory and that day's place registry, reproducible from
+    # neither once the advisory has been replaced. Empty out of season, like
+    # cyclone_storms — the same expected warning.
+    "hazard_flags": ("run_date", "place_id", "source", "storm_id"),
 }
 
 
