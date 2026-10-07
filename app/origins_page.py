@@ -168,10 +168,10 @@ def _origin_hazard(origin_key: str, hazards: dict[str, dict] | None) -> dict | N
     from app.markets import ledger_leg_id_for
 
     leg = config.ORIGIN_LEGS.get(origin_key) or {}
-    triple = (leg.get("market"), leg.get("block"), leg.get("key"))
-    if any(part is None for part in triple):
+    market, block, key = leg.get("market"), leg.get("block"), leg.get("key")
+    if market is None or block is None or key is None:
         return None
-    leg_id = ledger_leg_id_for(*triple)
+    leg_id = ledger_leg_id_for(str(market), str(block), str(key))
     return hazards.get(leg_id) if leg_id else None
 
 
