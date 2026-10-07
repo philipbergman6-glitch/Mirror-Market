@@ -194,7 +194,11 @@ def test_fx_rate_carries_its_own_observation_date(conn):
          ("BRL/USD", "2026-08-11", None, None, None, 0.1958)],
     )
     conn.commit()
-    assert open_provider(conn).fx_rate("BRL/USD", on=AS_OF) == (date(2026, 8, 11), 0.1958)
+    # A1 (#298): the newest prior close inside the 3-day cap, with its own date…
+    assert open_provider(conn).fx_rate("BRL/USD", on=date(2026, 8, 13)) == (date(2026, 8, 11), 0.1958)
+    # …and None past it: 11 Aug is seven days before AS_OF, and a hedge valued
+    # at a week-old rate is a different number wearing the right currency.
+    assert open_provider(conn).fx_rate("BRL/USD", on=AS_OF) is None
     assert open_provider(conn).fx_rate("ZAR/USD", on=AS_OF) is None
 
 
