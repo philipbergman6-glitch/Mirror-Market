@@ -291,6 +291,16 @@ SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
 FX_SESSION_TIMEZONE = "America/New_York"
 FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
 
+# A1 (#298) / B2 (#308) — the one FX-date rule. A `home_per_mt` leg converts
+# at its own date's FX close, else at the newest *prior* close at most this
+# many calendar days older, else renders blank with reason `fx_gap_exceeded`.
+# Three covers a weekend plus one holiday (the real calendar-divergence case)
+# without letting a frozen FX feed keep converting; past it the reason doubles
+# as a frozen-feed alarm. Never a later-dated rate. One policy for every
+# surface, public and desk: `pricing.fx_alignment.align_fx` is the only site
+# that applies it.
+FX_ALIGNMENT_MAX_GAP_DAYS = 3
+
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
 # Sign up: https://quickstats.nass.usda.gov/api
@@ -653,8 +663,45 @@ PSD_TARGET_COUNTRIES = [
 PSD_TARGET_ATTRIBUTES = [
     "Production", "Imports", "Exports", "Crush",
     "Ending Stocks", "Domestic Consumption",
+    "Domestic Use",  # 142 — cotton's consumption line; see below (#238)
     "Beginning Stocks", "Total Supply", "Total Distribution",
 ]
+
+# The PSD attribute that is a commodity's total domestic consumption. PSD
+# names it "Domestic Consumption" (125) for every oilseed and grain and
+# "Domestic Use" (142) for cotton — cotton has no 125 row at all, so an
+# attribute filter on the single name dropped cotton's consumption silently
+# and no cotton stocks-to-use could ever print (#238). Verified attribute by
+# attribute against the Sep-2026 bulk CSVs for all ten commodities.
+#
+# Explicit per commodity on purpose: a coalesce ("whichever of the two
+# exists") would quietly pick a wrong column the day PSD adds one. A
+# commodity missing here, or mapped to a name the fetcher does not request,
+# fails at import.
+PSD_CONSUMPTION_ATTRIBUTE = {
+    "Soybeans":      "Domestic Consumption",
+    "Soybean Oil":   "Domestic Consumption",
+    "Soybean Meal":  "Domestic Consumption",
+    "Palm Oil":      "Domestic Consumption",
+    "Corn":          "Domestic Consumption",
+    "Wheat":         "Domestic Consumption",
+    "Cotton":        "Domestic Use",
+    "Rapeseed":      "Domestic Consumption",
+    "Rapeseed Oil":  "Domestic Consumption",
+    "Rapeseed Meal": "Domestic Consumption",
+}
+if set(PSD_CONSUMPTION_ATTRIBUTE) != set(PSD_TARGET_COMMODITIES):
+    raise ValueError(
+        "PSD_CONSUMPTION_ATTRIBUTE must name a consumption attribute for "
+        "exactly the PSD_TARGET_COMMODITIES — mismatch: "
+        f"{sorted(set(PSD_CONSUMPTION_ATTRIBUTE) ^ set(PSD_TARGET_COMMODITIES))}"
+    )
+if not set(PSD_CONSUMPTION_ATTRIBUTE.values()) <= set(PSD_TARGET_ATTRIBUTES):
+    raise ValueError(
+        "PSD_CONSUMPTION_ATTRIBUTE maps to an attribute PSD_TARGET_ATTRIBUTES "
+        "does not request: "
+        f"{sorted(set(PSD_CONSUMPTION_ATTRIBUTE.values()) - set(PSD_TARGET_ATTRIBUTES))}"
+    )
 
 # ---------------------------------------------------------------------------
 # Layer 7 — Currency pairs via yfinance (export competitiveness)
@@ -1883,6 +1930,26 @@ CEC_YIELD_BAND_T_HA = (0.3, 5.0)
 # RSI levels (industry standard 70/30, but can be tuned)
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
+
+# Market-drivers narrative rules (#404). Each threshold gates an
+# *interpretation*; the observation prints regardless.
+#
+# "Crowded" positioning needs a historical extreme, not just a sign and an
+# RSI: the latest spec net must rank at or above this percentile of the
+# trailing window (longs) or at or below its mirror (shorts). Under the
+# observation floor the rule is withheld — a 3-week history has no extreme.
+COT_CROWDED_PERCENTILE = 90
+COT_CROWDED_LOOKBACK_DAYS = 365 * 3
+COT_CROWDED_MIN_OBSERVATIONS = 26
+
+# "China buying pace strong" needs two things a one-week share cannot give:
+# the latest week's absolute China net sales above this multiple of the
+# trailing mean (prior weeks, at least the floor of them), AND total
+# commitments running at or ahead of the year-ago share of the WASDE export
+# forecast. Share of one week's total is printed as an observation only.
+CHINA_PACE_LOOKBACK_WEEKS = 8
+CHINA_PACE_MIN_WEEKS = 4
+CHINA_PACE_STRONG_MULTIPLE = 1.5
 
 # Sessions the named ratio-adjusted continuous series must hold before the
 # technical stack adopts it over the provider front-month frame (A4 #301).

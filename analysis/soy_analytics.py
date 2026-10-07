@@ -785,6 +785,8 @@ def supply_analysis() -> dict:
                 "marketing_year": int(current["year"]),
                 "ending_stocks": float(current["ending_stocks"]),
                 "total_use": float(current["total_use"]),
+                # Cotton's levels are 1000 480-lb bales, the rest 1000 MT (#238).
+                "unit": str(current["unit"]),
                 "current_ratio": float(current["ratio"]),
                 "is_tight": name in tight,
             }

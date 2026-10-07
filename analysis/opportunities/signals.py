@@ -53,7 +53,7 @@ from analysis.opportunities.domain import (
     Volume,
 )
 from analysis.origins.domain import Grade, Incoterm, Money, Port, ShipmentWindow, SourceRef
-from pricing.semantics import confidence_for_quote_kind
+from pricing.semantics import PriceType, confidence_for_quote_kind, price_type_for_quote_kind
 
 log = logging.getLogger(__name__)
 
@@ -668,7 +668,9 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
     rows = _rows(
         conn,
         "SELECT commodity, country, year, attribute, value, unit FROM psd "
-        "WHERE commodity = 'Oilseed, Soybean'",
+        # Layer 6 stores PSD rows under config.PSD_TARGET_COMMODITIES'
+        # display names ("Soybeans"), not PSD's own "Oilseed, Soybean".
+        "WHERE commodity = 'Soybeans'",
     )
     if not rows:
         return []
@@ -705,7 +707,7 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
         source = SourceRef(
             layer="psd",
             table="psd",
-            key=f"Oilseed, Soybean/{country_name}",
+            key=f"Soybeans/{country_name}",
             detail=f"marketing year {int(latest['year'])}",
             href="index.html",
         )
@@ -732,7 +734,7 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
         signal = MarketSignal(
             signal_id=f"deficit:{iso}:{int(latest['year'])}",
             kind=SignalKind.SUPPLY_DEFICIT,
-            headline=signals[0]["description"].replace("Oilseed, Soybean", country_name),
+            headline=signals[0]["description"].replace("Soybeans", country_name),
             detail=(
                 "Ending stocks over total use (domestic consumption plus exports), below "
                 "the prior five-year low for this country. A tight importer bids for cargo; "
@@ -779,6 +781,79 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
 # ---------------------------------------------------------------------------
 # 5. Crush margin
 # ---------------------------------------------------------------------------
+#: The label a crush carries when its legs are administered values. Reuses the
+#: ``pricing.semantics`` level name rather than coining one: "administered" is
+#: what the evidence chips already say, so the headline and the table agree.
+ADMINISTERED_CRUSH_LABEL = f"{PriceType.ADMINISTERED.label.capitalize()}-price crush reference"
+
+
+def _has_administered_leg(result) -> bool:
+    """Whether any leg is set by decree rather than by trade.
+
+    One administered leg is enough: a margin with a decreed input is not a
+    traded margin, in the same way one hand-entered input drags a row's
+    confidence down (``pricing.semantics.worst_confidence``). Raises on a quote
+    kind nobody classified, as the semantics module does — a leg with no price
+    type must not silently pass as traded.
+    """
+    return any(
+        price_type_for_quote_kind(leg.quote_kind.value) is PriceType.ADMINISTERED
+        for leg in result.legs
+    )
+
+
+def _crush_label(result, *, administered: bool) -> str:
+    """The level label, or the administered relabel where the legs demand it."""
+    return ADMINISTERED_CRUSH_LABEL if administered else result.label
+
+
+def _crush_meaning(result, *, administered: bool) -> str:
+    """What the number is. The level's own meaning, unless the legs are decreed.
+
+    ``GROSS_PHYSICAL.meaning`` says "cash bean against cash oil and meal", which
+    an administered triplet is not, so that sentence is replaced rather than
+    appended to.
+    """
+    if not administered:
+        return result.meaning
+    return (
+        "Bean against oil and meal at one location on one day, every leg an "
+        f"{PriceType.ADMINISTERED.label} value. {PriceType.ADMINISTERED.caveat} "
+        "A reference for where the official values sit relative to each other; "
+        "it is not what any plant earns, because no plant buys or sells at a decree."
+    )
+
+
+def _crush_why_now(
+    market_name: str,
+    label: str,
+    margin: float,
+    as_of: date,
+    floor: float,
+    *,
+    administered: bool,
+) -> str:
+    """The first sentence a trader reads. Level-conditional on purpose.
+
+    Only traded or assessed legs support the inference that a crusher earning
+    the margin can bid up for beans. Administered legs support the weaker claim
+    only: the decreed values are this far apart.
+    """
+    opener = (
+        f"{market_name}'s {label.lower()} is {margin:,.2f} USD/MT on "
+        f"{as_of.isoformat()}, above the {floor:,.0f} USD/MT this engine treats as "
+        "worth a call."
+    )
+    if administered:
+        return (
+            f"{opener} The legs are {PriceType.ADMINISTERED.label} values, so this is "
+            "the gap between official reference prices for the three products, not a "
+            "margin anybody earned. It says where the decree puts product values "
+            "against beans; it does not say what a crusher can pay."
+        )
+    return f"{opener} A crusher earning that has room to bid up for beans."
+
+
 def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Detection]:
     """Crushers earning enough to bid up for beans.
 
@@ -786,6 +861,14 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
     it exists, falling back to the board. Both are labelled on the opportunity,
     because they are not the same number: a board crush is three named futures
     contracts and is not what any plant earns.
+
+    The prose carries the legs' price level too (#405). Argentina's physical
+    legs are MAGyP administered minimums — ``pricing.semantics`` already calls
+    them ``administered`` — and a margin struck across three decreed values is
+    a *reference*, not a plant's own buy and sell. It says nothing about what
+    any crusher earns, so it must not be sold as "gross physical" or read as
+    room to bid. The board crush is the model: the level is named in every
+    sentence a trader reads first, not only in the evidence table.
     """
     from analysis.origins.assumptions import load_assumptions
     from analysis.origins.crush import crush_stack
@@ -829,14 +912,17 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
             continue
 
         is_board = chosen.level.is_board
+        is_administered = _has_administered_leg(chosen)
+        label = _crush_label(chosen, administered=is_administered)
+        meaning = _crush_meaning(chosen, administered=is_administered)
         signal = MarketSignal(
             signal_id=f"crush:{slug}:{chosen.level.value}:{chosen.as_of.isoformat()}",
             kind=SignalKind.CRUSH_MARGIN,
             headline=(
-                f"{market.get('name', slug)} {chosen.label.lower()} at "
+                f"{market.get('name', slug)} {label.lower()} at "
                 f"{margin:,.2f} USD/MT"
             ),
-            detail=chosen.meaning,
+            detail=meaning,
             observed_on=chosen.as_of,
             evidence=evidence,
             validity_days=settings["validity_days"],
@@ -888,26 +974,28 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
             destination=country_port(iso, market.get("name", slug)),
             dislocation=Dislocation(
                 kind="margin",
-                label=chosen.label,
+                label=label,
                 value=margin,
                 unit="usd_per_mt",
             ),
             economics=Economics(
                 per_mt=Money(margin),
-                method=chosen.label,
+                method=label,
                 method_version=config.LANDED_COST_METHOD_VERSION,
                 struck_on=chosen.as_of,
                 components=tuple(
                     (leg.name, leg.price.amount) for leg in chosen.legs
                 ),
-                note=chosen.meaning,
+                note=meaning,
             ),
             blockers=tuple(blockers),
-            why_now=(
-                f"{market.get('name', slug)}'s {chosen.label.lower()} is "
-                f"{margin:,.2f} USD/MT on {chosen.as_of.isoformat()}, above the "
-                f"{settings['min_margin_usd_mt']:,.0f} USD/MT this engine treats as worth a "
-                "call. A crusher earning that has room to bid up for beans."
+            why_now=_crush_why_now(
+                market.get("name", slug),
+                label,
+                margin,
+                chosen.as_of,
+                float(settings["min_margin_usd_mt"]),
+                administered=is_administered,
             ),
             context={
                 "level": chosen.level.value,

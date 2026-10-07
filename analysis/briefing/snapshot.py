@@ -64,6 +64,7 @@ from analysis.weather_alerts import (
     precip_deficit_30d,
 )
 from analysis.zscore import trailing_zscore
+from config import PSD_CONSUMPTION_ATTRIBUTE
 from pipeline.query import (
     read_argentina_fob,
     read_brazil_estimates,
@@ -438,6 +439,8 @@ def _stocks_to_use_block() -> dict[str, dict[str, Any]]:
             "ratio": _num(current["ratio"]),
             "ending_stocks": _num(current["ending_stocks"]),
             "total_use": _num(current["total_use"]),
+            # Cotton is in 1000 480-lb bales, the rest in 1000 MT (#238).
+            "unit": str(current["unit"]),
             "marketing_year": int(current["year"]) if pd.notna(current["year"]) else None,
             "prior_5y_low": prior_low,
             "prior_5y_high": prior_high,
@@ -484,6 +487,7 @@ def _world_stocks_to_use_block() -> dict[str, Any]:
             ),
             "ending_stocks": _num(current["ending_stocks"]),
             "total_use": _num(current["total_use"]),
+            "unit": str(current["unit"]),
             "marketing_year": year,
             "prior_5y_low": (
                 _num(history["ratio"].min())
@@ -507,6 +511,8 @@ def _world_stocks_to_use_block() -> dict[str, Any]:
             WORLD_LESS_CHINA, wasde_grain_adjustment=WORLD_GRAIN_ADJUSTMENT
         ),
         "denominator": "Domestic Consumption",
+        # PSD's name for the same line differs by commodity (#238).
+        "denominator_attribute": dict(PSD_CONSUMPTION_ATTRIBUTE),
         "region": "every PSD country",
         "region_less_china": "every PSD country except China",
         "wasde_grain_adjustment": WORLD_GRAIN_ADJUSTMENT,

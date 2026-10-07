@@ -12,12 +12,15 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+import config
 from analysis.stocks_to_use import (
     HISTORY_WINDOW,
     MIN_HISTORY_YEARS,
     WORLD,
+    WORLD_COMMODITIES,
     WORLD_LESS_CHINA,
     compute_stocks_to_use,
+    consumption_attribute,
     denominator_note,
     detect_tight_supply,
 )
@@ -32,6 +35,7 @@ def _psd_row(
     year: int,
     attribute: str,
     value: float,
+    unit: str = "(1000 MT)",
 ) -> dict:
     return {
         "commodity": commodity,
@@ -39,7 +43,7 @@ def _psd_row(
         "year": year,
         "attribute": attribute,
         "value": value,
-        "unit": "(1000 MT)",
+        "unit": unit,
     }
 
 
@@ -80,7 +84,7 @@ def test_compute_returns_empty_for_empty_input():
     out = compute_stocks_to_use(pd.DataFrame())
     assert out.empty
     assert list(out.columns) == [
-        "commodity", "year", "ending_stocks", "total_use", "ratio",
+        "commodity", "year", "ending_stocks", "total_use", "ratio", "unit",
     ]
 
 
@@ -142,6 +146,148 @@ def test_compute_ignores_unrelated_attributes():
     assert len(out) == 1
     assert out.iloc[0]["ratio"] == pytest.approx(0.1)
 
+
+
+# ---------------------------------------------------------------------------
+# Cotton: PSD names its consumption line "Domestic Use" (#238)
+# ---------------------------------------------------------------------------
+
+_BALES = "1000 480 lb. Bales"  # PSD's cotton Unit_Description, verbatim
+
+# USDA PSD, cotton, United States, MY2024, September-2026 vintage. PSD's own
+# attribute 195 prints 29.41 for this row — ending stocks over
+# (Domestic Use + Exports), the same formula as every other commodity.
+_US_COTTON_2024 = {
+    "Ending Stocks": 4_000.0,
+    "Domestic Use": 1_700.0,
+    "Exports": 11_900.0,
+}
+# PSD world sum, cotton, MY2024, same vintage. Consumption-only denominator
+# gives 62.8 % — the convention WASDE prints (63.1 % in WASDE-673), not the
+# 46.3 % the country formula would give the aggregate.
+_WORLD_COTTON_2024 = {
+    "Ending Stocks": 74_831.0,
+    "Domestic Use": 119_103.0,
+    "Exports": 42_396.0,
+    "Imports": 43_028.0,
+}
+
+
+def _cotton_frame(values: dict[str, float], country: str = "United States",
+                  year: int = 2024, attribute_unit: str = _BALES) -> pd.DataFrame:
+    return pd.DataFrame([
+        _psd_row(commodity="Cotton", country=country, year=year,
+                 attribute=attribute, value=value, unit=attribute_unit)
+        for attribute, value in values.items()
+    ])
+
+
+def test_consumption_attribute_is_per_commodity():
+    """Cotton is the one PSD commodity whose consumption line is not
+    'Domestic Consumption' — verified against the Sep-2026 bulk CSVs,
+    attribute by attribute, for all ten tracked commodities."""
+    assert consumption_attribute("Cotton") == "Domestic Use"
+    for name in config.PSD_TARGET_COMMODITIES:
+        if name != "Cotton":
+            assert consumption_attribute(name) == "Domestic Consumption", name
+
+
+def test_consumption_attribute_map_covers_exactly_the_psd_commodities():
+    """Adding a PSD commodity without naming its consumption line must fail
+    at import, not quietly drop that commodity from every ratio."""
+    assert set(config.PSD_CONSUMPTION_ATTRIBUTE) == set(config.PSD_TARGET_COMMODITIES)
+    # ...and every name we map to is one the fetcher actually requests.
+    assert set(config.PSD_CONSUMPTION_ATTRIBUTE.values()) <= set(config.PSD_TARGET_ATTRIBUTES)
+
+
+def test_unknown_commodity_hard_fails_rather_than_defaulting():
+    df = pd.DataFrame([
+        _psd_row(commodity="Cottonseed", country="United States", year=2024,
+                 attribute=a, value=v)
+        for a, v in (("Ending Stocks", 1.0), ("Domestic Consumption", 5.0),
+                     ("Exports", 5.0))
+    ])
+    with pytest.raises(ValueError, match="Cottonseed"):
+        compute_stocks_to_use(df)
+    with pytest.raises(ValueError, match="Cottonseed"):
+        consumption_attribute("Cottonseed")
+
+
+def test_us_cotton_ratio_reproduces_psd_attribute_195():
+    out = compute_stocks_to_use(_cotton_frame(_US_COTTON_2024))
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert row["commodity"] == "Cotton"
+    assert row["total_use"] == pytest.approx(13_600.0)
+    assert row["ratio"] == pytest.approx(0.2941, abs=5e-5)
+
+
+def test_cotton_unit_travels_with_the_levels():
+    """Bales beside tonnes with no label is invariant-2 territory: the ratio
+    cancels the unit, the levels do not."""
+    soy = _psd_frame(pairs=[(2024, 8_840.0, 129_155.0)])
+    out = compute_stocks_to_use(pd.concat([soy, _cotton_frame(_US_COTTON_2024)],
+                                          ignore_index=True))
+    by_name = out.set_index("commodity")["unit"]
+    assert by_name["Cotton"] == _BALES
+    assert by_name["Soybeans"] == "(1000 MT)"
+
+
+def test_cotton_filed_under_domestic_consumption_hard_fails():
+    """If PSD ever renames cotton's line to match the others, the mapping is
+    wrong and must say so — reverting to 'Cotton: No data' is the silent
+    failure #238 existed to remove."""
+    renamed = _cotton_frame({
+        "Ending Stocks": 4_000.0,
+        "Domestic Consumption": 1_700.0,
+        "Exports": 11_900.0,
+    })
+    with pytest.raises(ValueError, match="Domestic Use"):
+        compute_stocks_to_use(renamed)
+
+
+def test_a_per_year_consumption_gap_is_still_an_ordinary_dropped_row():
+    """The rename guard fires only when a commodity has *no* consumption
+    row at all in the region; one missing year is a gap, not a rename."""
+    full = _cotton_frame(_US_COTTON_2024, year=2024)
+    partial = _cotton_frame({"Ending Stocks": 4_150.0, "Exports": 12_300.0}, year=2025)
+    out = compute_stocks_to_use(pd.concat([full, partial], ignore_index=True))
+    assert list(out["year"]) == [2024]
+
+
+def test_two_units_inside_one_commodity_hard_fail():
+    mixed = pd.concat([
+        _cotton_frame(_US_COTTON_2024, year=2024),
+        _cotton_frame(_US_COTTON_2024, year=2025, attribute_unit="(1000 MT)"),
+    ], ignore_index=True)
+    with pytest.raises(ValueError, match="unit"):
+        compute_stocks_to_use(mixed)
+
+
+def test_a_frame_without_a_unit_column_hard_fails():
+    df = _cotton_frame(_US_COTTON_2024).drop(columns=["unit"])
+    with pytest.raises(ValueError, match="unit"):
+        compute_stocks_to_use(df)
+
+
+def test_world_cotton_uses_the_consumption_only_denominator_in_bales():
+    df = _cotton_frame(_WORLD_COTTON_2024, country=WORLD)
+    out = compute_stocks_to_use(df, country=WORLD)
+    assert len(out) == 1
+    assert out.iloc[0]["ratio"] == pytest.approx(74_831.0 / 119_103.0)
+    assert out.iloc[0]["unit"] == _BALES
+    # The grain adjustment leaves cotton alone, as it does the oilseeds.
+    adjusted = compute_stocks_to_use(df, country=WORLD, wasde_grain_adjustment=True)
+    assert adjusted.iloc[0]["ratio"] == pytest.approx(out.iloc[0]["ratio"])
+
+
+def test_cotton_is_a_published_world_balance_sheet():
+    assert "Cotton" in WORLD_COMMODITIES
+
+
+def test_denominator_note_names_cottons_attribute():
+    assert "Domestic Use" in denominator_note("United States")
+    assert "Domestic Use" in denominator_note(WORLD)
 
 # ---------------------------------------------------------------------------
 # The world denominator (M15 #237)

@@ -300,3 +300,34 @@ def test_a_single_attribute_with_two_units_is_skipped():
     out = _filter_psd(raw)
 
     assert out[out["country"].isin({WORLD, WORLD_LESS_CHINA})].empty
+
+
+# ---------------------------------------------------------------------------
+# Cotton's consumption line is "Domestic Use", and it must survive the filter
+# (#238)
+# ---------------------------------------------------------------------------
+
+_COTTON = "2631000"  # config.PSD_TARGET_COMMODITIES["Cotton"]
+_BALES = "1000 480 lb. Bales"
+
+
+def test_cotton_domestic_use_rows_survive_the_attribute_filter():
+    """PSD has no 'Domestic Consumption' row for cotton at all; the isin
+    filter used to drop its 'Domestic Use' line silently, so no cotton
+    stocks-to-use could ever be computed."""
+    out = _filter_psd(_raw([
+        {"Commodity_Code": _COTTON, "Country_Name": "United States",
+         "Attribute_Description": "Domestic Use", "Value": 1_700.0,
+         "Unit_Description": _BALES},
+        {"Commodity_Code": _COTTON, "Country_Name": "China",
+         "Attribute_Description": "Domestic Use", "Value": 39_000.0,
+         "Unit_Description": _BALES},
+        {"Commodity_Code": _COTTON, "Country_Name": "United States",
+         "Attribute_Description": "Ending Stocks", "Value": 4_000.0,
+         "Unit_Description": _BALES},
+    ]))
+    assert _value(out, "United States", "Domestic Use") == 1_700.0
+    assert _value(out, WORLD, "Domestic Use") == 40_700.0
+    assert _value(out, WORLD_LESS_CHINA, "Domestic Use") == 1_700.0
+    units = set(out.loc[out["attribute"] == "Domestic Use", "unit"])
+    assert units == {_BALES}

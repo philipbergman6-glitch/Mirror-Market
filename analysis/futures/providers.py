@@ -58,6 +58,7 @@ from analysis.futures.domain import (
     parse_symbol,
     spec_for,
 )
+from pricing.fx_alignment import align_fx
 
 log = logging.getLogger(__name__)
 
@@ -531,12 +532,14 @@ class SqliteQuoteProvider:
 
     # -- fx ----------------------------------------------------------------
     def fx_rate(self, pair: str, *, on: date) -> tuple[date, float] | None:
-        """Most recent close for ``pair`` at or before ``on``.
+        """The close a position dated ``on`` is valued at, under A1 (#298).
 
         The stack's convention (``analysis.soy_analytics._latest_aligned_usd``)
         is that ``<CCY>/USD`` is USD per unit of the home currency, so callers
         *multiply*. Returned with its own observation date because a hedge
-        struck at a rate from three days ago must say so.
+        struck at a rate from three days ago must say so — and None past the
+        ``config.FX_ALIGNMENT_MAX_GAP_DAYS`` cap, the same rule every other
+        reader applies (``pricing.fx_alignment.align_fx``).
         """
         if not self._has_table("currencies"):
             return None
@@ -550,7 +553,10 @@ class SqliteQuoteProvider:
         observed = _as_date(row[0])
         if observed is None:
             return None
-        return observed, float(row[1])
+        aligned = align_fx(pair, [(observed, float(row[1]))], on).alignment
+        if aligned is None:
+            return None
+        return aligned.observed_on, aligned.usd_per_unit
 
 
 def _optional_float(row: Sequence, index: dict[str, int], column: str) -> float | None:

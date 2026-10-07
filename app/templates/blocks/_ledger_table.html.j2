@@ -64,6 +64,9 @@
       </td>
       <td>{% if row.kind %}<span class="kind">{{ row.kind_label or row.kind|replace('_', ' ') }}</span>{% endif %}</td>
       <td class="num strong">{{ f.usd(row.usd_mt) }}
+        {#- A1 #298: which day's rate, where it is not the print's own. -#}
+        {%- if row.fx_label %}<div class="caption">struck at {{ row.fx_label }}</div>
+        {%- elif row.fx_reason %}<div class="caption">withheld — {{ row.fx_reason }}</div>{% endif %}
         {%- if d.has_drilldown and row.band and row.band.since_label %}
         {#- Variant C's band: "high in its own range" is often the whole
             question, so it is stated in the collapsed row rather than behind a
