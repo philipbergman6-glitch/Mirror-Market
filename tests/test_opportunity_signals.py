@@ -153,9 +153,9 @@ def test_psd_signals_are_dated_by_our_own_ingest_not_by_today(tmp_db):
     rows = []
     for year, stocks in ((2021, 900), (2022, 850), (2023, 880), (2024, 870), (2025, 400)):
         rows.extend([
-            ("Oilseed, Soybean", "China", year, "Ending Stocks", stocks, "1000 MT"),
-            ("Oilseed, Soybean", "China", year, "Domestic Consumption", 10_000, "1000 MT"),
-            ("Oilseed, Soybean", "China", year, "Exports", 100, "1000 MT"),
+            ("Soybeans", "China", year, "Ending Stocks", stocks, "1000 MT"),
+            ("Soybeans", "China", year, "Domestic Consumption", 10_000, "1000 MT"),
+            ("Soybeans", "China", year, "Exports", 100, "1000 MT"),
         ])
     tmp_db.executemany(
         "INSERT INTO psd (commodity, country, year, attribute, value, unit) "
@@ -175,7 +175,7 @@ def test_psd_signals_are_dated_by_our_own_ingest_not_by_today(tmp_db):
 def test_psd_signal_is_withheld_when_we_cannot_date_it(tmp_db):
     tmp_db.executemany(
         "INSERT INTO psd (commodity, country, year, attribute, value, unit) VALUES (?,?,?,?,?,?)",
-        [("Oilseed, Soybean", "China", 2025, "Ending Stocks", 1, "1000 MT")],
+        [("Soybeans", "China", 2025, "Ending Stocks", 1, "1000 MT")],
     )
     tmp_db.commit()
     # No data_freshness row for psd: we cannot say when we learned this.
@@ -187,9 +187,9 @@ def test_exporting_countries_are_not_scanned_for_a_buyer_deficit(tmp_db):
     rows = []
     for year, stocks in ((2021, 900), (2022, 850), (2023, 880), (2024, 870), (2025, 10)):
         rows.extend([
-            ("Oilseed, Soybean", "Brazil", year, "Ending Stocks", stocks, "1000 MT"),
-            ("Oilseed, Soybean", "Brazil", year, "Domestic Consumption", 50_000, "1000 MT"),
-            ("Oilseed, Soybean", "Brazil", year, "Exports", 90_000, "1000 MT"),
+            ("Soybeans", "Brazil", year, "Ending Stocks", stocks, "1000 MT"),
+            ("Soybeans", "Brazil", year, "Domestic Consumption", 50_000, "1000 MT"),
+            ("Soybeans", "Brazil", year, "Exports", 90_000, "1000 MT"),
         ])
     tmp_db.executemany(
         "INSERT INTO psd (commodity, country, year, attribute, value, unit) VALUES (?,?,?,?,?,?)",

@@ -668,7 +668,9 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
     rows = _rows(
         conn,
         "SELECT commodity, country, year, attribute, value, unit FROM psd "
-        "WHERE commodity = 'Oilseed, Soybean'",
+        # Layer 6 stores PSD rows under config.PSD_TARGET_COMMODITIES'
+        # display names ("Soybeans"), not PSD's own "Oilseed, Soybean".
+        "WHERE commodity = 'Soybeans'",
     )
     if not rows:
         return []
@@ -705,7 +707,7 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
         source = SourceRef(
             layer="psd",
             table="psd",
-            key=f"Oilseed, Soybean/{country_name}",
+            key=f"Soybeans/{country_name}",
             detail=f"marketing year {int(latest['year'])}",
             href="index.html",
         )
@@ -732,7 +734,7 @@ def supply_deficit_detections(conn, *, today: date) -> list[Detection]:
         signal = MarketSignal(
             signal_id=f"deficit:{iso}:{int(latest['year'])}",
             kind=SignalKind.SUPPLY_DEFICIT,
-            headline=signals[0]["description"].replace("Oilseed, Soybean", country_name),
+            headline=signals[0]["description"].replace("Soybeans", country_name),
             detail=(
                 "Ending stocks over total use (domestic consumption plus exports), below "
                 "the prior five-year low for this country. A tight importer bids for cargo; "
