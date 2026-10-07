@@ -1,7 +1,9 @@
 """The client-record boundary.
 
-Four things in this project can only come from the client's own desk: a
-position, a fill, a clearing statement and an option quote. They are also the
+Five things in this project can only come from the client's own desk: a
+position, a fill, a clearing statement, an option quote and a desk assumption
+(a broker's freight indication, the desk's cost of funds — see
+``analysis/origins/assumptions.py``, B12 #409). They are also the
 four things that would do the most damage if published — a book is a trading
 intention, and a published one is front-runnable. Every other number here is
 somebody else's public data; these are the client's.
@@ -101,9 +103,11 @@ _RECORD_DIR_MARKERS = (
     "reference/options",
     "reference/clearing",
     "reference/import_profiles",
+    "reference/assumptions/private",
     "reference\\positions",
     "reference\\options",
     "reference\\clearing",
+    "reference\\assumptions\\private",
 )
 
 

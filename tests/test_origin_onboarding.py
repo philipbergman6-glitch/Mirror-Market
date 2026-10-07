@@ -170,7 +170,11 @@ def test_an_entry_lapsing_inside_the_horizon_is_reported_before_it_blocks():
 
 
 def test_the_loader_raises_on_an_unusable_file_rather_than_costing_a_route_with_it(tmp_path):
-    (tmp_path / "bad.yml").write_text(
+    from analysis.futures.privacy import AUDIENCE_PRIVATE
+    from analysis.origins.assumptions import PRIVATE_SUBDIR
+
+    (tmp_path / PRIVATE_SUBDIR).mkdir()
+    (tmp_path / PRIVATE_SUBDIR / "bad.yml").write_text(
         yaml.safe_dump([{
             "id": "freight.everywhere",
             "component": "ocean_freight",
@@ -187,7 +191,7 @@ def test_the_loader_raises_on_an_unusable_file_rather_than_costing_a_route_with_
         encoding="utf-8",
     )
     with pytest.raises(AssumptionError, match="scope_too_wide"):
-        load_assumptions(tmp_path)
+        load_assumptions(tmp_path, audience=AUDIENCE_PRIVATE)
 
 
 def test_the_shipped_assumption_directory_validates():

@@ -1,7 +1,10 @@
 # Fixture assumption set — TESTS ONLY
 
-Every number in `routes.yml` is **invented for a test**. None of it is a market
-observation, a broker indication, or a rate anybody quoted.
+Every number in `policy.yml` and `private/routes.yml` is **invented for a
+test**. None of it is a market observation, a broker indication, or a rate
+anybody quoted. The split mirrors the shipped directory (B12 #409): the two
+policy rates sit in the committed tier, every desk component under `private/`,
+and only `load_assumptions(..., audience="private")` reads the second.
 
 It exists because the success path of the origin page cannot otherwise be
 looked at: the shipped `data/reference/assumptions/` directory ships empty by

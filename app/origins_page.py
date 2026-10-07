@@ -36,10 +36,19 @@ the blocked state a workflow rather than a wall.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 import config
+from analysis.futures.privacy import (
+    AUDIENCE_PRIVATE,
+    AUDIENCE_PUBLIC,
+    AUDIENCES,
+    assert_private_path,
+    private_output_dir,
+)
 from analysis.origins import crush as crush_mod
 from analysis.origins import history as history_mod
 from analysis.origins import players as players_mod
@@ -554,6 +563,7 @@ def build_view(
     today: date,
     assumptions: AssumptionSet | None = None,
     destination_key: str | None = None,
+    audience: str = AUDIENCE_PUBLIC,
 ) -> dict:
     """Everything the Origin Comparison page renders.
 
@@ -561,8 +571,20 @@ def build_view(
     file and the selector has nothing to ask. The cost of that is linear in the
     window count and the arithmetic is trivial; the benefit is a selector that
     actually selects.
+
+    ``audience`` decides which assumption tier is read when none is passed
+    (B12 #409). The public edition — the one written into ``docs/`` — reads the
+    committed policy rates only, so it stays blocked by design on every machine,
+    the desk's included. Only the private edition, written to
+    ``data/workspace/`` by :func:`private_origins_target`, reads the desk's own
+    freight, financing and quality entries and can render a costed chain. A
+    caller passing its own ``assumptions`` is trusted to have chosen the tier.
     """
-    assumptions = assumptions if assumptions is not None else load_assumptions()
+    if audience not in AUDIENCES:
+        raise ValueError(f"audience must be one of {AUDIENCES}, got {audience!r}")
+    assumptions = (
+        assumptions if assumptions is not None else load_assumptions(audience=audience)
+    )
     destination_key = destination_key or next(iter(config.DESTINATION_PORTS))
     windows = offered_windows(today)
 
@@ -619,6 +641,8 @@ def build_view(
 
     return {
         "today": today.isoformat(),
+        "audience": audience,
+        "is_private": audience == AUDIENCE_PRIVATE,
         "destination": {
             "key": destination_key,
             **{
@@ -652,6 +676,20 @@ def build_view(
     }
 
 
+def private_origins_target(directory: str | os.PathLike[str] | None = None) -> Path:
+    """Where the private origins edition is written, proven to be outside ``docs/``.
+
+    The same guard the private workstation and opportunity editions use. The
+    default is ``config.OPPORTUNITY_PRIVATE_OUTPUT_DIR`` (``data/workspace/``,
+    gitignored); any directory inside ``docs/`` raises, because ``docs/`` is
+    what the Pages deploy uploads and a costed chain there is a broker's
+    indication on a public site.
+    """
+    root = Path(directory) if directory is not None else private_output_dir()
+    assert_private_path(root, where="private origins")
+    return assert_private_path(root / "origins.html", where="private origins")
+
+
 __all__ = [
     "COMPARABILITY_EXPLANATIONS",
     "COMPARABILITY_LABELS",
@@ -660,4 +698,5 @@ __all__ = [
     "STATE_EMPTY",
     "STATE_OK",
     "build_view",
+    "private_origins_target",
 ]

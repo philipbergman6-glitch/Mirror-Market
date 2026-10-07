@@ -3330,6 +3330,13 @@ CRUSH_BOARD = ("cbot", "dalian", "brazil", "argentina")
 # See analysis/origins/assumptions.py — an entered number with an owner and an
 # expiry beats a fabricated one with neither.
 #
+# Two tiers (B12 #409): this directory is the committed tier and holds policy
+# rates only; its gitignored `private/` subdirectory holds every desk-sourced
+# component. The subdirectory is derived from this root by
+# analysis.origins.assumptions.private_assumptions_dir, never configured on its
+# own, so no override can point the private tier at a committed path.
+# load_assumptions() reads the private tier only for the private audience.
+#
 # MIRROR_ASSUMPTIONS_DIR overrides the location. It exists for the dev loop and
 # for tests — rendering the page against a populated fixture set is the only way
 # to look at the success path on a clone whose real assumptions are (correctly)
