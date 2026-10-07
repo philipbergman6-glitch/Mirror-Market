@@ -110,9 +110,10 @@ def _open_download(path: Path, workdir: Path):
     with open(path, "rb") as fh:
         magic = fh.read(4)
     if magic[:2] == b"PK":
+        unzipped = workdir / "unzipped"  # never beside the zip: it is itself named .nc
         with zipfile.ZipFile(path) as zf:
-            zf.extractall(workdir)
-        files = sorted(workdir.glob("*.nc"))
+            zf.extractall(unzipped)
+        files = sorted(unzipped.glob("*.nc"))
     elif magic[:3] == b"CDF" or magic == b"\x89HDF":
         files = [path]
     else:
@@ -161,11 +162,15 @@ def _fetch(client, box: str, years: tuple[int, int], month: int | None, root: Pa
     if out.exists():
         log.info("%s cached", name)
         return [name]
-    with tempfile.TemporaryDirectory(dir=root) as tmp:
-        target = Path(tmp) / f"{name}.nc"
-        t0 = time.time()
+    # The raw download survives a failed reduce, so a fix never costs a re-download.
+    target = root / "raw" / f"{name}.nc"
+    t0 = time.time()
+    if target.exists():
+        log.info("%s raw cached, reducing", name)
+    else:
+        partial = target.with_suffix(".part")
         try:
-            client.retrieve(DATASET, _request(box, years, month), str(target))
+            client.retrieve(DATASET, _request(box, years, month), str(partial))
         except Exception as exc:  # cdsapi raises bare HTTP errors
             if "cost limit" not in str(exc).lower():
                 raise
@@ -177,13 +182,16 @@ def _fetch(client, box: str, years: tuple[int, int], month: int | None, root: Pa
                 log.info("%s refused (cost limits) → by month", name)
                 return [n for m in range(1, 13) for n in _fetch(client, box, years, m, root)]
             raise
-        mb = target.stat().st_size / 1e6
+        partial.rename(target)
+    mb = target.stat().st_size / 1e6
+    with tempfile.TemporaryDirectory(dir=root) as tmp:
         ds = _open_download(target, Path(tmp))
         try:
             _reduce_chunk(ds, Path(tmp) / "out.npz")
         finally:
             ds.close()
         shutil.move(Path(tmp) / "out.npz", out)
+    target.unlink()
     log.info("%s ok  %.0f MB  %.0f s", name, mb, time.time() - t0)
     return [name]
 
@@ -198,6 +206,7 @@ def download(boxes: list[str]) -> None:
         raise SystemExit("CDSAPI_KEY is not set (.env or environment)")
     root = cache_dir()
     (root / "chunks").mkdir(parents=True, exist_ok=True)
+    (root / "raw").mkdir(exist_ok=True)
     client = cdsapi.Client(url=CDS_URL, key=key, quiet=True, progress=False)
     spans = DECADES + [(2021, 2021)]
     for box in boxes:
