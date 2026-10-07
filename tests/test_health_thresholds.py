@@ -40,7 +40,6 @@ def health_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr("analysis.health.get_connection",
                         lambda: sqlite3.connect(str(db_path)))
     monkeypatch.setattr("analysis.health.DB_PATH", str(db_path))
-    monkeypatch.setattr("analysis.health.is_cloud", lambda: False)
     return db_path
 
 

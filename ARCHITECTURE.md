@@ -67,14 +67,13 @@ Tables are defined in `pipeline/schema.py` as `CREATE TABLE IF NOT EXISTS`
 strings. `pipeline/store.py` exposes `save_*()` functions that batch-upsert
 via `executemany` (INSERT OR REPLACE — the pipeline is safe to re-run).
 `pipeline/connection.py` returns **a local SQLite connection — always**, in CI
-and on every developer machine. It also carries a dormant Turso branch, which
-is not a deployment option and should not be read as one: `libsql` is
-deliberately absent from `requirements.txt`, no workflow sets
-`TURSO_DATABASE_URL`, and `is_cloud()` is `False` everywhere, so the branch is
-unreachable as the project is actually installed. It is vestigial — it predates
-the 2026-07-30 no-cloud-DB decision (invariant 6) that reversed the direction.
-`LAYERS.md` → "API keys" is the authoritative note on it; deleting it is
-tracked separately.
+and on every developer machine. It used to carry a dormant Turso branch that
+predated the 2026-07-30 no-cloud-DB decision (invariant 6) and could never run
+as the project is installed; #318 deleted it, together with the cloud guards
+and no-op sync calls it had scattered across the readers, so the storage story
+is stated once. Two tests in `tests/test_connection.py` hold the line: the
+cloud driver must not appear in either requirements file, and no Turso
+identifier may return outside `CHANGELOG.md` and the invariant-6 notes.
 
 - Database: `data/storage/mirror_market.db` (SQLite, gitignored)
 - Tables: `prices`, `economic`, `usda`, `crop_progress`, `cot`, `weather`, `psd`, `currencies`, `worldbank_prices`, `dce_futures`, `export_sales`, `forward_curve`, `wasde`, `inspections`, `inspection_port_flows`, `inspection_destinations`, `gulf_bids`, `argentina_fob`, `eia_energy`, `rin_generation`, `rin_prices`, `rfs_rvo`, `brazil_estimates`, `data_freshness`, `commodity_freshness`, `india_domestic_prices`, `brazil_spot_prices`, `safex_prices`, `sagis_deliveries`, `sagis_supply_demand`, `cec_estimates`, `ec_oilseed_prices`, `ocean_freight_rates`, `port_vessel_activity`, `river_levels`, `brazil_exports`, `sea_india_rates`, `sopa_crop_estimates`, `cyclone_source_status`, `cyclone_storms`, `cyclone_track_points`, `briefings`, `quarantined_revisions`

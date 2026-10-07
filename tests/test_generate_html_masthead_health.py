@@ -196,7 +196,6 @@ def test_every_table_health_can_flag_maps_to_a_writing_layer(
     monkeypatch.setattr("analysis.health.get_connection",
                         lambda: sqlite3.connect(str(db_path)))
     monkeypatch.setattr("analysis.health.DB_PATH", str(db_path))
-    monkeypatch.setattr("analysis.health.is_cloud", lambda: False)
 
     from analysis.health import run_health_check
 

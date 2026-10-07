@@ -61,14 +61,11 @@ def temp_db(monkeypatch_target=store):
         conn.close()
 
         original_get = monkeypatch_target.get_connection
-        original_is_cloud = monkeypatch_target.is_cloud
         monkeypatch_target.get_connection = lambda: sqlite3.connect(db_path)
-        monkeypatch_target.is_cloud = lambda: False
         try:
             yield db_path
         finally:
             monkeypatch_target.get_connection = original_get
-            monkeypatch_target.is_cloud = original_is_cloud
 
 
 def _synthetic_ohlcv(n: int) -> pd.DataFrame:

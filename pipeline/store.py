@@ -30,7 +30,7 @@ from config import (
     STORAGE_DIR,
 )
 from pipeline import divergence
-from pipeline.connection import get_connection, is_cloud, managed_connection, maybe_sync
+from pipeline.connection import get_connection, managed_connection
 from pipeline.schema import ALL_SCHEMAS, INDEXES
 
 logger = logging.getLogger(__name__)
@@ -332,7 +332,6 @@ def init_database():
         for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
-        maybe_sync(conn)
     logger.info("Database initialised (tables verified) at %s", DB_PATH)
 
 
@@ -425,7 +424,6 @@ def _save(
             conn.execute("ROLLBACK")
             logger.error("Transaction failed for %s — rolled back", label)
             raise
-        maybe_sync(conn)
     logger.info("Saved %d rows for %s → %s table", n, label, table)
     return n
 
@@ -811,7 +809,6 @@ def save_cyclone_frame(source: str, name: str, df: pd.DataFrame):
             conn.execute("ROLLBACK")
             logger.error("Clearing %s failed — rolled back", label)
             raise
-        maybe_sync(conn)
     if removed:
         logger.info("%s: no active storm — cleared %d stored track point(s)", label, removed)
 
@@ -937,7 +934,6 @@ def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
                 "this run's snapshot",
                 commodity, removed, fetched_date,
             )
-        maybe_sync(conn)
 
 
 def save_contract_bars(commodity: str, df: pd.DataFrame):
@@ -1394,7 +1390,6 @@ def save_briefing(
                VALUES (?, ?, ?, ?, ?)""",
             (briefing_date, text, signals_json, snapshot_json, generated_at),
         )
-        maybe_sync(conn)
     logger.info("Archived briefing for %s (%d signals)", briefing_date, len(signals or []))
 
 
@@ -1446,7 +1441,6 @@ def save_origin_ranking(rows: list[dict[str, Any]]) -> int:
             f"VALUES ({','.join('?' * len(columns))})",
             payload,
         )
-        maybe_sync(conn)
     logger.info("Archived origin ranking: %d row(s)", len(payload))
     return len(payload)
 
@@ -1508,7 +1502,6 @@ def save_opportunity_detections(rows: list[dict[str, Any]]) -> int:
             f"VALUES ({','.join('?' * len(columns))})",
             payload,
         )
-        maybe_sync(conn)
     logger.info("Archived opportunity detections: %d row(s)", len(payload))
     return len(payload)
 
@@ -1603,7 +1596,6 @@ def save_freshness(
              keys_returned, keys_expected,
              observed_at, fetch_started_at, fetch_completed_at, stored_at),
         )
-        maybe_sync(conn)
     logger.debug(
         "Freshness recorded for %s at %s (status=%s, %d rows, keys=%s/%s, observed=%s)",
         layer_name, now, status, rows_fetched, keys_returned, keys_expected, observed_at,
@@ -1612,7 +1604,7 @@ def save_freshness(
 
 def update_commodity_freshness():
     """Scan data tables, record per-commodity last_date + row count."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     # The optional fourth element is a WHERE fragment. `river_levels` stores
@@ -1647,5 +1639,4 @@ def update_commodity_freshness():
                        VALUES (?, ?, ?, ?, ?)""",
                     [(c, table, ld, ct, now) for c, ld, ct in rows],
                 )
-        maybe_sync(conn)
     logger.info("Commodity freshness updated at %s", now)

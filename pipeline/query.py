@@ -16,7 +16,7 @@ from typing import Any
 import pandas as pd
 
 from config import DB_PATH
-from pipeline.connection import get_connection, is_cloud, managed_connection
+from pipeline.connection import get_connection, managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _read_table(
     where_prefix : str
         Table alias prefix for the WHERE column when ``sql`` uses one.
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
     base = sql or f"SELECT * FROM {table}"  # noqa: S608 — table names are literals below
@@ -490,7 +490,7 @@ def read_freshness() -> pd.DataFrame:
         `latency.measure` reports as an unmeasured chain rather than a fast
         one.)
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
     with managed_connection(get_connection()) as conn:
@@ -519,7 +519,7 @@ def read_briefing(briefing_date: str) -> dict[str, Any] | None:
     Returns a dict with keys: briefing_date, text, signals (list),
     snapshot (dict), generated_at. JSON columns are decoded.
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return None
     with managed_connection(get_connection()) as conn:
         try:
@@ -552,7 +552,7 @@ def read_briefings(
         briefing_date, text, signals_json, snapshot_json, generated_at
     JSON columns are left as strings — callers can decode per-row.
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return pd.DataFrame()
     sql = "SELECT * FROM briefings"
     clauses: list[str] = []
@@ -577,7 +577,7 @@ def read_briefings(
 
 def read_commodity_freshness() -> pd.DataFrame:
     """Read per-commodity freshness data from SQLite."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
     with managed_connection(get_connection()) as conn:
@@ -600,7 +600,7 @@ def read_quarantined_revisions(table_name: str | None = None) -> pd.DataFrame:
     It answers "what did the guard hold back, and against what" after an
     alert.
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return pd.DataFrame()
 
     sql = "SELECT * FROM quarantined_revisions"

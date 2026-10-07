@@ -144,7 +144,7 @@ def patched_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     Creates a fresh DB with every table in schema.ALL_SCHEMAS, then
     monkeypatches
-    `get_connection`, `DB_PATH`, `STORAGE_DIR`, and `is_cloud` in both
+    `get_connection`, `DB_PATH`, and `STORAGE_DIR` in both
     pipeline modules so save_* / read_* functions transparently target
     the temp DB. Returns the DB path so a test can also issue raw SQL.
     """
@@ -161,7 +161,6 @@ def patched_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for module in ("pipeline.store", "pipeline.query"):
         monkeypatch.setattr(f"{module}.get_connection", _connect)
         monkeypatch.setattr(f"{module}.DB_PATH", str(db_path))
-        monkeypatch.setattr(f"{module}.is_cloud", lambda: False)
     monkeypatch.setattr("pipeline.store.STORAGE_DIR", str(tmp_path))
 
     return db_path

@@ -4,6 +4,23 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the dormant Turso path is deleted (2026-10-07)
+
+**#318**, from the integrity map (#296). The project has one storage
+backend, SQLite, but `pipeline/connection.py` carried a second one that
+could never run: `libsql` is not a declared dependency and no workflow
+sets `TURSO_DATABASE_URL`, so `is_cloud()` was `False` everywhere and
+`maybe_sync()` was a no-op. The branch predated the 2026-07-30 no-cloud-DB
+decision (invariant 6). Gone: the Turso branch, `TursoUnavailableError`,
+`MIRROR_REQUIRE_TURSO`, `maybe_sync()` and its nine call sites, the two
+config env constants, the fourteen `if not is_cloud() and …` guards (now
+plain `os.path.exists` checks), ~15 test monkeypatches, and the five
+Turso integration tests that skipped on every run (`5 skipped` → 0). No
+user-visible behaviour change. `tests/test_connection.py` keeps the
+`libsql`-not-declared guard from #319 and adds a symbol guard that fails
+if any Turso identifier returns outside the history docs. `LAYERS.md`,
+`ARCHITECTURE.md`, and `CLAUDE.md` invariant 6 now say "removed, and why".
+
 ## Unreleased — venue holidays read `closed`, not breached; technicals figures lose 60 % of their weight (2026-10-07)
 
 Two findings from the post-merge walk of the wayfinding pass (#393).

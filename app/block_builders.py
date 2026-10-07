@@ -148,11 +148,11 @@ class SiteContext:
         # would mean the tiers and the blocks could read different databases.
         import os
 
-        from app.markets import get_connection, is_cloud
+        from app.markets import get_connection
 
         today = today or datetime.now(timezone.utc).date()
 
-        if not is_cloud() and not os.path.exists(config.DB_PATH):
+        if not os.path.exists(config.DB_PATH):
             log.warning("No database at %s — every block renders an empty state", config.DB_PATH)
             return cls(conn=None, today=today)
         conn = get_connection()

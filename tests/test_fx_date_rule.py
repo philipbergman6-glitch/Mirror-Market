@@ -74,7 +74,6 @@ def db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
         )
     conn.commit()
     monkeypatch.setattr(markets_mod, "get_connection", lambda: sqlite3.connect(str(path)))
-    monkeypatch.setattr(markets_mod, "is_cloud", lambda: False)
     monkeypatch.setattr(config, "DB_PATH", str(path))
     try:
         yield conn

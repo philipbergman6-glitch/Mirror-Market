@@ -40,12 +40,9 @@ run. `config.missing_api_keys()` is that list.
 
 Layers 1, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25 work without API keys; Layer 30 needs `MARS_API_KEY`. Layer 16 needed a data.gov.in key until 2026-10 (`DATA_GOV_IN_API_KEY`, now unused); its Agmarknet 2.0 source is keyless.
 
-### Optional (Cloud Database — dormant)
+### No cloud database
 
-- `TURSO_DATABASE_URL` — Turso database URL (e.g., `libsql://your-db.turso.io`)
-- `TURSO_AUTH_TOKEN` — Turso authentication token
-
-**Decision 2026-07-30: no cloud DB.** CI persistence uses git-committed CSVs instead (see "Git-based history persistence" in `ARCHITECTURE.md`). The Turso code path in `pipeline/connection.py` remains as dormant optional code for local use — it requires `pip install libsql` (deliberately not in `requirements.txt`) plus both env vars. Nothing in CI sets them.
+**Decision 2026-07-30: no cloud DB.** CI persistence uses git-committed CSVs instead (see "Git-based history persistence" in `ARCHITECTURE.md`). A Turso/libsql code path once sat in `pipeline/connection.py` behind `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`; it was unreachable as the project is installed and was **removed in #318** so the storage backend is stated once. Those env vars are no longer read anywhere. Reintroducing a hosted database is a deliberate reversal of invariant 6, not a configuration change — `tests/test_connection.py` fails if `libsql` enters the requirements files.
 
 ## The layers
 

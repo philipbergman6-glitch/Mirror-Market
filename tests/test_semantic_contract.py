@@ -439,12 +439,10 @@ def published(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         return sqlite3.connect(str(db_path))
 
     monkeypatch.setattr(markets_mod, "get_connection", connect)
-    monkeypatch.setattr(markets_mod, "is_cloud", lambda: False)
     monkeypatch.setattr(config, "DB_PATH", str(db_path))
     for module in ("pipeline.store", "pipeline.query"):
         monkeypatch.setattr(f"{module}.get_connection", connect)
         monkeypatch.setattr(f"{module}.DB_PATH", str(db_path))
-        monkeypatch.setattr(f"{module}.is_cloud", lambda: False)
     private = tmp_path / "workspace"
     monkeypatch.setattr(config, "OPPORTUNITY_PRIVATE_OUTPUT_DIR", str(private))
 

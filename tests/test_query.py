@@ -4,7 +4,7 @@ Covers the three behaviours every read_* function shares:
   1. DB exists but the table is empty ⇒ empty DataFrame
   2. After a paired save_*, the read returns the rows with the right shape
      (commodity filter applied, Date column parsed to datetime)
-  3. DB file is missing and is_cloud() is False ⇒ empty DataFrame
+  3. DB file is missing ⇒ empty DataFrame
 
 Plus a handful of dedicated tests for the freshness readers and the
 table-missing branch (clear_database ⇒ read returns empty via the
@@ -88,7 +88,6 @@ def test_reader_empty_table_returns_empty_df(patched_db, reader):
 def test_reader_returns_empty_when_db_file_missing(tmp_path, monkeypatch, reader):
     nonexistent = tmp_path / "does_not_exist.db"
     monkeypatch.setattr("pipeline.query.DB_PATH", str(nonexistent))
-    monkeypatch.setattr("pipeline.query.is_cloud", lambda: False)
     out = reader()
     assert isinstance(out, pd.DataFrame)
     assert out.empty

@@ -27,7 +27,7 @@ from config import (
     HEALTH_TABLE_LAYERS,
     freshness_limit_days,
 )
-from pipeline.connection import get_connection, is_cloud, managed_connection
+from pipeline.connection import get_connection, managed_connection
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ def run_health_check() -> dict:
         "issues"     : list[dict] — each issue with severity, table, commodity, message
         "commodity_status" : list[dict] — per-commodity status for dashboard display
     """
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return {
             "summary": "DATABASE NOT FOUND — run 'python main.py' first.",
             "issues": [{"severity": "critical", "table": "all", "commodity": "all",
@@ -240,7 +240,7 @@ def _check_flat_prices() -> list[dict]:
     This could mean the source is returning cached/stale data.
     """
     issues: list[dict] = []
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return issues
 
     with managed_connection(get_connection()) as conn:
@@ -340,7 +340,7 @@ def _build_commodity_status() -> list[dict]:
         ("safex_prices",          "commodity", "Date"),
     ]
 
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return status_list
 
     with managed_connection(get_connection()) as conn:
