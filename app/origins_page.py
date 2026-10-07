@@ -146,9 +146,30 @@ def _section(section_id: str, *, state: str, reason: str = "", data: Any = None)
 # ---------------------------------------------------------------------------
 # Row and ranking views
 # ---------------------------------------------------------------------------
-def _row_view(row, rank: int | None) -> dict:
+def _origin_hazard(origin_key: str, hazards: dict[str, dict] | None) -> dict | None:
+    """The hazard view for the ledger leg this origin prices on (spec §7.3).
+
+    ``config.ORIGIN_LEGS`` names a ``(market, block, key)`` triple, not a ledger
+    leg id; ``ledger_leg_id_for`` is the explicit seam. A declared-absent origin
+    (PNW) has no triple and never reaches here. ``hazards`` is the generator's
+    precomputed ``{leg_id: view}``; ``None`` renders no chip.
+    """
+    if not hazards:
+        return None
+    from app.markets import ledger_leg_id_for
+
+    leg = config.ORIGIN_LEGS.get(origin_key) or {}
+    triple = (leg.get("market"), leg.get("block"), leg.get("key"))
+    if any(part is None for part in triple):
+        return None
+    leg_id = ledger_leg_id_for(*triple)
+    return hazards.get(leg_id) if leg_id else None
+
+
+def _row_view(row, rank: int | None, hazards: dict[str, dict] | None = None) -> dict:
     quote = row.quote
     return {
+        "hazard": _origin_hazard(quote.origin.key, hazards),
         "rank": rank,
         "origin_key": quote.origin.key,
         "origin_name": quote.origin.name,
@@ -193,9 +214,9 @@ def _row_view(row, rank: int | None) -> dict:
     }
 
 
-def _decision(ranking: OriginRanking) -> dict:
+def _decision(ranking: OriginRanking, hazards: dict[str, dict] | None = None) -> dict:
     ranks = {row.quote.origin.key: index for index, row in enumerate(ranking.rankable, start=1)}
-    rows = [_row_view(row, ranks.get(row.quote.origin.key)) for row in ranking.rows]
+    rows = [_row_view(row, ranks.get(row.quote.origin.key), hazards) for row in ranking.rows]
     rows.sort(key=lambda row: (row["rank"] is None, row["rank"] or 0, row["origin_key"]))
     cheapest = ranking.cheapest
     return {
@@ -554,8 +575,13 @@ def build_view(
     today: date,
     assumptions: AssumptionSet | None = None,
     destination_key: str | None = None,
+    hazards: dict[str, dict] | None = None,
 ) -> dict:
     """Everything the Origin Comparison page renders.
+
+    ``hazards`` is ``{ledger leg_id: hazard view}`` precomputed by the site
+    generator from the run's one ``SiteContext`` (spec §7.3), so the cyclone
+    assessment is computed once per edition. ``None`` renders no chips.
 
     Every offered shipment window is costed here, because the page is a static
     file and the selector has nothing to ask. The cost of that is linear in the
@@ -581,7 +607,7 @@ def build_view(
             "key": window.start.isoformat(),
             "label": window.describe(),
             "is_default": index == 1 or (index == 0 and len(windows) == 1),
-            "decision": _decision(ranking),
+            "decision": _decision(ranking, hazards),
             "waterfall": _waterfall(ranking),
             "fob": _fob(ranking),
             "sensitivity": _sensitivity(ranking, assumptions, today),

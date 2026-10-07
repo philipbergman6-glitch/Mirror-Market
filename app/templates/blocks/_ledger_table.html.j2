@@ -110,6 +110,13 @@
       <td>
         <span class="pill pill-{{ row.state }}{% if row.overdue and row.state == 'no_print_since' %} overdue{% endif %}">{{ row.state|replace('_', ' ') }}</span>
         <div class="caption">{{ row.state_detail }}</div>
+        {#- S2 #374 §8.2: the cyclone hazard chip, gated on `d.has_hazard` the
+            way the drill-down is gated — an explicit flag from the builder. The
+            headline passes False. Silent only when the leg is fully clear:
+            a watch, a stale read or a failed read is never silent. -#}
+        {%- if d.has_hazard and row.hazard and row.hazard.chip %}
+        <div><a class="hz-chip {{ row.hazard.chip_class }}" href="{{ root }}{{ row.hazard.anchor }}" title="{{ row.hazard.text }}">{{ row.hazard.chip }}</a></div>
+        {%- endif %}
       </td>
     </tr>
     {% if drill %}

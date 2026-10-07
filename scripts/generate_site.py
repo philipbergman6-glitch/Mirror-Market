@@ -44,7 +44,12 @@ from jinja2 import Environment
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.block_builders import SiteContext, build_blocks  # noqa: E402
+from app.block_builders import (  # noqa: E402
+    SiteContext,
+    build_blocks,
+    hazard_flag_rows,
+    ledger_hazard_views,
+)
 from app.blocks import BLOCK_IDS, BRIEF_BLOCK_IDS  # noqa: E402
 from app.markets import (  # noqa: E402
     TIER_BRIEF,
@@ -182,7 +187,7 @@ def _render_players(output_dir: Path, nav: list[dict], **_) -> Path:
     return generate_players_page(output_dir / "players.html", market_nav=nav)
 
 
-def _render_origins(output_dir: Path, nav: list[dict], *, ctx, now, **_) -> Path:
+def _render_origins(output_dir: Path, nav: list[dict], *, ctx, now, markets, **_) -> Path:
     """The Phase 2 origin-comparison page.
 
     Reuses the site context so the eight market pages and this one read one
@@ -193,7 +198,9 @@ def _render_origins(output_dir: Path, nav: list[dict], *, ctx, now, **_) -> Path
 
     relpath = "origins.html"
     root = relative_root(relpath)
-    view = build_view(ctx.conn, today=now.date())
+    # S2 #374 §7.3: the hazard views the ledger rows carry, computed once on
+    # the shared context and handed over — this page never builds a ledger row.
+    view = build_view(ctx.conn, today=now.date(), hazards=ledger_hazard_views(markets, ctx))
     html = _env().get_template("origins.html.j2").render(
         origins=view,
         root=root,
@@ -230,6 +237,25 @@ def _archive_origin_rankings(view: dict) -> None:
                 ranking.requested_window.describe(),
                 exc_info=True,
             )
+
+
+def _archive_hazard_flags(ctx, markets, now) -> None:
+    """Persist the cyclone flags this edition published (spec §7.4).
+
+    Modelled on ``_archive_origin_rankings``: isolated, a write failure logs
+    and never fails a render. The deploy workflow's history export runs after
+    site generation, so the rows reach ``data/history/`` with no workflow
+    change. A quiet day writes nothing.
+    """
+    from pipeline.store import save_hazard_flags
+
+    try:
+        rows = hazard_flag_rows(ctx, markets, run_date=now.date())
+        written = save_hazard_flags(rows)
+        if written:
+            log.info("archived %d published hazard flag(s)", written)
+    except Exception:  # noqa: BLE001 — archiving must never fail a render
+        log.warning("could not archive the hazard flags this edition published", exc_info=True)
 
 
 def _render_opportunities(output_dir: Path, nav: list[dict], *, ctx, now, **_) -> Path:
@@ -445,12 +471,12 @@ def generate_site(
 
     # One connection and one cache for every market page: eight pages x nine
     # blocks would otherwise re-read the CBOT reference leg eight times.
-    ctx = SiteContext.open(today=now.date())
+    ctx = SiteContext.open(today=now.date(), now=now)
 
     pages: list[tuple[str, str, callable, dict]] = [
         ("headline", "index.html", _render_headline, {"public_trust_state": public_trust_state}),
         ("players", "players.html", _render_players, {}),
-        ("origins", "origins.html", _render_origins, {"ctx": ctx, "now": now}),
+        ("origins", "origins.html", _render_origins, {"ctx": ctx, "now": now, "markets": markets}),
         ("workstation", "workstation.html", _render_workstation, {"ctx": ctx, "now": now}),
         ("opportunities", "opportunities.html", _render_opportunities, {"ctx": ctx, "now": now}),
     ]
@@ -481,6 +507,10 @@ def generate_site(
                 log.error("%s failed: %s", name, detail, exc_info=True)
                 path = _tombstone(output_dir, relpath, name, detail, nav, now)
                 results.append(PageResult(name, relpath, path, ok=False, error=detail))
+        # What was published is archived only for a whole edition — the same
+        # rule as the manifest: a `--only cbot` dev build published nothing.
+        if not only:
+            _archive_hazard_flags(ctx, markets, now)
     finally:
         ctx.close()
 

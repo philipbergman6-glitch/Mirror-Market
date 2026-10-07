@@ -66,3 +66,52 @@
   {% endfor %}
 </div>
 {% endif %}
+{# S2 #374 §8.3 — "Storms — the port leg": the ports of every leg on this
+   page's ledger, graded by analysis/hazards.py (the same rule set the briefing
+   prints). Reuses the river section's rows — no tenth block, no new component.
+   `not covered` is never rendered as `no storm`; the explicit green line names
+   only the ports that were actually read clear. #}
+{% if d.storms %}
+<div class="river">
+  <div class="river-head">Storms — the port leg · NHC + JTWC · checked {{ d.storms.checked_label }}</div>
+  {% for p in d.storms.ports %}
+  <div class="river-row">
+    <div class="lbl">{{ p.short }}
+      {%- if p.port_rain %}<div class="caption">port rain {{ p.port_rain.tp15_mm }} mm over 15 days · {{ p.port_rain.wet_days }} days ≥ 5 mm (loading delays) · {{ p.port_rain.stamp }}</div>{% endif %}
+    </div>
+    <div class="val">
+      {%- if p.chip -%}
+      <a class="hz-chip {{ p.chip_class }}" href="#block-weather" title="{{ p.reason or p.short }}">{{ p.chip }}</a>
+      {%- elif p.state == 'clear' -%}
+      <span class="muted">no storm ≤ 120 h</span>
+      {%- elif p.state == 'not_covered' -%}
+      <span class="muted">not covered</span>
+      {%- elif p.state == 'stale' -%}
+      <span class="muted">stale</span>
+      {%- else -%}
+      <span class="muted">no reading</span>
+      {%- endif -%}
+    </div>
+  </div>
+  {% endfor %}
+  {% for line in d.storms.flagged %}
+  <div class="{{ line.css_class }}">{{ line.text }}</div>
+  {% endfor %}
+  {% for line in d.storms.watches %}
+  <div class="{{ line.css_class }}">{{ line.text }}</div>
+  {% endfor %}
+  {% for f in d.storms.failures %}
+  <div class="empty-state state-empty"><span class="es-label">{{ f.label }}</span>{{ f.short }}: {{ f.reason }}</div>
+  {% endfor %}
+  {% if d.storms.clear_line %}
+  <div class="alert alert-ok">{{ d.storms.clear_line }}</div>
+  {% endif %}
+  {% for n in d.storms.not_covered %}
+  <div class="caption">{{ n.short }}: {{ n.reason }} — absence of a flag is not a clear reading</div>
+  {% endfor %}
+  {% if d.storms.not_exposed %}
+  <div class="caption">Not exposed, so not assessed: {% for n in d.storms.not_exposed %}{{ n.short }} ({{ n.reason }}){% if not loop.last %}; {% endif %}{% endfor %}</div>
+  {% endif %}
+  <div class="caption">{{ d.storms.method }}</div>
+</div>
+{% endif %}
