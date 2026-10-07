@@ -75,6 +75,7 @@ from pipeline.query import (
     read_weather,
 )
 from pipeline.units import convert_df_to_mt, mt_label, to_metric_tons
+from pricing.fx_alignment import align_fx
 
 logger = logging.getLogger(__name__)
 
@@ -1014,27 +1015,27 @@ def technicals_analysis() -> dict:
 # ---------------------------------------------------------------------------
 
 def _fx_aligned(
-    fx: pd.DataFrame, when: pd.Timestamp
+    fx: pd.DataFrame, when: pd.Timestamp, pair: str
 ) -> tuple[float, pd.Timestamp] | None:
-    """The ``<CCY>/USD`` close for ``when`` under A1 (#298), with its date.
+    """The ``pair`` close for ``when`` under A1 (#298), with its date.
 
-    The close dated ``when`` if one exists; else the newest *prior* close no
-    more than ``FX_ALIGNMENT_MAX_GAP_DAYS`` calendar days older. Never a
-    later-dated rate. ``None`` means the leg must render blank with reason
-    ``fx_gap_exceeded``. B2 #308 may lift this into a shared reader.
+    Thin adapter over :func:`pricing.fx_alignment.align_fx` — the one site
+    that applies the FX-date rule (B2 #308). ``None`` means the leg must
+    render blank with reason ``fx_gap_exceeded`` (or no prior rate at all).
     """
     closes = pd.Series(
         fx["Close"].to_numpy(dtype=float),
         index=pd.DatetimeIndex(fx.index).normalize(),
     ).dropna()
     closes = closes[closes > 0]
-    prior = closes[closes.index <= when]
-    if prior.empty:
+    res = align_fx(
+        pair,
+        ((pd.Timestamp(d).date(), float(v)) for d, v in closes.items()),
+        when.date(),
+    )
+    if not res.ok or res.rate is None or res.observed_on is None:
         return None
-    observed = pd.Timestamp(prior.index[-1])
-    if (when - observed).days > FX_ALIGNMENT_MAX_GAP_DAYS:
-        return None
-    return float(prior.iloc[-1]), observed
+    return float(res.rate), pd.Timestamp(res.observed_on)
 
 
 def _cross_venue_oil_spread(
@@ -1062,7 +1063,7 @@ def _cross_venue_oil_spread(
 
     # The displayed home-currency leg converts at its own date's rate (A1),
     # not at whatever rate happens to be newest.
-    other_fx = _fx_aligned(fx, other_last_on)
+    other_fx = _fx_aligned(fx, other_last_on, fx_pair)
     other_native = float(other.iloc[-1])
     entry: dict[str, Any] = {
         "soy_oil": own_latest,
@@ -1089,7 +1090,7 @@ def _cross_venue_oil_spread(
         return entry
 
     struck_on = pd.Timestamp(common[-1])
-    strike_fx = _fx_aligned(fx, struck_on)
+    strike_fx = _fx_aligned(fx, struck_on, fx_pair)
     if strike_fx is None:
         entry["struck_on"] = _asof(struck_on)
         entry["spread_reason_code"] = "fx_gap_exceeded"

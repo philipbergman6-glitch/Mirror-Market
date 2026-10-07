@@ -20,6 +20,8 @@
     {% if d.margin_home is not none %}<div class="mc-delta muted">{{ d.home_currency }} {{ f.num(d.margin_home, 0) }}/MT</div>{% endif %}
     {% if d.period_label %}<div class="mc-delta muted">{{ d.period_label }}</div>{% endif %}
     {{ f.asof(d.as_of, d.age_days) }}
+    {#- A1 #298: the three legs share one session; the rate may be a prior close. -#}
+    {% if d.fx_label %}<div class="caption">legs struck at {{ d.fx_label }}</div>{% endif %}
   </div>
   {% for name in ['bean', 'oil', 'meal'] %}
   <div class="mc">

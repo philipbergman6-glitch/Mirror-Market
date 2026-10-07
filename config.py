@@ -291,13 +291,14 @@ SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
 FX_SESSION_TIMEZONE = "America/New_York"
 FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
 
-# A1 #298 — the FX-date rule. A home-currency leg converts at its own date's
-# FX close when one exists, else at a *labelled prior* close at most this many
-# calendar days older (a weekend plus one holiday), else renders blank with
-# reason `fx_gap_exceeded`. Never a later-dated rate: a price converted at a
-# rate from its own future is a different number wearing the right currency.
-# The reason doubles as a frozen-FX-feed alarm. First enforced on the
-# cross-venue oil spread (B8 #402); B2 #308 generalises it across readers.
+# A1 (#298) / B2 (#308) — the one FX-date rule. A `home_per_mt` leg converts
+# at its own date's FX close, else at the newest *prior* close at most this
+# many calendar days older, else renders blank with reason `fx_gap_exceeded`.
+# Three covers a weekend plus one holiday (the real calendar-divergence case)
+# without letting a frozen FX feed keep converting; past it the reason doubles
+# as a frozen-feed alarm. Never a later-dated rate. One policy for every
+# surface, public and desk: `pricing.fx_alignment.align_fx` is the only site
+# that applies it.
 FX_ALIGNMENT_MAX_GAP_DAYS = 3
 
 # B8 #402 — a cross-venue spread is one session's number (invariant 8): both

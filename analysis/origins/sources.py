@@ -54,6 +54,7 @@ from analysis.origins.domain import (
     usd_mt,
 )
 from pipeline.units import to_metric_tons
+from pricing.fx_alignment import FxResolution, align_fx
 
 log = logging.getLogger(__name__)
 
@@ -236,15 +237,17 @@ def _parse_date(raw) -> date | None:
         return None
 
 
-def fx_on(conn, pair: str | None, when: date) -> FxObservation | None:
-    """The ``<CCY>/USD`` rate on ``when``, else the newest one before it.
-
-    A price dated D converted at today's rate is a different number from the
-    same price converted at D's rate, and the difference is an FX move being
-    reported as a market move. Same rule the ledger keeps.
+def fx_resolution_on(conn, pair: str | None, when: date) -> FxResolution:
+    """A1's answer for a print dated ``when`` (#298): own date's close, else
+    the newest prior close inside ``config.FX_ALIGNMENT_MAX_GAP_DAYS``, else a
+    reason — never a later-dated rate. Same ``align_fx`` the site's
+    ``SiteContext.fx_on`` applies; the two readers differ only in how they
+    fetch the closes, never in what they do with them.
     """
-    if not pair or conn is None:
-        return None
+    if not pair:
+        return align_fx(None, (), when)
+    if conn is None:
+        return align_fx(pair, (), when)
     try:
         row = conn.execute(
             "SELECT Date, Close FROM currencies WHERE pair = ? AND Date <= ? "
@@ -253,13 +256,30 @@ def fx_on(conn, pair: str | None, when: date) -> FxObservation | None:
         ).fetchone()
     except sqlite3.Error as exc:
         log.debug("origin fx read failed for %s: %s", pair, exc)
-        return None
+        return align_fx(pair, (), when)
     if not row or row[1] is None:
-        return None
+        return align_fx(pair, (), when)
     observed = _parse_date(row[0])
     if observed is None:
+        return align_fx(pair, (), when)
+    return align_fx(pair, [(observed, float(row[1]))], when)
+
+
+def fx_on(conn, pair: str | None, when: date) -> FxObservation | None:
+    """The ``<CCY>/USD`` rate a print dated ``when`` converts at, or None.
+
+    A price dated D converted at today's rate is a different number from the
+    same price converted at D's rate, and the difference is an FX move being
+    reported as a market move. ``fx_resolution_on`` carries the reason where
+    this returns None; the observation carries ``observed_on`` so the quote's
+    own date and its rate's date both travel with it.
+    """
+    res = fx_resolution_on(conn, pair, when)
+    if res.alignment is None:
         return None
-    return FxObservation(pair=pair, usd_per_unit=float(row[1]), observed_on=observed)
+    return FxObservation(
+        pair=res.alignment.pair, usd_per_unit=res.alignment.usd_per_unit, observed_on=res.alignment.observed_on
+    )
 
 
 def _latest_observation_date(conn, table: str, date_column: str, key_column: str, key: str) -> date | None:
@@ -443,6 +463,7 @@ __all__ = [
     "LOOKBACK_DAYS",
     "OriginSourceError",
     "fx_on",
+    "fx_resolution_on",
     "offered_windows",
     "parse_ams_slot",
     "parse_magyp_window",
