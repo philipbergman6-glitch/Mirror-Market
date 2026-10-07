@@ -467,7 +467,6 @@ def _seed_site(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rows):
         )
     conn.commit()
     monkeypatch.setattr(markets_mod, "get_connection", lambda: sqlite3.connect(str(db_path)))
-    monkeypatch.setattr(markets_mod, "is_cloud", lambda: False)
     monkeypatch.setattr(config, "DB_PATH", str(db_path))
     return conn
 

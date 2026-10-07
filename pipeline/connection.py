@@ -39,8 +39,3 @@ def managed_connection(conn) -> Iterator:
         close = getattr(conn, "close", None)
         if callable(close):
             close()
-
-
-def is_cloud() -> bool:
-    """Always False: there is no cloud backend. Removed in the next commit."""
-    return False

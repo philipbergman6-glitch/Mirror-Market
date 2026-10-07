@@ -38,7 +38,7 @@ from datetime import date, datetime, timezone
 import config
 from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
-from pipeline.connection import get_connection, is_cloud, managed_connection
+from pipeline.connection import get_connection, managed_connection
 from pipeline.units import native_label, to_metric_tons
 from pricing.semantics import (  # noqa: F401 — re-exported for the site layer
     QUOTE_KIND_PRICE_TYPE,
@@ -1265,7 +1265,7 @@ def compute_tiers(
     """Tier every market in one DB session, logging each verdict (M8)."""
     markets = markets if markets is not None else load_markets()
 
-    if not is_cloud() and not os.path.exists(config.DB_PATH):
+    if not os.path.exists(config.DB_PATH):
         # No DB at all (a fresh clone, or a docs-only CI job). Everything is a
         # stub with that stated as the reason — never a crash, and never a
         # silently full page.

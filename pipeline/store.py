@@ -30,7 +30,7 @@ from config import (
     STORAGE_DIR,
 )
 from pipeline import divergence
-from pipeline.connection import get_connection, is_cloud, managed_connection
+from pipeline.connection import get_connection, managed_connection
 from pipeline.schema import ALL_SCHEMAS, INDEXES
 
 logger = logging.getLogger(__name__)
@@ -1604,7 +1604,7 @@ def save_freshness(
 
 def update_commodity_freshness():
     """Scan data tables, record per-commodity last_date + row count."""
-    if not is_cloud() and not os.path.exists(DB_PATH):
+    if not os.path.exists(DB_PATH):
         return
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     # The optional fourth element is a WHERE fragment. `river_levels` stores
