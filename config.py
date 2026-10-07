@@ -1884,6 +1884,26 @@ CEC_YIELD_BAND_T_HA = (0.3, 5.0)
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 
+# Market-drivers narrative rules (#404). Each threshold gates an
+# *interpretation*; the observation prints regardless.
+#
+# "Crowded" positioning needs a historical extreme, not just a sign and an
+# RSI: the latest spec net must rank at or above this percentile of the
+# trailing window (longs) or at or below its mirror (shorts). Under the
+# observation floor the rule is withheld — a 3-week history has no extreme.
+COT_CROWDED_PERCENTILE = 90
+COT_CROWDED_LOOKBACK_DAYS = 365 * 3
+COT_CROWDED_MIN_OBSERVATIONS = 26
+
+# "China buying pace strong" needs two things a one-week share cannot give:
+# the latest week's absolute China net sales above this multiple of the
+# trailing mean (prior weeks, at least the floor of them), AND total
+# commitments running at or ahead of the year-ago share of the WASDE export
+# forecast. Share of one week's total is printed as an observation only.
+CHINA_PACE_LOOKBACK_WEEKS = 8
+CHINA_PACE_MIN_WEEKS = 4
+CHINA_PACE_STRONG_MULTIPLE = 1.5
+
 # Sessions the named ratio-adjusted continuous series must hold before the
 # technical stack adopts it over the provider front-month frame (A4 #301).
 # The constraint is measured, not aesthetic: the 2023-25 front contracts
