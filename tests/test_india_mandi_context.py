@@ -9,7 +9,7 @@ import pytest
 
 from analysis.briefing.sections.emerging_markets import _format_india_domestic
 from analysis.soy_analytics import _india_msp_on, _mandi_arrivals_pace
-from app.sections import _india_group
+from app.sections import _india_groups
 
 
 def _rows(days: int, end: str, arrivals: float | None = 100.0) -> pd.DataFrame:
@@ -58,6 +58,16 @@ def test_pace_without_a_prior_week_carries_no_change() -> None:
     assert pace == {"arrivals_7d_mt": 700.0, "arrivals_7d_end": "2026-10-05"}
 
 
+def test_pace_is_withheld_when_the_series_starts_inside_the_week() -> None:
+    """Days before the first stored row are unknown, not zero."""
+    assert _mandi_arrivals_pace(_rows(5, "2026-10-06")) is None
+
+
+def test_a_prior_week_overlapping_the_series_start_carries_no_change() -> None:
+    pace = _mandi_arrivals_pace(_rows(11, "2026-10-06"))
+    assert pace == {"arrivals_7d_mt": 700.0, "arrivals_7d_end": "2026-10-05"}
+
+
 def test_pace_counts_a_day_with_no_rows_as_no_arrivals() -> None:
     """The 31-day re-read stores every date the report carries, so a date
     inside it with no row is a day no mandi reported soybean (Diwali 2025
@@ -86,8 +96,10 @@ def test_msp_is_the_marketing_season_in_force_on_the_mandi_date(day, expected) -
     assert (found[0] if found else None) == expected
 
 
-def test_india_group_renders_msp_and_arrivals_cards() -> None:
-    group = _india_group({"india_domestic": {
+def test_india_groups_put_msp_and_arrivals_in_their_own_group() -> None:
+    """The price group stays three cards (DESIGN.md 4-up rows) and its
+    "median" title never sits over a tonnage."""
+    price, context = _india_groups({"india_domestic": {
         "soybean_mandi_inr": 57_750.0,
         "soybean_mandi_date": "2026-10-06",
         "msp_inr": 57_080.0,
@@ -97,7 +109,9 @@ def test_india_group_renders_msp_and_arrivals_cards() -> None:
         "arrivals_7d_end": "2026-10-05",
         "arrivals_7d_chg_pct": 31.2,
     }})
-    cards = {c["label"]: c for c in group["cards"]}
+    assert "median" in price["title"]
+    assert "vs MSP" not in {c["label"] for c in price["cards"]}
+    cards = {c["label"]: c for c in context["cards"]}
 
     assert cards["vs MSP"]["value"] == 1.17
     assert "₹57,080/MT" in cards["vs MSP"]["caption"]
@@ -107,10 +121,13 @@ def test_india_group_renders_msp_and_arrivals_cards() -> None:
     assert "to 2026-10-05" in cards["Arrivals, 7 days"]["caption"]
 
 
-def test_india_group_omits_cards_it_has_no_number_for() -> None:
-    group = _india_group({"india_domestic": {"soybean_mandi_inr": 57_750.0}})
-    labels = {c["label"] for c in group["cards"]}
-    assert "vs MSP" not in labels and "Arrivals, 7 days" not in labels
+def test_india_groups_omit_the_context_group_without_its_numbers() -> None:
+    price, context = _india_groups({"india_domestic": {"soybean_mandi_inr": 57_750.0}})
+    assert price is not None and context is None
+
+
+def test_india_groups_without_mandi_data_render_nothing() -> None:
+    assert _india_groups({}) == []
 
 
 def test_briefing_prints_msp_and_arrivals_lines() -> None:

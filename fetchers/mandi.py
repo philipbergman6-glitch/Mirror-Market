@@ -325,15 +325,23 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
     """
     parsed: list[dict[str, object]] = []
     malformed = 0
+    # Days that lost a lot to a bad price lose that lot's tonnes too, so their
+    # arrivals total is blanked; None = a skipped lot whose day is unknown.
+    short_days: set[date | None] = set()
     for rec in records:
         try:
             arrival = datetime.strptime(str(rec["arrival_date"]), "%d/%m/%Y").date()
-            modal = float(rec["modal_price"])
         except (KeyError, TypeError, ValueError):
             malformed += 1
+            short_days.add(None)
             continue
-        if modal <= 0:
+        try:
+            modal = float(rec["modal_price"])
+        except (KeyError, TypeError, ValueError):
+            modal = 0.0
+        if not modal > 0:
             malformed += 1
+            short_days.add(arrival)
             continue
         parsed.append({"date": arrival, "modal": modal, "arrivals": _arrivals_mt(rec)})
 
@@ -356,11 +364,15 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
         # rather than understating it (a partial sum still reads as a total).
         arrivals=("arrivals", lambda s: s.sum(min_count=len(s))),
     ).reset_index()
+    if None in short_days:
+        agg["arrivals"] = float("nan")
+    else:
+        agg.loc[agg["date"].isin(short_days), "arrivals"] = float("nan")
     unknown = int(agg["arrivals"].isna().sum())
     if unknown:
         logger.warning(
-            "Mandi API: %d day(s) carry a lot with no usable arrivals — "
-            "those days' arrivals are left blank", unknown,
+            "Mandi API: %d day(s) carry a lot with no usable arrivals or "
+            "price — those days' arrivals are left blank", unknown,
         )
 
     for day, median in zip(agg["date"], agg["close"], strict=True):

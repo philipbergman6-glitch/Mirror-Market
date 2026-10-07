@@ -1119,3 +1119,26 @@ def test_mandi_hard_fails_when_the_arrivals_column_changes(monkeypatch, columns)
     assert result.status == "failed"
     assert not result.has_rows
     assert "rrivals" in (result.error or "")
+
+
+def test_mandi_aggregate_blanks_arrivals_on_a_day_that_lost_a_lot_to_a_bad_price() -> None:
+    """A lot skipped for its price takes its tonnes out of the sum; the total
+    left behind would read as complete, so the day's arrivals stay blank."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", arrivals=10.0),
+        _mandi_record(market="B", modal_price="0", arrivals=500.0),
+        _mandi_record(market="C", arrival_date="03/08/2026", modal_price="7000", arrivals=5.0),
+    ]
+    df = _mandi_aggregate(records)
+    assert pd.isna(df["arrivals_mt"].iloc[0])
+    assert df["Close"].iloc[0] == 70_000.0
+    assert df["arrivals_mt"].iloc[1] == 5.0
+
+
+def test_mandi_aggregate_blanks_every_days_arrivals_when_a_skipped_lot_has_no_date() -> None:
+    """A lot whose date does not parse could belong to any day."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", arrivals=10.0),
+        _mandi_record(market="B", arrival_date="2026-08-02", arrivals=500.0),
+    ]
+    assert _mandi_aggregate(records)["arrivals_mt"].isna().all()

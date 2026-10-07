@@ -201,7 +201,8 @@ def _mandi_arrivals_pace(rows: pd.DataFrame) -> dict[str, Any] | None:
     slowdown. A calendar day inside the window with no row is zero tonnes —
     the lookback re-read stores every date the report carries. A stored row
     with NULL arrivals (it predates the column) withholds the whole figure:
-    a sum around it would understate the week.
+    a sum around it would understate the week. So do days before the first
+    stored row: they are unknown, not zero.
     """
     if rows.empty or "arrivals_mt" not in rows.columns:
         return None
@@ -210,6 +211,8 @@ def _mandi_arrivals_pace(rows: pd.DataFrame) -> dict[str, Any] | None:
     span = pd.Timedelta(days=_ARRIVALS_WINDOW_DAYS)
 
     def window(stop: pd.Timestamp) -> pd.Series | None:
+        if dates.min() > stop - span + pd.Timedelta(days=1):
+            return None
         inside = rows.loc[(dates > stop - span) & (dates <= stop), "arrivals_mt"]
         if inside.empty or inside.isna().any():
             return None
