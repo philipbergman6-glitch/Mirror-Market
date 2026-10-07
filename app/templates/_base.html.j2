@@ -247,6 +247,14 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
 .pill-no_print_since.overdue { background: #E8C983; color: #4A3608; }
 .pill-dark { background: var(--bearish); color: #fff; }
 .pill-out_of_cadence { background: transparent; border: 1px solid var(--rule-heavy); color: var(--text-dim); }
+/* Cyclone hazard chip (S2 #374 §8.2): a second chip under the state pill, on
+   market-page ledgers, the origins board and block 06's storm rows. Same
+   shape as .pill; three fills, all existing tokens — the alert badge, the
+   warning badge, the neutral badge. Silent only when fully clear. */
+.hz-chip { display: inline-block; font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; margin-top: 4px; text-decoration: none; }
+.hz-chip.hz-alert { background: var(--bearish); color: #fff; }
+.hz-chip.hz-warning { background: #E8C983; color: #4A3608; }
+.hz-chip.hz-quiet { background: #E4E8E4; color: var(--text-muted); }
 .fx-tag { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: rgba(47,93,143,0.12); color: var(--info); cursor: help; }
 .ledger-rule { display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; flex-wrap: wrap; }
 .rule-tag { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; background: var(--green); color: #fff; }

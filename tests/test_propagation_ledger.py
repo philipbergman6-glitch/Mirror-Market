@@ -998,3 +998,118 @@ def test_the_flag_alone_turns_the_drilldown_off(seeded, registry):
     assert off == stripped
     for artefact in ("drill", "range-band", "aria-expanded"):
         assert artefact not in off
+
+
+# ---------------------------------------------------------------------------
+# 9. Cyclone hazard flags on the row (S2 #374 slice 4, #390)
+# ---------------------------------------------------------------------------
+from datetime import datetime, timezone  # noqa: E402
+
+from app.block_builders import _ledger_row  # noqa: E402
+from tests.cyclone_fixtures import seed_francine, seed_quiet  # noqa: E402
+
+
+def _storm_ctx(seeded, now) -> SiteContext:
+    """``today`` drives the price prints; ``now`` is the storm clock (the
+    page-generation time the assessment ages a check against)."""
+    return SiteContext(conn=seeded.conn, today=TODAY, now=now)
+
+
+def test_ledger_row_carries_hazard(seeded, registry):
+    """Francine 010: ``us_gulf:cif`` is flagged on every ledger that lists it,
+    with no per-page code — the flag rides the row."""
+    ctx = _storm_ctx(seeded, seed_francine(seeded.conn, "010"))
+    listed = {slug: m for slug, m in registry.items()
+              if m.ledger and any(leg.leg_id == "us_gulf:cif" for leg in m.ledger.legs)}
+    assert set(listed) == {"cbot", "dalian", "brazil", "argentina"}
+    for slug, market in listed.items():
+        state, _reason, data = ledger_block(market, ctx, markets=registry)
+        if state == "ok":
+            hazard = next(r for r in data["rows"] if r["leg_id"] == "us_gulf:cif")["hazard"]
+        else:
+            # The fixture seeds no Dalian print, so that ledger is empty; the
+            # row itself still carries the flag, which is what is pinned here.
+            leg = next(leg for leg in market.ledger.legs if leg.leg_id == "us_gulf:cif")
+            hazard = _ledger_row(leg, ctx, is_own=False, is_reference=False,
+                                 own_prints=None, own_leg=market.ledger.own)["hazard"]
+        assert hazard["state"] == "flag", slug
+        assert hazard["severity"] == "warning"
+        assert hazard["chip"] == "storm"
+        assert hazard["chip_class"] == "hz-warning"
+        assert hazard["level"] == "ts_force"
+        assert hazard["storm"] == "Francine" and hazard["source"] == "NHC"
+        assert hazard["first_arrival_h"] == 24
+        # synoptic + tau, never issued + tau (slice-1 correction on #390).
+        assert hazard["first_arrival_at"] == "2024-09-12T00:00:00Z"
+        assert hazard["anchor"] == "markets/cbot.html#block-weather"
+        assert hazard["text"] == (
+            "Francine (NHC): tropical-storm-force winds at New Orleans from Thu 12 Sep 00:00Z"
+        )
+    data = _block("cbot", ctx, registry)
+    assert data["has_hazard"] is True
+    html = _ledger_html(data)
+    assert 'class="hz-chip hz-warning"' in html
+    assert 'href="../markets/cbot.html#block-weather"' in html
+
+
+def test_clear_leg_renders_no_chip(seeded, registry):
+    """[P1 #3]: silence is the clear reading — a fully covered, clear leg has no chip."""
+    now = datetime(2026, 10, 7, 20, 0, tzinfo=timezone.utc)
+    seed_quiet(seeded.conn, now)
+    ctx = _storm_ctx(seeded, now)
+    data = _block("cbot", ctx, registry)
+    row = next(r for r in data["rows"] if r["leg_id"] == "us_gulf:cif")
+    assert row["hazard"]["state"] == "clear"
+    assert row["hazard"]["partial"] is False
+    assert row["hazard"]["chip"] is None
+    assert "hz-chip" not in _ledger_html({**data, "rows": [row]})
+
+
+def test_not_covered_leg_renders_the_chip(seeded, registry):
+    """South Atlantic: `not covered` must never read as `no storm`."""
+    now = datetime(2026, 10, 7, 20, 0, tzinfo=timezone.utc)
+    seed_quiet(seeded.conn, now)
+    ctx = _storm_ctx(seeded, now)
+    data = _block("brazil", ctx, registry)
+    row = next(r for r in data["rows"] if r["leg_id"] == "brazil:paranagua")
+    assert row["hazard"]["state"] == "not_covered"
+    assert row["hazard"]["chip"] == "storm: not covered"
+    assert row["hazard"]["chip_class"] == "hz-quiet"
+    assert row["hazard"]["reason"]
+    html = _ledger_html({**data, "rows": [row]})
+    assert ">storm: not covered<" in html
+    assert 'href="../markets/brazil.html#block-weather"' in html
+
+
+def test_a_partially_covered_leg_names_the_uncovered_port(seeded, registry):
+    ctx = _storm_ctx(seeded, seed_francine(seeded.conn, "010"))
+    leg = registry["dalian"].ledger.own
+    row = _ledger_row(leg, ctx, is_own=True, is_reference=False, own_prints=None, own_leg=leg)
+    assert row["hazard"]["state"] == "flag" and row["hazard"]["partial"] is True
+    assert row["hazard"]["uncovered"] == ["Paranaguá"]
+    assert row["hazard"]["text"].endswith(" · Paranaguá not covered")
+
+
+def test_a_leg_with_no_exposed_place_has_no_hazard_key_value(seeded, registry):
+    ctx = _storm_ctx(seeded, seed_francine(seeded.conn, "010"))
+    assert _rows("brazil", ctx, registry)["brazil:cepea"]["hazard"] is None
+
+
+def test_headline_ledger_renders_no_hazard_chip(seeded, registry):
+    """[P1 #2] / §14.3: the headline's rows are markets, so a port flag would be
+    attributed to a whole market. The row still carries it; the gate is explicit."""
+    ctx = _storm_ctx(seeded, seed_francine(seeded.conn, "010"))
+    state, reason, data = headline_ledger(registry, ctx)
+    assert state == "ok", reason
+    assert data["has_hazard"] is False
+    cbot = next(r for r in data["rows"] if r["market_slug"] == "cbot")
+    assert cbot["hazard"]["state"] == "flag"
+    europe = next(r for r in data["rows"] if r["market_slug"] == "europe")
+    assert europe["hazard"] is None
+    assert "hz-chip" not in _ledger_html(data)
+
+
+def test_no_database_means_no_hazard_not_a_crash(registry):
+    ctx = SiteContext(conn=None, today=TODAY)
+    assert ctx.place_hazards() == {}
+    assert ctx.leg_hazard(registry["cbot"].ledger.own) is None

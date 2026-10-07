@@ -133,6 +133,21 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
      "a weaker real is not a cheaper bean."),
 )
 
+# The hazard chip's three fills (DESIGN.md → Hazard chip; spec #374 §8.2). Keyed
+# by chip class so tests/test_wayfinding.py can hold the key to every class the
+# builder's `_hazard_chip` can emit.
+_HAZARD_CHIP_ENTRIES = (
+    ("hz-alert", "storm",
+     "Hurricane-force winds forecast at a port that prices this leg, inside 120 h. The "
+     "chip links to the port's line in block 06 of the leg's own page."),
+    ("hz-warning", "storm",
+     "Tropical-storm-force or 50-kt winds forecast at the port inside 72 h."),
+    ("hz-quiet", "storm: not covered",
+     "Everything that is not a near flag: a flag three to five days out, a storm watch "
+     "(centre within 500 km, outside its wind radii), part covered, not covered (no "
+     "publishable source for that basin — never read as no storm), stale, or no reading."),
+)
+
 
 def how_to_read_vocabulary() -> dict[str, dict]:
     """The key's content, grouped. Each entry: key, label, meaning (+ optional css)."""
@@ -174,6 +189,16 @@ def how_to_read_vocabulary() -> dict[str, dict]:
                 {"key": tier, "label": tier, "meaning": _TIER_MEANINGS[tier],
                  "css": f"tier-pill {tier}"}
                 for tier in (TIER_PAGE, TIER_BRIEF, TIER_STUB)
+            ],
+        },
+        "storms": {
+            "title": "Cyclone hazard chips",
+            "lede": "A second chip under the ledger's state pill, and on the origins board, when "
+                    "a port that prices the leg is in a tropical cyclone's forecast. Silence is "
+                    "the clear reading; a watch, a stale read or a failed read is never silent.",
+            "entries": [
+                {"key": css, "label": label, "meaning": meaning, "css": f"hz-chip {css}"}
+                for css, label, meaning in _HAZARD_CHIP_ENTRIES
             ],
         },
         "age": {

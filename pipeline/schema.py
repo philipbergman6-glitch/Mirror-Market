@@ -273,6 +273,35 @@ CREATE TABLE IF NOT EXISTS cyclone_track_points (
 );
 """
 
+# What the site published (spec §3.2 / §7.4): one row per place in `flag` or
+# `watch` per generated edition, written by the site generator — never by a
+# fetcher. The registry coordinates are frozen into the row so a later edit to
+# config.PLACES cannot rewrite what was said; `legs` is every ledger leg that
+# carried the chip that day. A published flag is a function of that day's
+# advisory and that day's registry, so it is history (pipeline.history).
+_CREATE_HAZARD_FLAGS = """
+CREATE TABLE IF NOT EXISTS hazard_flags (
+    run_date            TEXT    NOT NULL,
+    place_id            TEXT    NOT NULL,
+    source              TEXT    NOT NULL,
+    storm_id            TEXT    NOT NULL,
+    state               TEXT    NOT NULL,
+    severity            TEXT    NOT NULL,
+    band_kt             INTEGER,
+    storm_name          TEXT,
+    advisory            TEXT,
+    issued_at           TEXT,
+    first_arrival_tau_h INTEGER,
+    first_arrival_at    TEXT,
+    closest_km          INTEGER NOT NULL,
+    closest_tau_h       INTEGER NOT NULL,
+    place_lat           REAL    NOT NULL,
+    place_lon           REAL    NOT NULL,
+    legs                TEXT    NOT NULL,
+    PRIMARY KEY (run_date, place_id, source, storm_id)
+);
+"""
+
 _CREATE_DCE_FUTURES = """
 CREATE TABLE IF NOT EXISTS dce_futures (
     commodity       TEXT NOT NULL,
@@ -916,6 +945,7 @@ ALL_SCHEMAS = (
     _CREATE_CYCLONE_SOURCE_STATUS,
     _CREATE_CYCLONE_STORMS,
     _CREATE_CYCLONE_TRACK_POINTS,
+    _CREATE_HAZARD_FLAGS,
     _CREATE_DCE_FUTURES,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,

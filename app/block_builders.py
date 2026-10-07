@@ -31,13 +31,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Any
 
 import pandas as pd
 
 import config
-from analysis import weather_alerts
+from analysis import hazards, weather_alerts
+from analysis.hazards import LegHazard, PlaceHazard
 from app.blocks import (
     BLOCK_IDS,
     GENERATION_ERROR,
@@ -133,9 +134,15 @@ class SiteContext:
     today: date
     _cache: dict = field(default_factory=dict)
     _owned: Any = None
+    # The generation instant the page is stamped with — what a stored cyclone
+    # check is aged against (spec §7.1: passed in, never read inside the
+    # assessor). ``open`` sets it; a context built without one is graded at
+    # the end of its own ``today``, so an un-stamped render is deterministic
+    # and never calls a check fresher than the clock would.
+    now: datetime | None = None
 
     @classmethod
-    def open(cls, *, today: date | None = None) -> SiteContext:
+    def open(cls, *, today: date | None = None, now: datetime | None = None) -> SiteContext:
         """One connection for the whole site, or none at all.
 
         A missing DB is not an error here: ``compute_tiers`` already stubs
@@ -150,13 +157,14 @@ class SiteContext:
 
         from app.markets import get_connection
 
-        today = today or datetime.now(timezone.utc).date()
+        now = now or datetime.now(timezone.utc)
+        today = today or now.date()
 
         if not os.path.exists(config.DB_PATH):
             log.warning("No database at %s — every block renders an empty state", config.DB_PATH)
-            return cls(conn=None, today=today)
+            return cls(conn=None, today=today, now=now)
         conn = get_connection()
-        return cls(conn=conn, today=today, _owned=conn)
+        return cls(conn=conn, today=today, _owned=conn, now=now)
 
     def close(self) -> None:
         if self._owned is not None:
@@ -205,6 +213,38 @@ class SiteContext:
             )
             return rows.get(leg.key) or []
         return self.cached(("leg", leg.leg_id), build)
+
+    # -- cyclone hazards (S2 #374 slice 4, #390) --------------------------------
+    @property
+    def generated_at(self) -> datetime:
+        """The instant stored checks are aged against (see ``now``)."""
+        if self.now is not None:
+            return self.now.astimezone(timezone.utc)
+        return datetime.combine(self.today, time(23, 59, 59), tzinfo=timezone.utc)
+
+    def _hazard_read(self) -> tuple[dict[str, PlaceHazard], dict[str, str | None]]:
+        return self.cached(("hazards",), lambda: _read_place_hazards(self.conn, self.today, self.generated_at))
+
+    def place_hazards(self) -> dict[str, PlaceHazard]:
+        """Every exposed place graded once for the whole site (spec §7.1)."""
+        return self._hazard_read()[0]
+
+    def cyclone_checked_at(self) -> dict[str, str | None]:
+        """Each source's newest ``checked_at``; ``None`` where it never answered."""
+        return self._hazard_read()[1]
+
+    def leg_hazard(self, leg) -> LegHazard | None:
+        return self.cached(
+            ("leg_hazard", leg.leg_id),
+            lambda: hazards.leg_hazard(leg.place_ids, self.place_hazards()),
+        )
+
+    def port_rain(self, place_id: str) -> dict | None:
+        """The port-rain caption slot [P1 #7] — ``None`` until footprint weather
+        (S1) owns the ECMWF fetch and fills ``{"tp15_mm", "wet_days", "stamp"}``.
+        ``None`` is correct, not a blank to fill: there is no second observation
+        yet, so the row renders without the caption."""
+        return None
 
     # -- FX ------------------------------------------------------------------
     def fx_series(self, pair: str | None) -> list[tuple[date, float]]:
@@ -275,6 +315,193 @@ def _fx_fields(source: Source, fx: FxResolution) -> dict[str, Any]:
         "fx_label": aligned.label if aligned else None,
         "fx_reason": fx.reason,
     }
+
+
+# ---------------------------------------------------------------------------
+# Cyclone hazards — the one read, the one view (S2 #374 slice 4, #390)
+#
+# The assessment itself lives in analysis/hazards.py and is shared with the
+# briefing; this file only reads the three cyclone tables plus the two
+# data_freshness rows, hands them to the assessor, and shapes the result for
+# the templates. ``now`` is the page-generation instant, passed in.
+# ---------------------------------------------------------------------------
+_CYCLONE_LAYERS: tuple[str, ...] = tuple(
+    sorted({str(b["layer"]) for b in config.CYCLONE_BASINS.values() if b.get("layer")})
+)
+
+
+def _frame(conn, sql: str) -> pd.DataFrame:
+    cursor = conn.execute(sql)
+    columns = [column[0] for column in cursor.description]
+    return pd.DataFrame(cursor.fetchall(), columns=columns)
+
+
+def _read_place_hazards(
+    conn, today: date, now: datetime
+) -> tuple[dict[str, PlaceHazard], dict[str, str | None]]:
+    """Grade every exposed place from the stored tables.
+
+    With no connection every leg hazard is ``None`` — the same "no database"
+    behaviour every other read has. A database with no cyclone tables at all
+    is treated the same way and logged: the schema creates them on every
+    pipeline run, so on a deployed site that branch never fires.
+    """
+    sources = {str(b["source"]) for b in config.CYCLONE_BASINS.values() if b.get("source")}
+    none_checked: dict[str, str | None] = dict.fromkeys(sorted(sources))
+    if conn is None:
+        return {}, none_checked
+    try:
+        # Plain cursors, not pandas.read_sql_query: on an error pandas rolls the
+        # connection back, which would discard a caller's uncommitted writes.
+        status = _frame(conn, "SELECT * FROM cyclone_source_status")
+        storms = _frame(conn, "SELECT * FROM cyclone_storms")
+        track = _frame(conn, "SELECT * FROM cyclone_track_points")
+        placeholders = ",".join("?" for _ in _CYCLONE_LAYERS)
+        freshness = conn.execute(
+            f"SELECT layer_name, status, last_success FROM data_freshness "  # noqa: S608 — placeholders
+            f"WHERE layer_name IN ({placeholders})",
+            _CYCLONE_LAYERS,
+        ).fetchall()
+    except Exception as exc:  # noqa: BLE001 — a missing table is "no database", not a crash
+        log.warning("cyclone hazards: tables unavailable, nothing assessed (%s)", exc)
+        return {}, none_checked
+    layer_states: dict[str, str | None] = dict.fromkeys(_CYCLONE_LAYERS)
+    last_success: dict[str, str | None] = dict.fromkeys(_CYCLONE_LAYERS)
+    for layer, state, last in freshness:
+        layer_states[str(layer)] = None if state is None else str(state)
+        last_success[str(layer)] = None if last is None else str(last)
+    graded = hazards.assess_places(
+        hazards.active_places(config.PLACES, today),
+        config.CYCLONE_BASINS,
+        status, storms, track, layer_states, now,
+        layer_last_success=last_success,
+    )
+    newest = hazards.newest_status(status)
+    checked = {s: (str(newest[s]["checked_at"]) if s in newest else None) for s in none_checked}
+    return graded, checked
+
+
+# §8.2 — the State-column chip, by leg state and severity. ``None`` renders nothing.
+def _hazard_chip(state: str, severity: str | None, partial: bool) -> tuple[str | None, str | None]:
+    if state == "flag":
+        if severity == "alert":
+            return "storm", "hz-alert"
+        if severity == "warning":
+            return "storm", "hz-warning"
+        return "storm: 3–5 days", "hz-quiet"
+    if state == "watch":
+        return "storm watch", "hz-quiet"
+    if state == "failed":
+        return "storm: no reading", "hz-quiet"
+    if state == "stale":
+        return "storm: stale", "hz-quiet"
+    if state == "not_covered":
+        return "storm: not covered", "hz-quiet"
+    if state == "clear":
+        return ("storm: part covered", "hz-quiet") if partial else (None, None)
+    raise ValueError(f"_hazard_chip: unknown hazard state {state!r}")
+
+
+_HAZARD_LEVELS = {34: "ts_force", 50: "50kt", 64: "hurricane_force"}
+
+
+def _hazard_view(leg_hazard: LegHazard | None, anchor: str) -> dict[str, Any] | None:
+    """The row's hazard (spec §7.2): ``None`` when the leg has no exposed place."""
+    if leg_hazard is None:
+        return None
+    primary = leg_hazard.primary
+    chip, chip_class = _hazard_chip(leg_hazard.state, leg_hazard.severity, leg_hazard.partial)
+    storm = primary if leg_hazard.state in ("flag", "watch") and primary is not None else None
+    return {
+        "state": leg_hazard.state,
+        "severity": leg_hazard.severity,
+        "partial": leg_hazard.partial,
+        "chip": chip,
+        "chip_class": chip_class,
+        "text": leg_hazard.text,
+        "level": _HAZARD_LEVELS.get(storm.band_kt) if storm is not None and storm.band_kt else None,
+        "storm": storm.storm_name if storm is not None else None,
+        "storm_id": storm.storm_id if storm is not None else None,
+        "source": storm.source if storm is not None else None,
+        "first_arrival_h": storm.first_arrival_tau_h if storm is not None else None,
+        "first_arrival_at": storm.first_arrival_at if storm is not None else None,
+        "reason": (
+            primary.reason
+            if primary is not None and leg_hazard.state in ("not_covered", "stale", "failed")
+            else None
+        ),
+        "uncovered": [
+            p.short for place_id in leg_hazard.uncovered
+            for p in leg_hazard.places if p.place_id == place_id
+        ],
+        "anchor": anchor,
+    }
+
+
+def _hazard_anchor(leg) -> str:
+    # Block 06 of the leg's OWNING page — the block id is `weather` (app/blocks.py).
+    return f"{leg.href}#block-weather"
+
+
+def ledger_hazard_views(markets: dict[str, Market], ctx: SiteContext) -> dict[str, dict[str, Any] | None]:
+    """``{leg_id: hazard view}`` for every ledger leg, from the run's one context.
+
+    The origins page's seam (spec §7.3): it never builds a ledger row, so the
+    generator computes the views once here and hands them over.
+    """
+    out: dict[str, dict[str, Any] | None] = {}
+    for market in markets.values():
+        if market.ledger is None:
+            continue
+        for leg in market.ledger.legs:
+            if leg.leg_id not in out:
+                out[leg.leg_id] = _hazard_view(ctx.leg_hazard(leg), _hazard_anchor(leg))
+    return out
+
+
+def hazard_flag_rows(ctx: SiteContext, markets: dict[str, Market], *, run_date: date) -> list[dict[str, Any]]:
+    """What this edition published, as ``hazard_flags`` rows (spec §7.4).
+
+    One row per place in ``flag`` or ``watch``; ``legs`` is every ledger leg
+    whose ``place_ids`` include it, in registry order. The registry
+    coordinates are frozen into the row so a later edit cannot rewrite what
+    was said. Nothing else is archived — a clear or uncovered place was not
+    published as a hazard.
+    """
+    legs_by_place: dict[str, list[str]] = {}
+    for market in markets.values():
+        if market.ledger is None:
+            continue
+        for leg in market.ledger.legs:
+            for place_id in leg.place_ids:
+                carried = legs_by_place.setdefault(place_id, [])
+                if leg.leg_id not in carried:
+                    carried.append(leg.leg_id)
+    rows: list[dict[str, Any]] = []
+    for place_id, p in ctx.place_hazards().items():
+        if p.state not in ("flag", "watch"):
+            continue
+        place = config.PLACES[place_id]
+        rows.append({
+            "run_date": run_date.isoformat(),
+            "place_id": place_id,
+            "source": p.source,
+            "storm_id": p.storm_id,
+            "state": p.state,
+            "severity": p.severity,
+            "band_kt": p.band_kt,
+            "storm_name": p.storm_name,
+            "advisory": p.advisory,
+            "issued_at": p.issued_at,
+            "first_arrival_tau_h": p.first_arrival_tau_h,
+            "first_arrival_at": p.first_arrival_at,
+            "closest_km": p.closest_km,
+            "closest_tau_h": p.closest_tau_h,
+            "place_lat": float(place["lat"]),
+            "place_lon": float(place["lon"]),
+            "legs": ",".join(legs_by_place.get(place_id, [])),
+        })
+    return rows
 
 
 def _read_series(
@@ -587,6 +814,10 @@ def ledger_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]
         "rows": ordered,
         "leading_edge": leading_edge,
         "has_drilldown": True,
+        # S2 #374 §7.2: the chip renders on market-page ledgers only. An
+        # explicit flag from the builder, never inferred — the has_drilldown
+        # pattern exactly.
+        "has_hazard": True,
         "reference": reference,
         "reference_note": reference_note,
         "fx_series": fx_series,
@@ -672,6 +903,9 @@ def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, 
         # M21 #250 left the headline alone: no pinned leg to overlay, and the
         # market cell is already this row's affordance.
         "has_drilldown": False,
+        # [P1 #2] / spec §14.3: nothing on the headline in v1. Its rows are
+        # markets, so a port flag would be attributed to a whole market.
+        "has_hazard": False,
         # On the headline the row is the market, so the market names the edge.
         "leading_edge_legs": [
             row["market_label"] for row in rows if row["as_of"] == leading_edge
@@ -724,6 +958,7 @@ def _headline_placeholder(market: Market) -> dict:
         "spread_note": None,
         "drill": None,
         "band": None,
+        "hazard": None,
     }
     if source is None:
         row["forced_state"] = (LEDGER_STATE_DARK, market.absent_reason("price"), True)
@@ -797,6 +1032,10 @@ def _ledger_row(
         # M21 #250 — both None on the headline, by the flag above.
         "drill": None,
         "band": None,
+        # S2 #374 §7.2 — set for every row whether or not it has prints, so
+        # every ledger that lists the leg inherits its port flag with no
+        # per-page code. None when the leg has no exposed place.
+        "hazard": _hazard_view(ctx.leg_hazard(leg), _hazard_anchor(leg)),
     }
     if not prints:
         return row
@@ -1717,7 +1956,8 @@ def weather_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict
         alerts.extend(region_alerts)
         withheld.extend(assessed.withheld)
     rivers = _river_rows(market, ctx)
-    if not regions and not any(r["state"] == "ok" for r in rivers):
+    storms = _storm_rows(market, ctx)
+    if not regions and not any(r["state"] == "ok" for r in rivers) and not (storms and storms["ports"]):
         return STATE_EMPTY, (
             "the weather layer holds no observed rows for "
             + ", ".join(market.weather_regions)
@@ -1728,6 +1968,8 @@ def weather_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict
         "withheld": weather_alerts.group_withheld(withheld),
         "rivers": rivers,
         "river_alerts": [r for r in rivers if r.get("low_water_breach")],
+        # S2 #374 §8.3 — None when the market has no ledger (no port to list).
+        "storms": storms,
     }
 
 
@@ -1799,6 +2041,105 @@ def _river_rows(market: Market, ctx: SiteContext) -> list[dict]:
             "low_water_outlook_breach": outlook_breach and not breach,
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# 06 Weather — "Storms — the port leg" (S2 #374 slice 4, #390)
+#
+# The exposed and unexposed places of EVERY leg in this market's ledger, in
+# declared leg order, each once (§8.3, decision §14.5): a chip on any row of
+# the page's ledger has its explanation on the same page. A market with no
+# ledger has no storms section — a fact about the registry, like a market
+# with no river gauge. The grading is analysis/hazards.py, shared with the
+# briefing; nothing here decides a state.
+# ---------------------------------------------------------------------------
+STORMS_METHOD_CAPTION = (
+    "Forecast wind radii (34, 50, 64 kt) out to 120 h, from NOAA National Hurricane "
+    "Center and the Joint Typhoon Warning Center. JTWC is US military guidance, not a "
+    "national warning. NHC forecasts hurricane-force radii to 72 h only. Ports and "
+    "pricing points only — storm rain on a growing area is in its rainfall forecast."
+)
+_FLAG_LINE_CLASS = {"alert": "alert alert-err", "warning": "alert alert-warn", "info": "alert alert-info"}
+
+
+def _storm_rows(market: Market, ctx: SiteContext) -> dict[str, Any] | None:
+    if market.ledger is None:
+        return None
+    graded = ctx.place_hazards()
+    ordered: list[str] = []
+    for leg in market.ledger.legs:
+        for place_id in leg.place_ids:
+            if place_id not in ordered:
+                ordered.append(place_id)
+
+    ports: list[dict[str, Any]] = []
+    not_exposed: list[dict[str, Any]] = []
+    for place_id in ordered:
+        raw = config.PLACES[place_id]
+        if raw["basin"] == "none":
+            not_exposed.append({"place_id": place_id, "short": raw["short"], "reason": raw["basin_reason"]})
+            continue
+        p = graded.get(place_id)
+        if p is None:
+            continue  # not active today (effective dates) — nothing to say
+        # §8.3: the value cell carries the chip for flag / watch only; every
+        # other state is muted text, so the chip means "something is coming".
+        chip, chip_class = _hazard_chip(p.state, p.severity, False) if p.state in ("flag", "watch") else (None, None)
+        ports.append({
+            "place_id": place_id,
+            "short": p.short,
+            "state": p.state,
+            "severity": p.severity,
+            "chip": chip,
+            "chip_class": chip_class,
+            "reason": p.reason,
+            "port_rain": ctx.port_rain(place_id),
+        })
+
+    by_id = {row["place_id"]: graded[row["place_id"]] for row in ports}
+    flagged = sorted((p for p in by_id.values() if p.state == "flag"), key=hazards._place_rank)
+    watches = [p for p in by_id.values() if p.state == "watch"]
+    failures = [p for p in by_id.values() if p.state in ("failed", "stale")]
+    clear = [p.short for p in by_id.values() if p.state == "clear"]
+    not_covered = [
+        {"short": p.short, "reason": config.PLACES[p.place_id].get("basin_reason") or p.reason}
+        for p in by_id.values() if p.state == "not_covered"
+    ]
+    # §8.3 line 4: only when nothing on the page is flagged or watched AND at
+    # least one port is clear — "no storm threatens a covered port" on a page
+    # with no covered port would be an empty reassurance.
+    clear_line = (
+        f"No active storm threatens {', '.join(clear)}" if clear and not flagged and not watches else None
+    )
+    checked = ctx.cyclone_checked_at()
+    stamps = list(checked.values())
+    checked_label = (
+        hazards.format_check_time(min(str(c) for c in stamps)) if stamps and all(stamps)
+        else hazards.format_check_time(None)
+    )
+    return {
+        "checked_label": checked_label,
+        "ports": ports,
+        "flagged": [
+            {"place_id": p.place_id, "short": p.short, "severity": p.severity,
+             "css_class": _FLAG_LINE_CLASS[p.severity or "info"], "text": hazards.flag_sentence(p)}
+            for p in flagged
+        ],
+        "watches": [
+            {"place_id": p.place_id, "short": p.short, "css_class": "alert alert-info",
+             "text": hazards.watch_sentence(p)}
+            for p in watches
+        ],
+        "failures": [
+            {"place_id": p.place_id, "short": p.short, "state": p.state,
+             "label": "no reading" if p.state == "failed" else "stale", "reason": p.reason}
+            for p in failures
+        ],
+        "clear_line": clear_line,
+        "not_covered": not_covered,
+        "not_exposed": not_exposed,
+        "method": STORMS_METHOD_CAPTION,
+    }
 
 
 def _river_reading_on_or_before(readings, when):

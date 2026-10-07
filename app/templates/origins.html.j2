@@ -226,7 +226,14 @@
           <td class="num">{{ f.usd(r.origin_usd_mt) }}</td>
           <td class="num">{{ f.usd(r.fob_usd_mt) }}</td>
           <td class="num strong">{{ f.usd(r.landed_usd_mt) }}</td>
-          <td><span class="cmp cmp-{{ r.comparability }}">{{ r.comparability_label }}</span></td>
+          <td><span class="cmp cmp-{{ r.comparability }}">{{ r.comparability_label }}</span>
+            {#- S2 #374 §8.2: the same hazard chip as the ledger, after the
+                comparability pill. No gate flag here; a row whose origin leg
+                resolves to no hazard (or no ledger leg) renders nothing. -#}
+            {%- if r.hazard and r.hazard.chip %}
+            <div><a class="hz-chip {{ r.hazard.chip_class }}" href="{{ root }}{{ r.hazard.anchor }}" title="{{ r.hazard.text }}">{{ r.hazard.chip }}</a></div>
+            {%- endif %}
+          </td>
           <td class="num">{{ r.observation_date }}</td>
         </tr>
         {% if r.comparability_explanation %}

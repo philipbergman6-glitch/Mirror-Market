@@ -238,3 +238,41 @@ def test_the_fixture_set_is_never_what_the_site_loads():
     import config
 
     assert Path(config.ASSUMPTIONS_DIR).resolve() != FIXTURE_SET.resolve()
+
+
+# ---------------------------------------------------------------------------
+# Cyclone hazard chips (S2 #374 slice 4, #390)
+# ---------------------------------------------------------------------------
+def test_the_origins_board_carries_the_hazard_chip_per_resolved_leg(db):
+    view_for = {
+        "us_gulf:cif": {"state": "flag", "severity": "warning", "partial": False, "chip": "storm",
+                        "chip_class": "hz-warning", "text": "Francine (NHC): tropical-storm-force winds",
+                        "level": "ts_force", "storm": "Francine", "storm_id": "al062024", "source": "NHC",
+                        "first_arrival_h": 24, "first_arrival_at": "2024-09-12T00:00:00Z",
+                        "reason": None, "uncovered": [], "anchor": "markets/cbot.html#block-weather"},
+        "brazil:paranagua": {"state": "not_covered", "severity": None, "partial": False,
+                             "chip": "storm: not covered", "chip_class": "hz-quiet",
+                             "text": "Paranaguá: South Atlantic — no publishable cyclone source",
+                             "level": None, "storm": None, "storm_id": None, "source": None,
+                             "first_arrival_h": None, "first_arrival_at": None,
+                             "reason": "South Atlantic — no publishable cyclone source",
+                             "uncovered": [], "anchor": "markets/brazil.html#block-weather"},
+    }
+    view = build_view(db, today=TODAY, hazards=view_for)
+    rows = {row["origin_key"]: row for row in view["views"][0]["decision"]["rows"]}
+    assert rows["us_gulf"]["hazard"] is view_for["us_gulf:cif"]
+    assert rows["br_paranagua"]["hazard"] is view_for["brazil:paranagua"]
+    assert rows["ar_up_river"]["hazard"] is None  # resolved, but not in the dict handed over
+    chips = _render(view).select("#section-decision a.hz-chip")
+    assert {c.get_text(strip=True) for c in chips} == {"storm", "storm: not covered"}
+    gulf = next(c for c in chips if c.get_text(strip=True) == "storm")
+    assert gulf["href"] == "markets/cbot.html#block-weather"
+    assert gulf["title"] == "Francine (NHC): tropical-storm-force winds"
+    assert "hz-warning" in gulf["class"]
+
+
+def test_no_hazards_handed_over_means_no_chip_anywhere(db):
+    view = build_view(db, today=TODAY)
+    assert all(row["hazard"] is None for row in view["views"][0]["decision"]["rows"])
+    # Scoped to the board: the "How to read" key legitimately shows the chip swatches.
+    assert not _render(view).select("#section-decision .hz-chip")

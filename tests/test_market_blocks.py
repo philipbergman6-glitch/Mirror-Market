@@ -999,3 +999,164 @@ def test_a_withheld_rapeseed_spread_renders_its_reason_not_a_number():
     assert "+160.0" not in html
     # Both legs still on the page.
     assert "1,150.00" in html and "1,310.00" in html
+
+
+# ---------------------------------------------------------------------------
+# 06 Weather — "Storms — the port leg" (S2 #374 slice 4, #390)
+# ---------------------------------------------------------------------------
+import re  # noqa: E402
+
+from app.templating import site_environment  # noqa: E402
+from tests.cyclone_fixtures import ensure_cyclone_tables, seed_francine, seed_quiet  # noqa: E402
+
+STORM_NOW = datetime(2026, 10, 7, 20, 0, tzinfo=timezone.utc)
+
+
+def _storms(slug, seeded, registry, now):
+    """The storms payload alone — the fixture seeds weather rows for CBOT only,
+    and the shape of the port list is a registry fact, not a weather one."""
+    ctx = SiteContext(conn=seeded.conn, today=TODAY, now=now)
+    return block_builders._storm_rows(registry[slug], ctx)
+
+
+def _weather_html(slug, seeded, registry, now) -> str:
+    """Block 06 rendered whole. A market the fixture gave no weather row is
+    given one, so the block is `ok` and the storms section is reachable."""
+    region = registry[slug].weather_regions[0]
+    if not seeded.conn.execute("SELECT 1 FROM weather WHERE region = ?", (region,)).fetchone():
+        seeded.conn.execute(
+            "INSERT INTO weather (region, Date, temp_max, temp_min, precipitation) VALUES (?,?,?,?,?)",
+            (region, TODAY.isoformat(), 25.0, 15.0, 1.0))
+        seeded.conn.commit()
+    ctx = SiteContext(conn=seeded.conn, today=TODAY, now=now)
+    weather = _block(_build(slug, ctx, registry), "weather")
+    assert weather.state == "ok", weather.reason
+    return site_environment().get_template("blocks/06_weather.html.j2").render(
+        block={"data": weather.data, "id": "weather"}, root="../"
+    )
+
+
+def test_storm_rows_follow_the_ledger(seeded, registry):
+    """§8.3: the ports of every leg on the page's ledger, in declared leg
+    order, each once — derived from the registry, never hard-coded."""
+    seed_quiet(seeded.conn, STORM_NOW)
+    expected = {
+        "cbot": (["New Orleans", "Paranaguá", "Rosario (up-river)", "North China (Qingdao)"],
+                 ["Burns Harbor (CBOT delivery)"]),
+        "dalian": (["North China (Qingdao)", "Paranaguá", "New Orleans"],
+                   ["Burns Harbor (CBOT delivery)"]),
+        "brazil": (["Paranaguá", "New Orleans", "Rosario (up-river)"],
+                   ["Burns Harbor (CBOT delivery)"]),
+        "argentina": (["Rosario (up-river)", "Paranaguá", "New Orleans"],
+                      ["Burns Harbor (CBOT delivery)"]),
+        "south_africa": (["Durban", "Rosario (up-river)", "Paranaguá", "New Orleans"],
+                         ["Randfontein (JSE reference)", "Burns Harbor (CBOT delivery)"]),
+        "india": ([], ["Indore (mandi hub)"]),
+    }
+    for slug, (ports, not_exposed) in expected.items():
+        storms = _storms(slug, seeded, registry, STORM_NOW)
+        assert [p["short"] for p in storms["ports"]] == ports, slug
+        assert [p["short"] for p in storms["not_exposed"]] == not_exposed, slug
+
+
+def test_flagged_port_renders_an_alert_line(seeded, registry):
+    now = seed_francine(seeded.conn, "010")
+    html = _weather_html("cbot", seeded, registry, now)
+    assert 'class="alert alert-warn"' in html
+    assert ("New Orleans: Francine (NHC adv 10, Hurricane, category 1, 65 kt) — "
+            "tropical-storm-force winds forecast from Thu 12 Sep 00:00Z") in html
+    # The port row carries the same chip as the ledger.
+    storms = _storms("cbot", seeded, registry, now)
+    nola = next(p for p in storms["ports"] if p["place_id"] == "P-NOLA")
+    assert nola["state"] == "flag" and nola["chip"] == "storm" and nola["chip_class"] == "hz-warning"
+    assert 'Storms — the port leg · NHC + JTWC · checked 04:00Z 11 Sep' in html
+
+
+def test_explicit_no_storm_line(seeded, registry):
+    seed_quiet(seeded.conn, STORM_NOW)
+    html = _weather_html("cbot", seeded, registry, STORM_NOW)
+    assert "No active storm threatens New Orleans, North China (Qingdao)" in html
+    assert 'class="alert alert-ok">No active storm' in html
+
+
+def test_no_storm_line_is_withheld_when_no_port_is_clear(seeded, registry):
+    """"No storm threatens a covered port" on a page with no covered port
+    would be an empty reassurance. No real page is in that position today,
+    so the ledger is narrowed to its South Atlantic legs."""
+    seed_quiet(seeded.conn, STORM_NOW)
+    brazil = registry["brazil"]
+    south_atlantic = tuple(leg for leg in brazil.ledger.legs
+                           if leg.leg_id in ("brazil:paranagua", "argentina:fob"))
+    narrowed = replace(brazil, ledger=replace(brazil.ledger, legs=south_atlantic))
+    ctx = SiteContext(conn=seeded.conn, today=TODAY, now=STORM_NOW)
+    storms = block_builders._storm_rows(narrowed, ctx)
+    assert [p["state"] for p in storms["ports"]] == ["not_covered", "not_covered"]
+    assert storms["clear_line"] is None
+
+
+def test_not_covered_caption(seeded, registry):
+    seed_quiet(seeded.conn, STORM_NOW)
+    html = _weather_html("brazil", seeded, registry, STORM_NOW)
+    assert ("Paranaguá: South Atlantic — no publishable cyclone source — "
+            "absence of a flag is not a clear reading") in html
+    assert "not covered</span>" in html
+
+
+def test_not_exposed_caption(seeded, registry):
+    seed_quiet(seeded.conn, STORM_NOW)
+    html = _weather_html("india", seeded, registry, STORM_NOW)
+    assert ("Not exposed, so not assessed: Indore (mandi hub) (inland pricing hub — "
+            "agency wind radii are valid only over water)") in html
+    assert "No active storm threatens" not in html
+
+
+def test_port_rain_slot_is_empty_until_footprint_weather_lands(seeded, registry):
+    seed_quiet(seeded.conn, STORM_NOW)
+    ctx = SiteContext(conn=seeded.conn, today=TODAY, now=STORM_NOW)
+    assert ctx.port_rain("P-NOLA") is None
+    storms = _storms("cbot", seeded, registry, STORM_NOW)
+    assert all(p["port_rain"] is None for p in storms["ports"])
+    assert "port rain" not in _weather_html("cbot", seeded, registry, STORM_NOW)
+
+
+def test_market_without_a_ledger_has_no_storms_section(seeded, registry):
+    seed_quiet(seeded.conn, STORM_NOW)
+    assert _storms("europe", seeded, registry, STORM_NOW) is None
+    assert "Storms — the port leg" not in _weather_html("europe", seeded, registry, STORM_NOW)
+
+
+def test_times_are_absolute_utc(seeded, registry):
+    now = seed_francine(seeded.conn, "010")
+    storms = _storms("cbot", seeded, registry, now)
+    line = storms["flagged"][0]["text"]
+    assert "Thu 12 Sep 00:00Z" in line and "03:00Z" in line
+    # A lead time appears only in brackets, anchored to the advisory — never bare.
+    assert re.search(r"(?<![(\w])\+\d+ h(?! from)", line) is None
+    assert "in 24 h" not in line
+
+
+def test_a_source_failure_is_a_warm_empty_state_not_a_clear_port(seeded, registry):
+    now = seed_francine(seeded.conn, "010")
+    seeded.conn.execute("UPDATE data_freshness SET status = 'failed', last_success = NULL "
+                        "WHERE layer_name = 'cyclones_nhc'")
+    seeded.conn.commit()
+    html = _weather_html("cbot", seeded, registry, now)
+    assert '<span class="es-label">no reading</span>New Orleans: NHC layer cyclones_nhc' in html
+    assert "No active storm threatens New Orleans" not in html
+    assert "No active storm threatens North China (Qingdao)" in html
+
+
+def test_storm_rows_alone_make_the_block_ok(registry, tmp_path):
+    """§8.3: ok when it has regions, OR a river reading, OR any storm row."""
+    conn = sqlite3.connect(str(tmp_path / "storms-only.db"))
+    conn.execute(schema._CREATE_WEATHER)
+    ensure_cyclone_tables(conn)
+    seed_quiet(conn, STORM_NOW)
+    ctx = SiteContext(conn=conn, today=TODAY, now=STORM_NOW)
+    weather = _block(_build("cbot", ctx, registry), "weather")
+    assert weather.state == "ok", weather.reason
+    assert weather.data["regions"] == []
+    assert weather.data["storms"]["ports"]
+    # Every value is the agencies' reading; the method caption names them.
+    assert "National Hurricane Center" in weather.data["storms"]["method"]
+    conn.close()

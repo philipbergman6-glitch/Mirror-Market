@@ -60,6 +60,22 @@ def test_key_explains_every_block_state_and_tier():
         assert tier in keys
 
 
+def test_key_explains_every_hazard_chip_class_the_builder_can_emit():
+    from app.block_builders import _hazard_chip
+
+    keys = _flatten(wayfinding.how_to_read_vocabulary())
+    emitted = set()
+    for state in ("flag", "watch", "clear", "not_covered", "stale", "failed"):
+        for severity in ("alert", "warning", "info", None):
+            for partial in (False, True):
+                _chip, css = _hazard_chip(state, severity, partial)
+                if css:
+                    emitted.add(css)
+    assert emitted == {"hz-alert", "hz-warning", "hz-quiet"}
+    for css in emitted:
+        assert css in keys, f"hazard chip class {css!r} has no entry in the key"
+
+
 def test_every_key_entry_has_a_label_and_a_meaning():
     for group in wayfinding.how_to_read_vocabulary().values():
         assert group["title"]

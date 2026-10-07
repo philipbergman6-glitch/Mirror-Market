@@ -17,6 +17,10 @@ import pytest
 
 import config
 from app.markets import ledger_leg_id_for, load_markets
+from app.origins_page import build_view
+from tests.test_origins_page_operational import TODAY as ORIGINS_TODAY
+from tests.test_origins_page_operational import _render as render_origins
+from tests.test_origins_page_operational import db  # noqa: F401 — fixture
 
 
 def _reload(monkeypatch, **overrides):
@@ -233,17 +237,39 @@ def test_a_triple_no_ledger_leg_reads_resolves_to_none():
     assert ledger_leg_id_for("cbot", "price", "Soybean Oil") is None
 
 
-def test_the_pnw_row_gets_no_hazard():
+def test_the_pnw_row_gets_no_hazard(db):  # noqa: F811 — the imported fixture
     """K1 edge case (c): PNW is a declared-absent origin with no price, so no
     ledger leg, no place, and nothing for a flag to attach to. A flag needs a price.
 
-    The rendered half — no chip in the origins row — lands with the chip in
-    slice 4; until then the page has no chip to render.
+    Two halves: the registry has nothing for it, and the rendered origins page
+    carries no chip in its row even when every priced leg is flagged.
     """
     pnw = config.ORIGIN_LEGS["us_pnw"]
     assert pnw.get("absent_reason")
     assert not {"market", "block", "key"} & pnw.keys()
     assert not any("PNW" in p or "Pacific Northwest" in place["name"] for p, place in config.PLACES.items())
+
+    flagged = {
+        "state": "flag", "severity": "warning", "partial": False, "chip": "storm",
+        "chip_class": "hz-warning", "text": "Synthetic (NHC): tropical-storm-force winds",
+        "level": "ts_force", "storm": "Synthetic", "storm_id": "al992026", "source": "NHC",
+        "first_arrival_h": 24, "first_arrival_at": "2026-08-19T00:00:00Z", "reason": None,
+        "uncovered": [], "anchor": "markets/cbot.html#block-weather",
+    }
+    hazards = {leg_id: flagged for leg_id in ("us_gulf:cif", "brazil:paranagua", "argentina:fob")}
+    view = build_view(db, today=ORIGINS_TODAY, hazards=hazards)
+    soup = render_origins(view)
+    decision = soup.select_one("#section-decision")
+    assert decision is not None
+    rows = {row["origin_key"]: row for row in view["views"][0]["decision"]["rows"]}
+    assert "us_pnw" not in rows  # rendered from UnavailableOrigin, never _row_view
+    assert all(rows[k]["hazard"] is flagged for k in ("us_gulf", "br_paranagua", "ar_up_river"))
+    # One chip per flagged row, in every costed window the section renders.
+    assert len(decision.select("a.hz-chip")) == 3 * len(view["views"])
+    pnw_block = next(es for es in decision.select(".empty-state") if "PNW" in es.get_text())
+    assert not pnw_block.select(".hz-chip")
+    assert "hazard" not in next(u for u in view["views"][0]["decision"]["unavailable"]
+                                if u["port"]["key"] == "us_pnw")
 
 
 def test_a_priced_origin_leg_with_no_ledger_leg_fails_the_build(monkeypatch):
