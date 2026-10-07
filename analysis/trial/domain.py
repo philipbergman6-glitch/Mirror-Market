@@ -96,6 +96,9 @@ AUDIENCE_AGGREGATE = "aggregate"
 #: asserts that none of them appears in an aggregate payload, at any depth.
 PRIVATE_FIELD_NAMES = frozenset({
     "participant",
+    # The pre-A6 name of the same field. Kept so a record written under protocol
+    # v1 still trips the guard — renaming a key must never loosen it.
+    "trader",
     "decision",
     "notes",
     "evidence",

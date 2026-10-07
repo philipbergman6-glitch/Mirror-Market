@@ -397,15 +397,50 @@ def test_a_window_short_of_thirty_trading_days_is_not_a_complete_scorecard() -> 
 def test_a_complete_window_reports_complete() -> None:
     start = TODAY - timedelta(days=60)
     days_list = [d for d in _weekdays(start, TODAY)][-32:]
+    tasks = list(TaskId)
     sessions = [
-        session(participant=participant, trading_day=day, hour=7 + offset)
-        for day in days_list
+        session(
+            participant=participant,
+            task=tasks[index % len(tasks)],
+            trading_day=day,
+            hour=7 + offset,
+        )
+        for index, day in enumerate(days_list)
         for offset, participant in enumerate(SYNTHETIC_PARTICIPANTS)
     ]
     observations = [day_observation(trading_day=day) for day in days_list]
     card = scorecard(sessions, observations, window_start=days_list[0], window_end=TODAY)
     assert card.trading_days_covered >= 30
+    assert card.floor is not None and card.floor.met
     assert card.is_complete
+
+
+def test_a_complete_window_with_one_participant_below_the_floor_is_not_complete() -> None:
+    # Thirty-two trading days covered, two participants present, but one of them
+    # logged only morning briefs: zero real decisions. A6 says that participant
+    # is reported, not graded, and the trial has one at the floor, not two.
+    start = TODAY - timedelta(days=60)
+    days_list = [d for d in _weekdays(start, TODAY)][-32:]
+    tasks = list(TaskId)
+    sessions = [
+        session(participant=SYNTHETIC_PARTICIPANTS[0], task=tasks[index % len(tasks)], trading_day=day, hour=7)
+        for index, day in enumerate(days_list)
+    ] + [
+        session(participant=SYNTHETIC_PARTICIPANTS[1], task=TaskId.MORNING_BRIEF, trading_day=day, hour=8)
+        for day in days_list
+    ]
+    observations = [day_observation(trading_day=day) for day in days_list]
+    card = scorecard(sessions, observations, window_start=days_list[0], window_end=TODAY)
+    assert card.participant_count == 2
+    assert card.verdict == VERDICT_INSUFFICIENT
+    assert "1 of 2 participant" in card.verdict_reason
+    assert SYNTHETIC_PARTICIPANTS[1] not in card.verdict_reason
+    assert not card.is_complete
+    text = scorecard_markdown(card)
+    assert "Decision floor" in text
+    assert SYNTHETIC_PARTICIPANTS[1] in text and "0 of 8 real decisions" in text
+    shared = scorecard_markdown(card, audience="aggregate")
+    assert SYNTHETIC_PARTICIPANTS[1] not in shared
 
 
 def _weekdays(start: date, end: date) -> list[date]:

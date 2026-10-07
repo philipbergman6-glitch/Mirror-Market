@@ -48,6 +48,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from analysis.trial.backlog import BacklogSet, draft_backlog
+from analysis.trial.floor import FloorResult, decision_floor
 from analysis.trial.domain import (
     AUDIENCE_AGGREGATE,
     AUDIENCE_PRIVATE,
@@ -262,6 +263,7 @@ class WeeklyReview:
     verdict_reason: str = ""
     participant_count: int = 0
     session_count: int = 0
+    floor: FloorResult | None = None
 
     @property
     def is_first_week(self) -> bool:
@@ -275,6 +277,7 @@ class WeeklyReview:
             "verdict_reason": self.verdict_reason,
             "participant_count": self.participant_count,
             "session_count": self.session_count,
+            "floor": self.floor.to_dict(audience=audience) if self.floor is not None else None,
             "metrics": self.metrics.to_dict(audience=audience),
             "trend": [entry.to_dict() for entry in self.trend],
             "worked": list(self.worked),
@@ -304,18 +307,16 @@ def _in_window(day: date, start: date, end: date) -> bool:
     return start <= day <= end
 
 
-def _verdict(metrics: MetricSet, backlog: BacklogSet, *, participants: int, sessions: int) -> tuple[str, str]:
-    """Apply the config bars, plus the two overrides an average cannot express."""
-    import config
+def _verdict(metrics: MetricSet, backlog: BacklogSet, *, floor: FloorResult) -> tuple[str, str]:
+    """Apply the config bars, plus the two overrides an average cannot express.
 
-    min_participants = getattr(config, "TRIAL_MIN_PARTICIPANTS", 2)
-    min_obs = getattr(config, "TRIAL_MIN_OBSERVATIONS", 10)
-    if participants < min_participants or sessions < min_obs:
-        return (
-            VERDICT_INSUFFICIENT,
-            f"{sessions} session(s) from {participants} participant(s); the protocol asks for at least "
-            f"{min_obs} sessions from {min_participants} participants before a verdict is meaningful",
-        )
+    The first override is the A6 decision floor: fewer than
+    ``config.TRIAL_MIN_PARTICIPANTS`` participants standing at the per-participant
+    floor is ``insufficient`` — no verdict, whatever the rates say. The reason
+    carries counts only; who is short is on the private review.
+    """
+    if not floor.met:
+        return VERDICT_INSUFFICIENT, floor.reason
 
     blockers = backlog.blockers
     if blockers:
@@ -481,8 +482,9 @@ def weekly_review(
         )
         for metric in metrics.metrics
     )
-    participants = len({s.participant for s in window})
-    verdict, reason = _verdict(metrics, backlog, participants=participants, sessions=len(window))
+    participants = len({s.participant.strip().lower() for s in window})
+    floor = decision_floor(window)
+    verdict, reason = _verdict(metrics, backlog, floor=floor)
     return WeeklyReview(
         week_start=week_start,
         week_end=end,
@@ -497,6 +499,7 @@ def weekly_review(
         verdict_reason=reason,
         participant_count=participants,
         session_count=len(window),
+        floor=floor,
     )
 
 
@@ -560,6 +563,7 @@ class Scorecard:
     trading_days_covered: int
     verdict: str
     verdict_reason: str
+    floor: FloorResult | None = None
 
     @property
     def graded_dimensions(self) -> tuple[ScorecardDimension, ...]:
@@ -582,12 +586,17 @@ class Scorecard:
 
     @property
     def is_complete(self) -> bool:
-        """Did the window meet the protocol's own coverage requirement?"""
+        """Did the window meet the protocol's own coverage requirement?
+
+        The trading-day count, and the A6 decision floor: enough participants
+        standing at the per-participant floor, not merely present.
+        """
         import config
 
         return (
             self.trading_days_covered >= getattr(config, "TRIAL_WINDOW_TRADING_DAYS", 30)
-            and self.participant_count >= getattr(config, "TRIAL_MIN_PARTICIPANTS", 2)
+            and self.floor is not None
+            and self.floor.met
         )
 
     def to_dict(self, *, audience: str = AUDIENCE_PRIVATE) -> dict[str, Any]:
@@ -605,6 +614,7 @@ class Scorecard:
             "day_count": self.day_count,
             "verdict": self.verdict,
             "verdict_reason": self.verdict_reason,
+            "floor": self.floor.to_dict(audience=audience) if self.floor is not None else None,
             "dimensions": [dim.to_dict(audience=audience) for dim in self.dimensions],
         }
 
@@ -838,9 +848,10 @@ def scorecard(
     ordered = tuple(by_key[key] for key in ordered_keys)
 
     backlog = draft_backlog(window)
-    participants = len({s.participant for s in window})
+    participants = len({s.participant.strip().lower() for s in window})
     covered = len({s.trading_day for s in window} | {d.trading_day for d in live_days})
-    verdict, reason = _verdict(metrics, backlog, participants=participants, sessions=total)
+    floor = decision_floor(window)
+    verdict, reason = _verdict(metrics, backlog, floor=floor)
     return Scorecard(
         window_start=window_start,
         window_end=window_end,
@@ -851,6 +862,7 @@ def scorecard(
         trading_days_covered=covered,
         verdict=verdict,
         verdict_reason=reason,
+        floor=floor,
     )
 
 
@@ -870,6 +882,7 @@ def review_markdown(review: WeeklyReview, *, audience: str = AUDIENCE_PRIVATE) -
     ]
     if audience == AUDIENCE_PRIVATE:
         lines.append("*Private record. Do not paste into a public tracker.*")
+    lines += _floor_lines(review.floor, audience=audience)
     lines += ["", "## Metrics", "", "| Metric | Value | Obs | Status | Trend |", "|---|---|---|---|---|"]
     trend_by_key = {entry.key: entry for entry in review.trend}
     for metric in review.metrics.metrics:
@@ -907,6 +920,18 @@ def review_markdown(review: WeeklyReview, *, audience: str = AUDIENCE_PRIVATE) -
     return "\n".join(lines)
 
 
+def _floor_lines(floor: FloorResult | None, *, audience: str) -> list[str]:
+    """The decision-floor section. Private: one line per handle; aggregate: counts."""
+    if floor is None:
+        return []
+    lines = ["", "## Decision floor", "", floor.reason + "."]
+    if audience == AUDIENCE_PRIVATE:
+        standings = [f"- {line}" for line in floor.standing_lines()]
+        lines += [""] + (standings or ["- No sessions in this window."])
+        lines += ["", "A participant below the floor is reported here and not graded."]
+    return lines
+
+
 def scorecard_markdown(card: Scorecard, *, audience: str = AUDIENCE_PRIVATE) -> str:
     """The 30-day scorecard as a document."""
     lines = [
@@ -927,6 +952,7 @@ def scorecard_markdown(card: Scorecard, *, audience: str = AUDIENCE_PRIVATE) -> 
             "> **This window did not meet the protocol's coverage requirement.** The scores "
             "below describe what was observed and are not a 30-day result.",
         ]
+    lines += _floor_lines(card.floor, audience=audience)
     lines += ["", "| Dimension | Score | Grade | Obs | Basis |", "|---|---|---|---|---|"]
     ungraded = False
     for dim in card.dimensions:

@@ -190,7 +190,10 @@ def full_window() -> tuple[list[SessionRecord], list[DayObservation]]:
     are not accidentally testing the insufficiency path. Tests that want a thin
     window build one explicitly.
     """
-    tasks = list(TaskId)
+    # Every task appears, and the three real-decision tasks (A6 floor: origin
+    # comparison, crush/hedge, counterparty) recur so that each participant
+    # clears the ≥8-real-decisions bar inside the 22-day fixture window.
+    tasks = list(TaskId) + [TaskId.ORIGIN_COMPARISON, TaskId.CRUSH_HEDGE, TaskId.COUNTERPARTY_ID]
     sessions: list[SessionRecord] = []
     days: list[DayObservation] = []
     for index, day in enumerate(trading_days()):

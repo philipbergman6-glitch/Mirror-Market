@@ -3871,15 +3871,40 @@ OPPORTUNITY_COUNTERPARTY_LIMIT = 6
 # Bumped whenever the session-record schema, a metric's formula, or a decision
 # threshold changes. Stamped on every captured session, so a result recorded in
 # week 1 can be read against the protocol that was in force when it was taken.
-TRIAL_PROTOCOL_VERSION = "1.0.0"
+TRIAL_PROTOCOL_VERSION = "2.0.0"
 
 # The trial window, in *trading* days — weekends and CBOT holidays do not count,
 # because a session on a day the board is shut measures nothing.
 TRIAL_WINDOW_TRADING_DAYS = 30
 
-# The minimum number of independent participants. Two is the floor stated in the
-# brief; one participant's preference is a taste, not a finding.
+# The minimum number of independent participants *at the decision floor*. Two
+# is the floor stated in the brief and confirmed by A6 (#303); one participant's
+# preference is a taste, not a finding.
 TRIAL_MIN_PARTICIPANTS = 2
+
+# The per-participant decision floor (A6 #303). A participant's sessions are
+# graded only once they have logged at least `sessions` sessions over the
+# window, across at least `tasks` distinct tasks, including at least
+# `real_decisions` completed sessions in the real cargo/basis tasks named in
+# TRIAL_REAL_DECISION_TASKS. A participant below the floor is reported, not
+# graded; fewer than TRIAL_MIN_PARTICIPANTS at the floor returns `insufficient`
+# — no verdict. Supersedes the protocol v1 flat ten-sessions-total floor.
+# Read only by analysis/trial/floor.py.
+TRIAL_DECISION_FLOOR: dict[str, int] = {
+    "sessions": 20,
+    "tasks": 5,
+    "real_decisions": 8,
+}
+
+# The tasks whose completed session is a real cargo/basis decision: origin
+# comparison, crush/hedge, and counterparty/opportunity identification (tasks
+# 2, 3 and 7 in the protocol's order). Values are TaskId values; a name that
+# is not one raises at read time rather than counting nothing.
+TRIAL_REAL_DECISION_TASKS: tuple[str, ...] = (
+    "origin_comparison",
+    "crush_hedge",
+    "counterparty_id",
+)
 
 # Where the private trial records live: participant ids, session notes, decisions,
 # counterparties, and every commercial judgement made during the window. This
@@ -3950,9 +3975,10 @@ TRIAL_LOWER_IS_BETTER = frozenset({
     "missed_alert_rate",
 })
 
-# A metric with fewer than this many observations reports `insufficient` rather
-# than a rate. Three sessions do not make a completion rate, and a go/no-go read
-# off one is worse than no go/no-go at all.
+# A *metric* with fewer than this many observations reports `insufficient`
+# rather than a rate. Three sessions do not make a completion rate. This is a
+# per-metric rule and is not the trial's decision floor — that is
+# TRIAL_DECISION_FLOOR, read per participant.
 TRIAL_MIN_OBSERVATIONS = 10
 
 # The nine rubric dimensions of the final scorecard, each scored 0-5 against the
