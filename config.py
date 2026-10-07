@@ -1373,8 +1373,9 @@ MANDI_STATE_IDS = {
 }
 # Every run re-reads this many trailing days (as whole months), so a mandi
 # that uploads after a run is picked up by the next one rather than lost,
-# and a missed run backfills itself. Agmarknet 2.0 serves dates back to its
-# 2025-11-07 go-live.
+# and a missed run backfills itself. The API serves far older months than
+# the window reads: MP soybean answered for every month probed back to
+# Oct 2020 (2026-10-07).
 MANDI_LOOKBACK_DAYS = 31
 # An arrival date is stored only once it is at least this many Indian
 # calendar days old: 1 = yesterday and earlier. The current IST day fills
@@ -1386,6 +1387,9 @@ MANDI_MIN_AGE_DAYS = 1
 # The unit the report must declare on its modal-price column. A different
 # label is a unit change and fails the layer rather than restating the level.
 MANDI_PRICE_UNIT = "Rs./Quintal"
+# The unit the report must declare on its arrivals column. Quintals would
+# parse as valid floats 10× too large, so a different label fails the layer.
+MANDI_ARRIVALS_UNIT = "Metric Tonnes"
 # Unit guard, ₹/quintal. ``modal_price`` is quoted per quintal (100 kg) and
 # multiplied by 10 into INR/MT; a source that switched to ₹/kg (~67) or
 # ₹/MT (~67,000) would still parse cleanly and silently restate the level
@@ -1394,6 +1398,21 @@ MANDI_PRICE_UNIT = "Rs./Quintal"
 # 2021 record was ~₹10,000/qtl and the 2008 low ~₹2,200/qtl.
 MANDI_MODAL_MIN_INR_QUINTAL = 1_000
 MANDI_MODAL_MAX_INR_QUINTAL = 20_000
+# Minimum Support Price for soybean (yellow): (marketing season opens, INR/MT,
+# season, source). The kharif marketing season runs October → September, so a
+# mandi date reads the season in force on that date. Kept in INR/MT — the
+# ₹/quintal figure ×10, written out here so no runtime conversion exists —
+# because that is the unit the mandi series is stored in. MSP is a floor the
+# government defends only through procurement (PSS) or a price-deficit
+# payment (MP's Bhavantar), not a traded price; it is shown as a reference
+# beside the mandi median, never as a quote. Before the first entry the MSP
+# is not modelled and the comparison is withheld.
+INDIA_SOYBEAN_MSP: tuple[tuple[_date, float, str, str], ...] = (
+    (_date(2025, 10, 1), 53_280.0, "2025-26",
+     "PIB/CCEA 28 May 2025: ₹5,328/quintal (+₹436)"),
+    (_date(2026, 10, 1), 57_080.0, "2026-27",
+     "CCEA 13 May 2026: ₹5,708/quintal (+₹380)"),
+)
 # Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
 MANDI_SERIES = "Soybean (Mandi MP)"     # headline: Indore is the crush-industry pricing hub
@@ -1989,15 +2008,13 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # page to a brief within the week rather than on the 14-day default (M19
     # #222).
     #
-    # Known risk, deliberately accepted (#212): India's closure calendar is the
-    # longest of any daily leg here, and the Diwali stretch (Dhanteras through
-    # Bhai Dooj, ~5 days — 17–23 Oct in 2026) with a Sunday at each end could
-    # exceed 7 and fire a false stale, demoting the India page over an ordinary
-    # festival week. 7 is kept anyway because a *full* blackout needs every one
-    # of ~115 reporting mandis per state shut, not just the Indore hub, which
-    # makes the real worst case very likely shorter. Agmarknet 2.0 now serves
-    # past days (since 2025-11-07), so the 2025 Diwali gap is measurable —
-    # revisit with it before the first Diwali (Oct 2026).
+    # Diwali risk (#212), measured 2026-10-07 and retired: the festival week
+    # (Dhanteras through Bhai Dooj — 17–23 Oct in 2026) was feared to blank
+    # both states for 5+ days and fire a false stale. Agmarknet's own record
+    # of Diwali 2025 (15–31 Oct) shows no blackout at all — every day carried
+    # rows in both states, the thinnest MP 4 lots (25 Oct) and MH 3 (21 Oct).
+    # The newest date never ages, so 7 holds. What the week does
+    # produce is *thin* medians, the same caveat as a Sunday (#370).
     "india_domestic": 7,
     # River gauges. Both are fixed-URL sources — nothing rotates, so a feed
     # that stops being refreshed answers 200 forever with the same stage and

@@ -559,7 +559,7 @@ def emerging_markets_section(data: dict | None) -> dict:
         groups = [
             _psd_group(info),
             _currency_group(info),
-            _india_group(info),
+            *_india_groups(info),
             *_brazil_groups(info),
             *_south_africa_groups(info),
         ]
@@ -617,23 +617,41 @@ def _currency_group(info: dict) -> dict | None:
     )])
 
 
-def _india_group(info: dict) -> dict | None:
+def _india_groups(info: dict) -> list[dict | None]:
     india = info.get("india_domestic") or {}
     if not india:
-        return None
+        return []
     mandi_date = india.get("soybean_mandi_date")
     basis_date = india.get("basis_date")
     premium = india.get("bean_premium_usd")
-    return _group("Mandi domestic price (Agmarknet, MP median)", [
-        _card("Soybean", india.get("soybean_mandi_inr"), prefix="₹",
-              caption=f"INR/MT{f' · {mandi_date}' if mandi_date else ''}"),
-        _card("Soybean (USD)", india.get("soybean_mandi_usd"), places=1, prefix="$",
-              caption=f"USD/MT{f' · {basis_date or mandi_date}' if (basis_date or mandi_date) else ''}"),
-        _card("vs CBOT beans", premium, places=1, prefix="$",
-              value_class=_direction(premium),
-              caption=("premium" if (premium or 0) > 0 else "discount")
-              + (f" · as of {basis_date}" if basis_date else "")),
-    ])
+    vs_msp = india.get("mandi_vs_msp_pct")
+    msp = india.get("msp_inr")
+    arrivals_chg = india.get("arrivals_7d_chg_pct")
+    return [
+        _group("Mandi domestic price (Agmarknet, MP median)", [
+            _card("Soybean", india.get("soybean_mandi_inr"), prefix="₹",
+                  caption=f"INR/MT{f' · {mandi_date}' if mandi_date else ''}"),
+            _card("Soybean (USD)", india.get("soybean_mandi_usd"), places=1, prefix="$",
+                  caption=f"USD/MT{f' · {basis_date or mandi_date}' if (basis_date or mandi_date) else ''}"),
+            _card("vs CBOT beans", premium, places=1, prefix="$",
+                  value_class=_direction(premium),
+                  caption=("premium" if (premium or 0) > 0 else "discount")
+                  + (f" · as of {basis_date}" if basis_date else "")),
+        ]),
+        _group("Mandi context (Agmarknet, MP)", [
+            # A reference, not a quote: the floor the state defends only
+            # through procurement or a price-deficit payment.
+            _card("vs MSP", vs_msp, places=1, suffix="%",
+                  value_class=_direction(vs_msp),
+                  caption=(f"MSP ₹{msp:,.0f}/MT · {india.get('msp_season', '')}"
+                           if msp is not None else "")),
+            _card("Arrivals, 7 days", india.get("arrivals_7d_mt"), suffix=" MT",
+                  delta=(f"{arrivals_chg:+.1f}% vs prior 7d"
+                         if arrivals_chg is not None else ""),
+                  caption=("mandis reporting to Agmarknet · "
+                           f"to {india.get('arrivals_7d_end', '')}")),
+        ]),
+    ]
 
 
 def _brazil_groups(info: dict) -> list[dict | None]:

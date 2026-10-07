@@ -112,6 +112,23 @@ def _migrate_weather_is_forecast(conn) -> None:
             logger.warning("Could not add is_forecast column to weather: %s", exc)
 
 
+def _migrate_india_domestic_arrivals(conn) -> None:
+    """Add the arrivals_mt column to india_domestic_prices if absent. Idempotent.
+
+    NULL means the row predates arrivals (or came from a source without
+    them) — never learned, not zero tonnes.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(india_domestic_prices)").fetchall()}
+    except Exception:
+        return
+    if cols and "arrivals_mt" not in cols:
+        try:
+            conn.execute("ALTER TABLE india_domestic_prices ADD COLUMN arrivals_mt REAL")
+        except Exception as exc:
+            logger.warning("Could not add arrivals_mt column to india_domestic_prices: %s", exc)
+
+
 def _migrate_gulf_bids_price_change(conn) -> None:
     """Add the price_change column to gulf_bids if absent. Idempotent.
 
@@ -306,6 +323,7 @@ def init_database():
         _migrate_forward_curve_liquidity(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
+        _migrate_india_domestic_arrivals(conn)
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
@@ -1060,6 +1078,7 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
 
     Serves the mandi (Agmarknet) series since 2026-08; the retired NCDEX
     rows share the table under their own commodity keys, never spliced.
+    ``arrivals_mt`` (the day's total tonnes) is NULL when the frame has none.
     """
     if df.empty:
         return
@@ -1071,8 +1090,11 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
         df["unit"] = df["Unit"].fillna("INR/MT").astype(str)
     else:
         df["unit"] = "INR/MT"
+    if "arrivals_mt" not in df.columns:
+        df["arrivals_mt"] = float("nan")
     _save("india_domestic_prices",
-          df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit"]],
+          df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit",
+              "arrivals_mt"]],
           ["Date", "commodity"], f"india_domestic/{commodity}")
 
 

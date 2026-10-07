@@ -23,6 +23,7 @@ Key concepts for learning:
 """
 
 import logging
+from datetime import date
 from typing import Any
 
 import pandas as pd
@@ -46,6 +47,7 @@ from config import (
     CONAB_FARMGATE_SERIES,
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
+    INDIA_SOYBEAN_MSP,
     MANDI_SERIES,
     MANDI_SERIES_MH,
     SAGIS_ATTRIBUTION,
@@ -176,6 +178,59 @@ def _pct_chg_calendar_days(rows: pd.DataFrame, days: int) -> float | None:
     if pd.isna(prev) or prev == 0:
         return None
     return float((rows["Close"].iloc[-1] - prev) / prev * 100)
+
+
+def _india_msp_on(day: date) -> tuple[float, str] | None:
+    """(MSP INR/MT, season) in force on ``day``, or None before the schedule."""
+    in_force = [entry for entry in INDIA_SOYBEAN_MSP if entry[0] <= day]
+    if not in_force:
+        return None
+    _, inr_mt, season, _source = max(in_force, key=lambda entry: entry[0])
+    return inr_mt, season
+
+
+_ARRIVALS_WINDOW_DAYS = 7
+
+
+def _mandi_arrivals_pace(rows: pd.DataFrame) -> dict[str, Any] | None:
+    """Seven-day mandi arrivals (MT) and their change on the seven before.
+
+    The window ends the day *before* the newest stored date: that day is
+    still filling with late uploads (MH 2026-10-05 was first stored from 83
+    lots and from 122 a day later), and a short last day would read as a
+    slowdown. A calendar day inside the window with no row is zero tonnes —
+    the lookback re-read stores every date the report carries. A stored row
+    with NULL arrivals (it predates the column) withholds the whole figure:
+    a sum around it would understate the week. So do days before the first
+    stored row: they are unknown, not zero.
+    """
+    if rows.empty or "arrivals_mt" not in rows.columns:
+        return None
+    dates = pd.to_datetime(rows["Date"])
+    end = dates.max() - pd.Timedelta(days=1)
+    span = pd.Timedelta(days=_ARRIVALS_WINDOW_DAYS)
+
+    def window(stop: pd.Timestamp) -> pd.Series | None:
+        if dates.min() > stop - span + pd.Timedelta(days=1):
+            return None
+        inside = rows.loc[(dates > stop - span) & (dates <= stop), "arrivals_mt"]
+        if inside.empty or inside.isna().any():
+            return None
+        return inside
+
+    current = window(end)
+    if current is None:
+        return None
+    pace: dict[str, Any] = {
+        "arrivals_7d_mt": round(float(current.sum()), 1),
+        "arrivals_7d_end": str(end.date()),
+    }
+    prior = window(end - span)
+    if prior is not None and prior.sum() > 0:
+        pace["arrivals_7d_chg_pct"] = round(
+            float((current.sum() - prior.sum()) / prior.sum() * 100), 1
+        )
+    return pace
 
 
 _SAGIS_YOY_AVERAGE_SEASONS = 3
@@ -1569,6 +1624,18 @@ def emerging_markets_analysis() -> dict:
                     weekly = _pct_chg_calendar_days(mandi_rows, 7)
                     if weekly is not None:
                         india_domestic_entry["weekly_chg_pct"] = round(weekly, 2)
+
+                    msp = _india_msp_on(pd.Timestamp(mandi_rows["Date"].iloc[-1]).date())
+                    if msp is not None:
+                        india_domestic_entry["msp_inr"] = msp[0]
+                        india_domestic_entry["msp_season"] = msp[1]
+                        india_domestic_entry["mandi_vs_msp_pct"] = round(
+                            (latest_close / msp[0] - 1) * 100, 2
+                        )
+
+                    pace = _mandi_arrivals_pace(mandi_rows)
+                    if pace is not None:
+                        india_domestic_entry.update(pace)
 
                 # Maharashtra — #1 producing state since 2025-26; secondary
                 # series alongside the MP (Indore hub) headline benchmark.

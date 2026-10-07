@@ -1046,3 +1046,99 @@ def test_mandi_one_state_going_quiet_fails_the_layer_but_keeps_its_rows(
     assert result.status == "failed"
     assert set(result.data) == {"Soybean (Mandi MP)", "Soybean (Mandi MH)"}
     assert "Maharashtra" in (result.error or "") and "2026-09-20" in (result.error or "")
+
+
+# ── Arrivals (MT) — the quantity leg of the same report ─────────────────────
+
+def test_mandi_aggregate_sums_arrivals_per_day() -> None:
+    """Arrivals are a state total, not a median: every lot's tonnes add up."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", arrivals="10.5"),
+        _mandi_record(market="B", modal_price="7100", arrivals=20.0),
+        _mandi_record(market="B", arrival_date="03/08/2026", modal_price="7100", arrivals=4.0),
+    ]
+    df = _mandi_aggregate(records)
+    assert list(df["arrivals_mt"]) == [30.5, 4.0]
+
+
+def test_mandi_aggregate_withholds_a_days_arrivals_when_any_lot_lacks_them() -> None:
+    """A partial sum understates the day and still reads as a total, so the
+    whole day's arrivals stay blank. The price is unaffected."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", arrivals=10.0),
+        _mandi_record(market="B", modal_price="7100", arrivals=None),
+        _mandi_record(market="C", arrival_date="03/08/2026", modal_price="7000", arrivals=5.0),
+    ]
+    df = _mandi_aggregate(records)
+    assert pd.isna(df["arrivals_mt"].iloc[0])
+    assert df["Close"].iloc[0] == 70_500.0
+    assert df["arrivals_mt"].iloc[1] == 5.0
+
+
+def test_mandi_aggregate_withholds_negative_arrivals() -> None:
+    records = [_mandi_record(arrivals=-3.0), _mandi_record(market="B", arrivals=2.0)]
+    assert pd.isna(_mandi_aggregate(records)["arrivals_mt"].iloc[0])
+
+
+def test_mandi_stores_arrivals_alongside_the_median(monkeypatch) -> None:
+    _serve_agmarknet(monkeypatch, _two_ordinary_months)
+
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    mp = result.data["Soybean (Mandi MP)"]
+    assert list(mp["arrivals_mt"]) == [20.0, 30.0]   # 10 MT per stub lot
+
+
+@pytest.mark.parametrize(
+    "columns",
+    [
+        pytest.param(
+            [c for c in _AGM_COLUMNS if c["key"] != "arrivals"], id="arrivals-column-gone",
+        ),
+        pytest.param(
+            [
+                {**c, "title": "Arrivals (Quintal)"} if c["key"] == "arrivals" else c
+                for c in _AGM_COLUMNS
+            ],
+            id="arrivals-unit-changed",
+        ),
+    ],
+)
+def test_mandi_hard_fails_when_the_arrivals_column_changes(monkeypatch, columns) -> None:
+    """Quintals read as valid floats 10× too large, so the unit is checked."""
+    _serve_agmarknet(
+        monkeypatch,
+        lambda state, year, month: {
+            **_two_ordinary_months(state, year, month),
+            "columns": [dict(c) for c in columns],
+        },
+    )
+
+    result = fetch_mandi_prices(today=date(2026, 10, 5))
+
+    assert result.status == "failed"
+    assert not result.has_rows
+    assert "rrivals" in (result.error or "")
+
+
+def test_mandi_aggregate_blanks_arrivals_on_a_day_that_lost_a_lot_to_a_bad_price() -> None:
+    """A lot skipped for its price takes its tonnes out of the sum; the total
+    left behind would read as complete, so the day's arrivals stay blank."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", arrivals=10.0),
+        _mandi_record(market="B", modal_price="0", arrivals=500.0),
+        _mandi_record(market="C", arrival_date="03/08/2026", modal_price="7000", arrivals=5.0),
+    ]
+    df = _mandi_aggregate(records)
+    assert pd.isna(df["arrivals_mt"].iloc[0])
+    assert df["Close"].iloc[0] == 70_000.0
+    assert df["arrivals_mt"].iloc[1] == 5.0
+
+
+def test_mandi_aggregate_blanks_every_days_arrivals_when_a_skipped_lot_has_no_date() -> None:
+    """A lot whose date does not parse could belong to any day."""
+    records = [
+        _mandi_record(market="A", modal_price="7000", arrivals=10.0),
+        _mandi_record(market="B", arrival_date="2026-08-02", arrivals=500.0),
+    ]
+    assert _mandi_aggregate(records)["arrivals_mt"].isna().all()

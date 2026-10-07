@@ -578,7 +578,7 @@ def clean_india_domestic(df: pd.DataFrame) -> pd.DataFrame:
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values("Date").reset_index(drop=True)
 
-    for col in ("Open", "High", "Low", "Close", "Volume"):
+    for col in ("Open", "High", "Low", "Close", "Volume", "arrivals_mt"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 

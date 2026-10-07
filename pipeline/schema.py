@@ -456,6 +456,7 @@ CREATE TABLE IF NOT EXISTS india_domestic_prices (
     Close       REAL,
     Volume      REAL,
     unit        TEXT,
+    arrivals_mt REAL,
     PRIMARY KEY (Date, commodity)
 );
 """
