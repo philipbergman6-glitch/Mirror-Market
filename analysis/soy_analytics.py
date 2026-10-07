@@ -1030,7 +1030,13 @@ def _fx_aligned(
     closes = closes[closes > 0]
     res = align_fx(
         pair,
-        ((pd.Timestamp(d).date(), float(v)) for d, v in closes.items()),
+        (
+            (ts.date(), float(v))
+            for ts, v in zip(
+                pd.DatetimeIndex(closes.index).to_pydatetime(),
+                closes.to_numpy(dtype=float),
+            )
+        ),
         when.date(),
     )
     if not res.ok or res.rate is None or res.observed_on is None:
