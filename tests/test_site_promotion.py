@@ -6,8 +6,9 @@ from trust.site_promotion import expected_site_paths, verify_site_candidate
 
 def _pages() -> dict[str, str]:
     generated = '<meta name="mirror-market-generated-at" content="2026-08-18T12:00:00+00:00">'
+    key = '<details id="how-to-read"></details>'
     pages = {
-        path: f"<!doctype html><html><head>{generated}</head><body></body></html>"
+        path: f"<!doctype html><html><head>{generated}</head><body>{key}</body></html>"
         for path in expected_site_paths()
     }
     nav = "".join(f'<a href="{path}">{path}</a>' for path in expected_site_paths())
@@ -18,9 +19,12 @@ def _pages() -> dict[str, str]:
     )
     pages["index.html"] = f"""<!doctype html><html><head>{generated}
       <meta name="mirror-market-layer-count" content="{len(PRODUCTION_LAYERS)}">
-      </head><body>{nav}<section id="briefing"><div class="briefing">Daily briefing</div></section>
+      </head><body>{key}{nav}<section id="briefing"><a href="briefing.html">Read the full briefing</a></section>
       {layers}{legs}<div data-derived="crush" data-aligned="true" data-as-of="2026-08-17"></div>
       </body></html>"""
+    # The briefing text lives on its own page (wayfinding pass, 2026-10-07).
+    pages["briefing.html"] = f"""<!doctype html><html><head>{generated}</head><body>{key}{nav}
+      <section id="briefing"><div class="briefing">Daily briefing</div></section></body></html>"""
     return pages
 
 
@@ -37,9 +41,12 @@ def test_complete_candidate_satisfies_promotion_contract():
 
 def test_contract_rejects_missing_briefing_tombstone_and_stale_benchmark():
     pages = _pages()
-    pages["index.html"] = pages["index.html"].replace(
+    pages["briefing.html"] = pages["briefing.html"].replace(
         '<div class="briefing">Daily briefing</div>', "No briefing data"
-    ).replace('data-as-of="2026-08-17"', 'data-as-of="2026-07-01"', 1)
+    )
+    pages["index.html"] = pages["index.html"].replace(
+        'data-as-of="2026-08-17"', 'data-as-of="2026-07-01"', 1
+    )
     pages["players.html"] = pages["players.html"].replace(
         "<body>", '<body><div class="tomb">could not be generated today</div>'
     )
@@ -96,4 +103,28 @@ def test_every_page_the_masthead_links_to_is_in_the_promotion_contract():
         assert target.split("/")[-1] in {p.split("/")[-1] for p in contract}, target
     assert "workstation.html" in contract
     assert "origins.html" in contract
+    assert "briefing.html" in contract
     assert linked or nav_targets     # the masthead links to something at all
+
+
+def test_contract_rejects_a_dead_cross_page_anchor_and_a_missing_key():
+    """A "Deeper" link to `markets/x.html#block-ledger` passes a file-exists
+    check even when that page renders no such block; the gate must read the
+    target. And a page that rendered without the key took the template's
+    test-only branch in production."""
+    pages = _pages()
+    pages["index.html"] = pages["index.html"].replace(
+        "<section id=", '<a href="markets/cbot.html#block-ledger">deeper</a>'
+        '<a href="briefing.html#briefing">ok</a><section id=', 1
+    )
+    pages["players.html"] = pages["players.html"].replace('<details id="how-to-read"></details>', "")
+
+    verdict = verify_site_candidate(
+        pages,
+        today=date(2026, 8, 18),
+        now=datetime(2026, 8, 18, 13, tzinfo=timezone.utc),
+    )
+
+    assert "dead anchor: index.html -> markets/cbot.html#block-ledger" in verdict.failures
+    assert not any("briefing.html#briefing" in f for f in verdict.failures)
+    assert "how-to-read key is absent: players.html" in verdict.failures

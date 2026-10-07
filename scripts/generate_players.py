@@ -21,11 +21,11 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
-from jinja2 import Environment, FileSystemLoader
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.templating import site_environment  # noqa: E402
 from scripts.validate_players import PLAYERS_DIR  # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -437,7 +437,7 @@ def render_players_html(
     market_nav: list[dict] | None = None,
     generated_at_iso: str = "",
 ) -> str:
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+    env = site_environment()
     template = env.get_template("players.html.j2")
     total = sum(len(g["cards"]) for g in groups)
     tier1 = sum(g["tier1_count"] for g in groups)

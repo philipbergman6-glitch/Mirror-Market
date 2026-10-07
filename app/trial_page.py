@@ -286,16 +286,11 @@ def build_view(
 
 def render_trial_page(view: dict[str, Any], *, generated_at: str = "") -> str:
     """Render the view through the template. No I/O."""
-    from jinja2 import Environment, FileSystemLoader
+    from app.templating import site_environment
 
-    env = Environment(
-        loader=FileSystemLoader(str(Path(__file__).resolve().parent / "templates")),
-        # select_autoescape matches on extension and "trial.html.j2" ends in
-        # .j2, so it silently resolved to OFF (#313). Unconditional instead.
-        autoescape=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
+    # Autoescape is unconditional inside site_environment: select_autoescape
+    # matched on extension and "trial.html.j2" silently resolved to OFF (#313).
+    env = site_environment(trim_blocks=True, lstrip_blocks=True)
     return env.get_template("trial.html.j2").render(trial=view, generated_at=generated_at)
 
 

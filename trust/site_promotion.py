@@ -44,6 +44,11 @@ PUBLISHED_ASSETS = (
 def expected_site_paths() -> tuple[str, ...]:
     return (
         "index.html",
+        # The full briefing text (wayfinding pass, 2026-10-07): moved off the
+        # headline onto its own page. In the contract because the masthead and
+        # headline section 11 both link to it, and because the "daily briefing
+        # is absent" check below now reads it here.
+        "briefing.html",
         "players.html",
         # The Phase 2 origin comparison. In the contract rather than optional
         # for the same reason every market URL is: the masthead links to it from
@@ -152,16 +157,43 @@ def verify_site_candidate(
         for violation in scan(html, surface=path):
             failures.append(f"misleading claim: {violation.describe()}")
 
+        # The key renders on every page from _base.html.j2 (wayfinding pass,
+        # 2026-10-07). The template guards it behind `how_to_read is defined`
+        # so focused tests can render without it; this is the check that a
+        # production page did not quietly take that branch.
+        if soup.select_one("details#how-to-read") is None:
+            failures.append(f"how-to-read key is absent: {path}")
+
         for link in soup.select("a[href]"):
-            target = _local_target(path, str(link.get("href", "")))
+            href = str(link.get("href", ""))
+            target = _local_target(path, href)
             if target is not None and target not in pages and target not in PUBLISHED_ASSETS:
                 failures.append(f"broken internal link: {path} -> {target}")
+            elif target in pages:
+                # A cross-page anchor (the headline's "Deeper" lines point at
+                # `markets/<slug>.html#block-<id>`) is dead when the target
+                # page renders no such id — a brief drops two blocks — and a
+                # file-exists check cannot see that. Same-page `#…` hrefs are
+                # not reached here (`_local_target` returns None for them).
+                fragment = urlsplit(href).fragment
+                if fragment:
+                    target_soup = parsed_pages.get(target) or BeautifulSoup(pages[target], "html.parser")
+                    parsed_pages.setdefault(target, target_soup)
+                    if target_soup.find(id=fragment) is None:
+                        failures.append(f"dead anchor: {path} -> {target}#{fragment}")
+
+    briefing_page = parsed_pages.get("briefing.html")
+    if briefing_page is not None:
+        briefing = briefing_page.select_one("#briefing .briefing")
+        if briefing is None or not briefing.get_text(strip=True):
+            failures.append("daily briefing is absent")
+        if "No briefing data" in briefing_page.get_text(" "):
+            failures.append("daily briefing fallback is visible")
 
     index = parsed_pages.get("index.html")
     if index is not None:
-        briefing = index.select_one("#briefing .briefing")
-        if briefing is None or not briefing.get_text(strip=True):
-            failures.append("daily briefing is absent")
+        # The headline's section 11 is now a pointer at briefing.html; the
+        # fallback sentence must not leak onto the front page either.
         if "No briefing data" in index.get_text(" "):
             failures.append("daily briefing fallback is visible")
 

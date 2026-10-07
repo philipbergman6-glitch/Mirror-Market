@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -55,6 +55,7 @@ from app.markets import (  # noqa: E402
     nav_items,
     relative_root,
 )
+from app.templating import site_environment  # noqa: E402
 from config import setup_logging  # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ def _env() -> Environment:
     # table fragments that genuinely are HTML pass through `| safe` at the
     # exact spot they are embedded, so every trusted fragment is visible in
     # the template rather than implied by a global off switch.
-    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+    return site_environment()
 
 
 def _write(output_dir: Path, relpath: str, html: str) -> Path:

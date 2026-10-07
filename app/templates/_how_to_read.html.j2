@@ -1,0 +1,36 @@
+{#
+  The "How to read" key (wayfinding pass, 2026-10-07).
+
+  Rendered on every page by _base.html.j2, collapsed, opened from the
+  "How to read" link at the end of the market nav. Its content is the code's
+  own vocabulary — `how_to_read()` is a global installed by
+  app.templating.site_environment and reads pricing.semantics, the ledger
+  states, the block states and the tiers — so a chip the site can print and
+  the key does not explain fails tests/test_wayfinding.py.
+
+  Each entry shows the label *as it renders* (same CSS class as the live
+  component) beside one sentence of meaning. No new component: it reuses
+  .kind, .pill, .es-label and .tier-pill exactly so the key and the page
+  cannot drift apart visually.
+#}
+{% set vocab = how_to_read() %}
+<details id="how-to-read" class="how-to-read">
+  <summary><span class="htr-no">KEY</span> How to read this site <span class="htr-sub">what the chips, pills and dates mean · nothing here is a settlement, a live quote or an order</span></summary>
+  <div class="htr-body">
+    {% for gid, group in vocab.items() %}
+    <div class="htr-group">
+      <h3>{{ group.title }}</h3>
+      <p class="htr-lede">{{ group.lede }}</p>
+      <dl>
+        {% for e in group.entries %}
+        <div class="htr-row">
+          <dt>{% if e.css %}<span class="{{ e.css }}">{{ e.label }}</span>{% else %}<span class="htr-word">{{ e.label }}</span>{% endif %}</dt>
+          <dd>{{ e.meaning }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </div>
+    {% endfor %}
+    <p class="htr-foot">Daily refresh with honest timestamps. Vocabulary: <code>LATENCY.md</code> and <code>pricing/semantics.py</code> in the <a href="https://github.com/philipbergman6-glitch/Mirror-Market" target="_blank" rel="noopener">source</a>.</p>
+  </div>
+</details>
