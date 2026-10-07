@@ -42,8 +42,8 @@ def test_every_task_appears_with_its_question_criterion_target_and_cadence() -> 
         assert str(task.target_minutes) in DOC
 
 
-def test_every_issue_class_and_severity_is_defined_for_the_trader() -> None:
-    # A trader classifying a finding needs the definition in front of them, or
+def test_every_issue_class_and_severity_is_defined_for_the_participant() -> None:
+    # A participant classifying a finding needs the definition in front of them, or
     # the classification metric measures how each person guessed.
     for kind in IssueClass:
         assert kind.value in DOC
@@ -71,12 +71,45 @@ def test_the_decision_thresholds_are_published_with_their_direction() -> None:
     assert "higher is better" in DOC
 
 
-def test_the_protocol_states_the_window_and_the_participation_floors() -> None:
+def test_the_protocol_states_the_window_and_the_decision_floor() -> None:
     import config
 
     assert str(config.TRIAL_WINDOW_TRADING_DAYS) in DOC
-    assert str(config.TRIAL_MIN_TRADERS) in DOC
+    assert str(config.TRIAL_MIN_PARTICIPANTS) in DOC
     assert str(config.TRIAL_MIN_OBSERVATIONS) in DOC
+    floor = config.TRIAL_DECISION_FLOOR
+    assert f"{floor['sessions']} logged sessions" in DOC
+    assert f"{floor['tasks']} of the ten tasks" in DOC
+    assert f"{floor['real_decisions']} real cargo/basis decisions" in DOC
+    for task in config.TRIAL_REAL_DECISION_TASKS:
+        assert f"`{task}`" in DOC
+    assert "`insufficient`" in DOC
+    assert "reported, not graded" in DOC
+
+
+def test_the_protocol_uses_the_a6_vocabulary_not_trader() -> None:
+    # A6 (#303): the person in the trial is a participant, a physical buyer.
+    assert "participant" in DOC
+    assert "physical buyer" in DOC
+    # The one legitimate mention is the A6 exclusion: futures-only traders are
+    # not participants. Every other "trader" is the retired wording.
+    assert "trader" not in DOC.lower().replace("futures-only traders", "")
+
+
+def test_the_protocol_states_desk_side_capture_and_the_self_reported_baseline() -> None:
+    lowered = DOC.lower()
+    assert "form" in lowered and "transcrib" in lowered
+    assert "scripts/trial.py transcribe" in DOC
+    assert "external_lookups_per_task" in DOC
+    assert "self-reported" in lowered
+
+
+def test_the_confidentiality_section_carries_the_participation_letter_and_design_partner() -> None:
+    lowered = DOC.lower()
+    assert "participation letter" in lowered
+    assert "design partner" in lowered
+    assert "withdraw" in lowered
+    assert "no nda" in lowered
 
 
 def test_the_protocol_states_the_confidentiality_boundary_and_where_records_live() -> None:

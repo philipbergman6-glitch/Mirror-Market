@@ -21,7 +21,7 @@ Three things enforce that, and they are independent:
 and that is the right rule for pages *on the site* — one owner for the head, the
 masthead and the nav, so no page drifts. This one is not on the site: it has no
 place in the nav, it must render with no database connection and no market
-registry, and giving it the shared base would put a page full of trader identity
+registry, and giving it the shared base would put a page full of participant identity
 one ``expected_site_paths()`` edit away from being deployed with everything else.
 It follows DESIGN.md's palette and type scale directly instead, which is checked
 by test rather than by inheritance.
@@ -86,7 +86,7 @@ def build_view(
             "session_count": 0,
             "empty": True,
             "empty_reason": (
-                "No trial sessions have been recorded yet. This page reports what traders "
+                "No trial sessions have been recorded yet. This page reports what participants "
                 "logged; with nothing logged there is nothing to report, and a dashboard of "
                 "zeros would read like a result."
             ),
@@ -135,7 +135,7 @@ def build_view(
             "trading_days_covered": card.trading_days_covered,
             "is_complete": card.is_complete,
             "session_count": len(sessions),
-            "trader_count": card.trader_count,
+            "participant_count": card.participant_count,
         }
     )
 

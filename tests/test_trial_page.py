@@ -1,7 +1,7 @@
 """The private trial dashboard: it renders, and it cannot be published.
 
 This page is the one surface in the repository that is *designed* to carry
-everything — trader handles, their words, the decisions they reached — because
+everything — participant handles, their words, the decisions they reached — because
 it is the desk's own read of the trial. That inverts the usual test: the risk
 here is not that a field is missing, it is that the file ends up somewhere the
 Pages deploy can see. So the assertions divide in two: the page renders what the
@@ -20,7 +20,7 @@ from tests.trial_fixtures import (
     BLOCKER_ISSUE,
     MARK,
     NUMERICAL_ISSUE,
-    SYNTHETIC_TRADERS,
+    SYNTHETIC_PARTICIPANTS,
     TODAY,
     day_observation,
     full_window,
@@ -171,10 +171,10 @@ def test_the_builder_has_no_audience_switch_that_could_publish_it_by_argument() 
 
 def test_the_written_file_carries_the_free_text_because_it_is_the_private_edition() -> None:
     # Proving the guards above are not passing against an empty page. Note what
-    # is asserted: the *words* traders typed, not their handles. The page reports
+    # is asserted: the *words* participants typed, not their handles. The page reports
     # findings and questions, and reaches participation only as a count — there
-    # is no per-trader breakdown on it, and none is wanted, because a defect
-    # attributed to a named trader invites the desk to read the person rather
+    # is no per-participant breakdown on it, and none is wanted, because a defect
+    # attributed to a named participant invites the desk to read the person rather
     # than the product.
     import tempfile
 
@@ -183,4 +183,4 @@ def test_the_written_file_carries_the_free_text_because_it_is_the_private_editio
         sessions.append(session(hour=13, issues=(NUMERICAL_ISSUE,), lookups=(lookup(),)))
         html = build_trial_page(sessions, days, output_dir=tmp).read_text(encoding="utf-8")
     assert MARK in html
-    assert not any(trader in html for trader in SYNTHETIC_TRADERS)
+    assert not any(participant in html for participant in SYNTHETIC_PARTICIPANTS)

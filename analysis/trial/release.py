@@ -6,7 +6,7 @@ the repository had neither half of that. There is no ``__version__``, no
 ``CODE_VERSION`` and no git-sha capture anywhere — the only code-provenance
 concept is ``trust.domain.Run.code_revision``, a free-text field whose one
 production value is a hardcoded string in ``trust/magyp_fob.py``. And the static
-site the traders will actually use is not built through ``trust.edition`` at
+site the participants will actually use is not built through ``trust.edition`` at
 all, so it has no edition id to inherit.
 
 So a stamp is assembled from what genuinely exists, and says so:
@@ -68,7 +68,7 @@ UNKNOWN_REVISION = "unknown"
 def _git(args: list[str], *, repo: Path) -> str | None:
     """Run a read-only git command. ``None`` on any failure, never an exception.
 
-    A trader mid-session must not lose a record because git is missing. The
+    A participant mid-session must not lose a record because git is missing. The
     absence propagates into the stamp as ``UNKNOWN_REVISION``, which is visible,
     rather than into a traceback, which is not.
     """
@@ -156,7 +156,7 @@ def capture_release_stamp(
     Every argument exists so a test — or a replay of an archived edition — can
     supply the state rather than the live machine. Called with no arguments it
     reads the checkout it lives in and the database that checkout is configured
-    for, which is what a trader's session does.
+    for, which is what a participant's session does.
     """
     sha, dirty = git_code_revision(repo)
     fingerprint, layer_count = data_fingerprint(freshness)

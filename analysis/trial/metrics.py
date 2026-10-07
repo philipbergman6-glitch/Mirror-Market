@@ -183,7 +183,7 @@ class MetricSet:
     external_tool_counts: tuple[tuple[str, int], ...] = ()
     session_count: int = 0
     day_count: int = 0
-    trader_count: int = 0
+    participant_count: int = 0
 
     @property
     def by_key(self) -> dict[str, Metric]:
@@ -211,7 +211,7 @@ class MetricSet:
             "external_tool_counts": [list(pair) for pair in self.external_tool_counts],
             "session_count": self.session_count,
             "day_count": self.day_count,
-            "trader_count": self.trader_count,
+            "participant_count": self.participant_count,
         }
 
 
@@ -355,7 +355,7 @@ def compute_metrics(
             _rate(false_alert_sessions, total),
             "rate",
             total,
-            f"{false_alert_sessions} of {total} sessions saw an alert the trader judged empty.",
+            f"{false_alert_sessions} of {total} sessions saw an alert the participant judged empty.",
         ),
         metric(
             "missed_alert_rate",
@@ -375,13 +375,13 @@ def compute_metrics(
             "rate",
             completed_n,
             (
-                f"{would_act} of {completed_n} completed sessions produced an output the trader "
+                f"{would_act} of {completed_n} completed sessions produced an output the participant "
                 "would act on unaided."
             ),
         ),
         metric(
             "median_confidence",
-            "Median trader confidence",
+            "Median participant confidence",
             statistics.median(confidences) if confidences else None,
             "score",
             len(confidences),
@@ -428,7 +428,7 @@ def compute_metrics(
             "rate",
             len(days),
             (
-                f"Mean share of the {len(config.TRIAL_CRITICAL_LAYERS)} trader-critical layers "
+                f"Mean share of the {len(config.TRIAL_CRITICAL_LAYERS)} participant-critical layers "
                 f"inside their own cadence budget, across {len(days)} observed trading days."
             ),
         ),
@@ -439,7 +439,7 @@ def compute_metrics(
             "rate",
             len(days),
             (
-                f"On {deployment_ok} of {len(days)} observed trading days the trader saw that "
+                f"On {deployment_ok} of {len(days)} observed trading days the participant saw that "
                 "day's edition. Published-but-stale counts as a failure: an edition carrying "
                 "yesterday's data deployed perfectly and answered the wrong day."
             ),
@@ -481,12 +481,12 @@ def compute_metrics(
         external_tool_counts=tuple(sorted(tool_counter.items(), key=lambda kv: (-kv[1], kv[0]))),
         session_count=total,
         day_count=len(days),
-        trader_count=len({s.trader.strip().lower() for s in sessions}),
+        participant_count=len({s.participant.strip().lower() for s in sessions}),
     )
 
 
 def _default_pages() -> tuple[str, ...]:
-    """Every surface a trader could have opened, from the promotion contract.
+    """Every surface a participant could have opened, from the promotion contract.
 
     Read from ``trust.site_promotion.expected_site_paths()`` rather than
     hardcoded, so a market promoted to a page or a new surface shipped mid-trial
