@@ -36,10 +36,6 @@ def stub_fetchers(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "HISTORY_DIR", str(tmp_path / "history"))
     monkeypatch.setattr("pipeline.history.HISTORY_DIR", str(tmp_path / "history"))
 
-    # Force local SQLite (no Turso)
-    monkeypatch.setattr(config, "TURSO_DATABASE_URL", "")
-    monkeypatch.setattr(config, "TURSO_AUTH_TOKEN", "")
-
     # Reload pipeline modules so they pick up the patched STORAGE_DIR/DB_PATH
     import importlib
 

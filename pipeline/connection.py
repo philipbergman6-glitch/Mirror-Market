@@ -1,18 +1,11 @@
 """
-Database connection abstraction for Mirror Market.
+Database connection for Mirror Market: one backend, local SQLite.
 
-Provides a single get_connection() function that returns either:
-  - A Turso (libsql) cloud connection when TURSO_DATABASE_URL is set
-  - A local SQLite connection as fallback
-
-This allows the same SQL code to work both locally and on cloud platforms
-where the filesystem is ephemeral.
-
-Key concepts for learning:
-    - Environment variables control which database backend is used
-    - The connection object supports the same API (execute, fetchall, etc.)
-    - libsql is a fork of SQLite that adds network access
-    - Free Turso tier: 9GB storage, 500 databases
+`get_connection()` returns a `sqlite3.Connection` to `config.DB_PATH`, in CI
+and on every developer machine. CI persistence is git-committed CSVs in
+`data/history/` (invariant 6, decided 2026-07-30), not a hosted database.
+A dormant Turso branch lived here until #318; it was unreachable as
+the project is installed and was deleted so the storage story is stated once.
 """
 
 import logging
@@ -21,55 +14,13 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from config import DB_PATH, STORAGE_DIR, TURSO_AUTH_TOKEN, TURSO_DATABASE_URL
+from config import DB_PATH, STORAGE_DIR
 
 logger = logging.getLogger(__name__)
 
 
-class TursoUnavailableError(RuntimeError):
-    """Raised when Turso is required (MIRROR_REQUIRE_TURSO=1) but unreachable."""
-
-
-def _require_turso() -> bool:
-    return os.getenv("MIRROR_REQUIRE_TURSO", "").strip() == "1"
-
-
-def get_connection():
-    """
-    Get a database connection — cloud (Turso) or local (SQLite).
-
-    If TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are configured in config.py
-    (via environment variables), connects to a hosted Turso database.
-    Otherwise, falls back to the local SQLite file.
-
-    When MIRROR_REQUIRE_TURSO=1, a failed Turso connection raises
-    TursoUnavailableError instead of silently falling back to local.
-    """
-    if TURSO_DATABASE_URL and TURSO_AUTH_TOKEN:
-        try:
-            import libsql
-            # libsql needs a local file for caching + sync_url for the cloud DB
-            os.makedirs(STORAGE_DIR, exist_ok=True)
-            local_replica = os.path.join(STORAGE_DIR, "local.db")
-            conn = libsql.connect(
-                local_replica,
-                sync_url=TURSO_DATABASE_URL,
-                auth_token=TURSO_AUTH_TOKEN,
-            )
-            conn.sync()
-            return conn
-        except ImportError as exc:
-            msg = "libsql not installed; cannot use Turso cloud database"
-            if _require_turso():
-                raise TursoUnavailableError(msg) from exc
-            logger.error("%s — falling back to local SQLite", msg)
-        except Exception as exc:
-            msg = f"Turso connection failed: {exc}"
-            if _require_turso():
-                raise TursoUnavailableError(msg) from exc
-            logger.error("%s — falling back to local SQLite", msg)
-
-    # Local SQLite fallback
+def get_connection() -> sqlite3.Connection:
+    """Open the local SQLite database, creating the storage directory if needed."""
     os.makedirs(STORAGE_DIR, exist_ok=True)
     return sqlite3.connect(DB_PATH)
 
@@ -90,25 +41,6 @@ def managed_connection(conn) -> Iterator:
             close()
 
 
-def maybe_sync(conn) -> None:
-    """Sync a libsql connection after writes; no-op for plain sqlite3.
-
-    Embedded-replica writes are only durable at the primary once synced.
-    Under MIRROR_REQUIRE_TURSO=1 a failed sync raises (a silent sync
-    failure would mean CI "succeeds" while writing to an ephemeral file);
-    otherwise it logs and continues.
-    """
-    sync = getattr(conn, "sync", None)
-    if not callable(sync):
-        return
-    try:
-        sync()
-    except Exception as exc:
-        if _require_turso():
-            raise TursoUnavailableError(f"Turso sync failed after write: {exc}") from exc
-        logger.error("Turso sync failed after write: %s", exc)
-
-
 def is_cloud() -> bool:
-    """Check if we're configured to use Turso cloud database."""
-    return bool(TURSO_DATABASE_URL and TURSO_AUTH_TOKEN)
+    """Always False: there is no cloud backend. Removed in the next commit."""
+    return False

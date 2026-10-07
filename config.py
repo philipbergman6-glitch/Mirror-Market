@@ -2320,14 +2320,6 @@ HISTORY_DIR = os.path.join(os.path.dirname(__file__), "data", "history")
 SAME_PK_DIVERGENCE_QUARANTINE_THRESHOLD = 0.20
 
 # ---------------------------------------------------------------------------
-# Cloud Database (Turso — hosted SQLite)
-# Set these env vars to use Turso instead of local SQLite.
-# Sign up: https://turso.tech (free tier: 9GB, 500 databases)
-# ---------------------------------------------------------------------------
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
-
-# ---------------------------------------------------------------------------
 # MARKETS — the site's market registry (M8 #150, built by M17 #213)
 #
 # Market identity was previously scattered across COMMODITY_TICKERS,

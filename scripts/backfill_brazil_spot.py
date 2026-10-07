@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import setup_logging  # noqa: E402
-from pipeline.connection import get_connection, managed_connection, maybe_sync  # noqa: E402
+from pipeline.connection import get_connection, managed_connection  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,6 @@ def backfill() -> int:
                    (Date, commodity, price_brl, unit) VALUES (?, ?, ?, ?)""",
                 to_write,
             )
-            maybe_sync(conn)
 
     logger.info(
         "Backfilled %d brazil_spot rows from %d archived briefings", len(to_write), len(rows)
