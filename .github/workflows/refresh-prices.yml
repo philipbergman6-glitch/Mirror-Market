@@ -236,6 +236,13 @@ jobs:
 
       - name: Install Chrome for viewport smoke checks
         uses: browser-actions/setup-chrome@v1
+        with:
+          # Stable channel, never `latest`: that value is the newest Chromium
+          # *snapshot*, and the 2026-10-07 21:26 UTC deploy hung in headless
+          # Chrome on a snapshot that had changed since the run three hours
+          # earlier passed the same pages. The browser is part of the
+          # promotion contract; it has to be as pinned as the Python deps.
+          chrome-version: stable
 
       - name: Verify candidate promotion contract
         run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
