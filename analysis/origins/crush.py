@@ -79,7 +79,7 @@ from analysis.origins.domain import (
     worst_confidence,
 )
 from analysis.origins.landed_cost import COMPONENT_LABELS, DAYS_PER_YEAR
-from analysis.origins.sources import fx_on, parse_magyp_window, to_usd_per_mt
+from analysis.origins.sources import fx_resolution_on, parse_magyp_window, to_usd_per_mt
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 
 log = logging.getLogger(__name__)
@@ -383,16 +383,16 @@ def _read_legs(
     else:
         values = {name: rows_for_day[0][1] for name, rows_for_day in day_rows.items()}
 
-    fx = fx_on(conn, config.MARKETS[market_slug].get("currency_pair"), observed)
+    fx = fx_resolution_on(conn, config.MARKETS[market_slug].get("currency_pair"), observed)
     quote_kind = QuoteKind(descriptor.get("quote_kind", "board"))
     built: dict[str, CrushLeg] = {}
     for name, key in legs.items():
         native = values[name]
-        usd = to_usd_per_mt(native, unit=unit, key=key, fx=fx.usd_per_unit if fx else None)
+        usd = to_usd_per_mt(native, unit=unit, key=key, fx=fx.rate)
         if usd is None:
             return (
-                f"no FX rate for {when} — the {name} leg quotes in "
-                f"{config.MARKETS[market_slug]['home_currency']} and cannot be stated in USD/MT"
+                f"the {name} leg quotes in {config.MARKETS[market_slug]['home_currency']} "
+                f"and cannot be stated in USD/MT for {when} — {fx.note}"
             )
         built[name] = CrushLeg(
             name=name,

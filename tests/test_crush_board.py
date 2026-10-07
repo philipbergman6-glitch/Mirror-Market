@@ -345,8 +345,9 @@ def test_a_session_older_than_every_rate_is_dropped_not_converted_forward(
 ):
     """History never borrows a rate from a session's own future.
 
-    ``ctx.fx_on`` falls back to the oldest stored rate, which is a carry of at
-    most a weekend for a level and a fabrication for a two-year-old margin.
+    ``ctx.fx_on`` once fell back to the oldest stored rate; A1 (#298, enforced
+    by #308) killed that for every surface — a session with no rate on or
+    before it, inside the cap, is dropped.
     """
     # Drop the five OLDEST rates; those sessions now predate every rate stored.
     seeded.conn.execute("DELETE FROM currencies WHERE Date <= ?", (_day(DALIAN_SESSIONS - 5),))

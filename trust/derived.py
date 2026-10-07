@@ -14,6 +14,7 @@ from datetime import date, timezone
 from decimal import Decimal
 from types import MappingProxyType
 
+import config
 from trust.domain import (
     DatasetResult,
     FreshnessState,
@@ -190,7 +191,7 @@ def derive_usd_mt_observation(
     contracts_by_dataset: Mapping[str, DatasetContract],
     results_by_dataset: Mapping[str, DatasetResult],
     calculation_version: str = USD_MT_CONVERSION_VERSION,
-    max_fx_age_days: int = 3,
+    max_fx_age_days: int = config.FX_ALIGNMENT_MAX_GAP_DAYS,
 ) -> DerivedObservationResult:
     """Convert one trusted native commodity price into a USD/MT revision.
 

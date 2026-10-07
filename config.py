@@ -291,6 +291,16 @@ SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
 FX_SESSION_TIMEZONE = "America/New_York"
 FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
 
+# A1 (#298) / B2 (#308) — the one FX-date rule. A `home_per_mt` leg converts
+# at its own date's FX close, else at the newest *prior* close at most this
+# many calendar days older, else renders blank with reason `fx_gap_exceeded`.
+# Three covers a weekend plus one holiday (the real calendar-divergence case)
+# without letting a frozen FX feed keep converting; past it the reason doubles
+# as a frozen-feed alarm. Never a later-dated rate. One policy for every
+# surface, public and desk: `pricing.fx_alignment.align_fx` is the only site
+# that applies it.
+FX_ALIGNMENT_MAX_GAP_DAYS = 3
+
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
 # Sign up: https://quickstats.nass.usda.gov/api

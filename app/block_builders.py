@@ -50,6 +50,7 @@ from app.blocks import (
 )
 from app.markets import Market, Source, TierResult, _ingest_status
 from pipeline.units import kg_to_metric_tons, kg_to_million_metric_tons
+from pricing.fx_alignment import FxResolution, align_fx
 from pricing.semantics import quote_kind_label
 
 log = logging.getLogger(__name__)
@@ -220,26 +221,20 @@ class SiteContext:
         latest = self.fx(pair)
         return latest[1] if latest else None
 
-    def fx_on(
-        self, pair: str | None, when: date, *, fallback_to_oldest: bool = True
-    ) -> float | None:
-        """The rate on ``when``, else the newest rate at or before it.
+    def fx_on(self, pair: str | None, when: date) -> FxResolution:
+        """The rate a print dated ``when`` converts at, under A1 (#298).
 
-        A price dated D converted at today's rate is a different number from
-        the same price converted at D's rate; the ledger's dual quote is only
-        honest if the two legs are struck on the same day where one exists.
+        Own date's close, else the newest prior close at most
+        ``config.FX_ALIGNMENT_MAX_GAP_DAYS`` older (carried with both dates so
+        the render can label the substitution), else withheld with a reason —
+        and never a later-dated rate. The old ``fallback_to_oldest`` converted
+        a print at a rate from its own future; A1 killed it, and dropping the
+        session is now the only behaviour on every surface.
 
-        ``fallback_to_oldest`` covers a day *older* than every stored rate. For
-        a level that is a carry-forward of at most a weekend and the rate is
-        better than nothing; for a historical session it would convert a margin
-        at a rate from its own future, so callers reading history turn it off
-        and drop the session instead.
+        Pass ``.rate`` to ``Source.to_usd_mt``; spread the rest onto the row
+        with ``_fx_fields``.
         """
-        rows = self.fx_series(pair)
-        prior = [rate for day, rate in rows if day <= when]
-        if prior:
-            return prior[-1]
-        return rows[0][1] if rows and fallback_to_oldest else None
+        return align_fx(pair, self.fx_series(pair), when)
 
     # -- the reference board -------------------------------------------------
     def reference_series(self, markets: dict[str, Market]) -> list[tuple[date, float]]:
@@ -257,6 +252,29 @@ class SiteContext:
                     out.append((day, usd))
             return out
         return self.cached("reference_series", build)
+
+
+def _fx_fields(source: Source, fx: FxResolution) -> dict[str, Any]:
+    """The A1 annotation a rendered USD figure carries (#298 §3).
+
+    Only a ``home_per_mt`` leg was converted at a rate at all, so only there
+    can a date have been substituted or a figure withheld for want of one;
+    every other unit gets the same keys, empty, so templates never branch on
+    their presence.
+    """
+    if source.unit != "home_per_mt":
+        return {
+            "fx_observed_on": None, "fx_gap_days": None, "fx_aligned": None,
+            "fx_label": None, "fx_reason": None,
+        }
+    aligned = fx.alignment
+    return {
+        "fx_observed_on": aligned.observed_on.isoformat() if aligned else None,
+        "fx_gap_days": aligned.gap_days if aligned else None,
+        "fx_aligned": aligned.aligned if aligned else None,
+        "fx_label": aligned.label if aligned else None,
+        "fx_reason": fx.reason,
+    }
 
 
 def _read_series(
@@ -388,12 +406,15 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             # gives (`_ledger_row`), by the same registry call.
             "home_unit": _home_unit(source, key, market.home_currency),
             "has_home_quote": source.has_native_quote,
-            "usd_mt": source.to_usd_mt(value, key, fx),
+            "usd_mt": source.to_usd_mt(value, key, fx.rate),
             "as_of": when.isoformat(),
             "age_days": _age_days(ctx.today, when),
             # Several quotes on one date are averaged (see SiteContext.series);
             # say so rather than presenting a mean as a single print.
             "quotes": n_rows,
+            # A1 #298: which day's rate the USD figure was struck at, or why
+            # there is none. Rendered wherever it differs from `as_of`.
+            **_fx_fields(source, fx),
             **changes,
         })
 
@@ -785,15 +806,16 @@ def _ledger_row(
     row.update({
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
-        "usd_mt": source.to_usd_mt(value, leg.key, fx),
+        "usd_mt": source.to_usd_mt(value, leg.key, fx.rate),
         "home_value": value,
         "quotes": quotes,
+        **_fx_fields(source, fx),
     })
 
     if len(prints) > 1:
         prior_when, prior_value, _ = prints[-2]
         row["home_chg_pct"] = _pct_change(value, prior_value)
-        prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when))
+        prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when).rate)
         row["usd_chg_pct"] = _pct_change(row["usd_mt"], prior_usd)
         # M3 #145: show both moves, and say so when the currency did the work.
         # A leg quoted in its own currency can be up at home and down in USD;
@@ -857,19 +879,17 @@ def _leg_points(leg, ctx: SiteContext, prints: list[tuple[date, float, int]]):
     return inside[-LEDGER_DRILLDOWN_MAX_OBS:], len(inside)
 
 
-def _rate_at_or_before(rates: list[tuple[date, float]], when: date) -> float | None:
-    """The newest rate on or before ``when`` — **None** where there is none.
+def _rate_at_or_before(pair: str | None, rates: list[tuple[date, float]], when: date) -> float | None:
+    """A1's rate for one chart point — **None** where there is none.
 
-    Deliberately not ``SiteContext.fx_on``, which falls back to the oldest rate
-    it holds when a price predates FX coverage. That fallback converts a print
-    at a rate struck *after* it, which invariant 7 forbids ("converts at that
-    row's own date's FX rate or renders blank") and which a chart multiplies:
-    the same wrong rate applied to a run of old prints draws a stretch of
-    movement that is the currency's, attributed to the venue, on a picture that
-    reads as evidence. Blank, and the pane says how many were withheld.
+    The same ``align_fx`` the level uses, on the series the pane already holds:
+    a later-dated rate is never used, and a prior one only inside the cap. A
+    chart multiplies any laxer rule — the same wrong rate applied to a run of
+    old prints draws a stretch of movement that is the currency's, attributed
+    to the venue, on a picture that reads as evidence. Blank, and the pane
+    says how many were withheld.
     """
-    prior = [rate for day, rate in rates if day <= when]
-    return prior[-1] if prior else None
+    return align_fx(pair, rates, when).rate
 
 
 def _usd_at_each_date(
@@ -895,7 +915,7 @@ def _usd_at_each_date(
     rates = ctx.fx_series(leg.market.currency_pair) if needs_rate else []
     out: list[float | None] = []
     for day, value, _ in points:
-        rate = _rate_at_or_before(rates, day) if needs_rate else None
+        rate = _rate_at_or_before(leg.market.currency_pair, rates, day) if needs_rate else None
         if needs_rate and rate is None:
             out.append(None)
             continue
@@ -1121,9 +1141,9 @@ def _spread(leg, prints, own_leg, own_prints, ctx: SiteContext):
     for day, value, _ in reversed(prints):
         if day not in own_by_date:
             continue
-        mine = leg.source.to_usd_mt(value, leg.key, ctx.fx_on(leg.market.currency_pair, day))
+        mine = leg.source.to_usd_mt(value, leg.key, ctx.fx_on(leg.market.currency_pair, day).rate)
         theirs = own_leg.source.to_usd_mt(
-            own_by_date[day][0], own_leg.key, ctx.fx_on(own_leg.market.currency_pair, day)
+            own_by_date[day][0], own_leg.key, ctx.fx_on(own_leg.market.currency_pair, day).rate
         )
         if mine is None or theirs is None:
             continue
@@ -1235,13 +1255,13 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         legs[leg_name] = {
             "key": key,
             "home_value": value,
-            "usd_mt": source.to_usd_mt(value, key, fx),
+            "usd_mt": source.to_usd_mt(value, key, fx.rate),
         }
 
     if any(leg["usd_mt"] is None for leg in legs.values()):
         return STATE_EMPTY, (
-            f"no {market.currency_pair or 'FX'} rate for {when.isoformat()} — the legs "
-            "quote in " + market.home_currency + " and cannot be stated in USD/MT"
+            f"the legs quote in {market.home_currency} and cannot be stated in USD/MT "
+            f"for {when.isoformat()} — {fx.note}"
         ), {}
 
     yields = crush.yields
@@ -1266,6 +1286,9 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         "home_currency": market.home_currency,
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
+        # A1 #298: the three legs share one session; the rate may be a labelled
+        # prior close. Not a same-session claim about the FX leg (invariant 8).
+        **_fx_fields(source, fx),
         "profitable": margin_usd > 0,
         # M7 #149 / M5 #147: a margin off an inferred NCM position code is not
         # a number to trade on, and the caveat rides with the data.
@@ -1506,11 +1529,10 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
     * **One session for all three legs.** A day the oil did not print is not a
       day with a margin, and interpolating one would put a shape into the range
       that the market never traded.
-    * **That row's own date's rate.** ``ctx.fx_on`` falls back to the oldest
-      stored rate for a day older than every rate, which is right for a level
-      (it is a carry-forward of at most a weekend) and wrong for history: it
-      would convert a margin at a rate from its future. ``fallback_to_oldest``
-      is off here, so those sessions are dropped instead.
+    * **That row's own date's rate, under A1 (#298).** ``ctx.fx_on`` never
+      converts at a later-dated rate and only at a prior one inside the cap;
+      a session with no such rate is dropped rather than restruck at a rate
+      from its own future.
     """
     crush = market.crush
     assert crush is not None, f"crush history requested for {market.slug} with no crush source"
@@ -1529,7 +1551,7 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
 
     history: list[tuple[date, float]] = []
     for day in sorted(common):
-        rate = ctx.fx_on(market.currency_pair, day, fallback_to_oldest=False)
+        rate = ctx.fx_on(market.currency_pair, day).rate
         legs: dict[str, float] = {}
         for leg_name, key in crush.legs.items():
             usd = source.to_usd_mt(values_by_key[key][day], key, rate)
@@ -1558,23 +1580,31 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
 
     key = source.headline_key or source.keys[0]
     rows = ctx.series(source).get(key) or []
-    history: list[tuple[date, float, float, float]] = []
+    history: list[tuple[date, float, float, float, FxResolution]] = []
+    withheld: FxResolution | None = None
     for when, value, _n in rows:
         board = reference.get(when)
         if board is None:
             continue  # M3: no cross-day joins — a basis is one session's number
-        local = source.to_usd_mt(value, key, ctx.fx_on(market.currency_pair, when))
+        fx = ctx.fx_on(market.currency_pair, when)
+        local = source.to_usd_mt(value, key, fx.rate)
         if local is None:
+            withheld = fx  # the newest session lost to A1, for the reason below
             continue
-        history.append((when, local, board, local - board))
+        history.append((when, local, board, local - board, fx))
 
     if not history:
+        if withheld is not None and withheld.reason is not None:
+            return STATE_EMPTY, (
+                f"{source.label or key} printed on a session the board shares, but "
+                f"cannot be stated in USD/MT — {withheld.note}"
+            ), {}
         return STATE_EMPTY, (
             f"{source.label or key} and the CBOT board share no session — the basis "
             "is only defined where both printed"
         ), {}
 
-    when, local, board, basis = history[-1]
+    when, local, board, basis, fx = history[-1]
     spreads = [row[3] for row in history]
     return STATE_OK, "", {
         "label": source.label or key,
@@ -1597,6 +1627,9 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
         "n_obs": len(history),
+        # A1 #298: the local leg's rate may be a labelled prior close; the
+        # board leg needs none. Rendered beside the local figure.
+        **_fx_fields(source, fx),
         # M19 #222: a spread no cargo can close is not a basis a trader can
         # work, and the difference is invisible in the number. India's mandi
         # bean prints ~+66% over CBOT behind a GM import ban; the caveat rides
