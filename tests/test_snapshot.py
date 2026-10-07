@@ -405,3 +405,28 @@ def test_snapshot_is_fully_json_native(patched_db: Path, synthetic_ohlcv: pd.Dat
 
     walk(snapshot)
     json.dumps(snapshot)
+
+
+def test_conab_block_withholds_usda_leg_for_a_calendar_year_label(patched_db: Path) -> None:
+    """CONAB wheat is labelled '2025', not '2025/26'. No PSD mapping exists for
+    that convention, so the USDA leg is withheld with a reason — and the
+    snapshot builds instead of raising (deploy 2026-10-07 regression)."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO brazil_estimates (source, commodity, crop_year, attribute,"
+        " value, unit, report_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("CONAB", "Wheat", "2025", "Production", 7_900.0, "1000 t", "2026-09-11"),
+    )
+    conn.execute(
+        "INSERT INTO psd (commodity, country, attribute, year, value, unit)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        ("Wheat", "Brazil", "Production", 2025, 8_000.0, "1000 MT"),
+    )
+    conn.commit()
+    conn.close()
+
+    row = build_snapshot(_empty_briefing())["conab"]["Wheat"]
+    assert row["crop_year"] == "2025"
+    assert row["usda_psd_year"] is None
+    assert row["usda_production"] is None
+    assert row["usda_reason"] == "calendar_year_label_unmapped"

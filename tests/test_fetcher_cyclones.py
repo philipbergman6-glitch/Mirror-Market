@@ -732,3 +732,14 @@ def test_the_readers_return_what_was_stored(web, patched_db):
     track = query.read_cyclone_track()
     assert sorted(track["tau_h"]) == sorted(_francine_frames(web)["track"]["tau_h"])
     assert track.loc[track["tau_h"] == 72, "r64_ne"].isna().all()
+
+
+def test_nhc_intermediate_advisory_is_read_in_either_case():
+    """NHC's index spells intermediate advisories lower-case ("004a") while the
+    zip metadata upper-cases them. Layer 34 failed live on al092026 advisory
+    '004a' (2026-10-07). One spelling: digits unpadded, letter upper-cased."""
+    assert cyclones._advisory("004a", "x") == "4A"
+    assert cyclones._advisory("004A", "x") == "4A"
+    assert cyclones._advisory("010", "x") == "10"
+    with pytest.raises(cyclones.CycloneSourceError, match="advisory"):
+        cyclones._advisory("4ab", "x")

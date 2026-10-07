@@ -7,7 +7,7 @@ year, otherwise the line says PSD has not published that crop yet.
 
 import pandas as pd
 
-from analysis.crop_year import psd_year_for_crop_year, psd_year_label
+from analysis.crop_year import is_split_crop_year, psd_year_for_crop_year, psd_year_label
 from config import MARKETS
 from pipeline.query import read_brazil_estimates, read_psd
 
@@ -33,8 +33,12 @@ def format() -> str:  # noqa: A001
         latest = subset[subset["crop_year"] == latest_year]
         if "report_date" in latest.columns:
             latest = latest[latest["report_date"] == latest["report_date"].max()]
-        psd_year = psd_year_for_crop_year(str(latest_year), offset)
-        psd_label = psd_year_label(psd_year)
+        # CONAB labels some crops by calendar year (wheat: "2025"); no PSD
+        # mapping is defined for that convention, so the PSD leg is skipped
+        # for the commodity and the line says so. Never a guessed year.
+        split_label = is_split_crop_year(latest_year)
+        psd_year = psd_year_for_crop_year(str(latest_year), offset) if split_label else None
+        psd_label = psd_year_label(psd_year) if psd_year is not None else None
 
         commodity_parts = []
         for _, row in latest.iterrows():
@@ -47,7 +51,12 @@ def format() -> str:  # noqa: A001
 
             part = f"{attr}: {val:,.0f} {unit}"
 
-            if not psd.empty and attr == "Production":
+            if attr == "Production" and not split_label:
+                part += (
+                    f" (no USDA comparison: CONAB labels {commodity} by calendar"
+                    f" year '{latest_year}', and no PSD mapping is defined for that)"
+                )
+            elif not psd.empty and attr == "Production":
                 psd_match = psd[
                     (psd["commodity"] == commodity)
                     & (psd["country"] == psd_country)

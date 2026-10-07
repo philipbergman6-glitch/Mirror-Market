@@ -173,3 +173,35 @@ def test_briefing_section_subtracts_on_the_mapped_year(patched_db: Path) -> None
     text = conab_section.format()
     assert "vs USDA 180,500" in text
     assert "gap: -36" in text
+
+
+# --- calendar-year labels (deploy 2026-10-07 20:49 UTC failed on this) -----
+
+def test_is_split_crop_year_distinguishes_conab_conventions() -> None:
+    from analysis.crop_year import is_split_crop_year
+
+    assert is_split_crop_year("2025/26")
+    assert not is_split_crop_year("2025")  # CONAB wheat
+    assert not is_split_crop_year(None)
+
+
+def test_briefing_section_survives_a_calendar_year_label_and_says_why(patched_db: Path) -> None:
+    """CONAB labels wheat by calendar year. One such row killed the whole briefing
+    (``crop year label '2025' is not of the form YYYY/YY``) and the promotion
+    contract refused the candidate. The PSD leg is skipped *for that commodity*
+    with a reason; soybeans still compare; nothing raises."""
+    _seed(patched_db, [("Soybeans", "Brazil", "Production", 2025, 180_500.0, "1000 MT"),
+                       ("Wheat", "Brazil", "Production", 2025, 8_000.0, "1000 MT")])
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO brazil_estimates (source, commodity, crop_year, attribute,"
+        " value, unit, report_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("CONAB", "Wheat", "2025", "Production", 7_900.0, "1000 MT", "2026-09-11"),
+    )
+    conn.commit()
+    conn.close()
+
+    text = conab_section.format()
+    assert "vs USDA 180,500" in text                       # soybeans still compared
+    assert "no USDA comparison" in text and "calendar" in text  # wheat explains itself
+    assert "8,000" not in text                             # PSD wheat never subtracted

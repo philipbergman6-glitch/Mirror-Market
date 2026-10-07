@@ -225,10 +225,12 @@ def parse_intensity(value: object) -> int:
 def _advisory(value: object, label: str) -> str:
     """An advisory number without its zero padding: "010", "10" and 10 are one."""
     text = str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
-    match = re.fullmatch(r"0*(\d+)([A-Z]?)", text)
+    # NHC's index writes intermediate advisories in lower case ("004a");
+    # the zip's own metadata upper-cases the same letter. One spelling here.
+    match = re.fullmatch(r"0*(\d+)([A-Za-z]?)", text)
     if match is None:
         raise CycloneSourceError(f"{label}: advisory number {value!r} is not readable")
-    return match.group(1) + match.group(2)
+    return match.group(1) + match.group(2).upper()
 
 
 def _int_value(value: object, field: str, label: str) -> int:
