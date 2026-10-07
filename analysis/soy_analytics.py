@@ -29,6 +29,7 @@ from typing import Any
 import pandas as pd
 
 from analysis import weather_alerts
+from analysis.crop_year import psd_year_for_crop_year, psd_year_label
 from analysis.forward_curve import analyze_curve, calendar_spread
 from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.nass_crush import latest_crush
@@ -50,6 +51,7 @@ from config import (
     INDIA_SOYBEAN_MSP,
     MANDI_SERIES,
     MANDI_SERIES_MH,
+    MARKETS,
     SAGIS_ATTRIBUTION,
 )
 from pipeline.query import (
@@ -63,6 +65,7 @@ from pipeline.query import (
     read_eia_data,
     read_export_sales,
     read_forward_curve,
+    read_freshness,
     read_india_domestic,
     read_inspections,
     read_psd,
@@ -503,6 +506,87 @@ def _cec_estimate_view(df: pd.DataFrame, psd: pd.DataFrame | None) -> dict[str, 
     return out
 
 
+def _official_estimate_vs_psd(
+    market: dict[str, Any],
+    estimates: pd.DataFrame,
+    psd: pd.DataFrame,
+    freshness: pd.DataFrame | None = None,
+    commodity: str = "Soybeans",
+) -> dict[str, Any]:
+    """A national agency's production estimate against USDA's PSD, one crop.
+
+    Generic over the market descriptor's ``crop_estimates`` entry (#403,
+    invariant 5): the agency, its table and the crop-year → PSD Market_Year
+    offset are registry data. The agency's newest crop year is mapped to
+    its PSD year and the comparison is struck **only** on that row. When
+    PSD has no row for it, the gap is withheld with a reason — in the
+    months after the agency's first survey PSD still carries the previous
+    crop, which is a lag, not a disagreement. Both vintages (crop-year
+    labels, the agency's report date, PSD's fetch stamp) ride along so the
+    page can say which crop each number is.
+
+    Returns {} when the agency has no production row for ``commodity``.
+    """
+    desc = market.get("crop_estimates")
+    if not desc:
+        return {}
+    if estimates is None or estimates.empty:
+        return {}
+    rows = estimates[
+        (estimates["commodity"] == commodity) & (estimates["attribute"] == "Production")
+    ]
+    rows = rows[rows["value"].notna()]
+    if rows.empty:
+        return {}
+
+    agency = str(desc["agency"])
+    crop_year = str(rows["crop_year"].max())
+    latest = rows[rows["crop_year"] == crop_year].sort_values("report_date").iloc[-1]
+    psd_year = psd_year_for_crop_year(crop_year, int(desc["psd_year_offset"]))
+    out: dict[str, Any] = {
+        "agency": agency,
+        "conab_production": float(latest["value"]),
+        # ``crop_year`` is the pre-#403 key; kept for existing readers.
+        "crop_year": crop_year,
+        "conab_crop_year": crop_year,
+        "conab_report_date": _asof(latest.get("report_date")),
+        "usda_psd_year": psd_year,
+        "usda_psd_year_label": psd_year_label(psd_year),
+    }
+
+    psd_country = market.get("psd_country")
+    usda_rows = pd.DataFrame()
+    if psd is not None and not psd.empty and psd_country:
+        usda_rows = psd[
+            (psd["commodity"] == commodity)
+            & (psd["country"] == psd_country)
+            & (psd["attribute"] == "Production")
+            & psd["value"].notna()
+        ]
+    if not usda_rows.empty:
+        out["usda_psd_newest_year"] = int(usda_rows["year"].max())
+    if freshness is not None and not freshness.empty and "layer_name" in freshness.columns:
+        stamp = freshness.loc[freshness["layer_name"] == "psd", "last_success"]
+        if not stamp.empty and pd.notna(stamp.iloc[0]) and str(stamp.iloc[0]):
+            # PSD rows carry no publication date of their own; the fetch
+            # stamp is the only vintage this stack holds for them.
+            out["usda_psd_fetched_at"] = str(stamp.iloc[0])
+
+    mapped = usda_rows[usda_rows["year"].astype(int) == psd_year] if not usda_rows.empty else usda_rows
+    if mapped.empty:
+        out["gap_withheld_reason"] = (
+            f"USDA PSD has not published {out['usda_psd_year_label']} "
+            f"(PSD MY{psd_year}) yet — {agency}'s {crop_year} estimate has no "
+            "USDA counterpart to compare against; a lag, not a disagreement"
+        )
+        return out
+
+    usda_value = float(mapped.iloc[-1]["value"])
+    out["usda_production"] = usda_value
+    out["gap"] = out["conab_production"] - usda_value
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Analyst 1: Command Center — the top-level snapshot
 # ---------------------------------------------------------------------------
@@ -702,32 +786,11 @@ def supply_analysis() -> dict:
             if attrs:
                 wasde_summary[commodity] = attrs
 
-    # --- CONAB vs USDA ---
-    conab_vs_usda = {}
-    brazil = read_brazil_estimates()
+    # --- CONAB vs USDA (#403: one mapped crop year, never two maxima) ---
     psd = read_psd()
-
-    if not brazil.empty:
-        soy_conab = brazil[
-            (brazil["commodity"] == "Soybeans") & (brazil["attribute"] == "Production")
-        ]
-        if not soy_conab.empty:
-            latest_year = soy_conab["crop_year"].max()
-            conab_prod = soy_conab[soy_conab["crop_year"] == latest_year]["value"].iloc[0]
-            conab_vs_usda["conab_production"] = conab_prod
-            conab_vs_usda["crop_year"] = latest_year
-
-            if not psd.empty:
-                usda_brazil = psd[
-                    (psd["commodity"] == "Soybeans") &
-                    (psd["country"] == "Brazil") &
-                    (psd["attribute"] == "Production")
-                ]
-                if not usda_brazil.empty:
-                    usda_val = usda_brazil[usda_brazil["year"] == usda_brazil["year"].max()]["value"]
-                    if not usda_val.empty:
-                        conab_vs_usda["usda_production"] = usda_val.iloc[0]
-                        conab_vs_usda["gap"] = conab_prod - usda_val.iloc[0]
+    conab_vs_usda = _official_estimate_vs_psd(
+        MARKETS["brazil"], read_brazil_estimates(), psd, read_freshness()
+    )
 
     # --- PSD global highlights ---
     psd_highlights = []
