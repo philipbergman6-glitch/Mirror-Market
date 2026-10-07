@@ -624,6 +624,9 @@ def _india_group(info: dict) -> dict | None:
     mandi_date = india.get("soybean_mandi_date")
     basis_date = india.get("basis_date")
     premium = india.get("bean_premium_usd")
+    vs_msp = india.get("mandi_vs_msp_pct")
+    msp = india.get("msp_inr")
+    arrivals_chg = india.get("arrivals_7d_chg_pct")
     return _group("Mandi domestic price (Agmarknet, MP median)", [
         _card("Soybean", india.get("soybean_mandi_inr"), prefix="₹",
               caption=f"INR/MT{f' · {mandi_date}' if mandi_date else ''}"),
@@ -633,6 +636,16 @@ def _india_group(info: dict) -> dict | None:
               value_class=_direction(premium),
               caption=("premium" if (premium or 0) > 0 else "discount")
               + (f" · as of {basis_date}" if basis_date else "")),
+        # A reference, not a quote: the floor the state defends only through
+        # procurement or a price-deficit payment.
+        _card("vs MSP", vs_msp, places=1, suffix="%",
+              value_class=_direction(vs_msp),
+              caption=(f"MSP ₹{msp:,.0f}/MT · {india.get('msp_season', '')}"
+                       if msp is not None else "")),
+        _card("Arrivals, 7 days", india.get("arrivals_7d_mt"), suffix=" MT",
+              delta=(f"{arrivals_chg:+.1f}% vs prior 7d"
+                     if arrivals_chg is not None else ""),
+              caption=f"MP mandis · to {india.get('arrivals_7d_end', '')}"),
     ])
 
 

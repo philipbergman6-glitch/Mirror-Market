@@ -104,8 +104,8 @@ def test_india_mandi_roundtrips_through_history(
     """India is snapshot-only and MUST stay in the round-trip set.
 
     The 2026-08 → 09-24 rows came from data.gov.in's current-day snapshot
-    and Agmarknet 2.0 serves nothing before 2025-11-07, so the committed
-    CSV is the single record of India's history. Drop this table from HISTORY_TABLES
+    and each run re-reads only a trailing month, so the committed CSV is
+    the single record of India's history. Drop this table from HISTORY_TABLES
     and every CI fetch is discarded at the end of the run, leaving India
     permanently unable to build a series (#155).
     """
@@ -479,3 +479,32 @@ def test_forward_curve_old_pk_migration(tmp_path: Path) -> None:
     )
     assert conn.execute("SELECT COUNT(*) FROM forward_curve").fetchone()[0] == 2
     conn.close()
+
+
+def test_india_csv_from_before_arrivals_still_imports(
+    history_env: Path, patched_db: Path
+) -> None:
+    """The committed CSV predates arrivals_mt. It must import with the column
+    NULL, and the next export must carry the column for new rows."""
+    history_env.mkdir(exist_ok=True)
+    (history_env / "india_domestic_prices.csv").write_text(
+        "Date,commodity,Open,High,Low,Close,Volume,unit\n"
+        "2026-08-11,Soybean (Mandi MP),,,,67250.0,115.0,INR/MT\n"
+    )
+    import_history()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO india_domestic_prices (Date, commodity, Close, unit, arrivals_mt) "
+        "VALUES ('2026-10-05', 'Soybean (Mandi MP)', 56000.0, 'INR/MT', 49136.3)"
+    )
+    conn.commit()
+    rows = conn.execute(
+        "SELECT Date, arrivals_mt FROM india_domestic_prices ORDER BY Date"
+    ).fetchall()
+    conn.close()
+    assert rows == [("2026-08-11", None), ("2026-10-05", 49136.3)]
+
+    export_history()
+    header = (history_env / "india_domestic_prices.csv").read_text().splitlines()[0]
+    assert header.split(",")[-1] == "arrivals_mt"
