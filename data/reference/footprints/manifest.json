@@ -2,7 +2,7 @@
  "built_at": "2026-10-07",
  "spam_version": "2020 V2r2",
  "natural_earth_version": "5.1.2",
- "ports_included": false,
+ "ports_included": true,
  "inputs_sha256": {
   "crosswalk": "34d411c3862de491a5b6ba55fddb6a0c99987e50dfd384cc97d9b6723690d440",
   "ecmwf_lsm": "b218b1e04072f72fa30fd34a33b980b694ed04a2b75b6a3b5af37056d4837af8",

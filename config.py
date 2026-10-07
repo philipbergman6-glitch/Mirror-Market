@@ -520,6 +520,12 @@ FOOTPRINTS = {
     },
 }
 
+# Port rain (footprint-weather spec §4.2): the five ports storm flags' block 06
+# lists. Coordinates come from PLACES; no box for inland pricing points.
+PORT_RAIN_BOXES = ("P-NOLA", "P-PNG", "P-UPR", "P-NCN", "P-DUR")
+PORT_RAIN_BOX_CELLS = 3          # 3×3 grid points centred on the nearest node [K2 §5]
+PORT_RAIN_WET_DAY_MM = 5.0       # "days ≥ 5 mm (loading delays)" [P1 #7]
+
 WEATHER_DAILY_VARS = "temperature_2m_max,temperature_2m_min,precipitation_sum"
 
 # ---------------------------------------------------------------------------

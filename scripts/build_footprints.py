@@ -47,7 +47,6 @@ GRID_STEP = 0.25
 GRID_NI, GRID_NJ = 1440, 721  # IFS 0.25°: lon −180 … 179.75 east, lat 90 … −90 south
 LAND_LSM = 0.5
 MIN_LAND_WEIGHT = 0.5
-PORT_BOX_HALF = 1  # 3×3 [config.PORT_RAIN_BOX_CELLS]
 
 
 def _env_path(name: str) -> Path:
@@ -245,9 +244,14 @@ def build(skip_ports: bool) -> None:
         if places is None or boxes is None:
             raise SystemExit("config.PLACES / PORT_RAIN_BOXES missing (storm-flags slice 2); "
                              "pass --skip-ports to build crop and pin weights only")
+        if config.PORT_RAIN_BOX_CELLS % 2 != 1:
+            raise SystemExit("PORT_RAIN_BOX_CELLS must be odd: the box is centred on a node")
+        half = config.PORT_RAIN_BOX_CELLS // 2
         for pid in boxes:
+            if places[pid]["kind"] == "inland_pricing_point":
+                raise SystemExit(f"{pid} is an inland pricing point; port rain is for ports [S1 §4.2]")
             pr, pc = node_of(places[pid]["lat"], places[pid]["lon"])
-            span = range(-PORT_BOX_HALF, PORT_BOX_HALF + 1)
+            span = range(-half, half + 1)
             box = [(int(pr) + dr, (int(pc) + dc) % GRID_NI, 1.0) for dr in span for dc in span]
             emit(pid, "port", [(rr, cc, w / len(box)) for rr, cc, w in box])
         ports_included = True
