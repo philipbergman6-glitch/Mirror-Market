@@ -174,8 +174,25 @@ def read_sea_india_rates(series: str | None = None) -> pd.DataFrame:
     return _read_table("sea_india_rates", "series", series, date_cols=("Date",))
 
 
+def read_sopa_crop_estimates(crop_year: int | None = None) -> pd.DataFrame:
+    """Read SOPA's state-wise soybean crop estimate (Layer 33) from SQLite.
+
+    A reading series: one row per (crop_year, state) per ``fetched_date``,
+    because SOPA overwrites its page when it revises. A caller wanting the
+    current estimate takes the newest ``fetched_date`` for the year; the
+    all-India total is the row whose state is ``config.SOPA_ALL_INDIA``.
+    Units: lakh ha, kg/ha, lakh t. Private while config.SOPA_PUBLISH is
+    False — only derived figures leave ``analysis/india_crop.py``.
+    """
+    return _read_table(
+        "sopa_crop_estimates", "crop_year",
+        None if crop_year is None else str(crop_year),
+        date_cols=("fetched_date",),
+    )
+
+
 def read_cyclone_status(source: str | None = None) -> pd.DataFrame:
-    """Read each cyclone source's per-run answer (Layers 33/34).
+    """Read each cyclone source's per-run answer (Layers 34/35).
 
     One row per source per day the index answered. ``storms_listed == 0`` is
     a real answer — asked, none active — not a gap. Times other than ``Date``
@@ -185,7 +202,7 @@ def read_cyclone_status(source: str | None = None) -> pd.DataFrame:
 
 
 def read_cyclone_storms(source: str | None = None) -> pd.DataFrame:
-    """Read every storm advisory read (Layers 33/34).
+    """Read every storm advisory read (Layers 34/35).
 
     ``track_state = 'absent'`` is a JTWC storm listed with no readable product:
     its position and wind are NULL because they were never learned. Forecast
@@ -195,7 +212,7 @@ def read_cyclone_storms(source: str | None = None) -> pd.DataFrame:
 
 
 def read_cyclone_track(source: str | None = None) -> pd.DataFrame:
-    """Read the latest forecast track per source (Layers 33/34).
+    """Read the latest forecast track per source (Layers 34/35).
 
     A NULL radius is a band the agency did not publish at that hour (NHC 64 kt
     beyond 72 h); ``0`` was published as zero. Knots and nautical miles.

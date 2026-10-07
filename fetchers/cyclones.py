@@ -1,5 +1,5 @@
 """
-Layers 33 / 34 — tropical-cyclone forecast tracks and wind radii.
+Layers 34 / 35 — tropical-cyclone forecast tracks and wind radii.
 
     33  NOAA NHC  — North Atlantic, East and Central Pacific
     34  JTWC      — West Pacific, North Indian, all Southern Hemisphere
@@ -21,7 +21,7 @@ nautical miles exactly as published; nothing passes through ``to_usd_mt``.
 JTWC is US military guidance, not the WMO regional centre for any basin, and
 its attribution says so on every stored row.
 
-Traps this module exists to survive (``LAYERS.md`` Layers 33/34):
+Traps this module exists to survive (``LAYERS.md`` Layers 34/35):
 
 1.  **NHC's DBF coordinates are whole degrees.** The ``LAT``/``LON`` attribute
     columns of the 5-day points shapefile are rounded; the position is the
@@ -332,7 +332,7 @@ def _track_rows(source: str, storm_id: str, issued_at: str,
 
 
 # ---------------------------------------------------------------------------
-# Layer 33 — NOAA NHC
+# Layer 34 — NOAA NHC
 # ---------------------------------------------------------------------------
 def _parse_issuance(value: object, label: str) -> datetime:
     if not isinstance(value, str) or not value.strip():
@@ -530,7 +530,7 @@ def parse_nhc_products(
 
 
 def fetch_nhc_storms() -> dict[str, pd.DataFrame]:
-    """Layer 33 — every storm NHC lists, read whole or not at all.
+    """Layer 34 — every storm NHC lists, read whole or not at all.
 
     A listed storm whose zip is missing, unreadable or a different advisory
     from the index raises: a half-read basin must not stamp ``last_success``.
@@ -563,7 +563,7 @@ def fetch_nhc_storms() -> dict[str, pd.DataFrame]:
 
 
 # ---------------------------------------------------------------------------
-# Layer 34 — JTWC
+# Layer 35 — JTWC
 # ---------------------------------------------------------------------------
 def parse_jtwc_index(text: str) -> list[str]:
     """Storm ids from ``jtwc.rss``. A feed listing no product is a valid answer.
@@ -679,7 +679,7 @@ def parse_jtwc_tcw(
 
 
 def fetch_jtwc_storms() -> dict[str, pd.DataFrame]:
-    """Layer 34 — every storm the JTWC feed lists.
+    """Layer 35 — every storm the JTWC feed lists.
 
     De-duplication against NHC is the assessment's job (spec §2.1), so every
     storm read here is stored, East/Central Pacific duplicates included.
@@ -727,7 +727,7 @@ if __name__ == "__main__":
     from config import setup_logging
     setup_logging()
 
-    for label, fetch in (("Layer 33 (NHC)", fetch_nhc_storms), ("Layer 34 (JTWC)", fetch_jtwc_storms)):
+    for label, fetch in (("Layer 34 (NHC)", fetch_nhc_storms), ("Layer 35 (JTWC)", fetch_jtwc_storms)):
         data = fetch()
         logger.info("=== %s ===", label)
         logger.info("%s", data["status"].to_string(index=False))

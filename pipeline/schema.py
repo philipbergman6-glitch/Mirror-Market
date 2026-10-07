@@ -171,7 +171,28 @@ CREATE TABLE IF NOT EXISTS sea_india_rates (
 );
 """
 
-# Layers 33/34 — tropical-cyclone forecasts, NOAA NHC and JTWC (S2 #374,
+# Layer 33 — SOPA all-India state-wise soybean crop estimate. A *reading
+# series*: SOPA overwrites its page in place when it revises a kharif, so
+# every run's reading is kept under the day it was read, keyed
+# (crop_year, state, fetched_date). The all-India total is stored as the
+# state config.SOPA_ALL_INDIA. Units are lakh ha / kg/ha / lakh t, proven by
+# the parser on every row. Never exported to data/history/ while
+# config.SOPA_PUBLISH is False: SOPA reserves all rights and the repo is
+# public — so on the ephemeral CI database the revision path does not
+# accumulate; it does in a local one.
+_CREATE_SOPA_CROP_ESTIMATES = """
+CREATE TABLE IF NOT EXISTS sopa_crop_estimates (
+    crop_year          INTEGER NOT NULL,   -- kharif year, as SOPA labels it
+    state              TEXT NOT NULL,      -- state name, or the all-India total
+    fetched_date       TEXT NOT NULL,      -- ISO date the page was read (IST)
+    area_lakh_ha       REAL NOT NULL,
+    yield_kg_ha        REAL NOT NULL,
+    production_lakh_t  REAL NOT NULL,
+    PRIMARY KEY (crop_year, state, fetched_date)
+);
+"""
+
+# Layers 34/35 — tropical-cyclone forecasts, NOAA NHC and JTWC (S2 #374,
 # docs/specs/cyclone-hazard-flags.md §3.2). Times are UTC ISO-8601 text, winds
 # knots, radii nautical miles, exactly as the agencies publish; nothing here is
 # a price. One row per source per run that the source answered — `0` storms
@@ -537,6 +558,7 @@ CREATE TABLE IF NOT EXISTS india_domestic_prices (
     Close       REAL,
     Volume      REAL,
     unit        TEXT,
+    arrivals_mt REAL,
     PRIMARY KEY (Date, commodity)
 );
 """
@@ -861,6 +883,7 @@ ALL_SCHEMAS = (
     _CREATE_EC_OILSEED_PRICES,
     _CREATE_BRAZIL_EXPORTS,
     _CREATE_SEA_INDIA_RATES,
+    _CREATE_SOPA_CROP_ESTIMATES,
     _CREATE_CYCLONE_SOURCE_STATUS,
     _CREATE_CYCLONE_STORMS,
     _CREATE_CYCLONE_TRACK_POINTS,

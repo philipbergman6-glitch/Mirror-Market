@@ -121,7 +121,7 @@ RETRY_DELAY = 2         # seconds between retries
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
 # denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 36 operational layers across 32
+# independently runnable sub-layer, hence 37 operational layers across 33
 # numbered groups.
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
@@ -160,9 +160,10 @@ PRODUCTION_LAYERS = (
     ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
     ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
     ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India meal FAS and oil import legs (private)"),
-    ("cyclones_nhc", "33", "NOAA NHC", "Per advisory, read daily",
+    ("sopa_crop", "33", "SOPA (state-wise crop estimate)", "Annual", "India soybean crop by state (private)"),
+    ("cyclones_nhc", "34", "NOAA NHC", "Per advisory, read daily",
      "Tropical-cyclone forecast tracks and wind radii — Atlantic, East/Central Pacific"),
-    ("cyclones_jtwc", "34", "JTWC", "Per advisory, read daily",
+    ("cyclones_jtwc", "35", "JTWC", "Per advisory, read daily",
      "Tropical-cyclone forecast tracks and wind radii — West Pacific, Indian Ocean, Southern Hemisphere"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
@@ -547,7 +548,7 @@ RIVER_GAUGES_INA = {
 }
 
 # ---------------------------------------------------------------------------
-# Layers 33 / 34 — tropical-cyclone forecasts (S2 #374, slice 1 #387)
+# Layers 34 / 35 — tropical-cyclone forecasts (S2 #374, slice 1 #387)
 #
 # Storm wind is tradeable weather for the same reason river water is: a
 # hurricane over the lower Mississippi or a typhoon off Qingdao stops the
@@ -1031,6 +1032,55 @@ SEA_ATTRIBUTION = (
 # tests/test_fetcher_sea.py pins the export half.
 SEA_PUBLISH = False
 
+# ---------------------------------------------------------------------------
+# Layer 33 — SOPA all-India state-wise soybean crop estimate (no API key)
+#
+# The Soybean Processors Association of India's kharif estimate — sowing
+# area, expected yield and estimated production by state (MP/MH division and
+# district detail beneath) — on one page per crop year. Years 2007 → are
+# online. Probed 2026-10-07 from a non-India address: keyless, no geo-block,
+# User-Agent-insensitive, robots.txt permits. Every response opens with an
+# injected <style>/<script> preamble before the doctype; the table is
+# selected out of the document, never read off its head. wp-json carries
+# nothing for the page — only the HTML has the table.
+#
+# No unit is printed: the columns are lakh ha, kg/ha and lakh t, and the
+# parser proves it on every row (area × yield / 1000 = production to the
+# printed rounding) before storing anything.
+#
+# The page is overwritten in place — kharif 2025 opened at 105.36 lakh t and
+# read 110.267 on 2026-10-07 — so each run's reading is kept under its own
+# fetched_date. The next kharif is presented at the Soy Conclave (Indore,
+# 16-17 Oct 2026); until then its page has no table and SOPA's own
+# "Found 0 posts" comment, which is no_publication, not a failure.
+#
+# Licence: SOPA's terms reserve "all rights not otherwise claimed". No reuse
+# grant, so the raw table is NOT in pipeline/history.py's export (the repo
+# is public — a committed CSV is a publication) and no page renders it.
+# What may be shown publicly is derived — year-on-year change, state shares
+# — plus at most one attributed headline total. Private tables are not
+# exported, so the revision snapshots persist only in a local DB.
+# ---------------------------------------------------------------------------
+SOPA_URL = "https://sopa.org/all-india-state-wise-soybean-area-production-and-productivity/"
+
+# Kharifs read each run, ending in the current calendar year: the one being
+# revised and the one about to be estimated. Pass a longer tuple of years to
+# fetch_sopa_estimates() to backfill the archive locally.
+SOPA_YEARS_READ = 2
+
+# The label the all-India total row is stored under (SOPA prints "Total").
+SOPA_ALL_INDIA = "All India"
+
+SOPA_ATTRIBUTION = (
+    "Source: The Soybean Processors Association of India (SOPA), kharif crop estimate"
+)
+
+# Publish gate. False until SOPA grants reproduction in writing. While False
+# the raw table stays out of the public history export and off every page;
+# only derived figures and one attributed headline total may render.
+# tests/test_fetcher_sopa.py pins the export half.
+SOPA_PUBLISH = False
+
 # India's effective import duty on crude soybean oil: (in force from, rate,
 # source). Basic customs duty + 5% AIDC + a 10% Social Welfare Surcharge on
 # the two. Before the first entry the duty is not modelled and parity is
@@ -1428,8 +1478,9 @@ MANDI_STATE_IDS = {
 }
 # Every run re-reads this many trailing days (as whole months), so a mandi
 # that uploads after a run is picked up by the next one rather than lost,
-# and a missed run backfills itself. Agmarknet 2.0 serves dates back to its
-# 2025-11-07 go-live.
+# and a missed run backfills itself. The API serves far older months than
+# the window reads: MP soybean answered for every month probed back to
+# Oct 2020 (2026-10-07).
 MANDI_LOOKBACK_DAYS = 31
 # An arrival date is stored only once it is at least this many Indian
 # calendar days old: 1 = yesterday and earlier. The current IST day fills
@@ -1441,6 +1492,9 @@ MANDI_MIN_AGE_DAYS = 1
 # The unit the report must declare on its modal-price column. A different
 # label is a unit change and fails the layer rather than restating the level.
 MANDI_PRICE_UNIT = "Rs./Quintal"
+# The unit the report must declare on its arrivals column. Quintals would
+# parse as valid floats 10× too large, so a different label fails the layer.
+MANDI_ARRIVALS_UNIT = "Metric Tonnes"
 # Unit guard, ₹/quintal. ``modal_price`` is quoted per quintal (100 kg) and
 # multiplied by 10 into INR/MT; a source that switched to ₹/kg (~67) or
 # ₹/MT (~67,000) would still parse cleanly and silently restate the level
@@ -1449,6 +1503,21 @@ MANDI_PRICE_UNIT = "Rs./Quintal"
 # 2021 record was ~₹10,000/qtl and the 2008 low ~₹2,200/qtl.
 MANDI_MODAL_MIN_INR_QUINTAL = 1_000
 MANDI_MODAL_MAX_INR_QUINTAL = 20_000
+# Minimum Support Price for soybean (yellow): (marketing season opens, INR/MT,
+# season, source). The kharif marketing season runs October → September, so a
+# mandi date reads the season in force on that date. Kept in INR/MT — the
+# ₹/quintal figure ×10, written out here so no runtime conversion exists —
+# because that is the unit the mandi series is stored in. MSP is a floor the
+# government defends only through procurement (PSS) or a price-deficit
+# payment (MP's Bhavantar), not a traded price; it is shown as a reference
+# beside the mandi median, never as a quote. Before the first entry the MSP
+# is not modelled and the comparison is withheld.
+INDIA_SOYBEAN_MSP: tuple[tuple[_date, float, str, str], ...] = (
+    (_date(2025, 10, 1), 53_280.0, "2025-26",
+     "PIB/CCEA 28 May 2025: ₹5,328/quintal (+₹436)"),
+    (_date(2026, 10, 1), 57_080.0, "2026-27",
+     "CCEA 13 May 2026: ₹5,708/quintal (+₹380)"),
+)
 # Fresh series keys — mandi farmgate spot is a different instrument from the
 # retired NCDEX futures series and must never be spliced onto it.
 MANDI_SERIES = "Soybean (Mandi MP)"     # headline: Indore is the crush-industry pricing hub
@@ -1978,6 +2047,11 @@ FRESHNESS_WARNING_DAYS_BY_LAYER = {
     "eia": 42,
     "epa_rfs": 42,
     "usda": 400,  # annual NASS crop data
+    # One kharif estimate a year (mid-October), revised in place over the
+    # following months. The newest reading is re-stamped on every run that
+    # finds the table, so the budget here only has to outlast the gap
+    # between the page going dark and the next release.
+    "sopa_crop": 400,
 }
 
 
@@ -2044,15 +2118,13 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # page to a brief within the week rather than on the 14-day default (M19
     # #222).
     #
-    # Known risk, deliberately accepted (#212): India's closure calendar is the
-    # longest of any daily leg here, and the Diwali stretch (Dhanteras through
-    # Bhai Dooj, ~5 days — 17–23 Oct in 2026) with a Sunday at each end could
-    # exceed 7 and fire a false stale, demoting the India page over an ordinary
-    # festival week. 7 is kept anyway because a *full* blackout needs every one
-    # of ~115 reporting mandis per state shut, not just the Indore hub, which
-    # makes the real worst case very likely shorter. Agmarknet 2.0 now serves
-    # past days (since 2025-11-07), so the 2025 Diwali gap is measurable —
-    # revisit with it before the first Diwali (Oct 2026).
+    # Diwali risk (#212), measured 2026-10-07 and retired: the festival week
+    # (Dhanteras through Bhai Dooj — 17–23 Oct in 2026) was feared to blank
+    # both states for 5+ days and fire a false stale. Agmarknet's own record
+    # of Diwali 2025 (15–31 Oct) shows no blackout at all — every day carried
+    # rows in both states, the thinnest MP 4 lots (25 Oct) and MH 3 (21 Oct).
+    # The newest date never ages, so 7 holds. What the week does
+    # produce is *thin* medians, the same caveat as a Sunday (#370).
     "india_domestic": 7,
     # River gauges. Both are fixed-URL sources — nothing rotates, so a feed
     # that stops being refreshed answers 200 forever with the same stage and
@@ -3294,6 +3366,162 @@ NET_PLANT_MARGIN_COMPONENTS = (
     "plant_freight_in",
     "working_capital",
 )
+
+
+# ---------------------------------------------------------------------------
+# PLACES — where a ledger leg is priced, for cyclone hazard flags (#374 / #388)
+#
+# Spec: docs/specs/cyclone-hazard-flags.md §4 and §5.1. A hazard flag is a
+# dated warning on a rendered leg because a tropical cyclone threatens a place
+# that prices it, so this registry holds ports and pricing points ONLY —
+# growing areas are footprints (S1), not places. A place exists only where a
+# rendered leg needs it: app/markets.py `_validate_leg_places` refuses an
+# orphan, an unknown id, and a leg that declares nothing without a reason.
+#
+# Names and coordinates are K1 §1 (research/k1-place-list.md on branch
+# research/k1-place-list), each coordinate cross-checked there between
+# UN/LOCODE and Wikidata. Never edit a coordinate on one source.
+#
+# `basin` is a key of CYCLONE_BASINS or the literal "none". "none" is a stated
+# fact — not exposed: agency wind radii are valid only over water (R2 §2.2),
+# so an inland pricing point is never assessed and its `basin_reason` renders
+# instead. A basin with no publishable source (the South Atlantic) also
+# carries a reason, and reads `not_covered`, never `clear`.
+#
+# `effective_from` / `effective_to` are None (open-ended) or an ISO date. A
+# place is active on day d when (from is None or from <= d) and (to is None or
+# d <= to). The JSE's proposed Randfontein -> Driefontein move (2027-03-01) is
+# NOT entered: a proposed date is not a fact (invariant 2). When the JSE
+# confirms, the edit is data only — set P-RFT's effective_to, add a P-DRF row
+# from two coordinate sources, add P-DRF to LEG_PLACES["south_africa:safex"].
+# ---------------------------------------------------------------------------
+PLACE_KINDS = (
+    "export_port",
+    "export_port_range",
+    "import_port_range",
+    "import_parity_port",
+    "inland_pricing_point",
+)
+
+PLACES: dict[str, dict[str, Any]] = {
+    "P-NOLA": {
+        "name": "US Gulf — New Orleans / lower Mississippi",
+        "short": "New Orleans",
+        "kind": "export_port_range",
+        "lat": 29.9369, "lon": -90.0619,
+        "basin": "north_atlantic",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-PNG": {
+        "name": "Paranaguá",
+        "short": "Paranaguá",
+        "kind": "export_port",
+        "lat": -25.5047, "lon": -48.5108,
+        "basin": "south_atlantic",
+        "basin_reason": "South Atlantic — no publishable cyclone source",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-UPR": {
+        "name": "Argentina up-river — Rosario / San Lorenzo / Timbúes",
+        "short": "Rosario (up-river)",
+        "kind": "export_port_range",
+        "lat": -32.9575, "lon": -60.6394,
+        "basin": "south_atlantic",
+        "basin_reason": "South Atlantic — no publishable cyclone source",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-NCN": {
+        "name": "North China discharge range — Qingdao / Rizhao / Dalian",
+        "short": "North China (Qingdao)",
+        "kind": "import_port_range",
+        "lat": 36.0833, "lon": 120.3170,
+        "basin": "west_pacific",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-DUR": {
+        "name": "Durban",
+        "short": "Durban",
+        "kind": "import_parity_port",
+        "lat": -29.8737, "lon": 31.0232,
+        "basin": "south_west_indian",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-CBOT": {
+        "name": (
+            "CBOT soybean delivery territory — Chicago/Burns Harbor at par, "
+            "Illinois Waterway down to St. Louis"
+        ),
+        "short": "Burns Harbor (CBOT delivery)",
+        "kind": "inland_pricing_point",
+        "lat": 41.6259, "lon": -87.1334,
+        "basin": "none",
+        "basin_reason": "inland delivery territory — agency wind radii are valid only over water",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-RFT": {
+        "name": "Randfontein — JSE single reference point",
+        "short": "Randfontein (JSE reference)",
+        "kind": "inland_pricing_point",
+        "lat": -26.1797, "lon": 27.7042,
+        "basin": "none",
+        "basin_reason": "inland pricing point — agency wind radii are valid only over water",
+        "effective_from": None, "effective_to": None,
+    },
+    "P-IDR": {
+        "name": "Indore — mandi MP hub",
+        "short": "Indore (mandi hub)",
+        "kind": "inland_pricing_point",
+        "lat": 22.7186, "lon": 75.8550,
+        "basin": "none",
+        "basin_reason": "inland pricing hub — agency wind radii are valid only over water",
+        "effective_from": None, "effective_to": None,
+    },
+}
+
+# Only the basins a registered place declares; add one when a place needs it.
+# NHC and JTWC share one wind convention (1-minute, knots — R2 §3); never add
+# an agency that averages differently. `south_atlantic` has no source by
+# finding, not neglect (R2 §2.10): no regional centre, the Brazilian Navy site
+# sits behind a Cloudflare challenge, and GDACS / IBTrACS / SWIC all missed
+# Akará (2024) and Caiobá (2026). JTWC's `sh` prefix is the standard ATCF code
+# but was not observed live (spec §15); the fetcher hard-fails on a surprise.
+CYCLONE_BASINS: dict[str, dict[str, Any]] = {
+    "north_atlantic":    {"layer": "cyclones_nhc",  "source": "NHC",  "id_prefix": "al", "hemisphere": "N"},
+    "west_pacific":      {"layer": "cyclones_jtwc", "source": "JTWC", "id_prefix": "wp", "hemisphere": "N"},
+    "south_west_indian": {"layer": "cyclones_jtwc", "source": "JTWC", "id_prefix": "sh", "hemisphere": "S"},
+    "south_atlantic":    {"layer": None, "source": None, "id_prefix": None, "hemisphere": "S"},
+}
+
+# Keyed by the same leg ids as LEDGER_LEGS: every ledger leg declares its
+# places, or an empty tuple with a LEG_PLACES_ABSENT_REASONS entry. The mapping
+# is K1 §3, ports only. `cbot:board -> P-NOLA` is K1's one inferred link ("the
+# board against its own physical — the Gulf basis", the LEDGERS["cbot"] note),
+# approved by P1 with the Francine result. app/markets.py hands each tuple out
+# as LedgerLeg.place_ids — builders read that, never this dict.
+LEG_PLACES: dict[str, tuple[str, ...]] = {
+    "cbot:board":         ("P-CBOT", "P-NOLA"),
+    "us_gulf:cif":        ("P-NOLA",),
+    "brazil:cepea":       (),
+    "brazil:paranagua":   ("P-PNG",),
+    "argentina:fob":      ("P-UPR",),
+    "dalian:board":       ("P-NCN", "P-PNG", "P-NOLA"),
+    "india:mandi_mp":     ("P-IDR",),
+    "india:mandi_mh":     (),
+    "south_africa:safex": ("P-RFT", "P-DUR"),
+}
+LEG_PLACES_ABSENT_REASONS: dict[str, str] = {
+    "brazil:cepea": "an in-state wholesale indicator, not a port price — it has no port to flag (K1 §3)",
+    "india:mandi_mh": "a state-wide mandi median with no stated hub or port (K1 §3)",
+}
+
+# Geometry and severity (spec §5.1), read by the hazard assessment.
+CYCLONE_LOOKAHEAD_HOURS = 120            # both agencies' horizon
+CYCLONE_RADII_KT = (34, 50, 64)          # the agencies' own bands
+CYCLONE_WARNING_MAX_TAU_H = 72           # 34/50 kt inside this is `warning`, beyond it `info`
+CYCLONE_WATCH_KM = 500                   # centre this close, outside the radii
+CYCLONE_WATCH_MIN_KT = 34                # ...and only while at least tropical-storm strength
+CYCLONE_ADVISORY_MAX_AGE_HOURS = {"N": 12, "S": 18}   # R2 §3: one missed cycle
+CYCLONE_CHECK_MAX_AGE_HOURS = 36         # a daily read, plus half a day of scheduler drift
 
 
 # ---------------------------------------------------------------------------

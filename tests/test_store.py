@@ -345,6 +345,13 @@ def _scenario_india_domestic(_: Path) -> None:
     out = query.read_india_domestic("Soybeans")
     assert len(out) == 1
     assert out["Close"].iloc[0] == 45200.0
+    # A frame with no arrivals (the dormant NCDEX fallback) stores NULL —
+    # "never learned", not zero tonnes.
+    assert pd.isna(out["arrivals_mt"].iloc[0])
+
+    df["arrivals_mt"] = [1234.5]
+    store.save_india_domestic("Soybeans", df)
+    assert query.read_india_domestic("Soybeans")["arrivals_mt"].iloc[0] == 1234.5
 
 
 def _scenario_brazil_spot(_: Path) -> None:
@@ -770,3 +777,26 @@ def test_init_database_adds_futures_month_high_to_legacy_gulf_bids(patched_db):
     store.save_gulf_bids(_gulf_bid_row())
 
     assert _fetchall(patched_db, "SELECT futures_month_high FROM gulf_bids") == [(11,)]
+
+
+def test_init_db_adds_arrivals_to_a_pre_arrivals_india_table(patched_db):
+    """A DB created before arrivals existed gains the column, NULL-filled."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DROP TABLE india_domestic_prices")
+    conn.execute(
+        "CREATE TABLE india_domestic_prices (Date TEXT NOT NULL, commodity TEXT NOT NULL, "
+        "Open REAL, High REAL, Low REAL, Close REAL, Volume REAL, unit TEXT, "
+        "PRIMARY KEY (Date, commodity))"
+    )
+    conn.execute(
+        "INSERT INTO india_domestic_prices (Date, commodity, Close) "
+        "VALUES ('2026-08-11', 'Soybean (Mandi MP)', 67250.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    store.init_database()
+    store.init_database()  # idempotent
+
+    rows = _fetchall(patched_db, "SELECT Close, arrivals_mt FROM india_domestic_prices")
+    assert rows == [(67250.0, None)]

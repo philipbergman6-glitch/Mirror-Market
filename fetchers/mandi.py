@@ -42,7 +42,13 @@ Series construction:
     every per-variety row the report carries for that state and day (~115
     rows/day in MP), robust to single-mandi outliers. Prices arrive in
     INR/quintal (100 kg) and are stored as INR/MT (×10). Volume is the
-    row count. USD conversion happens at the analysis layer. Series are
+    row count. ``arrivals_mt`` is the day's total arrivals in metric
+    tonnes, summed over every lot — blank if any lot lacks a figure, since a
+    partial sum still reads as a total. Arrivals are a *total*, never a
+    weight on the price: an arrivals-weighted median was tested and is
+    noisier (MP normal-day deviation from a 7-day rolling median 0.87% vs
+    0.42% plain; thin days up to 26% vs 11%), because on a thin day one big
+    lot is the whole state. USD conversion happens at the analysis layer. Series are
     stored per-state and never pooled — a cross-state median would put a
     level break on the existing MP history.
 
@@ -89,8 +95,8 @@ Guards — why the report is checked against the request:
     soybean returns an empty report — indistinguishable in shape from a
     closed day. So every response must carry ``success: true``, a title
     naming exactly the month, commodity and state asked for, the
-    ``arrivalDate``/``modalPrice`` columns with the modal column declaring
-    ``MANDI_PRICE_UNIT``, and only arrival dates inside the month asked
+    ``arrivalDate``/``arrivals``/``modalPrice`` columns with the modal column
+    declaring ``MANDI_PRICE_UNIT`` and arrivals ``MANDI_ARRIVALS_UNIT``, and only arrival dates inside the month asked
     for. Any miss raises ScraperShapeError. A trailing month-sized window
     with no completed rows at all is a failure too, never "mandis closed":
     MP and MH trade soybean every week of the year.
@@ -110,6 +116,7 @@ import requests
 from config import (
     LAYER_MAX_DATA_AGE_DAYS,
     MANDI_API_URL,
+    MANDI_ARRIVALS_UNIT,
     MANDI_COMMODITY,
     MANDI_COMMODITY_ID,
     MANDI_LOOKBACK_DAYS,
@@ -139,7 +146,7 @@ _HEADERS = {
 }
 
 # Column keys this module parses. Extra columns appearing is not a break.
-_REQUIRED_COLUMN_KEYS = frozenset({"arrivalDate", "modalPrice"})
+_REQUIRED_COLUMN_KEYS = frozenset({"arrivalDate", "arrivals", "modalPrice"})
 
 
 def _ist_today() -> date:
@@ -230,6 +237,11 @@ def _assert_report_is_the_one_requested(
             f"Agmarknet: modal price column is {titles['modalPrice']!r}, not "
             f"{MANDI_PRICE_UNIT} — the unit changed"
         )
+    if MANDI_ARRIVALS_UNIT not in titles["arrivals"]:
+        raise ScraperShapeError(
+            f"Agmarknet: arrivals column is {titles['arrivals']!r}, not "
+            f"{MANDI_ARRIVALS_UNIT} — the unit changed"
+        )
     if not isinstance(payload.get("markets"), list):
         raise ScraperShapeError("Agmarknet: report carries no 'markets' list")
 
@@ -252,6 +264,7 @@ def _report_records(payload: dict, year: int, month: int) -> list[dict]:
                         "variety": row.get("variety"),
                         "arrival_date": day["arrivalDate"],
                         "modal_price": row["modalPrice"],
+                        "arrivals": row.get("arrivals"),
                     })
     except (KeyError, TypeError, ValueError) as exc:
         raise ScraperShapeError(
@@ -286,12 +299,22 @@ def _collect_records(state: str, today: date) -> list[dict]:
     return completed
 
 
+def _arrivals_mt(rec: dict) -> float:
+    """One lot's arrivals in MT, or NaN when absent, unparseable or negative."""
+    try:
+        value = float(rec["arrivals"])
+    except (KeyError, TypeError, ValueError):
+        return float("nan")
+    return value if value >= 0 else float("nan")
+
+
 def _aggregate(records: list[dict]) -> pd.DataFrame:
     """Distill per-mandi rows into one median-modal row per arrival date.
 
     Returns the ``clean_india_domestic``/``save_india_domestic`` shape:
     Date (ISO), Open/High/Low/Close (INR/MT), Volume (row count: one per
-    mandi × variety lot, so it runs above the mandi count), Unit.
+    mandi × variety lot, so it runs above the mandi count), arrivals_mt
+    (the day's total tonnes across every lot; NaN if any lot lacks one), Unit.
     Open/High/Low are NaN by design — see the module docstring; only the
     median modal is a defensible daily number.
 
@@ -302,17 +325,25 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
     """
     parsed: list[dict[str, object]] = []
     malformed = 0
+    # Days that lost a lot to a bad price lose that lot's tonnes too, so their
+    # arrivals total is blanked; None = a skipped lot whose day is unknown.
+    short_days: set[date | None] = set()
     for rec in records:
         try:
             arrival = datetime.strptime(str(rec["arrival_date"]), "%d/%m/%Y").date()
-            modal = float(rec["modal_price"])
         except (KeyError, TypeError, ValueError):
             malformed += 1
+            short_days.add(None)
             continue
-        if modal <= 0:
+        try:
+            modal = float(rec["modal_price"])
+        except (KeyError, TypeError, ValueError):
+            modal = 0.0
+        if not modal > 0:
             malformed += 1
+            short_days.add(arrival)
             continue
-        parsed.append({"date": arrival, "modal": modal})
+        parsed.append({"date": arrival, "modal": modal, "arrivals": _arrivals_mt(rec)})
 
     if records and not parsed:
         raise ScraperShapeError(
@@ -329,7 +360,20 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
     agg = raw.groupby("date").agg(
         close=("modal", "median"),
         volume=("modal", "size"),
+        # min_count = rows: one lot without a tonnage blanks the day's total
+        # rather than understating it (a partial sum still reads as a total).
+        arrivals=("arrivals", lambda s: s.sum(min_count=len(s))),
     ).reset_index()
+    if None in short_days:
+        agg["arrivals"] = float("nan")
+    else:
+        agg.loc[agg["date"].isin(short_days), "arrivals"] = float("nan")
+    unknown = int(agg["arrivals"].isna().sum())
+    if unknown:
+        logger.warning(
+            "Mandi API: %d day(s) carry a lot with no usable arrivals or "
+            "price — those days' arrivals are left blank", unknown,
+        )
 
     for day, median in zip(agg["date"], agg["close"], strict=True):
         if not MANDI_MODAL_MIN_INR_QUINTAL <= median <= MANDI_MODAL_MAX_INR_QUINTAL:
@@ -350,6 +394,7 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
         "Low": float("nan"),
         "Close": agg["close"] * _QUINTAL_TO_MT,
         "Volume": agg["volume"].astype(float),
+        "arrivals_mt": agg["arrivals"].astype(float),
         "Unit": "INR/MT",
     })
     return df.sort_values("Date").reset_index(drop=True)

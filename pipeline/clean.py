@@ -578,7 +578,7 @@ def clean_india_domestic(df: pd.DataFrame) -> pd.DataFrame:
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values("Date").reset_index(drop=True)
 
-    for col in ("Open", "High", "Low", "Close", "Volume"):
+    for col in ("Open", "High", "Low", "Close", "Volume", "arrivals_mt"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -893,7 +893,7 @@ def clean_worldbank(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Layers 33/34 — tropical-cyclone forecasts (NOAA NHC, JTWC)
+# Layers 34/35 — tropical-cyclone forecasts (NOAA NHC, JTWC)
 # ---------------------------------------------------------------------------
 # Per frame: primary key, columns that must be present on every row, and the
 # integer / real columns to coerce. A coerced value that comes back NaN where
@@ -949,7 +949,7 @@ def _cyclone_bounds() -> dict[str, tuple[float, float]]:
 
 
 def clean_cyclone_frame(name: str, df: pd.DataFrame) -> pd.DataFrame:
-    """Type and bound one cyclone frame (Layers 33/34) — spec §3.4.
+    """Type and bound one cyclone frame (Layers 34/35) — spec §3.4.
 
     Coerces types and hard-fails, naming the column, on a latitude outside
     ±90, a longitude outside ±180 *after* normalising it to that range, a wind

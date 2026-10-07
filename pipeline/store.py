@@ -113,6 +113,23 @@ def _migrate_weather_is_forecast(conn) -> None:
             logger.warning("Could not add is_forecast column to weather: %s", exc)
 
 
+def _migrate_india_domestic_arrivals(conn) -> None:
+    """Add the arrivals_mt column to india_domestic_prices if absent. Idempotent.
+
+    NULL means the row predates arrivals (or came from a source without
+    them) — never learned, not zero tonnes.
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(india_domestic_prices)").fetchall()}
+    except Exception:
+        return
+    if cols and "arrivals_mt" not in cols:
+        try:
+            conn.execute("ALTER TABLE india_domestic_prices ADD COLUMN arrivals_mt REAL")
+        except Exception as exc:
+            logger.warning("Could not add arrivals_mt column to india_domestic_prices: %s", exc)
+
+
 def _migrate_gulf_bids_price_change(conn) -> None:
     """Add the price_change column to gulf_bids if absent. Idempotent.
 
@@ -307,6 +324,7 @@ def init_database():
         _migrate_forward_curve_liquidity(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
+        _migrate_india_domestic_arrivals(conn)
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
@@ -670,7 +688,35 @@ def save_sea_india_rates(series: str, df: pd.DataFrame):
     )
 
 
-# Layers 33/34 — frame name → (table, primary key, columns), spec §3.2.
+_SOPA_COLUMNS = [
+    "crop_year", "state", "fetched_date",
+    "area_lakh_ha", "yield_kg_ha", "production_lakh_t",
+]
+
+
+def save_sopa_crop_estimates(name: str, df: pd.DataFrame):
+    """Write SOPA's state-wise crop estimate → 'sopa_crop_estimates' (Layer 33).
+
+    Upsert on (crop_year, state, fetched_date): a page re-read the same day
+    rewrites the same rows, and a later day's reading adds its own — the
+    page is overwritten in place upstream, so the reading date is the only
+    identity a revision has. ``name`` is the fetcher's frame key
+    (``kharif_<year>``) and is used for logging only; the year is a column.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["fetched_date"] = _date(df["fetched_date"])
+    missing = [c for c in _SOPA_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_sopa_crop_estimates: frame missing columns {missing}")
+    _save(
+        "sopa_crop_estimates", df[_SOPA_COLUMNS],
+        ["crop_year", "state", "fetched_date"], f"sopa/{name}",
+    )
+
+
+# Layers 34/35 — frame name → (table, primary key, columns), spec §3.2.
 _CYCLONE_RADII = [f"r{band}_{q}" for band in (34, 50, 64) for q in ("ne", "se", "sw", "nw")]
 _CYCLONE_TABLES: dict[str, tuple[str, list[str], list[str]]] = {
     "status": (
@@ -695,7 +741,7 @@ _CYCLONE_OK_REQUIRED = ("lat", "lon", "vmax_kt", "max_tau_h", "synoptic_at")
 
 
 def save_cyclone_frame(source: str, name: str, df: pd.DataFrame):
-    """Write one cyclone frame (Layers 33/34) — spec §3.3.
+    """Write one cyclone frame (Layers 34/35) — spec §3.3.
 
     ``status`` and ``storms`` upsert. ``track`` is **window-replaced**: every
     stored point for ``source`` is deleted and the incoming frame inserted, in
@@ -1161,6 +1207,7 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
 
     Serves the mandi (Agmarknet) series since 2026-08; the retired NCDEX
     rows share the table under their own commodity keys, never spliced.
+    ``arrivals_mt`` (the day's total tonnes) is NULL when the frame has none.
     """
     if df.empty:
         return
@@ -1172,8 +1219,11 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
         df["unit"] = df["Unit"].fillna("INR/MT").astype(str)
     else:
         df["unit"] = "INR/MT"
+    if "arrivals_mt" not in df.columns:
+        df["arrivals_mt"] = float("nan")
     _save("india_domestic_prices",
-          df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit"]],
+          df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit",
+              "arrivals_mt"]],
           ["Date", "commodity"], f"india_domestic/{commodity}")
 
 

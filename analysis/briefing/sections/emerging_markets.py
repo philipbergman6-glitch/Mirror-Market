@@ -52,6 +52,22 @@ def _format_india_domestic(em_countries: dict) -> str:
     if weekly is not None:
         lines.append(f"  Weekly Chg (Mandi Soybean): {weekly:+.1f}%")
 
+    vs_msp = dom.get("mandi_vs_msp_pct")
+    if vs_msp is not None:
+        lines.append(
+            f"  MSP {dom.get('msp_season', '')}: ₹{dom['msp_inr']:,.0f}/MT — "
+            f"MP median {vs_msp:+.1f}% vs MSP"
+        )
+
+    arrivals = dom.get("arrivals_7d_mt")
+    if arrivals is not None:
+        chg = dom.get("arrivals_7d_chg_pct")
+        chg_str = f" ({chg:+.1f}% vs prior 7d)" if chg is not None else ""
+        lines.append(
+            f"  MP arrivals, 7d to {dom.get('arrivals_7d_end')}: "
+            f"{arrivals:,.0f} MT{chg_str}"
+        )
+
     return "\n".join(lines)
 
 
