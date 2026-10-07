@@ -69,6 +69,7 @@ from fetchers.river import fetch_ina_gauges, fetch_nwps_gauges
 from fetchers.safex import fetch_safex
 from fetchers.sagis import fetch_sagis_deliveries, fetch_sagis_supply_demand
 from fetchers.sea import fetch_sea_rates
+from fetchers.sopa import fetch_sopa_estimates
 from fetchers.usda import (
     fetch_all_crop_progress,
     fetch_crush_data,
@@ -145,6 +146,7 @@ from pipeline.store import (
     save_sagis_deliveries,
     save_sagis_smd,
     save_sea_india_rates,
+    save_sopa_crop_estimates,
     save_usda_data,
     save_wasde,
     save_weather_data,
@@ -1027,6 +1029,19 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         "sea_india", "Layer 32", "SEA India weekly rate sheet (private)",
         fetch=lambda: fetch_sea_rates(),
         save=lambda n, d: save_sea_india_rates(n, d),
+    )
+    # Layer 33: SOPA's state-wise kharif estimate, the only state-level
+    # Indian soybean crop figure in the stack. Private while
+    # config.SOPA_PUBLISH is False: the raw table is never exported or
+    # rendered; analysis/india_crop.py derives the public-safe readings.
+    # The next kharif's page is empty until the Soy Conclave in mid-October,
+    # so a run that finds no table for any year asked is no_publication,
+    # not a failure (empty_fails off); a table that will not parse still is.
+    results["sopa_crop"] = _run_scraper_layer(
+        "sopa_crop", "Layer 33", "SOPA India state-wise crop estimate (private)",
+        fetch=lambda: fetch_sopa_estimates(),
+        save=lambda n, d: save_sopa_crop_estimates(n, d),
+        empty_fails=False,
     )
 
 

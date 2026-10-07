@@ -174,6 +174,23 @@ def read_sea_india_rates(series: str | None = None) -> pd.DataFrame:
     return _read_table("sea_india_rates", "series", series, date_cols=("Date",))
 
 
+def read_sopa_crop_estimates(crop_year: int | None = None) -> pd.DataFrame:
+    """Read SOPA's state-wise soybean crop estimate (Layer 33) from SQLite.
+
+    A reading series: one row per (crop_year, state) per ``fetched_date``,
+    because SOPA overwrites its page when it revises. A caller wanting the
+    current estimate takes the newest ``fetched_date`` for the year; the
+    all-India total is the row whose state is ``config.SOPA_ALL_INDIA``.
+    Units: lakh ha, kg/ha, lakh t. Private while config.SOPA_PUBLISH is
+    False — only derived figures leave ``analysis/india_crop.py``.
+    """
+    return _read_table(
+        "sopa_crop_estimates", "crop_year",
+        None if crop_year is None else str(crop_year),
+        date_cols=("fetched_date",),
+    )
+
+
 def read_ocean_freight_rates(route: str | None = None) -> pd.DataFrame:
     """Read GTR monthly bulk grain ocean freight rates from SQLite.
 

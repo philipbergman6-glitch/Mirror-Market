@@ -112,5 +112,5 @@ def test_registry_counts_are_what_the_docs_were_corrected_to() -> None:
     doc silently rewrote itself. This one fails loudly on a roster change, so
     the change is a deliberate doc edit rather than a passive one.
     """
-    assert _operational_layer_count() == 36
-    assert _numbered_group_count() == 32
+    assert _operational_layer_count() == 37
+    assert _numbered_group_count() == 33

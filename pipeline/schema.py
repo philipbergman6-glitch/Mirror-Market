@@ -171,6 +171,27 @@ CREATE TABLE IF NOT EXISTS sea_india_rates (
 );
 """
 
+# Layer 33 — SOPA all-India state-wise soybean crop estimate. A *reading
+# series*: SOPA overwrites its page in place when it revises a kharif, so
+# every run's reading is kept under the day it was read, keyed
+# (crop_year, state, fetched_date). The all-India total is stored as the
+# state config.SOPA_ALL_INDIA. Units are lakh ha / kg/ha / lakh t, proven by
+# the parser on every row. Never exported to data/history/ while
+# config.SOPA_PUBLISH is False: SOPA reserves all rights and the repo is
+# public — so on the ephemeral CI database the revision path does not
+# accumulate; it does in a local one.
+_CREATE_SOPA_CROP_ESTIMATES = """
+CREATE TABLE IF NOT EXISTS sopa_crop_estimates (
+    crop_year          INTEGER NOT NULL,   -- kharif year, as SOPA labels it
+    state              TEXT NOT NULL,      -- state name, or the all-India total
+    fetched_date       TEXT NOT NULL,      -- ISO date the page was read (IST)
+    area_lakh_ha       REAL NOT NULL,
+    yield_kg_ha        REAL NOT NULL,
+    production_lakh_t  REAL NOT NULL,
+    PRIMARY KEY (crop_year, state, fetched_date)
+);
+"""
+
 _CREATE_DCE_FUTURES = """
 CREATE TABLE IF NOT EXISTS dce_futures (
     commodity       TEXT NOT NULL,
@@ -780,6 +801,7 @@ ALL_SCHEMAS = (
     _CREATE_EC_OILSEED_PRICES,
     _CREATE_BRAZIL_EXPORTS,
     _CREATE_SEA_INDIA_RATES,
+    _CREATE_SOPA_CROP_ESTIMATES,
     _CREATE_DCE_FUTURES,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,

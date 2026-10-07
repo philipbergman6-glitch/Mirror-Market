@@ -669,6 +669,34 @@ def save_sea_india_rates(series: str, df: pd.DataFrame):
     )
 
 
+_SOPA_COLUMNS = [
+    "crop_year", "state", "fetched_date",
+    "area_lakh_ha", "yield_kg_ha", "production_lakh_t",
+]
+
+
+def save_sopa_crop_estimates(name: str, df: pd.DataFrame):
+    """Write SOPA's state-wise crop estimate → 'sopa_crop_estimates' (Layer 33).
+
+    Upsert on (crop_year, state, fetched_date): a page re-read the same day
+    rewrites the same rows, and a later day's reading adds its own — the
+    page is overwritten in place upstream, so the reading date is the only
+    identity a revision has. ``name`` is the fetcher's frame key
+    (``kharif_<year>``) and is used for logging only; the year is a column.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["fetched_date"] = _date(df["fetched_date"])
+    missing = [c for c in _SOPA_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"save_sopa_crop_estimates: frame missing columns {missing}")
+    _save(
+        "sopa_crop_estimates", df[_SOPA_COLUMNS],
+        ["crop_year", "state", "fetched_date"], f"sopa/{name}",
+    )
+
+
 def save_ocean_freight(route: str, df: pd.DataFrame):
     """Write GTR monthly ocean freight rates → 'ocean_freight_rates'.
 
