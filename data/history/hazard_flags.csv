@@ -1,0 +1,2 @@
+run_date,place_id,source,storm_id,state,severity,band_kt,storm_name,advisory,issued_at,first_arrival_tau_h,first_arrival_at,closest_km,closest_tau_h,place_lat,place_lon,legs
+2026-10-07,P-NOLA,NHC,al092026,watch,info,,Isaias,5,2026-10-07T21:00:00Z,,,255,55,29.9369,-90.0619,"cbot:board,us_gulf:cif,dalian:board"
