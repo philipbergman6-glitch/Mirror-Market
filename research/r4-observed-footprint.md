@@ -214,3 +214,16 @@ Yes. One daily table keyed by footprint, valid date and lead day:
 - GitHub-runner bandwidth to the AWS mirror.
 - ARCO-ERA5 as a queue-free ERA5T path (metadata read only).
 - The ECMWF Terms of Use attribution clause; current CDS numeric cost limits.
+
+## Verification pass (2026-10-07, stdlib recomputation from `results/series_*.csv`)
+
+- ERA5T, CHIRPS and Tmax numbers reproduce exactly (Iowa ERA5T r 0.931 / 0.961, ratio 1.02; MT ratio 0.61; CPC Tmax MAE 1.89 °C in MT with 4 days > 38 °C).
+- **CPC rain is window-sensitive.** The tables above score CPC on 126 days (to 10-04). On the 122-day
+  window common to every source (06-01 → 09-30): daily r 0.541 (Iowa) / 0.410 (MT), 5-day r 0.844 / 0.937,
+  total ÷ ECMWF **0.95 / 0.99**. So in Mato Grosso the gauge product and ECMWF day 1 agree on the
+  season total to 1 %, while ERA5T stays at 0.61 — the ERA5T-outlier conclusion strengthens, the
+  CPC daily correlation is weaker than stated above.
+- The AWS mirror returned HTTP 000 (no response) on two consecutive probes, then 200 in 0.28 s.
+  The backfill needs retries; a transient failure must not mark a day `failed`.
+- Mirror `Last-Modified` for the 2026-10-07 00z run: 07:34:07 UTC — the 07:34 landing time holds.
+- `data/history/` untouched (0 files vs the branch base). No secrets in the pushed files.
