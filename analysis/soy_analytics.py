@@ -45,8 +45,10 @@ from config import (
     CEC_PSD_COUNTERPARTS,
     CEC_PSD_YEAR_OFFSET,
     CONAB_FARMGATE_SERIES,
+    CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS,
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
+    FX_ALIGNMENT_MAX_GAP_DAYS,
     INDIA_SOYBEAN_MSP,
     MANDI_SERIES,
     MANDI_SERIES_MH,
@@ -73,6 +75,7 @@ from pipeline.query import (
     read_weather,
 )
 from pipeline.units import convert_df_to_mt, mt_label, to_metric_tons
+from pricing.fx_alignment import align_fx
 
 logger = logging.getLogger(__name__)
 
@@ -1013,6 +1016,112 @@ def technicals_analysis() -> dict:
 # Analyst 5: Relative Value — inter-leg and cross-commodity
 # ---------------------------------------------------------------------------
 
+def _fx_aligned(
+    fx: pd.DataFrame, when: pd.Timestamp, pair: str
+) -> tuple[float, pd.Timestamp] | None:
+    """The ``pair`` close for ``when`` under A1 (#298), with its date.
+
+    Thin adapter over :func:`pricing.fx_alignment.align_fx` — the one site
+    that applies the FX-date rule (B2 #308). ``None`` means the leg must
+    render blank with reason ``fx_gap_exceeded`` (or no prior rate at all).
+    """
+    closes = pd.Series(
+        fx["Close"].to_numpy(dtype=float),
+        index=pd.DatetimeIndex(fx.index).normalize(),
+    ).dropna()
+    closes = closes[closes > 0]
+    res = align_fx(
+        pair,
+        (
+            (ts.date(), float(v))
+            for ts, v in zip(
+                pd.DatetimeIndex(closes.index).to_pydatetime(),
+                closes.to_numpy(dtype=float),
+                strict=True,
+            )
+        ),
+        when.date(),
+    )
+    if not res.ok or res.rate is None or res.observed_on is None:
+        return None
+    return float(res.rate), pd.Timestamp(res.observed_on)
+
+
+def _cross_venue_oil_spread(
+    *,
+    own: pd.Series,
+    own_commodity: str,
+    other: pd.Series,
+    other_label: str,
+    fx: pd.DataFrame,
+    fx_pair: str,
+) -> dict[str, Any] | None:
+    """CBOT oil (native units) vs a home-currency oil leg, USD/MT, one session.
+
+    Display legs are each leg's own latest print; the spread is struck on the
+    latest session both printed, no more than
+    ``CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS`` behind the newer leg, at that
+    session's A1-aligned FX. Otherwise ``spread_usd_mt`` is None and
+    ``spread_reason`` says why — a gap, never a wrong number (invariant 11).
+    """
+    if own.empty or other.empty:
+        return None
+    own_last_on = pd.Timestamp(own.index[-1])
+    other_last_on = pd.Timestamp(other.index[-1])
+    own_latest = to_metric_tons(float(own.iloc[-1]), own_commodity)
+
+    # The displayed home-currency leg converts at its own date's rate (A1),
+    # not at whatever rate happens to be newest.
+    other_fx = _fx_aligned(fx, other_last_on, fx_pair)
+    other_native = float(other.iloc[-1])
+    entry: dict[str, Any] = {
+        "soy_oil": own_latest,
+        "soy_oil_as_of": _asof(own_last_on),
+        "rapeseed_oil": other_native * other_fx[0] if other_fx else None,
+        "rapeseed_oil_cny": other_native,
+        "rapeseed_oil_as_of": _asof(other_last_on),
+        "cny_usd": other_fx[0] if other_fx else None,
+        "spread_usd_mt": None,
+        "struck_on": None,
+        "spread_fx_observed_on": None,
+        "spread_reason_code": None,
+        "spread_reason": None,
+    }
+
+    common = own.index.intersection(other.index)
+    newest = max(own_last_on, other_last_on)
+    if common.empty or (newest - pd.Timestamp(common[-1])).days > CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS:
+        entry["spread_reason_code"] = "no_common_session"
+        entry["spread_reason"] = (
+            f"no common session within {CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS} days: "
+            f"soy oil last printed {_asof(own_last_on)}, {other_label} {_asof(other_last_on)}"
+        )
+        return entry
+
+    struck_on = pd.Timestamp(common[-1])
+    strike_fx = _fx_aligned(fx, struck_on, fx_pair)
+    if strike_fx is None:
+        entry["struck_on"] = _asof(struck_on)
+        entry["spread_reason_code"] = "fx_gap_exceeded"
+        entry["spread_reason"] = (
+            f"fx_gap_exceeded: no {fx_pair} close within {FX_ALIGNMENT_MAX_GAP_DAYS} days "
+            f"at or before the strike session {_asof(struck_on)}"
+        )
+        return entry
+
+    rate, fx_observed_on = strike_fx
+    own_struck = to_metric_tons(float(own.loc[struck_on]), own_commodity)
+    if own_struck is None:
+        entry["struck_on"] = _asof(struck_on)
+        entry["spread_reason_code"] = "unit_conversion_failed"
+        entry["spread_reason"] = f"{own_commodity} has no USD/MT conversion"
+        return entry
+    entry["spread_usd_mt"] = float(other.loc[struck_on]) * rate - own_struck
+    entry["struck_on"] = _asof(struck_on)
+    entry["spread_fx_observed_on"] = _asof(fx_observed_on)
+    return entry
+
+
 def relative_value_analysis() -> dict:
     """
     Relative value analysis: crush margin, oil/meal ratio, soy oil vs palm oil.
@@ -1172,7 +1281,12 @@ def relative_value_analysis() -> dict:
 
     # --- Soy oil vs CZCE rapeseed oil (cross-oilseed, USD/MT) ---
     # ICE canola (RS=F) has no usable yfinance feed, so the daily rapeseed
-    # leg is the CZCE Rapeseed Oil continuous (CNY/MT) at CNY/USD spot.
+    # leg is the CZCE Rapeseed Oil continuous (CNY/MT) at CNY/USD.
+    #
+    # B8 #402: each leg displays its *own* latest print, but the spread is
+    # struck on the latest session BOTH legs printed (invariant 8) and its FX
+    # on that session follows A1 #298 — never three independent `iloc[-1]`s.
+    # A spread subtracted across dates reads a calendar gap as a market move.
     cny_usd = currencies.get("CNY/USD")
     if (
         oil is not None and not oil.empty
@@ -1183,34 +1297,35 @@ def relative_value_analysis() -> dict:
             rapeseed = read_dce_futures("CZCE Rapeseed Oil")
         except Exception:
             logger.warning("CZCE rapeseed oil read failed", exc_info=True)
-        rate = cny_usd["Close"].iloc[-1]
-        if not rapeseed.empty and pd.notna(rate) and rate > 0:
+        if not rapeseed.empty:
             rapeseed = rapeseed.sort_values("Date")
-            rapeseed_cny = float(rapeseed["Close"].iloc[-1])
-            rapeseed_usd = rapeseed_cny * float(rate)
-            soy_oil_usd = to_metric_tons(oil["Close"].iloc[-1], "Soybean Oil")
-            entry = {
-                "soy_oil": soy_oil_usd,
-                "soy_oil_as_of": _asof(oil.index[-1]),
-                "rapeseed_oil": rapeseed_usd,
-                "rapeseed_oil_cny": rapeseed_cny,
-                "rapeseed_oil_as_of": _asof(rapeseed["Date"].iloc[-1]),
-                "cny_usd": float(rate),
-                "spread_usd_mt": (
-                    rapeseed_usd - soy_oil_usd
-                    if soy_oil_usd is not None else None
-                ),
-            }
-            if len(oil) >= 6:
-                entry["soy_oil_weekly_chg"] = (
-                    (oil["Close"].iloc[-1] - oil["Close"].iloc[-6]) / oil["Close"].iloc[-6]
-                ) * 100
-            if len(rapeseed) >= 6:
-                entry["rapeseed_oil_weekly_chg"] = (
-                    (rapeseed["Close"].iloc[-1] - rapeseed["Close"].iloc[-6])
-                    / rapeseed["Close"].iloc[-6]
-                ) * 100
-            result["oil_vs_rapeseed"] = entry
+            rapeseed_closes = pd.Series(
+                rapeseed["Close"].to_numpy(dtype=float),
+                index=pd.DatetimeIndex(pd.to_datetime(rapeseed["Date"])).normalize(),
+            ).dropna()
+            oil_closes = pd.Series(
+                oil["Close"].to_numpy(dtype=float),
+                index=pd.DatetimeIndex(oil.index).normalize(),
+            ).dropna()
+            rapeseed_entry = _cross_venue_oil_spread(
+                own=oil_closes,
+                own_commodity="Soybean Oil",
+                other=rapeseed_closes,
+                other_label="CZCE rapeseed oil",
+                fx=cny_usd,
+                fx_pair="CNY/USD",
+            )
+            if rapeseed_entry is not None:
+                if len(oil) >= 6:
+                    rapeseed_entry["soy_oil_weekly_chg"] = (
+                        (oil["Close"].iloc[-1] - oil["Close"].iloc[-6]) / oil["Close"].iloc[-6]
+                    ) * 100
+                if len(rapeseed) >= 6:
+                    rapeseed_entry["rapeseed_oil_weekly_chg"] = (
+                        (rapeseed["Close"].iloc[-1] - rapeseed["Close"].iloc[-6])
+                        / rapeseed["Close"].iloc[-6]
+                    ) * 100
+                result["oil_vs_rapeseed"] = rapeseed_entry
 
     # --- Bean/Corn ratio ---
     if beans is not None and corn is not None and not beans.empty and not corn.empty:

@@ -301,6 +301,14 @@ FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
 # that applies it.
 FX_ALIGNMENT_MAX_GAP_DAYS = 3
 
+# B8 #402 — a cross-venue spread is one session's number (invariant 8): both
+# price legs on the latest session *both* printed. That common session must
+# be no more than this many calendar days behind the newer leg's own latest
+# print, or the spread is withheld with the reason and each leg keeps its own
+# dated price. Three days is a weekend plus one holiday; a week-long closure
+# (Golden Week) is a gap, not a number.
+CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS = 3
+
 # ---------------------------------------------------------------------------
 # Layer 2 — USDA NASS QuickStats API
 # Sign up: https://quickstats.nass.usda.gov/api

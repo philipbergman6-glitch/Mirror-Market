@@ -139,7 +139,13 @@ def relative_value_section(data: dict | None) -> dict:
         right=("rapeseed_oil", "CZCE Rapeseed Oil"),
     )
     if rapeseed:
-        rapeseed["spread_usd_mt"] = (data.get("oil_vs_rapeseed") or {}).get("spread_usd_mt")
+        ovr = data.get("oil_vs_rapeseed") or {}
+        # B8 #402: the spread is one session's number. `struck_on` is the
+        # session both legs printed; `spread_reason` is why there is none.
+        rapeseed["spread_usd_mt"] = ovr.get("spread_usd_mt")
+        rapeseed["struck_on"] = ovr.get("struck_on")
+        rapeseed["spread_fx_observed_on"] = ovr.get("spread_fx_observed_on")
+        rapeseed["spread_reason"] = ovr.get("spread_reason")
         rapeseed["spread_note"] = (
             "CZCE rapeseed oil premium over CBOT soy oil, USD/MT — ICE canola (RS=F) "
             "has no free daily feed, so CZCE is the rapeseed leg"
@@ -237,7 +243,10 @@ def _two_oil_panel(data: dict | None, *, left: tuple[str, str], right: tuple[str
     # UndefinedError under StrictUndefined — that is what tombstoned the
     # headline page and with it the whole deploy (#226). None means "no
     # spread on this pair"; the template skips the block.
-    return {"legs": legs, "spread_usd_mt": None, "spread_note": None}
+    return {
+        "legs": legs, "spread_usd_mt": None, "spread_note": None,
+        "struck_on": None, "spread_fx_observed_on": None, "spread_reason": None,
+    }
 
 
 def _competing_oil_weather_strip() -> dict | None:
