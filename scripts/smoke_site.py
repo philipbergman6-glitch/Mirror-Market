@@ -132,7 +132,13 @@ def _viewport_failures(base_url: str, chrome: str) -> list[str]:
                 f"--window-size={width},{height}", "--dump-dom",
                 base_url.rstrip("/") + "/" + path,
             ]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                # A hung browser is a verdict, not a crash: name the page and
+                # keep checking the rest, so the run summary shows the extent.
+                failures.append(f"browser timed out at {width}px: {path}")
+                continue
             if result.returncode:
                 failures.append(f"browser failed at {width}px: {path}")
                 continue
