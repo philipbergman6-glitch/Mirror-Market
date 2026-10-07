@@ -41,7 +41,7 @@ from analysis.briefing.sections.export_sales import (
 from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
-from analysis.crop_year import psd_year_for_crop_year
+from analysis.crop_year import is_split_crop_year, psd_year_for_crop_year
 from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
@@ -829,11 +829,18 @@ def _conab_block() -> dict[str, dict[str, Any]]:
         }
         # #403: USDA's leg is the PSD row for the *mapped* crop year, never
         # PSD's newest projection. The mapping is registry data.
-        psd_year = psd_year_for_crop_year(
-            str(crop_year), int(MARKETS["brazil"]["crop_estimates"]["psd_year_offset"])
+        # Calendar-year labels (CONAB wheat: "2025") have no PSD mapping;
+        # the USDA leg is withheld with a reason rather than a guessed year.
+        psd_year = (
+            psd_year_for_crop_year(
+                str(crop_year), int(MARKETS["brazil"]["crop_estimates"]["psd_year_offset"])
+            )
+            if is_split_crop_year(crop_year)
+            else None
         )
         usda_production = None
-        if not psd.empty:
+        usda_reason = None if psd_year is not None else "calendar_year_label_unmapped"
+        if psd_year is not None and not psd.empty:
             match = psd[
                 (psd["commodity"] == commodity)
                 & (psd["country"] == MARKETS["brazil"]["psd_country"])
@@ -852,6 +859,7 @@ def _conab_block() -> dict[str, dict[str, Any]]:
             "usda_psd_year": psd_year,
             "attributes": attributes,
             "usda_production": usda_production,
+            "usda_reason": usda_reason,
         }
     return out
 

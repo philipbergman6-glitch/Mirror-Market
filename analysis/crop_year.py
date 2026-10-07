@@ -18,6 +18,18 @@ import re
 _SPLIT_YEAR = re.compile(r"^(\d{4})/(\d{2})$")
 
 
+def is_split_crop_year(label: object) -> bool:
+    """True for an agency's split label (``"2025/26"``), False for anything else.
+
+    CONAB labels some crops by calendar year (wheat: ``"2025"``). That is a
+    different convention, not a malformed label, and no PSD mapping is
+    defined for it — callers that compare across agencies skip the
+    comparison and say why, rather than guess a Market_Year or crash the
+    surface they are rendering.
+    """
+    return _SPLIT_YEAR.match(str(label).strip()) is not None
+
+
 def psd_year_for_crop_year(label: str, offset: int) -> int:
     """PSD ``Market_Year`` for an agency's split crop-year label.
 
