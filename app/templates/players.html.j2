@@ -43,9 +43,12 @@
 .player-card[open] summary::before { transform: rotate(90deg); }
 .pc-name { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
 .pc-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
-.pill { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
-.pill-t1 { background: var(--green); color: #fff; }
-.pill-side { background: transparent; border: 1px solid var(--rule); }
+/* Scoped to the player cards: _base.html.j2 owns `.pill` for the ledger
+   states, and the "How to read" key renders those on this page too — an
+   unscoped override here would grey out its red `dark` and green `repriced`. */
+.player-card .pill { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E4E8E4; color: var(--text-muted); }
+.player-card .pill-t1 { background: var(--green); color: #fff; }
+.player-card .pill-side { background: transparent; border: 1px solid var(--rule); }
 .stale { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 3px; background: #E8C983; color: #4A3608; }
 .pc-dests { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
 

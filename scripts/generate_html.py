@@ -17,7 +17,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
-from jinja2 import Environment, FileSystemLoader
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +36,7 @@ from app.sections import (  # noqa: E402
     risk_monitor_section,
     seasonal_section,
 )
+from app.templating import site_environment  # noqa: E402
 from config import (  # noqa: E402
     HEALTH_TABLE_WRITER_LAYERS,
     PRODUCTION_LAYERS,
@@ -972,7 +972,16 @@ def generate(
         "crush_board": crush_board,
         "briefing_text": _build_briefing_text(briefing_text) if briefing_text else "",
         "briefing_uri": _to_data_uri(briefing_text) if briefing_text else "",
+        "briefing_lines": briefing_text.count("\n") + 1 if briefing_text else 0,
         "health_html": _build_health_html(health) if health else "",
+    }
+    # Wayfinding pass: every headline section closes with the market-page
+    # block that carries the same subject in depth, resolved against the
+    # same nav (and so the same tiers) the masthead renders.
+    from app.wayfinding import deeper_links
+
+    context["deeper"] = {
+        s["id"]: deeper_links(s["id"], context["market_nav"], root="") for s in SECTIONS
     }
 
     # Render template
@@ -981,7 +990,7 @@ def generate(
     # dashboard's chart/table fragments pass through `| safe` in the template;
     # every other value — including text that arrived from an external API —
     # renders inert by default.
-    env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
+    env = site_environment()
     template = env.get_template("dashboard.html.j2")
     html_output = template.render(**context)
 
@@ -994,6 +1003,19 @@ def generate(
     size_kb = output_file.stat().st_size / 1024
     log.info("Generated %s (%.0f KB)", output_file, size_kb)
     artifacts = {"dashboard": output_file}
+
+    # The full briefing text, on its own page (wayfinding pass). Rendered from
+    # the same context in the same call so the two pages cannot disagree
+    # about the masthead or the report. The key is "briefing_page", not
+    # "briefing": the trusted-render path (trust/edition.py) already uses
+    # "briefing" for the Markdown report artifact.
+    briefing_file = output_dir / "briefing.html"
+    briefing_file.write_text(
+        env.get_template("briefing.html.j2").render(**dict(context, current_page="briefing")),
+        encoding="utf-8",
+    )
+    log.info("Generated %s (%.0f KB)", briefing_file, briefing_file.stat().st_size / 1024)
+    artifacts["briefing_page"] = briefing_file
 
     # Players page (issue #123) — same deploy, own template. Validation above
     # already gates the knowledge base, so a failure here is a build bug and

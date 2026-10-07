@@ -355,6 +355,10 @@ class LedgerLeg:
     label: str
     trade_proof_column: str | None
     expected_gap_days: int
+    # The places that price this leg (``config.LEG_PLACES``, spec §4.3) — the
+    # one route by which a hazard flag reaches a row. Builders read this, never
+    # the config dict. Empty only with a ``LEG_PLACES_ABSENT_REASONS`` entry.
+    place_ids: tuple[str, ...]
 
     @property
     def source(self) -> Source:
@@ -682,6 +686,22 @@ def _market(slug: str, raw: dict) -> Market:
     )
 
 
+def _leg_place_ids(leg_id: str) -> tuple[str, ...]:
+    """The leg's declared places, or a hard-fail naming the missing entry.
+
+    The full rule set is ``_validate_leg_places``, which runs after wiring;
+    this guard exists so a leg missing from ``config.LEG_PLACES`` fails with
+    the same statement here rather than as a bare ``KeyError``.
+    """
+    place_ids = config.LEG_PLACES.get(leg_id)
+    if place_ids is None:
+        raise ValueError(
+            f"ledger leg {leg_id!r} has no config.LEG_PLACES entry — every ledger leg "
+            "declares the places that price it, or an empty tuple with a reason (spec §4.3)"
+        )
+    return tuple(place_ids)
+
+
 def _ledger_leg(leg_id: str, markets: dict[str, Market]) -> LedgerLeg:
     """Resolve one leg id against the market registry, or hard-fail.
 
@@ -742,6 +762,7 @@ def _ledger_leg(leg_id: str, markets: dict[str, Market]) -> LedgerLeg:
         expected_gap_days=int(
             raw.get("expected_gap_days", config.LEDGER_DEFAULT_EXPECTED_GAP_DAYS)
         ),
+        place_ids=_leg_place_ids(leg_id),
     )
 
 
@@ -844,18 +865,230 @@ def _wire_ledgers(markets: dict[str, Market]) -> dict[str, Market]:
     return wired
 
 
-def load_markets() -> dict[str, Market]:
+def load_markets(*, today: date | None = None) -> dict[str, Market]:
     """Validate and return every registered market, in registry key order.
 
     Registry order IS nav order IS M2's ledger order — declared once in
     ``config.MARKETS`` and never re-sorted here.
+
+    ``today`` (UTC date, default now) is the day the place registry's
+    effective dates are judged on — every leg with places must have one active.
     """
     markets: dict[str, Market] = {}
     for slug, raw in config.MARKETS.items():
         if slug != slug.lower() or not slug.replace("_", "").isalnum():
             raise ValueError(f"market slug {slug!r} must be lowercase alphanumeric with underscores")
         markets[slug] = _market(slug, raw)
-    return _wire_ledgers(markets)
+    wired = _wire_ledgers(markets)
+    _validate_leg_places(today or datetime.now(timezone.utc).date())
+    return wired
+
+
+# ---------------------------------------------------------------------------
+# Places — the leg → place map behind cyclone hazard flags (#374 spec §4)
+# ---------------------------------------------------------------------------
+PLACE_FIELDS = frozenset({"name", "short", "kind", "lat", "lon", "basin", "effective_from", "effective_to"})
+PLACE_OPTIONAL_FIELDS = frozenset({"basin_reason"})
+BASIN_FIELDS = frozenset({"layer", "source", "id_prefix", "hemisphere"})
+NOT_EXPOSED_BASIN = "none"
+
+
+def _validate_cyclone_basins() -> None:
+    """A basin either has a source (layer, agency and id prefix) or has none of the three."""
+    for basin, raw in config.CYCLONE_BASINS.items():
+        if basin == NOT_EXPOSED_BASIN:
+            raise ValueError(f"cyclone basin {basin!r} is reserved — it means 'not exposed', not a basin")
+        if set(raw) != BASIN_FIELDS:
+            raise ValueError(
+                f"cyclone basin {basin!r} has fields {sorted(raw)}, expected exactly {sorted(BASIN_FIELDS)}"
+            )
+        if raw["hemisphere"] not in config.CYCLONE_ADVISORY_MAX_AGE_HOURS:
+            raise ValueError(
+                f"cyclone basin {basin!r} hemisphere {raw['hemisphere']!r} has no advisory age "
+                f"budget in config.CYCLONE_ADVISORY_MAX_AGE_HOURS {sorted(config.CYCLONE_ADVISORY_MAX_AGE_HOURS)}"
+            )
+        sourced = [raw[k] is not None for k in ("layer", "source", "id_prefix")]
+        if any(sourced) and not all(sourced):
+            raise ValueError(
+                f"cyclone basin {basin!r} declares half a source (layer={raw['layer']!r}, "
+                f"source={raw['source']!r}, id_prefix={raw['id_prefix']!r}) — all three or none"
+            )
+
+
+def _place_date(place_id: str, field_name: str, value: object) -> date | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"place {place_id!r} {field_name} must be None or an ISO date string, got {value!r}")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise ValueError(
+            f"place {place_id!r} {field_name} {value!r} is not an ISO date (YYYY-MM-DD)"
+        ) from None
+
+
+def _validate_place(place_id: str, raw: dict) -> None:
+    """Rule 5 — the §4.1 field rules, every message naming the place."""
+    missing = PLACE_FIELDS - raw.keys()
+    if missing:
+        raise ValueError(f"place {place_id!r} missing field(s): {sorted(missing)}")
+    extra = raw.keys() - PLACE_FIELDS - PLACE_OPTIONAL_FIELDS
+    if extra:
+        raise ValueError(f"place {place_id!r} has unknown field(s): {sorted(extra)}")
+    for text_field in ("name", "short"):
+        value = raw[text_field]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"place {place_id!r} {text_field} must be a non-blank string, got {value!r}")
+    if raw["kind"] not in config.PLACE_KINDS:
+        raise ValueError(f"place {place_id!r} kind {raw['kind']!r} not in {list(config.PLACE_KINDS)}")
+    for coord, bound in (("lat", 90.0), ("lon", 180.0)):
+        value = raw[coord]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not -bound <= value <= bound:
+            raise ValueError(f"place {place_id!r} {coord} {value!r} is not a number within ±{bound:g}")
+
+    basin = raw["basin"]
+    if basin != NOT_EXPOSED_BASIN and basin not in config.CYCLONE_BASINS:
+        raise ValueError(
+            f"place {place_id!r} basin {basin!r} is neither a config.CYCLONE_BASINS key "
+            f"{sorted(config.CYCLONE_BASINS)} nor {NOT_EXPOSED_BASIN!r}"
+        )
+    needs_reason = basin == NOT_EXPOSED_BASIN or config.CYCLONE_BASINS[basin]["source"] is None
+    reason = raw.get("basin_reason")
+    has_reason = isinstance(reason, str) and bool(reason.strip())
+    if needs_reason and not has_reason:
+        raise ValueError(
+            f"place {place_id!r} has basin {basin!r}, which no cyclone source covers — it needs "
+            "a non-blank basin_reason, the sentence a reader sees instead of a flag"
+        )
+    if not needs_reason and "basin_reason" in raw:
+        raise ValueError(
+            f"place {place_id!r} has a covered basin {basin!r} and a basin_reason — a reason "
+            "is only for 'none' or a basin with no source"
+        )
+
+    start = _place_date(place_id, "effective_from", raw["effective_from"])
+    end = _place_date(place_id, "effective_to", raw["effective_to"])
+    # Rule 6 — a window that closes before it opens is never active.
+    if start is not None and end is not None and start > end:
+        raise ValueError(f"place {place_id!r} effective_from {start} is after effective_to {end}")
+
+
+def _place_is_active(place_id: str, day: date) -> bool:
+    """Spec §4.1: active on ``day`` when ``(from is None or from <= day) and (to is None or day <= to)``.
+
+    Both bounds inclusive; ``None`` is open-ended.
+    """
+    raw = config.PLACES[place_id]
+    start = _place_date(place_id, "effective_from", raw["effective_from"])
+    end = _place_date(place_id, "effective_to", raw["effective_to"])
+    return (start is None or start <= day) and (end is None or day <= end)
+
+
+def ledger_leg_id_for(market: str, block: str, key: str) -> str | None:
+    """The one ``config.LEDGER_LEGS`` id reading ``market.block[key]``, or ``None``.
+
+    The explicit seam from an origin leg (``config.ORIGIN_LEGS``, which names a
+    ``(market, block, key)`` triple) to a ledger leg id (spec §7.3) — the
+    origins page never builds a ledger row, so it cannot inherit a leg's
+    places any other way. Two legs reading one triple is a registry error, not
+    a choice to make here.
+    """
+    matches = [
+        leg_id
+        for leg_id, raw in config.LEDGER_LEGS.items()
+        if (raw.get("market"), raw.get("block"), raw.get("key")) == (market, block, key)
+    ]
+    if len(matches) > 1:
+        raise ValueError(f"ledger legs {sorted(matches)} all read {market}.{block}[{key!r}] — one triple, one leg")
+    return matches[0] if matches else None
+
+
+def _validate_leg_places(today: date) -> None:
+    """Hard-fail on any inconsistency between ledger legs and the place registry.
+
+    Same create-then-wire shape as the ledger gate: it runs after
+    ``_wire_ledgers`` and every message names the offending id. A leg whose
+    places are wrong would never fail loudly downstream — it would simply carry
+    no flag, which on a hazard surface reads as "clear".
+    """
+    _validate_cyclone_basins()
+    for place_id, raw in config.PLACES.items():
+        _validate_place(place_id, raw)
+
+    # Rule 1 — one entry per ledger leg, no more, no fewer.
+    unknown_legs = set(config.LEG_PLACES) - set(config.LEDGER_LEGS)
+    if unknown_legs:
+        raise ValueError(f"config.LEG_PLACES names leg(s) not in config.LEDGER_LEGS: {sorted(unknown_legs)}")
+    undeclared = set(config.LEDGER_LEGS) - set(config.LEG_PLACES)
+    if undeclared:
+        raise ValueError(
+            f"ledger leg(s) {sorted(undeclared)} have no config.LEG_PLACES entry — every ledger "
+            "leg declares the places that price it, or an empty tuple with a reason"
+        )
+    stale_reasons = set(config.LEG_PLACES_ABSENT_REASONS) - set(config.LEG_PLACES)
+    if stale_reasons:
+        raise ValueError(
+            f"config.LEG_PLACES_ABSENT_REASONS names leg(s) not in config.LEG_PLACES: {sorted(stale_reasons)}"
+        )
+
+    for leg_id, place_ids in config.LEG_PLACES.items():
+        # Rule 2 — every named place is registered, and named once.
+        unknown_places = [p for p in place_ids if p not in config.PLACES]
+        if unknown_places:
+            raise ValueError(
+                f"ledger leg {leg_id!r} names place(s) {unknown_places} not in config.PLACES "
+                f"(known: {sorted(config.PLACES)})"
+            )
+        if len(set(place_ids)) != len(place_ids):
+            raise ValueError(f"ledger leg {leg_id!r} names a place twice: {list(place_ids)}")
+
+        # Rule 3 — an empty tuple is a statement and carries its reason.
+        reason = (config.LEG_PLACES_ABSENT_REASONS.get(leg_id) or "").strip()
+        if not place_ids and not reason:
+            raise ValueError(
+                f"ledger leg {leg_id!r} declares no places and has no non-blank "
+                "LEG_PLACES_ABSENT_REASONS entry — an empty set must name its reason"
+            )
+        if place_ids and leg_id in config.LEG_PLACES_ABSENT_REASONS:
+            raise ValueError(
+                f"ledger leg {leg_id!r} declares places {list(place_ids)} AND a "
+                "LEG_PLACES_ABSENT_REASONS entry — a leg has places or a reason, never both"
+            )
+
+    # Rule 4 — a place exists only where a rendered leg needs it.
+    used = {place for place_ids in config.LEG_PLACES.values() for place in place_ids}
+    orphans = set(config.PLACES) - used
+    if orphans:
+        raise ValueError(
+            f"config.PLACES holds place(s) {sorted(orphans)} that no ledger leg names — a place "
+            "exists only where a rendered leg needs it (spec §4.4 rule 4)"
+        )
+
+    # Rule 7 — a leg with places has at least one in force today. A registry
+    # edit that closes a place with no successor would otherwise drop the leg
+    # off every hazard surface without a word.
+    for leg_id, place_ids in config.LEG_PLACES.items():
+        if place_ids and not any(_place_is_active(p, today) for p in place_ids):
+            raise ValueError(
+                f"ledger leg {leg_id!r} names places {list(place_ids)}, none active on {today} — "
+                "close a place only when its successor is entered"
+            )
+
+    # Rule 8 — a priced origin leg resolves to exactly one ledger leg, so the
+    # origins page can carry that leg's places (spec §7.3). A declared-absent
+    # origin has no price, so there is nothing for a flag to attach to.
+    for origin, raw in config.ORIGIN_LEGS.items():
+        if raw.get("absent_reason"):
+            continue
+        missing = {"market", "block", "key"} - raw.keys()
+        if missing:
+            raise ValueError(f"priced origin leg {origin!r} missing key(s) {sorted(missing)}")
+        if ledger_leg_id_for(raw["market"], raw["block"], raw["key"]) is None:
+            raise ValueError(
+                f"priced origin leg {origin!r} reads {raw['market']}.{raw['block']}[{raw['key']!r}], "
+                "which no config.LEDGER_LEGS entry reads — it would carry no hazard flag"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1114,6 +1347,7 @@ __all__ = [
     "TierResult",
     "compute_tier",
     "compute_tiers",
+    "ledger_leg_id_for",
     "load_markets",
     "nav_items",
     "relative_root",
