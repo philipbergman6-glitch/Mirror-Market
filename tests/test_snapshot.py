@@ -318,7 +318,14 @@ def test_conab_block_stores_legs_not_gap(patched_db: Path) -> None:
     conn.execute(
         "INSERT INTO psd (commodity, country, attribute, year, value, unit)"
         " VALUES (?, ?, ?, ?, ?, ?)",
-        ("Soybeans", "Brazil", "Production", 2026, 169_000.0, "1000 MT"),
+        # PSD Market_Year 2025 is USDA's "2025/26" — CONAB's crop (#403).
+        ("Soybeans", "Brazil", "Production", 2025, 169_000.0, "1000 MT"),
+    )
+    conn.execute(
+        "INSERT INTO psd (commodity, country, attribute, year, value, unit)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        # The 2026/27 projection: newer, and a different crop — never paired.
+        ("Soybeans", "Brazil", "Production", 2026, 186_000.0, "1000 MT"),
     )
     conn.commit()
     conn.close()
@@ -327,10 +334,30 @@ def test_conab_block_stores_legs_not_gap(patched_db: Path) -> None:
     row = snapshot["conab"]["Soybeans"]
 
     assert row["crop_year"] == "2025/26"
+    assert row["usda_psd_year"] == 2025
     assert row["attributes"]["Production"] == {"value": 170_000.0, "unit": "1000 t"}
-    assert row["usda_production"]["value"] == 169_000.0
-    assert row["usda_production"]["unit"] == "1000 MT"
+    assert row["usda_production"] == {"value": 169_000.0, "unit": "1000 MT", "year": 2025}
     assert "gap" not in row
+
+
+def test_conab_block_withholds_usda_leg_when_psd_lacks_the_mapped_year(patched_db: Path) -> None:
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO brazil_estimates (source, commodity, crop_year, attribute,"
+        " value, unit, report_date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("CONAB", "Soybeans", "2025/26", "Production", 170_000.0, "1000 t", "2026-07-10"),
+    )
+    conn.execute(
+        "INSERT INTO psd (commodity, country, attribute, year, value, unit)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        ("Soybeans", "Brazil", "Production", 2026, 186_000.0, "1000 MT"),
+    )
+    conn.commit()
+    conn.close()
+
+    row = build_snapshot(_empty_briefing())["conab"]["Soybeans"]
+    assert row["usda_psd_year"] == 2025
+    assert row["usda_production"] is None
 
 
 def test_currencies_block_uses_session_changes(patched_db: Path) -> None:

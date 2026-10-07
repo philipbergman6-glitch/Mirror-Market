@@ -1,7 +1,14 @@
-"""BRAZIL CROP ESTIMATES (CONAB) section — compares to USDA PSD."""
+"""BRAZIL CROP ESTIMATES (CONAB) section — compares to USDA PSD, one crop year.
+
+The CONAB → PSD Market_Year mapping is registry data on the Brazil market
+descriptor (#403); the gap is struck only where PSD carries the mapped
+year, otherwise the line says PSD has not published that crop yet.
+"""
 
 import pandas as pd
 
+from analysis.crop_year import psd_year_for_crop_year, psd_year_label
+from config import MARKETS
 from pipeline.query import read_brazil_estimates, read_psd
 
 
@@ -13,6 +20,9 @@ def format() -> str:  # noqa: A001
         return "BRAZIL CROP ESTIMATES (CONAB): No data"
 
     psd = read_psd()
+    market = MARKETS["brazil"]
+    offset = int(market["crop_estimates"]["psd_year_offset"])
+    psd_country = market["psd_country"]
 
     for commodity in brazil["commodity"].unique():
         subset = brazil[brazil["commodity"] == commodity]
@@ -21,6 +31,10 @@ def format() -> str:  # noqa: A001
 
         latest_year = subset["crop_year"].max()
         latest = subset[subset["crop_year"] == latest_year]
+        if "report_date" in latest.columns:
+            latest = latest[latest["report_date"] == latest["report_date"].max()]
+        psd_year = psd_year_for_crop_year(str(latest_year), offset)
+        psd_label = psd_year_label(psd_year)
 
         commodity_parts = []
         for _, row in latest.iterrows():
@@ -36,26 +50,32 @@ def format() -> str:  # noqa: A001
             if not psd.empty and attr == "Production":
                 psd_match = psd[
                     (psd["commodity"] == commodity)
-                    & (psd["country"] == "Brazil")
+                    & (psd["country"] == psd_country)
                     & (psd["attribute"] == "Production")
+                    & psd["value"].notna()
                 ]
-                if not psd_match.empty:
-                    psd_latest = psd_match[psd_match["year"] == psd_match["year"].max()]
-                    if not psd_latest.empty:
-                        usda_val = psd_latest.iloc[0]["value"]
-                        usda_unit = str(psd_latest.iloc[0].get("unit", "") or "")
-                        if pd.notna(usda_val):
-                            # Only derive a gap when both legs are metric tons.
-                            # PSD reports cotton in 1000 480-lb bales vs CONAB's
-                            # 1000 MT lint — subtracting those fabricates a gap.
-                            if "MT" in usda_unit.upper():
-                                gap = val - usda_val
-                                part += f" (vs USDA {usda_val:,.0f} — gap: {gap:+,.0f})"
-                            else:
-                                part += (
-                                    f" (vs USDA {usda_val:,.0f} {usda_unit.strip()}"
-                                    " — units differ, no gap)"
-                                )
+                mapped = psd_match[psd_match["year"].astype(int) == psd_year]
+                if psd_match.empty:
+                    pass
+                elif mapped.empty:
+                    part += (
+                        f" (USDA PSD has not published {psd_label} yet — no gap;"
+                        f" PSD's newest year is MY{int(psd_match['year'].max())})"
+                    )
+                else:
+                    usda_val = mapped.iloc[-1]["value"]
+                    usda_unit = str(mapped.iloc[-1].get("unit", "") or "")
+                    # Only derive a gap when both legs are metric tons.
+                    # PSD reports cotton in 1000 480-lb bales vs CONAB's
+                    # 1000 MT lint — subtracting those fabricates a gap.
+                    if "MT" in usda_unit.upper():
+                        gap = val - usda_val
+                        part += f" (vs USDA {usda_val:,.0f} for {psd_label} — gap: {gap:+,.0f})"
+                    else:
+                        part += (
+                            f" (vs USDA {usda_val:,.0f} {usda_unit.strip()} for {psd_label}"
+                            " — units differ, no gap)"
+                        )
 
             commodity_parts.append(f"    {part}")
 

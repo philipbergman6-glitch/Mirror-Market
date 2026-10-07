@@ -41,6 +41,7 @@ from analysis.briefing.sections.export_sales import (
 from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
+from analysis.crop_year import psd_year_for_crop_year
 from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
@@ -64,7 +65,7 @@ from analysis.weather_alerts import (
     precip_deficit_30d,
 )
 from analysis.zscore import trailing_zscore
-from config import PSD_CONSUMPTION_ATTRIBUTE
+from config import MARKETS, PSD_CONSUMPTION_ATTRIBUTE
 from pipeline.query import (
     read_argentina_fob,
     read_brazil_estimates,
@@ -826,22 +827,29 @@ def _conab_block() -> dict[str, dict[str, Any]]:
             for _, r in rows.iterrows()
             if _num(r["value"]) is not None
         }
+        # #403: USDA's leg is the PSD row for the *mapped* crop year, never
+        # PSD's newest projection. The mapping is registry data.
+        psd_year = psd_year_for_crop_year(
+            str(crop_year), int(MARKETS["brazil"]["crop_estimates"]["psd_year_offset"])
+        )
         usda_production = None
         if not psd.empty:
             match = psd[
                 (psd["commodity"] == commodity)
-                & (psd["country"] == "Brazil")
+                & (psd["country"] == MARKETS["brazil"]["psd_country"])
                 & (psd["attribute"] == "Production")
+                & (psd["year"].astype(int) == psd_year)
             ]
             if not match.empty:
-                latest = match[match["year"] == match["year"].max()].iloc[0]
+                latest = match.iloc[-1]
                 usda_production = {
                     "value": _num(latest["value"]),
                     "unit": str(latest.get("unit", "")) or None,
-                    "year": int(latest["year"]) if pd.notna(latest["year"]) else None,
+                    "year": psd_year,
                 }
         out[str(commodity)] = {
             "crop_year": str(crop_year) if pd.notna(crop_year) else None,
+            "usda_psd_year": psd_year,
             "attributes": attributes,
             "usda_production": usda_production,
         }

@@ -733,21 +733,47 @@ def _build_supply(data: dict) -> dict | None:
                 lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(item["country"])} {_esc(item["commodity"])} {_esc(item["attribute"])}: <strong style="color:var(--text)">{item["value"]:,.0f}</strong> {_esc(item.get("unit", ""))}</div>')
         out["competing_html"] = "\n".join(lines) if lines else ""
 
-    # CONAB
+    # CONAB vs USDA — one mapped crop year (#403). Each card names the
+    # vintage it is; a missing PSD counterpart renders as a stated reason in
+    # muted text, never as a gap against a different crop.
     conab = data.get("conab_vs_usda", {})
     if conab.get("conab_production"):
         cp = conab["conab_production"]
         up = conab.get("usda_production")
-        gap = conab.get("gap", 0)
-        crop_year = conab.get("crop_year", "")
-        year_str = f" · {_esc(crop_year)}" if crop_year else ""
+        crop_year = conab.get("conab_crop_year") or conab.get("crop_year", "")
+        report_date = conab.get("conab_report_date")
+        psd_year = conab.get("usda_psd_year")
+        psd_label = conab.get("usda_psd_year_label", "")
+        conab_meta = " · ".join(
+            [x for x in ("1000 MT", _esc(crop_year) if crop_year else "",
+                         f"report {_esc(report_date)}" if report_date else "") if x]
+        )
+        usda_meta = " · ".join(
+            [x for x in ("1000 MT",
+                         f"{_esc(psd_label)} (PSD MY{psd_year})" if psd_year is not None else "",
+                         f"fetched {_esc(conab.get('usda_psd_fetched_at'))}"
+                         if conab.get("usda_psd_fetched_at") else "") if x]
+        )
         html_parts = ['<div class="grid grid-3">']
-        html_parts.append(f'<div class="mc"><div class="mc-label">CONAB (Brazil)</div><div class="mc-val">{cp:,.0f}</div><div class="mc-delta muted">1000 MT{year_str}</div></div>')
-        if up:
-            html_parts.append(f'<div class="mc"><div class="mc-label">USDA (Brazil)</div><div class="mc-val">{up:,.0f}</div><div class="mc-delta muted">1000 MT</div></div>')
+        html_parts.append(
+            f'<div class="mc"><div class="mc-label">{_esc(conab.get("agency", "CONAB"))} (Brazil)</div>'
+            f'<div class="mc-val">{cp:,.0f}</div><div class="mc-delta muted">{conab_meta}</div></div>'
+        )
+        if up is not None and "gap" in conab:
+            gap = conab["gap"]
+            html_parts.append(
+                f'<div class="mc"><div class="mc-label">USDA (Brazil)</div><div class="mc-val">{up:,.0f}</div>'
+                f'<div class="mc-delta muted">{usda_meta}</div></div>'
+            )
             gc = "up" if gap > 0 else "down"
-            html_parts.append(f'<div class="mc"><div class="mc-label">Gap</div><div class="mc-val {gc}">{gap:+,.0f}</div><div class="mc-delta muted">1000 MT</div></div>')
+            html_parts.append(
+                f'<div class="mc"><div class="mc-label">Gap</div><div class="mc-val {gc}">{gap:+,.0f}</div>'
+                f'<div class="mc-delta muted">1000 MT · same crop ({_esc(crop_year)})</div></div>'
+            )
         html_parts.append('</div>')
+        reason = conab.get("gap_withheld_reason")
+        if reason:
+            html_parts.append(f'<div class="caption muted">{_esc(reason)}</div>')
         out["conab_html"] = "\n".join(html_parts)
 
     # Crop progress

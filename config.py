@@ -2650,6 +2650,24 @@ MARKETS: dict[str, dict[str, Any]] = {
             ("Brazil Rio Grande do Sul", "domestic crop — the La Niña swing state"),
         ],
         "psd_country": "Brazil",
+        # Layer 15 (#403): the official national crop estimate and how its
+        # crop-year label maps onto USDA's PSD Market_Year, so a CONAB-vs-USDA
+        # line compares one crop, never CONAB's newest label against PSD's
+        # newest projection. CONAB labels a crop by its agricultural year
+        # ("2025/26" = planted Sep–Dec 2025, harvested Jan–May 2026); PSD keys
+        # the same crop to the *first* year of that label (Market_Year 2025 =
+        # USDA's "2025/26"), so the offset is 0. Verified on the 2026-10-07
+        # bulk file: CONAB 2025/26 = 180,463.5 kt vs PSD MY2025 = 180,500 kt,
+        # while PSD MY2026 (186,000 kt) is the 2026/27 projection CONAB will
+        # not label until its first survey. The South Africa analogue is
+        # CEC_PSD_YEAR_OFFSET = −1, because the CEC labels by harvest year.
+        "crop_estimates": {
+            "layer": "conab",
+            "table": "brazil_estimates",
+            "agency": "CONAB",
+            "source": "CONAB",
+            "psd_year_offset": 0,
+        },
         # Layer 31 (#351): where Brazil's cargo actually went, by month.
         "customs_exports": "comexstat",
         "players_country": "BR",
