@@ -337,3 +337,106 @@ def test_the_report_writes_a_json_file_ci_can_attach(tmp_path) -> None:
     assert payload["dataset_keys"] == list(CBOT_BENCHMARK_DATASET_KEYS)
     assert payload["commodities"][0]["commodity"] == "Soybeans"
     assert payload["quarantined_revision_ids"] == []
+
+
+# ---------------------------------------------------------------------------
+# #331: a pre-cutoff run fires settlement.confirmed and still reconciles
+# ---------------------------------------------------------------------------
+
+BEFORE_SETTLEMENT = datetime(2026, 8, 13, 15, 0, tzinfo=timezone.utc)
+OPEN_SESSION = date(2026, 8, 13)
+
+
+def test_the_runner_downloads_unguarded_by_default() -> None:
+    import fetchers.yfinance as yf_module
+    import scripts.reconcile_cbot_benchmarks as script
+
+    assert script._MemoisingDownloader()._download is yf_module.download_bars
+
+
+def test_a_pre_cutoff_run_rejects_the_open_bar_on_one_side_drops_it_on_the_other_and_reconciles(
+    tmp_path,
+) -> None:
+    import scripts.reconcile_cbot_benchmarks as script
+
+    def download(ticker: str, period: str = "5d") -> pd.DataFrame:
+        # The provider frame as it arrives: yesterday's close and today's
+        # session in progress.
+        return frame([{"day": SESSION, "close": 1148.0}, {"day": OPEN_SESSION, "close": 1150.25}])
+
+    run = script.reconcile_once(
+        commodities=("Soybeans",),
+        today=AS_OF,
+        repository_root=tmp_path,
+        download=download,
+        now=BEFORE_SETTLEMENT,
+    )
+
+    assert run.status == script.STATUS_RECONCILED
+    item = run.commodities[0]
+    assert item.legacy_rows == item.trusted_rows == 6
+    assert item.report.matched_rows == 6
+    # The evidence line DT-16's docstring promises: the rule fired, live.
+    assert dict(run.rejected_by_rule) == {"settlement.confirmed": 6}
+    assert run.to_dict()["rejected_by_rule"] == {"settlement.confirmed": 6}
+
+
+def test_trusted_rows_count_the_compared_curve_not_every_session_in_the_window(tmp_path) -> None:
+    import scripts.reconcile_cbot_benchmarks as script
+
+    def download(ticker: str, period: str = "5d") -> pd.DataFrame:
+        return frame([
+            {"day": date(2026, 8, 10), "close": 1140.0},
+            {"day": date(2026, 8, 11), "close": 1144.0},
+            {"day": SESSION, "close": 1150.25},
+        ])
+
+    run = script.reconcile_once(
+        commodities=("Soybeans",),
+        today=AS_OF,
+        repository_root=tmp_path,
+        download=download,
+        now=AFTER_SETTLEMENT,
+    )
+
+    item = run.commodities[0]
+    assert item.legacy_rows == item.trusted_rows == 6
+    assert item.report.matched_rows == 6
+
+
+def test_a_post_cutoff_run_of_the_same_window_rejects_nothing(tmp_path) -> None:
+    import scripts.reconcile_cbot_benchmarks as script
+
+    def download(ticker: str, period: str = "5d") -> pd.DataFrame:
+        return frame([{"day": SESSION, "close": 1148.0}, {"day": OPEN_SESSION, "close": 1150.25}])
+
+    run = script.reconcile_once(
+        commodities=("Soybeans",),
+        today=AS_OF,
+        repository_root=tmp_path,
+        download=download,
+        now=AFTER_SETTLEMENT,
+    )
+
+    assert run.status == script.STATUS_RECONCILED
+    assert dict(run.rejected_by_rule) == {}
+    assert run.commodities[0].report.matched_rows == 6
+    # Both paths published the finished 08-13 session, not 08-12.
+    assert run.commodities[0].legacy_rows == 6
+
+
+def test_the_run_leaves_the_v1_fetcher_module_untouched() -> None:
+    """The old runner monkeypatched ``forward_curve.fetch_one`` for the v1
+    half. The split parse means nothing in the module is rebound."""
+    import fetchers.forward_curve as forward_curve
+    import fetchers.yfinance as yf_module
+    import scripts.reconcile_cbot_benchmarks as script
+
+    script.reconcile_once(
+        commodities=("Soybeans",),
+        today=AS_OF,
+        download=lambda ticker, period="5d": frame([{"day": SESSION, "close": 1150.25}]),
+        now=AFTER_SETTLEMENT,
+    )
+
+    assert forward_curve.fetch_one is yf_module.fetch_one

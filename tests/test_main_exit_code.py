@@ -281,7 +281,13 @@ def test_run_writes_pipeline_status_file(stub_fetchers, monkeypatch, tmp_path):
     assert "psd" in status["hard_failures"]
     assert "agrural" in status["hard_failures"]
     assert status["critical_failures"] == []
-    assert "prices" in status["succeeded"]
+    # At the floor but short of the catalog: usable_partial (A3 #300), which
+    # is its own tally — neither green nor a hard failure.
+    assert "prices" not in status["succeeded"]
+    assert "prices" in status["classifications"]["usable_partial"]
+    assert "prices" not in status["hard_failures"]
+    assert status["usable_partial_detail"]["prices"]["consecutive_runs"] == 1
+    assert status["classifications"]["catalog_drift"] == []
     assert status["operational_layer_count"] == len(PRODUCTION_LAYERS)
     assert "psd" in status["classifications"]["upstream_failure"]
 

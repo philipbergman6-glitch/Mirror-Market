@@ -129,7 +129,7 @@ def freshness_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     calls: list[dict] = []
 
     def _capture(layer_name, rows_fetched=0, status="success",
-                 keys_returned=None, keys_expected=None):
+                 keys_returned=None, keys_expected=None, missing_keys=None):
         calls.append({"layer": layer_name, "rows": rows_fetched, "status": status})
 
     monkeypatch.setattr(main, "save_freshness", _capture)

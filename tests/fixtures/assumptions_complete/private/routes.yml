@@ -1,17 +1,19 @@
-# FIXTURE VALUES — invented for tests. See README.md in this directory.
+# FIXTURE VALUES — invented for tests. See ../README.md.
 # Never copy any of these numbers into data/reference/assumptions/.
 #
-# One complete stack for each of the three supported routes into North China,
-# plus the destination-scoped rungs they share. Expiries are far out so the set
-# does not start failing tests on a calendar boundary; the lapse cases are built
-# in the tests themselves rather than dated into this file.
+# The private tier of the fixture set (B12 #409): one complete desk stack for
+# each of the three supported routes into North China, plus the
+# destination-scoped rungs they share. These are desk components and the
+# loader refuses them anywhere but under private/. Expiries are far out so the
+# set does not start failing tests on a calendar boundary; the lapse cases are
+# built in the tests themselves rather than dated into this file.
 
 - id: fixture.elevation.us_gulf
   component: elevation
   value: 14.5
   unit: usd_per_mt
   origin: us_gulf
-  basis: "FIXTURE — invented barge-to-vessel elevation, not a quote"
+  basis: FIXTURE — invented barge-to-vessel elevation, not a quote
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -24,7 +26,7 @@
   unit: usd_per_mt
   origin: us_gulf
   destination: cn_north
-  basis: "FIXTURE — invented Panamax rate, not a broker indication"
+  basis: FIXTURE — invented Panamax rate, not a broker indication
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -37,7 +39,7 @@
   unit: usd_per_mt
   origin: br_paranagua
   destination: cn_north
-  basis: "FIXTURE — invented Panamax rate, not a broker indication"
+  basis: FIXTURE — invented Panamax rate, not a broker indication
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -50,7 +52,7 @@
   unit: usd_per_mt
   origin: ar_up_river
   destination: cn_north
-  basis: "FIXTURE — invented Panamax rate, not a broker indication"
+  basis: FIXTURE — invented Panamax rate, not a broker indication
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -63,7 +65,7 @@
   unit: usd_per_mt
   origin: us_gulf
   destination: cn_north
-  basis: "FIXTURE — invented protein differential, not measured"
+  basis: FIXTURE — invented protein differential, not measured
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -76,7 +78,7 @@
   unit: usd_per_mt
   origin: br_paranagua
   destination: cn_north
-  basis: "FIXTURE — invented protein differential, not measured"
+  basis: FIXTURE — invented protein differential, not measured
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -89,7 +91,7 @@
   unit: usd_per_mt
   origin: ar_up_river
   destination: cn_north
-  basis: "FIXTURE — invented protein differential, not measured"
+  basis: FIXTURE — invented protein differential, not measured
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -101,31 +103,7 @@
   value: 0.0012
   unit: fraction
   destination: cn_north
-  basis: "FIXTURE — invented cargo insurance rate, not a policy"
-  source: fixture
-  entered_by: fixture
-  entered_at: 2026-08-01
-  expires_on: 2027-12-31
-  confidence: indicative
-
-- id: fixture.import_duty.cn_north
-  component: import_duty
-  value: 0.03
-  unit: fraction
-  destination: cn_north
-  basis: "FIXTURE — stands in for the policy rate; do not read as authoritative"
-  source: fixture
-  entered_by: fixture
-  entered_at: 2026-08-01
-  expires_on: 2027-12-31
-  confidence: indicative
-
-- id: fixture.import_vat.cn_north
-  component: import_vat
-  value: 0.09
-  unit: fraction
-  destination: cn_north
-  basis: "FIXTURE — stands in for the policy rate; do not read as authoritative"
+  basis: FIXTURE — invented cargo insurance rate, not a policy
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -137,7 +115,7 @@
   value: 6.0
   unit: usd_per_mt
   destination: cn_north
-  basis: "FIXTURE — invented discharge and handling cost, not a receiver quote"
+  basis: FIXTURE — invented discharge and handling cost, not a receiver quote
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01
@@ -150,7 +128,7 @@
   unit: rate_per_annum
   days: 45
   destination: cn_north
-  basis: "FIXTURE — invented carry rate and period, not anybody's cost of funds"
+  basis: FIXTURE — invented carry rate and period, not anybody's cost of funds
   source: fixture
   entered_by: fixture
   entered_at: 2026-08-01

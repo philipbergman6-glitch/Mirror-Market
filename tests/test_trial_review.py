@@ -49,7 +49,7 @@ from tests.trial_fixtures import (
     BLOCKER_ISSUE,
     MARK,
     NUMERICAL_ISSUE,
-    SYNTHETIC_TRADERS,
+    SYNTHETIC_PARTICIPANTS,
     TODAY,
     WINDOW_START,
     day_observation,
@@ -108,23 +108,23 @@ def test_a_second_sighting_promotes_on_recurrence() -> None:
     assert item.occurrences == 2
 
 
-def test_a_second_trader_promotes_on_corroboration() -> None:
+def test_a_second_participant_promotes_on_corroboration() -> None:
     sessions = [
-        session(trader=SYNTHETIC_TRADERS[0], issues=(issue(),)),
-        session(trader=SYNTHETIC_TRADERS[1], hour=8, issues=(issue(),)),
+        session(participant=SYNTHETIC_PARTICIPANTS[0], issues=(issue(),)),
+        session(participant=SYNTHETIC_PARTICIPANTS[1], hour=8, issues=(issue(),)),
     ]
     item = draft_backlog(sessions).items[0]
     assert "corroborated" in item.promotion_rules
-    assert item.trader_count == 2
+    assert item.participant_count == 2
 
 
 def test_the_worst_severity_anyone_assigned_wins() -> None:
-    # Two traders disagreeing about how bad a defect is means at least one of
+    # Two participants disagreeing about how bad a defect is means at least one of
     # them was blocked by it.
     sessions = [
         session(issues=(issue(IssueClass.WORKFLOW_FRICTION, Severity.MINOR),)),
         session(
-            trader=SYNTHETIC_TRADERS[1],
+            participant=SYNTHETIC_PARTICIPANTS[1],
             hour=8,
             issues=(issue(IssueClass.WORKFLOW_FRICTION, Severity.MAJOR),),
         ),
@@ -236,7 +236,7 @@ def test_a_healthy_full_window_reaches_go() -> None:
 
 
 def test_one_open_blocker_overrides_every_healthy_metric() -> None:
-    # An average cannot express "a trader could size a real trade wrongly off
+    # An average cannot express "a participant could size a real trade wrongly off
     # this surface", so this is an override rather than a weighting.
     sessions, days = full_window()
     sessions.append(
@@ -247,15 +247,15 @@ def test_one_open_blocker_overrides_every_healthy_metric() -> None:
     assert "blocker" in review.verdict_reason
 
 
-def test_a_single_trader_cannot_produce_a_verdict_however_many_sessions() -> None:
+def test_a_single_participant_cannot_produce_a_verdict_however_many_sessions() -> None:
     sessions = [session(hour=7 + (i % 10), trading_day=TODAY - timedelta(days=i)) for i in range(30)]
     review = weekly_review(sessions, [], week_start=TODAY - timedelta(days=40), week_end=TODAY)
     assert review.verdict == VERDICT_INSUFFICIENT
-    assert "trader" in review.verdict_reason
+    assert "participant" in review.verdict_reason
 
 
 def test_a_thin_window_is_insufficient_rather_than_go() -> None:
-    sessions = [session(), session(trader=SYNTHETIC_TRADERS[1], hour=8)]
+    sessions = [session(), session(participant=SYNTHETIC_PARTICIPANTS[1], hour=8)]
     review = weekly_review(sessions, [], week_start=TODAY, week_end=TODAY)
     assert review.verdict == VERDICT_INSUFFICIENT
 
@@ -265,7 +265,7 @@ def test_the_verdict_reason_names_the_metrics_that_held_or_failed() -> None:
     # Make every session need Bloomberg twice: the displacement metric fails.
     sessions = [
         session(
-            trader=s.trader,
+            participant=s.participant,
             task=s.task,
             trading_day=s.trading_day,
             hour=s.started_at.hour,
@@ -284,7 +284,7 @@ def test_the_review_reports_only_what_the_records_show() -> None:
     review = weekly_review(sessions, days, week_start=WINDOW_START, week_end=TODAY)
     assert review.worked
     assert review.session_count == len(sessions)
-    assert review.trader_count == len(SYNTHETIC_TRADERS)
+    assert review.participant_count == len(SYNTHETIC_PARTICIPANTS)
 
 
 def test_unmet_questions_are_ranked_by_how_often_they_were_asked_elsewhere() -> None:
@@ -370,7 +370,7 @@ def test_an_ungraded_dimension_is_left_out_of_the_overall_rather_than_filled_in(
         window_end=TODAY,
         dimensions=dims,
         session_count=20,
-        trader_count=2,
+        participant_count=2,
         day_count=20,
         trading_days_covered=20,
         verdict=VERDICT_GO,
@@ -397,15 +397,50 @@ def test_a_window_short_of_thirty_trading_days_is_not_a_complete_scorecard() -> 
 def test_a_complete_window_reports_complete() -> None:
     start = TODAY - timedelta(days=60)
     days_list = [d for d in _weekdays(start, TODAY)][-32:]
+    tasks = list(TaskId)
     sessions = [
-        session(trader=trader, trading_day=day, hour=7 + offset)
-        for day in days_list
-        for offset, trader in enumerate(SYNTHETIC_TRADERS)
+        session(
+            participant=participant,
+            task=tasks[index % len(tasks)],
+            trading_day=day,
+            hour=7 + offset,
+        )
+        for index, day in enumerate(days_list)
+        for offset, participant in enumerate(SYNTHETIC_PARTICIPANTS)
     ]
     observations = [day_observation(trading_day=day) for day in days_list]
     card = scorecard(sessions, observations, window_start=days_list[0], window_end=TODAY)
     assert card.trading_days_covered >= 30
+    assert card.floor is not None and card.floor.met
     assert card.is_complete
+
+
+def test_a_complete_window_with_one_participant_below_the_floor_is_not_complete() -> None:
+    # Thirty-two trading days covered, two participants present, but one of them
+    # logged only morning briefs: zero real decisions. A6 says that participant
+    # is reported, not graded, and the trial has one at the floor, not two.
+    start = TODAY - timedelta(days=60)
+    days_list = [d for d in _weekdays(start, TODAY)][-32:]
+    tasks = list(TaskId)
+    sessions = [
+        session(participant=SYNTHETIC_PARTICIPANTS[0], task=tasks[index % len(tasks)], trading_day=day, hour=7)
+        for index, day in enumerate(days_list)
+    ] + [
+        session(participant=SYNTHETIC_PARTICIPANTS[1], task=TaskId.MORNING_BRIEF, trading_day=day, hour=8)
+        for day in days_list
+    ]
+    observations = [day_observation(trading_day=day) for day in days_list]
+    card = scorecard(sessions, observations, window_start=days_list[0], window_end=TODAY)
+    assert card.participant_count == 2
+    assert card.verdict == VERDICT_INSUFFICIENT
+    assert "1 of 2 participant" in card.verdict_reason
+    assert SYNTHETIC_PARTICIPANTS[1] not in card.verdict_reason
+    assert not card.is_complete
+    text = scorecard_markdown(card)
+    assert "Decision floor" in text
+    assert SYNTHETIC_PARTICIPANTS[1] in text and "0 of 8 real decisions" in text
+    shared = scorecard_markdown(card, audience="aggregate")
+    assert SYNTHETIC_PARTICIPANTS[1] not in shared
 
 
 def _weekdays(start: date, end: date) -> list[date]:
@@ -421,9 +456,9 @@ def test_a_dimension_with_no_sessions_of_its_kind_is_insufficient_not_zero() -> 
     # Nobody ran a futures task, so futures usefulness was not measured. Scoring
     # it zero would say the futures surface failed.
     sessions = [
-        session(trader=t, task=TaskId.MORNING_BRIEF, trading_day=TODAY - timedelta(days=i), hour=7 + o)
+        session(participant=t, task=TaskId.MORNING_BRIEF, trading_day=TODAY - timedelta(days=i), hour=7 + o)
         for i in range(12)
-        for o, t in enumerate(SYNTHETIC_TRADERS)
+        for o, t in enumerate(SYNTHETIC_PARTICIPANTS)
     ]
     card = scorecard(sessions, [], window_start=TODAY - timedelta(days=30), window_end=TODAY)
     futures = next(dim for dim in card.dimensions if dim.key == "futures_usefulness")

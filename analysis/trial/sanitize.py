@@ -1,6 +1,6 @@
 """The privacy boundary, made checkable (Phase 5).
 
-The trial's binding constraint is that trader names, positions, counterparties,
+The trial's binding constraint is that participant names, positions, counterparties,
 contact notes and commercial decisions are never published, that sensitive
 records live outside the GitHub Pages artifact, and that what *is* shared is
 sanitised aggregate. Every object in this package already implements that by
@@ -13,11 +13,11 @@ enough to run on every write:
 
 **Key guard.** :func:`assert_sanitized` walks a payload to any depth and raises
 if a key from ``PRIVATE_FIELD_NAMES`` appears anywhere. Recursive, because the
-realistic regression is not a top-level ``trader`` key — nobody adds one of
+realistic regression is not a top-level ``participant`` key — nobody adds one of
 those by accident — but a private key surviving three levels down inside a
 nested backlog item that a new caller passed through unchanged.
 
-**Value guard.** :func:`assert_no_identifiers` takes the trader identifiers the
+**Value guard.** :func:`assert_no_identifiers` takes the participant identifiers the
 records actually contain and searches every string value for them. This catches
 the leak a key guard cannot: a name interpolated into free text, which is how the
 real disclosure happens ("alice could not price the Nov cargo"). It requires the
@@ -31,7 +31,7 @@ strictly more sensitive, so they get the same guard applied at the write.
 
 A guard that only runs in tests is a guard that documents an intention. These
 run at every write, so the failure mode is a raised exception on the desk rather
-than a trader's name on a public page.
+than a participant's name on a public page.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def _walk(payload: Any, path: str = "$", key: str | None = None) -> Iterable[tup
     a guard that works and one that looks like it does. The aggregate payloads
     here carry bare strings inside lists — ``worked``, ``recommendations`` — and
     a walk that only descended through mappings never scanned a single one of
-    them, which is precisely where an interpolated trader name would sit.
+    them, which is precisely where an interpolated participant name would sit.
 
     ``key`` is ``None`` for a list element: the element inherits no name of its
     own, and reusing the parent's would report one private key once per item.
@@ -118,10 +118,10 @@ def assert_sanitized(payload: Any, *, where: str = "payload") -> None:
 
 
 def assert_no_identifiers(payload: Any, identifiers: Iterable[str], *, where: str = "payload") -> None:
-    """Raise if any trader identifier appears in any string value, at any depth.
+    """Raise if any participant identifier appears in any string value, at any depth.
 
     Matching is case-insensitive and substring-based, which over-matches on
-    purpose: a trader initialled ``jd`` will trip on the word "adjusted", and the
+    purpose: a participant initialled ``jd`` will trip on the word "adjusted", and the
     right response to that is to pick an identifier that is not a substring of
     ordinary English, not to loosen the check. Over-matching costs a rename;
     under-matching costs a disclosure.
@@ -144,7 +144,7 @@ def assert_no_identifiers(payload: Any, identifiers: Iterable[str], *, where: st
             for identifier in wanted:
                 if identifier in lowered:
                     raise PrivacyLeak(
-                        f"{where}: trader identifier {identifier!r} appears at {path}. "
+                        f"{where}: participant identifier {identifier!r} appears at {path}. "
                         "Aggregate output must not name a participant, including inside free text."
                     )
 

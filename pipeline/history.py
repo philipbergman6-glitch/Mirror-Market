@@ -50,6 +50,9 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # Operational state must survive the ephemeral CI runner so a failed run
     # can report the real age of its last known good predecessor.
     "data_freshness": ("layer_name",),
+    # The usable_partial streak (A3 #300 §6): "three consecutive runs" is a
+    # fact about previous runners, so it has to ride along with data_freshness.
+    "layer_partial_streak": ("layer_name",),
     # AgRural Paranaguá FOB (1 row/day, the Brazil basis source) + CEPEA
     # via Notícias Agrícolas (~10 sessions deep — only recent self-heals).
     "brazil_spot_prices": ("Date", "commodity"),

@@ -44,7 +44,7 @@ from tests.trial_fixtures import (
     BLOCKER_ISSUE,
     MARK,
     NUMERICAL_ISSUE,
-    SYNTHETIC_TRADERS,
+    SYNTHETIC_PARTICIPANTS,
     TODAY,
     WINDOW_START,
     day_observation,
@@ -60,10 +60,10 @@ REPO = Path(__file__).resolve().parents[1]
 def _rich_window() -> tuple[list, list]:
     """The healthy window plus the two issues that carry the most free text."""
     sessions, days = full_window()
-    sessions.append(session(trader=SYNTHETIC_TRADERS[1], hour=11, issues=(NUMERICAL_ISSUE,)))
+    sessions.append(session(participant=SYNTHETIC_PARTICIPANTS[1], hour=11, issues=(NUMERICAL_ISSUE,)))
     sessions.append(
         session(
-            trader=SYNTHETIC_TRADERS[0],
+            participant=SYNTHETIC_PARTICIPANTS[0],
             hour=12,
             issues=(BLOCKER_ISSUE,),
             lookups=(lookup(),),
@@ -90,7 +90,7 @@ def test_no_aggregate_projection_in_the_package_builds_a_private_key() -> None:
         ("scorecard", card),
         ("backlog", backlog),
     ):
-        aggregate(obj, identifiers=SYNTHETIC_TRADERS, where=name)
+        aggregate(obj, identifiers=SYNTHETIC_PARTICIPANTS, where=name)
 
 
 def test_no_synthetic_free_text_survives_into_any_aggregate_projection() -> None:
@@ -110,8 +110,8 @@ def test_no_synthetic_free_text_survives_into_any_aggregate_projection() -> None
     ]
     blob = json.dumps(payloads, default=str)
     assert MARK not in blob
-    for trader in SYNTHETIC_TRADERS:
-        assert trader not in blob.lower()
+    for participant in SYNTHETIC_PARTICIPANTS:
+        assert participant not in blob.lower()
 
 
 def test_the_private_projection_by_contrast_does_keep_everything() -> None:
@@ -120,7 +120,7 @@ def test_the_private_projection_by_contrast_does_keep_everything() -> None:
     payload = session(issues=(NUMERICAL_ISSUE,), lookups=(lookup(),)).to_dict()
     blob = json.dumps(payload, default=str)
     assert MARK in blob
-    assert SYNTHETIC_TRADERS[0] in blob
+    assert SYNTHETIC_PARTICIPANTS[0] in blob
 
 
 # --- the key guard --------------------------------------------------------
@@ -131,7 +131,7 @@ def test_the_key_guard_fires_on_every_private_field_name(field: str) -> None:
 
 
 def test_the_key_guard_reaches_a_private_field_buried_several_levels_down() -> None:
-    # The realistic regression is never a top-level `trader` key — it is one
+    # The realistic regression is never a top-level `participant` key — it is one
     # surviving inside a nested item a new caller passed through unchanged.
     payload = {"weeks": [{"backlog": {"items": [{"evidence": "leaked"}]}}]}
     with pytest.raises(PrivacyLeak, match=r"\$\.weeks\[0\]\.backlog\.items\[0\]\.evidence"):
@@ -148,14 +148,14 @@ def test_the_value_guard_catches_a_handle_interpolated_into_free_text() -> None:
     # string. This is how the real disclosure happens.
     payload = {"worked": ["zephyr priced the Nov cargo without leaving the page"]}
     with pytest.raises(PrivacyLeak, match="zephyr"):
-        assert_no_identifiers(payload, SYNTHETIC_TRADERS, where="test")
+        assert_no_identifiers(payload, SYNTHETIC_PARTICIPANTS, where="test")
 
 
 def test_the_value_guard_scans_bare_strings_inside_lists() -> None:
     # A walk that only descended through mappings never scanned these, which is
     # exactly where the review's `worked` and `recommendations` entries sit.
     with pytest.raises(PrivacyLeak):
-        assert_no_identifiers(["fine", ["nested", "quartz was blocked"]], SYNTHETIC_TRADERS)
+        assert_no_identifiers(["fine", ["nested", "quartz was blocked"]], SYNTHETIC_PARTICIPANTS)
 
 
 def test_the_value_guard_matches_regardless_of_case() -> None:
@@ -165,7 +165,7 @@ def test_the_value_guard_matches_regardless_of_case() -> None:
 
 def test_the_value_guard_also_checks_keys_because_a_handle_can_be_one() -> None:
     with pytest.raises(PrivacyLeak):
-        assert_no_identifiers({"by_trader": {"zephyr": 4}}, SYNTHETIC_TRADERS)
+        assert_no_identifiers({"by_participant": {"zephyr": 4}}, SYNTHETIC_PARTICIPANTS)
 
 
 def test_a_two_character_identifier_is_refused_rather_than_silently_useless() -> None:
@@ -215,13 +215,13 @@ def test_the_trial_page_is_not_on_the_promotion_contract() -> None:
 # --- writes ---------------------------------------------------------------
 def test_a_private_write_keeps_its_content_and_guards_only_its_destination(tmp_path: Path) -> None:
     target = write_private_json(tmp_path / "record.json", session().to_dict())
-    assert SYNTHETIC_TRADERS[0] in target.read_text(encoding="utf-8")
+    assert SYNTHETIC_PARTICIPANTS[0] in target.read_text(encoding="utf-8")
 
 
 def test_an_aggregate_write_refuses_a_payload_carrying_a_private_field(tmp_path: Path) -> None:
     with pytest.raises(PrivacyLeak):
         write_private_json(
-            tmp_path / "share.json", {"trader": "zephyr"}, audience=AUDIENCE_AGGREGATE
+            tmp_path / "share.json", {"participant": "zephyr"}, audience=AUDIENCE_AGGREGATE
         )
 
 
@@ -231,7 +231,7 @@ def test_an_aggregate_write_refuses_a_payload_naming_a_participant(tmp_path: Pat
             tmp_path / "share.json",
             {"worked": ["zephyr completed every brief"]},
             audience=AUDIENCE_AGGREGATE,
-            identifiers=SYNTHETIC_TRADERS,
+            identifiers=SYNTHETIC_PARTICIPANTS,
         )
 
 
@@ -243,7 +243,7 @@ def test_no_write_of_any_audience_may_land_in_docs() -> None:
 
 # --- the backlog's separate clearance ------------------------------------
 def test_a_backlog_item_refuses_public_rendering_until_it_is_cleared() -> None:
-    # Backlog items must carry evidence, and evidence is a trader's words. So
+    # Backlog items must carry evidence, and evidence is a participant's words. So
     # publishing one is a separate, explicit act rather than a projection.
     backlog = draft_backlog([session(issues=(NUMERICAL_ISSUE,)) for _ in range(3)])
     assert backlog.items, "the fixture must produce at least one item to clear"
@@ -251,7 +251,7 @@ def test_a_backlog_item_refuses_public_rendering_until_it_is_cleared() -> None:
     with pytest.raises(TrialError, match="cleared"):
         issue_body(item, audience=AUDIENCE_AGGREGATE)
     body = issue_body(item.cleared(), audience=AUDIENCE_AGGREGATE)
-    assert_no_identifiers(body, SYNTHETIC_TRADERS, where="issue body")
+    assert_no_identifiers(body, SYNTHETIC_PARTICIPANTS, where="issue body")
 
 
 def test_the_private_issue_body_needs_no_clearance_because_it_is_not_shared() -> None:
@@ -278,7 +278,7 @@ def test_a_day_observations_operator_note_never_reaches_the_aggregate() -> None:
 def test_an_object_without_an_audience_aware_to_dict_is_refused_not_shared() -> None:
     class Naive:
         def to_dict(self) -> dict[str, str]:
-            return {"trader": "zephyr"}
+            return {"participant": "zephyr"}
 
     with pytest.raises(TrialError, match="audience"):
         aggregate(Naive(), where="naive")

@@ -64,11 +64,10 @@ log = logging.getLogger(__name__)
 
 #: Curve legs are the same venue, the same provider and the same cadence as
 #: Layer 1, so they are graded on Layer 1's recency budget rather than a second
-#: number that could disagree with it. ``forward_curve`` itself is deliberately
-#: absent from ``LAYER_MAX_DATA_AGE_DAYS`` (its rows are dated by *contract*
-#: month, months in the future, so a frozen curve would stay "recent" for a
-#: year) — that exemption is about the contract_month column, not about the
-#: observation date, which is what this grades.
+#: number that could disagree with it. ``forward_curve`` carries its own equal
+#: budget since A3 #300 (keyed to ``observation_date``, the session the legs
+#: were struck on — never the contract_month column); this stays on ``prices``
+#: so the two can only ever agree by construction.
 _CURVE_AGE_LAYER = "prices"
 
 #: A daily leg may legitimately go a long weekend plus a holiday without a

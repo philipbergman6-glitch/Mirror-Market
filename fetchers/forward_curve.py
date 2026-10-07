@@ -17,9 +17,12 @@ Key concepts for learning:
     - Every leg of one curve must carry the same observation date —
       see _enforce_single_observation_date
     - Reuses fetch_one() from yfinance_fetcher for retry logic
+    - The fetch and the parse are separable — curve_contracts() names the
+      tickers, build_curve() parses frames already fetched (#331)
 """
 
 import logging
+from collections.abc import Mapping, Sequence
 from datetime import date
 
 import pandas as pd
@@ -167,47 +170,48 @@ def _enforce_single_observation_date(df: pd.DataFrame, commodity: str) -> pd.Dat
     return df[df["observation_date"] == curve_date]
 
 
-def fetch_forward_curve(commodity: str, today: date | None = None) -> pd.DataFrame:
-    """
-    Fetch the forward curve for a single commodity.
+def curve_contracts(commodity: str, today: date | None = None) -> list[dict]:
+    """The contract months ``fetch_forward_curve`` asks the provider for.
 
-    Downloads the latest close price for each upcoming contract month,
-    building a picture of the term structure.
-
-    Parameters
-    ----------
-    commodity : str
-        Commodity name matching a key in FORWARD_CURVE_CONTRACTS.
-    today : date | None
-        Clock injection point for tests; defaults to today.
-
-    Returns
-    -------
-    pd.DataFrame
-        Columns: commodity, contract_month, label, ticker, close,
-        observation_date. Sorted by contract_month (nearest first), every
-        row carrying the same observation_date.
-        Empty DataFrame if the commodity isn't configured or no data found.
+    Hard-fails on an unconfigured commodity: this is the fetch half of the
+    v1 parse, and a caller holding a ticker list for a commodity that has no
+    curve has already gone wrong.
     """
     spec = FORWARD_CURVE_CONTRACTS.get(commodity)
     if not spec:
-        logger.warning("No forward curve config for %s", commodity)
-        return pd.DataFrame()
-
-    contracts = _build_contract_tickers(
+        raise KeyError(f"No forward curve config for {commodity}")
+    return _build_contract_tickers(
         root=spec["root"],
         exchange=spec["exchange"],
         trading_months=spec["months"],
         today=today,
     )
 
+
+def build_curve(
+    commodity: str, contracts: Sequence[Mapping], frames: Mapping[str, pd.DataFrame]
+) -> pd.DataFrame:
+    """The v1 parse over frames that were already fetched.
+
+    Split from ``fetch_forward_curve`` (#331) so the DT-16 reconciler can
+    download each contract once, unguarded, and run this parse over the same
+    bars the trusted adapter captured — a reconciliation whose two sides each
+    fetched separately cannot tell a parse difference from a session
+    difference, which is the only thing it exists to say. The guard is the
+    *caller's* job on that route; ``fetch_forward_curve`` applies it by
+    fetching through ``fetch_one``.
+
+    ``frames`` must carry every ticker in ``contracts``. A ticker that is
+    absent was never asked for, and reading absence as "delisted" would
+    shorten the curve silently, so it raises instead. An *empty* frame is the
+    provider's answer and means not listed / expired.
+    """
     rows = []
     for contract in contracts:
         ticker = contract["ticker"]
-        logger.debug("Fetching %s curve contract %s ...", commodity, ticker)
-
-        # Fetch just 5 days of data — we only need the latest close
-        df = fetch_one(ticker, period="5d")
+        if ticker not in frames:
+            raise KeyError(f"{commodity}: no frame was fetched for curve contract {ticker}")
+        df = frames[ticker]
         if df.empty:
             # Not yet listed, or already expired and delisted by Yahoo.
             logger.debug("  No data for %s — contract not listed", ticker)
@@ -244,6 +248,46 @@ def fetch_forward_curve(commodity: str, today: date | None = None) -> pd.DataFra
 
     result = result.sort_values("contract_month").reset_index(drop=True)
     return result
+
+
+def fetch_forward_curve(commodity: str, today: date | None = None) -> pd.DataFrame:
+    """
+    Fetch the forward curve for a single commodity.
+
+    Downloads the latest close price for each upcoming contract month,
+    building a picture of the term structure. ``curve_contracts`` names the
+    tickers, ``fetch_one`` (the settlement-guarded choke point) fetches each
+    one, and ``build_curve`` parses them.
+
+    Parameters
+    ----------
+    commodity : str
+        Commodity name matching a key in FORWARD_CURVE_CONTRACTS.
+    today : date | None
+        Clock injection point for tests; defaults to today.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: commodity, contract_month, label, ticker, close,
+        observation_date. Sorted by contract_month (nearest first), every
+        row carrying the same observation_date.
+        Empty DataFrame if the commodity isn't configured or no data found.
+    """
+    if commodity not in FORWARD_CURVE_CONTRACTS:
+        logger.warning("No forward curve config for %s", commodity)
+        return pd.DataFrame()
+
+    contracts = curve_contracts(commodity, today=today)
+
+    frames: dict[str, pd.DataFrame] = {}
+    for contract in contracts:
+        ticker = contract["ticker"]
+        logger.debug("Fetching %s curve contract %s ...", commodity, ticker)
+        # Fetch just 5 days of data — we only need the latest close
+        frames[ticker] = fetch_one(ticker, period="5d")
+
+    return build_curve(commodity, contracts, frames)
 
 
 def fetch_all_forward_curves() -> dict[str, pd.DataFrame]:

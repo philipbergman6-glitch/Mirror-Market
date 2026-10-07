@@ -32,7 +32,7 @@ from analysis.trial.metrics import (
 from tests.trial_fixtures import (
     CLEAN_STAMP,
     DIRTY_STAMP,
-    SYNTHETIC_TRADERS,
+    SYNTHETIC_PARTICIPANTS,
     day_observation,
     full_window,
     issue,
@@ -265,9 +265,9 @@ def test_every_issue_class_appears_in_the_issue_counts_even_at_zero() -> None:
     assert counts[IssueClass.NUMERICAL_ERROR.value] == 0
 
 
-def test_traders_are_counted_case_insensitively_so_one_handle_is_one_trader() -> None:
-    sessions = [session(trader="Zephyr"), session(hour=8, trader="zephyr ")]
-    assert compute_metrics(sessions).trader_count == 1
+def test_participants_are_counted_case_insensitively_so_one_handle_is_one_participant() -> None:
+    sessions = [session(participant="Zephyr"), session(hour=8, participant="zephyr ")]
+    assert compute_metrics(sessions).participant_count == 1
 
 
 def test_an_empty_window_computes_without_raising_and_grades_nothing() -> None:
@@ -282,12 +282,12 @@ def test_asking_for_a_metric_that_does_not_exist_raises_rather_than_returning_no
         compute_metrics([session()]).get("invented_metric")
 
 
-def test_the_aggregate_projection_of_a_metric_set_carries_no_free_text_from_a_trader() -> None:
+def test_the_aggregate_projection_of_a_metric_set_carries_no_free_text_from_a_participant() -> None:
     sessions, days = full_window()
     payload = compute_metrics(sessions, days).to_dict(audience=AUDIENCE_AGGREGATE)
     blob = repr(payload)
-    for trader in SYNTHETIC_TRADERS:
-        assert trader not in blob
+    for participant in SYNTHETIC_PARTICIPANTS:
+        assert participant not in blob
     assert "SYNTHETIC" not in blob
 
 

@@ -5,15 +5,15 @@ severity, evidence, affected decision, and acceptance criteria. Four things abou
 that sentence are load-bearing, and each is enforced here rather than left to
 whoever runs the weekly review.
 
-**"Validated" is a rule, not a mood.** A trader reporting one surprising number
+**"Validated" is a rule, not a mood.** A participant reporting one surprising number
 on one afternoon is an observation. It becomes a backlog item when something
-corroborates it: a second occurrence, a second trader, a blocker severity, or a
+corroborates it: a second occurrence, a second participant, a blocker severity, or a
 correctness class where being wrong once is already the whole problem.
 :func:`draft_backlog` applies that rule and *keeps* the rejects, as
 :class:`Observation`, with the reason they did not promote. Discarding them would
 delete the evidence that the rule is too strict.
 
-**Recurrence is counted, not summed.** The same complaint from two traders is one
+**Recurrence is counted, not summed.** The same complaint from two participants is one
 item seen twice, so issues are grouped by a stable identity — classification,
 page, and a normalised summary — and never by their free text alone. An item
 seen four times on four days outranks a louder one seen once, which is the
@@ -26,7 +26,7 @@ generated criterion reads exactly like a considered one, and shipping against an
 unread acceptance criterion is how a fix closes a ticket without fixing anything.
 
 **Publishing is a separate, deliberate act.** A finding's evidence is free text a
-trader typed during a live session; it may name a cargo, a counterparty or a
+participant typed during a live session; it may name a cargo, a counterparty or a
 position. So :func:`issue_body` refuses to render a public body until the owner
 has cleared that specific item, and the aggregate projection carries counts and
 classes with no free text at all. The private body is the full one and is written
@@ -72,13 +72,13 @@ __all__ = [
 #: weekly review can show the rule that fired, and so a rule that never fires —
 #: or one that fires for everything — is visible rather than inferred.
 PROMOTION_RULES: dict[str, str] = {
-    "blocker": "severity is a blocker: it stopped a trader completing the task",
+    "blocker": "severity is a blocker: it stopped a participant completing the task",
     "correctness": (
         "a correctness class (wrong number, wrong meaning, stale data): being wrong "
         "once is the finding, so it needs no second occurrence"
     ),
     "recurrence": "seen more than once",
-    "corroborated": "seen by more than one trader",
+    "corroborated": "seen by more than one participant",
 }
 
 #: Acceptance-criteria templates, one per issue class. Each is phrased as a
@@ -107,8 +107,8 @@ _CRITERIA_TEMPLATES: dict[IssueClass, str] = {
         "acceptable outcome."
     ),
     IssueClass.MISLEADING_UX: (
-        "A trader who has not read this ticket reaches the correct reading of {page} "
-        "unaided, confirmed by re-running the originating task with a second trader."
+        "A participant who has not read this ticket reaches the correct reading of {page} "
+        "unaided, confirmed by re-running the originating task with a second participant."
     ),
     IssueClass.WORKFLOW_FRICTION: (
         "The task completes without the step described in the evidence, and the median "
@@ -120,7 +120,7 @@ _CRITERIA_TEMPLATES: dict[IssueClass, str] = {
         "alert's own description."
     ),
     IssueClass.MISSED_ALERT: (
-        "The condition in the evidence raises an alert at the severity a trader would act "
+        "The condition in the evidence raises an alert at the severity a participant would act "
         "on, pinned by a test against that day's data."
     ),
     IssueClass.UPSTREAM_OUTAGE: (
@@ -150,7 +150,7 @@ def finding_key(issue: Issue) -> str:
     """Stable identity for a finding: ``(classification, page, normalised summary)``.
 
     Deliberately excludes severity and every number. Severity is a judgement two
-    traders will make differently about one defect, and grouping on it would file
+    participants will make differently about one defect, and grouping on it would file
     the same bug twice at two ranks.
     """
     basis = "|".join((issue.classification.value, (issue.page or "").strip().lower(), _normalise(issue.summary)))
@@ -179,7 +179,7 @@ class Observation:
     classification: IssueClass
     summary: str
     occurrences: int
-    trader_count: int
+    participant_count: int
     reason_not_promoted: str
 
     def to_dict(self, *, audience: str = AUDIENCE_PRIVATE) -> dict[str, Any]:
@@ -187,7 +187,7 @@ class Observation:
             "key": self.key,
             "classification": self.classification.value,
             "occurrences": self.occurrences,
-            "trader_count": self.trader_count,
+            "participant_count": self.participant_count,
             "reason_not_promoted": self.reason_not_promoted,
         }
         if audience == AUDIENCE_PRIVATE:
@@ -219,7 +219,7 @@ class BacklogItem:
     session_ids: tuple[str, ...] = ()
     trading_days: tuple[date, ...] = ()
     releases: tuple[ReleaseStamp, ...] = field(default=(), repr=False)
-    trader_count: int = 1
+    participant_count: int = 1
     promotion_rules: tuple[str, ...] = ()
     criteria_are_drafted: bool = True
     cleared_for_public: bool = False
@@ -241,8 +241,8 @@ class BacklogItem:
             )
         if not self.promotion_rules:
             raise TrialError(f"{self.key}: a backlog item must record which promotion rule fired")
-        if self.trader_count < 1:
-            raise TrialError(f"{self.key}: trader_count must be at least 1")
+        if self.participant_count < 1:
+            raise TrialError(f"{self.key}: participant_count must be at least 1")
 
     @property
     def occurrences(self) -> int:
@@ -255,7 +255,7 @@ class BacklogItem:
 
     @property
     def priority(self) -> tuple[int, int, int]:
-        """Sort key, highest first: severity, then traders, then occurrences.
+        """Sort key, highest first: severity, then participants, then occurrences.
 
         Three separate integers rather than a weighted score. A blended number
         would make a minor issue seen six times outrank a blocker seen once, and
@@ -265,7 +265,7 @@ class BacklogItem:
         # here to share one descending sort with the two counts, which run the
         # other way. Mixing the directions in one tuple is the bug this comment
         # exists to stop being reintroduced.
-        return (-self.severity.rank, self.trader_count, self.occurrences)
+        return (-self.severity.rank, self.participant_count, self.occurrences)
 
     @property
     def title(self) -> str:
@@ -289,7 +289,7 @@ class BacklogItem:
             "severity": self.severity.value,
             "page": self.page,
             "occurrences": self.occurrences,
-            "trader_count": self.trader_count,
+            "participant_count": self.participant_count,
             "reproducible_occurrences": self.reproducible_occurrences,
             "promotion_rules": list(self.promotion_rules),
             "criteria_are_drafted": self.criteria_are_drafted,
@@ -298,7 +298,7 @@ class BacklogItem:
         if audience == AUDIENCE_AGGREGATE:
             # No summary, no evidence, no decision, no session ids, no dates. An
             # aggregate reader learns that three major numerical errors were
-            # found on the origins page; it learns nothing a trader typed.
+            # found on the origins page; it learns nothing a participant typed.
             return payload
         payload.update(
             {
@@ -362,7 +362,9 @@ class BacklogSet:
         }
 
 
-def _promotion_rules(*, severity: Severity, classification: IssueClass, occurrences: int, traders: int) -> list[str]:
+def _promotion_rules(
+    *, severity: Severity, classification: IssueClass, occurrences: int, participants: int
+) -> list[str]:
     fired: list[str] = []
     if severity is Severity.BLOCKER:
         fired.append("blocker")
@@ -370,7 +372,7 @@ def _promotion_rules(*, severity: Severity, classification: IssueClass, occurren
         fired.append("correctness")
     if occurrences > 1:
         fired.append("recurrence")
-    if traders > 1:
+    if participants > 1:
         fired.append("corroborated")
     return fired
 
@@ -381,7 +383,7 @@ def draft_backlog(sessions: Iterable[SessionRecord]) -> BacklogSet:
     Pure: takes records, returns a set. It writes nothing, files nothing and
     contacts no tracker — emitting an item is :func:`issue_body`, and filing it
     is a human running ``gh``. A routine that opened tickets by itself would put
-    a trader's live-session free text into a public repository on no decision.
+    a participant's live-session free text into a public repository on no decision.
     """
     grouped: dict[str, list[tuple[SessionRecord, Issue]]] = {}
     issue_count = 0
@@ -395,8 +397,8 @@ def draft_backlog(sessions: Iterable[SessionRecord]) -> BacklogSet:
     items: list[BacklogItem] = []
     observations: list[Observation] = []
     for key, pairs in grouped.items():
-        traders = {session.trader for session, _ in pairs}
-        # The worst severity anyone assigned wins. Two traders disagreeing about
+        participants = {session.participant for session, _ in pairs}
+        # The worst severity anyone assigned wins. Two participants disagreeing about
         # how bad a defect is means at least one of them was blocked by it.
         worst = min((issue.severity for _, issue in pairs), key=lambda severity: severity.rank)
         lead = next(issue for _, issue in pairs if issue.severity is worst)
@@ -404,7 +406,7 @@ def draft_backlog(sessions: Iterable[SessionRecord]) -> BacklogSet:
             severity=worst,
             classification=lead.classification,
             occurrences=len(pairs),
-            traders=len(traders),
+            participants=len(participants),
         )
         if not fired:
             observations.append(
@@ -413,9 +415,9 @@ def draft_backlog(sessions: Iterable[SessionRecord]) -> BacklogSet:
                     classification=lead.classification,
                     summary=lead.summary,
                     occurrences=len(pairs),
-                    trader_count=len(traders),
+                    participant_count=len(participants),
                     reason_not_promoted=(
-                        "seen once, by one trader, at a severity below blocker and in a class "
+                        "seen once, by one participant, at a severity below blocker and in a class "
                         "where a single sighting is not yet evidence — re-report it to promote"
                     ),
                 )
@@ -439,14 +441,14 @@ def draft_backlog(sessions: Iterable[SessionRecord]) -> BacklogSet:
                 session_ids=tuple(session.session_id for session, _ in pairs),
                 trading_days=tuple(dict.fromkeys(session.trading_day for session, _ in pairs)),
                 releases=tuple(session.release for session, _ in pairs),
-                trader_count=len(traders),
+                participant_count=len(participants),
                 promotion_rules=tuple(fired),
                 criteria_are_drafted=True,
             )
         )
 
     items.sort(key=lambda item: item.priority, reverse=True)
-    observations.sort(key=lambda obs: (obs.occurrences, obs.trader_count), reverse=True)
+    observations.sort(key=lambda obs: (obs.occurrences, obs.participant_count), reverse=True)
     return BacklogSet(
         items=tuple(items),
         observations=tuple(observations),
@@ -459,7 +461,7 @@ def issue_body(item: BacklogItem, *, audience: str = AUDIENCE_PRIVATE) -> str:
     """The markdown body for a tracker ticket.
 
     The public form refuses to render until the item is cleared, because the
-    evidence field is whatever a trader typed mid-session and this repository is
+    evidence field is whatever a participant typed mid-session and this repository is
     public. Clearing is one call (:meth:`BacklogItem.cleared`) and is the owner's
     judgement, which is exactly where that judgement belongs.
     """
@@ -477,7 +479,7 @@ def issue_body(item: BacklogItem, *, audience: str = AUDIENCE_PRIVATE) -> str:
         "",
         f"- **Severity**: {item.severity.value} — {item.severity.meaning}",
         f"- **Class**: {item.classification.value} — {item.classification.meaning}",
-        f"- **Seen**: {item.occurrences}x by {item.trader_count} trader(s)",
+        f"- **Seen**: {item.occurrences}x by {item.participant_count} participant(s)",
         f"- **Promoted by**: {', '.join(PROMOTION_RULES[rule] for rule in item.promotion_rules)}",
         f"- **Reproducible sightings**: {item.reproducible_occurrences} of {item.occurrences}",
     ]

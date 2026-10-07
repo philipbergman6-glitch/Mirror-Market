@@ -22,6 +22,42 @@ secrets, and proves no value reaches the output. The optional persistence of
 skipped-unconfigured as a freshness status is not taken here: gating
 Layers 2/2b/3 with `run_if` is a `main.py` edit held back while #309 and
 #311 edit the same file.
+## Unreleased — success means complete and dated; `usable_partial` is the new amber (2026-10-07)
+
+**#309 (B3)**, enforcing the vocabulary A3 **#300** decided. One status axis
+gains one word: `success | usable_partial | incomplete | stale | failed |
+no_publication | disabled`, defined once in `pipeline/grading.py`. The gate
+order in `main._finalize_layer` is deterministic: empty → `failed` /
+`no_publication`; below the `LAYER_MIN_KEYS` floor → `incomplete` (recency
+not judged); above the floor but past the age budget → `stale`, even when
+also partial; fresh and above the floor → `success` only when every catalog
+key answered, else `usable_partial`. A 23/24 weather fetch is no longer a
+success. `usable_partial` advances `last_success` (`save_freshness` stamps
+`{success, usable_partial}`) and is not a hard failure; the shortfall travels
+as the status word, the coverage pair and the named missing keys. **Masthead:**
+green counts `success` only; `usable_partial` is a distinct amber "N partial"
+tally, never folded into green or red (`DESIGN.md` decision). **Alerts:** the
+outage issue is unchanged; a separate `ci-catalog-drift` issue names the
+missing keys once a layer has been partial for
+`config.USABLE_PARTIAL_ESCALATION_RUNS` (3) consecutive runs — the streak is
+the new `layer_partial_streak` table, written on every freshness write and
+round-tripped through `data/history/` so an ephemeral runner can count to
+three. **Age budgets are universal by default:** `config.validate_age_budgets`
+hard-fails at import on a production layer with neither a
+`LAYER_MAX_DATA_AGE_DAYS` entry nor a reasoned `LAYER_AGE_BUDGET_EXEMPT`
+entry. New budgets: `forward_curve` 7 (on `observation_date`), `cepea` /
+`agrural` / `gulf_bids` 7, `magyp_fob` 14, `crush_inspections` 21, `conab`
+75, `conab_precos` 21 — the last three via `_finalize_layer`, which their
+custom paths now share. Written exemptions: `psd`, `wasde`, `usda`,
+`crop_progress`, `sopa_crop`, `cyclones_nhc`, `cyclones_jtwc`. The
+`config.py` recency comment that still said a frozen upstream records
+`'failed'` now says `'stale'`. Trial drill `partial_key_coverage` runs the
+layer three times (full / at floor / under floor) and expects
+`success` / `usable_partial` / `incomplete`. Tests:
+`tests/test_success_state_vocabulary.py` (gate order, stamping, streak,
+drift alert, masthead tally, briefing note, budget-or-exemption rule); five
+legacy recency/coverage tests updated from the old "not listed = not
+checked" and "at-floor = success" rules.
 
 ## Unreleased — the dormant Turso path is deleted (2026-10-07)
 

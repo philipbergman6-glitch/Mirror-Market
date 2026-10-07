@@ -144,3 +144,72 @@ def _patch_fetch(monkeypatch, prices: dict[str, pd.DataFrame]) -> None:
         fc, "fetch_one",
         lambda ticker, period="5d": prices.get(ticker, pd.DataFrame()).copy(),
     )
+
+
+# ── #331: the fetch is split from the parse ─────────────────────────
+#
+# ``curve_contracts`` names the tickers and ``build_curve`` parses frames
+# that were already fetched, so a caller that downloads once (the DT-16
+# reconciler) can run v1's parse over the same bars the trusted adapter
+# captured. ``fetch_forward_curve`` is the two recomposed over ``fetch_one``.
+
+def test_curve_contracts_names_the_tickers_fetch_forward_curve_asks_for(monkeypatch):
+    asked: list[str] = []
+
+    def fetch(ticker, period="5d"):
+        asked.append(ticker)
+        return pd.DataFrame()
+
+    monkeypatch.setattr(fc, "fetch_one", fetch)
+    fc.fetch_forward_curve("Soybeans", today=NOW)
+
+    assert [c["ticker"] for c in fc.curve_contracts("Soybeans", today=NOW)] == asked
+
+
+def test_curve_contracts_hard_fails_on_an_unconfigured_commodity():
+    with pytest.raises(KeyError, match="Tulips"):
+        fc.curve_contracts("Tulips", today=NOW)
+
+
+def test_build_curve_over_prefetched_frames_matches_fetch_forward_curve(monkeypatch):
+    prices = {
+        "ZSQ26.CBT": _bars("2026-08-12", 1147.25),
+        "ZSU26.CBT": _bars("2026-08-12", 1150.25),
+        "ZSX26.CBT": _bars("2026-08-11", 1160.00),  # stale leg, dropped on both routes
+    }
+    _patch_fetch(monkeypatch, prices)
+    fetched = fc.fetch_forward_curve("Soybeans", today=NOW)
+
+    contracts = fc.curve_contracts("Soybeans", today=NOW)
+    frames = {c["ticker"]: prices.get(c["ticker"], pd.DataFrame()).copy() for c in contracts}
+    built = fc.build_curve("Soybeans", contracts, frames)
+
+    pd.testing.assert_frame_equal(built, fetched)
+    assert list(built["ticker"]) == ["ZSQ26.CBT", "ZSU26.CBT"]
+
+
+def test_build_curve_refuses_a_contract_it_was_handed_no_frame_for():
+    """Absence is not an empty answer: a ticker missing from ``frames`` was
+    never asked for, and treating it as delisted would shorten the curve
+    silently."""
+    contracts = fc.curve_contracts("Soybeans", today=NOW)
+    frames = {contracts[0]["ticker"]: _bars("2026-08-12", 1147.25)}
+
+    with pytest.raises(KeyError, match=contracts[1]["ticker"]):
+        fc.build_curve("Soybeans", contracts, frames)
+
+
+def test_build_curve_with_every_frame_empty_is_an_empty_curve():
+    contracts = fc.curve_contracts("Soybeans", today=NOW)
+    frames = {c["ticker"]: pd.DataFrame() for c in contracts}
+
+    assert fc.build_curve("Soybeans", contracts, frames).empty
+
+
+def test_the_v1_fetch_path_is_the_settlement_guarded_one():
+    """``fetch_forward_curve`` must keep fetching through ``fetch_one``. The
+    split exists so the *reconciler* can apply the guard itself over an
+    unguarded download; v1 itself never sees an unfinished bar."""
+    import fetchers.yfinance
+
+    assert fc.fetch_one is fetchers.yfinance.fetch_one

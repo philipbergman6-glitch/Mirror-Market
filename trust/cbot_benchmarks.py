@@ -20,7 +20,11 @@ the bar is a *finished* session rather than the one in progress. An unfinished
 bar is rejected, because storing it publishes a partial print as the day's
 close — the exact defect ``fetchers/_settlement.py`` exists to prevent, here
 enforced as a quality rule rather than a fetch-time drop, so a provider
-substitution cannot lose it.
+substitution cannot lose it. For that to be true the adapter has to *see* the
+unfinished bar: it downloads through the unguarded
+``fetchers.yfinance.download_bars`` and captures the provider's whole window
+(#331), so a pre-cutoff run records a ``settlement.confirmed`` reject for the
+open session and an accepted revision for the finished one before it.
 
 **A candle that has to be possible.** ``ohlc.relationship`` rejects a bar whose
 high is below its open/low/close or whose low is above them. A frame like that
@@ -297,13 +301,28 @@ def fetch_cbot_benchmark_artifact(
     a second copy of the month rules: the trusted path must ask the provider
     for exactly what v1 asks for, or a reconciliation difference could mean
     "different contracts" rather than "different parse".
+
+    ``download`` is the *unguarded* provider download
+    (``fetchers.yfinance.download_bars``), not ``fetch_one`` (#331).
+    ``fetch_one`` drops the session in progress before returning, so an
+    adapter fetching through it captured frames that structurally could not
+    contain the bar ``settlement.confirmed`` exists to reject — the rule
+    passed on every live run while proving nothing. Here the frame arrives as
+    the provider published it and the rule judges it.
+
+    Every bar in the provider's window is captured, not only the newest. With
+    one bar per ticker a pre-cutoff run would hand the ledger nothing but the
+    open session — rejected, correctly — while v1's guard falls back to the
+    previous bar, and the two could never reconcile. The window carries that
+    previous session too, so the ledger's newest *accepted* session is the one
+    v1 publishes.
     """
 
-    from fetchers.yfinance import fetch_one  # imported late so tests need no network stack
+    from fetchers.yfinance import download_bars  # imported late so tests need no network stack
 
     contract_for(commodity)  # reject an unregistered commodity before any request
     spec = spec_for(commodity)
-    download = download or fetch_one
+    download = download or download_bars
     tickers = _build_contract_tickers(
         root=spec.root,
         exchange=spec.provider_suffix.lstrip(".") or "CBT",
@@ -314,9 +333,7 @@ def fetch_cbot_benchmark_artifact(
     bars: list[ProviderBar] = []
     for entry in tickers:
         frame = download(entry["ticker"], period="5d")
-        bar = _bar_from_frame(entry["ticker"], frame)
-        if bar is not None:
-            bars.append(bar)
+        bars.extend(_bars_from_frame(entry["ticker"], frame))
     return artifact_from_bars(commodity, bars, retrieved_at=retrieved_at)
 
 
@@ -432,6 +449,10 @@ class BenchmarkDatasetIngestion:
     rejected_revision_ids: tuple[str, ...]
     finding_ids: tuple[str, ...]
     result: DatasetResult
+    #: REJECT findings this run, counted by rule — the line a pre-cutoff run
+    #: must be able to print (``settlement.confirmed: N``) for the rule to
+    #: count as proven live (#331). Sorted pairs, so the record is stable.
+    rejected_by_rule: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -456,6 +477,14 @@ class BenchmarkTrustedIngestion:
     @property
     def quarantined_revision_ids(self) -> tuple[str, ...]:
         return tuple(sorted(rid for item in self.datasets for rid in item.quarantined_revision_ids))
+
+    @property
+    def rejected_by_rule(self) -> tuple[tuple[str, int], ...]:
+        counts: dict[str, int] = {}
+        for item in self.datasets:
+            for rule_id, count in item.rejected_by_rule:
+                counts[rule_id] = counts.get(rule_id, 0) + count
+        return tuple(sorted(counts.items()))
 
 
 def ingest_cbot_benchmark_replays(
@@ -541,9 +570,25 @@ def ingest_cbot_benchmark_replays(
                 numeric_policy=NumericValidationPolicy(allow_zero=False, allow_negative=False),
             )
         )
-        previous_values = _previous_accepted_values(repository, contract, parsed.candidates)
+        previous_values, same_session_priors = _previous_accepted_values(
+            repository, contract, parsed.candidates
+        )
+        # A window arrives as one batch, oldest session first. An accepted
+        # session in the batch is the "previous value" for the next session
+        # of the same contract, exactly as it would be had it arrived in an
+        # earlier run — otherwise, on a fresh ledger, the move rule would
+        # judge only the window's first session and skip the rest silently.
+        accepted_in_batch: dict[tuple[str, str], tuple[date, Decimal]] = {}
         revisions: list[ObservationRevision] = []
-        for candidate in parsed.candidates:
+        for candidate in sorted(parsed.candidates, key=lambda item: item.identity.effective_date):
+            contract_key = _contract_key(candidate)
+            earlier = accepted_in_batch.get(contract_key) if contract_key else None
+            if (
+                earlier is not None
+                and candidate.candidate_id not in same_session_priors
+                and earlier[0] < candidate.identity.effective_date
+            ):
+                previous_values[candidate.candidate_id] = earlier[1]
             evaluation: QualityEvaluation = engine.evaluate(
                 run_id=run_id,
                 dataset_id=contract.dataset.dataset_id,
@@ -557,6 +602,10 @@ def ingest_cbot_benchmark_replays(
             for finding in evaluation.findings:
                 repository.store(finding)
                 record_findings.append(finding)
+            if evaluation.disposition is QualityState.ACCEPTED and contract_key:
+                accepted_in_batch[contract_key] = (
+                    candidate.identity.effective_date, Decimal(str(candidate.value))
+                )
             revisions.append(
                 ObservationRevision(
                     identity=candidate.identity,
@@ -813,7 +862,16 @@ def _dataset_ingestion(
         rejected_revision_ids=_ids(revisions, QualityState.REJECTED),
         finding_ids=tuple(sorted({finding.finding_id for finding in record_findings})),
         result=result,
+        rejected_by_rule=_reject_counts(record_findings),
     )
+
+
+def _reject_counts(findings: Sequence[Finding]) -> tuple[tuple[str, int], ...]:
+    counts: dict[str, int] = {}
+    for finding in findings:
+        if finding.severity is FindingSeverity.REJECT:
+            counts[finding.rule_id] = counts.get(finding.rule_id, 0) + 1
+    return tuple(sorted(counts.items()))
 
 
 def _ids(revisions: Sequence[ObservationRevision], state: QualityState) -> tuple[str, ...]:
@@ -862,8 +920,12 @@ def _previous_accepted_values(
     repository: TrustRepository,
     contract: DatasetContract,
     candidates: Sequence[CandidateObservation],
-) -> dict[str, Decimal]:
+) -> tuple[dict[str, Decimal], frozenset[str]]:
     """The accepted value a candidate is judged against, keyed by candidate id.
+
+    Returns the map and the set of candidate ids whose prior is a re-print of
+    the *same session*: ingestion chains a window's own accepted sessions into
+    this map, and a same-session prior must not be displaced by that.
 
     The comparison is made against the same *contract*, not the same commodity:
     a bean July and a bean November are different instruments, and the spread
@@ -898,6 +960,7 @@ def _previous_accepted_values(
             by_session[key] = (identity.effective_date, revision.ingested_at, value)
 
     previous: dict[str, Decimal] = {}
+    same_session: set[str] = set()
     for candidate in candidates:
         identity = candidate.identity
         if identity.contract is None:
@@ -905,11 +968,19 @@ def _previous_accepted_values(
         same_observation = by_observation.get(identity.observation_id)
         if same_observation is not None:
             previous[candidate.candidate_id] = same_observation[1]
+            same_session.add(candidate.candidate_id)
             continue
         seen = by_session.get((identity.contract.code, identity.contract.delivery_month))
         if seen is not None and seen[0] < identity.effective_date:
             previous[candidate.candidate_id] = seen[2]
-    return previous
+    return previous, frozenset(same_session)
+
+
+def _contract_key(candidate: CandidateObservation) -> tuple[str, str] | None:
+    contract = candidate.identity.contract
+    if contract is None:
+        return None
+    return (contract.code, contract.delivery_month)
 
 
 def _run(
@@ -973,27 +1044,39 @@ def _canonical_content(commodity: str, bars: Sequence[ProviderBar]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _bar_from_frame(ticker: str, frame: pd.DataFrame) -> ProviderBar | None:
+def _bars_from_frame(ticker: str, frame: pd.DataFrame) -> tuple[ProviderBar, ...]:
+    """Every dated bar in the provider frame, in the provider's order.
+
+    A row with no close is skipped — the provider carried the date and no
+    price, which is not a price. An *undated* row hard-fails: the session date
+    is the observation's identity, and guessing it would be the silent
+    substitution this ledger exists to refuse.
+    """
     if frame is None or getattr(frame, "empty", True):
         # Not yet listed, or expired and delisted by the provider. Both are
         # absences of a contract, not absences of a price.
-        return None
-    last = frame.iloc[-1]
-    close = last.get("Close")
-    if close is None or pd.isna(close):
-        return None
-    stamp = pd.Timestamp(frame.index[-1])
-    if pd.isna(stamp):
-        raise BenchmarkShapeError(f"{ticker}: provider frame has an undated last bar")
-    return ProviderBar(
-        symbol=ticker,
-        session_date=stamp.date(),
-        close=_decimal(float(close), "provider_bar.close"),
-        open=_frame_decimal(last, "Open"),
-        high=_frame_decimal(last, "High"),
-        low=_frame_decimal(last, "Low"),
-        volume=_frame_decimal(last, "Volume"),
-    )
+        return ()
+    bars: list[ProviderBar] = []
+    for position in range(len(frame)):
+        stamp = pd.Timestamp(cast(Any, frame.index[position]))
+        if pd.isna(stamp):
+            raise BenchmarkShapeError(f"{ticker}: provider frame has an undated bar")
+        row = frame.iloc[position]
+        close = row.get("Close")
+        if close is None or pd.isna(close):
+            continue
+        bars.append(
+            ProviderBar(
+                symbol=ticker,
+                session_date=stamp.date(),
+                close=_decimal(float(close), "provider_bar.close"),
+                open=_frame_decimal(row, "Open"),
+                high=_frame_decimal(row, "High"),
+                low=_frame_decimal(row, "Low"),
+                volume=_frame_decimal(row, "Volume"),
+            )
+        )
+    return tuple(bars)
 
 
 def _frame_decimal(row, column: str) -> Decimal | None:

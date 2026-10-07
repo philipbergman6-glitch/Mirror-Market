@@ -3,6 +3,19 @@
 Hand-entered cost inputs for the origin comparison (`analysis/origins/`).
 One YAML file per topic; every file is a list of assumption mappings.
 
+**Two tiers (B12 #409).** This directory is the *committed* tier and holds
+only **policy rates** — China's import duty and VAT, published administered
+numbers with public provenance. Every **desk assumption** (ocean freight,
+elevation, port costs, financing, quality differentials, crush-plant costs)
+lives in [`private/`](private/README.md), which is gitignored in the same style
+as `positions/`, `options/` and `clearing/`: an entry carries the owner's email
+and the broker in `basis`, so a tracked file would publish a client record on
+the next push (invariant 4). The CLI routes every desk component there and
+refuses any other target; the loader refuses a desk component found in a
+committed file. The public Origins page reads this tier only and therefore
+stays blocked by design on every machine; the costed chain renders only in the
+private edition at `data/workspace/origins.html`.
+
 **Onboarding a route** — exactly what must be entered before US Gulf, Brazil
 Paranaguá or Argentina Up River becomes comparable into North China, and in
 what unit and scope: see [ONBOARDING.md](ONBOARDING.md), or run
@@ -95,8 +108,9 @@ python scripts/enter_assumption.py --gaps          # what the page cannot rank y
 `--check` fails (exit 1) on faults in the *files* — a unit that does not match
 its component, a freight with no `origin` (it would price every leg off one
 indication), a scope key that matches no route, two entries of the same scope
-whose windows and lifetimes overlap, or a shipment window that ended before the
-entry was made. `load_assumptions()` raises on the same set, so an unusable file
+whose windows and lifetimes overlap, a shipment window that ended before the
+entry was made, a desk component in a committed-tier file, or any file under
+`private/` that git tracks. `load_assumptions()` raises on the same set, so an unusable file
 can never quietly cost a route.
 
 Expired and expiring entries are **reported, not refused**: the record is the
@@ -109,8 +123,10 @@ are **published policy rates**, not price estimates, and their provenance is
 recorded in the entries themselves. They are still given an expiry, because
 policy rates move and a stale one is as wrong as a stale freight.
 
-Everything else is deliberately absent: ocean freight, elevation, port costs,
-financing and quality differentials ship **empty**. The origin comparison page
-therefore opens in a blocked state on a fresh clone, naming each missing input
-and the command that supplies it. That is the intended behaviour, not an
-unfinished feature.
+Everything else is deliberately absent and, once entered, **private**: ocean
+freight, elevation, port costs, financing, quality differentials and
+crush-plant costs are written to `private/` and never committed. A fresh clone
+therefore has none, and the origin comparison page opens in a blocked state,
+naming each missing input and the command that supplies it. That is the
+intended behaviour, not an unfinished feature. Why each of those inputs is
+missing, and the command for each, is in [`private/README.md`](private/README.md).

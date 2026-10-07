@@ -28,7 +28,7 @@
 
 {% block mast_meta %}
     <div class="day">{{ masthead.day_line }}</div>
-    <div>Generated {{ generated_at }} · {{ masthead.on_schedule_count }}/{{ masthead.total_layers }} layers on schedule{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
+    <div>Generated {{ generated_at }} · {{ masthead.on_schedule_count }}/{{ masthead.total_layers }} layers on schedule{% if masthead.partial_count %} · <span class="mast-partial" title="usable partial: fresh and rendered, short of the full catalog">{{ masthead.partial_count }} partial</span>{% endif %}{% if masthead.critical_count %} · <span class="mast-critical">{{ masthead.critical_count }} data critical{{ "s" if masthead.critical_count != 1 }}</span>{% endif %}</div>
     {% if masthead.price_age %}<div>Board and FX priced from data <b>{{ masthead.price_age }}</b> old · <a href="manifest.json">latency detail</a></div>{% endif %}
     <div>Soy complex + competing crops · all prices USD/MT</div>
 {% endblock %}
