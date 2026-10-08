@@ -635,7 +635,7 @@ tr.tv-panel > td { padding: 0; }
     <thead>
       <tr>
         <th>Release</th><th>Agency</th><th>Expected</th><th class="num">Days</th>
-        <th>Cadence rule</th><th>Our newest observation</th><th>Why it matters</th>
+        <th>Schedule basis</th><th>Our newest observation</th><th>Why it matters</th>
       </tr>
     </thead>
     <tbody>
@@ -643,9 +643,9 @@ tr.tv-panel > td { padding: 0; }
       <tr>
         <td class="strong">{{ e.name }}</td>
         <td>{{ e.agency }}</td>
-        <td>{{ e.expected_date }}</td>
+        <td>{{ e.expected_date }} <span class="ptype">{{ e.confidence|replace("_", " ") }}</span></td>
         <td class="num">{{ e.days_away }}</td>
-        <td>{{ e.cadence }}</td>
+        <td>{{ e.cadence }}{% if e.schedule_url %} · <a href="{{ e.schedule_url }}">publisher calendar</a>{% endif %}</td>
         <td>{% if e.last_observed %}{{ e.last_observed }}{% if e.stale %} <span class="sev sev-warning">stale</span>{% endif %}{% else %}<span class="muted">not tracked</span>{% endif %}</td>
         <td>{{ e.what_moves }}</td>
       </tr>

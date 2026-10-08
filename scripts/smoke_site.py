@@ -86,10 +86,8 @@ def _wait_for_propagation(
     So the smoke asks the live site for the stamp it just uploaded and only
     grades what it sees once that stamp — or a newer one — is what comes back.
 
-    Returns False on timeout. The caller proceeds regardless: whatever the
-    site serves at that point is graded honestly by the promotion contract,
-    which is the failure the wait exists to avoid raising falsely, not the
-    failure it exists to hide.
+    Returns False on timeout. The caller records that failure and also grades
+    the served pages, retaining both propagation and content diagnostics.
     """
     url = base_url.rstrip("/") + "/index.html"
     deadline = clock() + timeout
@@ -100,7 +98,7 @@ def _wait_for_propagation(
             served = None
             print(f"propagation: index not readable yet ({exc})")
         if served is not None and served >= expected:
-            print(f"propagation: public index carries {served.isoformat()}")
+            print(f"propagation: public index carries {served.isoformat()}; recovered before deadline")
             return True
         if clock() >= deadline:
             print(
@@ -110,6 +108,19 @@ def _wait_for_propagation(
             )
             return False
         sleep(interval)
+
+
+def _candidate_failures(pages: dict[str, str], expected: datetime) -> list[str]:
+    """A recent prior edition must not pass as the candidate just deployed."""
+    failures = []
+    for path, html in pages.items():
+        served = _generated_at(html)
+        if served is None or served < expected:
+            failures.append(
+                f"{path}: candidate {expected.isoformat()} not visible; served "
+                f"{served.isoformat() if served else 'no stamp'}"
+            )
+    return failures
 
 
 def _chrome_binary(explicit: str | None) -> str | None:
@@ -132,7 +143,11 @@ def _viewport_failures(base_url: str, chrome: str) -> list[str]:
                 f"--window-size={width},{height}", "--dump-dom",
                 base_url.rstrip("/") + "/" + path,
             ]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            try:
+                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            except subprocess.TimeoutExpired:
+                failures.append(f"browser timed out at {width}px: {path}")
+                continue
             if result.returncode:
                 failures.append(f"browser failed at {width}px: {path}")
                 continue
@@ -227,15 +242,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.candidate and not args.url:
         parser.error("--candidate only makes sense with --url")
 
+    propagation_failures: list[str] = []
+    expected = None
     if args.url and args.candidate:
-        _wait_for_propagation(
-            args.url, _candidate_stamp(args.candidate),
+        expected = _candidate_stamp(args.candidate)
+        propagated = _wait_for_propagation(
+            args.url, expected,
             timeout=args.propagation_timeout, interval=args.propagation_interval,
         )
+        if not propagated:
+            propagation_failures.append("candidate propagation deadline exceeded; publication recovery unconfirmed")
     pages = _load_local(args.root) if args.root else _load_remote(args.url)
     assets = _available_assets(args.root, args.url)
     verdict = verify_site_candidate(pages, assets=assets)
-    failures = list(verdict.failures)
+    failures = list(verdict.failures) + propagation_failures
+    if expected is not None:
+        failures.extend(_candidate_failures(pages, expected))
     failures.extend(_publication_latency_report(pages, args.url))
 
     server = None

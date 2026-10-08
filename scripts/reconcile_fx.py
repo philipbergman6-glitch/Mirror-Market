@@ -129,6 +129,7 @@ class ReconciliationRun:
     quarantined_revision_ids: tuple[str, ...]
     unfinished_sessions: tuple[tuple[str, date], ...]
     checked_at: datetime
+    rejected_revision_ids: tuple[str, ...] = ()
     dataset_keys: tuple[str, ...] = FX_DATASET_KEYS
 
     @property
@@ -150,6 +151,7 @@ class ReconciliationRun:
             # rate is not a divergence. It is here because a cutover should not
             # be enabled on a day the ledger is holding rates back.
             "quarantined_revision_ids": list(self.quarantined_revision_ids),
+            "rejected_revision_ids": list(self.rejected_revision_ids),
             # Also reported, never graded: both paths drop an unfinished FX
             # session, so this is the two agreeing. It is the durable record
             # that they agreed for the *stated* reason.
@@ -233,6 +235,9 @@ def reconcile_once(
         session=session,
         pairs=items,
         quarantined_revision_ids=result.ingestion.quarantined_revision_ids,
+        rejected_revision_ids=tuple(sorted(
+            rid for dataset in result.ingestion.datasets for rid in dataset.rejected_revision_ids
+        )),
         unfinished_sessions=result.ingestion.unfinished_sessions,
         checked_at=checked_at,
     )
@@ -334,6 +339,9 @@ def _log_summary(run: ReconciliationRun) -> None:
             log.error("  %s %s: v1=%r trusted=%r", diff["key"], diff["field"], diff["legacy"], diff["trusted"])
     for pair, session in run.unfinished_sessions:
         log.info("FX %s: %s was an unfinished session and was priced by neither path", pair, session)
+    if run.rejected_revision_ids:
+        log.warning("Required FX: %d rejected revision(s); inspect source OHLC and quality gates",
+                    len(run.rejected_revision_ids))
     if run.quarantined_revision_ids:
         log.warning(
             "Required FX: %d rate(s) quarantined by the ledger this run — "

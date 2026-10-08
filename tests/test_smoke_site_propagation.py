@@ -89,3 +89,24 @@ def test_candidate_without_a_stamp_is_a_hard_failure(tmp_path):
     (tmp_path / "index.html").write_text(_page(None), encoding="utf-8")
     with pytest.raises(SystemExit):
         smoke_site._candidate_stamp(tmp_path)
+
+
+def test_propagation_timeout_cannot_pass_a_recent_but_old_edition(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    (tmp_path / "index.html").write_text(_page(NOW))
+    monkeypatch.setattr(smoke_site, "_wait_for_propagation", lambda *a, **k: False)
+    monkeypatch.setattr(smoke_site, "_load_remote", lambda *a: {"index.html": _page(NOW - timedelta(minutes=5))})
+    monkeypatch.setattr(smoke_site, "_available_assets", lambda *a: set())
+    monkeypatch.setattr(smoke_site, "verify_site_candidate", lambda *a, **k: SimpleNamespace(failures=()))
+    monkeypatch.setattr(smoke_site, "_publication_latency_report", lambda *a: [])
+    assert smoke_site.main(["--url", "https://example.test", "--candidate", str(tmp_path)]) == 1
+    assert "candidate" in capsys.readouterr().out
+
+
+def test_each_page_must_reach_candidate_even_if_index_has_propagated():
+    failures = smoke_site._candidate_failures({
+        "index.html": _page(NOW), "origins.html": _page(NOW - timedelta(minutes=1)),
+    }, NOW)
+    assert len(failures) == 1
+    assert "origins.html" in failures[0]
