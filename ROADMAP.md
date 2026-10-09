@@ -112,8 +112,10 @@ was authorized by the handoff.
   This improves diagnosis; it does not establish why that CDN edge stayed old.
 - [Deploy 37702094754](https://github.com/philipbergman6-glitch/Mirror-Market/actions/runs/37702094754)
   failed browser checks (desktop timeout, mobile overflow marker still pending).
-  Browser timeouts now remain named failures while other pages are checked.
-  The exact browser timing cause remains unresolved; no viewport gate was relaxed.
+  Main has since incorporated #434: stable Chrome replaces moving Chromium
+  snapshots, and browser timeouts remain named per-page failures. Those changes
+  and their regression test are preserved. Recovery from the later failure is
+  not established by that mitigation; no viewport gate was relaxed.
 - The same run's saved FX report contains ZAR close `0.060509610921144485` above
   high `0.06050887703895569` on October 7. Replaying that row reproduces rejection
   by the trusted OHLC gate and acceptance by v1. Rejected revision IDs now travel

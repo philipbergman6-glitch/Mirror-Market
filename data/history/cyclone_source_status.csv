@@ -1,3 +1,4 @@
 source,Date,checked_at,storms_listed,storms_parsed,products_absent,index_last_modified,attribution
-JTWC,2026-10-07,2026-10-07T21:21:34Z,4,4,0,"Wed, 07 Oct 2026 21:21:22 GMT","Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
-NHC,2026-10-07,2026-10-07T21:21:33Z,3,3,0,"Wed, 07 Oct 2026 20:56:00 GMT",NOAA National Hurricane Center
+JTWC,2026-10-07,2026-10-07T23:35:49Z,4,4,0,"Wed, 07 Oct 2026 23:34:21 GMT","Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,2026-10-08,2026-10-08T23:50:44Z,4,4,0,"Thu, 08 Oct 2026 23:50:23 GMT","Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+NHC,2026-10-07,2026-10-07T23:35:47Z,3,3,0,"Wed, 07 Oct 2026 21:56:00 GMT",NOAA National Hurricane Center

@@ -110,3 +110,30 @@ def test_each_page_must_reach_candidate_even_if_index_has_propagated():
     }, NOW)
     assert len(failures) == 1
     assert "origins.html" in failures[0]
+
+
+def test_a_hung_browser_is_a_named_failure_not_a_crash(monkeypatch):
+    """Deploy 2026-10-07 21:26 UTC: headless Chrome hung on index.html and the
+    smoke script died with a TimeoutExpired traceback, so the verdict named
+    nothing. A timeout is a failure *per page*; the loop continues so the
+    summary shows how many pages hang."""
+    import subprocess
+
+    calls: list[str] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command[-1])
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 30))
+
+    monkeypatch.setattr(smoke_site.subprocess, "run", fake_run)
+    monkeypatch.setattr(smoke_site, "expected_site_paths", lambda: ("index.html", "briefing.html"))
+
+    failures = smoke_site._viewport_failures("http://127.0.0.1:1", "chrome")
+
+    assert failures == [
+        "browser timed out at 1440px: index.html",
+        "browser timed out at 1440px: briefing.html",
+        "browser timed out at 390px: index.html",
+        "browser timed out at 390px: briefing.html",
+    ]
+    assert len(calls) == 4
