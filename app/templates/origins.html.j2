@@ -567,6 +567,7 @@
       <div class="caption">
         revenue {{ f.usd(lv.revenue_usd_mt, 2) }} − bean {{ f.usd(lv.bean_cost_usd_mt, 2) }}
         · {{ lv.as_of }}{% if lv.shipment_window %} · shipment {{ lv.shipment_window }}{% endif %}
+        {% for label in lv.fx_labels %} · struck at {{ label }}{% endfor %}
         · <span class="conf">{{ lv.confidence }}</span>
         {%- if lv.period_label %} · {{ lv.period_label }}{% endif %}
         {%- if lv.contract_basis %} · legs: {{ lv.contract_basis.replace('_', ' ') }}{% endif %}
