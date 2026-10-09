@@ -91,3 +91,95 @@ Bloomberg comparison in detail and reaches the same conclusion from the data
 side: the free stack cannot claim to replace the exchange-grade intraday feed
 or the end-to-end trading workflow until it buys entitlements. It is retained
 as the costing input for this track, not as a target.
+
+## Audit continuation — 2026-10-08
+
+Implemented locally after reproducing the four findings at `4a49b5b`: origin
+crush FX provenance through the rendered caption; missing commitment components
+withheld rather than summed as zero; China pace withheld until original WASDE
+release availability is stored; eligible-only trial performance with all-record
+standing and blocker reporting. Prior-FX limits and financial quality gates are
+unchanged. No push, merge, deployment, participant outreach or paid subscription
+was authorized by the handoff.
+
+### Operations evidence and remaining work
+
+- [Refresh 37800738125](https://github.com/philipbergman6-glitch/Mirror-Market/actions/runs/37800738125)
+  served the 02:49 edition throughout the 240-second wait for the 15:27 candidate.
+  The smoke now explicitly fails a propagation timeout and checks every served
+  page against the candidate stamp, even if an older edition is still inside the
+  ordinary age budget. Recovery is logged only after the served stamp catches up.
+  This improves diagnosis; it does not establish why that CDN edge stayed old.
+- [Deploy 37702094754](https://github.com/philipbergman6-glitch/Mirror-Market/actions/runs/37702094754)
+  failed browser checks (desktop timeout, mobile overflow marker still pending).
+  Main has since incorporated #434: stable Chrome replaces moving Chromium
+  snapshots, and browser timeouts remain named per-page failures. Those changes
+  and their regression test are preserved. Recovery from the later failure is
+  not established by that mitigation; no viewport gate was relaxed.
+- The same run's saved FX report contains ZAR close `0.060509610921144485` above
+  high `0.06050887703895569` on October 7. Replaying that row reproduces rejection
+  by the trusted OHLC gate and acceptance by v1. Rejected revision IDs now travel
+  into the JSON report and log. This is a real divergence, not proof of recovery
+  or grounds for enabling the trusted reader (#239 / #312).
+- COT failed all three attempts for both annual files with non-ZIP responses.
+  Its open outage is #398. Weather returned 23/24 pins after three timeouts for
+  Germany Mecklenburg-Vorpommern; #435 previously named Canada Alberta. Changing
+  missing pins undermine a catalog-rename diagnosis. The alert now calls for
+  transport/parse investigation before a catalog edit. Neither source is declared
+  repaired. The weather licence decision remains #366.
+- The deploy log also reports a forward-curve history shrink guard. That guard
+  remains intact; no CI-owned history was edited.
+
+### One private workflow before more features
+
+`tests/test_origins_page_operational.py` now has a complete synthetic route
+regression spanning cost inputs, September shipment, CIF barge delivery terms,
+quality, landed ranking, sensitivity and an explicitly separate hedge assumption.
+The five technical failure drills passed. The operating plan now removes its
+obsolete proposed August start grid and lists the actual private inputs needed.
+No local session/day JSON records were present. Real validation still requires
+#411's two independent physical buyers, participation letters, private handles,
+owned commercial inputs and their blind reads of the degraded surfaces.
+
+### Narrow change digest — scoped, not activated
+
+Keep the reserved News block under map #142 until a text-source contract is
+accepted. The first digest should contain at most three source-linked changes
+since the prior edition, limited to soy sales, applicable official policy, and
+route logistics. Candidate sources:
+
+- USDA FAS daily export-sale announcements. Resolve and validate the current
+  primary listing before building an adapter; the attempted listing URL was
+  inaccessible during this audit. Do not substitute newswire summaries or add
+  daily announcements to weekly commitments (double counting).
+- [USDA AMS Grain Transportation Report](https://www.ams.usda.gov/services/transportation-analysis/gtr),
+  already relevant to #75: factual transport changes with the issue date and
+  applicable route; never represent its context rates as a desk freight quote.
+- [FAS policy notices](https://www.federalregister.gov/agencies/foreign-agricultural-service):
+  follow the official document/PDF, record publication and effective dates
+  separately, and distinguish proposed from final measures. Scope other agencies
+  only when a specific soy route or oil-demand decision requires them.
+
+Each item must carry publisher URL, publication time (unknown when absent),
+retrieval time, affected commodity/route, concise factual change, separately
+labelled decision implication, next verification/catalyst, and uncertainty.
+Deduplicate by publisher document ID/URL, retain corrections, and distinguish
+successful empty retrieval from source failure. Summarize facts and link out;
+exclude copied articles, licensed report values and private desk content. No
+synthetic example is to become a published news item.
+
+### First-screen proposal for #406 — approval still outstanding
+
+Use the existing editorial typography and numbered-section pattern. Proposed
+reading order: edition timestamp and missing critical inputs; three dated changes
+with source links and one sentence each on the physical decision affected;
+next verified catalyst with schedule basis; route readiness and the private
+workspace link. Each change exposes its observation separately from its
+interpretation and uncertainty. The private edition may add landed sensitivity
+and a named hedge reference only when its inputs are complete. The public edition
+must keep the honest blocked state where desk inputs are absent.
+
+Acceptance with the design partner: in a timed morning read, the buyer can name
+what changed, why it matters to the cargo/basis decision, what they will check
+next, and which missing input prevents action. No first-screen layout has been
+changed; #406 and `DESIGN.md` require the buyer/design approval first.

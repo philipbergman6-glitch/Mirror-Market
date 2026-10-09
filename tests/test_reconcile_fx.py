@@ -251,3 +251,19 @@ def test_the_v1_downloader_is_restored_after_the_run() -> None:
     reconcile_once(pairs=("BRL/USD",), download=sessions([date(2026, 8, 12)]), now=AFTER_FX_CLOSE)
 
     assert yfinance_fetcher.download_bars is before
+
+
+def test_ci_zar_close_above_high_remains_diverged_and_reports_rejection():
+    """Replay the public OHLC row in CI run 37702094754; never relax the gate."""
+    day = date(2026, 10, 7)
+    bars = frame([(day, 0.060509610921144485)])
+    bars.loc[:, "Open"] = 0.06046077236533165
+    bars.loc[:, "High"] = 0.06050887703895569
+    bars.loc[:, "Low"] = 0.05978776514530182
+    run = reconcile_once(
+        pairs=("ZAR/USD",), download=downloader({ticker_for("ZAR/USD"): bars}),
+        now=datetime(2026, 10, 7, 23, 33, tzinfo=timezone.utc),
+    )
+    assert run.status == STATUS_DIVERGED
+    assert run.pairs[0].legacy_rows == 1 and run.pairs[0].trusted_rows == 0
+    assert run.to_dict()["rejected_revision_ids"]

@@ -143,7 +143,7 @@ price/currency frames from `analysis/loaders.py` (shared, cached;
 
 - `analysis/briefing/` — daily text briefing. Each section lives in its own module under `analysis/briefing/sections/` (prices, crush, economic, usda, crop_progress, wasde, export_sales, inspections, gulf_basis, transport, dce, forward_curve, eia, conab, currencies, cot, weather, psd, worldbank, emerging_markets, basis, stocks_to_use, correlations, seasonal, market_drivers, signals, freshness). `orchestrator.py` joins them; `types.py` defines the typed `BriefingData` returned by `generate_briefing_data()`; `generate_briefing()` is a thin wrapper returning `BriefingData.text`. `snapshot.py` distills `BriefingData` into structured `snapshot_json` for the briefings archive (schema v2, marked by a top-level `schema_version`; rows without it are v1) — raw numbers and components, never display labels; every block degrades to None/{} on failure.
 
-  Market drivers (#404): every driver is a `Driver` of three separable parts — the dated **observation**, a labelled **interpretation** (`Reads as:`) or the reason none is drawn (`Not interpreted:`), and a **falsifier** (`Confirm / refute:`). The type hard-fails on a driver missing either. Interpretations are gated on evidence the inputs can carry: "crowded" needs a `COT_CROWDED_PERCENTILE` extreme of the trailing net position, "China buying pace strong" needs absolute China net sales above `CHINA_PACE_STRONG_MULTIPLE` × the trailing mean *and* commitments at or ahead of the year-ago share of the WASDE export forecast; livestock price moves, biodiesel volume, weather-alert coincidence and a CONAB–USDA gap print as observations only. No template change — the briefing is pre-wrap mono text and the parts are indented sub-lines.
+  Market drivers (#404): every driver is a `Driver` of three separable parts — the dated **observation**, a labelled **interpretation** (`Reads as:`) or the reason none is drawn (`Not interpreted:`), and a **falsifier** (`Confirm / refute:`). The type hard-fails on a driver missing either. Interpretations are gated on evidence the inputs can carry: "crowded" needs a `COT_CROWDED_PERCENTILE` extreme of the trailing net position, "China buying pace strong" is currently withheld because stored WASDE reference periods do not establish historical release availability (2026-10-08 audit fix); its intended rule needs absolute China net sales above `CHINA_PACE_STRONG_MULTIPLE` × the trailing mean *and* commitments at or ahead of the year-ago share of the WASDE export forecast; livestock price moves, biodiesel volume, weather-alert coincidence and a CONAB–USDA gap print as observations only. No template change — the briefing is pre-wrap mono text and the parts are indented sub-lines.
 - `analysis/soy_analytics.py` — 9 analyst functions that produce page-shaped dicts for the dashboard: command_center, supply, demand, technicals, relative_value, risk, seasonal, forward_curve, emerging_markets.
 
 Briefing section order: 1 Data Freshness Warnings · 2 Prices · 3 Crush Spread · 4 Brazil Basis (Paranaguá FOB vs CBOT) · 4b US Gulf Basis (CIF NOLA barge) · 4c Cross-Origin FOB Board (Gulf × Paranaguá × Argentina) · 4d Transport (ocean freight + vessel lineups) · 5 Economic Context · 6 USDA Fundamentals · 7 Crop Conditions · 8 Yield Curve · 9 WASDE · 10 Stocks-to-Use · 11 Export Sales · 12 Export Inspections · 13 DCE vs CBOT · 14 Forward Curve · 15 Biofuel & Energy · 16 Brazil Crop Estimates (CONAB vs USDA) · 17 Currencies · 18 COT · 19 Weather Alerts · 20 Global Supply (PSD) · 21 World Bank Prices · 22 Emerging Markets (SA SAFEX + SAGIS pace + SAGIS S&D + CEC revisions + Brazil farmgate + India mandi vs CBOT + Nigeria) · 23 Correlations · 24 Seasonal · 25 Market Drivers · 26 Signals (by severity).
@@ -585,3 +585,23 @@ that's the bug — back it out and convert at render instead.
 | A new opportunity rule                   | Detector in `analysis/opportunities/signals.py` + its `config.OPPORTUNITY_RULES` entry (threshold, validity, question) + wire into `DETECTORS`; blockers/next action in `rules.py` |
 | A new blocker reason                     | `BlockerCode` member in `analysis/opportunities/domain.py` (+ `HARD_BLOCKERS` if it stops the trade) + the check that raises it in `rules.py` |
 | A hand-entered option quote              | A `*.yml` document in `data/reference/options/` — see its README; never code |
+
+
+### Audit continuation — 2026-10-08
+
+Origin crush legs retain their governed `FxAlignment` through serialization,
+including net margins derived from gross legs. The existing caption prints each
+prior-close label once beside the margin. No FX-date policy changed.
+
+Trial reviews compute performance only from participants at the decision floor.
+All records still contribute to participant standing, issue/backlog reporting,
+and blocker escalation. Counts in the review header describe all records;
+metric and dimension denominators describe eligible records.
+
+The workstation calendar now includes source-linked, publisher-scheduled WASDE
+(2026–27) and external-only NOPA (2026), in `analysis/futures/release_schedule.py`.
+The annual schedules were checked on 2026-10-08. Exhausted schedules are omitted
+with a renewal warning, never extrapolated. Scheduled dates, stored observation
+dates and exchange closures are separate concepts. NOPA report values remain
+unlicensed and uningested. Other calendar rows retain explicitly labelled cadence
+estimates. Source URLs travel into the existing calendar table.

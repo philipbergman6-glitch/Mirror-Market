@@ -19,7 +19,7 @@ A second, distinct rolling issue (label `ci-catalog-drift`) carries
 catalog keys it keeps missing. main.py decides the threshold and writes
 the verdict as `classifications.catalog_drift`; this script only relays
 it. A first or second partial run opens nothing — amber means transient
-until it has not been. The fix for drift is a catalog edit (a delisted
+until it has not been. Investigate transport failures before a catalog edit (a delisted
 contract, a renamed region), which is why it is not folded into the
 outage issue. Uses the gh CLI with the workflow-provided GH_TOKEN. Exits
 non-zero on gh errors; the workflow step is continue-on-error so a broken
@@ -118,8 +118,9 @@ def build_drift_body(status: dict) -> str:
     detail = status.get("usable_partial_detail") or {}
     lines = [
         "Layers have graded `usable_partial` for enough consecutive runs to "
-        "stop being transient. The fix is a catalog edit — a delisted contract, "
-        "a renamed region — not a retry:",
+        "require investigation. Check per-key transport/parse failures and whether "
+        "the missing keys change between runs. Edit the catalog only with evidence "
+        "of a delisted or renamed source; repeated timeouts do not prove catalog drift:",
         "",
     ]
     for layer in classes.get("catalog_drift", []):
