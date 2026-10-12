@@ -306,3 +306,15 @@ def test_synthetic_private_route_through_cost_ranking_sensitivity_and_hedge(db, 
     assert hedge.basis_risk_usd_per_mt_move == 10_000
     rendered = _render(view).get_text(" ", strip=True)
     assert "PRIVATE" in rendered.upper() and "FIXTURE" in rendered
+
+
+def test_an_fob_board_observed_days_apart_is_withheld_with_its_reason(db, complete):
+    """The page says *why* the FOB board is empty — never a bare 'no data'."""
+    db.execute("UPDATE gulf_bids SET report_date = '2026-08-13'")
+    db.commit()
+    view = build_view(db, today=TODAY, assumptions=complete)
+    fob = _section(_render(view), "fob")
+
+    assert "withheld" in fob.lower()
+    assert "4 days apart" in fob
+    assert "leads the next by" not in fob

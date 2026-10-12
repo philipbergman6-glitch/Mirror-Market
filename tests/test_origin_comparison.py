@@ -20,9 +20,10 @@ from analysis.origins.comparison import (
     default_window,
     fob_advantage,
     fob_board,
+    fob_board_refusal,
     select_quote,
 )
-from analysis.origins.domain import Carrier, Incoterm, ShipmentWindow
+from analysis.origins.domain import Carrier, Freshness, Incoterm, Money, ShipmentWindow
 from analysis.origins.sources import (
     offered_windows,
     parse_ams_slot,
@@ -342,3 +343,54 @@ def test_a_one_row_fob_board_publishes_no_advantage(db):
         assumptions=AssumptionSet(()),
     )
     assert fob_advantage(ranking) == (None, None)
+
+
+def _two_origin_board(db, *, second_observed: date, second_freshness=Freshness.CURRENT):
+    """The Argentine Sep row plus a cloned second origin, $5 dearer.
+
+    Building a second FOB-ready origin from the fixture would need a Gulf
+    elevation assumption; cloning the one ready row keeps the test about the
+    board's gate rather than about the waterfall.
+    """
+    from dataclasses import replace
+
+    ranking = build_ranking(
+        db, destination_key="cn_north", window=SEP, today=TODAY,
+        assumptions=AssumptionSet(()), leg_ids=("ar_up_river",),
+    )
+    (first,) = [row for row in ranking.rows if row.fob_equivalent is not None]
+    other_port = replace(first.quote.origin, key="clone", name="Clone origin")
+    second = replace(
+        first,
+        quote=replace(first.quote, origin=other_port, observation_date=second_observed),
+        fob_equivalent=Money(first.fob_equivalent.amount + 5.0),
+        freshness=second_freshness,
+    )
+    return replace(ranking, rows=(first, second))
+
+
+def test_a_two_origin_fob_board_on_one_session_ranks_and_states_the_edge(db):
+    ranking = _two_origin_board(db, second_observed=date(2026, 8, 11))
+    assert [row.quote.origin.key for row in fob_board(ranking)] == ["ar_up_river", "clone"]
+    assert fob_board_refusal(ranking) is None
+    edge, _pct = fob_advantage(ranking)
+    assert edge == pytest.approx(5.0)
+
+
+def test_a_stale_quote_never_enters_the_fob_board(db):
+    """Invariant 11: a 120-day-lookback row past its budget is a label, not a rank."""
+    ranking = _two_origin_board(
+        db, second_observed=date(2026, 8, 11), second_freshness=Freshness.STALE
+    )
+    assert "clone" not in {row.quote.origin.key for row in fob_board(ranking)}
+    assert fob_advantage(ranking) == (None, None)
+
+
+def test_fob_quotes_observed_too_far_apart_refuse_the_board(db, monkeypatch):
+    """Invariant 8: the board is one set, so the spread refuses the set, not a row."""
+    monkeypatch.setattr(config, "ORIGIN_MAX_OBSERVATION_SPREAD_DAYS", 3)
+    ranking = _two_origin_board(db, second_observed=date(2026, 8, 5))
+    assert fob_board(ranking) == ()
+    assert fob_advantage(ranking) == (None, None)
+    reason = fob_board_refusal(ranking)
+    assert reason is not None and "6 days apart" in reason

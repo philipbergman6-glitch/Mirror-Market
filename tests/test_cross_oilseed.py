@@ -281,3 +281,34 @@ def test_a_later_dated_fx_rate_is_never_used(monkeypatch):
 
     assert ovr["spread_usd_mt"] is None
     assert ovr["spread_reason_code"] == "fx_gap_exceeded"
+
+
+# ── market_drivers: the USD spread obeys one session (invariant 8) ─────
+
+def test_market_drivers_rapeseed_spread_is_struck_on_one_session(monkeypatch):
+    rapeseed = _rapeseed_df(_DATES, [9000.0, 9000.0, 9000.0, 9200.0, 9400.0, 9500.0, 9600.0])
+    _stub_market_driver_reads(monkeypatch, rapeseed)
+    enriched = {"Soybean Oil": _enriched_oil(1.0)}
+    currency_data = {"CNY/USD": _close_df(_DATES, [0.14] * len(_DATES))}
+
+    text = market_drivers.format({}, enriched, currency_data)
+
+    # 9600 × 0.14 − 45 c/lb → USD/MT, struck on the last common session
+    expected = 9600.0 * 0.14 - to_metric_tons(45.0, "Soybean Oil")
+    assert f"CZCE − CBOT {expected:+,.0f} USD/MT, struck 2026-01-13" in text
+
+
+def test_market_drivers_rapeseed_spread_withheld_across_sessions(monkeypatch):
+    """CBOT a week ahead of a dark CZCE: the weekly reading stands, the USD spread does not."""
+    rapeseed = _rapeseed_df(_DATES, [9000.0, 9000.0, 9000.0, 9200.0, 9400.0, 9500.0, 9600.0])
+    _stub_market_driver_reads(monkeypatch, rapeseed)
+    later = [f"2026-01-{d:02d}" for d in (14, 15, 16, 19, 20, 21, 22)]
+    oil = _close_df(later, [45.0] * len(later))
+    oil["weekly_pct_change"] = 1.0
+    currency_data = {"CNY/USD": _close_df(_DATES + later, [0.14] * (len(_DATES) + len(later)))}
+
+    text = market_drivers.format({}, {"Soybean Oil": oil}, currency_data)
+
+    assert "CZCE rapeseed oil outperforming soybean oil" in text
+    assert "spread withheld" in text
+    assert "CZCE − CBOT" not in text

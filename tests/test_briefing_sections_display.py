@@ -541,3 +541,73 @@ def test_dce_section_no_crush_line_with_missing_leg(patched_db: Path) -> None:
     _seed_dce(patched_db, _DCE_ROWS[:2])  # no meal leg
 
     assert "DCE board crush" not in dce.format({}, None)
+
+
+# ---------------------------------------------------------------------------
+# DCE vs CBOT premium — one session, A1 FX (invariants 7 and 8)
+# ---------------------------------------------------------------------------
+
+
+def _close_frame(rows: dict[str, float]):
+    import pandas as pd
+
+    return pd.DataFrame({"Close": list(rows.values())}, index=pd.to_datetime(list(rows)))
+
+
+def _oil_line(text: str) -> str:
+    return next(line for line in text.splitlines() if "DCE Soybean Oil:" in line)
+
+
+def test_dce_leg_converts_at_its_own_dates_rate_never_a_later_one(patched_db: Path) -> None:
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, [("DCE Soybean Oil", "2026-08-06", 8000.0)])
+    cny = _close_frame({"2026-08-06": 0.14, "2026-08-10": 0.15})  # 08-10 is after the print
+
+    line = _oil_line(dce.format({}, {"CNY/USD": cny}))
+
+    assert "1,120 USD/MT (CNY 8,000)" in line  # 8000 × 0.14, not × 0.15
+
+
+def test_dce_premium_is_struck_on_the_session_both_legs_printed(patched_db: Path) -> None:
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, [
+        ("DCE Soybean Oil", "2026-08-06", 8000.0),
+        ("DCE Soybean Oil", "2026-08-07", 9000.0),
+    ])
+    cbot = {"Soybean Oil": _close_frame({"2026-08-06": 50.0, "2026-08-07": 60.0})}
+    cny = _close_frame({"2026-08-06": 0.14, "2026-08-07": 0.14})
+
+    line = _oil_line(dce.format(cbot, {"CNY/USD": cny}))
+
+    # 9000 × 0.14 − 60 c/lb × 22.0462 = 1260 − 1322.77 = −63, struck 08-07
+    assert "premium -63 (struck 2026-08-07)" in line
+
+
+def test_dce_premium_is_withheld_when_the_legs_printed_on_different_sessions(
+    patched_db: Path,
+) -> None:
+    """A week-long DCE closure is a gap, not a premium against today's CBOT."""
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, [("DCE Soybean Oil", "2026-09-30", 8000.0)])
+    cbot = {"Soybean Oil": _close_frame({"2026-10-07": 50.0})}
+    cny = _close_frame({"2026-09-30": 0.14, "2026-10-07": 0.14})
+
+    line = _oil_line(dce.format(cbot, {"CNY/USD": cny}))
+
+    assert "premium withheld" in line
+    assert "no common session" in line
+    assert "premium -" not in line and "premium +" not in line
+
+
+def test_dce_board_crush_converts_at_the_crush_sessions_rate(patched_db: Path) -> None:
+    from analysis.briefing.sections import dce
+
+    _seed_dce(patched_db, _DCE_ROWS)
+    cny = _close_frame({"2026-08-06": 0.14, "2026-08-12": 0.20})
+
+    text = dce.format({}, {"CNY/USD": cny})
+
+    assert "DCE board crush: CNY -333/MT (-47 USD/MT)" in text

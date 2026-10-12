@@ -55,7 +55,12 @@ from analysis.origins import players as players_mod
 from analysis.origins import readiness as readiness_mod
 from analysis.origins import scenarios as scenarios_mod
 from analysis.origins.assumptions import AssumptionSet, load_assumptions
-from analysis.origins.comparison import build_ranking, fob_advantage, fob_board
+from analysis.origins.comparison import (
+    build_ranking,
+    fob_advantage,
+    fob_board,
+    fob_board_refusal,
+)
 from analysis.origins.domain import Comparability, CostComponent, OriginRanking
 from analysis.origins.landed_cost import COMPONENT_LABELS
 from analysis.origins.sources import offered_windows
@@ -321,6 +326,7 @@ def _fob(ranking: OriginRanking) -> dict:
         "excluded": excluded,
         "advantage_usd_mt": edge,
         "advantage_pct": pct,
+        "refusal": fob_board_refusal(ranking),
         "caveat": (
             "FOB-equivalent means every origin normalised to the same delivery term at "
             "its own loading port — the US Gulf bid has had its barge-to-vessel "

@@ -432,12 +432,17 @@
       ({{ '%.2f'|format(b.advantage_pct) }}%) — before any ocean leg.
     </div>
     {% endif %}
+    {% elif b.refusal %}
+    <div class="empty-state state-empty">
+      <span class="es-label">withheld</span>
+      No FOB ranking for {{ view.decision.window }}: {{ b.refusal }}.
+    </div>
     {% else %}
     <div class="empty-state state-empty">
       <span class="es-label">no data</span>
       No origin can be stated FOB-vessel for {{ view.decision.window }}: each one either
-      publishes no shipment window, is quoting a different one, or has no costed path
-      from its own delivery term to FOB vessel.
+      publishes no shipment window, is quoting a different one, has no costed path
+      from its own delivery term to FOB vessel, or is past its recency budget.
     </div>
     {% endif %}
 

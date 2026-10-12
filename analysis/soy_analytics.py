@@ -39,6 +39,8 @@ from analysis.spreads import (
     compute_brazil_basis,
     compute_crush_spread,
     compute_domestic_basis,
+    fx_close_on,
+    strike_cross_venue_spread,
 )
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
 from config import (
@@ -46,10 +48,8 @@ from config import (
     CEC_PSD_COUNTERPARTS,
     CEC_PSD_YEAR_OFFSET,
     CONAB_FARMGATE_SERIES,
-    CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS,
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
-    FX_ALIGNMENT_MAX_GAP_DAYS,
     INDIA_SOYBEAN_MSP,
     MANDI_SERIES,
     MANDI_SERIES_MH,
@@ -78,7 +78,6 @@ from pipeline.query import (
     read_weather,
 )
 from pipeline.units import convert_df_to_mt, mt_label, to_metric_tons
-from pricing.fx_alignment import align_fx
 
 logger = logging.getLogger(__name__)
 
@@ -1082,32 +1081,8 @@ def technicals_analysis() -> dict:
 def _fx_aligned(
     fx: pd.DataFrame, when: pd.Timestamp, pair: str
 ) -> tuple[float, pd.Timestamp] | None:
-    """The ``pair`` close for ``when`` under A1 (#298), with its date.
-
-    Thin adapter over :func:`pricing.fx_alignment.align_fx` — the one site
-    that applies the FX-date rule (B2 #308). ``None`` means the leg must
-    render blank with reason ``fx_gap_exceeded`` (or no prior rate at all).
-    """
-    closes = pd.Series(
-        fx["Close"].to_numpy(dtype=float),
-        index=pd.DatetimeIndex(fx.index).normalize(),
-    ).dropna()
-    closes = closes[closes > 0]
-    res = align_fx(
-        pair,
-        (
-            (ts.date(), float(v))
-            for ts, v in zip(
-                pd.DatetimeIndex(closes.index).to_pydatetime(),
-                closes.to_numpy(dtype=float),
-                strict=True,
-            )
-        ),
-        when.date(),
-    )
-    if not res.ok or res.rate is None or res.observed_on is None:
-        return None
-    return float(res.rate), pd.Timestamp(res.observed_on)
+    """The ``pair`` close for ``when`` under A1 (#298) — see :func:`analysis.spreads.fx_close_on`."""
+    return fx_close_on(fx, when, pair)
 
 
 def _cross_venue_oil_spread(
@@ -1151,37 +1126,17 @@ def _cross_venue_oil_spread(
         "spread_reason": None,
     }
 
-    common = own.index.intersection(other.index)
-    newest = max(own_last_on, other_last_on)
-    if common.empty or (newest - pd.Timestamp(common[-1])).days > CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS:
-        entry["spread_reason_code"] = "no_common_session"
-        entry["spread_reason"] = (
-            f"no common session within {CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS} days: "
-            f"soy oil last printed {_asof(own_last_on)}, {other_label} {_asof(other_last_on)}"
-        )
-        return entry
-
-    struck_on = pd.Timestamp(common[-1])
-    strike_fx = _fx_aligned(fx, struck_on, fx_pair)
-    if strike_fx is None:
-        entry["struck_on"] = _asof(struck_on)
-        entry["spread_reason_code"] = "fx_gap_exceeded"
-        entry["spread_reason"] = (
-            f"fx_gap_exceeded: no {fx_pair} close within {FX_ALIGNMENT_MAX_GAP_DAYS} days "
-            f"at or before the strike session {_asof(struck_on)}"
-        )
-        return entry
-
-    rate, fx_observed_on = strike_fx
-    own_struck = to_metric_tons(float(own.loc[struck_on]), own_commodity)
-    if own_struck is None:
-        entry["struck_on"] = _asof(struck_on)
-        entry["spread_reason_code"] = "unit_conversion_failed"
-        entry["spread_reason"] = f"{own_commodity} has no USD/MT conversion"
-        return entry
-    entry["spread_usd_mt"] = float(other.loc[struck_on]) * rate - own_struck
-    entry["struck_on"] = _asof(struck_on)
-    entry["spread_fx_observed_on"] = _asof(fx_observed_on)
+    strike = strike_cross_venue_spread(
+        own=own, own_commodity=own_commodity, own_label="soy oil",
+        other=other, other_label=other_label, fx=fx, fx_pair=fx_pair,
+    )
+    entry["spread_usd_mt"] = strike.spread_usd_mt
+    entry["struck_on"] = _asof(strike.struck_on) if strike.struck_on is not None else None
+    entry["spread_fx_observed_on"] = (
+        _asof(strike.fx_observed_on) if strike.fx_observed_on is not None else None
+    )
+    entry["spread_reason_code"] = strike.reason_code
+    entry["spread_reason"] = strike.reason
     return entry
 
 
