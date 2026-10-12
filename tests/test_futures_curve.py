@@ -173,3 +173,21 @@ def test_a_spread_across_two_sessions_says_so():
     spread = build_spread(*legs)
     assert spread.same_session is False
     assert spread.observation_date is None
+
+
+def test_a_spread_across_two_sessions_strikes_no_number():
+    """Invariant 8: the intervening move is not term structure — refuse, don't footnote."""
+    legs = [
+        quote("Soybeans", 2026, 9, 1150.25, observed=date(2026, 8, 10)),
+        quote("Soybeans", 2026, 11, 1167.75, observed=date(2026, 8, 11)),
+    ]
+    spread = build_spread(*legs)
+    assert spread.value is None
+    assert spread.usd_per_mt is None
+    assert spread.annualised_pct is None
+    assert spread.usd_per_mt_per_month is None
+    assert spread.is_carry is None
+    # The legs themselves still render: a trader still wants to see them.
+    assert spread.near_price == 1150.25 and spread.far_price == 1167.75
+    payload = spread.to_dict()
+    assert payload["value"] is None and payload["usd_per_mt"] is None

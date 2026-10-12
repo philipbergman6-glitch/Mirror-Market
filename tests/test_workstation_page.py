@@ -392,6 +392,42 @@ def test_a_curve_stitched_from_two_sessions_is_flagged_rather_than_used(empty_po
     conn.close()
 
 
+def test_a_stitched_curve_says_it_dropped_legs_and_strikes_only_one_session(empty_positions):
+    """Invariant 8 on the page: spreads use only the legs that share a session."""
+    from scripts.generate_site import _env
+
+    conn = sqlite3.connect(":memory:")
+    for ddl in schema.ALL_SCHEMAS:
+        conn.execute(ddl)
+    conn.executemany(
+        "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+        "observation_date, fetched_date) VALUES (?,?,?,?,?,?, '2026-08-18')",
+        [
+            ("Soybeans", "2026-11-01", "Nov 2026", "ZSX26.CBT", 1167.75, "2026-08-18"),
+            ("Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", 1183.00, "2026-08-18"),
+            ("Soybeans", "2027-03-01", "Mar 2027", "ZSH27.CBT", 1250.00, "2026-08-17"),
+        ],
+    )
+    conn.commit()
+    page = build_view(conn, today=AS_OF, generated_at=GENERATED, positions_dir=empty_positions)
+    curve = next(
+        r for r in section(page, "curve")["data"]["commodities"] if r["commodity"] == "Soybeans"
+    )
+    assert curve["coherent"] is False
+    assert [(sp["near"], sp["far"]) for sp in curve["spreads"]] == [("ZSX26", "ZSF27")]
+    assert all(sp["same_session"] for sp in curve["spreads"])
+
+    html = _env().get_template("workstation.html.j2").render(
+        workstation=page, root="", market_nav=[], current_page="workstation",
+        generated_at="2026-08-18 21:30",
+    )
+    text = " ".join(html.split())
+    assert "off-session legs were dropped" in text
+    assert "ZSH27 observed 2026-08-17" in text
+    assert "struck across legs that are not one session" not in text
+    conn.close()
+
+
 # ---------------------------------------------------------------------------
 # Options: the chain is still unavailable, and the hand-entered ladder works
 # ---------------------------------------------------------------------------

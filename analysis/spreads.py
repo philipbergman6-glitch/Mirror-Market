@@ -13,10 +13,18 @@ Two daily, cross-market relationships are computed here:
    premium is a future fetcher (Phase 2).
 """
 
+from dataclasses import dataclass
+
 import pandas as pd
 
-from config import CRUSH_MEAL_FACTOR, CRUSH_OIL_FACTOR
+from config import (
+    CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS,
+    CRUSH_MEAL_FACTOR,
+    CRUSH_OIL_FACTOR,
+    FX_ALIGNMENT_MAX_GAP_DAYS,
+)
 from pipeline.units import to_metric_tons
+from pricing.fx_alignment import align_fx
 
 # Metric-native crush yields, derived from the same 60-lb-bushel mass
 # balance behind the CBOT board-crush factors: ~11 lb oil + ~44 lb meal
@@ -313,3 +321,136 @@ def compute_brazil_basis(
     ).rename(columns={"domestic_usd_mt": "cepea_usd_mt", "fx_usd": "brl_usd"})
 
     return result[empty_columns]
+
+
+# ---------------------------------------------------------------------------
+# Cross-venue spreads: a CBOT leg against a home-currency leg, one session
+# ---------------------------------------------------------------------------
+def daily_close(series: pd.Series) -> pd.Series:
+    """A close series on a tz-naive, midnight-normalised, ascending DatetimeIndex.
+
+    Venues' frames arrive with different index conventions (a ``Date`` column,
+    a tz-aware provider index); two legs can only share a session once their
+    dates compare equal.
+    """
+    index = pd.DatetimeIndex(pd.to_datetime(series.index))
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    out = pd.Series(series.to_numpy(dtype=float), index=index.normalize()).dropna()
+    return out[~out.index.duplicated(keep="last")].sort_index()
+
+
+def fx_close_on(
+    fx: pd.DataFrame | None, when: pd.Timestamp, pair: str
+) -> tuple[float, pd.Timestamp] | None:
+    """The ``pair`` close a price dated ``when`` converts at under A1 (#298).
+
+    Thin adapter over :func:`pricing.fx_alignment.align_fx` — the one site that
+    applies the FX-date rule — for a ``Close``-column frame on a DatetimeIndex.
+    ``None`` means the leg renders without a USD figure: there is no close on or
+    before ``when`` inside the cap, and a later-dated rate is never used.
+    """
+    if fx is None or fx.empty or "Close" not in fx.columns:
+        return None
+    closes = pd.Series(
+        fx["Close"].to_numpy(dtype=float),
+        index=pd.DatetimeIndex(fx.index).normalize(),
+    ).dropna()
+    closes = closes[closes > 0]
+    res = align_fx(
+        pair,
+        (
+            (ts.date(), float(v))
+            for ts, v in zip(
+                pd.DatetimeIndex(closes.index).to_pydatetime(),
+                closes.to_numpy(dtype=float),
+                strict=True,
+            )
+        ),
+        pd.Timestamp(when).date(),
+    )
+    if not res.ok or res.rate is None or res.observed_on is None:
+        return None
+    return float(res.rate), pd.Timestamp(res.observed_on)
+
+
+@dataclass(frozen=True)
+class CrossVenueStrike:
+    """A home-currency leg minus a CBOT leg in USD/MT, or the reason there is none.
+
+    Exactly one of ``spread_usd_mt`` / ``reason_code`` is set. ``struck_on`` is
+    carried on an FX refusal too, so the withheld line can name the session it
+    would have used.
+    """
+
+    spread_usd_mt: float | None
+    struck_on: pd.Timestamp | None = None
+    fx_observed_on: pd.Timestamp | None = None
+    reason_code: str | None = None
+    reason: str | None = None
+
+
+def strike_cross_venue_spread(
+    *,
+    own: pd.Series,
+    own_commodity: str,
+    own_label: str,
+    other: pd.Series,
+    other_label: str,
+    fx: pd.DataFrame | None,
+    fx_pair: str,
+) -> CrossVenueStrike:
+    """``other`` (home currency per MT) minus ``own`` (CBOT native units), one session.
+
+    The spread is struck on the latest session both legs printed, no more than
+    ``CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS`` behind the newer leg, at that
+    session's A1-aligned FX (invariant 8). Each leg's own latest print is the
+    caller's to display; this function only ever subtracts like from like.
+    """
+    own = own.dropna()
+    other = other.dropna()
+    if own.empty or other.empty:
+        return CrossVenueStrike(
+            None, reason_code="leg_missing", reason=f"{own_label} or {other_label} has no print"
+        )
+    own_last_on = pd.Timestamp(own.index[-1])
+    other_last_on = pd.Timestamp(other.index[-1])
+    common = own.index.intersection(other.index)
+    newest = max(own_last_on, other_last_on)
+    if common.empty or (newest - pd.Timestamp(common[-1])).days > CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS:
+        return CrossVenueStrike(
+            None,
+            reason_code="no_common_session",
+            reason=(
+                f"no common session within {CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS} days: "
+                f"{own_label} last printed {own_last_on.strftime('%Y-%m-%d')}, "
+                f"{other_label} {other_last_on.strftime('%Y-%m-%d')}"
+            ),
+        )
+
+    struck_on = pd.Timestamp(common[-1])
+    strike_fx = fx_close_on(fx, struck_on, fx_pair)
+    if strike_fx is None:
+        return CrossVenueStrike(
+            None,
+            struck_on=struck_on,
+            reason_code="fx_gap_exceeded",
+            reason=(
+                f"fx_gap_exceeded: no {fx_pair} close within {FX_ALIGNMENT_MAX_GAP_DAYS} days "
+                f"at or before the strike session {struck_on.strftime('%Y-%m-%d')}"
+            ),
+        )
+    rate, fx_observed_on = strike_fx
+    own_struck = to_metric_tons(float(own.loc[struck_on]), own_commodity)
+    if own_struck is None:
+        return CrossVenueStrike(
+            None,
+            struck_on=struck_on,
+            reason_code="unit_conversion_failed",
+            reason=f"{own_commodity} has no USD/MT conversion",
+        )
+    return CrossVenueStrike(
+        float(other.loc[struck_on]) * rate - own_struck,
+        struck_on=struck_on,
+        fx_observed_on=fx_observed_on,
+    )

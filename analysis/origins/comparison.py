@@ -41,6 +41,7 @@ import config
 from analysis.origins.assumptions import AssumptionSet, load_assumptions
 from analysis.origins.domain import (
     Comparability,
+    Freshness,
     LandedCost,
     OriginQuote,
     OriginRanking,
@@ -189,6 +190,45 @@ def build_ranking(
     )
 
 
+def _fob_eligible(ranking: OriginRanking) -> tuple[LandedCost, ...]:
+    """Rows that can each stand on the FOB board, before the set-level spread rule.
+
+    A row's own ``comparability`` is not the gate here, because it carries
+    landed-cost verdicts (a missing freight assumption) that the FOB board
+    exists to survive. So the gate restates the three that *do* apply to an FOB
+    comparison: a costed path to FOB vessel, the requested window, and the
+    quote's own recency budget. The last one is why this function exists —
+    quotes are read back ``LOOKBACK_DAYS`` so a dark scraper stays visible, and
+    without it a four-month-old level would rank against today's.
+    """
+    return tuple(
+        row for row in ranking.rows
+        if row.fob_equivalent is not None
+        and row.freshness is Freshness.CURRENT
+        and window_verdict(row.quote, ranking.requested_window) is Comparability.COMPARABLE
+    )
+
+
+def fob_board_refusal(ranking: OriginRanking) -> str | None:
+    """Why the FOB board publishes no ranking at all, or ``None`` when it may.
+
+    The same set-level rule :func:`build_ranking` applies to the landed ranking,
+    applied to the FOB set: two origins observed further apart than
+    ``config.ORIGIN_MAX_OBSERVATION_SPREAD_DAYS`` differ by the calendar as much
+    as by the market, and dropping the oldest row would publish a board that
+    looks tighter than the data behind it.
+    """
+    spread = _observation_spread(_fob_eligible(ranking))
+    if spread is None or spread <= config.ORIGIN_MAX_OBSERVATION_SPREAD_DAYS:
+        return None
+    return (
+        f"the FOB-ready origins were observed {spread} days apart, past the "
+        f"{config.ORIGIN_MAX_OBSERVATION_SPREAD_DAYS}-day limit — over that gap the "
+        "difference between them is measuring the calendar as much as the market, "
+        "so no FOB ranking is published"
+    )
+
+
 def fob_board(ranking: OriginRanking) -> tuple[LandedCost, ...]:
     """The window-aligned FOB-vessel comparison, cheapest first.
 
@@ -202,13 +242,13 @@ def fob_board(ranking: OriginRanking) -> tuple[LandedCost, ...]:
     not equal delivered, and the freight difference between the US Gulf and
     Brazil to North China is routinely larger than the FOB spread between them.
     The page labels it as an intermediate accordingly.
+
+    Stale quotes never rank, and a set observed too far apart publishes an
+    empty board — :func:`fob_board_refusal` says why.
     """
-    eligible = [
-        row for row in ranking.rows
-        if row.fob_equivalent is not None
-        and window_verdict(row.quote, ranking.requested_window) is Comparability.COMPARABLE
-    ]
-    return tuple(sorted(eligible, key=lambda row: row.fob_equivalent.amount))  # type: ignore[union-attr]
+    if fob_board_refusal(ranking) is not None:
+        return ()
+    return tuple(sorted(_fob_eligible(ranking), key=lambda row: row.fob_equivalent.amount))  # type: ignore[union-attr]
 
 
 def fob_advantage(ranking: OriginRanking) -> tuple[float | None, float | None]:
@@ -243,5 +283,6 @@ __all__ = [
     "destinations",
     "fob_advantage",
     "fob_board",
+    "fob_board_refusal",
     "select_quote",
 ]

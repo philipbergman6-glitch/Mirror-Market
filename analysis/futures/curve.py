@@ -15,9 +15,11 @@ Three deliberate refusals:
 
 **An incoherent curve is not analysed.** If the legs are not one session, the
 spreads between them mix term structure with the intervening move. The
-analysis is still produced — a trader still wants to see the legs — but it is
-stamped ``coherent=False`` and every spread carries ``same_session=False``,
-which the page renders as a refusal rather than a footnote.
+provider keeps only the legs on the newest session and stamps the curve
+``coherent=False`` with the dropped legs named, so every spread here is struck
+on that one session. ``build_spread`` refuses on its own as well (invariant
+8): legs from two sessions give ``value``/``usd_per_mt`` of None, never a
+number with a footnote.
 
 **Carry is annualised on business days between the two contracts' last trade
 dates, not on their delivery-month labels.** Nov→Jan is not "two months" of
@@ -88,14 +90,17 @@ class CalendarSpread:
     and ``usd_per_mt`` is the same number for a physical trader who thinks in
     tonnes. Both are carried because both are used, and deriving one from the
     other at the render site is how they drift.
+
+    Across two sessions every struck figure is None (invariant 8); both leg
+    prices are still carried so the reader sees what was refused.
     """
 
     near: NamedContract
     far: NamedContract
     near_price: float
     far_price: float
-    value: float                    # far - near, native units
-    usd_per_mt: float               # far - near, USD/MT
+    value: float | None             # far - near, native units; None across sessions
+    usd_per_mt: float | None        # far - near, USD/MT; None across sessions
     same_session: bool
     observation_date: date | None
     calendar_months: int
@@ -104,9 +109,12 @@ class CalendarSpread:
     usd_per_mt_per_month: float | None
 
     @property
-    def is_carry(self) -> bool:
-        """True when the far month is above the near — the market pays to store."""
-        return self.value > 0
+    def is_carry(self) -> bool | None:
+        """True when the far month is above the near — the market pays to store.
+
+        None when no spread was struck: a refused number has no sign.
+        """
+        return None if self.value is None else self.value > 0
 
     @property
     def label(self) -> str:
@@ -125,8 +133,8 @@ class CalendarSpread:
             "label": self.label,
             "near_price": self.near_price,
             "far_price": self.far_price,
-            "value": round(self.value, 4),
-            "usd_per_mt": round(self.usd_per_mt, 3),
+            "value": None if self.value is None else round(self.value, 4),
+            "usd_per_mt": None if self.usd_per_mt is None else round(self.usd_per_mt, 3),
             "same_session": self.same_session,
             "observation_date": self.observation_date.isoformat() if self.observation_date else None,
             "calendar_months": self.calendar_months,
@@ -303,8 +311,12 @@ def build_spread(near: ContractQuote, far: ContractQuote) -> CalendarSpread:
     give a number, and it would be wrong by up to a fortnight either way.
     """
     spec = near.contract.spec
-    value = far.price - near.price
-    usd_per_mt = spec.native_to_usd_per_mt(far.price) - spec.native_to_usd_per_mt(near.price)
+    same_session = near.observation_date == far.observation_date
+    value: float | None = None
+    usd_per_mt: float | None = None
+    if same_session:
+        value = far.price - near.price
+        usd_per_mt = spec.native_to_usd_per_mt(far.price) - spec.native_to_usd_per_mt(near.price)
     months = _calendar_months(near.contract, far.contract)
 
     bdays: int | None = None
@@ -312,7 +324,7 @@ def build_spread(near: ContractQuote, far: ContractQuote) -> CalendarSpread:
     per_month: float | None = None
     if near.contract.last_trade and far.contract.last_trade:
         bdays = business_days_between(near.contract.last_trade, far.contract.last_trade)
-        if bdays > 0 and near.price != 0:
+        if value is not None and usd_per_mt is not None and bdays > 0 and near.price != 0:
             years = bdays / BUSINESS_DAYS_PER_YEAR
             annualised = (value / abs(near.price)) / years * 100.0
             per_month = usd_per_mt / (bdays / (BUSINESS_DAYS_PER_YEAR / 12))
@@ -324,8 +336,8 @@ def build_spread(near: ContractQuote, far: ContractQuote) -> CalendarSpread:
         far_price=far.price,
         value=value,
         usd_per_mt=usd_per_mt,
-        same_session=near.observation_date == far.observation_date,
-        observation_date=near.observation_date if near.observation_date == far.observation_date else None,
+        same_session=same_session,
+        observation_date=near.observation_date if same_session else None,
         calendar_months=months,
         business_days=bdays,
         annualised_pct=annualised,
@@ -453,12 +465,21 @@ def build_histories(
         points.sort()
 
         near_now, far_now = current.leg(near_symbol), current.leg(far_symbol)
-        current_value = (far_now.price - near_now.price) if near_now and far_now else None
+        one_session = (
+            near_now is not None and far_now is not None
+            and near_now.observation_date == far_now.observation_date
+        )
+        current_value = (
+            far_now.price - near_now.price  # type: ignore[union-attr]
+            if one_session else None
+        )
         values = [value for _, value in points]
 
         percentile: float | None = None
         withheld = ""
-        if current_value is None:
+        if near_now is not None and far_now is not None and not one_session:
+            withheld = "legs are not one session — no current value is struck"
+        elif current_value is None:
             withheld = "no current value for this spread"
         elif len(values) < MIN_HISTORY_FOR_PERCENTILE:
             withheld = (

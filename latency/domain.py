@@ -682,6 +682,49 @@ class LayerMeasurement:
         return Verdict.MEETS
 
 
+def _newest_session_at(clock: ObservationClock, at: datetime) -> date | None:
+    """The newest session whose close is at or before ``at``.
+
+    The venue calendar where one is declared; otherwise every weekday is
+    taken as a session — which makes an undeclared holiday look like a missed
+    bar, the conservative direction for anything that would excuse a breach.
+    """
+    if clock.venue is not None:
+        return clock.latest_completed_session(at)
+    if clock.timezone is None or clock.close_local is None:
+        return None
+    day = clock.local_date(at)
+    assert day is not None
+    for _ in range(7):
+        close = clock.instant(day)
+        if day.weekday() < 5 and close is not None and close <= at:
+            return day
+        day -= timedelta(days=1)
+    return None
+
+
+def started_after_objective(
+    spec: LayerLatency, observed_at: datetime | None, fetch_started_at: datetime | None
+) -> bool:
+    """True when the fetch began after the acquisition objective had lapsed.
+
+    That is a breach no run could have avoided once it started — GitHub's
+    scheduler start delay, not the data and not our pipeline. Proven only
+    when the held bar is the newest session as of the fetch start (a stale
+    upstream bar is a data problem and stays a breach) and the clock has a
+    session close to measure from. Any missing stamp means not proven.
+    """
+    if observed_at is None or fetch_started_at is None:
+        return False
+    clock = spec.clock
+    if clock.granularity is not Granularity.SESSION_CLOSE:
+        return False
+    newest = _newest_session_at(clock, fetch_started_at)
+    if newest is None or clock.local_date(observed_at) != newest:
+        return False
+    return fetch_started_at - observed_at > spec.objective.acquisition_target
+
+
 def age_at(measurement: LayerMeasurement, now: datetime) -> timedelta | None:
     """How old the newest observation is *right now*, as a reader sees it.
 

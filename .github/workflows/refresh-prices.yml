@@ -123,6 +123,8 @@ jobs:
       layers: ${{ steps.slot.outputs.layers }}
       gate: ${{ steps.slot.outputs.gate }}
       skip: ${{ steps.slot.outputs.skip }}
+      late_start_ok: ${{ steps.slot.outputs.late_start_ok }}
+      backstop: ${{ steps.slot.outputs.backstop }}
     steps:
       # Which layers this slot fetches, and which layers its latency gate is
       # allowed to fail on. The gate is scoped to the layers the run just
@@ -141,10 +143,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           SKIP=false
+          LATE_START_OK=false
+          BACKSTOP=false
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             LAYERS="${{ inputs.layers }}"
           elif [[ "${{ github.event.schedule }}" == "0 8 * * 1-5" ]]; then
             LAYERS="dce"
+            BACKSTOP=true
             ON_TIME=$(gh run list --workflow refresh-prices.yml \
               --event workflow_dispatch --status success \
               --created ">=$(date -u +%F)" --limit 50 --json displayTitle \
@@ -171,11 +176,25 @@ jobs:
             GATE=""
           else
             GATE="prices,currencies,forward_curve"
+            # The 20:07 slot is the one whose start delay alone decides the
+            # board verdict: +1h54 to +3h35 measured, against a fetch that has
+            # to land by 00:15 UTC. Runs that started after that deadline
+            # (4 of 15 reds, 2026-09-28 to 2026-10-09) were the scheduler, not
+            # the data — a late start on the newest bar is reported as LATE
+            # START, never silently; a stale bar or a pipeline breach still
+            # fails. The 08:00 backstop never opts in: its red is the alarm.
+            # Nor does a manual dispatch: a person starting it late is not
+            # the scheduler.
+            if [[ "${{ github.event.schedule }}" == "7 20 * * 1-5" ]]; then
+              LATE_START_OK=true
+            fi
           fi
           {
             echo "layers=$LAYERS"
             echo "gate=$GATE"
             echo "skip=$SKIP"
+            echo "late_start_ok=$LATE_START_OK"
+            echo "backstop=$BACKSTOP"
           } >> "$GITHUB_OUTPUT"
           echo "fetching: ${LAYERS:-default (prices,currencies,forward_curve)} | gating on: $GATE | skip: $SKIP"
 
@@ -285,6 +304,16 @@ jobs:
       - name: Gate the published edition's latency
         run: |
           GATE="${{ needs.slot.outputs.gate }}"
+          if [[ "${{ needs.slot.outputs.backstop }}" == "true" ]]; then
+            # The backstop only fetches when no dispatched dce run succeeded
+            # today, so reaching here means cron-job.org did not fire. Name
+            # that cause before the latency breach it guarantees.
+            echo "::error title=DCE trigger did not fire::No successful 'Refresh Prices (dce)' dispatch had run today when this backstop started ($(date -u +%H:%M) UTC; the trigger is due 10:30) — check the cron-job.org job (enabled? token valid?). The dce breach below is the consequence, not the cause."
+          fi
+          LATE_START=""
+          if [[ "${{ needs.slot.outputs.late_start_ok }}" == "true" ]]; then
+            LATE_START="--late-start-is-not-a-breach"
+          fi
           python scripts/latency_report.py \
             --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
-            ${GATE:+--fail-on-breach-layers "$GATE"}
+            ${GATE:+--fail-on-breach-layers "$GATE"} $LATE_START

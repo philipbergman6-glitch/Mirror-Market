@@ -31,6 +31,7 @@ from analysis.briefing.sections.export_sales import (
     soy_marketing_year,
 )
 from analysis.forward_curve import analyze_curve
+from analysis.spreads import daily_close, strike_cross_venue_spread
 from analysis.weather_alerts import (
     RULE_HEAT,
     RULE_HEAVY_RAIN,
@@ -58,7 +59,6 @@ from pipeline.query import (
     read_wasde,
     read_weather,
 )
-from pipeline.units import to_metric_tons
 
 # Weather rules that can put a premium on the crop this week.
 _PREMIUM_RULES = frozenset({RULE_HEAT, RULE_POD_FILL_HEAT, RULE_HEAVY_RAIN})
@@ -529,22 +529,23 @@ def _palm_driver(enriched: dict[str, pd.DataFrame]) -> Driver | None:
 
 
 def _rapeseed_driver(
-    enriched: dict[str, pd.DataFrame], currency_data: dict[str, pd.DataFrame]
+    enriched: dict[str, pd.DataFrame],
+    currency_data: dict[str, pd.DataFrame],
+    price_data: dict[str, pd.DataFrame],
 ) -> Driver | None:
-    # Cross-oilseed: CBOT soy oil vs CZCE rapeseed oil (USD/MT). ICE canola
-    # (RS=F) is dead on yfinance, so CZCE is the daily rapeseed leg —
-    # CNY/MT converted at CNY/USD spot.
+    # Cross-oilseed: CBOT soy oil vs CZCE rapeseed oil. ICE canola (RS=F) is
+    # dead on yfinance, so CZCE is the daily rapeseed leg. The weekly reading
+    # compares each leg's own change; the USD spread is one session's number,
+    # struck where both venues printed at that session's A1 rate (#298), or
+    # withheld with the reason (invariant 8). The strike reads the RAW
+    # provider closes: ``enriched`` may be the ratio-adjusted series, whose
+    # pre-roll sessions are scaled levels that never printed (invariant 2).
     if "Soybean Oil" not in enriched or enriched["Soybean Oil"].empty:
         return None
-    cny_usd = None
     cny_df = currency_data.get("CNY/USD") if currency_data else None
-    if cny_df is not None and not cny_df.empty:
-        rate = cny_df["Close"].iloc[-1]
-        if pd.notna(rate) and rate > 0:
-            cny_usd = float(rate)
     rapeseed = read_dce_futures("CZCE Rapeseed Oil")
     oil_chg = _latest_weekly(enriched["Soybean Oil"])
-    if cny_usd is None or len(rapeseed) < 6 or oil_chg is None:
+    if cny_df is None or cny_df.empty or len(rapeseed) < 6 or oil_chg is None:
         return None
     rapeseed = rapeseed.sort_values("Date")
     rape_chg = (
@@ -552,11 +553,26 @@ def _rapeseed_driver(
     ) * 100
     if pd.isna(rape_chg):
         return None
-    rape_usd = float(rapeseed["Close"].iloc[-1]) * cny_usd
-    soy_oil_usd = to_metric_tons(enriched["Soybean Oil"]["Close"].iloc[-1], "Soybean Oil")
-    spread_txt = ""
-    if soy_oil_usd is not None:
-        spread_txt = f" (CZCE {rape_usd:,.0f} vs CBOT {soy_oil_usd:,.0f} USD/MT)"
+    raw_oil = price_data.get("Soybean Oil")
+    strike = strike_cross_venue_spread(
+        own=(
+            daily_close(raw_oil["Close"]) if raw_oil is not None and not raw_oil.empty
+            else pd.Series(dtype=float)
+        ),
+        own_commodity="Soybean Oil",
+        own_label="CBOT soy oil",
+        other=daily_close(rapeseed.set_index("Date")["Close"]),
+        other_label="CZCE rapeseed oil",
+        fx=cny_df,
+        fx_pair="CNY/USD",
+    )
+    if strike.spread_usd_mt is not None and strike.struck_on is not None:
+        spread_txt = (
+            f" (CZCE − CBOT {strike.spread_usd_mt:+,.0f} USD/MT, "
+            f"struck {strike.struck_on.strftime('%Y-%m-%d')})"
+        )
+    else:
+        spread_txt = f" (USD spread withheld — {strike.reason})"
     return _oil_spread_driver(
         "CZCE rapeseed oil", float(rape_chg), "soybean oil", oil_chg,
         enriched["Soybean Oil"], spread_txt,
@@ -677,7 +693,7 @@ def format(  # noqa: A001
     palm = _palm_driver(enriched)
     if palm:
         drivers.append(palm)
-    rapeseed = _rapeseed_driver(enriched, currency_data or {})
+    rapeseed = _rapeseed_driver(enriched, currency_data or {}, price_data or {})
     if rapeseed:
         drivers.append(rapeseed)
     for maybe in (_biodiesel_driver(), _conab_driver(), _dollar_driver()):

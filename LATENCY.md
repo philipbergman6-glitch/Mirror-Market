@@ -212,6 +212,24 @@ past settlement-plus-six-hours by construction, so its gate could never be
 green and was red every night after a deploy that had succeeded. The report
 still prints for that slot; only the exit code is ungated.
 
+**A late start is reported, not failed — on the 20:07 slot only** (2026-10-12).
+Four of the fifteen reds from 2026-09-28 to 2026-10-09 were the 20:07 slot
+starting at 00:16–01:16 UTC: past settlement-plus-six-hours before a byte was
+fetched, on the right bar, after a deploy that had succeeded. That slot — the cron, never a manual dispatch — passes
+`--late-start-is-not-a-breach`, under which a gated breach prints `LATE START`
+instead of failing when all of these hold: the held bar is the newest session
+as of the fetch start (`latency.domain.started_after_objective` — a stale
+upstream bar is still a breach), the fetch began after the acquisition target
+had lapsed, the clock has a session close to measure from, and our own
+pipeline leg did not breach. (In CI that last condition is vacuous: the gate
+reads the published manifest, which is written before its own deploy and so
+carries the pipeline leg as `unknown`. The first two conditions carry the
+weight.) The edition *was* late; the line says so and
+names the cause. The 08:00 DCE backstop never opts in: it fetches only when no
+dispatched `Refresh Prices (dce)` run succeeded that day, so its red is the
+alarm that the cron-job.org trigger did not fire, and the gate step now says
+that first in an `::error` annotation.
+
 **The post-deploy smoke waits for the CDN.** `deploy-pages` reports done
 before GitHub's CDN serves the new edition everywhere: on 2026-09-17 the
 public index still carried the previous night's stamp 37 s after the deploy

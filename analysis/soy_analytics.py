@@ -31,14 +31,17 @@ import pandas as pd
 from analysis import weather_alerts
 from analysis.crop_year import psd_year_for_crop_year, psd_year_label
 from analysis.forward_curve import analyze_curve, calendar_spread
+from analysis.futures.domain import contracts_from
 from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal, monthly_seasonal
-from analysis.signals import detect_all_signals, suppress_near_roll_signals
+from analysis.signals import detect_all_signals, is_near_roll, suppress_near_roll_signals
 from analysis.spreads import (
     compute_brazil_basis,
     compute_crush_spread,
     compute_domestic_basis,
+    fx_close_on,
+    strike_cross_venue_spread,
 )
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
 from config import (
@@ -46,10 +49,8 @@ from config import (
     CEC_PSD_COUNTERPARTS,
     CEC_PSD_YEAR_OFFSET,
     CONAB_FARMGATE_SERIES,
-    CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS,
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
-    FX_ALIGNMENT_MAX_GAP_DAYS,
     INDIA_SOYBEAN_MSP,
     MANDI_SERIES,
     MANDI_SERIES_MH,
@@ -78,7 +79,6 @@ from pipeline.query import (
     read_weather,
 )
 from pipeline.units import convert_df_to_mt, mt_label, to_metric_tons
-from pricing.fx_alignment import align_fx
 
 logger = logging.getLogger(__name__)
 
@@ -594,6 +594,67 @@ def _official_estimate_vs_psd(
 # Analyst 1: Command Center — the top-level snapshot
 # ---------------------------------------------------------------------------
 
+_CRUSH_LEGS = ("Soybeans", "Soybean Meal", "Soybean Oil")
+
+
+def front_month_crush(
+    beans: pd.DataFrame, oil: pd.DataFrame, meal: pd.DataFrame
+) -> dict[str, Any]:
+    """The continuous front-month board crush, with the months it is struck on.
+
+    All three legs are one session (``compute_crush_spread`` inner-joins on
+    date). They are not always one *delivery month*: beans list no October or
+    December, so from mid-September to mid-December ZS=F is a different month
+    from ZM=F/ZL=F and the number embeds a calendar spread. The figure and its
+    session date stay — the site promotion probe reads that date — but the
+    profitable/negative verdict is withheld whenever the months differ or any
+    leg is within three sessions of its roll, where the continuous series may
+    not yet have moved to the month the calendar says.
+    """
+    spread = compute_crush_spread(beans, oil, meal)
+    if spread.empty:
+        return {"available": False}
+    latest_cents = spread.iloc[-1]["crush_spread"]
+    struck_raw = spread.iloc[-1].get("Date")
+    if struck_raw is None or pd.isna(struck_raw):
+        # The months are read off the strike date; without it they cannot be.
+        raise ValueError("crush spread's latest row carries no Date")
+    struck = pd.Timestamp(struck_raw)
+    contracts = {
+        leg: contracts_from(leg, struck.date(), count=1)[0].symbol for leg in _CRUSH_LEGS
+    }
+    months_aligned = len({symbol[2:] for symbol in contracts.values()}) == 1
+    near_roll = any(is_near_roll(struck, leg) for leg in _CRUSH_LEGS)
+
+    withheld = ""
+    if not months_aligned:
+        withheld = (
+            "mixed delivery months ("
+            + " / ".join(contracts[leg] for leg in _CRUSH_LEGS)
+            + ") — the figure embeds a calendar spread, so no margin verdict"
+        )
+    elif near_roll:
+        withheld = "within three sessions of a contract roll — the front month is uncertain"
+
+    info: dict[str, Any] = {
+        "available": True,
+        "as_of": _asof(spread.iloc[-1].get("Date")),
+        # Crush spread is in cents/bu; same conversion as soybeans.
+        "value_usd_mt": to_metric_tons(latest_cents, "Soybeans"),
+        "value_dollars_bu": latest_cents / 100,
+        "contracts": contracts,
+        "months_aligned": months_aligned,
+        "profitable": None if withheld else bool(latest_cents > 0),
+        "verdict_withheld": withheld,
+        "spread_series": spread,
+    }
+    if len(spread) >= 6:
+        prev_cents = spread.iloc[-6]["crush_spread"]
+        info["trend"] = "widening" if latest_cents > prev_cents else "narrowing"
+        info["weekly_chg"] = latest_cents - prev_cents
+    return info
+
+
 def command_center() -> dict:
     """
     Build the command center snapshot — everything a trader glances at first.
@@ -672,24 +733,7 @@ def command_center() -> dict:
         and not beans.empty and not oil.empty and not meal.empty
     ):
         try:
-            spread = compute_crush_spread(beans, oil, meal)
-            if not spread.empty:
-                latest_cents = spread.iloc[-1]["crush_spread"]
-                # Convert crush spread to USD/MT
-                # Crush spread is in cents/bu; same conversion as soybeans
-                crush_mt = to_metric_tons(latest_cents, "Soybeans")
-                crush_info = {
-                    "available": True,
-                    "as_of": _asof(spread.iloc[-1].get("Date")),
-                    "value_usd_mt": crush_mt,
-                    "value_dollars_bu": latest_cents / 100,
-                    "profitable": latest_cents > 0,
-                    "spread_series": spread,
-                }
-                if len(spread) >= 6:
-                    prev_cents = spread.iloc[-6]["crush_spread"]
-                    crush_info["trend"] = "widening" if latest_cents > prev_cents else "narrowing"
-                    crush_info["weekly_chg"] = latest_cents - prev_cents
+            crush_info = front_month_crush(beans, oil, meal)
         except Exception:
             logger.warning("Command-center crush computation failed", exc_info=True)
 
@@ -1082,32 +1126,8 @@ def technicals_analysis() -> dict:
 def _fx_aligned(
     fx: pd.DataFrame, when: pd.Timestamp, pair: str
 ) -> tuple[float, pd.Timestamp] | None:
-    """The ``pair`` close for ``when`` under A1 (#298), with its date.
-
-    Thin adapter over :func:`pricing.fx_alignment.align_fx` — the one site
-    that applies the FX-date rule (B2 #308). ``None`` means the leg must
-    render blank with reason ``fx_gap_exceeded`` (or no prior rate at all).
-    """
-    closes = pd.Series(
-        fx["Close"].to_numpy(dtype=float),
-        index=pd.DatetimeIndex(fx.index).normalize(),
-    ).dropna()
-    closes = closes[closes > 0]
-    res = align_fx(
-        pair,
-        (
-            (ts.date(), float(v))
-            for ts, v in zip(
-                pd.DatetimeIndex(closes.index).to_pydatetime(),
-                closes.to_numpy(dtype=float),
-                strict=True,
-            )
-        ),
-        when.date(),
-    )
-    if not res.ok or res.rate is None or res.observed_on is None:
-        return None
-    return float(res.rate), pd.Timestamp(res.observed_on)
+    """The ``pair`` close for ``when`` under A1 (#298) — see :func:`analysis.spreads.fx_close_on`."""
+    return fx_close_on(fx, when, pair)
 
 
 def _cross_venue_oil_spread(
@@ -1151,37 +1171,17 @@ def _cross_venue_oil_spread(
         "spread_reason": None,
     }
 
-    common = own.index.intersection(other.index)
-    newest = max(own_last_on, other_last_on)
-    if common.empty or (newest - pd.Timestamp(common[-1])).days > CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS:
-        entry["spread_reason_code"] = "no_common_session"
-        entry["spread_reason"] = (
-            f"no common session within {CROSS_VENUE_SPREAD_MAX_SESSION_LAG_DAYS} days: "
-            f"soy oil last printed {_asof(own_last_on)}, {other_label} {_asof(other_last_on)}"
-        )
-        return entry
-
-    struck_on = pd.Timestamp(common[-1])
-    strike_fx = _fx_aligned(fx, struck_on, fx_pair)
-    if strike_fx is None:
-        entry["struck_on"] = _asof(struck_on)
-        entry["spread_reason_code"] = "fx_gap_exceeded"
-        entry["spread_reason"] = (
-            f"fx_gap_exceeded: no {fx_pair} close within {FX_ALIGNMENT_MAX_GAP_DAYS} days "
-            f"at or before the strike session {_asof(struck_on)}"
-        )
-        return entry
-
-    rate, fx_observed_on = strike_fx
-    own_struck = to_metric_tons(float(own.loc[struck_on]), own_commodity)
-    if own_struck is None:
-        entry["struck_on"] = _asof(struck_on)
-        entry["spread_reason_code"] = "unit_conversion_failed"
-        entry["spread_reason"] = f"{own_commodity} has no USD/MT conversion"
-        return entry
-    entry["spread_usd_mt"] = float(other.loc[struck_on]) * rate - own_struck
-    entry["struck_on"] = _asof(struck_on)
-    entry["spread_fx_observed_on"] = _asof(fx_observed_on)
+    strike = strike_cross_venue_spread(
+        own=own, own_commodity=own_commodity, own_label="soy oil",
+        other=other, other_label=other_label, fx=fx, fx_pair=fx_pair,
+    )
+    entry["spread_usd_mt"] = strike.spread_usd_mt
+    entry["struck_on"] = _asof(strike.struck_on) if strike.struck_on is not None else None
+    entry["spread_fx_observed_on"] = (
+        _asof(strike.fx_observed_on) if strike.fx_observed_on is not None else None
+    )
+    entry["spread_reason_code"] = strike.reason_code
+    entry["spread_reason"] = strike.reason
     return entry
 
 

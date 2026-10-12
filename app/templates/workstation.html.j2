@@ -290,7 +290,9 @@ tr.tv-panel > td { padding: 0; }
     <div class="spec-line">{{ c.implication }}</div>
     {% if not c.coherent %}
     <div class="incoherent">
-      Spreads below are struck across legs that are not one session — {{ c.coherence_note }}
+      Not every contract month printed on one session, so the off-session legs were
+      dropped — {{ c.coherence_note }}. The spreads and structure below use only the
+      legs that share one session.
     </div>
     {% endif %}
     <div class="table-scroll">
@@ -308,10 +310,10 @@ tr.tv-panel > td { padding: 0; }
       {% set hist = (c.histories | selectattr('symbols', 'equalto', sp.near ~ '-' ~ sp.far) | list | first) %}
         <tr>
           <td class="sym">{{ sp.near }}–{{ sp.far }}</td>
-          <td class="num">{{ '{:+,.2f}'.format(sp.value) }}</td>
-          <td class="num">{{ '{:+,.2f}'.format(sp.usd_per_mt) }}</td>
+          <td class="num">{% if sp.value is none %}<span class="muted">withheld</span>{% else %}{{ '{:+,.2f}'.format(sp.value) }}{% endif %}</td>
+          <td class="num">{% if sp.usd_per_mt is none %}<span class="muted">withheld</span>{% else %}{{ '{:+,.2f}'.format(sp.usd_per_mt) }}{% endif %}</td>
           <td class="num">{% if sp.usd_per_mt_per_month is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.2f}'.format(sp.usd_per_mt_per_month) }}{% endif %}</td>
-          <td class="num">{% if sp.annualised_pct is none %}<span class="muted">expiry rule not encoded</span>{% else %}{{ '{:+.2f}'.format(sp.annualised_pct) }}%{% endif %}</td>
+          <td class="num">{% if sp.annualised_pct is none and not sp.same_session %}<span class="muted">withheld</span>{% elif sp.annualised_pct is none %}<span class="muted">expiry rule not encoded</span>{% else %}{{ '{:+.2f}'.format(sp.annualised_pct) }}%{% endif %}</td>
           <td class="num">{{ sp.business_days if sp.business_days is not none else '—' }}</td>
           <td>{% if sp.same_session %}{{ sp.observation_date }}{% else %}<span class="down">no</span>{% endif %}</td>
           <td class="num">{% if hist and hist.percentile is not none %}{{ '{:.0f}'.format(hist.percentile) }}{% else %}<span class="muted">withheld</span>{% endif %}</td>
