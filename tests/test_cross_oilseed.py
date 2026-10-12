@@ -121,7 +121,8 @@ def test_market_drivers_rapeseed_outperformance_fires(monkeypatch):
     enriched = {"Soybean Oil": _enriched_oil(1.0)}
     currency_data = {"CNY/USD": _close_df(_DATES, [0.14] * len(_DATES))}
 
-    text = market_drivers.format({}, enriched, currency_data)
+    raw = {"Soybean Oil": _close_df(_DATES, [45.0] * len(_DATES))}
+    text = market_drivers.format(raw, enriched, currency_data)
 
     assert "CZCE rapeseed oil outperforming soybean oil" in text
     assert "USD/MT" in text
@@ -291,7 +292,8 @@ def test_market_drivers_rapeseed_spread_is_struck_on_one_session(monkeypatch):
     enriched = {"Soybean Oil": _enriched_oil(1.0)}
     currency_data = {"CNY/USD": _close_df(_DATES, [0.14] * len(_DATES))}
 
-    text = market_drivers.format({}, enriched, currency_data)
+    raw = {"Soybean Oil": _close_df(_DATES, [45.0] * len(_DATES))}
+    text = market_drivers.format(raw, enriched, currency_data)
 
     # 9600 × 0.14 − 45 c/lb → USD/MT, struck on the last common session
     expected = 9600.0 * 0.14 - to_metric_tons(45.0, "Soybean Oil")
@@ -307,8 +309,23 @@ def test_market_drivers_rapeseed_spread_withheld_across_sessions(monkeypatch):
     oil["weekly_pct_change"] = 1.0
     currency_data = {"CNY/USD": _close_df(_DATES + later, [0.14] * (len(_DATES) + len(later)))}
 
-    text = market_drivers.format({}, {"Soybean Oil": oil}, currency_data)
+    text = market_drivers.format({"Soybean Oil": oil[["Close"]]}, {"Soybean Oil": oil}, currency_data)
 
     assert "CZCE rapeseed oil outperforming soybean oil" in text
     assert "spread withheld" in text
     assert "CZCE − CBOT" not in text
+
+
+def test_market_drivers_rapeseed_spread_strikes_the_raw_close_not_the_adjusted_one(monkeypatch):
+    """A ratio-adjusted pre-roll level never printed; the strike must not use it."""
+    rapeseed = _rapeseed_df(_DATES, [9000.0, 9000.0, 9000.0, 9200.0, 9400.0, 9500.0, 9600.0])
+    _stub_market_driver_reads(monkeypatch, rapeseed)
+    adjusted = _enriched_oil(1.0)
+    adjusted["Close"] = 90.0  # a scaled level, not a print
+    raw = {"Soybean Oil": _close_df(_DATES, [45.0] * len(_DATES))}
+    currency_data = {"CNY/USD": _close_df(_DATES, [0.14] * len(_DATES))}
+
+    text = market_drivers.format(raw, {"Soybean Oil": adjusted}, currency_data)
+
+    expected = 9600.0 * 0.14 - to_metric_tons(45.0, "Soybean Oil")
+    assert f"CZCE − CBOT {expected:+,.0f} USD/MT" in text

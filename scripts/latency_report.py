@@ -198,10 +198,12 @@ def main(argv: list[str] | None = None) -> int:
                 for layer in sorted(late):
                     # Said out loud, never silent: the edition WAS late; it is
                     # the cause, not the fact, that this run cannot change.
+                    # stderr, beside BREACH: stdout may be --json.
                     print(
                         f"LATE START: {layer} — the fetch began after its objective "
-                        "had lapsed on the newest bar; GitHub's scheduler start "
-                        "delay, not the data or the pipeline"
+                        "had lapsed on the newest bar; the run's start delay, not "
+                        "the data or the pipeline",
+                        file=sys.stderr,
                     )
                 gated = [layer for layer in gated if layer not in late]
             if gated:

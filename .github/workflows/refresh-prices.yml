@@ -183,7 +183,11 @@ jobs:
             # the data — a late start on the newest bar is reported as LATE
             # START, never silently; a stale bar or a pipeline breach still
             # fails. The 08:00 backstop never opts in: its red is the alarm.
-            LATE_START_OK=true
+            # Nor does a manual dispatch: a person starting it late is not
+            # the scheduler.
+            if [[ "${{ github.event.schedule }}" == "7 20 * * 1-5" ]]; then
+              LATE_START_OK=true
+            fi
           fi
           {
             echo "layers=$LAYERS"
@@ -304,7 +308,7 @@ jobs:
             # The backstop only fetches when no dispatched dce run succeeded
             # today, so reaching here means cron-job.org did not fire. Name
             # that cause before the latency breach it guarantees.
-            echo "::error title=DCE trigger did not fire::No successful 'Refresh Prices (dce)' dispatch today — check the cron-job.org job (enabled? token valid?). The dce breach below is the consequence, not the cause."
+            echo "::error title=DCE trigger did not fire::No successful 'Refresh Prices (dce)' dispatch had run today when this backstop started ($(date -u +%H:%M) UTC; the trigger is due 10:30) — check the cron-job.org job (enabled? token valid?). The dce breach below is the consequence, not the cause."
           fi
           LATE_START=""
           if [[ "${{ needs.slot.outputs.late_start_ok }}" == "true" ]]; then

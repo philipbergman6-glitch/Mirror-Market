@@ -529,13 +529,17 @@ def _palm_driver(enriched: dict[str, pd.DataFrame]) -> Driver | None:
 
 
 def _rapeseed_driver(
-    enriched: dict[str, pd.DataFrame], currency_data: dict[str, pd.DataFrame]
+    enriched: dict[str, pd.DataFrame],
+    currency_data: dict[str, pd.DataFrame],
+    price_data: dict[str, pd.DataFrame],
 ) -> Driver | None:
     # Cross-oilseed: CBOT soy oil vs CZCE rapeseed oil. ICE canola (RS=F) is
     # dead on yfinance, so CZCE is the daily rapeseed leg. The weekly reading
     # compares each leg's own change; the USD spread is one session's number,
     # struck where both venues printed at that session's A1 rate (#298), or
-    # withheld with the reason (invariant 8).
+    # withheld with the reason (invariant 8). The strike reads the RAW
+    # provider closes: ``enriched`` may be the ratio-adjusted series, whose
+    # pre-roll sessions are scaled levels that never printed (invariant 2).
     if "Soybean Oil" not in enriched or enriched["Soybean Oil"].empty:
         return None
     cny_df = currency_data.get("CNY/USD") if currency_data else None
@@ -549,8 +553,12 @@ def _rapeseed_driver(
     ) * 100
     if pd.isna(rape_chg):
         return None
+    raw_oil = price_data.get("Soybean Oil")
     strike = strike_cross_venue_spread(
-        own=daily_close(enriched["Soybean Oil"]["Close"]),
+        own=(
+            daily_close(raw_oil["Close"]) if raw_oil is not None and not raw_oil.empty
+            else pd.Series(dtype=float)
+        ),
         own_commodity="Soybean Oil",
         own_label="CBOT soy oil",
         other=daily_close(rapeseed.set_index("Date")["Close"]),
@@ -685,7 +693,7 @@ def format(  # noqa: A001
     palm = _palm_driver(enriched)
     if palm:
         drivers.append(palm)
-    rapeseed = _rapeseed_driver(enriched, currency_data or {})
+    rapeseed = _rapeseed_driver(enriched, currency_data or {}, price_data or {})
     if rapeseed:
         drivers.append(rapeseed)
     for maybe in (_biodiesel_driver(), _conab_driver(), _dollar_driver()):

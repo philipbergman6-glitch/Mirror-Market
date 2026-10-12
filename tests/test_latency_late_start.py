@@ -76,8 +76,7 @@ def test_the_opted_in_gate_passes_a_late_start_and_says_why(tmp_path, capsys):
     path = _manifest(tmp_path, [_row("prices", SETTLED_OCT_8, LATE_START)])
     assert main(["--manifest", path, "--fail-on-breach-layers", "prices",
                  "--late-start-is-not-a-breach"]) == 0
-    out = capsys.readouterr().out
-    assert "LATE START: prices" in out
+    assert "LATE START: prices" in capsys.readouterr().err
 
 
 def test_without_the_flag_the_same_run_is_still_red(tmp_path):
