@@ -169,14 +169,20 @@ def nav_items_at(nav: list[dict], root: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Page renderers
 # ---------------------------------------------------------------------------
-def _render_headline(output_dir: Path, nav: list[dict], *, public_trust_state=None, **_) -> Path:
+def _render_headline(
+    output_dir: Path, nav: list[dict], *, now: datetime, public_trust_state=None, **_
+) -> Path:
     from scripts.generate_html import generate
 
+    # One edition, one stamp: the index takes the clock every other page and
+    # the manifest already carry. Its own render runs ~15-20 s, and a later
+    # index stamp made the post-deploy smoke fail every page (#444).
     artifacts = generate(
         output_dir=output_dir,
         market_nav=nav,
         include_players=False,
         public_trust_state=public_trust_state,
+        generated_at=now,
     )
     return artifacts["dashboard"]
 
@@ -511,7 +517,8 @@ def generate_site(
     ctx = SiteContext.open(today=now.date(), now=now)
 
     pages: list[tuple[str, str, callable, dict]] = [
-        ("headline", "index.html", _render_headline, {"public_trust_state": public_trust_state}),
+        ("headline", "index.html", _render_headline,
+         {"public_trust_state": public_trust_state, "now": now}),
         ("players", "players.html", _render_players, {}),
         ("origins", "origins.html", _render_origins, {"ctx": ctx, "now": now, "markets": markets}),
         ("workstation", "workstation.html", _render_workstation, {"ctx": ctx, "now": now}),

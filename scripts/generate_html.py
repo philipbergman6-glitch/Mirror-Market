@@ -923,8 +923,16 @@ def generate(
     public_trust_state=None,
     include_players: bool = False,
     market_nav: list[dict] | None = None,
+    generated_at: datetime | None = None,
 ) -> dict[str, Path]:
     """Render the headline page (M2 #144).
+
+    ``generated_at`` is the edition's one clock. ``scripts/generate_site.py``
+    passes the instant it stamped on every other page and on the manifest, so
+    the index carries the same stamp and the post-deploy smoke — which reads
+    the candidate's index and requires every served page to be at least that
+    new — compares one edition with itself. Left ``None`` (a standalone run),
+    the page stamps its own clock.
 
     M8 #150 demoted this module to one entry in the site's page list; the page
     list, the market nav and the failure-isolation policy live in
@@ -992,7 +1000,7 @@ def generate(
 
     # Build template context
     log.info("Building template context...")
-    now = datetime.now(timezone.utc)
+    now = generated_at or datetime.now(timezone.utc)
     freshness_items = _build_freshness_items()
     context = {
         "sections": SECTIONS,
