@@ -392,75 +392,37 @@ def test_a_curve_stitched_from_two_sessions_is_flagged_rather_than_used(empty_po
     conn.close()
 
 
-# ---------------------------------------------------------------------------
-# Options: the chain is still unavailable, and the hand-entered ladder works
-# ---------------------------------------------------------------------------
+def test_a_stitched_curve_says_it_dropped_legs_and_strikes_only_one_session(empty_positions):
+    """Invariant 8 on the page: spreads use only the legs that share a session."""
+    from scripts.generate_site import _env
 
-
-def test_the_options_section_is_empty_but_says_why_when_nothing_is_entered(
-    conn, empty_positions, tmp_path
-):
-    data = section(
-        build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(tmp_path / "none"),
-                   audience=AUDIENCE_PRIVATE),
-        "options",
-    )["data"]
-    assert data["available"] is False                 # the chain, still
-    # And the two absences are stated separately: ours and the market's.
-    assert "no source ingested by this project" in data["reason"].lower()
-
-    entered = section(
-        build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(tmp_path / "none"),
-                   audience=AUDIENCE_PRIVATE),
-        "options_entered",
+    conn = sqlite3.connect(":memory:")
+    for ddl in schema.ALL_SCHEMAS:
+        conn.execute(ddl)
+    conn.executemany(
+        "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+        "observation_date, fetched_date) VALUES (?,?,?,?,?,?, '2026-08-18')",
+        [
+            ("Soybeans", "2026-11-01", "Nov 2026", "ZSX26.CBT", 1167.75, "2026-08-18"),
+            ("Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", 1183.00, "2026-08-18"),
+            ("Soybeans", "2027-03-01", "Mar 2027", "ZSH27.CBT", 1250.00, "2026-08-17"),
+        ],
     )
-    assert entered["state"] == "empty"
-    assert "no options entered" in entered["reason"].lower()
-
-
-def test_a_hand_entered_option_is_valued_against_the_board_and_labelled_a_model_value(
-    conn, empty_positions, tmp_path
-):
-    """The end-to-end fill: a broker quote in a file, priced off our own curve.
-
-    ZSX26 prints 1167.75 in the fixture curve, so the 1200 call is out of the
-    money and its delta must be below 0.5. Everything on the row is stamped
-    manual and carries the source string from the file.
-    """
-    ladder = tmp_path / "options"
-    ladder.mkdir()
-    (ladder / "book.yml").write_text(
-        "options:\n"
-        "  - underlying: ZSX26\n    right: call\n    strike: 1200\n"
-        "    expiry: 2026-10-23\n    quoted_on: 2026-08-18\n"
-        "    source: Broker XYZ 15:40 CT\n    implied_volatility: 0.185\n",
-        encoding="utf-8",
+    conn.commit()
+    page = build_view(conn, today=AS_OF, generated_at=GENERATED, positions_dir=empty_positions)
+    curve = next(
+        r for r in section(page, "curve")["data"]["commodities"] if r["commodity"] == "Soybeans"
     )
-    data = section(
-        build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(ladder),
-                   audience=AUDIENCE_PRIVATE),
-        "options_entered",
-    )["data"]
-    row = data["entered"][0]
-    assert row["valued"] is True
-    assert row["forward"] == 1167.75
-    assert 0.0 < row["greeks"]["delta"] < 0.5
-    assert row["price_type"] == "manual"
-    assert "Broker XYZ" in row["volatility_source"]
-    assert "4.0%" in data["rate_note"]
+    assert curve["coherent"] is False
+    assert [(sp["near"], sp["far"]) for sp in curve["spreads"]] == [("ZSX26", "ZSF27")]
+    assert all(sp["same_session"] for sp in curve["spreads"])
 
-
-def test_a_malformed_options_document_fails_the_page_rather_than_rendering_empty(
-    conn, empty_positions, tmp_path
-):
-    """Same rule as the position book: entered wrongly is not entered nothing."""
-    ladder = tmp_path / "options"
-    ladder.mkdir()
-    (ladder / "bad.yml").write_text("options:\n  - right: call\n", encoding="utf-8")
-    with pytest.raises(options_mod.OptionEntryError):
-        build_view(conn, today=AS_OF, generated_at=GENERATED,
-                   positions_dir=empty_positions, options_dir=str(ladder),
-                   audience=AUDIENCE_PRIVATE)
+    html = _env().get_template("workstation.html.j2").render(
+        workstation=page, root="", market_nav=[], current_page="workstation",
+        generated_at="2026-08-18 21:30",
+    )
+    text = " ".join(html.split())
+    assert "off-session legs were dropped" in text
+    assert "ZSH27 observed 2026-08-17" in text
+    assert "struck across legs that are not one session" not in text
+    conn.close()

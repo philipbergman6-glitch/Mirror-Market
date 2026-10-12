@@ -529,13 +529,27 @@ def _build_command_center(data: dict) -> dict | None:
     # promotion contract reads `data-derived="crush"` to prove the three
     # benchmark legs came from one session, which is why the tile survives the
     # retirement of the DCE one below.
+    #
+    # The verdict is withheld when the three front months are not one delivery
+    # month (mid-Sep to mid-Dec every year: beans list no Oct/Dec) or a leg is
+    # near its roll — the figure then embeds a calendar spread, and "Profitable"
+    # over it would be a reading of the calendar, not of the crush.
     crush_val = crush.get("value_usd_mt")
+    profitable = crush.get("profitable")
+    if crush_val is None:
+        crush_delta, crush_class = "", "muted"
+    elif profitable is None:
+        crush_delta = crush.get("verdict_withheld") or "no margin verdict"
+        crush_class = "muted"
+    else:
+        crush_delta = "Profitable" if profitable else "Negative"
+        crush_class = "up" if profitable else "down"
     key_metrics.append({
         "label": "CBOT Front-Month Crush",
-        "value": f"${crush_val:,.1f}" if crush_val else "N/A",
-        "val_class": "up" if crush.get("profitable") else "down" if crush_val else "",
-        "delta": "Profitable" if crush.get("profitable") else "Negative" if crush_val else "",
-        "delta_class": "up" if crush.get("profitable") else "down",
+        "value": f"${crush_val:,.1f}" if crush_val is not None else "N/A",
+        "val_class": "" if crush_class == "muted" else crush_class,
+        "delta": crush_delta,
+        "delta_class": crush_class,
         "as_of": crush.get("as_of") or "",
         # The alignment probe, declared rather than inferred from the label.
         "derived": "crush",

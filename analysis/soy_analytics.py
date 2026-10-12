@@ -31,10 +31,11 @@ import pandas as pd
 from analysis import weather_alerts
 from analysis.crop_year import psd_year_for_crop_year, psd_year_label
 from analysis.forward_curve import analyze_curve, calendar_spread
+from analysis.futures.domain import contracts_from
 from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.nass_crush import latest_crush
 from analysis.seasonal import current_vs_seasonal, monthly_seasonal
-from analysis.signals import detect_all_signals, suppress_near_roll_signals
+from analysis.signals import detect_all_signals, is_near_roll, suppress_near_roll_signals
 from analysis.spreads import (
     compute_brazil_basis,
     compute_crush_spread,
@@ -593,6 +594,63 @@ def _official_estimate_vs_psd(
 # Analyst 1: Command Center — the top-level snapshot
 # ---------------------------------------------------------------------------
 
+_CRUSH_LEGS = ("Soybeans", "Soybean Meal", "Soybean Oil")
+
+
+def front_month_crush(
+    beans: pd.DataFrame, oil: pd.DataFrame, meal: pd.DataFrame
+) -> dict[str, Any]:
+    """The continuous front-month board crush, with the months it is struck on.
+
+    All three legs are one session (``compute_crush_spread`` inner-joins on
+    date). They are not always one *delivery month*: beans list no October or
+    December, so from mid-September to mid-December ZS=F is a different month
+    from ZM=F/ZL=F and the number embeds a calendar spread. The figure and its
+    session date stay — the site promotion probe reads that date — but the
+    profitable/negative verdict is withheld whenever the months differ or any
+    leg is within three sessions of its roll, where the continuous series may
+    not yet have moved to the month the calendar says.
+    """
+    spread = compute_crush_spread(beans, oil, meal)
+    if spread.empty:
+        return {"available": False}
+    latest_cents = spread.iloc[-1]["crush_spread"]
+    struck = pd.Timestamp(spread.iloc[-1].get("Date"))
+    contracts = {
+        leg: contracts_from(leg, struck.date(), count=1)[0].symbol for leg in _CRUSH_LEGS
+    }
+    months_aligned = len({symbol[2:] for symbol in contracts.values()}) == 1
+    near_roll = any(is_near_roll(struck, leg) for leg in _CRUSH_LEGS)
+
+    withheld = ""
+    if not months_aligned:
+        withheld = (
+            "mixed delivery months ("
+            + " / ".join(contracts[leg] for leg in _CRUSH_LEGS)
+            + ") — the figure embeds a calendar spread, so no margin verdict"
+        )
+    elif near_roll:
+        withheld = "within three sessions of a contract roll — the front month is uncertain"
+
+    info: dict[str, Any] = {
+        "available": True,
+        "as_of": _asof(spread.iloc[-1].get("Date")),
+        # Crush spread is in cents/bu; same conversion as soybeans.
+        "value_usd_mt": to_metric_tons(latest_cents, "Soybeans"),
+        "value_dollars_bu": latest_cents / 100,
+        "contracts": contracts,
+        "months_aligned": months_aligned,
+        "profitable": None if withheld else bool(latest_cents > 0),
+        "verdict_withheld": withheld,
+        "spread_series": spread,
+    }
+    if len(spread) >= 6:
+        prev_cents = spread.iloc[-6]["crush_spread"]
+        info["trend"] = "widening" if latest_cents > prev_cents else "narrowing"
+        info["weekly_chg"] = latest_cents - prev_cents
+    return info
+
+
 def command_center() -> dict:
     """
     Build the command center snapshot — everything a trader glances at first.
@@ -671,24 +729,7 @@ def command_center() -> dict:
         and not beans.empty and not oil.empty and not meal.empty
     ):
         try:
-            spread = compute_crush_spread(beans, oil, meal)
-            if not spread.empty:
-                latest_cents = spread.iloc[-1]["crush_spread"]
-                # Convert crush spread to USD/MT
-                # Crush spread is in cents/bu; same conversion as soybeans
-                crush_mt = to_metric_tons(latest_cents, "Soybeans")
-                crush_info = {
-                    "available": True,
-                    "as_of": _asof(spread.iloc[-1].get("Date")),
-                    "value_usd_mt": crush_mt,
-                    "value_dollars_bu": latest_cents / 100,
-                    "profitable": latest_cents > 0,
-                    "spread_series": spread,
-                }
-                if len(spread) >= 6:
-                    prev_cents = spread.iloc[-6]["crush_spread"]
-                    crush_info["trend"] = "widening" if latest_cents > prev_cents else "narrowing"
-                    crush_info["weekly_chg"] = latest_cents - prev_cents
+            crush_info = front_month_crush(beans, oil, meal)
         except Exception:
             logger.warning("Command-center crush computation failed", exc_info=True)
 
