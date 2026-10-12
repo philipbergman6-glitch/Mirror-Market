@@ -615,7 +615,11 @@ def front_month_crush(
     if spread.empty:
         return {"available": False}
     latest_cents = spread.iloc[-1]["crush_spread"]
-    struck = pd.Timestamp(spread.iloc[-1].get("Date"))
+    struck_raw = spread.iloc[-1].get("Date")
+    if struck_raw is None or pd.isna(struck_raw):
+        # The months are read off the strike date; without it they cannot be.
+        raise ValueError("crush spread's latest row carries no Date")
+    struck = pd.Timestamp(struck_raw)
     contracts = {
         leg: contracts_from(leg, struck.date(), count=1)[0].symbol for leg in _CRUSH_LEGS
     }
