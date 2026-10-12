@@ -321,18 +321,22 @@ def test_no_inputs_raises_no_alerts():
 # ---------------------------------------------------------------------------
 
 
-def test_every_calendar_entry_belongs_to_a_layer_this_project_ingests():
-    """The scope rule. A calendar of reports we do not read is a research note."""
+def test_calendar_entries_are_ingested_or_explicitly_external_with_a_source():
+    """External catalysts must have a publisher link and cannot imply ingestion."""
     import config
 
     layers = {row[0] for row in config.PRODUCTION_LAYERS}
     for source in EVENT_SOURCES:
-        assert source.layer in layers, f"{source.key} names a layer this project does not run"
+        if source.layer is None:
+            assert source.key == "nopa" and source.schedule_url
+            assert source.observation_table is None
+        else:
+            assert source.layer in layers
 
 
 def test_no_report_we_do_not_ingest_is_listed():
     keys = {source.key for source in EVENT_SOURCES}
-    for absent in ("nopa", "statscan", "abares", "cftc_cit"):
+    for absent in ("statscan", "abares", "cftc_cit"):
         assert absent not in keys
 
 
@@ -368,7 +372,7 @@ def test_the_calendar_works_with_no_database_at_all():
     """A fresh clone has no observations; the schedule still stands."""
     events = build_calendar(None, as_of=AS_OF)
     assert events
-    assert all(event.confidence is EventConfidence.RULE for event in events)
+    assert all(event.confidence in (EventConfidence.RULE, EventConfidence.PUBLISHED) for event in events)
     assert all(event.last_observed is None for event in events)
 
 
@@ -400,7 +404,7 @@ def test_two_cadences_of_silence_marks_the_rule_date_as_not_evidence(conn):
     conn.commit()
     event = next(e for e in build_calendar(conn, as_of=AS_OF) if e.source.key == "cot")
     assert event.stale is True
-    assert "a rule, not evidence" in event.note
+    assert "not evidence" in event.note
     # And the expected date keeps ticking forward regardless, which is the trap
     # the observed column exists to expose.
     assert event.expected_date > AS_OF
@@ -422,3 +426,18 @@ def test_a_seasonal_source_carries_its_own_caveat():
     assert "not published between roughly December and March" in progress.seasonal_note
     event = next(e for e in build_calendar(None, as_of=AS_OF) if e.source.key == "crop_progress")
     assert event.to_dict()["seasonal_note"] == progress.seasonal_note
+
+
+def test_exact_publisher_dates_replace_the_wasde_window_and_include_external_nopa():
+    events = {e.source.key: e for e in build_calendar(None, as_of=date(2026, 9, 1))}
+    assert events["wasde"].expected_date == date(2026, 9, 11)
+    assert events["wasde"].confidence is EventConfidence.PUBLISHED
+    assert events["nopa"].expected_date == date(2026, 9, 15)
+    assert events["nopa"].source.layer is None
+    assert events["nopa"].last_observed is None
+    assert events["nopa"].to_dict()["schedule_url"].startswith("https://www.nopa.org/")
+
+
+def test_published_calendar_never_extrapolates_past_its_horizon():
+    events = {e.source.key: e for e in build_calendar(None, as_of=date(2028, 1, 1))}
+    assert "wasde" not in events and "nopa" not in events

@@ -331,11 +331,11 @@ def test_the_ticket_section_carries_the_banner_and_both_formats(conn, empty_posi
     assert ticket["id"]
 
 
-def test_the_calendar_lists_only_ingested_sources_and_says_the_dates_are_rules(conn, empty_positions):
+def test_calendar_labels_schedule_basis_and_external_sources(conn, empty_positions):
     data = section(view(conn, empty_positions), "calendar")["data"]
     assert data["events"]
-    assert all(event["confidence"] == "rule" for event in data["events"])
-    assert "Only releases this project actually ingests are listed" in data["scope_note"]
+    assert all(event["confidence"] in ("rule", "published_schedule") for event in data["events"])
+    assert "NOPA is external-only" in data["scope_note"]
 
 
 def test_the_options_section_reports_no_chain_and_offers_the_manual_route(conn, empty_positions):

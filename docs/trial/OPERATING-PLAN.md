@@ -6,46 +6,50 @@ defines *who does it, on which day, and what the desk does each morning*. It
 changes no threshold, no task definition and no issue class — if anything here
 disagrees with the protocol, the protocol wins.
 
-## Status at time of writing (2026-08-19)
+## Status checked 2026-10-08
 
-| Piece | State |
-|---|---|
-| Protocol v1.0.0 | generated, current |
-| Record harness (`scripts/trial.py`) | verified: `check`, `metrics`, `scorecard` all refuse to produce a number with zero records |
-| Five failure drills | **mechanism half passed 5/5** (`scripts/trial.py drills`) — see below |
-| Session records | **none** |
-| Day observations | **none** |
-| Participants onboarded | **none** |
+The trial has **not started**. No local JSON/JSONL session or day records were
+present at inspection. No participant onboarding or commercial outcome is claimed.
+Protocol v2 remains the authority; recruitment is tracked in #411 and the
+buyer-approved first-screen contract in #406.
 
-The trial has **not started**. Days 1–30 begin on the first trading day after
-two participants (physical buyers) are onboarded and have handles.
+All five technical failure drills passed again with `python scripts/trial.py
+drills`. The participant halves below remain open. The synthetic private-route
+integration test in `tests/test_origins_page_operational.py` also passed: US Gulf
+to North China, September 2026 shipment, CIF barge to FOB vessel bridge, freight,
+insurance, duty/VAT, destination port, finance and quality, landed ranking and
+sensitivity, plus a separately assumed named-contract hedge reference. Every
+input is a fixture. This validates software mechanics, not a cargo decision.
 
 ## The window
 
-30 trading days on the CBOT calendar (`analysis.futures.domain.is_business_day`,
-which excludes Labor Day, Mon 2026-09-07). Anchored to the earliest possible
-start:
+Start the 30-trading-day window only after two independent physical buyers have
+committed, signed participation letters, chosen private handles, and one has
+approved the first-screen contract. Set the actual dates then; the old August
+2026 grid was a planning example and did not record attendance.
 
-| # | Day | # | Day | # | Day |
-|---|---|---|---|---|---|
-| 1 | Thu 2026-08-20 | 11 | Thu 2026-09-03 | 21 | Fri 2026-09-18 |
-| 2 | Fri 2026-08-21 | 12 | Fri 2026-09-04 | 22 | Mon 2026-09-21 |
-| 3 | Mon 2026-08-24 | 13 | Tue 2026-09-08 | 23 | Tue 2026-09-22 |
-| 4 | Tue 2026-08-25 | 14 | Wed 2026-09-09 | 24 | Wed 2026-09-23 |
-| 5 | Wed 2026-08-26 | 15 | Thu 2026-09-10 | 25 | Thu 2026-09-24 |
-| 6 | Thu 2026-08-27 | 16 | Fri 2026-09-11 | 26 | Fri 2026-09-25 |
-| 7 | Fri 2026-08-28 | 17 | Mon 2026-09-14 | 27 | Mon 2026-09-28 |
-| 8 | Mon 2026-08-31 | 18 | Tue 2026-09-15 | 28 | Tue 2026-09-29 |
-| 9 | Tue 2026-09-01 | 19 | Wed 2026-09-16 | 29 | Wed 2026-09-30 |
-| 10 | Wed 2026-09-02 | 20 | Thu 2026-09-17 | 30 | Thu 2026-10-01 |
+Use the CBOT business-day calendar for trading days and the publisher calendar
+for release days. These are different calendars. The workstation links the
+[USDA WASDE schedule](https://www.usda.gov/about-usda/general-information/staff-offices/office-chief-economist/commodity-markets/wasde-report).
+Recheck it when setting the window and after any publisher rescheduling notice.
+Do not infer publication from a scheduled date or invent a task-4 session if a
+release falls outside the actual trial window.
 
-If the start slips, shift the whole grid — never compress it. Thirty trading
-days is the sample, not a deadline.
+## Private-route onboarding before day 1
 
-**One WASDE falls inside this window: Fri 2026-09-11 (day 16).** Task 4 is
-therefore a single occurrence, and it is the only day in the trial that cannot
-be rescheduled. A window that starts later than 2026-09-11 must be checked
-against the next release (Fri 2026-10-09) or task 4 scores nothing.
+Supply the actual origin and destination, product grade and quality specification,
+shipment and pricing windows, delivery terms/carrier and cargo quantity. Enter
+owned, dated, expiring freight, elevation, insurance, destination port, finance
+(rate and days) and quality assumptions in `data/reference/assumptions/private/`.
+Use explicit zero only when confirmed, never to fill an unknown. Verify public
+policy rates and their expiry separately. Keep records and rendered desk output
+outside `docs/`; never copy the test fixture set into production assumptions.
+
+For the hedge reference, separately state physical exposure direction, pricing
+convention, named contract, hedge ratio/rounding and any FX exposure. A landed
+comparison alone cannot establish these. Review residual tonnes, basis and FX
+risk alongside the contract count. The drill's 10,000 MT and 73 ZSX26 contracts
+are invented examples, not suggested inputs.
 
 ## Who
 
@@ -91,7 +95,7 @@ Straight from the protocol's cadences, per participant per week:
 | 10 ticket review | 2 |
 | **total** | **19** |
 
-Task 4 is event-driven (day 16 only). Task 8 is the five drills, below.
+Task 4 is event-driven on the verified release day. Task 8 is the five drills, below.
 
 Over six weeks that is roughly 115 sessions per participant against the
 **decision floor** of 20 sessions / 5 tasks / 8 real decisions per participant
@@ -117,7 +121,8 @@ participant over the window.
 ## Task 8 — the five drills
 
 `scripts/trial.py drills` runs all five with no network, no production database
-and no write into `docs/`. Run on 2026-08-19 against `feat/gtr-transport`:
+and no write into `docs/`. Mechanisms rerun successfully on 2026-10-08;
+participant validation remains outstanding:
 
 | Drill | Mechanism | Participant half |
 |---|---|---|
@@ -132,15 +137,8 @@ the participant's blind read** — show the degraded surface to a participant wh
 been told what broke and record what they can name. All five participant halves are
 outstanding, and no drill counts as run until its participant half is recorded.
 
-Place one drill per failure mode across the window, avoiding day 16 (WASDE):
-
-| Drill day | Mode |
-|---|---|
-| 4 (Tue 2026-08-25) | `critical_source_outage` |
-| 10 (Wed 2026-09-02) | `partial_key_coverage` |
-| 15 (Thu 2026-09-10) | `stale_payload` |
-| 21 (Fri 2026-09-18) | `page_generation_failure` |
-| 28 (Tue 2026-09-29) | `deployment_failure` |
+Place one drill per failure mode across the actual window, avoiding verified
+release days. Assign dates only after the trial start is known.
 
 Record the day with `--drill <name>` so it leaves the reliability metrics: a
 deliberate outage counted as downtime would understate the product's real
@@ -174,9 +172,6 @@ Mondays, on the prior week:
 python scripts/trial.py review --week-start <Mon>
 python scripts/trial.py backlog
 ```
-
-Review Mondays: 2026-08-24, 08-31, 09-07, 09-14, 09-21, 09-28, and a final on
-2026-10-05 covering days 27–30.
 
 The weekly output is: what worked, what failed, the top unmet questions, the
 metric trend against the prior week, recommended changes, and a go/no-go for

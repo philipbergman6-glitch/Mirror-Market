@@ -1,33 +1,9 @@
-"""Scheduled-release calendar for the sources this project actually ingests.
+"""Release risk calendar: publisher schedules, cadence rules and observations.
 
-Scope rule, and it is the whole design: **an event is listed only if a layer in
-this repository consumes its output.** A calendar that lists every USDA report
-in existence would be a research note; this one is a risk tool, and its value
-is that every row is a date on which a number *this stack renders* can move.
-So there is no NOPA crush (not ingested), no StatsCan, no ABARES, and no
-Brazilian CONAB weekly that we do not read.
-
-Two kinds of date, never mixed:
-
-**Rule dates** are computed from the agency's published schedule rule (COT is
-Friday 15:30 ET; export sales are Thursday 08:30 ET). They are reliable in
-cadence and can be wrong by a day around a federal holiday, which the agency
-resolves by shifting — so a rule date carries
-:attr:`ScheduledEvent.confidence` = ``rule`` and says it is derived.
-
-**Observed dates** come from our own stored data: the newest observation the
-layer actually holds, and the modal gap between the ones before it. That is
-evidence rather than a schedule, and it is what makes a frozen upstream
-visible — a rule date keeps ticking forward whether or not anybody published.
-
-The two are shown side by side deliberately. A rule date in the future with an
-observed date three weeks stale is the single most useful row this calendar can
-produce, and it only exists because both are carried.
-
-WASDE is the exception worth naming: USDA publishes its exact release dates a
-year ahead, but this project does not ingest that schedule file, so the WASDE
-row is a rule date ("around the 9th-12th, monthly") and says so rather than
-pretending to a precision it did not source.
+WASDE and external-only NOPA use dated publisher calendars. Other rows retain
+labelled cadence estimates. A schedule is never evidence of publication, an
+observation date, or an exchange closure. Exhausted publisher schedules are
+omitted rather than extrapolated. NOPA report values are not ingested.
 """
 
 from __future__ import annotations
@@ -41,6 +17,7 @@ from enum import Enum
 from typing import Any
 
 from analysis.futures.domain import is_business_day, next_business_day
+from analysis.futures.release_schedule import CHECKED_ON, NOPA_URL, PUBLISHED_DATES, WASDE_URL
 
 log = logging.getLogger(__name__)
 
@@ -48,18 +25,19 @@ log = logging.getLogger(__name__)
 class EventConfidence(str, Enum):
     #: Computed from the agency's published cadence rule.
     RULE = "rule"
+    PUBLISHED = "published_schedule"
     #: Read from our own stored observations.
     OBSERVED = "observed"
 
 
 @dataclass(frozen=True)
 class EventSource:
-    """One publisher whose output a layer here consumes."""
+    """An ingested source or explicitly external publisher calendar."""
 
     key: str
     name: str
     agency: str
-    layer: str                     # the pipeline layer that ingests it
+    layer: str | None             # None for external-only catalysts
     cadence: str                   # human description of the rule
     what_moves: str                # why a hedger cares
     #: (weekday, hour, minute, tz) for weekly releases; None for monthly ones.
@@ -70,19 +48,26 @@ class EventSource:
     observation_table: str | None = None
     observation_column: str | None = None
     seasonal_note: str = ""
+    schedule_url: str | None = None
 
 
-#: Every scheduled release behind a layer this repository ingests. Times are
+#: Ingested releases and explicitly external catalysts. Times are
 #: the agency's own, in US Eastern, and are labels — nothing here schedules
 #: anything, so a wrong minute costs nothing and a wrong day is what the
 #: observed column is for.
 EVENT_SOURCES: tuple[EventSource, ...] = (
     EventSource(
         key="wasde", name="WASDE", agency="USDA OCE", layer="wasde",
-        cadence="monthly, typically the 9th-12th, 12:00 ET",
+        cadence="publisher schedule, 12:00 ET",
+        schedule_url=WASDE_URL,
         what_moves="US and world balance sheets — the single most price-moving scheduled release",
-        monthly_window=(9, 12),
         observation_table="wasde", observation_column=None,
+    ),
+    EventSource(
+        key="nopa", name="NOPA monthly crush (external)", agency="NOPA / LSEG", layer=None,
+        cadence="publisher schedule, noon Eastern",
+        what_moves="US soybean processing demand and oil stocks; report values not ingested",
+        schedule_url=NOPA_URL,
     ),
     EventSource(
         key="cot", name="Commitments of Traders", agency="CFTC", layer="cot",
@@ -187,6 +172,8 @@ class ScheduledEvent:
             "agency": self.source.agency,
             "layer": self.source.layer,
             "cadence": self.source.cadence,
+            "schedule_url": self.source.schedule_url,
+            "external_only": self.source.layer is None,
             "what_moves": self.source.what_moves,
             "expected_date": self.expected_date.isoformat(),
             "confidence": self.confidence.value,
@@ -261,7 +248,7 @@ def build_calendar(
     as_of: date,
     horizon_days: int = 45,
 ) -> tuple[ScheduledEvent, ...]:
-    """The next scheduled release for every ingested source, soonest first.
+    """The next release for each source or external catalyst, soonest first.
 
     ``conn`` may be None — the rule dates need no database, and the calendar
     degrades to schedule-only with the observed columns blank rather than
@@ -271,7 +258,15 @@ def build_calendar(
     events: list[ScheduledEvent] = []
 
     for source in EVENT_SOURCES:
-        if source.weekly is not None:
+        confidence = EventConfidence.RULE
+        if source.key in PUBLISHED_DATES:
+            upcoming = [day for day in PUBLISHED_DATES[source.key] if day >= as_of]
+            if not upcoming:
+                log.warning("release calendar: %s schedule exhausted; renew %s", source.key, source.schedule_url)
+                continue
+            expected = min(upcoming)
+            confidence = EventConfidence.PUBLISHED
+        elif source.weekly is not None:
             expected = next_weekly(source.weekly[0], as_of)
         elif source.monthly_window is not None:
             expected = next_monthly(source.monthly_window, as_of)
@@ -282,7 +277,10 @@ def build_calendar(
 
         last_observed, gap = (_observed(conn, source) if conn is not None else (None, None))
         stale = False
-        note = ""
+        note = (
+            f"Publisher schedule checked {CHECKED_ON}; scheduled, not confirmation of publication."
+            if confidence is EventConfidence.PUBLISHED else "Cadence estimate; holiday shifts may differ."
+        )
         if last_observed is not None and gap:
             age = (as_of - last_observed).days
             # Two cadences' worth of silence is the point at which a rule date
@@ -290,16 +288,16 @@ def build_calendar(
             # to look at.
             stale = age > gap * 2
             if stale:
-                note = (
+                note += " " + (
                     f"our newest observation is {age} days old against a typical "
-                    f"{gap:.0f}-day cadence — the schedule below is a rule, not evidence "
+                    f"{gap:.0f}-day cadence — the schedule is not evidence "
                     "that anything published"
                 )
 
         events.append(ScheduledEvent(
             source=source,
             expected_date=expected,
-            confidence=EventConfidence.RULE,
+            confidence=confidence,
             days_away=(expected - as_of).days,
             last_observed=last_observed,
             observed_gap_days=gap,

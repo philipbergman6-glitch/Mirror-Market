@@ -276,3 +276,33 @@ def test_no_hazards_handed_over_means_no_chip_anywhere(db):
     assert all(row["hazard"] is None for row in view["views"][0]["decision"]["rows"])
     # Scoped to the board: the "How to read" key legitimately shows the chip swatches.
     assert not _render(view).select("#section-decision .hz-chip")
+
+
+def test_synthetic_private_route_through_cost_ranking_sensitivity_and_hedge(db, complete):
+    """SYNTHETIC DRILL: no participant, quote, or commercial decision is recorded."""
+    from analysis.futures.domain import Side
+    from analysis.futures.hedge import propose_hedge
+    from tests.test_futures_hedge import BEANS, curve, exposure
+
+    view = build_view(db, today=TODAY, assumptions=complete, audience=AUDIENCE_PRIVATE)
+    default = next(v for v in view["views"] if v["is_default"])
+    gulf = next(row for row in default["decision"]["rows"] if row["origin_key"] == "us_gulf")
+    assert default["decision"]["window_start"] == "2026-09-01"
+    assert gulf["incoterm"] == "CIF barge"
+    assert gulf["grade"]
+    assert gulf["landed_usd_mt"] == pytest.approx(609.61, abs=0.3)
+    components = {step["component"] for step in gulf["steps"]}
+    assert {"elevation", "ocean_freight", "marine_insurance", "financing",
+            "destination_port_costs", "quality_adjustment"} <= components
+    assert gulf["rank"] is not None
+    assert default["sensitivity"]["flip_moves"]
+    # Independent, explicitly assumed drill exposure. A landed quote does not
+    # establish the desk's position, pricing convention, or hedge mandate.
+    hedge = propose_hedge(exposure(Side.LONG, basis_source="SYNTHETIC DRILL assumption"),
+                          curve("Soybeans", BEANS), as_of=TODAY)
+    assert hedge.legs[0].contract.symbol == "ZSX26"
+    assert hedge.legs[0].contracts == 73
+    assert hedge.residual_mt == pytest.approx(66.3234, abs=0.001)
+    assert hedge.basis_risk_usd_per_mt_move == 10_000
+    rendered = _render(view).get_text(" ", strip=True)
+    assert "PRIVATE" in rendered.upper() and "FIXTURE" in rendered

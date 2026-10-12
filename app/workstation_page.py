@@ -123,7 +123,7 @@ SECTION_SPECS = (
     ("exposure", "Exposure", "flat price, basis, crush, FX, month, first notice and residual"),
     ("limits", "Desk limits", "every configured line, its headroom, and which are crossed"),
     ("clearing", "Clearing reconciliation", "the official P&L beside ours — reported, never merged"),
-    ("calendar", "Release calendar", "scheduled releases from sources this project ingests"),
+    ("calendar", "Release calendar", "scheduled releases and labelled external catalysts"),
     ("options", "Options", "the interface, the model, its limits, and why there is no chain"),
     ("options_entered", "Entered options", "quotes this desk supplied, valued and labelled"),
     ("provider", "Provider & method", "where every number on this page came from"),
@@ -821,9 +821,9 @@ def _calendar_section(conn, *, as_of: date) -> dict[str, Any]:
     return _section("calendar", state=STATE_OK, data={
         "events": [event.to_dict() for event in calendar],
         "scope_note": (
-            "Only releases this project actually ingests are listed. Dates are computed from each "
-            "agency's published cadence rule, not from a schedule file we read, so they can shift "
-            "around a federal holiday; the observed column is our own evidence."
+            "Publisher calendars and cadence estimates are labelled separately. NOPA is external-only; "
+            "its report values are not ingested. A scheduled date is not confirmation of publication "
+            "or an exchange closure. Our newest observation remains a separate dated fact."
         ),
     })
 
