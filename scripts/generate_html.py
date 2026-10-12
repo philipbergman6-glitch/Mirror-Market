@@ -1002,12 +1002,14 @@ def generate(
     log.info("Building template context...")
     now = generated_at or datetime.now(timezone.utc)
     freshness_items = _build_freshness_items()
+    # _base.html.j2 owns <head>, the masthead and the market nav. The nav is
+    # normally passed down by generate_site.py so every page shares one tier
+    # computation; a standalone run computes its own. Resolved once, typed,
+    # because the deeper-links pass below needs the same list.
+    nav: list[dict] = market_nav if market_nav is not None else _standalone_market_nav()
     context = {
         "sections": SECTIONS,
-        # _base.html.j2 owns <head>, the masthead and the market nav. The nav
-        # is normally passed down by generate_site.py so every page shares one
-        # tier computation; a standalone run computes its own.
-        "market_nav": market_nav if market_nav is not None else _standalone_market_nav(),
+        "market_nav": nav,
         "root": "",
         "current_page": "headline",
         "current_market": None,
@@ -1050,7 +1052,7 @@ def generate(
     from app.wayfinding import deeper_links
 
     context["deeper"] = {
-        s["id"]: deeper_links(s["id"], context["market_nav"], root="") for s in SECTIONS
+        s["id"]: deeper_links(s["id"], nav, root="") for s in SECTIONS
     }
 
     # Render template
