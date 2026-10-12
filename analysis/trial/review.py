@@ -464,8 +464,11 @@ def weekly_review(
 
     window = [s for s in sessions if _in_window(s.trading_day, week_start, end)]
     window_days = [d for d in days if _in_window(d.trading_day, week_start, end)]
+    eligibility = decision_floor(window)
+    eligible_handles = {standing.participant for standing in eligibility.at_floor}
+    graded_window = [s for s in window if s.participant.strip().lower() in eligible_handles]
     metrics = compute_metrics(
-        window,
+        graded_window,
         window_days,
         worked_opportunities=worked_opportunities,
         progressed_opportunities=progressed_opportunities,
@@ -483,7 +486,7 @@ def weekly_review(
         for metric in metrics.metrics
     )
     participants = len({s.participant.strip().lower() for s in window})
-    floor = decision_floor(window)
+    floor = eligibility
     verdict, reason = _verdict(metrics, backlog, floor=floor)
     return WeeklyReview(
         week_start=week_start,
@@ -665,20 +668,23 @@ def scorecard(
     window = [s for s in sessions if _in_window(s.trading_day, window_start, window_end)]
     window_days = [d for d in days if _in_window(d.trading_day, window_start, window_end)]
     live_days = [d for d in window_days if not d.is_drill]
+    eligibility = decision_floor(window)
+    eligible_handles = {standing.participant for standing in eligibility.at_floor}
+    graded_window = [s for s in window if s.participant.strip().lower() in eligible_handles]
     metrics = compute_metrics(
-        window,
+        graded_window,
         window_days,
         worked_opportunities=worked_opportunities,
         progressed_opportunities=progressed_opportunities,
         min_observations=floor,
     )
-    total = len(window)
+    total = len(graded_window)
 
     dims: list[ScorecardDimension] = []
 
     # precision — did the numbers reproduce their sources?
-    numerical = sum(len(s.issues_of(IssueClass.NUMERICAL_ERROR)) for s in window)
-    precision = _issue_free_rate(window, (IssueClass.NUMERICAL_ERROR,))
+    numerical = sum(len(s.issues_of(IssueClass.NUMERICAL_ERROR)) for s in graded_window)
+    precision = _issue_free_rate(graded_window, (IssueClass.NUMERICAL_ERROR,))
     dims.append(
         ScorecardDimension(
             key="precision",
@@ -691,9 +697,9 @@ def scorecard(
     )
 
     # accuracy — the wider correctness family
-    correctness = sum(len(s.correctness_issues) for s in window)
+    correctness = sum(len(s.correctness_issues) for s in graded_window)
     accuracy = _issue_free_rate(
-        window, (IssueClass.NUMERICAL_ERROR, IssueClass.SEMANTIC_MISMATCH, IssueClass.STALE_DATA)
+        graded_window, (IssueClass.NUMERICAL_ERROR, IssueClass.SEMANTIC_MISMATCH, IssueClass.STALE_DATA)
     )
     dims.append(
         ScorecardDimension(
@@ -730,7 +736,7 @@ def scorecard(
     )
 
     # timeliness — inside the task's own target, and not reading stale numbers
-    completed = [s for s in window if s.outcome.is_complete]
+    completed = [s for s in graded_window if s.outcome.is_complete]
     timeliness: float | None
     timeliness_basis: tuple[str, ...]
     if completed:
@@ -760,7 +766,7 @@ def scorecard(
         ("futures_usefulness", _FUTURES_TASKS),
         ("opportunity_usefulness", _OPPORTUNITY_TASKS),
     ):
-        score, count = _task_usefulness(window, tasks)
+        score, count = _task_usefulness(graded_window, tasks)
         basis: tuple[str, ...] = ()
         if score is not None:
             basis = (
@@ -790,9 +796,10 @@ def scorecard(
 
     # ux — did the surface get in the way?
     ux_issues = sum(
-        len(s.issues_of(IssueClass.MISLEADING_UX)) + len(s.issues_of(IssueClass.WORKFLOW_FRICTION)) for s in window
+        len(s.issues_of(IssueClass.MISLEADING_UX)) + len(s.issues_of(IssueClass.WORKFLOW_FRICTION))
+        for s in graded_window
     )
-    ux = _issue_free_rate(window, (IssueClass.MISLEADING_UX, IssueClass.WORKFLOW_FRICTION))
+    ux = _issue_free_rate(graded_window, (IssueClass.MISLEADING_UX, IssueClass.WORKFLOW_FRICTION))
     lookups = _metric_value(metrics, "external_lookups_per_task")
     dims.append(
         ScorecardDimension(
@@ -850,13 +857,13 @@ def scorecard(
     backlog = draft_backlog(window)
     participants = len({s.participant.strip().lower() for s in window})
     covered = len({s.trading_day for s in window} | {d.trading_day for d in live_days})
-    floor = decision_floor(window)
+    floor = eligibility
     verdict, reason = _verdict(metrics, backlog, floor=floor)
     return Scorecard(
         window_start=window_start,
         window_end=window_end,
         dimensions=ordered,
-        session_count=total,
+        session_count=len(window),
         participant_count=participants,
         day_count=len(window_days),
         trading_days_covered=covered,

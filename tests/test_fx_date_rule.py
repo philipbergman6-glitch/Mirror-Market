@@ -342,3 +342,28 @@ def test_ledger_crush_and_basis_print_the_same_caption(db, registry):
     assert label in _render("blocks/02_ledger.html.j2", _block(db, registry, "brazil", "ledger"))
     assert label in _render("blocks/03_crush.html.j2", _block(db, registry, "dalian", "crush"))
     assert label in _render("blocks/04_basis.html.j2", _block(db, registry, "brazil", "basis"))
+
+
+def test_origin_crush_retains_prior_fx_provenance(db):
+    from analysis.origins.crush import board_crush
+
+    _fx(db, "CNY/USD", INSIDE, 0.14)
+    result = board_crush(db, "dalian", today=TODAY).to_dict()
+    assert result["margin_usd_mt"] is not None
+    assert result["as_of"] == D.isoformat()
+    for leg in result["legs"]:
+        assert leg["fx"]["observed_on"] == INSIDE.isoformat()
+        assert leg["fx"]["gap_days"] == 3
+    assert result["fx_labels"] == ["FX 2026-10-03 (3d prior)"]
+
+
+def test_origin_crush_prior_fx_reaches_rendered_page(db):
+    from app.origins_page import build_view
+    from tests.test_price_semantics_rendering import _env
+
+    _fx(db, "CNY/USD", INSIDE, 0.14)
+    html = _env().get_template("origins.html.j2").render(
+        origins=build_view(db, today=TODAY), root="", market_nav=[],
+        current_page="origins", generated_at="2026-10-07 21:30",
+    )
+    assert "struck at FX 2026-10-03 (3d prior)" in html

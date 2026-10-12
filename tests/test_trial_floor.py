@@ -154,3 +154,39 @@ def test_a_misconfigured_real_decision_task_is_a_crash_not_a_silent_zero(monkeyp
     monkeypatch.setattr(config, "TRIAL_REAL_DECISION_TASKS", ("origin_comparison", "not_a_task"))
     with pytest.raises(TrialError, match="not_a_task"):
         real_decision_tasks()
+
+
+@pytest.mark.parametrize("kind", ["weekly", "scorecard"])
+def test_below_floor_participant_does_not_change_graded_results(kind):
+    from analysis.trial.review import scorecard, weekly_review
+
+    records = _at_floor(ZEPHYR) + _at_floor(QUARTZ)
+    newcomer = session(participant="newcomer", outcome=Outcome.ABANDONED,
+                       would_act=False, issues=(issue(),))
+    def build(rows):
+        if kind == "weekly":
+            return weekly_review(rows, week_start=TODAY - timedelta(days=30), week_end=TODAY)
+        return scorecard(rows, window_start=TODAY - timedelta(days=30), window_end=TODAY)
+    before, after = build(records), build(records + [newcomer])
+    assert after.participant_count == 3
+    assert len(after.floor.below_floor) == 1
+    if kind == "weekly":
+        assert after.metrics == before.metrics
+    else:
+        assert after.dimensions == before.dimensions
+
+
+@pytest.mark.parametrize("kind", ["weekly", "scorecard"])
+def test_below_floor_blocker_still_escalates(kind):
+    from analysis.trial.domain import IssueClass, Severity
+    from analysis.trial.review import scorecard, weekly_review
+
+    rows = _at_floor(ZEPHYR) + _at_floor(QUARTZ) + [session(
+        participant="newcomer", issues=(issue(IssueClass.NUMERICAL_ERROR, Severity.BLOCKER),),
+    )]
+    if kind == "weekly":
+        result = weekly_review(rows, week_start=TODAY - timedelta(days=30), week_end=TODAY)
+    else:
+        result = scorecard(rows, window_start=TODAY - timedelta(days=30), window_end=TODAY)
+    assert result.verdict == "no_go"
+    assert "blocker" in result.verdict_reason

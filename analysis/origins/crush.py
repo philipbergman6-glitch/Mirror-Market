@@ -81,6 +81,7 @@ from analysis.origins.domain import (
 from analysis.origins.landed_cost import COMPONENT_LABELS, DAYS_PER_YEAR
 from analysis.origins.sources import fx_resolution_on, parse_magyp_window, to_usd_per_mt
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
+from pricing.fx_alignment import FxAlignment
 
 log = logging.getLogger(__name__)
 
@@ -132,6 +133,7 @@ class CrushLeg:
     price_type: str | None = None
     provider: str | None = None
     settlement_proven: bool | None = None
+    fx: FxAlignment | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -150,6 +152,7 @@ class CrushLeg:
             "price_type": self.price_type,
             "provider": self.provider,
             "settlement_proven": self.settlement_proven,
+            "fx": self.fx.to_dict() if self.fx else None,
         }
 
 
@@ -219,6 +222,9 @@ class CrushResult:
             "label": self.label,
             "meaning": self.meaning,
             "legs": [leg.to_dict() for leg in self.legs],
+            "fx_labels": list(dict.fromkeys(
+                leg.fx.label for leg in self.legs if leg.fx and leg.fx.label
+            )),
             "yields": dict(self.yields),
             "revenue_usd_mt": self.revenue.amount if self.revenue else None,
             "bean_cost_usd_mt": self.bean_cost.amount if self.bean_cost else None,
@@ -400,6 +406,7 @@ def _read_legs(
             price=usd_mt(usd),
             native_price=native,
             native_unit=unit,
+            fx=fx.alignment if unit == "home_per_mt" else None,
             quote_kind=quote_kind,
             source=SourceRef(
                 layer=descriptor.get("layer", table),

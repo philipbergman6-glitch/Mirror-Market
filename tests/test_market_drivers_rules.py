@@ -111,9 +111,9 @@ def _with_year_ago_committed(es: pd.DataFrame, committed_mt: float) -> pd.DataFr
     return pd.concat([es, yr_ago], ignore_index=True)
 
 
-def test_record_absolute_china_at_25pct_share_is_strong_only_when_pace_passes(quiet):
-    # Latest China week is 3× the trailing mean AND commitments run ahead of
-    # the year-ago share of the WASDE forecast → pace passes despite 25 % share.
+def test_record_absolute_china_with_revised_forecasts_withholds_pace(quiet):
+    # High absolute sales and a revised year-ago denominator cannot prove
+    # the share of the forecast actually available at the historical week.
     es = _with_year_ago_committed(_record_china_week(prior_china=500_000.0), 20_000_000.0)
     quiet.setattr(market_drivers, "read_export_sales", lambda *a, **k: es)
     quiet.setattr(market_drivers, "read_wasde", lambda *a, **k: _wasde_with_year_ago(41.0))
@@ -121,9 +121,10 @@ def test_record_absolute_china_at_25pct_share_is_strong_only_when_pace_passes(qu
     text = market_drivers.format({}, {}, {})
 
     assert "25%" in text
-    assert "strong" in text.lower()
+    assert "strong" not in text.lower()
+    assert "availability" in text
     block = next(b for b in _driver_blocks(text) if "China" in b[0])
-    assert any(line.lstrip().startswith("Reads as:") for line in block)
+    assert any(line.lstrip().startswith("Not interpreted:") for line in block)
 
 
 def test_record_absolute_china_at_25pct_share_prints_observation_when_pace_fails(quiet):
@@ -254,3 +255,54 @@ def test_every_driver_separates_observation_interpretation_falsifier(quiet):
         tails = [line.lstrip() for line in block[1:]]
         assert any(t.startswith(("Reads as:", "Not interpreted:")) for t in tails), block
         assert any(t.startswith("Confirm / refute:") for t in tails), block
+
+
+@pytest.mark.parametrize("values", [[None, None], [1.0, None]])
+def test_commitments_require_every_destination_component(values):
+    rows = pd.DataFrame({"accumulated_exports": values, "outstanding_sales": [100.0, 200.0]})
+    assert market_drivers._committed_mt(rows) is None
+
+
+def test_known_zero_commitments_are_zero():
+    assert market_drivers._committed_mt(pd.DataFrame({
+        "accumulated_exports": [0.0], "outstanding_sales": [0.0],
+    })) == 0.0
+
+
+def test_reference_period_is_not_publication_evidence(quiet):
+    es = _with_year_ago_committed(_record_china_week(500_000.0), 20_000_000.0)
+    quiet.setattr(market_drivers, "read_wasde", lambda *a: _wasde_with_year_ago(41.0))
+    passed, reason = market_drivers.assess_china_pace("Soybeans", es, _WEEK, 1_500_000.0)
+    assert passed is None
+    assert "availability" in reason
+
+
+@pytest.mark.parametrize("value", [0.0, -1.0, 1e308, float("inf"), float("nan")])
+def test_forecast_denominator_must_be_finite_positive(value):
+    wasde = _wasde_with_year_ago(41.0)
+    wasde.loc[wasde.year == "2026/27", "value"] = value
+    assert market_drivers._wasde_export_forecast_mt(wasde, "2026/27") is None
+
+
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize("column", ["accumulated_exports", "outstanding_sales"])
+def test_missing_component_withholds_current_and_historical_pace(quiet, historical, column):
+    es = _with_year_ago_committed(_record_china_week(500_000.0), 20_000_000.0)
+    target = pd.Timestamp("2025-10-02") if historical else _WEEK
+    es.loc[es.index[es.week_ending == target][0], column] = np.nan
+    quiet.setattr(market_drivers, "read_wasde", lambda *a: _wasde_with_year_ago(41.0))
+    passed, reason = market_drivers.assess_china_pace("Soybeans", es, _WEEK, 1_500_000.0)
+    assert passed is None
+    assert "commitments" in reason
+
+
+def test_later_wasde_revision_cannot_change_asof_interpretation(quiet):
+    es = _with_year_ago_committed(_record_china_week(500_000.0), 20_000_000.0)
+    outcomes = []
+    for revised in (900.0, 1800.0):
+        wasde = _wasde_with_year_ago(41.0)
+        wasde.loc[wasde.year == "2025/26", "value"] = revised
+        quiet.setattr(market_drivers, "read_wasde", lambda *a, frame=wasde: frame)
+        outcomes.append(market_drivers.assess_china_pace("Soybeans", es, _WEEK, 1_500_000.0))
+    assert outcomes[0] == outcomes[1]
+    assert outcomes[0][0] is None

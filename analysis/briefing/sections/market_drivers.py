@@ -22,6 +22,7 @@ net long beside a high RSI is not crowded until it is a historical extreme).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 import pandas as pd
 
@@ -39,7 +40,6 @@ from analysis.weather_alerts import (
 from config import (
     CHINA_PACE_LOOKBACK_WEEKS,
     CHINA_PACE_MIN_WEEKS,
-    CHINA_PACE_STRONG_MULTIPLE,
     COT_CROWDED_LOOKBACK_DAYS,
     COT_CROWDED_MIN_OBSERVATIONS,
     COT_CROWDED_PERCENTILE,
@@ -227,18 +227,26 @@ def _wasde_export_forecast_mt(wasde: pd.DataFrame, marketing_year: str) -> float
     unit = str(rows.iloc[-1].get("unit", "") or "").strip().lower()
     if unit != _WASDE_SOY_EXPORT_UNIT:
         return None
-    return float(rows.iloc[-1]["value"]) * MT_PER_MILLION_BUSHELS_SOY
+    value = float(rows.iloc[-1]["value"]) * MT_PER_MILLION_BUSHELS_SOY
+    return value if isfinite(value) and value > 0 else None
 
 
 def _committed_mt(week_data: pd.DataFrame) -> float | None:
     """Accumulated exports + outstanding sales across all destinations."""
     if "accumulated_exports" not in week_data.columns or "outstanding_sales" not in week_data.columns:
         return None
-    acc = week_data["accumulated_exports"].sum(skipna=True)
-    out = week_data["outstanding_sales"].sum(skipna=True)
-    if (pd.isna(acc) or acc <= 0) and (pd.isna(out) or out <= 0):
+    if week_data.empty:
         return None
-    return float(0.0 if pd.isna(acc) else acc) + float(0.0 if pd.isna(out) else out)
+    # ESR stores one nullable pair per destination, not a total row. Every
+    # stored destination must contribute both components; NULL is not zero.
+    components = week_data[["accumulated_exports", "outstanding_sales"]]
+    if components.isna().any().any():
+        return None
+    values = components.to_numpy(dtype=float)
+    if not all(isfinite(value) and value >= 0 for value in values.flat):
+        return None
+    total = float(values.sum())
+    return total if isfinite(total) else None
 
 
 def _year_ago_week(subset: pd.DataFrame, latest_week: pd.Timestamp) -> pd.Timestamp | None:
@@ -280,7 +288,6 @@ def assess_china_pace(
         if multiple is not None
         else f"trailing {len(prior)}-wk China mean {trailing_mean:,.0f} MT, not positive"
     )
-    abs_passed = multiple is not None and multiple >= CHINA_PACE_STRONG_MULTIPLE
 
     wasde_key = _WASDE_EXPORT_COMMODITY.get(commodity)
     if wasde_key is None:
@@ -304,21 +311,16 @@ def assess_china_pace(
             f"{soy_marketing_year(ya_week)} missing; {abs_text}"
         )
 
-    share = committed / forecast * 100
-    ya_share = ya_committed / ya_forecast * 100
-    pace_text = (
-        f"commitments {share:.0f}% of WASDE {forecast / 1e6:,.2f} MMT export forecast "
-        f"vs {ya_share:.0f}% year-ago (w/e {ya_week.strftime('%Y-%m-%d')})"
+    # The persisted WASDE contract has reference_period only. The fetcher
+    # also synthesizes prior-month reference periods from revised workbook
+    # columns; these are not publication/availability dates. Consequently an
+    # as-of denominator cannot be recovered safely from these rows. Withhold
+    # the interpretation until ingestion preserves actual release vintages.
+    return None, (
+        "pace not assessed — WASDE availability dates and original release "
+        "vintages are not stored; latest revised estimates cannot establish "
+        f"a comparable year-ago forecast; {abs_text}"
     )
-    pace_passed = share >= ya_share
-    if abs_passed and pace_passed:
-        return True, f"{abs_text}; {pace_text}"
-    failed = []
-    if not abs_passed:
-        failed.append(f"rule needs ≥ {CHINA_PACE_STRONG_MULTIPLE:.1f}× the trailing mean")
-    if not pace_passed:
-        failed.append("commitments behind the year-ago share of forecast")
-    return False, f"pace rule not met ({'; '.join(failed)}) — {abs_text}; {pace_text}"
 
 
 def _export_sales_drivers() -> list[Driver]:
