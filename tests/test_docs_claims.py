@@ -130,3 +130,45 @@ def test_registry_counts_are_what_the_docs_were_corrected_to() -> None:
     """
     assert _operational_layer_count() == 39
     assert _numbered_group_count() == 35
+
+
+# A16 #459: AGENTS.md is the model-neutral door to CLAUDE.md, and the
+# capability-status table is the one status file. Both are made of pointers;
+# a pointer to a moved or deleted file is the exact rot the table exists to stop.
+_REPO_POINTER = re.compile(r"`([\w.-]+(?:/[\w.*-]+)*(?:\.(?:py|md|yml)|/))`")
+
+
+def _capability_table() -> str:
+    text = _read("ARCHITECTURE.md")
+    start = text.index("## Capability status")
+    return text[start : text.index("\n## ", start + 1)]
+
+
+def _repo_pointers(text: str) -> set[str]:
+    return {m.group(1) for m in _REPO_POINTER.finditer(text) if "*" not in m.group(1)}
+
+
+def test_agents_md_states_the_canonical_mission() -> None:
+    assert CANONICAL_MISSION in _read("AGENTS.md")
+
+
+@pytest.mark.parametrize("text", ["AGENTS.md", "capability table"])
+def test_status_pointers_resolve(text: str) -> None:
+    body = _read("AGENTS.md") if text == "AGENTS.md" else _capability_table()
+    pointers = _repo_pointers(body)
+    assert pointers, f"no repository pointers found in {text}"
+    missing = sorted(p for p in pointers if not (REPO / p).exists())
+    assert not missing, f"{text} points at paths that do not exist: {missing}"
+
+
+def test_capability_rows_name_a_known_rightmost_column() -> None:
+    columns = {"specified", "implemented", "tested", "deployed", "operationally verified"}
+    rows = [
+        line
+        for line in _capability_table().splitlines()
+        if line.startswith("| ") and not line.startswith("| Capability")
+    ]
+    assert rows
+    for row in rows:
+        rightmost = row.rstrip(" |").rsplit("|", 1)[1].strip()
+        assert rightmost in columns, f"unknown rightmost column {rightmost!r} in: {row[:60]}"

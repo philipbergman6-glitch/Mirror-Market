@@ -4,7 +4,56 @@ The goal is for a contributor to read this and know which file to open for any
 given task — and to know the load-bearing rules of each subsystem before
 touching it. Per-source detail and data traps live in `LAYERS.md`; project
 invariants and commands in `CLAUDE.md`; visual rules in `DESIGN.md`; the
-data-age vocabulary in `LATENCY.md`.
+data-age vocabulary in `LATENCY.md`. What is actually running — as opposed to
+written down — is the capability-status table directly below.
+
+## Capability status
+
+**The one status table in this repo** (A16 #459). A spec reads like a build and
+a merged module reads like a running one; this table is where the difference is
+stated. One row per product capability, walked from the sections of this file —
+not per layer: the layer roster is `config.PRODUCTION_LAYERS`, and a layer's
+daily health is its `data_freshness` row and the run's `pipeline_status.json`.
+
+Each column is evidence, never a judgement, and a cell is either a pointer or
+`—` with the reason it is blank:
+
+- **Specified** — the written decision: a section of this file, a spec under `docs/specs/`, or the deciding issue.
+- **Implemented** — the owning module on `main`.
+- **Tested** — network-free tests on `main`, run by the `check` job of `.github/workflows/ci.yml`.
+- **Deployed** — a workflow on `main` runs it in production. *Desk-local* (built on the desk's own machine, by design) is not deployed.
+- **Operationally verified** — a dated production observation that it did its job: a run id, or a live-page check naming what the page showed. It is a dated fact, not a property — a later red run supersedes it.
+
+**Rightmost** is the furthest column with evidence, read left to right without a
+gap. Evidence below as of **2026-10-13**: `main` at 03c7e7b, daily deploy run
+38361825223 (07:18 UTC), live edition generated 10:31 UTC by Refresh Prices
+(dce) run 38383874364. A PR that moves a capability edits its row in the same
+PR; there is no second status file to keep in step.
+
+| Capability | Specified | Implemented | Tested | Deployed | Operationally verified | Rightmost |
+|---|---|---|---|---|---|---|
+| Daily ingest and grading | "Stage detail"; A3 #300 | `main.py`, `fetchers/`, `pipeline/grading.py` | `tests/test_success_state_vocabulary.py`, `tests/test_main_exit_code.py` | `.github/workflows/deploy-dashboard.yml`, 19:00 UTC weekdays | Run 38361825223 graded every layer: `india_domestic` failed (captcha, #449), `weather` `usable_partial` for 12 consecutive runs, the rest succeeded | operationally verified |
+| History persistence and same-day retry | "Git-based history persistence"; #254 | `pipeline/history.py`, `scripts/ci_retry_decision.py` | `tests/test_history.py`, `tests/test_ci_retry_decision.py` | deploy-dashboard.yml "Commit history snapshots"; `.github/workflows/retry-failed-pipeline.yml` | Daily snapshot commit c57a19c; retry run 38335911701 dispatched re-run 38335926439 after three hard failures in 38330303750 | operationally verified |
+| Quarantine guard | "Quarantine guard"; A2 #299 | `pipeline/divergence.py`, `pipeline/quarantine.py` | `tests/test_store_quarantine.py`, `tests/test_quarantine_semantics.py` | Every `_save` in the daily run; tally in `pipeline_status.json` | — never observed holding a row: no `quarantined_revisions` history CSV exists, run 38361825223 held 0, and it is inert for `prices`/`currencies` on CI's empty database by construction | deployed |
+| Static site: render, verify, promote | "The static site contract", "Verify and promote" | `scripts/generate_site.py`, `trust/site_promotion.py`, `scripts/smoke_site.py` | `tests/test_site_contract.py`, `tests/test_site_promotion.py`, `tests/test_one_edition_stamp.py` | deploy-dashboard.yml: promotion contract → Pages → public smoke | Run 38361825223: promotion contract and post-deploy smoke green; every public page answered 200 on 2026-10-13 | operationally verified |
+| Market pages and propagation ledger | "The propagation ledger"; M3 #145, M12 #161, M21 #250 | `app/block_builders.py`, `app/markets.py` | `tests/test_propagation_ledger.py`, `tests/test_market_blocks.py` | deploy-dashboard.yml | Live 2026-10-13: headline 03 and the `markets/cbot.html` ledger rendered | operationally verified |
+| Crush board and named crush | "The crush board", "The crush"; M16 #208 | `analysis/futures/crush.py`, `crush_block` in `app/block_builders.py` | `tests/test_named_crush.py`, `tests/test_crush_board.py` | deploy-dashboard.yml | Live headline 04, 2026-10-13: CBOT +102.3 $/MT struck on ZSX26; Argentina labelled administered; Dalian withheld; Brazil `absent` with its reason | operationally verified |
+| Daily briefing | "Analyze"; market drivers #404 | `analysis/briefing/` | `tests/test_briefing.py`, `tests/test_market_drivers_rules.py` | deploy-dashboard.yml | Live `briefing.html` 2026-10-13: drivers print observation, `Reads as:` and `Confirm / refute:` | operationally verified |
+| Price semantics and semantic contract | "Price semantics", "Semantic contract" | `pricing/semantics.py`, `pricing/policy.py` | `tests/test_price_semantics.py`, `tests/test_semantic_contract.py` | `scan()` runs inside the promotion gate | Run 38361825223 passed the gate; live chips read `board · delayed close` | operationally verified |
+| FX alignment (A1) | "FX alignment"; A1 #298 | `pricing/fx_alignment.py` | `tests/test_fx_alignment.py`, `tests/test_fx_date_rule.py` | Every reader in the daily build | Live headline 04, 2026-10-13: Dalian crush withheld `fx_gap_exceeded` (newest CNY/USD close 4 days old) — the cap fired in production | operationally verified |
+| Workstation hedge (public reference edition) | "Hedge" | `analysis/futures/`, `app/workstation_page.py` | `tests/test_futures_hedge.py`, `tests/test_workstation_page.py` | deploy-dashboard.yml | Live `workstation.html` 2026-10-13: 1,000 MT reference calculation, `PROPOSAL — NOT ROUTED` | operationally verified |
+| Contract-row chart panel and outbound links | `DESIGN.md` "Contract-row chart panel"; #320, #328 | `app/workstation_page.py` | `tests/test_workstation_chart_expander.py`, `tests/test_tradingview.py` | deploy-dashboard.yml | Live workstation 2026-10-13: vendored lightweight-charts loaded, TradingView and Barchart links per contract (present, not clicked through) | operationally verified |
+| Opportunity screen (public board) | "Screen" | `analysis/opportunities/`, `app/opportunities_page.py` | `tests/test_opportunity_rules.py`, `tests/test_opportunities_page.py` | deploy-dashboard.yml | Live `opportunities.html` 2026-10-13 rendered the ladder with blockers | operationally verified |
+| Landed-cost origins (public, fail-closed) | "Landed-cost onboarding"; B12 #409 | `analysis/origins/`, `app/origins_page.py` | `tests/test_landed_cost.py`, `tests/test_origin_onboarding.py` | deploy-dashboard.yml | Live `origins.html` 2026-10-13: route readiness rendered, every landed total blocked with its `<VALUE>` command — fail-closed as designed | operationally verified |
+| Private desk editions: book, limits, clearing, options, opportunity workflow, costed origin chain | "Positions, limits and options workflow"; privacy rules in "Screen" and "Landed-cost onboarding" | `analysis/futures/privacy.py`, `analysis/futures/limits.py`, `analysis/futures/clearing.py`, `analysis/opportunities/workflow.py` | `tests/test_book_privacy.py`, `tests/test_workstation_privacy.py`, `tests/test_opportunity_workflow.py`, `tests/test_origins_page_operational.py` (fixture route) | — desk-local by design; no workflow builds a private edition with a book in it | — no desk has entered a book or a costed route | tested |
+| Physical-buyer trial | `docs/trial/PROTOCOL.md`; A6 #303 | `analysis/trial/`, `scripts/trial.py` | `tests/test_trial_drills.py`, `tests/test_trial_protocol.py`; drills re-passed 2026-10-08 (`docs/trial/OPERATING-PLAN.md`) | — desk-local by design | — not started; recruitment is A15 #411 | tested |
+| Trusted ledger and reader cutover | `docs/plans/2026-08-10-data-trust-foundation.md`; "Trusted ledger" sections | `trust/` | `tests/test_trust_cbot_benchmarks.py`, `tests/test_trust_fx_ingestion.py`, `tests/test_trust_cutover.py` | Reconciliation only: the `reconcile-trusted` job in deploy-dashboard.yml. `MIRROR_TRUSTED_READ_DATASETS` is set in no workflow, so every page reads v1 | — run 38361825223: MAGyP and CBOT reconciled, FX diverged (ZAR, #447); no dataset cut over | deployed |
+| Latency instrumentation and breach gate | `LATENCY.md`; "Latency" | `latency/`, `scripts/latency_report.py` | `tests/test_latency.py`, `tests/test_latency_closed.py` | `.github/workflows/refresh-prices.yml` scoped gate; masthead data age | Live masthead 2026-10-13 states data age; run 38383874364 passed its scoped `dce` gate | operationally verified |
+| Fast price refresh and regression gate | "Fast refresh" | `scripts/refresh_prices.py`, `main.py --fast`, `trust/site_promotion.py` | `tests/test_fast_refresh.py` | refresh-prices.yml: 20:07 and 23:30 UTC crons, external `dce` dispatch 10:30 UTC | Partial. The `dce` dispatch is verified: run 38383874364 published the live edition. The crons are not: the last three scheduled runs are red — 38342950368 refused by the regression gate on a missing DB cache (the gate worked, the refresh did not publish), 38334665795 a `currencies` breach. Cache seeding is B13 #453 | deployed |
+| Technicals on the adjusted continuous series | A4 #301; B4 #310 (first rule under "Hedge") | `analysis/futures/continuous.py`, `enrich_with_technicals` in `analysis/loaders.py` | `tests/test_continuous_from_bars.py`, `tests/test_loaders_series_kind.py` | deploy-dashboard.yml (`contract_bars` layer) | — not serving yet: live headline 10 (2026-10-13) labels the provider front-month fallback; the switch waits on `TECHNICALS_MIN_SESSIONS` stored sessions | deployed |
+| Point weather alerts | `analysis/weather_alerts.py` under "Analyze"; #355 | `analysis/weather_alerts.py`, `fetchers/weather.py`, `pipeline/clean.py` | `tests/test_weather_agronomics.py`, `tests/test_weather_alert_parity.py` | deploy-dashboard.yml | — four confirmed defects open (B14–B17, #454–#457); `weather` `usable_partial` for 12 consecutive runs (India Madhya Pradesh missing) | deployed |
+| Cyclone hazard flags | `docs/specs/cyclone-hazard-flags.md` (#374) | `fetchers/cyclones.py`, `analysis/hazards.py` | `tests/test_fetcher_cyclones.py`, `tests/test_hazards.py`, `tests/test_hazard_archive.py` | deploy-dashboard.yml (two layers) | Run 38361825223, the first full run after #452: both cyclone layers succeeded; live `markets/cbot.html` "Storms — the port leg · checked 07:31Z 13 Oct". One green run, no streak yet | operationally verified |
+| Footprint weather | `docs/specs/footprint-weather.md` (#373) | — build slices #380–#386 all open; no footprint fetcher on `main` | — | — | — | specified |
 
 ## The pipeline
 
