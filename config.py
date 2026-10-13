@@ -1656,11 +1656,13 @@ MARS_API_KEY: str = os.getenv("MARS_API_KEY", "")
 # because invariant 1 makes them different states:
 #   skips    — the layer is `run_if`-gated in main.py: it never fetches and
 #              writes no freshness row ("skipped-unconfigured").
-#   degrades — the layer is not gated: its fetcher logs a warning, returns
-#              nothing, and the empty result is graded under the #175 rules,
-#              which for these layers means a `failed` freshness row. Honest
-#              about what happens today; tests/test_doctor.py pins the split
-#              against main._build_dict_layers so it cannot drift.
+#   degrades — the layer is not gated: it runs without the keyed part.
+#              Since #424 the only such layer is crush_inspections (Layer
+#              14), whose keyless inspections half still grades it; a
+#              DictLayer listed here would run its fetcher, get nothing,
+#              and grade `failed` under the #175 rules. tests/test_doctor.py
+#              pins the split against main._build_dict_layers so it cannot
+#              drift.
 # `required_in_ci` is the deploy contract: CLAUDE.md lists the keys the daily
 # run cannot do without. MARS is the exception — Layer 30 is designed to
 # withhold with a reason when it is absent (LAYERS.md → API keys).
@@ -1686,13 +1688,17 @@ _API_KEY_SPECS: tuple[ApiKeySpec, ...] = (
     ApiKeySpec(
         name="USDA_API_KEY",
         unlocks="USDA NASS QuickStats: US production, area, yield, crop progress and crush",
-        degrades=("usda", "crop_progress", "crush_inspections"),
+        skips=("usda", "crop_progress"),
+        # Layer 14 is a custom block, not a DictLayer: only its crush call
+        # needs the key, and the keyless inspections half still grades the
+        # layer. "Degrades" here means "runs without its crush frame".
+        degrades=("crush_inspections",),
         signup="https://quickstats.nass.usda.gov/api",
     ),
     ApiKeySpec(
         name="FRED_API_KEY",
         unlocks="FRED: dollar index, CPI, Fed funds, Treasury yields, energy PPIs",
-        degrades=("fred",),
+        skips=("fred",),
         signup="https://fred.stlouisfed.org/docs/api/api_key.html",
     ),
     ApiKeySpec(

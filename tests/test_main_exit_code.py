@@ -50,6 +50,16 @@ def stub_fetchers(monkeypatch, tmp_path):
     import main
     importlib.reload(main)
 
+    # #424: Layers 2, 2b and 3 are run_if-gated on their keys. These tests
+    # exercise the *configured* path — stubbed fetchers answering with
+    # nothing — so the predicates must see a key, or the layers skip and
+    # write no freshness row at all (which is its own, separately pinned,
+    # behaviour in tests/test_layer_run_if.py).
+    import fetchers.fred
+    import fetchers.usda
+    monkeypatch.setattr(fetchers.usda, "USDA_API_KEY", "test-key")
+    monkeypatch.setattr(fetchers.fred, "FRED_API_KEY", "test-key")
+
     empty_df = pd.DataFrame()
     empty_dict: dict[str, pd.DataFrame] = {}
 

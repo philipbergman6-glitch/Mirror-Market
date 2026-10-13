@@ -67,15 +67,16 @@ def _consequence(spec: ApiKeySpec) -> list[str]:
     """What a missing key does, one line per distinct outcome — never merged.
 
     ``skipped`` and ``failed`` are two states (invariant 1): a skipped layer
-    never ran and writes no freshness row; a degraded one runs, fetches
-    nothing, and is graded as failed. The reader needs to know which rows
+    never ran and writes no freshness row; a degraded one runs without its
+    keyed part (Layer 14: no crush frame, graded on the keyless inspections
+    report) and is graded on what it did fetch. The reader needs to know which rows
     to expect on the health page.
     """
     lines: list[str] = []
     if spec.skips:
         lines.append(f"skipped, no freshness row: {_layer_line(spec.skips)}")
     if spec.degrades:
-        lines.append(f"runs and grades as failed: {_layer_line(spec.degrades)}")
+        lines.append(f"runs degraded without the keyed part: {_layer_line(spec.degrades)}")
     if spec.also:
         lines.append(f"also: {spec.also}")
     return lines

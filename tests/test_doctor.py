@@ -7,7 +7,8 @@ noticing. The doctor answers, without fetching anything:
 
 * every env var any layer reads, set or missing — never its value;
 * what a missing one does downstream: a `run_if`-gated layer is skipped
-  with no freshness row, an un-gated one runs and grades as failed;
+  with no freshness row, an un-gated one runs degraded without its keyed
+  part (since #424 only Layer 14, graded on its keyless inspections half);
 * a non-zero exit when a key the deploy workflow relies on is missing.
 
 Everything here runs off `config.API_KEY_CATALOG`, and the tests below pin
@@ -114,11 +115,15 @@ def test_a_missing_key_says_whether_its_layers_skip_or_degrade(monkeypatch) -> N
     assert set(by_name) == set(API_KEY_CATALOG)
     assert not by_name["FAS_API_KEY"].present
     assert by_name["FAS_API_KEY"].spec.skips == ("export_sales",)
-    assert by_name["USDA_API_KEY"].spec.degrades == ("usda", "crop_progress", "crush_inspections")
+    # #424: Layers 2 and 2b skip on the key; Layer 14 is a custom block that
+    # gates only its crush call and still grades on the keyless inspections.
+    assert by_name["USDA_API_KEY"].spec.skips == ("usda", "crop_progress")
+    assert by_name["USDA_API_KEY"].spec.degrades == ("crush_inspections",)
+    assert by_name["FRED_API_KEY"].spec.skips == ("fred",)
 
     _, out = _run(monkeypatch)
     assert "skipped" in out
-    assert "failed" in out
+    assert "degraded" in out
 
 
 def test_a_set_key_reads_as_set_and_a_missing_one_as_missing(monkeypatch) -> None:

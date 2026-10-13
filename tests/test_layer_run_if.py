@@ -48,7 +48,18 @@ GATED_LAYERS = {
     "export_sales": ("fetchers.export_sales", "FAS_API_KEY"),
     "eia": ("fetchers.eia", "EIA_API_KEY"),
     "us_processor_cash": ("fetchers.processor_cash", "MARS_API_KEY"),
+    # #424: the three layers the doctor used to report as "runs and grades
+    # as failed" on a missing key.
+    "usda": ("fetchers.usda", "USDA_API_KEY"),
+    "crop_progress": ("fetchers.usda", "USDA_API_KEY"),
+    "fred": ("fetchers.fred", "FRED_API_KEY"),
 }
+
+# Gated layers whose all-empty result with the key *set* is an outage. Crop
+# progress is the exception: NASS publishes nothing December–March by design
+# (config.LAYER_AGE_BUDGET_EXEMPT), so key-set-nothing-back is
+# no_publication there, pinned separately below.
+OUTAGE_LAYERS = sorted(set(GATED_LAYERS) - {"crop_progress"})
 
 
 def _layer(key: str) -> main.DictLayer:
@@ -98,7 +109,7 @@ def test_unconfigured_layer_writes_no_freshness_row(key, monkeypatch, freshness_
     assert fetches == [], "an unconfigured layer must not call its fetcher at all"
 
 
-@pytest.mark.parametrize("key", sorted(GATED_LAYERS))
+@pytest.mark.parametrize("key", OUTAGE_LAYERS)
 def test_configured_layer_returning_nothing_is_an_outage(key, monkeypatch, freshness_calls):
     """F3c: the key is set and the upstream answered with nothing at all.
 
@@ -122,7 +133,7 @@ def test_configured_layer_returning_nothing_is_an_outage(key, monkeypatch, fresh
     assert len(fetches) == 1, "a configured layer must actually attempt the fetch"
 
 
-@pytest.mark.parametrize("key", sorted(GATED_LAYERS))
+@pytest.mark.parametrize("key", OUTAGE_LAYERS)
 def test_configured_layer_with_empty_frames_is_also_an_outage(key, monkeypatch, freshness_calls):
     """The empty shape a live outage actually produces.
 
@@ -139,6 +150,23 @@ def test_configured_layer_with_empty_frames_is_also_an_outage(key, monkeypatch, 
 
     assert [c["status"] for c in freshness_calls] == ["failed"]
     assert key in main._HARD_FAILURES
+
+
+def test_configured_crop_progress_with_nothing_back_is_no_publication(monkeypatch, freshness_calls):
+    """#424: the key is set, NASS answered with nothing — the off-season shape.
+
+    Not a skip (the fetch was attempted, a freshness row is written) and not
+    an outage (crop progress is seasonally silent by design): the row says
+    no_publication and nothing pages CI.
+    """
+    _set_key(monkeypatch, "crop_progress", present=True)
+    layer, fetches = _stubbed(_layer("crop_progress"), {})
+
+    main._run_dict_layer(layer)
+
+    assert len(fetches) == 1, "a configured layer must actually attempt the fetch"
+    assert [c["status"] for c in freshness_calls] == ["no_publication"]
+    assert "crop_progress" not in main._HARD_FAILURES
 
 
 def test_run_if_and_skip_msg_are_wired_together():

@@ -57,6 +57,7 @@ from fetchers.export_sales import fetch_all_export_sales
 from fetchers.export_sales import is_configured as export_sales_configured
 from fetchers.forward_curve import fetch_all_forward_curves
 from fetchers.fred import fetch_all_series
+from fetchers.fred import is_configured as fred_configured
 from fetchers.gtr import fetch_gtr_ocean_freight, fetch_gtr_vessel_activity
 from fetchers.gulf_bids import fetch_gulf_bids
 from fetchers.magyp_fob import fetch_magyp_fob
@@ -76,6 +77,7 @@ from fetchers.usda import (
     fetch_export_inspections,
     fetch_soybean_overview,
 )
+from fetchers.usda import is_configured as usda_configured
 from fetchers.wasde import fetch_wasde_estimates
 from fetchers.weather import fetch_all_regions
 from fetchers.worldbank import fetch_worldbank_prices
@@ -725,21 +727,31 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
             save=lambda n, d: save_price_data(n, d),
             clean=lambda n, d: clean_ohlcv(d, label=n),
         ),
+        # Key-gated like Layers 10, 13 and 30 (#424): an unset key is
+        # "never ran" — no freshness row, nothing in _HARD_FAILURES, no
+        # ci-alert issue. Before this the fetcher returned nothing and the
+        # empty result graded as `failed`, the collapse invariant 1 forbids.
         DictLayer(
             "usda", "Layer 2", "USDA soybean data",
             fetch=lambda: fetch_soybean_overview(),
             save=lambda n, d: save_usda_data(d, n),
+            run_if=usda_configured,
+            skip_msg="USDA soybean data skipped (USDA_API_KEY not set)",
         ),
         DictLayer(
             "crop_progress", "Layer 2b", "USDA crop progress/condition",
             fetch=lambda: fetch_all_crop_progress(),
             save=lambda n, d: save_crop_progress(n, d),
+            run_if=usda_configured,
+            skip_msg="USDA crop progress skipped (USDA_API_KEY not set)",
         ),
         DictLayer(
             "fred", "Layer 3", "FRED economic indicators",
             fetch=lambda: fetch_all_series(),
             save=lambda n, d: save_fred_data(n, d),
             clean=lambda n, d: clean_fred_series(d),
+            run_if=fred_configured,
+            skip_msg="FRED skipped (FRED_API_KEY not set)",
         ),
         DictLayer(
             "cot", "Layer 4", "CFTC Commitment of Traders data",
@@ -936,11 +948,20 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         logger.info("[Layer 14] Fetching USDA crush data + export inspections ...")
         total_14 = 0
 
-        # Crush data (same USDA API, stat_category=CRUSHED)
-        crush_df = fetch_crush_data()
-        if not crush_df.empty:
-            save_usda_data(crush_df, "CRUSHED")
-            total_14 += len(crush_df)
+        # Crush data (same USDA API, stat_category=CRUSHED). Only this half
+        # needs the key (#424): with USDA_API_KEY unset the call is skipped
+        # outright and the layer is still graded on the keyless inspections
+        # report below, so the layer runs degraded (no crush frame), never
+        # failed-for-want-of-a-key. The catalog lists it under `degrades`
+        # for that reason — it is not a run_if skip.
+        if usda_configured():
+            crush_df = fetch_crush_data()
+            if not crush_df.empty:
+                save_usda_data(crush_df, "CRUSHED")
+                total_14 += len(crush_df)
+        else:
+            logger.info("[Layer 14] Crush call skipped (USDA_API_KEY not set); grading on inspections only")
+            crush_df = pd.DataFrame()
 
         # Export inspections (AMS text report)
         insp_result = fetch_export_inspections()
