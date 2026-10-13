@@ -414,6 +414,26 @@ def parse_fx_candidates(
 
 
 @dataclass(frozen=True)
+class FxRevisionFindings:
+    """One revision that drew at least one finding, dated so a report is
+    diagnosable on its own (#447: a bare revision id named neither the
+    session nor the rule, so the ZAR divergence had to be re-pulled to read)."""
+
+    revision_id: str
+    effective_date: date
+    quality_state: QualityState
+    rule_ids: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "revision_id": self.revision_id,
+            "effective_date": self.effective_date.isoformat(),
+            "quality_state": self.quality_state.value,
+            "rule_ids": list(self.rule_ids),
+        }
+
+
+@dataclass(frozen=True)
 class FxDatasetIngestion:
     """What one pair's dataset produced in one run."""
 
@@ -427,6 +447,7 @@ class FxDatasetIngestion:
     unfinished_sessions: tuple[date, ...]
     finding_ids: tuple[str, ...]
     result: DatasetResult
+    revision_findings: tuple[FxRevisionFindings, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -802,11 +823,29 @@ def _dataset_ingestion(
         unfinished_sessions=unfinished_sessions,
         finding_ids=tuple(sorted({finding.finding_id for finding in record_findings})),
         result=result,
+        revision_findings=_revision_findings(revisions, record_findings),
     )
 
 
 def _ids(revisions: Sequence[ObservationRevision], state: QualityState) -> tuple[str, ...]:
     return tuple(sorted(item.revision_id for item in revisions if item.quality_state is state))
+
+
+def _revision_findings(
+    revisions: Sequence[ObservationRevision], findings: Sequence[Finding]
+) -> tuple[FxRevisionFindings, ...]:
+    rule_by_finding = {finding.finding_id: finding.rule_id for finding in findings}
+    dated = [
+        FxRevisionFindings(
+            revision_id=revision.revision_id,
+            effective_date=revision.identity.effective_date,
+            quality_state=revision.quality_state,
+            rule_ids=tuple(sorted({rule_by_finding[fid] for fid in revision.finding_ids if fid in rule_by_finding})),
+        )
+        for revision in revisions
+        if revision.finding_ids
+    ]
+    return tuple(sorted(dated, key=lambda item: (item.effective_date, item.revision_id)))
 
 
 def _dataset_revisions(

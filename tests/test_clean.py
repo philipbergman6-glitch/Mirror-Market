@@ -233,6 +233,63 @@ def test_clean_ohlcv_refuses_to_fabricate_a_close(caplog):
     assert not cleaned[["Open", "High", "Low", "Close"]].isna().any().any()
 
 
+def test_clean_ohlcv_keeps_a_close_outside_its_range_and_says_so(caplog):
+    """A complete candle whose close lies outside its own high/low is kept,
+    with a logged reason — never dropped (#447).
+
+    The two ZAR/USD candles the provider revised in October 2026: Close >
+    High on 10-07, Close < Low on 10-09. The close is the observation every
+    conversion reads; Yahoo's range is auxiliary and routinely wrong (12,033
+    such bars across every Layer 1 and 7 ticker at period="max"), so a
+    cleaner that dropped them would delete up to half of a series.
+    """
+    idx = pd.to_datetime(["2026-10-07", "2026-10-08", "2026-10-09"])
+    df = pd.DataFrame(
+        {
+            "Open":  [0.06046077, 0.0604, 0.06030054],
+            "High":  [0.06050888, 0.0606, 0.06060698],
+            "Low":   [0.05978777, 0.0602, 0.06030054],
+            "Close": [0.06050961, 0.0605, 0.06028534],
+            "Volume": [0, 0, 0],
+        },
+        index=idx,
+    )
+    with caplog.at_level(logging.WARNING, logger="pipeline.clean"):
+        out = clean_ohlcv(df, label="ZAR/USD")
+
+    pdt.assert_frame_equal(out, df.rename_axis("Date"))
+    [record] = [r for r in caplog.records if "outside the bar's own high/low" in r.message]
+    assert record.message.startswith("[ZAR/USD] 2 bar(s)")
+    assert "2026-10-07, 2026-10-09" in record.message
+
+
+def test_clean_ohlcv_candle_predicate_matches_the_trusted_rule():
+    """One inequality, stated twice: the vectorised v1 predicate and the
+    trusted path's scalar rule must flag exactly the same candles (#447)."""
+    from decimal import Decimal
+
+    from pipeline.clean import ohlc_relationship_violated
+    from trust.quality import ohlc_relationship_holds
+
+    candles = [
+        # open, high, low, close
+        (10.0, 11.0, 9.0, 10.5),    # coherent
+        (10.0, 11.0, 9.0, 11.0),    # close == high: coherent
+        (10.0, 11.0, 9.0, 9.0),     # close == low: coherent
+        (10.0, 11.0, 9.0, 11.5),    # close above high
+        (10.0, 11.0, 9.0, 8.5),     # close below low
+        (11.5, 11.0, 9.0, 10.0),    # open above high
+        (8.5, 11.0, 9.0, 10.0),     # open below low
+        (10.0, 9.0, 11.0, 10.0),    # high below low
+    ]
+    df = pd.DataFrame(candles, columns=["Open", "High", "Low", "Close"])
+    vectorised = ohlc_relationship_violated(df).tolist()
+    scalar = [
+        not ohlc_relationship_holds(*(Decimal(str(v)) for v in candle)) for candle in candles
+    ]
+    assert vectorised == scalar == [False, False, False, True, True, True, True, True]
+
+
 def test_clean_ohlcv_drops_bar_missing_open(caplog):
     """Any missing price cell disqualifies the bar — Open/High/Low too.
 

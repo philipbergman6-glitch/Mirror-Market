@@ -300,8 +300,10 @@ def test_a_leg_the_ledger_refuses_is_reported_as_a_divergence(tmp_path) -> None:
 
     def download(ticker: str, period: str = "5d") -> pd.DataFrame:
         if ticker == "ZSX26.CBT":
-            # An impossible candle: v1 stores it, the ledger rejects it.
-            return frame([{"day": SESSION, "close": 1162.0}]).assign(High=1100.0)
+            # Half a candle: v1 reads the close, the ledger rejects the
+            # incomplete observation (``ohlc.complete``). A close *outside*
+            # its range is no longer a refusal on either path (#447).
+            return frame([{"day": SESSION, "close": 1162.0}]).assign(High=float("nan"))
         return frame([{"day": SESSION, "close": 1150.25}])
 
     run = script.reconcile_once(

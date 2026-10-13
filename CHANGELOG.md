@@ -4,6 +4,35 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — India captcha gate named; the OHLC rule keeps the close (2026-10-13)
+
+**#449 · #447**, the two source discrepancies the 2026-10-13 quality
+assessment left open.
+
+*India (#449).* Agmarknet's report API has answered HTTP 400
+`TOKEN_OR_CAPTCHA_REQUIRED` to every request since 2026-10-09; the front end
+that issues the captcha 403s outside India, as do the old `.aspx` pages and
+data.gov.in, so no public path remains for a runner outside India.
+`fetchers/mandi.py` now recognises the gate and fails Layer 16 at once with
+that reason — one request, no retries — instead of "HTTP 400 after 3
+attempts". Nothing is patched: the India leg runs on held history until its
+7-day budget withholds it. Re-opening is an owner decision (India-hosted
+relay, or a DMI/NIC conversation), recorded on the ticket.
+
+*FX (#447).* The trusted path rejected the ZAR/USD 2026-10-09 revision
+because Yahoo served Close < Low; v1 published it; reconciliation diverged.
+Measured at `period="max"` across all 20 Layer 1 + 7 tickers: 12,033 of
+~124k bars carry a close outside their own range (PYG/USD 52%, NGN/USD
+24%, ZS=F 847 — all pre-2012), so propagating REJECT to v1 would have
+deleted the series. The rule is split: `ohlc.complete` still REJECTs a
+candle missing a field; `ohlc.relationship` is now a WARNING on the range,
+the close is kept on both paths (v1 logs the dated bars), and the
+daily-move/plausibility rules remain the guard on the close itself.
+`scripts/reconcile_fx.py` reports `revision_findings` — pair, session, rules
+per flagged revision — so the next divergence reads from the artifact alone.
+Tests: both ZAR candles replayed and reconciled; the v1 and trusted
+predicates pinned against each other on the same candles.
+
 ## Unreleased — `python main.py --doctor` reports API keys and what each one gates (2026-10-07)
 
 **#354**, from the God's Eye View evaluation (pattern: its `npm run doctor`).

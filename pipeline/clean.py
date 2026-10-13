@@ -149,11 +149,57 @@ def clean_ohlcv(df: pd.DataFrame, label: str = "") -> pd.DataFrame:
     # partial bars with a logged reason — those are real data defects.
     df = df.dropna(subset=present, how="all")
     df = _drop_partial_bars(df, price_cols, label=label)
+    _warn_incoherent_candles(df, label=label)
 
     # Run sanity checks (warnings only — doesn't block pipeline)
     _validate_price_data(df, label=label)
 
     return df
+
+
+def ohlc_relationship_violated(df: pd.DataFrame) -> pd.Series:
+    """True per row where the candle's high/low do not contain its open and close.
+
+    The vectorised twin of ``trust.quality.ohlc_relationship_holds`` — one
+    inequality, stated twice because this module must not import ``trust``;
+    ``tests/test_clean.py`` pins the two against each other (#447).
+    """
+    return (
+        (df["High"] < df[["Open", "Low", "Close"]].max(axis=1))
+        | (df["Low"] > df[["Open", "High", "Close"]].min(axis=1))
+    )
+
+
+def _warn_incoherent_candles(df: pd.DataFrame, label: str = "") -> None:
+    """Log, never drop, bars whose close lies outside their own range (#447).
+
+    Yahoo serves such candles routinely: measured 2026-10-13 at
+    ``period="max"`` across every Layer 1 and Layer 7 ticker, 12,033 of
+    ~124k bars (PYG/USD 52%, NGN/USD 24%, ZS=F 847 — every one pre-2012,
+    settlements up to 8% outside the traded range). The close is the
+    observation this project reads; the range is auxiliary. Dropping the bar
+    would delete the series, and the trusted path's ``ohlc.relationship``
+    rule records the same bars at WARNING severity for the same reason, so
+    the two paths agree on what they keep. A bar whose *close* is wrong is
+    caught where the close is compared: the daily-move checks, and the
+    stored-value divergence guard at the write.
+    """
+    if df.empty or not {"Open", "High", "Low", "Close"}.issubset(df.columns):
+        return
+    bad = ohlc_relationship_violated(df)
+    if not bad.any():
+        return
+    prefix = f"[{label}] " if label else ""
+    dates = ", ".join(
+        idx.date().isoformat() if hasattr(idx, "date") else str(idx) for idx in df.index[bad][:10]
+    )
+    if int(bad.sum()) > 10:
+        dates += f", … and {int(bad.sum()) - 10} more"
+    logger.warning(
+        "%s%d bar(s) whose close lies outside the bar's own high/low (%s) — "
+        "kept, the close is the observation and the range is the provider's (#447)",
+        prefix, int(bad.sum()), dates,
+    )
 
 
 def clean_fred_series(series: pd.Series) -> pd.Series:
