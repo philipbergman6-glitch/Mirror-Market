@@ -47,6 +47,18 @@ Traps this module exists to survive (``LAYERS.md`` Layers 34/35):
 7.  **One storm id, two formats.** NHC ``al062024`` (four-digit year), JTWC
     ``wp2626`` (two-digit). Both normalise to a four-digit ``season``; an id
     outside the ATCF basin codes raises, naming itself.
+8.  **JTWC lists invests.** ATCF numbers 90–99 are invest areas, and the
+    feed lists their ``.tcw`` too — a Tropical Cyclone Formation Alert with
+    no WMO header and no ``T`` lines, not a forecast. They are dropped at
+    discovery (``parse_jtwc_index``), logged, and never counted as listed:
+    a formation alert is not a storm to grade a port against.
+9.  **An NHC intermediate advisory ("23A") keeps the full advisory's clock.**
+    Its forecast points and wind radii are the 00/06/12/18Z advisory's,
+    stamped ``SYNOPTIME`` at that hour, while the points file's tau-0
+    ``VALIDTIME`` is the 3-hourly fix three hours later. ``synoptic_at`` is
+    the radii's synoptic hour (so ``synoptic_at + tau_h`` is right for every
+    forecast point) and the tau-0 row is that later fix; any other lag, or a
+    lag on a numbered advisory, still raises.
 
 Neither source needs a key.
 """
@@ -115,6 +127,12 @@ _ID_SHAPES = {
 }
 
 _JTWC_PRODUCT_RE = re.compile(r"https://www\.metoc\.navy\.mil/jtwc/products/(\w+)\.tcw")
+# ATCF storm numbers 90–99 are invest areas (trap 8); JTWC lists their
+# formation alerts under the same product name shape as a warning.
+JTWC_INVEST_NUMBERS = range(90, 100)
+# NHC's intermediate advisories ("23A") sit three hours after the synoptic
+# advisory whose forecast they carry (trap 9).
+NHC_INTERMEDIATE_LAG = timedelta(hours=3)
 _JTWC_LINE1_RE = re.compile(r"WT[A-Z]{2}\d{2}\s+[A-Z]{4}\s+(\d{2})(\d{2})(\d{2})\s*$")
 _JTWC_LINE3_RE = re.compile(r"(\d{10})\s+(\d{2})([A-Z])\s+(\S+)\s+(\d{3})\b")
 _JTWC_TRACK_START_RE = re.compile(r"T\d{3}\b")
@@ -457,6 +475,31 @@ def _nhc_synoptic(validtime: object, issued: datetime, label: str) -> datetime:
     )
 
 
+def _nhc_advisory_synoptic(
+    advisory: str, tau0: datetime, radii_synoptic: set[str], label: str,
+) -> datetime:
+    """The synoptic time forecast hours count from, cross-checked against the radii.
+
+    A numbered advisory's radii are stamped at the track's tau-0 time. An
+    intermediate advisory (letter suffix) carries the preceding synoptic
+    advisory's forecast and radii, stamped exactly ``NHC_INTERMEDIATE_LAG``
+    before its tau-0 fix (trap 9) — that earlier hour is the clock. No radii
+    published (a weak system) leaves the tau-0 time as the clock.
+    """
+    stamp = "%Y%m%d%H"
+    if not radii_synoptic:
+        return tau0
+    if radii_synoptic == {tau0.strftime(stamp)}:
+        return tau0
+    earlier = tau0 - NHC_INTERMEDIATE_LAG
+    if advisory[-1:].isalpha() and radii_synoptic == {earlier.strftime(stamp)}:
+        return earlier
+    raise CycloneSourceError(
+        f"{label}: radii synoptic time {sorted(radii_synoptic)} disagrees with the "
+        f"track's {tau0.strftime(stamp)}"
+    )
+
+
 def parse_nhc_products(
     listing: NhcListing, five_day_zip: bytes, radii_zip: bytes, *, checked_at: datetime,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -515,11 +558,7 @@ def parse_nhc_products(
 
     if synoptic is None:
         raise CycloneSourceError(f"{label}: the track has no hour-0 point")
-    if radii_synoptic and radii_synoptic != {synoptic.strftime("%Y%m%d%H")}:
-        raise CycloneSourceError(
-            f"{label}: radii synoptic time {sorted(radii_synoptic)} disagrees with the "
-            f"track's {synoptic.strftime('%Y%m%d%H')}"
-        )
+    synoptic = _nhc_advisory_synoptic(listing.advisory, synoptic, radii_synoptic, label)
 
     track = _track_rows("NHC", listing.storm_id, listing.issued_at, points, label)
     storm = _storm_row(
@@ -568,7 +607,9 @@ def fetch_nhc_storms() -> dict[str, pd.DataFrame]:
 # Layer 35 — JTWC
 # ---------------------------------------------------------------------------
 def parse_jtwc_index(text: str) -> list[str]:
-    """Storm ids from ``jtwc.rss``. A feed listing no product is a valid answer.
+    """Numbered storm ids from ``jtwc.rss``; invests (90–99) are dropped (trap 8).
+
+    A feed listing no product is a valid answer.
 
     Trap 3: ids come from the ``www.metoc.navy.mil/.../{id}.tcw`` URLs in the
     feed text (inside CDATA), never from the ``<link>`` values, whose S3 host
@@ -583,9 +624,15 @@ def parse_jtwc_index(text: str) -> list[str]:
     if root.tag != "rss" or root.find("channel") is None:
         raise CycloneSourceError(f"JTWC RSS has an unexpected root <{root.tag}>")
     ids = sorted(set(_JTWC_PRODUCT_RE.findall(text)))
+    storms: list[str] = []
     for storm_id in ids:
-        parse_storm_id(storm_id, "JTWC")
-    return ids
+        _, number, _ = parse_storm_id(storm_id, "JTWC")
+        if number in JTWC_INVEST_NUMBERS:
+            # Trap 8: a formation alert, not a storm — not listed, never fetched.
+            logger.info("JTWC lists invest %s (a formation alert) — not a storm, skipped", storm_id)
+            continue
+        storms.append(storm_id)
+    return storms
 
 
 def _jtwc_issued(day: int, hour: int, minute: int, synoptic: datetime, label: str) -> datetime:

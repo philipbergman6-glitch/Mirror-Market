@@ -432,6 +432,34 @@ def test_an_unparsable_jtwc_index_raises(web):
         cyclones.fetch_jtwc_storms()
 
 
+def test_jtwc_index_drops_invests_which_are_formation_alerts_not_storms():
+    """Layer 35 failed live three times on 2026-10-12: the RSS listed ep9326, an
+    invest (ATCF 90–99) whose .tcw is a Tropical Cyclone Formation Alert with
+    no WMO header and no T lines. An invest is not a storm — dropped at
+    discovery (#450)."""
+    rss = (FIXTURES / "jtwc_2026-10-13.rss").read_text()
+    assert "ep9326.tcw" in rss
+    assert cyclones.parse_jtwc_index(rss) == ["ep2026", "wp2726", "wp2826"]
+
+
+def test_a_listed_invest_is_never_fetched_and_never_counted(web):
+    _serve_jtwc(web, _rss_listing("wp2726", "ep9326"), {
+        "wp2726": _Response(200, _tcw("jtwc_wp2726_2026-10-07.tcw")),
+        "ep9326": _Response(200, _tcw("jtwc_ep9326_2026-10-13.tcw")),
+    })
+    data = cyclones.fetch_jtwc_storms()
+    status = data["status"].iloc[0]
+    assert (status["storms_listed"], status["storms_parsed"], status["products_absent"]) == (1, 1, 0)
+    assert list(data["storms"]["storm_id"]) == ["wp2726"]
+    assert _jtwc_url("ep9326") not in web.calls
+
+
+def test_a_formation_alert_served_for_a_numbered_storm_still_raises():
+    """The invest product's shape is unknown for a real storm — that stays loud."""
+    with pytest.raises(cyclones.CycloneSourceError, match="unknown header shape"):
+        cyclones.parse_jtwc_tcw("ep2026", _tcw("jtwc_ep9326_2026-10-13.tcw"), checked_at=CHECKED)
+
+
 def test_the_live_jtwc_payload_reads_end_to_end(web):
     """Every product the live RSS lists, with two captured and three absent."""
     _serve_jtwc(web, (FIXTURES / "jtwc_2026-10-07.rss").read_text(), {
@@ -732,6 +760,55 @@ def test_the_readers_return_what_was_stored(web, patched_db):
     track = query.read_cyclone_track()
     assert sorted(track["tau_h"]) == sorted(_francine_frames(web)["track"]["tau_h"])
     assert track.loc[track["tau_h"] == 72, "r64_ne"].isna().all()
+
+
+SIMON = FIXTURES / "simon"
+
+
+def _serve_simon(web) -> None:
+    """ep202026 Simon, intermediate advisory 23A as NHC served it 2026-10-13 06Z."""
+    index = (FIXTURES / "nhc_CurrentStorms_2026-10-13.json").read_text()
+    web.routes[NHC_INDEX] = _Response(200, index)
+    web.routes[_nhc_url("ep202026", "5day")] = _Response(200, (SIMON / "ep202026_5day_023A.zip").read_bytes())
+    web.routes[_nhc_url("ep202026", "fcst")] = _Response(200, (SIMON / "ep202026_fcst_023A.zip").read_bytes())
+
+
+def test_nhc_intermediate_advisory_counts_forecast_hours_from_the_synoptic_advisory(web):
+    """Layer 34 failed live on ep202026 advisory 20A (2026-10-12): the radii
+    are stamped SYNOPTIME 06Z while the tau-0 fix is 09Z. The live 23A zips
+    show the shape: forecast points sit at 00Z + tau (TAU 12 valid 13/1200)
+    while tau 0 is the 03Z fix — so ``synoptic_at`` is the radii's hour (#451)."""
+    _serve_simon(web)
+    data = cyclones.fetch_nhc_storms()
+
+    storm = data["storms"].iloc[0]
+    assert (storm["storm_id"], storm["advisory"], storm["name"]) == ("ep202026", "23A", "Simon")
+    assert storm["issued_at"] == "2026-10-13T06:00:00Z"
+    assert storm["synoptic_at"] == "2026-10-13T00:00:00Z"
+    assert (storm["lat"], storm["lon"], storm["vmax_kt"]) == (20.5, -107.1, 80)
+    track = data["track"].set_index("tau_h")
+    assert list(track.index) == [0, 12, 24, 36, 48, 60, 72, 96, 120]
+    assert track.loc[12, "r64_ne"] is not None and not pd.isna(track.loc[12, "r64_ne"])
+    assert pd.isna(track.loc[96, "r64_ne"])  # 64-kt radii end at 72 h (trap 4)
+    assert data["status"].iloc[0]["storms_parsed"] == 1
+
+
+_T0 = datetime(2026, 10, 12, 9, tzinfo=timezone.utc)
+
+
+def test_a_numbered_advisory_whose_radii_lag_the_track_still_raises():
+    with pytest.raises(cyclones.CycloneSourceError, match="disagrees"):
+        cyclones._nhc_advisory_synoptic("20", _T0, {"2026101206"}, "x")
+
+
+def test_an_intermediate_advisory_accepts_only_the_three_hour_lag():
+    assert cyclones._nhc_advisory_synoptic("20A", _T0, {"2026101206"}, "x") == _T0.replace(hour=6)
+    assert cyclones._nhc_advisory_synoptic("20A", _T0, {"2026101209"}, "x") == _T0
+    assert cyclones._nhc_advisory_synoptic("20A", _T0, set(), "x") == _T0
+    with pytest.raises(cyclones.CycloneSourceError, match="disagrees"):
+        cyclones._nhc_advisory_synoptic("20A", _T0, {"2026101200"}, "x")
+    with pytest.raises(cyclones.CycloneSourceError, match="disagrees"):
+        cyclones._nhc_advisory_synoptic("20A", _T0, {"2026101206", "2026101209"}, "x")
 
 
 def test_nhc_intermediate_advisory_is_read_in_either_case():
