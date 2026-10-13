@@ -76,3 +76,33 @@ _Avoid_: NDA (a vendor instrument this effort does not use), consent form
 - "trader" in `docs/trial/PROTOCOL.md` and `analysis/trial/` vs "physical buyer" in the mission — resolved 2026-10-07 (A6): the canonical term is **participant**, a physical buyer; code and protocol v2 follow it (#412).
 
 - "belt" was about to mean an area outline (2026-10-05 God's Eye View map) — resolved: it keeps its existing meaning (set of pins); the outline is a **footprint**.
+
+## Verification
+
+**Critical basket**
+The named set of displayed numbers (by product, venue, contract, origin, FX pair, crush, landed row) whose accuracy the product is judged on. Membership is a decision, labelled "pre-buyer" until physical buyers have revised it.
+_Avoid_: sample (the sample is drawn from the basket), panel
+
+**Verified**
+A displayed number whose value, unit, observation date and contract month were checked against a source independent of the fetcher that produced it: the publisher of record (Tier 1) or a second provider publishing the same definition (Tier 2). A derived number is verified only when its legs are verified and its arithmetic recomputed (Tier 3).
+_Avoid_: reconciled (see below), validated, tested
+
+**Reconciled**
+One provider's payload run through two of our own code paths with no field-level disagreement. Confirms persistence and parsing, never truth.
+_Avoid_: verified, cross-checked
+
+**Unverifiable**
+A basket number for which no independent source is reachable. A legal published state carried with its reason, never a pass.
+_Avoid_: skipped, n/a
+
+**Discrepancy**
+A verified comparison that fails: a value outside tolerance, or a date, contract, grade, incoterm or FX-date mismatch at any value delta (a metadata fail). Each is explained (cause and owner named) or unexplained.
+_Avoid_: error (until unexplained and material), drift (reserved for reconciliation)
+
+**Material**
+A discrepancy that exceeds both the dataset's tick/rounding tolerance and the economic threshold in USD/MT, or is a metadata fail. A labelled D−1 against the publisher's D is not a discrepancy.
+_Avoid_: significant, large
+
+**Accuracy ledger**
+The published, dated record of a verification pass: sample count per stratum, tolerances, and every discrepancy with its explanation. Shows pass/fail and delta only for licence-restricted series.
+_Avoid_: scorecard, accuracy rate
