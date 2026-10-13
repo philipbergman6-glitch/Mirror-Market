@@ -121,9 +121,9 @@ RETRY_DELAY = 2         # seconds between retries
 
 # Authoritative operational inventory. The public masthead, About Data table,
 # pipeline summary, and smoke contract all consume this catalog so their
-# denominator cannot drift. Numbered groups 2, 11, 15 and 26 each have an
-# independently runnable sub-layer, hence 37 operational layers across 33
-# numbered groups.
+# denominator cannot drift. Some numbered groups carry independently runnable
+# sub-layers (``15`` and ``15b``), so the layer count exceeds the group count;
+# count both from this tuple, never from prose (tests/test_docs_claims.py).
 PRODUCTION_LAYERS = (
     ("prices", "1", "Yahoo Finance (CME/CBOT/ICE)", "Daily", "10 commodity futures"),
     ("usda", "2", "USDA NASS QuickStats", "Annual", "US production, area and yield"),

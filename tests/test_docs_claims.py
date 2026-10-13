@@ -95,6 +95,22 @@ def test_no_doc_states_a_stale_layer_count(doc: str) -> None:
 
 
 @pytest.mark.parametrize("doc", COUNTED_DOCS)
+def test_no_doc_states_a_stale_hyphenated_layer_count(doc: str) -> None:
+    """The adjective form ("consistent 27-layer counts") is a roster claim too.
+
+    B18 #458: the plural-noun grep above never matched it, so `README.md`
+    carried a 27 against a 39-layer registry. Every hyphenated count in these
+    docs describes the whole roster; a subset says "N layers" instead.
+    """
+    expected = _operational_layer_count()
+    for match in re.finditer(r"\b(\d+)-layer\b", _read(doc)):
+        assert int(match.group(1)) == expected, (
+            f"{doc} claims {match.group(0)!r}; "
+            f"config.PRODUCTION_LAYERS holds {expected} layers"
+        )
+
+
+@pytest.mark.parametrize("doc", COUNTED_DOCS)
 def test_no_doc_states_a_stale_group_count(doc: str) -> None:
     expected = _numbered_group_count()
     for match in re.finditer(r"(\d+)\s+numbered\s+(?:source\s+)?groups", _read(doc)):

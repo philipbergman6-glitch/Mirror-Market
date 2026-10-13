@@ -1,7 +1,7 @@
 """
 Database read (query) functions for Mirror Market.
 
-All read_* functions query the SQLite/Turso database and return DataFrames.
+All read_* functions query the SQLite database and return DataFrames.
 Used by the analysis layer and dashboard.
 
 Extracted from the original processing/combiner.py.

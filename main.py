@@ -1,13 +1,9 @@
 """
 Mirror Market — main entry point.
 
-Run this script to fetch, clean, and store all 20 data layers:
-    commodity prices, USDA crop data + progress, FRED, COT, weather,
-    PSD, currencies, World Bank, DCE futures, export sales, forward
-    curves, WASDE, EIA, crush + inspections, CONAB (estimates +
-    weekly farmgate prices), India mandi domestic, CEPEA via Notícias
-    Agrícolas, SAFEX, AgRural FOB, and AMS Gulf export bids — then
-    print a verification summary.
+Run this script to fetch, clean, and store every layer in
+config.PRODUCTION_LAYERS (count from that roster, never from prose) — then
+print a verification summary.
 
 Usage:
     python main.py
@@ -1160,7 +1156,7 @@ def run(
     """
     setup_logging()
     # Say up front which layers cannot fetch. Each one also logs its own skip
-    # later, but scattered across a 29-layer run those read as ordinary noise;
+    # later, but scattered across a full run those read as ordinary noise;
     # the reason a run is degraded belongs at the top of it.
     for name, layers in missing_api_keys().items():
         logger.warning("%s is not set — %s will run degraded or skip", name, layers)
