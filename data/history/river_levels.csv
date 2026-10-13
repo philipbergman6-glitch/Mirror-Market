@@ -82,21 +82,21 @@ Mississippi at Memphis,2026-10-09,8.33,ft,0,nwps,NOAA/NWS National Water Predict
 Mississippi at Memphis,2026-10-10,9.61,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at Memphis,2026-10-11,9.27,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at Memphis,2026-10-12,8.26,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-13,7.1,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-14,5.7,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-15,4.9,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-16,5.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-17,5.5,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-18,6.1,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-19,6.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-20,5.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-21,4.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-22,3.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-23,2.6,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-24,1.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-25,1.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-26,0.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at Memphis,2026-10-27,-0.1,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-13,7.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-14,5.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-15,5.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-16,5.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-17,5.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-18,6.4,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-19,6.6,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-20,6.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-21,5.7,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-22,5.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-23,4.5,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-24,3.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-25,3.1,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-26,2.4,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at Memphis,2026-10-27,1.9,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at St. Louis,2026-07-22,8.25,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at St. Louis,2026-07-23,8.26,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at St. Louis,2026-07-24,5.89,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
@@ -180,20 +180,21 @@ Mississippi at St. Louis,2026-10-09,17.64,ft,0,nwps,NOAA/NWS National Water Pred
 Mississippi at St. Louis,2026-10-10,15.55,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at St. Louis,2026-10-11,14.61,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Mississippi at St. Louis,2026-10-12,11.98,ft,0,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-13,11.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-14,11.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-15,10.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-16,9.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-17,8.7,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-18,8.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-19,7.4,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-20,6.5,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-21,5.6,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-22,4.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-23,4.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-24,3.4,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-25,2.7,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
-Mississippi at St. Louis,2026-10-26,2.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-13,12.5,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-14,12.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-15,10.8,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-16,10.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-17,10.4,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-18,10.9,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-19,10.6,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-20,9.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-21,7.3,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-22,5.9,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-23,5.0,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-24,4.1,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-25,3.2,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-26,2.4,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
+Mississippi at St. Louis,2026-10-27,2.1,ft,1,nwps,NOAA/NWS National Water Prediction Service — stage courtesy of USACE and USGS
 Paraná at Rosario,2024-08-21,0.93,m,0,ina,Instituto Nacional del Agua (INA) — reading by Prefectura Naval Argentina
 Paraná at Rosario,2024-08-22,1.11,m,0,ina,Instituto Nacional del Agua (INA) — reading by Prefectura Naval Argentina
 Paraná at Rosario,2024-08-23,0.97,m,0,ina,Instituto Nacional del Agua (INA) — reading by Prefectura Naval Argentina
