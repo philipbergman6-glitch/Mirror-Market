@@ -2166,6 +2166,10 @@ WEATHER_DRY_SPELL_ALERT_DAYS = 10
 WEATHER_PRECIP_DEFICIT_WINDOW_DAYS = 30
 WEATHER_PRECIP_DEFICIT_BASELINE_DAYS = 90
 WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS = 45
+# The 30-day window has a floor too (B17 #457), and it is the whole window:
+# the total is a sum, so every missing day understates it — in the direction
+# that fires the deficit alert. A partial sum is withheld, never scaled up.
+WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS = WEATHER_PRECIP_DEFICIT_WINDOW_DAYS
 WEATHER_PRECIP_DEFICIT_ALERT_PCT = 40   # alert when 30d total ≥40% below norm
 
 # Data freshness: warn if a layer hasn't updated in this many days.

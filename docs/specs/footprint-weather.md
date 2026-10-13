@@ -450,7 +450,7 @@ The self-healing behaviour comes from [R4].
 
 **Expected load:**
 - **First deploy:** about 120 runs. R4 measured 31.7 s and 845 MB for 128 runs from a home connection.
-- **Every Monday:** 2 runs (Saturday and Sunday, because the cron is weekdays only). About 13 MB. **This is load-bearing:** without it every weekend leaves two NULL days, and a NULL breaks a dry streak (`consecutive_dry_days`) and thins the deficit baseline.
+- **Every Monday:** 2 runs (Saturday and Sunday, because the cron is weekdays only). About 13 MB. **This is load-bearing:** without it every weekend leaves two NULL days, and a NULL breaks a dry streak (`consecutive_dry_days`), thins the deficit baseline, and — inside the 30-day window — withholds the deficit outright (`WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS` is the whole window, B17 #457).
 - **After a failed deploy:** 1–2 runs.
 
 ---

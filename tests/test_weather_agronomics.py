@@ -3,7 +3,7 @@
 Covers:
 - fetcher is_forecast flag (rows dated after today)
 - is_forecast schema migration + save path (NULL for legacy callers)
-- clean_weather keeps is_forecast out of the forward-fill
+- clean_weather never fills a gap (B14 #454)
 - observed_only / consecutive_dry_days / precip_deficit_30d helpers
 - section alerts: forecast exclusion, dry spell, 30d deficit, pod-fill heat
 - snapshot weather block observed-only behavior + new fields
@@ -19,6 +19,9 @@ import pandas as pd
 
 from analysis.briefing.sections import weather as weather_section
 from analysis.weather_alerts import (
+    RULE_DRY_SPELL,
+    RULE_PRECIP_DEFICIT,
+    assess_region,
     consecutive_dry_days,
     heat_threshold_for,
     observed_only,
@@ -27,6 +30,7 @@ from analysis.weather_alerts import (
 from config import (
     WEATHER_EXTREME_HEAT_C,
     WEATHER_POD_FILL_HEAT_C,
+    WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS,
 )
 from fetchers.weather import fetch_region_weather
 from pipeline import store
@@ -101,18 +105,35 @@ def test_save_weather_with_flag_roundtrips(patched_db):
 
 
 # ---------------------------------------------------------------------------
-# Clean — flag held out of forward-fill
+# Clean — a missing reading stays missing (B14 #454)
 # ---------------------------------------------------------------------------
 
-def test_clean_weather_does_not_ffill_is_forecast():
+def test_clean_weather_never_fills_a_gap():
     df = pd.DataFrame({
         "Date": ["2026-01-01", "2026-01-02", "2026-01-03"],
         "temp_max": [30.0, np.nan, 32.0],
+        "precipitation": [0.0, np.nan, 0.0],
         "is_forecast": [1, np.nan, 0],
     })
     out = clean_weather(df)
-    assert out["temp_max"].iloc[1] == 30.0          # measurements ffilled
-    assert pd.isna(out["is_forecast"].iloc[1])      # flag never inherited
+    assert pd.isna(out["temp_max"].iloc[1])
+    assert pd.isna(out["precipitation"].iloc[1])
+    assert pd.isna(out["is_forecast"].iloc[1])
+
+
+def test_a_missing_reading_after_nine_dry_days_is_not_a_dry_spell():
+    """The auditor's reproduction: nine dry days and a missing tenth reading
+    graded 'Dry spell — 10 consecutive days' once the cleaner had turned the
+    gap into 0 mm."""
+    dates = pd.date_range("2026-01-01", periods=10)
+    rows = _obs_df(dates, [0.0] * 9 + [np.nan], is_forecast=[0] * 10)
+
+    graded = assess_region("US Illinois", clean_weather(rows))
+
+    assert graded is not None
+    assert graded.precip is None
+    assert RULE_DRY_SPELL not in {a.rule for a in graded.alerts}
+    assert RULE_DRY_SPELL in {w.rule for w in graded.withheld}
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +174,61 @@ def test_consecutive_dry_days_counts_trailing_streak():
     assert consecutive_dry_days(_obs_df(dates, [0.0] * 14 + [8.0])) == 0
 
 
+def test_consecutive_dry_days_counts_calendar_days_not_rows():
+    """The auditor's reproduction (B16 #456): ten dry readings dated every
+    second day were '10 consecutive days <1mm'. A missing date ends the run
+    exactly as a missing reading does."""
+    dates = pd.date_range("2026-01-01", periods=10, freq="2D")
+    assert consecutive_dry_days(_obs_df(dates, [0.0] * 10)) == 1
+
+
+def test_alternate_day_dry_readings_are_not_a_dry_spell():
+    dates = pd.date_range("2026-01-01", periods=10, freq="2D")
+    graded = assess_region("US Illinois", _obs_df(dates, [0.0] * 10))
+
+    assert graded is not None
+    assert graded.dry_days == 1
+    assert RULE_DRY_SPELL not in {a.rule for a in graded.alerts}
+
+
+def test_a_dry_run_that_ends_at_a_gap_withholds_the_spell():
+    """Five dry days back to a missing date, dry days before it: the run may
+    be ten long. That is unanswered, not 'no dry spell'."""
+    dates = list(pd.date_range("2026-01-01", periods=6)) + list(
+        pd.date_range("2026-01-08", periods=5)
+    )
+    graded = assess_region("US Illinois", _obs_df(dates, [0.0] * 11))
+
+    assert graded is not None
+    assert graded.dry_days == 5
+    assert RULE_DRY_SPELL not in {a.rule for a in graded.alerts}
+    reasons = [w.reason for w in graded.withheld if w.rule == RULE_DRY_SPELL]
+    assert reasons and "2026-01-07" in reasons[0]
+
+
+def test_a_gap_too_short_to_make_a_spell_is_answered():
+    """Five dry days, one missing date, then rain: even if the missing day
+    was dry the run is six days, so 'no dry spell' is a true answer."""
+    dates = list(pd.date_range("2026-01-01", periods=6)) + list(
+        pd.date_range("2026-01-08", periods=5)
+    )
+    graded = assess_region("US Illinois", _obs_df(dates, [0.0] * 5 + [6.0] + [0.0] * 5))
+
+    assert graded is not None
+    assert graded.dry_days == 5
+    assert RULE_DRY_SPELL not in {a.rule for a in graded.alerts}
+    assert RULE_DRY_SPELL not in {w.rule for w in graded.withheld}
+
+
+def test_a_dry_run_that_ends_at_a_wet_day_is_answered():
+    dates = pd.date_range("2026-01-01", periods=11)
+    graded = assess_region("US Illinois", _obs_df(dates, [0.0] * 5 + [6.0] + [0.0] * 5))
+
+    assert graded is not None
+    assert graded.dry_days == 5
+    assert RULE_DRY_SPELL not in {w.rule for w in graded.withheld}
+
+
 def test_precip_deficit_30d_flags_dry_month():
     # 90 baseline days at 4mm/day, then 30 recent days at 0.5mm/day
     dates = pd.date_range("2026-01-01", periods=120)
@@ -168,6 +244,27 @@ def test_precip_deficit_30d_thin_baseline_returns_none_pct():
     assert total is not None
     assert deficit is None
     assert precip_deficit_30d(pd.DataFrame()) == (None, None)
+
+
+def test_a_thin_recent_window_withholds_the_deficit():
+    """The auditor's reproduction (B17 #457): ninety baseline days and one
+    recent reading graded a 96.7% deficit — one day's rain against a
+    thirty-day norm. A partial sum is not a thirty-day total."""
+    dates = list(pd.date_range("2026-01-01", periods=90)) + [pd.Timestamp("2026-04-30")]
+    rows = _obs_df(dates, [4.0] * 90 + [4.0])
+
+    assert precip_deficit_30d(rows) == (None, None)
+
+    graded = assess_region("US Illinois", rows)
+    assert graded is not None
+    assert graded.deficit_pct is None
+    assert graded.precip_30d_mm is None
+    assert RULE_PRECIP_DEFICIT not in {a.rule for a in graded.alerts}
+    reasons = [w.reason for w in graded.withheld if w.rule == RULE_PRECIP_DEFICIT]
+    assert reasons == [
+        f"1 of {WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS} observed days needed in the "
+        "30-day window"
+    ]
 
 
 def test_heat_threshold_pod_fill_months():
@@ -244,21 +341,21 @@ def test_section_same_temp_no_alert_off_season(patched_db):
 def test_snapshot_weather_block_observed_only(patched_db):
     from analysis.briefing.snapshot import _weather_block
 
-    dates = pd.date_range("2026-06-01", periods=12)
+    dates = pd.date_range("2026-06-01", periods=33)
     df = _obs_df(
         dates,
-        precip=[2.0] * 9 + [40.0] * 3,
-        is_forecast=[0] * 9 + [1] * 3,
-        temp_max=[25.0] * 9 + [45.0] * 3,
+        precip=[2.0] * 30 + [40.0] * 3,
+        is_forecast=[0] * 30 + [1] * 3,
+        temp_max=[25.0] * 30 + [45.0] * 3,
     )
     store.save_weather_data("China Heilongjiang", df)
     block = _weather_block()
     row = block["China Heilongjiang"]
 
-    assert row["date"] == "2026-06-09"           # last observed, not forecast
+    assert row["date"] == "2026-06-30"           # last observed, not forecast
     assert row["temp_max_c"] == 25.0
     assert row["precipitation_mm"] == 2.0
     assert row["forecast_days"] == 3
     assert row["consecutive_dry_days"] == 0
-    assert row["precip_30d_mm"] == 18.0
+    assert row["precip_30d_mm"] == 60.0
     assert "precip_30d_deficit_pct" in row

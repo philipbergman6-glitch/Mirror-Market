@@ -209,7 +209,12 @@ def clean_weather(df: pd.DataFrame) -> pd.DataFrame:
     Steps:
         1. Ensure Date column is datetime.
         2. Sort by date.
-        3. Forward-fill small gaps (API occasionally has missing values).
+
+    Gaps are never filled (B14 #454). A missing precipitation reading
+    carried forward from a dry day is 0 mm nobody measured — and it lands
+    on the dry-spell and deficit rules in the direction that fires them.
+    NULL stays NULL (invariant 2); ``analysis.weather_alerts`` withholds
+    what a gap leaves unanswerable.
 
     Returns cleaned copy (original is not mutated).
     """
@@ -219,10 +224,6 @@ def clean_weather(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.sort_values("Date").reset_index(drop=True)
-    # is_forecast is a flag, not a measurement — hold it out of the
-    # forward-fill so a gap never inherits a neighboring day's flag.
-    measure_cols = [c for c in df.columns if c != "is_forecast"]
-    df[measure_cols] = df[measure_cols].ffill(limit=3)
     if "is_forecast" in df.columns:
         df["is_forecast"] = pd.to_numeric(df["is_forecast"], errors="coerce")
     return df
@@ -231,11 +232,10 @@ def clean_weather(df: pd.DataFrame) -> pd.DataFrame:
 def clean_river_levels(df: pd.DataFrame) -> pd.DataFrame:
     """Clean river stage rows from either provider (Layers 27/28).
 
-    Deliberately *not* clean_weather: weather forward-fills small gaps, and a
-    river gauge must not. A missing stage is a reading nobody took, and the
-    days it goes missing — a frozen sensor in a low-water event — are exactly
-    the days a carried-forward level would be wrong in the direction that
-    matters. NULL stays NULL (invariant 2).
+    A missing stage is a reading nobody took, and the days it goes missing —
+    a frozen sensor in a low-water event — are exactly the days a
+    carried-forward level would be wrong in the direction that matters.
+    NULL stays NULL (invariant 2).
 
     Returns a cleaned copy; the original is not mutated.
     """
