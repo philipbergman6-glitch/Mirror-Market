@@ -76,3 +76,9 @@ _Avoid_: NDA (a vendor instrument this effort does not use), consent form
 - "trader" in `docs/trial/PROTOCOL.md` and `analysis/trial/` vs "physical buyer" in the mission — resolved 2026-10-07 (A6): the canonical term is **participant**, a physical buyer; code and protocol v2 follow it (#412).
 
 - "belt" was about to mean an area outline (2026-10-05 God's Eye View map) — resolved: it keeps its existing meaning (set of pins); the outline is a **footprint**.
+
+## Publishing
+
+**Publication disposition**
+What the public may see of a source's series, fixed by that source's terms and decided per series (A18, 2026-10-13). One of three states: **open** (raw levels public), **derived** (raw levels desk-only; the public sees only our arithmetic on them — spreads against another series, rebased indices, ratios, ranks, percentiles), **withheld** (nothing of the series is public; at most a labelled link to the publisher's own page). An absolute change is not derived — it reconstructs the level. The committed history CSVs are a public surface, so a `derived` or `withheld` series is never exported there. Pre-sale every series is `open` (owner decision 2026-10-13); the other two states exist for the licence flip at sale. The private desk edition is internal use and sees raw levels under every disposition.
+_Avoid_: licence-blocked (a reason, not a state), redacted, hidden
