@@ -489,6 +489,15 @@ Surfaces: the masthead's "Board and FX priced from data N old" (generation time 
 
 **A fast refresh's failure mode is not a crash — it is a structurally perfect site that knows less than the one it replaces.** It inherits 26 layers from whatever database it sits on, and on an unseeded runner that is only what `data/history/*.csv` carries, so PSD, weather, COT and crop progress would silently vanish behind legal empty states. `trust.site_promotion.verify_refresh_is_not_a_regression` compares the candidate's `manifest.json` against the published edition's: no layer's observation may go backwards or vanish, no page that rendered may tombstone. A missing *candidate* manifest is a refusal (being unable to compare is being unable to pass); a missing *published* one passes loudly (the first build has nothing to compare against). Refusal is a **no-op** — `scripts/refresh_prices.py` exits before the Pages upload and the live edition is untouched. `docs/manifest.json` is a published **asset**, not a page: it is in `trust.site_promotion.PUBLISHED_ASSETS` (link-checked for existence) rather than `expected_site_paths` (crawled and timestamp-checked as HTML).
 
+**The refresh seeds only from a verified database (#453).** Two GitHub Actions cache identities, never one — restore-keys match by prefix, so neither prefix extends the other:
+
+| Cache | Key | Written by | Restored by |
+|---|---|---|---|
+| **Verified seed** | `mirror-market-db-verified-<run_id>` | `deploy-dashboard.yml` "Cache the verified seed for the fast refresh" — only when `generate_site` and the candidate promotion contract (`smoke_candidate`) both succeeded on `main`; `refresh-prices.yml` "Advance the verified seed" — default `success()`, so only after `scripts/refresh_prices.py` passed both its gates and the browser smoke passed | `refresh-prices.yml` "Restore the verified seed" (newest entry by prefix) |
+| **Diagnostic** | `mirror-market-diagnostic-db-<run_id>` | `deploy-dashboard.yml` "Cache the database for diagnosis" — every non-cancelled `main` run, whatever its layers or candidate did | nothing automatic; for inspecting a failed or refused run's database |
+
+A deploy whose candidate fails the promotion contract, and a refresh whose candidate is refused, leave the seed where the last verified edition put it. The regression gate is unchanged; the split only stops a refused database from becoming the next refresh's starting point — before it, a deploy that hard-failed three layers (2026-10-13) cached its database, and the next refresh restored it, was refused, and re-cached it.
+
 ## Module dependency graph
 
 ```
