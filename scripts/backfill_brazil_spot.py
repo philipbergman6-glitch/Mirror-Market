@@ -8,8 +8,8 @@ the raw BRL price, we reconstruct it:
     price_brl = spot_usd_mt / brl_usd        (brl_usd is USD-per-BRL)
 
 Only dates missing from brazil_spot_prices are written, so the script is
-safe to re-run. Run it once after wiring up a persistent (Turso) database
-to seed basis history from the archive:
+safe to re-run. Run it to seed basis history from the archive (CI persists
+the table through data/history/brazil_spot_prices.csv — invariant 6):
 
     python scripts/backfill_brazil_spot.py
 """
