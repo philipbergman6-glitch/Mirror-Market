@@ -15,6 +15,7 @@ from __future__ import annotations
 import calendar
 import contextlib
 import gzip
+import logging
 from datetime import date
 from pathlib import Path
 
@@ -724,6 +725,42 @@ def test_mandi_requests_every_month_the_lookback_window_touches(monkeypatch) -> 
         (19, 2026, 12), (19, 2027, 1), (20, 2026, 12), (20, 2027, 1),
     }
     assert {p["commodityId"] for p in sent} == {13}
+
+
+def test_mandi_captcha_gate_fails_the_layer_at_once_with_the_reason(monkeypatch, caplog) -> None:
+    """Since 2026-10-09 the report API answers HTTP 400
+    ``TOKEN_OR_CAPTCHA_REQUIRED`` to every request (#449). That is a closed
+    door, not a transient: one request, no retries, and the layer's reason
+    names the gate instead of "HTTP 400 after 3 attempts"."""
+    sent: list[dict] = []
+    gate = {"detail": "Captcha key and captcha value are required.", "code": "TOKEN_OR_CAPTCHA_REQUIRED"}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        sent.append(dict(params))
+        return _AgmResponse(400, gate)
+
+    monkeypatch.setattr("fetchers.mandi.requests.get", fake_get)
+    monkeypatch.setattr("fetchers.mandi.retry_sleep", lambda attempt: pytest.fail("must not retry"))
+
+    with caplog.at_level(logging.ERROR, logger="fetchers.mandi"):
+        result = fetch_mandi_prices(today=date(2026, 10, 13))
+
+    assert result.status == "failed"
+    assert result.data == {}
+    assert "TOKEN_OR_CAPTCHA_REQUIRED" in result.error and "#449" in result.error
+    assert len(sent) == 1
+
+
+def test_mandi_plain_http_400_is_still_retried_as_a_transient(monkeypatch) -> None:
+    """Only the captcha gate short-circuits; a bodyless 400 keeps the old
+    three-attempt transport path and its ``failed`` verdict."""
+    sent = _serve_agmarknet(monkeypatch, lambda state, year, month: 400)
+
+    result = fetch_mandi_prices(today=date(2026, 10, 13))
+
+    assert result.status == "failed"
+    assert "after 3 attempts (HTTP 400)" in result.error
+    assert len(sent) == 6  # three attempts per state, both states tried
 
 
 # ── CONAB weekly farmgate prices (Layer 15b) ────────────────────────────────

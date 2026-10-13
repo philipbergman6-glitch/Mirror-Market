@@ -220,7 +220,22 @@ def generic_candidate_quality_rules(
             QualityRule("settlement.confirmed", version, "candidate", FindingSeverity.REJECT, _settlement_confirmed)
         )
     if "ohlc.relationship" in requested_rules:
-        rules.append(QualityRule("ohlc.relationship", version, "candidate", FindingSeverity.REJECT, _ohlc_relationship))
+        # Two findings, two severities (#447). A candle missing one of its
+        # four fields is half an observation and is rejected, as v1's
+        # ``clean_ohlcv`` drops the same partial bar. A *complete* candle
+        # whose close sits outside its own high/low is accepted with a
+        # durable WARNING on the range: measured 2026-10-13 over every Layer
+        # 1 and Layer 7 ticker at ``period="max"``, Yahoo serves such candles
+        # routinely — 12,033 of ~124k bars; PYG/USD 52%, NGN/USD 24%, ZS=F
+        # 847 (all pre-2012, settlements up to 8% outside the traded range),
+        # ZAR/USD 96 — so rejecting the close would delete the series, not
+        # guard it. The close is the observation every conversion reads and
+        # is guarded on its own by the daily-move and plausibility rules;
+        # the range is auxiliary, and the range is what the finding is about.
+        rules.append(QualityRule("ohlc.complete", version, "candidate", FindingSeverity.REJECT, _ohlc_complete))
+        rules.append(
+            QualityRule("ohlc.relationship", version, "candidate", FindingSeverity.WARNING, _ohlc_relationship)
+        )
     if "price.daily-move" in requested_rules:
         rules.append(
             QualityRule("price.daily-move", version, "candidate", FindingSeverity.QUARANTINE, _price_daily_move)
@@ -586,24 +601,45 @@ def _settlement_state(subject: Any) -> SettlementState | None:
     return None
 
 
-def _ohlc_relationship(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+def _ohlc_present(context: QualityRuleContext) -> dict[str, Decimal]:
     values = {field_name: _candidate_decimal(context, field_name) for field_name in _OHLC_FIELDS}
-    present = {field_name: value for field_name, value in values.items() if value is not None}
-    if not present:
+    return {field_name: value for field_name, value in values.items() if value is not None}
+
+
+def _ohlc_complete(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    """A candle that carries some, but not all, of its four fields."""
+    present = _ohlc_present(context)
+    if not present or len(present) == len(_OHLC_FIELDS):
         return ()
+    return (
+        RuleFinding(
+            evidence={"missing": sorted(set(_OHLC_FIELDS) - set(present))},
+            message="OHLC observations must provide a complete candle",
+        ),
+    )
+
+
+def ohlc_relationship_holds(open_value: Any, high_value: Any, low_value: Any, close_value: Any) -> bool:
+    """The one predicate for a coherent candle, shared with v1 (#447).
+
+    ``pipeline.clean.clean_ohlcv`` applies the same inequality vectorised so
+    both paths flag the same bars; ``tests/test_clean.py`` pins the two
+    against each other on the same candles.
+    """
+    return not (
+        high_value < max(open_value, low_value, close_value)
+        or low_value > min(open_value, high_value, close_value)
+    )
+
+
+def _ohlc_relationship(context: QualityRuleContext) -> tuple[RuleFinding, ...]:
+    """A complete candle whose high/low do not contain its open and close."""
+    present = _ohlc_present(context)
     if len(present) != len(_OHLC_FIELDS):
-        return (
-            RuleFinding(
-                evidence={"missing": sorted(set(_OHLC_FIELDS) - set(present))},
-                message="OHLC observations must provide a complete candle",
-            ),
-        )
-    open_value = present["open_value"]
-    high_value = present["high_value"]
-    low_value = present["low_value"]
-    close_value = present["close_value"]
-    assert open_value is not None and high_value is not None and low_value is not None and close_value is not None
-    if high_value < max(open_value, low_value, close_value) or low_value > min(open_value, high_value, close_value):
+        return ()
+    if not ohlc_relationship_holds(
+        present["open_value"], present["high_value"], present["low_value"], present["close_value"]
+    ):
         return (
             RuleFinding(
                 evidence={field_name: str(value) for field_name, value in present.items()},

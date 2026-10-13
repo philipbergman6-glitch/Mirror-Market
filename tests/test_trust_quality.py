@@ -352,27 +352,64 @@ def test_settlement_validator_rejects_unfinished_current_session_bars(state: str
     assert any(finding.rule_id == "settlement.confirmed" for finding in result.findings)
 
 
-def test_ohlc_validator_rejects_impossible_candles() -> None:
-    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
-
-    result = QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
+def _candle_evaluation(contract, **candle):
+    subject = {
+        "identity": _minimal_identity(contract),
+        "value": candle.get("close_value", "1025.5"),
+        "settlement_state": SettlementState.SETTLED,
+        "parsed_at": NOW,
+        **candle,
+    }
+    return QualityRuleEngine(generic_candidate_quality_rules(contract)).evaluate(
         run_id=_ids()[0],
         dataset_id=contract.dataset.dataset_id,
         subject_id="row-1",
-        subject={
-            "identity": _minimal_identity(contract),
-            "value": "1025.5",
-            "open_value": "1020",
-            "high_value": "1024",
-            "low_value": "1018",
-            "close_value": "1025.5",
-            "settlement_state": SettlementState.SETTLED,
-            "parsed_at": NOW,
-        },
+        subject=subject,
     )
 
+
+def test_ohlc_validator_accepts_a_close_outside_its_range_with_a_warning() -> None:
+    """A complete candle whose close sits outside its high/low keeps its
+    close and carries a durable WARNING on the range (#447).
+
+    Yahoo serves such candles routinely (12,033 of ~124k bars across every
+    Layer 1 and 7 ticker on 2026-10-13; PYG/USD 52%); the close is the
+    observation and is guarded by the daily-move rules, so rejecting it
+    would delete the series rather than guard it.
+    """
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+
+    result = _candle_evaluation(
+        contract, open_value="1020", high_value="1024", low_value="1018", close_value="1025.5"
+    )
+
+    assert result.disposition is QualityState.ACCEPTED
+    finding = next(finding for finding in result.findings if finding.rule_id == "ohlc.relationship")
+    assert finding.severity is FindingSeverity.WARNING
+    assert finding.evidence["close_value"] == "1025.5"
+
+
+def test_ohlc_validator_still_rejects_an_incomplete_candle() -> None:
+    """Half a candle is half an observation — v1 drops the same partial bar."""
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+
+    result = _candle_evaluation(contract, open_value="1020", high_value="1024", close_value="1022")
+
     assert result.disposition is QualityState.REJECTED
-    assert any(finding.rule_id == "ohlc.relationship" for finding in result.findings)
+    finding = next(finding for finding in result.findings if finding.rule_id == "ohlc.complete")
+    assert list(finding.evidence["missing"]) == ["low_value"]
+    assert not any(finding.rule_id == "ohlc.relationship" for finding in result.findings)
+
+
+def test_ohlc_validator_is_silent_on_a_coherent_candle() -> None:
+    contract = PILOT_REGISTRY.dataset_by_key("yahoo-finance", "cbot-soybean-named-contracts")
+
+    result = _candle_evaluation(
+        contract, open_value="1020", high_value="1026", low_value="1018", close_value="1025.5"
+    )
+
+    assert result.disposition is QualityState.ACCEPTED
+    assert not any(finding.rule_id.startswith("ohlc.") for finding in result.findings)
 
 
 def test_price_daily_move_validator_quarantines_extreme_moves() -> None:

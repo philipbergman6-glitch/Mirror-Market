@@ -253,17 +253,54 @@ def test_the_v1_downloader_is_restored_after_the_run() -> None:
     assert yfinance_fetcher.download_bars is before
 
 
-def test_ci_zar_close_above_high_remains_diverged_and_reports_rejection():
-    """Replay the public OHLC row in CI run 37702094754; never relax the gate."""
-    day = date(2026, 10, 7)
-    bars = frame([(day, 0.060509610921144485)])
-    bars.loc[:, "Open"] = 0.06046077236533165
-    bars.loc[:, "High"] = 0.06050887703895569
-    bars.loc[:, "Low"] = 0.05978776514530182
+def _zar_candle(day: date, *, open_: float, high: float, low: float, close: float) -> pd.DataFrame:
+    bars = frame([(day, close)])
+    bars.loc[:, "Open"] = open_
+    bars.loc[:, "High"] = high
+    bars.loc[:, "Low"] = low
+    return bars
+
+
+@pytest.mark.parametrize(
+    ("day", "candle", "violation"),
+    [
+        # The public row in CI run 37702094754: Close > High.
+        (
+            date(2026, 10, 7),
+            dict(open_=0.06046077236533165, high=0.06050887703895569,
+                 low=0.05978776514530182, close=0.060509610921144485),
+            "close above high",
+        ),
+        # The revised row in CI run 38254970831: Close < Low (#447).
+        (
+            date(2026, 10, 9),
+            dict(open_=0.06030054, high=0.06060698, low=0.06030054, close=0.06028534),
+            "close below low",
+        ),
+    ],
+    ids=["close-above-high", "close-below-low"],
+)
+def test_ci_zar_incoherent_candle_is_kept_by_both_paths_and_dated_in_the_report(day, candle, violation):
+    """Replay the two ZAR/USD candles behind #447.
+
+    Both paths keep the close — the trusted path with a durable WARNING on
+    the range, v1 with a log line — so the pair reconciles, and the report
+    names the session and the rule so the next reader needs no re-pull.
+    """
     run = reconcile_once(
-        pairs=("ZAR/USD",), download=downloader({ticker_for("ZAR/USD"): bars}),
-        now=datetime(2026, 10, 7, 23, 33, tzinfo=timezone.utc),
+        pairs=("ZAR/USD",), download=downloader({ticker_for("ZAR/USD"): _zar_candle(day, **candle)}),
+        now=datetime(day.year, day.month, day.day, 23, 33, tzinfo=timezone.utc),
     )
-    assert run.status == STATUS_DIVERGED
-    assert run.pairs[0].legacy_rows == 1 and run.pairs[0].trusted_rows == 0
-    assert run.to_dict()["rejected_revision_ids"]
+    assert run.status == STATUS_RECONCILED, violation
+    assert run.pairs[0].legacy_rows == 1 and run.pairs[0].trusted_rows == 1
+    report = run.to_dict()
+    assert report["rejected_revision_ids"] == []
+    assert report["revision_findings"] == [
+        {
+            "pair": "ZAR/USD",
+            "revision_id": report["revision_findings"][0]["revision_id"],
+            "effective_date": day.isoformat(),
+            "quality_state": "accepted",
+            "rule_ids": ["ohlc.relationship"],
+        }
+    ]

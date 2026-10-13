@@ -12,6 +12,13 @@ Source history:
     republished on data.gov.in. From ~2026-09-24 api.data.gov.in refuses
     TCP from every non-Indian address, so the layer went dark. Re-sourced
     2026-10-05 to ``api.agmarknet.gov.in``, which answers from anywhere.
+    **Dark again since 2026-10-09 (#449)**: the report endpoint answers
+    HTTP 400 ``TOKEN_OR_CAPTCHA_REQUIRED`` to every request; the catalogue
+    endpoints (``/v1/daily-price-arrival/filters``) still answer. The site
+    that issues the captcha 403s outside India, as do the old ``.aspx``
+    report pages and (TCP-refused) data.gov.in, so no public path remains
+    for a runner outside India. The gate is recognised and the layer
+    fails at once with that reason — withheld, never retried or patched.
     Validated that day before the switch: on complete days the MP median
     matched our stored data.gov.in values to ≤0.23% (6/6 days) and MH to
     ≤1% (16/17; the miss a 6-mandi Sunday); every one of 202 MSAMB (the
@@ -164,9 +171,25 @@ def _window_months(today: date) -> list[tuple[int, int]]:
     return months
 
 
+#: The error code Agmarknet answers with, HTTP 400, when the report is asked
+#: for without a solved captcha (probed 2026-10-12 and 2026-10-13; #449).
+_CAPTCHA_GATE_CODE = "TOKEN_OR_CAPTCHA_REQUIRED"
+
+
+def _is_captcha_gate(resp: requests.Response) -> bool:
+    """True when a non-200 answer is the captcha gate, not a transient."""
+    if resp.status_code != 400:
+        return False
+    try:
+        body = resp.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("code") == _CAPTCHA_GATE_CODE
+
+
 def _fetch_month(state: str, year: int, month: int) -> dict:
     """Fetch one state's date-wise report for one month. Raises on
-    exhausted retries."""
+    exhausted retries, or at once on the captcha gate (#449)."""
     params: dict[str, str | int] = {
         "year": year,
         "month": month,
@@ -176,6 +199,7 @@ def _fetch_month(state: str, year: int, month: int) -> dict:
     }
     last_error = "no attempts made"
     for attempt in range(1, MAX_RETRIES + 1):
+        gated = False
         try:
             resp = requests.get(
                 MANDI_API_URL,
@@ -186,8 +210,21 @@ def _fetch_month(state: str, year: int, month: int) -> dict:
             if resp.status_code == 200:
                 return resp.json()
             last_error = f"HTTP {resp.status_code}"
+            gated = _is_captcha_gate(resp)
         except (requests.RequestException, ValueError) as exc:
             last_error = str(exc)
+        if gated:
+            # Not a transient: since 2026-10-09 the report demands a captcha
+            # key/value the browser flow obtains (#449). Retrying cannot
+            # change the answer, and "HTTP 400 after 3 attempts" hid the
+            # reason for three days of runs. The public API path is closed to
+            # an unattended job; the layer withholds with this reason.
+            raise ScraperShapeError(
+                f"Agmarknet: {state} {year:04d}-{month:02d} answered "
+                f"{_CAPTCHA_GATE_CODE} — the report API now demands a captcha "
+                "the browser flow solves, so the public path is closed to an "
+                "unattended fetch (#449); withheld, not retried"
+            )
         logger.warning(
             "Agmarknet: %s %04d-%02d attempt %d failed: %s",
             state, year, month, attempt, last_error,
