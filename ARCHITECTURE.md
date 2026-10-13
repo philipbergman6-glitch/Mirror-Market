@@ -109,7 +109,7 @@ read as a real 0% session in every derived metric. Rejection is final
 later evidence could release, so it is dropped log-only, never held — see
 the quarantine rules below for what *is* held. Limited forward-fill
 survives only in `clean_fred_series()` (monthly macro series stay in force
-between publications) and `clean_weather()`. Returns copies — originals
+between publications); weather gaps stay gaps (B14 #454). Returns copies — originals
 are never mutated. Also `clean_india_domestic()`, `clean_brazil_spot()`,
 `clean_safex()`, `clean_sagis_deliveries()`.
 

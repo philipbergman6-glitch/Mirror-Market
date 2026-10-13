@@ -363,9 +363,9 @@ def test_the_ina_error_object_served_under_http_200_is_a_failure_not_a_frame(
 # Cleaning — a river gap is not a weather gap
 # ---------------------------------------------------------------------------
 def test_a_missing_stage_is_never_forward_filled():
-    """clean_weather forward-fills small gaps; this must not. The days a gauge
-    goes dark — a frozen sensor in a low-water event — are exactly the days a
-    carried-forward level would be wrong in the direction that matters."""
+    """The days a gauge goes dark — a frozen sensor in a low-water event —
+    are exactly the days a carried-forward level would be wrong in the
+    direction that matters."""
     frame = pd.DataFrame({
         "Date": pd.to_datetime(["2026-08-18", "2026-08-19", "2026-08-20"]),
         "stage": [11.4, None, 11.0],

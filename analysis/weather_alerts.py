@@ -9,7 +9,7 @@ different answer for the same pin on the same day.
 The six observed rules (thresholds in config.py — this module adds none):
 
     heavy rain      latest precip > WEATHER_HEAVY_RAIN_MM
-    dry spell       trailing run of days < WEATHER_DRY_THRESHOLD_MM reaches
+    dry spell       trailing run of calendar days < WEATHER_DRY_THRESHOLD_MM reaches
                     WEATHER_DRY_SPELL_ALERT_DAYS
     dry day         latest precip < WEATHER_DRY_THRESHOLD_MM
     30d deficit     30-day total ≥ WEATHER_PRECIP_DEFICIT_ALERT_PCT below the
@@ -24,9 +24,19 @@ Precedence is the briefing's: heavy rain, dry spell and dry day are one chain
 Observed only. A forecast heatwave is not a reading, so `is_forecast = 1`
 rows are dropped before any rule runs (NULL = observed, pre-flag data).
 
+A gap is a gap (B14 #454): ``pipeline.clean.clean_weather`` fills nothing,
+so a missing reading reaches these rules as NULL and is never read as 0 mm.
+A dry run counts calendar days back from the latest observation, and a
+missing date or reading ends it (B16 #456).
+
 A rule the data cannot answer is **withheld with a reason**, never reported
-as "no alert". The deficit needs WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS
-observed days in the baseline before its 30-day window; a fresh CI runner
+as "no alert". A dry run that ends at a gap, not a wet day, withholds the
+dry-spell rule — the unmeasured day could extend it — unless a measured wet
+day close behind the gap caps the run short of a spell. The deficit's 30-day
+window must be complete (WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS, B17 #457):
+a partial sum is not a 30-day total. The deficit also needs
+WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS observed days in the baseline before
+its 30-day window; a fresh CI runner
 holds ~31 observed days (Open-Meteo `past_days=30`, and weather is not a
 history table), so on today's pipeline that rule is withheld everywhere —
 and every surface says so.
@@ -58,6 +68,7 @@ from config import (
     WEATHER_PRECIP_DEFICIT_ALERT_PCT,
     WEATHER_PRECIP_DEFICIT_BASELINE_DAYS,
     WEATHER_PRECIP_DEFICIT_MIN_BASELINE_OBS,
+    WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS,
     WEATHER_PRECIP_DEFICIT_WINDOW_DAYS,
     WEATHER_SOY_POD_FILL_MONTHS,
 )
@@ -165,22 +176,62 @@ def observed_only(subset: pd.DataFrame) -> pd.DataFrame:
     return subset[flag == 0]
 
 
-def consecutive_dry_days(observed: pd.DataFrame) -> int:
-    """Trailing consecutive observed days with precip < WEATHER_DRY_THRESHOLD_MM.
+def _dry_run(observed: pd.DataFrame) -> tuple[int, date | None]:
+    """(trailing dry calendar days, the day whose missing reading ended the run).
 
-    A missing precip reading breaks the streak (conservative — we don't
-    assume a gap was dry).
+    Walks back from the latest observed date one calendar day at a time
+    (B16 #456). A date with no row, or a row with no precipitation reading,
+    ends the run and is returned — we don't assume a gap was dry. The day
+    is None when a wet reading or the start of the record ended it.
     """
     if observed.empty or "precipitation" not in observed.columns:
-        return 0
-    precip = observed.sort_values("Date")["precipitation"]
+        return 0, None
+    rows = observed.sort_values("Date")
+    days = pd.to_datetime(rows["Date"]).dt.normalize()
+    repeated = days[days.duplicated()]
+    if not repeated.empty:
+        raise ValueError(
+            f"weather rows repeat dates {sorted(d.date().isoformat() for d in repeated)}"
+        )
     count = 0
-    for val in reversed(precip.tolist()):
-        if pd.notna(val) and val < WEATHER_DRY_THRESHOLD_MM:
-            count += 1
-        else:
-            break
-    return count
+    expected = days.iloc[-1]
+    precip = rows["precipitation"].tolist()
+    for day, val in zip(reversed(days.tolist()), reversed(precip), strict=True):
+        if day != expected:
+            return count, expected.date()
+        if pd.isna(val):
+            return count, day.date()
+        if val >= WEATHER_DRY_THRESHOLD_MM:
+            return count, None
+        count += 1
+        expected = day - pd.Timedelta(days=1)
+    return count, None
+
+
+def _spell_ruled_out(observed: pd.DataFrame) -> bool:
+    """True when no trailing dry spell is possible even if every unmeasured
+    day was dry — a measured wet day closes the run short of the bar."""
+    rows = observed.sort_values("Date")
+    days = pd.to_datetime(rows["Date"]).dt.normalize()
+    precip = dict(zip(days, rows["precipitation"], strict=True))
+    day, first = days.iloc[-1], days.iloc[0]
+    for _ in range(WEATHER_DRY_SPELL_ALERT_DAYS):
+        if day < first:
+            return False  # the run could have started before the record did
+        val = precip.get(day)
+        if val is not None and pd.notna(val) and val >= WEATHER_DRY_THRESHOLD_MM:
+            return True
+        day -= pd.Timedelta(days=1)
+    return False
+
+
+def consecutive_dry_days(observed: pd.DataFrame) -> int:
+    """Trailing consecutive calendar days with precip < WEATHER_DRY_THRESHOLD_MM.
+
+    A missing date or a missing precip reading ends the streak
+    (conservative — we don't assume a gap was dry).
+    """
+    return _dry_run(observed)[0]
 
 
 def _precip_deficit(observed: pd.DataFrame) -> tuple[float | None, float | None, str | None]:
@@ -195,9 +246,11 @@ def _precip_deficit(observed: pd.DataFrame) -> tuple[float | None, float | None,
     window = pd.Timedelta(days=WEATHER_PRECIP_DEFICIT_WINDOW_DAYS)
     recent_cut = latest_date - window
     recent = observed.loc[observed["Date"] > recent_cut, "precipitation"].dropna()
-    if recent.empty:
+    if len(recent) < WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS:
+        # A partial sum is not a 30-day total (B17 #457): withheld, not scaled.
         return None, None, (
-            f"no precipitation readings in the last {WEATHER_PRECIP_DEFICIT_WINDOW_DAYS} days"
+            f"{len(recent)} of {WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS} observed days "
+            f"needed in the {WEATHER_PRECIP_DEFICIT_WINDOW_DAYS}-day window"
         )
     total_30d = float(recent.sum())
 
@@ -225,8 +278,8 @@ def precip_deficit_30d(observed: pd.DataFrame) -> tuple[float | None, float | No
     deficit_pct is the % difference of the 30-day total vs the region's own
     trailing norm (mean daily precip over the preceding baseline window,
     scaled to 30 days). Negative = drier than normal. Returns (None, None)
-    when there's no data; (total, None) when the baseline is too thin or has
-    zero norm.
+    when the 30-day window holds fewer than WEATHER_PRECIP_DEFICIT_MIN_RECENT_OBS
+    readings; (total, None) when the baseline is too thin or has zero norm.
     """
     total, pct, _ = _precip_deficit(observed)
     return total, pct
@@ -276,7 +329,7 @@ def assess_region(region: str, rows: pd.DataFrame) -> RegionWeather | None:
     as_of = latest["Date"].date()
     precip = _num(latest.get("precipitation"))
     temp_max = _num(latest.get("temp_max"))
-    dry_days = consecutive_dry_days(observed)
+    dry_days, dry_run_gap = _dry_run(observed)
     total_30d, deficit_pct, deficit_reason = _precip_deficit(observed)
 
     alerts: list[WeatherAlert] = []
@@ -303,7 +356,16 @@ def assess_region(region: str, rows: pd.DataFrame) -> RegionWeather | None:
     else:
         if precip < WEATHER_DRY_THRESHOLD_MM:
             fire(RULE_DRY_DAY, "Dry conditions — watch soil moisture")
-        if 0 < dry_days == len(observed):
+        if dry_run_gap is not None and not _spell_ruled_out(observed):
+            # The run reaches a day nobody measured: what lies behind the gap
+            # could make it a spell.
+            withhold(
+                RULE_DRY_SPELL,
+                f"the {dry_days}-day dry run reaches {dry_run_gap}, which has no "
+                f"precipitation reading — a {WEATHER_DRY_SPELL_ALERT_DAYS}-day spell "
+                "cannot be ruled out",
+            )
+        elif 0 < dry_days == len(observed):
             # Every observed day is dry and the record is shorter than a
             # spell: the run may have started before the data did.
             withhold(
