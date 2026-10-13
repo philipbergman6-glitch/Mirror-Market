@@ -32,11 +32,14 @@ Page shape (verified 2026-05-11):
 
 Redistribution:
     The page footer reads "Fica vedada, sob qualquer forma, a reprodução
-    total ou parcial das tabelas." We honour this by storing raw BRL/MT
-    locally (for our own analysis) and exposing only the derived USD/MT
-    basis on the public GitHub Pages dashboard. See plan Phase 2 §
-    "User decisions" and the display constraint enforced in
-    ``scripts/generate_html.py``.
+    total ou parcial das tabelas." Publication disposition is ``open``
+    (``config.AGRURAL_PUBLICATION_DISPOSITION``): raw BRL/MT rows are stored
+    in ``brazil_spot_prices`` and exported to the committed, public
+    ``data/history/brazil_spot_prices.csv``. That is an owner decision
+    (A18 #468, 2026-10-13: keep every series open pre-sale, licence on the
+    A5 trigger), not an oversight — an earlier docstring claimed the rows
+    stayed local, which was never true (B19 #469). The public page renders
+    the derived USD/MT basis, as a display choice.
 
 Unit conversion:
     AgRural publishes BRL per 60 kg bag → we store BRL/MT.

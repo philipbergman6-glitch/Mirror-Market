@@ -1910,8 +1910,8 @@ def emerging_markets_analysis() -> dict:
                                 (cepea_brl - farmgate_brl) / farmgate_brl * 100, 1
                             )
 
-                    # AgRural Paranaguá FOB — USD/MT only (raw BRL is not publishable
-                    # under AgRural redistribution rules; the derived USD basis is).
+                    # AgRural Paranaguá FOB — rendered as USD/MT basis (display
+                    # choice; disposition is ``open``, see config.AGRURAL_PUBLICATION_DISPOSITION).
                     agrural_rows = brl_df[
                         brl_df["commodity"] == "Soybean (AgRural Paranaguá FOB)"
                     ].sort_values("Date")

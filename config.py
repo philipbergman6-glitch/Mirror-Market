@@ -1878,9 +1878,17 @@ SAFEX_COMMODITIES = (
 # Trade-convention Brazil basis benchmark: daily Paranaguá port buy price
 # in BRL per 60kg bag, converted to BRL/MT downstream.
 #
-# Redistribution constraint: raw BRL/saca quotes are stored locally only.
-# The public dashboard publishes only the derived USD/MT basis.
+# Publication disposition (CONTEXT.md): ``open``. AgRural's footer forbids
+# table reproduction, and the owner decided (A18 #468, 2026-10-13) to keep
+# every series open pre-sale and carry that exposure until the A5 trigger
+# (a signed paying client) buys the licences. Raw BRL/MT rows therefore sit
+# in the ``brazil_spot_prices`` history export, i.e. in the public repo —
+# the earlier "stored locally only" promise was false (B19 #469). The
+# public page still renders the derived USD/MT basis, as a display choice.
+# ``tests/test_agrural_disposition.py`` fails if this flag and the export
+# roster ever disagree again.
 # ---------------------------------------------------------------------------
+AGRURAL_PUBLICATION_DISPOSITION = "open"
 AGRURAL_URL = "https://agrural.com.br/precossojaemilho/"
 AGRURAL_COMMODITIES = ["Soybean (AgRural Paranaguá FOB)"]
 
