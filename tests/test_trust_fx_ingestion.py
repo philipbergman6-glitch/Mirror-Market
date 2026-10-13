@@ -305,18 +305,27 @@ def test_source_shape_drift_produces_a_typed_finding_and_no_accepted_revisions(t
 # ---------------------------------------------------------------------------
 
 
-def test_an_impossible_candle_is_rejected_rather_than_stored_as_a_rate(tmp_path) -> None:
+def test_a_close_outside_its_range_is_kept_with_a_dated_warning(tmp_path) -> None:
+    """The close is the observation; the provider's range is auxiliary and
+    routinely wrong (#447: 12,033 of ~124k Yahoo bars, PYG/USD 52%). The
+    rate lands, the range finding is durable, and the ingestion names the
+    session and rule so the reconcile report can print them."""
     store = repository(tmp_path)
     replay = artifact_from_bars(
         "BRL/USD",
         [bar(close="0.1840", high="0.1800", low="0.1700")],  # high below the close
         retrieved_at=AFTER_FX_CLOSE,
     )
-    ingest_fx_replays(store, [replay], ingested_at=AFTER_FX_CLOSE)
+    ingestion = ingest_fx_replays(store, [replay], ingested_at=AFTER_FX_CLOSE)
 
     revisions = list(store.all_observation_revisions())
-    assert [revision.quality_state for revision in revisions] == [QualityState.REJECTED]
-    assert trusted_currency_frame(store, "BRL/USD").empty
+    assert [revision.quality_state for revision in revisions] == [QualityState.ACCEPTED]
+    assert len(trusted_currency_frame(store, "BRL/USD")) == 1
+    [flagged] = ingestion.dataset("BRL/USD").revision_findings
+    assert flagged.revision_id == revisions[0].revision_id
+    assert flagged.effective_date == revisions[0].identity.effective_date
+    assert flagged.quality_state is QualityState.ACCEPTED
+    assert flagged.rule_ids == ("ohlc.relationship",)
 
 
 def test_an_inverted_rate_quarantines_instead_of_landing_as_a_conversion_input(tmp_path) -> None:

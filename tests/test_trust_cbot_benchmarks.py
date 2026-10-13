@@ -281,7 +281,10 @@ def test_repeated_ingestion_of_the_same_artifact_adds_no_revisions(tmp_path) -> 
     assert len(store.all_observation_revisions()) == 1
 
 
-def test_an_impossible_candle_is_rejected_rather_than_stored_as_a_price(tmp_path) -> None:
+def test_a_settlement_outside_the_traded_range_is_kept_with_a_warning(tmp_path) -> None:
+    """A settlement can print outside the day's traded range, and Yahoo's
+    history does so on 847 ZS=F bars (#447); the close is the observation,
+    the range draws a durable WARNING, and the revision lands."""
     store = repository(tmp_path)
     replay = artifact_from_bars(
         "Soybeans",
@@ -292,9 +295,11 @@ def test_an_impossible_candle_is_rejected_rather_than_stored_as_a_price(tmp_path
     ingestion = ingest_cbot_benchmark_replays(store, [replay], ingested_at=AFTER_SETTLEMENT)
 
     dataset = ingestion.dataset("Soybeans")
-    assert dataset.accepted_revision_ids == ()
-    assert len(dataset.rejected_revision_ids) == 1
-    assert trusted_curve_frame(store, "Soybeans").empty
+    assert len(dataset.accepted_revision_ids) == 1
+    assert dataset.rejected_revision_ids == ()
+    assert len(trusted_curve_frame(store, "Soybeans")) == 1
+    [revision] = store.all_observation_revisions()
+    assert revision.finding_ids  # the range finding travels on the revision
 
 
 def test_a_symbol_from_another_product_is_refused_with_a_finding_not_carried(tmp_path) -> None:
