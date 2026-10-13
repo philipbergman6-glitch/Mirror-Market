@@ -114,6 +114,23 @@ def _migrate_weather_is_forecast(conn) -> None:
             logger.warning("Could not add is_forecast column to weather: %s", exc)
 
 
+def _migrate_weather_basis(conn) -> None:
+    """Add the basis column to weather if absent. Idempotent (B15 #455).
+
+    NULL means the row predates the label — never learned, so never
+    backfilled with a guess (invariant 2).
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(weather)").fetchall()}
+    except Exception:
+        return
+    if cols and "basis" not in cols:
+        try:
+            conn.execute("ALTER TABLE weather ADD COLUMN basis TEXT")
+        except Exception as exc:
+            logger.warning("Could not add basis column to weather: %s", exc)
+
+
 def _migrate_india_domestic_arrivals(conn) -> None:
     """Add the arrivals_mt column to india_domestic_prices if absent. Idempotent.
 
@@ -344,6 +361,7 @@ def init_database():
         _migrate_forward_curve_liquidity(conn)
         _migrate_export_sales_unit(conn)
         _migrate_weather_is_forecast(conn)
+        _migrate_weather_basis(conn)
         _migrate_india_domestic_arrivals(conn)
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
@@ -563,8 +581,11 @@ def save_weather_data(region: str, df: pd.DataFrame):
     df["Date"] = _date(df["Date"])
     if "is_forecast" not in df.columns:
         df["is_forecast"] = None  # legacy callers: NULL = observed
+    if "basis" not in df.columns:
+        df["basis"] = None  # legacy callers: NULL = never labelled
     _save("weather",
-          df[["region", "Date", "temp_max", "temp_min", "precipitation", "is_forecast"]],
+          df[["region", "Date", "temp_max", "temp_min", "precipitation",
+              "is_forecast", "basis"]],
           ["region", "Date"], f"weather/{region}")
 
 

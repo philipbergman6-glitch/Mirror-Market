@@ -400,6 +400,12 @@ COT_COMMODITIES = {
 # historical rows stop accruing; that is the intended cost.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# What a Layer 5 row is (B15 #455). Open-Meteo's forecast endpoint serves
+# weather-model output for its past days too — model analysis, not station
+# readings — so every row, elapsed or ahead, is an estimate. Same honesty as
+# the footprint build's "day-1 estimate · ECMWF 00z" (footprint spec §7):
+# never "observed". `is_forecast` still splits elapsed from ahead.
+OPENMETEO_BASIS = "model estimate · Open-Meteo"
 
 GROWING_REGIONS = {
     # ── US Soybean Belt (CBOT) ──
