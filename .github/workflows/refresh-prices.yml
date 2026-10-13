@@ -217,23 +217,28 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # A miss is not a failure. The refresh still runs, still generates, and
-      # is then refused by the regression gate below because its coverage is
-      # thinner than the published edition's — which is the correct outcome
-      # and leaves the live site untouched.
-      - name: Restore the database from the daily build
+      # Restores the *verified seed* only (#453): the newest database saved
+      # by a daily build or refresh whose candidate passed the promotion
+      # contract. The diagnostic cache the daily build also writes
+      # (mirror-market-diagnostic-db-*) is not a prefix match and can never
+      # be picked up here — a failed or rejected run's database is not a
+      # seed. A miss is not a failure. The refresh still runs, still
+      # generates, and is then refused by the regression gate below because
+      # its coverage is thinner than the published edition's — which is the
+      # correct outcome and leaves the live site untouched.
+      - name: Restore the verified seed
         id: db_cache
         uses: actions/cache/restore@v4
         with:
           path: data/storage/mirror_market.db
-          key: mirror-market-db-
+          key: mirror-market-db-verified-
           restore-keys: |
-            mirror-market-db-
+            mirror-market-db-verified-
 
       - name: Report cache state
         run: |
           if [[ "${{ steps.db_cache.outputs.cache-matched-key }}" == "" ]]; then
-            echo "::warning::no cached database — this refresh will be refused by the regression gate"
+            echo "::warning::no verified seed — this refresh will be refused by the regression gate"
           else
             echo "restored ${{ steps.db_cache.outputs.cache-matched-key }}"
           fi
@@ -266,6 +271,22 @@ jobs:
       - name: Verify candidate promotion contract
         run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
 
+      # Advance the verified seed, so the next fast refresh builds on this
+      # one rather than on the evening's daily build — two refreshes in a day
+      # would otherwise each start from the same older snapshot. Default
+      # `success()` condition, deliberately: this step is reached only when
+      # scripts/refresh_prices.py passed both its gates (promotion contract
+      # and regression) and the browser smoke above passed too. A rejected
+      # refresh fails before here and never re-caches (#453) — before that
+      # fix this step ran under `!cancelled()` after the deploy, so a refused
+      # candidate re-cached the very database that had been refused.
+      - name: Advance the verified seed
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/storage/mirror_market.db
+          key: mirror-market-db-verified-${{ github.run_id }}
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -285,17 +306,6 @@ jobs:
           --url "${{ steps.deployment.outputs.page_url }}"
           --candidate "$RUNNER_TEMP/mirror-market-candidate"
           --browser
-
-      # Re-cache so the next fast refresh builds on this one rather than on
-      # the morning's daily build. Without it, two refreshes in a day would
-      # each start from the same stale snapshot.
-      - name: Re-cache the database
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: data/storage/mirror_market.db
-          key: mirror-market-db-${{ github.run_id }}
 
       # Not continue-on-error: a breach in a layer THIS run was responsible
       # for fetching is a red run, not a log line. The deploy has already
