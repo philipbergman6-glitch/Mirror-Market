@@ -284,26 +284,27 @@ jobs:
           echo "::error::history snapshot push failed after 3 attempts"
           exit 1
 
-      # The fast refresh (refresh-prices.yml) fetches three layers and reads
-      # the other twenty-six from whatever the database already holds. On a
-      # fresh runner that is only what data/history/*.csv carries, which is
-      # the snapshot-only tables and nothing else — so without this cache a
-      # fast refresh would render a site missing PSD, weather, COT and crop
-      # progress entirely. That candidate is caught and refused by the
-      # regression gate either way; the cache is what makes the fast path
-      # *useful* rather than merely safe.
+      # Two cache identities, never one (#453). This is the *diagnostic*
+      # cache: every main run writes it, whatever its layers or its candidate
+      # did, so the database behind a failed or rejected edition can still be
+      # restored and inspected. Nothing restores it automatically — the fast
+      # refresh seeds only from the verified seed saved after the promotion
+      # contract below. Its prefix is deliberately not an extension of the
+      # verified one: restore-keys match by prefix, and a shared stem would
+      # let the refresh pick a diagnostic entry up.
       #
-      # Saved after the pipeline and the smoke, so a cached database is one
-      # that produced a promotable edition. Keyed by run id with a prefix
-      # restore-key, because cache entries are immutable: a fixed key would
-      # pin the first day's database forever.
-      - name: Cache the populated database for the fast refresh
+      # Before #453 this step was the refresh's seed, and it ran here, before
+      # the smoke: on 2026-10-13 run 38335926439 hard-failed three layers,
+      # cached anyway, and the next refresh restored that database and was
+      # refused by the regression gate. The gate protected readers; the
+      # recovery path could not recover.
+      - name: Cache the database for diagnosis
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: data/storage/mirror_market.db
-          key: mirror-market-db-${{ github.run_id }}
+          key: mirror-market-diagnostic-db-${{ github.run_id }}
 
       - name: Install Chrome for viewport smoke checks
         if: ${{ !cancelled() && steps.generate_site.outcome == 'success' }}
@@ -321,6 +322,29 @@ jobs:
         if: ${{ !cancelled() && steps.generate_site.outcome == 'success' }}
         continue-on-error: true
         run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
+
+      # The *verified seed* for the fast refresh (#453). refresh-prices.yml
+      # fetches three layers and reads the other twenty-six from whatever the
+      # database already holds. On a fresh runner that is only what
+      # data/history/*.csv carries, which is the snapshot-only tables and
+      # nothing else — so without a seed a fast refresh would render a site
+      # missing PSD, weather, COT and crop progress entirely. That candidate
+      # is caught and refused by the regression gate either way; the seed is
+      # what makes the fast path *useful* rather than merely safe.
+      #
+      # Written only when the candidate passed the promotion contract, under
+      # the same condition that admits the Pages upload below: the seed is
+      # the database of an edition this run would publish, never of one it
+      # refused. A failed smoke leaves the previous seed as the newest entry.
+      # Keyed by run id with a prefix restore-key, because cache entries are
+      # immutable: a fixed key would pin the first day's database forever.
+      - name: Cache the verified seed for the fast refresh
+        if: ${{ github.ref == 'refs/heads/main' && steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: data/storage/mirror_market.db
+          key: mirror-market-db-verified-${{ github.run_id }}
 
       - name: Upload Pages artifact
         if: ${{ steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}

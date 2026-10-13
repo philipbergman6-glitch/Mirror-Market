@@ -7,7 +7,7 @@ Formula: ``min(RETRY_DELAY * 2**(attempt-1), 30) + uniform(0, 1)``.
 ``attempt`` is 1-indexed so the first retry waits roughly the base
 ``RETRY_DELAY``, the second waits twice that, etc., capped at 30s
 to avoid pathologically long sleeps on the third or later attempt.
-The jitter prevents synchronised retry storms across the 18-layer
+The jitter prevents synchronised retry storms across the multi-layer
 pipeline.
 """
 

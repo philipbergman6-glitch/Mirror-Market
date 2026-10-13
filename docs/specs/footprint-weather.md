@@ -511,7 +511,7 @@ This returns the frame every grading surface reads, in `read_weather()`'s shape 
 | `precipitation`, `temp_max`, `temp_min` | `d1_rain_mm`, `d1_tmax_c`, `d1_tmin_c` | As today |
 | `is_forecast` | `0` for rows with `run_date` < the latest daily run; `1` for the latest run's day 1 (valid today, not yet complete) | As today |
 | `wet_area_share` | `d1_wet_area_share` | NULL |
-| `basis` | `day-1 estimate · ECMWF 00z` | `observed` |
+| `basis` | `day-1 estimate · ECMWF 00z` | The row's own `basis`: `model estimate · Open-Meteo` (B15 #455 — Open-Meteo past days are model analysis, never `observed`) |
 
 So the elapsed side ends at D−1, and D onward is forecast: there is no gap [R4]. Rows go back `LOOKBACK_DAYS + 5` days.
 

@@ -62,6 +62,7 @@ or a backlog item, and none of it should be partially built to look closer:
 | Executable bids/offers with counterparty terms | A broker/counterparty network, not an API |
 | Full CTRM lifecycle | L/Cs, GAFTA/FOSFA clause handling, washouts, arbitration, hedge accounting |
 | Terminal-grade SLOs and paging | An on-call rota |
+| Quantified weather-to-yield model (exposure → planted area → growth stage → damage with uncertainty → production → S&D) | Historical yield-outcome data per footprint, stage-specific damage functions, and validation against past seasons *before* any quantitative claim is published. Ruled out of map #296 on 2026-10-13 (third external audit response); the footprint build (#380–#386) delivers the in-scope part — production-weighted exposure with labelled estimates — and A17 #460 costs this track. |
 
 ### The trigger
 

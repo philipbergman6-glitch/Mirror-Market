@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for Claude Code working in this repository.
+Guidance for Claude Code working in this repository — and, through `AGENTS.md`, the model-neutral entry point, for every other agent: its rules bind every model.
 
 ## Mission
 
@@ -31,7 +31,7 @@ The build: 39 operational data layers across 35 numbered groups (fetch → clean
 ## Reference docs — read before touching the relevant area
 
 - **`LAYERS.md`** — all 39 data layers: units, cadence, API keys, and every source's known traps. **Mandatory before editing any fetcher.**
-- **`ARCHITECTURE.md`** — pipeline, analysis, storage, history persistence, site contract, and the product phases (origins, workstation, desk workflow, opportunities, crush, price semantics, trust ledger, latency, fast refresh).
+- **`ARCHITECTURE.md`** — opens with the **capability-status table**, the one place that says what is specified / implemented / tested / deployed / operationally verified, each cell an evidence pointer. Then pipeline, analysis, storage, history persistence, site contract, and the product phases (origins, workstation, desk workflow, opportunities, crush, price semantics, trust ledger, latency, fast refresh).
 - **`DESIGN.md`** — all visual/UI decisions. Read before any visual change; never deviate without explicit user approval. In QA mode, flag code that doesn't match it.
 - **`LATENCY.md`** — the data-age vocabulary and objectives.
 - **`ROADMAP.md`** — what is deliberately deferred, and the commercial trigger that would reopen it.
