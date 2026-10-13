@@ -1,7 +1,7 @@
 """Tests for the observed/forecast weather split and agronomic alerting.
 
 Covers:
-- fetcher is_forecast flag (rows dated after today)
+- fetcher is_forecast flag (rows dated today or later)
 - is_forecast schema migration + save path (NULL for legacy callers)
 - clean_weather keeps is_forecast out of the forward-fill
 - observed_only / consecutive_dry_days / precip_deficit_30d helpers
@@ -37,10 +37,12 @@ from pipeline.store import _migrate_weather_is_forecast
 # Fetcher — is_forecast flag
 # ---------------------------------------------------------------------------
 
-def test_fetcher_flags_future_rows_as_forecast():
+def test_fetcher_flags_today_and_future_rows_as_forecast():
+    # Today is an unfinished day, so it sits with the forecast (B15 #455).
     today = pd.Timestamp.today().normalize()
     dates = [today - pd.Timedelta(days=2), today, today + pd.Timedelta(days=2)]
     payload = {
+        "timezone": "UTC",
         "daily": {
             "time": [d.strftime("%Y-%m-%d") for d in dates],
             "temperature_2m_max": [30.0, 31.0, 32.0],
@@ -51,9 +53,11 @@ def test_fetcher_flags_future_rows_as_forecast():
     resp = MagicMock(status_code=200)
     resp.json.return_value = payload
     with patch("fetchers.weather.requests.get", return_value=resp):
-        df = fetch_region_weather("Testville", 0.0, 0.0)
+        df = fetch_region_weather(
+            "Testville", 0.0, 0.0, now=today.tz_localize("UTC") + pd.Timedelta(hours=12),
+        )
 
-    assert list(df["is_forecast"]) == [0, 0, 1]
+    assert list(df["is_forecast"]) == [0, 1, 1]
 
 
 # ---------------------------------------------------------------------------

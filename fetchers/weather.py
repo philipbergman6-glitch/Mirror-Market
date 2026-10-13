@@ -16,6 +16,7 @@ Key concepts for learning:
 
 import json
 import logging
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 import requests
@@ -23,6 +24,7 @@ import requests
 from config import (
     GROWING_REGIONS,
     MAX_RETRIES,
+    OPENMETEO_BASIS,
     OPENMETEO_FORECAST_URL,
     REQUEST_TIMEOUT,
     WEATHER_DAILY_VARS,
@@ -38,6 +40,8 @@ def fetch_region_weather(
     lon: float,
     past_days: int = 30,
     forecast_days: int = 7,
+    *,
+    now: pd.Timestamp | None = None,
 ) -> pd.DataFrame:
     """
     Fetch recent history + forecast for a single growing region.
@@ -55,14 +59,30 @@ def fetch_region_weather(
         Days of recent history to include (max 92).
     forecast_days : int
         Days of forecast to include (max 16).
+    now : pd.Timestamp, optional
+        Timezone-aware wall clock (default: the current UTC instant). The
+        test seam for the day boundary.
 
     Returns
     -------
     pd.DataFrame
         Columns: Date, temp_max, temp_min, precipitation, is_forecast
-        (1 for rows dated after today — Open-Meteo forecast; 0 for
-        observed/past rows). Empty DataFrame on failure.
+        (1 for rows dated on or after the pin's local today — forecast or
+        an unfinished day; 0 for complete past days), basis
+        (`config.OPENMETEO_BASIS` on every row: past days are model
+        analysis, never observations). Empty DataFrame on transport failure.
+
+    Raises
+    ------
+    ValueError
+        `now` is naive, or the response names no resolvable timezone — the
+        day boundary cannot be placed without one.
     """
+    if now is None:
+        now = pd.Timestamp.now(tz="UTC")
+    if now.tzinfo is None:
+        raise ValueError("fetch_region_weather: `now` must be timezone-aware")
+
     params: dict[str, str | float | int] = {
         "latitude":      lat,
         "longitude":     lon,
@@ -105,12 +125,17 @@ def fetch_region_weather(
                 "precipitation": daily.get("precipitation_sum"),
             })
 
-            # Rows dated after today are model forecast, not observations.
-            # Downstream z-scores and agronomic alerts must exclude them.
-            today = pd.Timestamp.today().normalize()
+            # `time` is the pin's local calendar (timezone=auto), so today is
+            # the pin's today, not the runner's. Today itself is a running
+            # total — unfinished max, partial precip sum — so it is flagged
+            # with the forecast rows: the elapsed side ends at D−1, and the
+            # 08:00 and 23:30 UTC slots no longer disagree about an
+            # "observed" day. Downstream z-scores and alerts exclude both.
+            pin_today = _pin_today(region_name, data.get("timezone"), now)
             df["is_forecast"] = (
-                pd.to_datetime(df["Date"]) > today
+                pd.to_datetime(df["Date"]) >= pin_today
             ).astype(int)
+            df["basis"] = OPENMETEO_BASIS
 
             logger.info(
                 "Got %d days of weather for %s (%.1f°, %.1f°)",
@@ -131,6 +156,23 @@ def fetch_region_weather(
         MAX_RETRIES, region_name,
     )
     return pd.DataFrame()
+
+
+def _pin_today(region_name: str, timezone: object, now: pd.Timestamp) -> pd.Timestamp:
+    """The pin's local calendar date at `now`, as a naive midnight."""
+    if not isinstance(timezone, str) or not timezone:
+        raise ValueError(
+            f"Open-Meteo response for {region_name} names no timezone "
+            f"(got {timezone!r}); its daily dates cannot be placed"
+        )
+    try:
+        tz = ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(
+            f"Open-Meteo response for {region_name} names an unknown "
+            f"timezone {timezone!r}"
+        ) from exc
+    return now.tz_convert(tz).normalize().tz_localize(None)
 
 
 def fetch_all_regions() -> dict[str, pd.DataFrame]:
