@@ -33,10 +33,14 @@ run. `config.missing_api_keys()` is that list.
 
 `python main.py --doctor` (#354) prints the same catalog without running
 anything: every key as set or missing (never its value), and for a missing
-one whether its layers are **skipped** (`run_if`-gated — Layers 10, 13, 30:
-no freshness row, the layer never ran) or **degraded** (not gated — Layers 2,
-2b, 3, 14: the fetcher returns nothing and the empty result grades as
-`failed`). Exit 1 when a key the deploy workflow relies on is missing;
+one whether its layers are **skipped** (`run_if`-gated — Layers 2, 2b, 3,
+10, 13, 30: no freshness row, the layer never ran) or **degraded** (Layer 14
+only, since #424: a custom block that skips its crush call without the USDA
+key and is still graded on the keyless AMS inspections report, so it runs
+without its crush frame rather than failing). Until #424, Layers 2, 2b and 3
+were un-gated — the fetcher returned nothing and the empty result graded as
+`failed`, which paged CI about a key nobody had set. Exit 1 when a key the
+deploy workflow relies on is missing;
 `MARS_API_KEY` is optional by design. `config.API_KEY_CATALOG` is the one
 roster — a new keyed layer is added there, and `tests/test_doctor.py` pins
 the skip/degrade split against `main._build_dict_layers`.

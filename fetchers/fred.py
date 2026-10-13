@@ -34,6 +34,15 @@ from fetchers._backoff import retry_sleep
 logger = logging.getLogger(__name__)
 
 
+def is_configured() -> bool:
+    """Is the FRED key set? (DictLayer.run_if, #180 / #424.)
+
+    Reads the module global at call time so the predicate and fetch_series's
+    own key check can never disagree.
+    """
+    return bool(FRED_API_KEY)
+
+
 def fetch_series(
     series_id: str,
     start_date: str = "2020-01-01",

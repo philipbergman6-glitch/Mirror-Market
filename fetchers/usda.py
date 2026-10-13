@@ -40,6 +40,17 @@ from pipeline.results import FetchResult, ScraperShapeError
 logger = logging.getLogger(__name__)
 
 
+def is_configured() -> bool:
+    """Is the NASS QuickStats key set? (DictLayer.run_if, #180 / #424.)
+
+    Reads the module global at call time, so this and the key checks inside
+    fetch_usda / fetch_crop_progress can never disagree. Layers 2 and 2b are
+    run_if-gated on it; Layer 14 gates only its crush call (the export
+    inspections half is a keyless AMS report).
+    """
+    return bool(USDA_API_KEY)
+
+
 def _numeric_values(df: pd.DataFrame, context: str) -> pd.DataFrame:
     """Coerce the NASS ``Value`` column to numeric, dropping suppression
     sentinels — "(D)" withheld, "(NA)", "(Z)" — instead of storing them raw."""
