@@ -1,6 +1,9 @@
 # Mirror Market
 
 [![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-GitHub_Pages-2D6A4F?style=for-the-badge)](https://philipbergman6-glitch.github.io/Mirror-Market/)
+[![Update Dashboard](https://github.com/philipbergman6-glitch/Mirror-Market/actions/workflows/deploy-dashboard.yml/badge.svg)](https://github.com/philipbergman6-glitch/Mirror-Market/actions/workflows/deploy-dashboard.yml)
+
+**Public-data soy market intelligence for physical buyers**: 39 free data sources, one SQLite database, a daily-rebuilt static site, and a 3,900-test guard against publishing a wrong number. Python, pandas, Jinja2, GitHub Actions. No paid data, no cloud database, no servers.
 
 ## The Big Picture
 
@@ -20,11 +23,15 @@ The focus is the **soy complex** — soybeans and the two products they're crush
 
 **The headline page**, in the order you'd scan it each morning:
 
-**01 Overnight** — what prices did · **02 Signals** — anything unusual, ranked by urgency · **03 Propagation ledger** — who has repriced, and who has not printed · **04 Crush & Relative Value** — is processing beans profitable, and how does soy compare to rivals · **05 Supply & Demand** — how much the world is growing, buying, and holding · **06 Risk** — currencies, fund positioning, weather · **07 Forward Curves** — what future months cost vs today · **08 Seasonal** — how this year compares to a normal year · **09 Technicals** — deep charts · **10 Full Briefing** — the whole text report
+**01 The Complex Overnight** — what prices did · **02 What Fired** — anything unusual, ranked by urgency · **03 Propagation** — who has repriced, and who has not printed · **04 Crush Board** — is processing beans profitable · **05 Relative Value** — how soy compares to rivals · **06 Supply & Demand** — how much the world is growing, buying, and holding · **07 Risk Monitor** — currencies, fund positioning, weather · **08 Forward Curves** — what future months cost vs today · **09 Seasonal** — how this year compares to a normal year · **10 Technicals** — deep charts · **11 The Full Briefing** — the whole text report · **12 About the Data** — every source, its age, and whether it printed
 
-**One page per market** — CBOT, Dalian, Brazil, Argentina, India, Europe, South Africa, Nigeria — each built from the same nine blocks (prices, propagation ledger, crush, basis, weather, supply & demand, flows, positioning, data health). The market is a parameter, not a code path: a new market is a registry entry, not new code.
+Every page carries two clocks: when it was *generated*, and how old the *oldest number feeding the headline* is — so "generated 10:31" can never read as fresher than "priced from data 16 h old".
+
+**One page per market** — CBOT, Dalian, Brazil, Argentina, India, Europe, South Africa, Nigeria — each built from the same nine blocks (local price, propagation ledger, crush margin, basis vs the board, currency, weather, supply & demand, news, players). The market is a parameter, not a code path: a new market is a registry entry, not new code.
 
 Each market page is **tiered from the data every run** — a full page, a brief, or a stub — so a market whose source went dark demotes itself and says so, rather than publishing a confident-looking empty page. The URL never changes with the tier, so yesterday's link never 404s.
+
+**Four cross-market pages**: **Origins** — the same cargo priced at every origin, side by side · **Players** — crushers, exporters and state buyers by market · **Workstation** — contract months, forward curves and an in-page candlestick chart per contract · **Opportunities** — basis and spread screens. The public site shows their public editions; the private desk editions (a buyer's own positions, hedges and assumptions) are built from gitignored files into `data/workspace/` and are never published.
 
 ## Where the Data Comes From (all free)
 
@@ -42,6 +49,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 9 | AKShare | Chinese futures prices — what the biggest soy buyer is paying |
 | 10 | USDA FAS* | Weekly US export sales and who bought |
 | 11 | Yahoo Finance | Prices for future delivery months |
+| 11b | Yahoo Finance | Daily bar history per named contract (feeds the workstation charts) |
 | 12 | USDA WASDE | The monthly USDA forecast the whole market trades on |
 | 13 | EIA* | Ethanol, biodiesel, diesel — fuel demand for crops |
 | 14 | USDA* | How many beans got crushed, how many got shipped |
@@ -57,8 +65,22 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 23 | SAGIS | South Africa weekly producer deliveries — the country's physical flow series |
 | 24 | SAGIS | South Africa monthly soybean supply & demand balance (incl. crush volume) |
 | 25 | Crop Estimates Committee (SA) | South Africa's official monthly crop estimate, with its in-season revision path |
+| 26 | USDA AMS Grain Transport Report | Monthly ocean freight, US Gulf and PNW to Japan |
+| 26b | USDA AMS Grain Transport Report | Weekly grain vessel lineups at the Gulf and PNW |
+| 27 | NOAA NWPS | Mississippi River stage and forecast at Memphis and St. Louis — barge capacity |
+| 28 | Argentina INA | Paraná River level at Rosario — draft limits at the world's largest crush hub |
+| 29 | US EPA | Renewable Fuel Standard: RIN generation, RIN prices, volume obligations |
+| 30 | USDA AMS MARS* | Weekly US processor cash soybean oil and meal |
+| 31 | MDIC/SECEX Comex Stat | Brazil's monthly soy, meal and oil exports by destination |
+| 32 | SEA India† | Weekly India meal FAS and oil import price legs |
+| 33 | SOPA† | India's state-by-state soybean crop estimate |
+| 34 | NOAA NHC | Tropical-cyclone forecast tracks — Atlantic and East Pacific ports |
+| 35 | JTWC | Tropical-cyclone forecast tracks — West Pacific, Indian Ocean, Southern Hemisphere ports |
 
-\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, and `MARS_API_KEY` for Layer 30). **31 of 39 operational layers need no private key**, and if any one contextual source fails, the rest still run and the degradation remains visible.
+\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, `MARS_API_KEY`). **32 of 39 operational layers need no key at all**; `python main.py --doctor` names what each missing key costs. If any one source fails, the rest still run and the degradation stays visible on the page.
+† stored and analysed, but the raw table is never published: the publisher's terms allow use, not redistribution. Only derived readings (a year-on-year change, a state share) render.
+
+`config.PRODUCTION_LAYERS` is the one roster; this table is checked against it in CI.
 
 ## What the Analysis Actually Tells You
 
@@ -71,7 +93,7 @@ In plain terms, each piece answers a question a trader would ask:
 - **Stocks-to-use** — *"How tight is supply?"* Leftover inventory as a fraction of yearly consumption. Low number = little cushion = prices react violently to bad news.
 - **Positioning z-scores** — *"Is the trade crowded?"* When speculative funds are all leaning the same way to a historically extreme degree, a snap-back gets more likely.
 - **Market Drivers** — *"How does it fit together?"* A written narrative connecting the layers: the Brazilian real and exports, fund crowding, weather premiums, dollar impact, China's buying pace.
-- **Daily briefing** — the full 26-section text report, archived to the database each day so past calls can be checked against what actually happened.
+- **Daily briefing** — the full 30-section text report, archived to the database each day so past calls can be checked against what actually happened.
 
 ## Run It Yourself
 
@@ -128,15 +150,19 @@ Only publish the rendered candidate explicitly:
 
 ```
 main.py            runs the whole collection pipeline, source by source
+config.py          every threshold, the layer roster, the market registry — numbers live here, not in code
 fetchers/          one module per data source (the "collectors")
-pipeline/          cleaning, validation, unit conversion, database read/write
-analysis/          turns stored data into indicators, signals, and the briefing
-app/               the market registry, the nine block builders, and the HTML templates
+pipeline/          cleaning, validation, unit conversion, database read/write, git-CSV history
+pricing/           the one price vocabulary: what a number is, how confident, which FX date
+analysis/          turns stored data into indicators, signals, hazards, and the briefing
+app/               the market registry, the block builders, and the HTML templates
+trust/             source contracts, the promotion gate, reconciliation ledger
 scripts/           generate_site.py — the orchestrator that renders every page
+tests/             ~3,950 tests; sandboxed — no network, no writes to history
 docs/              local site output (gitignored) — Pages serves the CI-built artifact, not this directory
 ```
 
-Design system in `DESIGN.md` · architecture details in `ARCHITECTURE.md` and `CLAUDE.md`.
+Design system in `DESIGN.md` · architecture and the capability-status table in `ARCHITECTURE.md` · every source's traps in `LAYERS.md` · engineering invariants in `CLAUDE.md` · what is deliberately deferred in `ROADMAP.md` · working on it with an AI agent starts at `AGENTS.md`.
 
 ---
 

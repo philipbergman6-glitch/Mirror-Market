@@ -172,3 +172,17 @@ def test_capability_rows_name_a_known_rightmost_column() -> None:
     for row in rows:
         rightmost = row.rstrip(" |").rsplit("|", 1)[1].strip()
         assert rightmost in columns, f"unknown rightmost column {rightmost!r} in: {row[:60]}"
+
+
+def test_readme_source_table_lists_every_production_layer() -> None:
+    """The README's source table says it is checked against the roster.
+
+    Make that true: the layer numbers in the table are exactly the numbers in
+    ``config.PRODUCTION_LAYERS`` — no layer missing, no retired layer lingering.
+    """
+    table_numbers = set(re.findall(r"^\| (\d+[a-z]?) \|", _read("README.md"), flags=re.M))
+    roster_numbers = {number for _, number, *_ in config.PRODUCTION_LAYERS}
+    assert table_numbers == roster_numbers, {
+        "missing_from_readme": sorted(roster_numbers - table_numbers),
+        "not_in_roster": sorted(table_numbers - roster_numbers),
+    }
