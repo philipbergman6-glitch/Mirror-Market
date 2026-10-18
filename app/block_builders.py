@@ -1698,6 +1698,8 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
     # Same narrowing contract as price_block: absent_reason() gates dispatch.
     crush = market.crush
     assert crush is not None, f"crush_block dispatched for {market.slug} with no crush source"
+    if crush.months is not None:
+        return _month_crush_block(market, ctx)
     if crush.contracts == "named":
         return _named_crush_block(market, ctx)
     source = crush.as_source()
@@ -1773,6 +1775,85 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
             if crush.contracts == "continuous" else None
         ),
         "legs_named": False,
+    }
+
+
+def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict]:
+    """The board crush on ONE named delivery month (B29 #503).
+
+    The month, the session and every refusal come from
+    ``analysis.futures.crush.month_board_crush`` — the Origins board level and
+    the briefing read the same call. This only converts: each leg at the
+    session's own FX rate (A1 #298), through ``Source.to_usd_mt``.
+    """
+    from analysis.futures.crush import CrushWithheld, month_board_crush, month_label
+
+    if ctx.conn is None:
+        return STATE_EMPTY, "no database connection", {}
+    crush = market.crush
+    assert crush is not None and crush.months is not None
+    outcome = month_board_crush(ctx.conn, crush.months, today=ctx.today)
+    if isinstance(outcome, CrushWithheld):
+        return STATE_EMPTY, outcome.reason, {}
+
+    source = crush.as_source()
+    when = outcome.session
+    fx = ctx.fx_on(market.currency_pair, when)
+    legs: dict[str, dict] = {}
+    closes = outcome.closes
+    for role, quote in outcome.legs.items():
+        commodity = crush.legs[role]
+        legs[role] = {
+            # `key` is the contract, as on the CBOT named block — the one
+            # template renders both, and the commodity rides beside it.
+            "key": quote.contract,
+            "commodity": commodity,
+            "home_value": closes[role],
+            "usd_mt": source.to_usd_mt(closes[role], commodity, fx.rate),
+            "contract_month": month_label(quote.delivery_month),
+            "price_label": outcome.price_type.label,
+            "settlement_proven": False,
+        }
+    if any(leg["usd_mt"] is None for leg in legs.values()):
+        return STATE_EMPTY, (
+            f"the legs quote in {market.home_currency} and cannot be stated in USD/MT "
+            f"for {when.isoformat()} — {fx.note}"
+        ), {}
+
+    yields = crush.yields
+    margin_usd = _crush_margin({name: leg["usd_mt"] for name, leg in legs.items()}, yields)
+    margin_home = _crush_margin(
+        {name: leg["home_value"] for name, leg in legs.items()}, yields
+    ) if crush.unit == "home_per_mt" else None
+    return STATE_OK, "", {
+        "kind": crush.kind,
+        "legs": legs,
+        "yields": yields,
+        "margin_usd_mt": margin_usd,
+        "margin_home": margin_home,
+        "home_currency": market.home_currency,
+        "as_of": when.isoformat(),
+        "age_days": _age_days(ctx.today, when),
+        **_fx_fields(source, fx),
+        "profitable": margin_usd > 0,
+        "provisional": crush.provisional,
+        "provisional_note": None,
+        "contract_basis": "named_contract",
+        # Never placeable: MONTH_CRUSH_UNPLACEABLE_REASON — the Origins
+        # CrushResult carries the same reason, so the two surfaces agree.
+        "hedgeable": False,
+        # The headline card's inline month label; block 03 renders the
+        # period label and caption instead (legs_named).
+        "contract_note": (
+            f"{outcome.label} — "
+            + " / ".join(outcome.legs[role].contract for role in ("bean", "oil", "meal"))
+            + f", all traded {when.isoformat()}"
+        ),
+        "legs_named": True,
+        "period_label": outcome.label,
+        "delivery_month": outcome.month,
+        "convention": crush.months.convention,
+        "provider_display": crush.months.provider_display,
     }
 
 
@@ -1955,13 +2036,15 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     """
     crush = market.crush
     assert crush is not None, f"crush range requested for {market.slug} with no crush source"
-    if crush.contracts == "named":
+    if crush.months is not None:
+        history = _month_margin_history(market, ctx)
+    elif crush.contracts == "named":
         return None, (
             "no range yet — struck on named delivery months; a mean off the "
             "front-month series would be a range around a different margin"
         )
-
-    history = _crush_margin_history(market, ctx)
+    else:
+        history = _crush_margin_history(market, ctx)
     if len(history) < CRUSH_RANGE_MIN_OBS:
         return None, (
             f"no range yet — {len(history)} session(s) all three legs struck, short "
@@ -2023,6 +2106,40 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
             legs[leg_name] = usd
         else:
             history.append((day, _crush_margin(legs, yields)))
+    return history
+
+
+def _month_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:
+    """The level's own delivery month, restruck on every session it traded (B29 #503).
+
+    One month's three contracts across their own life, never a run stitched
+    across months — that would be a range around a different margin. Each
+    session at its own date's rate under A1 (#298), or dropped.
+    """
+    from analysis.futures.crush import CrushWithheld, month_board_crush, month_crush_history
+
+    crush = market.crush
+    assert crush is not None and crush.months is not None
+    if ctx.conn is None:
+        return []
+    level = month_board_crush(ctx.conn, crush.months, today=ctx.today)
+    if isinstance(level, CrushWithheld):
+        return []
+    source = crush.as_source()
+    since = ctx.today - _days(LOOKBACK_DAYS_BY_CADENCE["daily"])
+    history: list[tuple[date, float]] = []
+    for strike in month_crush_history(
+        ctx.conn, crush.months, level.month, since=since, until=ctx.today
+    ):
+        rate = ctx.fx_on(market.currency_pair, strike.session).rate
+        legs: dict[str, float] = {}
+        for role, close in strike.closes.items():
+            usd = source.to_usd_mt(close, crush.legs[role], rate)
+            if usd is None:
+                break
+            legs[role] = usd
+        else:
+            history.append((strike.session, _crush_margin(legs, crush.yields)))
     return history
 
 

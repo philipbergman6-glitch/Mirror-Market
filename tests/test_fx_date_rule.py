@@ -46,6 +46,7 @@ def db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
         schema._CREATE_PRICES,
         schema._CREATE_CURRENCIES,
         schema._CREATE_DCE_FUTURES,
+        schema._CREATE_DCE_CONTRACT_BARS,
         schema._CREATE_BRAZIL_SPOT,
         schema._CREATE_FORWARD_CURVE,
         schema._CREATE_WEATHER,
@@ -65,12 +66,15 @@ def db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
                 "INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
                 (_iso(D - timedelta(days=back)), key, brl),
             )
-    # Dalian crush triplet on D, CNY/MT.
-    for key, close in (
-        ("DCE Soybean No.2", 3600.0), ("DCE Soybean Oil", 8000.0), ("DCE Soybean Meal", 3000.0),
+    # Dalian crush triplet on D, CNY/MT — one named month (B29 #503).
+    for key, contract, close in (
+        ("DCE Soybean No.2", "B2611", 3600.0),
+        ("DCE Soybean Oil", "Y2611", 8000.0),
+        ("DCE Soybean Meal", "M2611", 3000.0),
     ):
         conn.execute(
-            "INSERT INTO dce_futures (commodity, Date, Close) VALUES (?,?,?)", (key, _iso(D), close)
+            "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, Volume, "
+            "Open_Interest) VALUES (?,?,?,?,?,?,?)", (key, contract, "2026-11", _iso(D), close, 100.0, 100.0),
         )
     conn.commit()
     monkeypatch.setattr(markets_mod, "get_connection", lambda: sqlite3.connect(str(path)))

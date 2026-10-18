@@ -318,6 +318,29 @@ CREATE TABLE IF NOT EXISTS dce_futures (
 );
 """
 
+_CREATE_DCE_CONTRACT_BARS = """
+CREATE TABLE IF NOT EXISTS dce_contract_bars (
+    commodity       TEXT NOT NULL,
+    contract        TEXT NOT NULL,
+    delivery_month  TEXT NOT NULL,
+    Date            TEXT NOT NULL,
+    Open            REAL,
+    High            REAL,
+    Low             REAL,
+    Close           REAL NOT NULL,
+    Volume          REAL,
+    Open_Interest   REAL,
+    Settle          REAL,
+    PRIMARY KEY (contract, Date)
+);
+"""
+# Layer 9, B29 #503: the Dalian crush legs as named delivery months ("B2611"),
+# one row per (contract, session). `dce_futures` holds the continuous B0/Y0/M0
+# series, whose legs roll on different days — a crush needs the month. Volume
+# NULL is "Sina gave none", never zero, and does not prove a trade. Not in
+# data/history/: Sina serves an expired contract's whole life (B2603 still
+# served 2026-10-18), so the table self-heals on re-fetch.
+
 _CREATE_CROP_PROGRESS = """
 CREATE TABLE IF NOT EXISTS crop_progress (
     commodity       TEXT    NOT NULL,
@@ -948,6 +971,7 @@ ALL_SCHEMAS = (
     _CREATE_CYCLONE_TRACK_POINTS,
     _CREATE_HAZARD_FLAGS,
     _CREATE_DCE_FUTURES,
+    _CREATE_DCE_CONTRACT_BARS,
     _CREATE_CROP_PROGRESS,
     _CREATE_EXPORT_SALES,
     _CREATE_FORWARD_CURVE,

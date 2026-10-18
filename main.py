@@ -26,6 +26,7 @@ from typing import Any
 import pandas as pd
 
 from config import (
+    DCE_NAMED_MONTH_KEYS,
     DEFAULT_HISTORY_PERIOD,
     FAST_REFRESH_HISTORY_PERIOD,
     FAST_REFRESH_LAYERS,
@@ -41,7 +42,7 @@ from config import (
     setup_logging,
 )
 from fetchers.agrural import fetch_agrural
-from fetchers.akshare import fetch_dce_futures
+from fetchers.akshare import fetch_dce_crush_months, fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
 from fetchers.comexstat import fetch_brazil_exports
 from fetchers.conab import fetch_conab_estimates
@@ -129,6 +130,7 @@ from pipeline.store import (
     save_crop_progress,
     save_currency_data,
     save_cyclone_frame,
+    save_dce_contract_bars,
     save_dce_futures_data,
     save_ec_oilseed_prices,
     save_eia_data,
@@ -878,8 +880,13 @@ def _build_dict_layers(history_period: str = DEFAULT_HISTORY_PERIOD) -> list[Dic
         ),
         DictLayer(
             "dce", "Layer 9", "DCE futures (AKShare)",
-            fetch=lambda: fetch_dce_futures(),
-            save=lambda n, d: save_dce_futures_data(n, d),
+            # Continuous series plus the crush legs' named months (B29 #503),
+            # each its own catalog key so a missing product is a named gap.
+            fetch=lambda: {**fetch_dce_futures(), **fetch_dce_crush_months()},
+            save=lambda n, d: (
+                save_dce_contract_bars(DCE_NAMED_MONTH_KEYS[n], d)
+                if n in DCE_NAMED_MONTH_KEYS else save_dce_futures_data(n, d)
+            ),
             clean=lambda n, d: clean_dce_futures(d),
         ),
         DictLayer(

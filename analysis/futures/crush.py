@@ -62,9 +62,10 @@ November crush by a delivery period.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -860,8 +861,414 @@ def named_board_crush(
     )
 
 
+# ---------------------------------------------------------------------------
+# One delivery month, off a table that stores the month per row (B29 #503)
+# ---------------------------------------------------------------------------
+#: Rendered wherever a month-struck crush is, ``{rule}`` filled from the
+#: descriptor's ``month_rule`` (:attr:`MonthTable.convention`). The CBOT
+#: convention pairs a bean month with a product month; this one never pairs
+#: two months at all.
+MONTH_CRUSH_CONVENTION_NOTE = (
+    "Crush month: bean, oil and meal are one delivery month — {rule}. A month is "
+    "eligible only if all three list it, its delivery has not begun and its three "
+    "contracts all traded on the session; a month one leg did not trade is skipped, "
+    "never paired with another."
+)
+
+#: The month rules a month-struck descriptor may name (``month_rule``), each
+#: with the clause it puts in the convention note.
+MONTH_RULES: dict[str, str] = {
+    "nearest": "the nearest eligible month",
+    "max_min_open_interest": (
+        "the main contract: the eligible month whose thinner {legs} leg holds the most "
+        "open interest, a tie going to the nearer month"
+    ),
+}
+
+#: Why a month-struck margin is never placeable, on every surface (B29 #503).
+#: The legs are named contracts, but "delivery has not begun" is the only
+#: expiry bound this engine keeps — no last-trading-day calendar is encoded —
+#: so nothing proves the month can still take the offsetting orders.
+MONTH_CRUSH_UNPLACEABLE_REASON = (
+    "The legs are named contracts, but no last-trading-day calendar is encoded for "
+    "them, so nothing proves the month can still take the offsetting orders."
+)
+
+_MONTH_ABBR = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+_ROLES = ("bean", "oil", "meal")
+
+
+def month_label(delivery_month: str) -> str:
+    """``"2026-11"`` → ``"Nov-26"``."""
+    year, month = delivery_month.split("-")
+    return f"{_MONTH_ABBR[int(month) - 1]}-{year[2:]}"
+
+
+@dataclass(frozen=True)
+class MonthQuote:
+    """One named contract's daily bar, as stored. Native units, no FX."""
+
+    session: date
+    contract: str
+    delivery_month: str            # YYYY-MM
+    close: float | None
+    volume: float | None
+    open_interest: float | None = None
+
+    @property
+    def traded(self) -> bool:
+        """A positive close AND a positive volume. NULL is "never learned", not a trade."""
+        return (
+            self.close is not None and self.close > 0
+            and self.volume is not None and self.volume > 0
+        )
+
+
+@dataclass(frozen=True)
+class MonthCrush:
+    """Three legs of one delivery month, one session. Native units only.
+
+    No USD figure on purpose: conversion has two sites (invariant 7) and each
+    surface already calls one of them at the session's own FX rate.
+    """
+
+    month: str                     # YYYY-MM
+    session: date
+    legs: Mapping[str, MonthQuote]
+    considered: tuple[str, ...] = ()
+    price_type: PriceType = PriceType.DELAYED_CLOSE
+
+    def __post_init__(self) -> None:
+        if set(self.legs) != set(_ROLES):
+            raise ValueError(f"a crush is bean, oil and meal; got {sorted(self.legs)}")
+        months = {leg.delivery_month for leg in self.legs.values()}
+        sessions = {leg.session for leg in self.legs.values()}
+        if months != {self.month} or sessions != {self.session}:
+            raise ValueError(
+                f"a month crush is one month on one session; legs span {sorted(months)} "
+                f"on {sorted(d.isoformat() for d in sessions)}"
+            )
+        untraded = sorted(leg.contract for leg in self.legs.values() if not leg.traded)
+        if untraded:
+            raise ValueError(f"a crush leg must have traded on its session; {untraded} did not")
+
+    @property
+    def closes(self) -> dict[str, float]:
+        """Each leg's close, native units. Non-null by construction (``traded``)."""
+        return {role: float(leg.close or 0.0) for role, leg in self.legs.items()}
+
+    @property
+    def label(self) -> str:
+        return f"{month_label(self.month)} crush"
+
+    def margin(self, yields: Mapping[str, float]) -> float:
+        """``oil × yield + meal × yield − bean`` in the legs' one native unit."""
+        close = self.closes
+        return close["oil"] * yields["oil"] + close["meal"] * yields["meal"] - close["bean"]
+
+
+def strike_month_crush(
+    quotes: Mapping[str, list[MonthQuote]],
+    *,
+    crush_months: tuple[int, ...],
+    month_rule: str = "nearest",
+    open_interest_legs: tuple[str, ...] = (),
+) -> MonthCrush | CrushWithheld:
+    """The crush on one delivery month, or the reason there is none.
+
+    All three legs on one session (invariant 8), as on CBOT. What differs is
+    what is stored:
+
+    * **One month, never a pair.** Every DCE bean month that meal and oil list
+      is a month they list too, so there is nothing to pair across.
+    * **Delivery month not begun**, in place of "five sessions to last trade".
+      DCE's last trade falls inside the delivery month and no DCE trading
+      calendar is encoded here, so the month's first day is the bound that
+      needs none — and is the stricter of the two.
+    * **Which eligible month** is the descriptor's ``month_rule``
+      (:data:`MONTH_RULES`): ``nearest``, or ``max_min_open_interest`` — the
+      main contract, the month whose thinnest ``open_interest_legs`` leg holds
+      the most open interest (a tie goes to the nearer month). A month whose
+      ranked legs carry no open interest cannot be ranked and is skipped.
+
+    The session is the newest one all three products printed on. A month that
+    is incomplete on it is skipped; the session never falls to an older one,
+    which would print yesterday's margin as today's.
+    """
+    if month_rule not in MONTH_RULES:
+        raise ValueError(f"unknown month_rule {month_rule!r}; expected one of {sorted(MONTH_RULES)}")
+    if month_rule == "max_min_open_interest" and (
+        not open_interest_legs or not set(open_interest_legs) <= set(_ROLES)
+    ):
+        raise ValueError(
+            f"month_rule {month_rule!r} needs open_interest_legs drawn from {list(_ROLES)}, "
+            f"got {list(open_interest_legs)}"
+        )
+    missing = [role for role in _ROLES if not quotes.get(role)]
+    if missing:
+        return CrushWithheld(
+            code=WithheldReason.NO_CURVE,
+            reason=(
+                "no named-month rows are stored for the " + ", ".join(missing)
+                + " leg — a crush cannot be struck on the legs that are present"
+            ),
+            remedy="run Layer 9 so the named crush months are fetched",
+            detail={"missing": missing},
+        )
+
+    common = set.intersection(*({q.session for q in quotes[role]} for role in _ROLES))
+    if not common:
+        return CrushWithheld(
+            code=WithheldReason.MIXED_SESSIONS,
+            reason=(
+                "the bean, oil and meal legs share no session — a margin struck across "
+                "different days is the intervening move, not a margin"
+            ),
+            remedy="re-fetch Layer 9 so all three products carry the same session",
+        )
+    session = max(common)
+
+    by_month = {
+        role: {q.delivery_month: q for q in quotes[role] if q.session == session}
+        for role in _ROLES
+    }
+    session_month = f"{session.year:04d}-{session.month:02d}"
+    candidates = sorted(
+        month for month in set().union(*by_month.values())
+        if int(month[5:7]) in crush_months and month > session_month
+    )
+
+    considered: list[str] = []
+    eligible: list[tuple[str, dict[str, MonthQuote]]] = []
+    for month in candidates:
+        legs = {role: by_month[role].get(month) for role in _ROLES}
+        gaps = [
+            (f"no {_contract_hint(by_month, role, month)} bar" if quote is None
+             else f"{quote.contract} did not trade")
+            for role, quote in legs.items()
+            if quote is None or not quote.traded
+        ]
+        if gaps:
+            considered.append(f"{month_label(month)}: " + ", ".join(gaps))
+            continue
+        eligible.append((month, {role: quote for role, quote in legs.items() if quote is not None}))
+
+    if month_rule == "max_min_open_interest":
+        ranked: list[tuple[float, str, dict[str, MonthQuote]]] = []
+        for month, struck in eligible:
+            unknown = [struck[role].contract for role in open_interest_legs
+                       if struck[role].open_interest is None]
+            if unknown:
+                considered.append(
+                    f"{month_label(month)}: no open interest stored for {', '.join(unknown)}"
+                )
+                continue
+            ranked.append((
+                min(float(struck[role].open_interest or 0.0) for role in open_interest_legs),
+                month, struck,
+            ))
+        # max() keeps the first of equal keys, and candidates run nearest first.
+        eligible = [max(ranked, key=lambda row: row[0])[1:]] if ranked else []
+
+    if eligible:
+        month, struck = eligible[0]
+        return MonthCrush(month=month, session=session, legs=struck, considered=tuple(considered))
+
+    held = "; ".join(considered) or (
+        "no stored contract is a month every leg lists whose delivery has not begun"
+    )
+    return CrushWithheld(
+        code=WithheldReason.NO_CRUSH_MONTH,
+        reason=(
+            f"no single delivery month can be struck on bean, oil and meal for "
+            f"{session.isoformat()} — {held}. Legs of different months are a calendar "
+            "spread, not a margin"
+        ),
+        remedy="wait for the next Layer 9 fetch; the crush is struck when one month prints on all three",
+        detail={"session": session.isoformat(), "considered": considered},
+    )
+
+
+@dataclass(frozen=True)
+class MonthTable:
+    """Where a month-struck crush reads its legs: the registry descriptor's columns.
+
+    Built from ``config.MARKETS[slug]["crush"]`` — the market is a parameter
+    (invariant 5). A descriptor names a ``month_column`` exactly when its table
+    stores the delivery month per row; without one this returns ``None`` and the
+    caller keeps whichever engine the descriptor's ``contracts`` selects.
+    """
+
+    table: str
+    date_column: str
+    key_column: str
+    contract_column: str
+    month_column: str
+    value_column: str
+    volume_column: str
+    legs: Mapping[str, str]            # role -> stored key
+    crush_months: tuple[int, ...]
+    provider_display: str
+    month_rule: str
+    open_interest_column: str | None = None
+    open_interest_legs: tuple[str, ...] = ()
+
+    _REQUIRED = (
+        "table", "date_column", "key_column", "contract_column", "month_column",
+        "value_column", "volume_column", "legs", "crush_months", "provider_display",
+        "month_rule",
+    )
+
+    @property
+    def convention(self) -> str:
+        """The convention note for this descriptor's month rule."""
+        rule = MONTH_RULES[self.month_rule].format(legs="/".join(self.open_interest_legs))
+        return MONTH_CRUSH_CONVENTION_NOTE.format(rule=rule)
+
+    @classmethod
+    def from_descriptor(cls, descriptor: Mapping[str, Any]) -> MonthTable | None:
+        if descriptor.get("month_column") is None:
+            return None
+        missing = [name for name in cls._REQUIRED if not descriptor.get(name)]
+        if missing:
+            raise KeyError(
+                f"a month-struck crush descriptor needs {missing} — without them the "
+                "month each leg belongs to cannot be read, and a crush across months "
+                "is a calendar spread"
+            )
+        legs = dict(descriptor["legs"])
+        if set(legs) != set(_ROLES):
+            raise KeyError(f"crush legs must be exactly {list(_ROLES)}, got {sorted(legs)}")
+        month_rule = descriptor["month_rule"]
+        if month_rule not in MONTH_RULES:
+            raise KeyError(f"unknown month_rule {month_rule!r}; expected one of {sorted(MONTH_RULES)}")
+        oi_legs = tuple(descriptor.get("open_interest_legs") or ())
+        oi_column = descriptor.get("open_interest_column")
+        if month_rule == "max_min_open_interest" and (
+            not oi_column or not oi_legs or not set(oi_legs) <= set(_ROLES)
+        ):
+            raise KeyError(
+                f"month_rule {month_rule!r} needs open_interest_column and open_interest_legs "
+                f"drawn from {list(_ROLES)} — without them the main contract cannot be ranked"
+            )
+        return cls(
+            table=descriptor["table"],
+            date_column=descriptor["date_column"],
+            key_column=descriptor["key_column"],
+            contract_column=descriptor["contract_column"],
+            month_column=descriptor["month_column"],
+            value_column=descriptor["value_column"],
+            volume_column=descriptor["volume_column"],
+            legs=legs,
+            crush_months=tuple(descriptor["crush_months"]),
+            provider_display=descriptor["provider_display"],
+            month_rule=month_rule,
+            open_interest_column=oi_column,
+            open_interest_legs=oi_legs,
+        )
+
+
+def read_month_quotes(conn, spec: MonthTable, *, since: date, until: date) -> dict[str, list[MonthQuote]]:
+    """Every stored bar for the three legs in ``[since, until]``, by role.
+
+    ``until`` is the as-of date: a row dated after it is not yet history on
+    the day being rendered. Raises ``sqlite3.Error`` for an unreadable table —
+    the callers turn that into a withheld reason.
+    """
+    keys = list(spec.legs.values())
+    sql = (
+        f"SELECT {spec.key_column}, {spec.date_column}, {spec.contract_column}, "  # noqa: S608 - registry identifiers
+        f"{spec.month_column}, {spec.value_column}, {spec.volume_column}, "
+        f"{spec.open_interest_column or 'NULL'} "
+        f"FROM {spec.table} WHERE {spec.key_column} IN ({','.join('?' for _ in keys)}) "
+        f"AND {spec.date_column} >= ? AND {spec.date_column} < ? "
+        f"AND {spec.value_column} IS NOT NULL"
+    )
+    day_after = (until + timedelta(days=1)).isoformat()
+    rows = conn.execute(sql, (*keys, since.isoformat(), day_after)).fetchall()
+    role_by_key = {key: role for role, key in spec.legs.items()}
+    out: dict[str, list[MonthQuote]] = {role: [] for role in _ROLES}
+    for key, raw_date, contract, month, close, volume, open_interest in rows:
+        out[role_by_key[str(key)]].append(MonthQuote(
+            session=date.fromisoformat(str(raw_date)[:10]),
+            contract=str(contract),
+            delivery_month=str(month),
+            close=float(close),
+            volume=None if volume is None else float(volume),
+            open_interest=None if open_interest is None else float(open_interest),
+        ))
+    return out
+
+
+def month_board_crush(
+    conn, spec: MonthTable, *, today: date, lookback_days: int = 120
+) -> MonthCrush | CrushWithheld:
+    """The month-struck crush as of ``today`` — the one call every surface makes."""
+    try:
+        quotes = read_month_quotes(
+            conn, spec, since=today - timedelta(days=lookback_days), until=today
+        )
+    except sqlite3.Error as exc:
+        return CrushWithheld(
+            code=WithheldReason.NO_CURVE,
+            reason=f"{spec.table} is unreadable ({exc})",
+            remedy="run Layer 9 so the named crush months are fetched",
+        )
+    return strike_month_crush(
+        quotes,
+        crush_months=spec.crush_months,
+        month_rule=spec.month_rule,
+        open_interest_legs=spec.open_interest_legs,
+    )
+
+
+def month_crush_history(
+    conn, spec: MonthTable, month: str, *, since: date, until: date
+) -> list[MonthCrush]:
+    """Every session ``month``'s three contracts all traded on, oldest first.
+
+    The range behind a month-struck level is that month's own history — the
+    same three contracts, never a stitched run across months, which would be a
+    range around a different margin.
+    """
+    quotes = read_month_quotes(conn, spec, since=since, until=until)
+    by_session: dict[date, dict[str, MonthQuote]] = {}
+    for role in _ROLES:
+        for quote in quotes[role]:
+            if quote.delivery_month == month and quote.traded:
+                by_session.setdefault(quote.session, {})[role] = quote
+    return [
+        MonthCrush(month=month, session=session, legs=legs)
+        for session, legs in sorted(by_session.items())
+        if len(legs) == len(_ROLES)
+    ]
+
+
+def _contract_hint(by_month: Mapping[str, Mapping[str, MonthQuote]], role: str, month: str) -> str:
+    """The symbol a missing leg would carry: its own root + YYMM ("Y2611").
+
+    The session is common to all three products, so every role has at least
+    one contract on it to read the root from.
+    """
+    root = next(iter(by_month[role].values())).contract.rstrip("0123456789")
+    return f"{root}{month[2:4]}{month[5:7]}"
+
+
 __all__ = [
     "CRUSH_CONVENTION_NOTE",
+    "MONTH_CRUSH_CONVENTION_NOTE",
+    "MONTH_CRUSH_UNPLACEABLE_REASON",
+    "MONTH_RULES",
+    "MonthCrush",
+    "MonthQuote",
+    "MonthTable",
+    "month_board_crush",
+    "month_crush_history",
+    "read_month_quotes",
+    "month_label",
+    "strike_month_crush",
     "DEFAULT_CANDIDATE_MONTHS",
     "MIN_DAYS_TO_EXPIRY",
     "SOY_CRUSH_PRODUCT_MONTH",

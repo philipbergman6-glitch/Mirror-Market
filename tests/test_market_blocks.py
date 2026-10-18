@@ -42,6 +42,7 @@ from app.sections import (
     seasonal_section,
     section,
 )
+from fetchers.akshare import crush_delivery_months
 from pipeline import schema
 from pipeline.units import native_label
 
@@ -92,6 +93,7 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         schema._CREATE_PSD,
         schema._CREATE_CURRENCIES,
         schema._CREATE_DCE_FUTURES,
+        schema._CREATE_DCE_CONTRACT_BARS,
         schema._CREATE_ARGENTINA_FOB,
         schema._CREATE_GULF_BIDS,
         schema._CREATE_INDIA_DOMESTIC,
@@ -152,6 +154,18 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     ):
         conn.execute("INSERT INTO dce_futures (commodity, Date, Close) VALUES (?,?,?)",
                      (key, _day(0), close))
+    # The crush legs, one named month (B29 #503): the nearest crush month
+    # whose delivery has not begun, so the fixture rolls with the calendar.
+    month = crush_delivery_months(TODAY)[0]
+    for key, (root, _months), close in zip(
+        config.DCE_CRUSH_MONTH_ROOTS, config.DCE_CRUSH_MONTH_ROOTS.values(),
+        (3600.0, 8000.0, 3000.0), strict=True,
+    ):
+        conn.execute(
+            "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, "
+            "Volume, Open_Interest) VALUES (?,?,?,?,?,?,?)",
+            (key, f"{root}{month[2:4]}{month[5:7]}", month, _day(0), close, 100.0, 100.0),
+        )
     conn.execute("INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
                  (_day(0), "Soybean (CEPEA)", 2000.0))
     conn.execute("INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
@@ -456,13 +470,17 @@ def test_the_cbot_crush_is_withheld_when_a_leg_is_missing(seeded, registry):
     assert "Soybean Oil" in crush.reason
 
 
-def test_the_dalian_crush_says_its_legs_are_continuous(seeded, registry):
-    """Arithmetically fine, structurally unhedgeable — and it must say so."""
+def test_the_dalian_crush_names_its_one_delivery_month(seeded, registry):
+    """B29 #503: struck on named contracts of one month, and labelled with it."""
     crush = _block(_build("dalian", seeded, registry), "crush")
     assert crush.state == "ok"
-    assert crush.data["contract_basis"] == "continuous"
+    assert crush.data["contract_basis"] == "named_contract"
+    assert crush.data["legs_named"] is True
+    # No DCE trading calendar is encoded, so no last trade proves it placeable.
     assert crush.data["hedgeable"] is False
-    assert "not published" in crush.data["contract_note"]
+    months = {leg["contract_month"] for leg in crush.data["legs"].values()}
+    assert len(months) == 1
+    assert crush.data["period_label"] == f"{months.pop()} crush"
 
 
 def test_no_market_ships_a_provisional_crush_today(registry):

@@ -11,11 +11,15 @@ struck on the latest session both venues printed, or withheld with the reason
 """
 
 import logging
+from datetime import date, datetime, timezone
 
 import pandas as pd
 
+import config
+from analysis.futures.crush import CrushWithheld, MonthTable, month_board_crush
 from analysis.spreads import (
-    compute_dce_crush_margin,
+    CRUSH_MEAL_YIELD_MT,
+    CRUSH_OIL_YIELD_MT,
     daily_close,
     fx_close_on,
     strike_cross_venue_spread,
@@ -95,37 +99,47 @@ def format(  # noqa: A001
         )
 
     try:
-        lines.extend(_board_crush_lines(dce_data, cny_df))
+        lines.append(_board_crush_line(cny_df, datetime.now(timezone.utc).date()))
     except Exception as exc:
-        logger.debug("DCE board crush failed: %s", exc)
+        logger.warning("DCE board crush failed: %s", exc)
 
     return "\n".join(lines)
 
 
-def _board_crush_lines(dce_data: pd.DataFrame, cny_df: pd.DataFrame | None) -> list[str]:
-    """China board crush margin from the B0/M0/Y0 continuous series.
+def _board_crush_line(cny_df: pd.DataFrame | None, today: date) -> str:
+    """China board crush on ONE named delivery month, or why there is none (B29 #503).
 
-    Continuous-series caveat: the three legs need not roll the underlying
-    contract on the same day, so near-roll prints may embed roll gaps —
-    hence the explicit tag on the line (same humility as Layer 1 signals).
+    The month, the session and the refusal are
+    ``analysis.futures.crush.month_board_crush``'s — the same call the Dalian
+    page's block 03 and the Origins board level make. It used to be the
+    B0/Y0/M0 continuous series, whose legs roll on different days: on
+    2026-10-16 that printed Nov beans against Jan products as a margin.
     """
-    crush = compute_dce_crush_margin(dce_data)
-    if crush.empty:
-        return []
-    latest = crush.iloc[-1]
-    value_cny = latest["crush_cny_mt"]
-    date = latest["Date"]
+    from pipeline.connection import managed_connection
+    from pipeline.query import get_connection
+
+    spec = MonthTable.from_descriptor(config.MARKETS["dalian"]["crush"])
+    if spec is None:
+        raise KeyError("the Dalian crush descriptor names no month_column")
+    with managed_connection(get_connection()) as conn:
+        outcome = month_board_crush(conn, spec, today=today)
+    if isinstance(outcome, CrushWithheld):
+        return f"  DCE board crush: withheld — {outcome.reason}"
+
+    yields = {"oil": CRUSH_OIL_YIELD_MT, "meal": CRUSH_MEAL_YIELD_MT}
+    value_cny = outcome.margin(yields)
+    oil_value = outcome.closes["oil"] * yields["oil"]
+    meal_value = outcome.closes["meal"] * yields["meal"]
 
     # Converted at the crush session's own rate, never the newest (A1 #298).
-    crush_fx = fx_close_on(cny_df, pd.Timestamp(date), "CNY/USD")
+    crush_fx = fx_close_on(cny_df, pd.Timestamp(outcome.session), "CNY/USD")
     if crush_fx is not None:
         parts = [f"CNY {value_cny:+,.0f}/MT ({value_cny * crush_fx[0]:+,.0f} USD/MT)"]
     else:
         parts = [f"CNY {value_cny:+,.0f}/MT"]
-    parts.append(f"oil share {latest['oil_value_share'] * 100:.0f}%")
-
-    date_str = date.date() if hasattr(date, "date") else date
-    return [
-        f"  DCE board crush: {' | '.join(parts)} "
-        f"(as of {date_str}; continuous main-contract legs — roll gaps possible)"
-    ]
+    parts.append(f"oil share {oil_value / (oil_value + meal_value) * 100:.0f}%")
+    contracts = " / ".join(outcome.legs[role].contract for role in ("bean", "oil", "meal"))
+    return (
+        f"  DCE board crush, {outcome.label} ({contracts}): {' | '.join(parts)} "
+        f"(as of {outcome.session.isoformat()}; one delivery month, one session)"
+    )

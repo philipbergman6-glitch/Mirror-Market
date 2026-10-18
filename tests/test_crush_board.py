@@ -64,6 +64,7 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         schema._CREATE_PRICES,
         schema._CREATE_CURRENCIES,
         schema._CREATE_DCE_FUTURES,
+        schema._CREATE_DCE_CONTRACT_BARS,
         schema._CREATE_ARGENTINA_FOB,
         schema._CREATE_FORWARD_CURVE,
     ):
@@ -91,15 +92,20 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             "INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
             ("CNY/USD", _day(offset), CNY_USD + offset * 0.001),
         )
-        for key, close in (
-            ("DCE Soybean No.2", DCE_BEAN),
-            ("DCE Soybean Oil", DCE_OIL),
-            ("DCE Soybean Meal", DCE_MEAL),
-            ("DCE Soybean No.1", 4900.0),
+        conn.execute(
+            "INSERT INTO dce_futures (commodity, Date, Close) VALUES (?,?,?)",
+            ("DCE Soybean No.1", _day(offset), 4900.0),
+        )
+        # The crush legs are one named month, Sep-26 (B29 #503).
+        for key, contract, close in (
+            ("DCE Soybean No.2", "B2609", DCE_BEAN),
+            ("DCE Soybean Oil", "Y2609", DCE_OIL),
+            ("DCE Soybean Meal", "M2609", DCE_MEAL),
         ):
             conn.execute(
-                "INSERT INTO dce_futures (commodity, Date, Close) VALUES (?,?,?)",
-                (key, _day(offset), close),
+                "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, "
+                "Close, Volume, Open_Interest) VALUES (?,?,?,?,?,?,?)",
+                (key, contract, "2026-09", _day(offset), close, 100.0, 100.0),
             )
 
     # Argentina — natively USD/MT, and a handful of sessions only.
@@ -201,7 +207,8 @@ def test_each_card_prints_the_same_margin_as_that_markets_block_03(slug, seeded,
 def test_the_dalian_card_keys_off_no2_the_imported_crush_bean(seeded, registry):
     """#152: No.1 is the domestic food bean and Chinese crushers do not crush it."""
     row = _rows(seeded, registry)["dalian"]
-    assert row["bean_key"] == "DCE Soybean No.2"
+    # B is No.2's root; No.1 would be A.
+    assert row["bean_key"] == "B2609"
     yields = _yields()
     expected = (
         (DCE_OIL * yields["oil"] + DCE_MEAL * yields["meal"] - DCE_BEAN) * CNY_USD
@@ -227,13 +234,14 @@ def test_the_argentina_card_is_a_verified_leg_not_a_provisional_one(seeded, regi
     assert row["margin_home"] is None
 
 
-def test_the_cbot_card_names_its_contracts_and_the_dalian_card_cannot(seeded, registry):
+def test_the_cbot_and_dalian_cards_both_name_their_contracts(seeded, registry):
+    """B29 #503: Dalian is struck on one named month and says which, inline."""
     rows = _rows(seeded, registry)
     assert rows["cbot"]["contract_basis"] == "named_contract"
     assert rows["cbot"]["legs_named"] is True
-    assert rows["dalian"]["contract_basis"] == "continuous"
-    assert rows["dalian"]["legs_named"] is False
-    assert "not published" in rows["dalian"]["contract_note"]
+    assert rows["dalian"]["contract_basis"] == "named_contract"
+    assert rows["dalian"]["legs_named"] is True
+    assert rows["dalian"]["contract_note"].startswith("Sep-26 crush — B2609 / Y2609 / M2609")
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +327,9 @@ def test_a_named_contract_margin_gets_no_range_off_a_different_engine(seeded, re
 def test_the_range_only_counts_sessions_every_leg_printed(seeded, registry):
     """A margin struck across two days is not a margin — in history either."""
     seeded.conn.execute(
-        "INSERT INTO dce_futures (commodity, Date, Close) VALUES (?,?,?)",
-        ("DCE Soybean Oil", _day(DALIAN_SESSIONS + 3), DCE_OIL),
+        "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, "
+        "Volume, Open_Interest) VALUES (?,?,?,?,?,?,?)",
+        ("DCE Soybean Oil", "Y2609", "2026-09", _day(DALIAN_SESSIONS + 3), DCE_OIL, 100.0, 100.0),
     )
     seeded.conn.commit()
     row = _rows(SiteContext(conn=seeded.conn, today=TODAY), registry)["dalian"]

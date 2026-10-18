@@ -84,7 +84,7 @@ LAYER_MIN_KEYS = {
     "weather": 18,     # of 24 regions (M14 #207 remapped the set)
     "cot": 7,          # of 10 commodities
     "psd": 5,          # of 10 commodities
-    "dce": 3,          # of 8 contracts (6 DCE + 2 CZCE rapeseed)
+    "dce": 3,          # of 11 frames (6 DCE + 2 CZCE continuous, 3 named-month crush legs)
     "usda": 2,         # of 3 stats (production, area harvested, yield)
     "export_sales": 4,  # of 6 commodities
     "forward_curve": 7,  # of 9 commodities
@@ -1195,7 +1195,7 @@ INDIA_CRUDE_SOY_OIL_DUTY: tuple[tuple[_date, float, str], ...] = (
 # CNY/MT food premium; Chinese crushers do not crush it. No.2 (B) is the
 # imported/GMO deliverable bean — the crush bean, and the only honest
 # counterpart to CBOT for an import-parity comparison. The board crush and
-# the vs-CBOT premium both key off No.2 (see analysis/spreads.py:_DCE_BEAN).
+# the vs-CBOT premium both key off No.2 (the Dalian crush descriptor's bean leg).
 DCE_CONTRACTS = {
     "DCE Soybean No.1": "A0",   # Soybean No.1 continuous — domestic non-GMO food bean
     "DCE Soybean No.2": "B0",   # Soybean No.2 continuous — imported/GMO crush bean
@@ -1208,6 +1208,38 @@ DCE_CONTRACTS = {
     # substitute-oil signal for the soy oil book.
     "CZCE Rapeseed Oil":  "OI0",  # Rapeseed Oil continuous
     "CZCE Rapeseed Meal": "RM0",  # Rapeseed Meal continuous
+}
+
+# B29 #503: the Dalian crush legs as *named delivery months*, so the margin is
+# struck on one month. The continuous B0/Y0/M0 series roll on their own
+# schedules — on 2026-10-16 B0 was B2611 while Y0/M0 were Y2701/M2701, and the
+# block printed a Nov-bean/Jan-product calendar spread as a margin (V1 #474).
+# Sina symbol = root + YYMM ("B2611"). Listed months as Sina served them on
+# 2026-10-18: No.2 every month (B2612, B2702, B2704 present); meal and oil
+# 1/3/5/7/8/9/11/12 (M2702, Y2702 absent). A crush month is one all three
+# list — derived below, never typed out a second time.
+DCE_CRUSH_MONTH_ROOTS: dict[str, tuple[str, tuple[int, ...]]] = {
+    "DCE Soybean No.2": ("B", tuple(range(1, 13))),
+    "DCE Soybean Oil": ("Y", (1, 3, 5, 7, 8, 9, 11, 12)),
+    "DCE Soybean Meal": ("M", (1, 3, 5, 7, 8, 9, 11, 12)),
+}
+# The months all three legs list — the only months a one-month crush can be.
+DCE_CRUSH_MONTHS: tuple[int, ...] = tuple(sorted(
+    set.intersection(*(set(months) for _, months in DCE_CRUSH_MONTH_ROOTS.values()))
+))
+if not DCE_CRUSH_MONTHS:
+    raise ValueError(
+        "DCE_CRUSH_MONTH_ROOTS share no delivery month — a one-month crush cannot exist"
+    )
+# How many crush months ahead Layer 9 fetches per leg. Five keeps the next
+# main contract (01/05/09) in the window all year: in July the next five are
+# Aug/Sep/Nov/Dec/Jan, and Jan takes the main from Sep around August.
+DCE_CRUSH_MONTHS_AHEAD = 5
+# Layer 9 frame key for one product's named months — its own catalog key, so a
+# product whose named months all failed is a named gap in coverage, not a
+# silent one.
+DCE_NAMED_MONTH_KEYS: dict[str, str] = {
+    f"{name} · named months": name for name in DCE_CRUSH_MONTH_ROOTS
 }
 
 # ---------------------------------------------------------------------------
@@ -2565,7 +2597,7 @@ LAYER_KEY_CATALOGS: dict[str, dict] = {
     "weather": GROWING_REGIONS,
     "cot": COT_COMMODITIES,
     "psd": PSD_TARGET_COMMODITIES,
-    "dce": DCE_CONTRACTS,
+    "dce": {**DCE_CONTRACTS, **DCE_NAMED_MONTH_KEYS},
     "export_sales": EXPORT_SALES_COMMODITIES,
     "forward_curve": FORWARD_CURVE_CONTRACTS,
     "contract_bars": FORWARD_CURVE_CONTRACTS,
@@ -2820,17 +2852,34 @@ MARKETS: dict[str, dict[str, Any]] = {
             "value_column": "Close",
             "unit": "home_per_mt",
         },
-        # Continuous main-contract series (akshare A0/M0/Y0): the underlying
-        # contract changes silently and is not published, so this margin is a
-        # China board *reference* and never a hedgeable one. Declared rather
-        # than inferred — that is the whole point of the field.
+        # Named delivery months (B29 #503), struck on ONE month all three legs
+        # traded on one session — `analysis.futures.crush.strike_month_crush`.
+        # It was the continuous B0/Y0/M0 series, whose legs roll on their own
+        # schedules: the 2026-10-16 margin was Nov beans against Jan products.
+        # `month_column` is what says the table carries a delivery month per
+        # row; the CBOT descriptor has none and keeps its forward-curve engine.
+        # `month_rule` (owner decision on #503): the main contract — the
+        # eligible month whose thinner product leg holds the most open
+        # interest. Ranked on oil/meal, not beans: on 2026-10-16 No.2's open
+        # interest peaked in B2611 (122,705) while oil and meal sat in Jan
+        # (Y2701 549,171, M2701 2,321,910 vs Y2611 79,923), so a three-leg
+        # minimum picks Nov and a desk reads Jan. Beans must still have traded.
         "crush": {
             "kind": "board",
-            "contracts": "continuous",
+            "contracts": "named",
+            "layer": "dce",
             "yield_set": "soy_board",
-            "table": "dce_futures",
+            "table": "dce_contract_bars",
             "date_column": "Date",
             "key_column": "commodity",
+            "contract_column": "contract",
+            "month_column": "delivery_month",
+            "volume_column": "Volume",
+            "crush_months": DCE_CRUSH_MONTHS,
+            "provider_display": "Sina Finance via AKShare",
+            "month_rule": "max_min_open_interest",
+            "open_interest_column": "Open_Interest",
+            "open_interest_legs": ("oil", "meal"),
             "legs": {
                 "bean": "DCE Soybean No.2",
                 "oil": "DCE Soybean Oil",

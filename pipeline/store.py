@@ -381,7 +381,7 @@ def clear_database():
     _ensure_storage_dir()
     tables = [
         "prices", "economic", "usda", "cot", "weather", "psd",
-        "currencies", "worldbank_prices", "dce_futures", "crop_progress",
+        "currencies", "worldbank_prices", "dce_futures", "dce_contract_bars", "crop_progress",
         "export_sales", "forward_curve", "wasde", "inspections",
         "inspection_port_flows", "inspection_destinations", "gulf_bids",
         "us_processor_cash",
@@ -1101,6 +1101,23 @@ def save_dce_futures_data(commodity: str, df: pd.DataFrame):
         "commodity", "Date", "Open", "High", "Low", "Close",
         "Volume", "Open_Interest", "Settle",
     ]], ["commodity", "Date"], f"dce_futures/{commodity}")
+
+
+def save_dce_contract_bars(commodity: str, df: pd.DataFrame):
+    """Write named-month DCE crush legs → 'dce_contract_bars' (B29 #503).
+
+    Upsert on (contract, Date), like contract_bars: bars are keyed by session,
+    so two runs on one day agree by construction.
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["commodity"] = commodity
+    df["Date"] = _date(df["Date"])
+    _save("dce_contract_bars", df[[
+        "commodity", "contract", "delivery_month", "Date", "Open", "High", "Low",
+        "Close", "Volume", "Open_Interest", "Settle",
+    ]], ["contract", "Date"], f"dce_contract_bars/{commodity}")
 
 
 def save_wasde(commodity_key: str, df: pd.DataFrame):

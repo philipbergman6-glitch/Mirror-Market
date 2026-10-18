@@ -759,8 +759,9 @@ def command_center() -> dict:
     # grid is gone with its tile (M16 #208). Dalian's margin is on the crush
     # board now, struck by the same engine as its market page's block 03 —
     # while this was a fifth surface computing its own, off the continuous
-    # main-contract series. `compute_dce_crush_margin` itself stays: the
-    # briefing's DCE section is its remaining reader.
+    # main-contract series. B29 #503 retired `compute_dce_crush_margin` too:
+    # every surface now strikes one delivery month via
+    # `analysis.futures.crush.month_board_crush`.
 
     # Dollar index
     econ = read_economic()
