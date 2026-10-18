@@ -138,7 +138,7 @@ _CRITERIA_TEMPLATES: dict[IssueClass, str] = {
 def _normalise(text: str) -> str:
     """Reduce a summary to its identity: lowercase, no punctuation, no digits.
 
-    Digits go deliberately. "Paranagua FOB reads 421 not 418" and the same
+    Digits go deliberately. "Paranagua port bid reads 421 not 418" and the same
     complaint the next day at different levels are one finding, and keeping the
     numbers in the key would file them as two.
     """

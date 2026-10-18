@@ -638,7 +638,7 @@ def test_daily_scraper_layer_is_recency_checked(freshness_calls):
     assert LAYER_MAX_DATA_AGE_DAYS["agrural"] == 7
 
     ok = main._run_scraper_layer(
-        "agrural", "Layer 19", "AgRural Paranagua FOB",
+        "agrural", "Layer 19", "AgRural Paranagua port bid",
         fetch=lambda: _scraper_result(days_ago=400),
         save=lambda n, d: None,
     )

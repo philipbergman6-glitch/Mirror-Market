@@ -9,8 +9,9 @@ Two daily, cross-market relationships are computed here:
 2. Brazil basis (CEPEA Paraná farm-gate vs CBOT): the price differential
    between Brazilian domestic soy and CBOT futures, normalized to USD/MT.
    Negative basis = Brazilian product trades below CBOT (export-competitive).
-   This is a Brazil-domestic-vs-CBOT spread; the true Paranaguá port FOB
-   premium is a future fetcher (Phase 2).
+   This is a Brazil-domestic-vs-CBOT spread. The AgRural Paranaguá leg
+   (Layer 19) is an on-truck "sobre rodas" port bid, not FOB vessel (B21
+   #483), and no publisher of record exists for a Paranaguá FOB premium.
 """
 
 from dataclasses import dataclass

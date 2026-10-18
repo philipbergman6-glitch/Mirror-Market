@@ -76,7 +76,7 @@ def test_evidence_is_worst_confidence_plus_one_corroboration_bonus():
     two_layers = make_opportunity(
         evidence=(
             make_evidence(layer="gulf_bids"),
-            make_evidence(layer="agrural", label="Paranagua FOB"),
+            make_evidence(layer="agrural", label="Paranagua port bid"),
         ),
     )
     assert evidence_score(two_layers)[0] == 75.0 + CORROBORATION_BONUS

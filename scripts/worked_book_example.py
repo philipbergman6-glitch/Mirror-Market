@@ -142,7 +142,7 @@ def main() -> int:
         pricing_end=TODAY + timedelta(days=75),
         basis_convention=BasisConvention.BASIS_OVER_FUTURES,
         basis_usd_per_mt=-12.5,
-        basis_source="Paranagua FOB indication",
+        basis_source="Paranagua port bid indication (on truck, not FOB)",
         note="SYNTHETIC worked example",
     )
     analysis = analyse_curve(provider.curve("Soybeans", as_of=TODAY), as_of=TODAY)
