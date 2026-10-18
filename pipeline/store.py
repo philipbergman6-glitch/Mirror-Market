@@ -647,13 +647,23 @@ def save_currency_data(pair: str, df: pd.DataFrame):
     here, so one arriving is a bug and raises. One already stored — written
     before the guard knew, and kept by the cached CI database because an
     upsert never deletes — is purged in the same transaction as the pair's
-    next save.
+    next save. The purge only fires on a non-empty save for that pair: a pair
+    whose fetch came back empty keeps its stored weekend row until it next
+    returns bars.
+
+    A row with no parseable Date also raises: it has no session to judge.
     """
     if df.empty:
         return
     df = df.reset_index().copy()
     df["pair"] = pair
-    weekend = pd.to_datetime(df["Date"]).dt.weekday.map(lambda d: d not in FX_SESSION_WEEKDAYS)
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    if dates.isna().any():
+        raise ValueError(
+            f"currencies/{pair}: refusing {int(dates.isna().sum())} row(s) with no parseable Date "
+            "— an FX close must carry its session date"
+        )
+    weekend = dates.dt.weekday.map(lambda d: d not in FX_SESSION_WEEKDAYS)
     if weekend.any():
         raise ValueError(
             f"currencies/{pair}: refusing weekend-labelled row(s) "
