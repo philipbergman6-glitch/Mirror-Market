@@ -860,8 +860,204 @@ def named_board_crush(
     )
 
 
+# ---------------------------------------------------------------------------
+# One delivery month, off a table that stores the month per row (B29 #503)
+# ---------------------------------------------------------------------------
+#: Rendered wherever a month-struck crush is. The CBOT convention pairs a bean
+#: month with a product month; this one never pairs two months at all.
+MONTH_CRUSH_CONVENTION_NOTE = (
+    "Crush month: bean, oil and meal are one delivery month — the nearest month all "
+    "three list whose delivery has not begun and whose three contracts all traded on "
+    "the session. A month one leg did not trade is skipped, never paired with another."
+)
+
+_MONTH_ABBR = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+_ROLES = ("bean", "oil", "meal")
+
+
+def crush_months(listed: Mapping[str, tuple[int, ...]]) -> tuple[int, ...]:
+    """The delivery months every leg lists — the only months a crush can be one.
+
+    Derived from each leg's own listing so a listing change cannot leave a stale
+    literal behind. Hard-fails when there is none: a registry that declares a
+    month-struck crush with no shared month has declared a crush that can never
+    be struck, and an always-withheld block would hide that.
+    """
+    shared = set.intersection(*(set(months) for months in listed.values()))
+    if not shared:
+        raise ValueError(
+            f"no delivery month is listed by every crush leg ({dict(listed)}) — "
+            "a one-month crush cannot exist on this roster"
+        )
+    return tuple(sorted(shared))
+
+
+def month_label(delivery_month: str) -> str:
+    """``"2026-11"`` → ``"Nov-26"``."""
+    year, month = delivery_month.split("-")
+    return f"{_MONTH_ABBR[int(month) - 1]}-{year[2:]}"
+
+
+@dataclass(frozen=True)
+class MonthQuote:
+    """One named contract's daily bar, as stored. Native units, no FX."""
+
+    session: date
+    contract: str
+    delivery_month: str            # YYYY-MM
+    close: float | None
+    volume: float | None
+
+    @property
+    def traded(self) -> bool:
+        """A close AND a positive volume. NULL volume is "never learned", not a trade."""
+        return self.close is not None and self.volume is not None and self.volume > 0
+
+
+@dataclass(frozen=True)
+class MonthCrush:
+    """Three legs of one delivery month, one session. Native units only.
+
+    No USD figure on purpose: conversion has two sites (invariant 7) and each
+    surface already calls one of them at the session's own FX rate.
+    """
+
+    month: str                     # YYYY-MM
+    session: date
+    legs: Mapping[str, MonthQuote]
+    considered: tuple[str, ...] = ()
+    price_type: PriceType = PriceType.DELAYED_CLOSE
+
+    def __post_init__(self) -> None:
+        if set(self.legs) != set(_ROLES):
+            raise ValueError(f"a crush is bean, oil and meal; got {sorted(self.legs)}")
+        months = {leg.delivery_month for leg in self.legs.values()}
+        sessions = {leg.session for leg in self.legs.values()}
+        if months != {self.month} or sessions != {self.session}:
+            raise ValueError(
+                f"a month crush is one month on one session; legs span {sorted(months)} "
+                f"on {sorted(d.isoformat() for d in sessions)}"
+            )
+
+    @property
+    def label(self) -> str:
+        return f"{month_label(self.month)} crush"
+
+    def margin(self, yields: Mapping[str, float]) -> float:
+        """``oil × yield + meal × yield − bean`` in the legs' one native unit."""
+        close = {role: float(self.legs[role].close) for role in _ROLES}  # type: ignore[arg-type]
+        return close["oil"] * yields["oil"] + close["meal"] * yields["meal"] - close["bean"]
+
+
+def strike_month_crush(
+    quotes: Mapping[str, list[MonthQuote]],
+    *,
+    crush_months: tuple[int, ...],
+) -> MonthCrush | CrushWithheld:
+    """The crush on one delivery month, or the reason there is none.
+
+    The CBOT rule, kept: nearest crush period first, and all three legs on one
+    session (invariant 8). Two differences, both because of what is stored:
+
+    * **One month, never a pair.** Every DCE bean month that meal and oil list
+      is a month they list too, so there is nothing to pair across.
+    * **Delivery month not begun**, in place of "five sessions to last trade".
+      DCE's last trade falls inside the delivery month and no DCE trading
+      calendar is encoded here, so the month's first day is the bound that
+      needs none — and is the stricter of the two.
+
+    The session is the newest one all three products printed on. A month that
+    is incomplete on it falls to the next month; it never falls to an older
+    session, which would print yesterday's margin as today's.
+    """
+    missing = [role for role in _ROLES if not quotes.get(role)]
+    if missing:
+        return CrushWithheld(
+            code=WithheldReason.NO_CURVE,
+            reason=(
+                "no named-month rows are stored for the " + ", ".join(missing)
+                + " leg — a crush cannot be struck on the legs that are present"
+            ),
+            remedy="run Layer 9 so the named crush months are fetched",
+            detail={"missing": missing},
+        )
+
+    common = set.intersection(*({q.session for q in quotes[role]} for role in _ROLES))
+    if not common:
+        return CrushWithheld(
+            code=WithheldReason.MIXED_SESSIONS,
+            reason=(
+                "the bean, oil and meal legs share no session — a margin struck across "
+                "different days is the intervening move, not a margin"
+            ),
+            remedy="re-fetch Layer 9 so all three products carry the same session",
+        )
+    session = max(common)
+
+    by_month = {
+        role: {q.delivery_month: q for q in quotes[role] if q.session == session}
+        for role in _ROLES
+    }
+    session_month = f"{session.year:04d}-{session.month:02d}"
+    candidates = sorted(
+        month for month in set().union(*by_month.values())
+        if int(month[5:7]) in crush_months and month > session_month
+    )
+
+    considered: list[str] = []
+    for month in candidates:
+        legs = {role: by_month[role].get(month) for role in _ROLES}
+        gaps = [
+            (f"no {_contract_hint(by_month, role, month)} bar" if quote is None
+             else f"{quote.contract} did not trade")
+            for role, quote in legs.items()
+            if quote is None or not quote.traded
+        ]
+        if gaps:
+            considered.append(f"{month_label(month)}: " + ", ".join(gaps))
+            continue
+        return MonthCrush(
+            month=month,
+            session=session,
+            legs={role: quote for role, quote in legs.items() if quote is not None},
+            considered=tuple(considered),
+        )
+
+    held = "; ".join(considered) or (
+        "no stored contract is a month every leg lists whose delivery has not begun"
+    )
+    return CrushWithheld(
+        code=WithheldReason.NO_CRUSH_MONTH,
+        reason=(
+            f"no single delivery month has bean, oil and meal all traded on "
+            f"{session.isoformat()} — {held}. Legs of different months are a calendar "
+            "spread, not a margin"
+        ),
+        remedy="wait for the next Layer 9 fetch; the crush is struck when one month prints on all three",
+        detail={"session": session.isoformat(), "considered": considered},
+    )
+
+
+def _contract_hint(by_month: Mapping[str, Mapping[str, MonthQuote]], role: str, month: str) -> str:
+    """The symbol a missing leg would carry: its own root + YYMM ("Y2611").
+
+    The session is common to all three products, so every role has at least
+    one contract on it to read the root from.
+    """
+    root = next(iter(by_month[role].values())).contract.rstrip("0123456789")
+    return f"{root}{month[2:4]}{month[5:7]}"
+
+
 __all__ = [
     "CRUSH_CONVENTION_NOTE",
+    "MONTH_CRUSH_CONVENTION_NOTE",
+    "MonthCrush",
+    "MonthQuote",
+    "crush_months",
+    "month_label",
+    "strike_month_crush",
     "DEFAULT_CANDIDATE_MONTHS",
     "MIN_DAYS_TO_EXPIRY",
     "SOY_CRUSH_PRODUCT_MONTH",
