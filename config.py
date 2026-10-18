@@ -1168,7 +1168,7 @@ INDIA_CRUDE_SOY_OIL_DUTY: tuple[tuple[_date, float, str], ...] = (
 # CNY/MT food premium; Chinese crushers do not crush it. No.2 (B) is the
 # imported/GMO deliverable bean — the crush bean, and the only honest
 # counterpart to CBOT for an import-parity comparison. The board crush and
-# the vs-CBOT premium both key off No.2 (see analysis/spreads.py:_DCE_BEAN).
+# the vs-CBOT premium both key off No.2 (the Dalian crush descriptor's bean leg).
 DCE_CONTRACTS = {
     "DCE Soybean No.1": "A0",   # Soybean No.1 continuous — domestic non-GMO food bean
     "DCE Soybean No.2": "B0",   # Soybean No.2 continuous — imported/GMO crush bean
@@ -1190,12 +1190,20 @@ DCE_CONTRACTS = {
 # Sina symbol = root + YYMM ("B2611"). Listed months as Sina served them on
 # 2026-10-18: No.2 every month (B2612, B2702, B2704 present); meal and oil
 # 1/3/5/7/8/9/11/12 (M2702, Y2702 absent). A crush month is one all three
-# list — derived in analysis.futures.crush, never typed out a second time.
+# list — derived below, never typed out a second time.
 DCE_CRUSH_MONTH_ROOTS: dict[str, tuple[str, tuple[int, ...]]] = {
     "DCE Soybean No.2": ("B", tuple(range(1, 13))),
     "DCE Soybean Oil": ("Y", (1, 3, 5, 7, 8, 9, 11, 12)),
     "DCE Soybean Meal": ("M", (1, 3, 5, 7, 8, 9, 11, 12)),
 }
+# The months all three legs list — the only months a one-month crush can be.
+DCE_CRUSH_MONTHS: tuple[int, ...] = tuple(sorted(
+    set.intersection(*(set(months) for _, months in DCE_CRUSH_MONTH_ROOTS.values()))
+))
+if not DCE_CRUSH_MONTHS:
+    raise ValueError(
+        "DCE_CRUSH_MONTH_ROOTS share no delivery month — a one-month crush cannot exist"
+    )
 # How many crush months ahead Layer 9 fetches per leg. Four covers the
 # nearest month plus three to fall to when it has not printed on all legs.
 DCE_CRUSH_MONTHS_AHEAD = 4
@@ -2830,7 +2838,7 @@ MARKETS: dict[str, dict[str, Any]] = {
             "contract_column": "contract",
             "month_column": "delivery_month",
             "volume_column": "Volume",
-            "month_roster": DCE_CRUSH_MONTH_ROOTS,
+            "crush_months": DCE_CRUSH_MONTHS,
             "provider_display": "Sina Finance via AKShare",
             "legs": {
                 "bean": "DCE Soybean No.2",

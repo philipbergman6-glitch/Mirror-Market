@@ -62,9 +62,10 @@ November crush by a delivery period.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -877,23 +878,6 @@ _MONTH_ABBR = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
 _ROLES = ("bean", "oil", "meal")
 
 
-def crush_months(listed: Mapping[str, tuple[int, ...]]) -> tuple[int, ...]:
-    """The delivery months every leg lists — the only months a crush can be one.
-
-    Derived from each leg's own listing so a listing change cannot leave a stale
-    literal behind. Hard-fails when there is none: a registry that declares a
-    month-struck crush with no shared month has declared a crush that can never
-    be struck, and an always-withheld block would hide that.
-    """
-    shared = set.intersection(*(set(months) for months in listed.values()))
-    if not shared:
-        raise ValueError(
-            f"no delivery month is listed by every crush leg ({dict(listed)}) — "
-            "a one-month crush cannot exist on this roster"
-        )
-    return tuple(sorted(shared))
-
-
 def month_label(delivery_month: str) -> str:
     """``"2026-11"`` → ``"Nov-26"``."""
     year, month = delivery_month.split("-")
@@ -1040,6 +1024,129 @@ def strike_month_crush(
     )
 
 
+@dataclass(frozen=True)
+class MonthTable:
+    """Where a month-struck crush reads its legs: the registry descriptor's columns.
+
+    Built from ``config.MARKETS[slug]["crush"]`` — the market is a parameter
+    (invariant 5). A descriptor names a ``month_column`` exactly when its table
+    stores the delivery month per row; without one this returns ``None`` and the
+    caller keeps whichever engine the descriptor's ``contracts`` selects.
+    """
+
+    table: str
+    date_column: str
+    key_column: str
+    contract_column: str
+    month_column: str
+    value_column: str
+    volume_column: str
+    legs: Mapping[str, str]            # role -> stored key
+    crush_months: tuple[int, ...]
+    provider_display: str
+
+    _REQUIRED = (
+        "table", "date_column", "key_column", "contract_column", "month_column",
+        "value_column", "volume_column", "legs", "crush_months", "provider_display",
+    )
+
+    @classmethod
+    def from_descriptor(cls, descriptor: Mapping[str, Any]) -> MonthTable | None:
+        if descriptor.get("month_column") is None:
+            return None
+        missing = [name for name in cls._REQUIRED if not descriptor.get(name)]
+        if missing:
+            raise KeyError(
+                f"a month-struck crush descriptor needs {missing} — without them the "
+                "month each leg belongs to cannot be read, and a crush across months "
+                "is a calendar spread"
+            )
+        legs = dict(descriptor["legs"])
+        if set(legs) != set(_ROLES):
+            raise KeyError(f"crush legs must be exactly {list(_ROLES)}, got {sorted(legs)}")
+        return cls(
+            table=descriptor["table"],
+            date_column=descriptor["date_column"],
+            key_column=descriptor["key_column"],
+            contract_column=descriptor["contract_column"],
+            month_column=descriptor["month_column"],
+            value_column=descriptor["value_column"],
+            volume_column=descriptor["volume_column"],
+            legs=legs,
+            crush_months=tuple(descriptor["crush_months"]),
+            provider_display=descriptor["provider_display"],
+        )
+
+
+def read_month_quotes(conn, spec: MonthTable, *, since: date, until: date) -> dict[str, list[MonthQuote]]:
+    """Every stored bar for the three legs in ``[since, until]``, by role.
+
+    ``until`` is the as-of date: a row dated after it is not yet history on
+    the day being rendered. Raises ``sqlite3.Error`` for an unreadable table —
+    the callers turn that into a withheld reason.
+    """
+    keys = list(spec.legs.values())
+    sql = (
+        f"SELECT {spec.key_column}, {spec.date_column}, {spec.contract_column}, "  # noqa: S608 - registry identifiers
+        f"{spec.month_column}, {spec.value_column}, {spec.volume_column} "
+        f"FROM {spec.table} WHERE {spec.key_column} IN ({','.join('?' for _ in keys)}) "
+        f"AND {spec.date_column} >= ? AND {spec.date_column} < ? "
+        f"AND {spec.value_column} IS NOT NULL"
+    )
+    day_after = (until + timedelta(days=1)).isoformat()
+    rows = conn.execute(sql, (*keys, since.isoformat(), day_after)).fetchall()
+    role_by_key = {key: role for role, key in spec.legs.items()}
+    out: dict[str, list[MonthQuote]] = {role: [] for role in _ROLES}
+    for key, raw_date, contract, month, close, volume in rows:
+        out[role_by_key[str(key)]].append(MonthQuote(
+            session=date.fromisoformat(str(raw_date)[:10]),
+            contract=str(contract),
+            delivery_month=str(month),
+            close=float(close),
+            volume=None if volume is None else float(volume),
+        ))
+    return out
+
+
+def month_board_crush(
+    conn, spec: MonthTable, *, today: date, lookback_days: int = 120
+) -> MonthCrush | CrushWithheld:
+    """The month-struck crush as of ``today`` — the one call every surface makes."""
+    try:
+        quotes = read_month_quotes(
+            conn, spec, since=today - timedelta(days=lookback_days), until=today
+        )
+    except sqlite3.Error as exc:
+        return CrushWithheld(
+            code=WithheldReason.NO_CURVE,
+            reason=f"{spec.table} is unreadable ({exc})",
+            remedy="run Layer 9 so the named crush months are fetched",
+        )
+    return strike_month_crush(quotes, crush_months=spec.crush_months)
+
+
+def month_crush_history(
+    conn, spec: MonthTable, month: str, *, since: date, until: date
+) -> list[MonthCrush]:
+    """Every session ``month``'s three contracts all traded on, oldest first.
+
+    The range behind a month-struck level is that month's own history — the
+    same three contracts, never a stitched run across months, which would be a
+    range around a different margin.
+    """
+    quotes = read_month_quotes(conn, spec, since=since, until=until)
+    by_session: dict[date, dict[str, MonthQuote]] = {}
+    for role in _ROLES:
+        for quote in quotes[role]:
+            if quote.delivery_month == month and quote.traded:
+                by_session.setdefault(quote.session, {})[role] = quote
+    return [
+        MonthCrush(month=month, session=session, legs=legs)
+        for session, legs in sorted(by_session.items())
+        if len(legs) == len(_ROLES)
+    ]
+
+
 def _contract_hint(by_month: Mapping[str, Mapping[str, MonthQuote]], role: str, month: str) -> str:
     """The symbol a missing leg would carry: its own root + YYMM ("Y2611").
 
@@ -1055,7 +1162,10 @@ __all__ = [
     "MONTH_CRUSH_CONVENTION_NOTE",
     "MonthCrush",
     "MonthQuote",
-    "crush_months",
+    "MonthTable",
+    "month_board_crush",
+    "month_crush_history",
+    "read_month_quotes",
     "month_label",
     "strike_month_crush",
     "DEFAULT_CANDIDATE_MONTHS",

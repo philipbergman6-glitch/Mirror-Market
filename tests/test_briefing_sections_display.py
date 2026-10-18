@@ -485,7 +485,7 @@ def test_inspections_china_share_zero_when_china_absent(patched_db: Path) -> Non
 
 
 # ---------------------------------------------------------------------------
-# DCE board crush (X2 #132)
+# DCE board crush (X2 #132; one delivery month since B29 #503)
 # ---------------------------------------------------------------------------
 
 
@@ -499,48 +499,109 @@ def _seed_dce(db: Path, rows: list[tuple]) -> None:
     conn.close()
 
 
-_DCE_ROWS = [
-    ("DCE Soybean No.2", "2026-08-06", 4000.0),
-    ("DCE Soybean Oil", "2026-08-06", 8000.0),
-    ("DCE Soybean Meal", "2026-08-06", 3000.0),
-]
+def _crush_session() -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+
+
+def _seed_dce_months(db: Path, legs: list[tuple[str, str, float]], session: str) -> None:
+    """(commodity, contract, close) rows on one session — delivery month from the symbol.
+
+    The continuous No.2 row rides along: the section opens on Layer 9's
+    continuous series, which always lands with the named months.
+    """
+    _seed_dce(db, [("DCE Soybean No.2", session, 3978.0)])
+    conn = sqlite3.connect(str(db))
+    conn.executemany(
+        "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, Volume) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [(key, contract, f"20{contract[1:3]}-{contract[3:5]}", session, close, 100.0)
+         for key, contract, close in legs],
+    )
+    conn.commit()
+    conn.close()
+
+
+def _next_crush_month_legs() -> list[tuple[str, str, float]]:
+    from datetime import date
+
+    from fetchers.akshare import crush_delivery_months
+
+    month = crush_delivery_months(date.fromisoformat(_crush_session()))[0]
+    yymm = f"{month[2:4]}{month[5:7]}"
+    return [
+        ("DCE Soybean No.2", f"B{yymm}", 4000.0),
+        ("DCE Soybean Oil", f"Y{yymm}", 8000.0),
+        ("DCE Soybean Meal", f"M{yymm}", 3000.0),
+    ]
 
 
 def test_dce_section_board_crush_line(patched_db: Path) -> None:
-    import pandas as pd
-
     from analysis.briefing.sections import dce
 
-    _seed_dce(patched_db, _DCE_ROWS)
-    cny = pd.DataFrame(
-        {"Close": [0.14]}, index=pd.to_datetime(["2026-08-06"])
-    )
+    session = _crush_session()
+    legs = _next_crush_month_legs()
+    _seed_dce_months(patched_db, legs, session)
+    cny = _close_frame({session: 0.14})
 
     text = dce.format({}, {"CNY/USD": cny})
 
     # crush = 8000*(11/60) + 3000*(44/60) - 4000 = -333 CNY/MT; -333*0.14 = -47 USD/MT
-    assert "DCE board crush: CNY -333/MT (-47 USD/MT) | oil share 40%" in text
-    assert "continuous main-contract legs — roll gaps possible" in text
+    contracts = " / ".join(contract for _, contract, _ in legs)
+    assert f"crush ({contracts}): CNY -333/MT (-47 USD/MT) | oil share 40%" in text
+    assert "one delivery month, one session" in text
+    assert "roll gaps possible" not in text
 
 
 def test_dce_section_board_crush_degrades_without_fx(patched_db: Path) -> None:
     from analysis.briefing.sections import dce
 
-    _seed_dce(patched_db, _DCE_ROWS)
+    _seed_dce_months(patched_db, _next_crush_month_legs(), _crush_session())
 
     text = dce.format({}, None)
 
-    assert "DCE board crush: CNY -333/MT | oil share 40%" in text
     crush_line = next(line for line in text.splitlines() if "DCE board crush" in line)
+    assert "CNY -333/MT | oil share 40%" in crush_line
     assert "USD/MT" not in crush_line
 
 
-def test_dce_section_no_crush_line_with_missing_leg(patched_db: Path) -> None:
+def test_dce_section_withholds_the_crush_with_a_reason_when_a_leg_is_missing(patched_db: Path) -> None:
     from analysis.briefing.sections import dce
 
-    _seed_dce(patched_db, _DCE_ROWS[:2])  # no meal leg
+    _seed_dce_months(patched_db, _next_crush_month_legs()[:2], _crush_session())  # no meal leg
 
-    assert "DCE board crush" not in dce.format({}, None)
+    crush_line = next(line for line in dce.format({}, None).splitlines() if "DCE board crush" in line)
+    assert "withheld" in crush_line and "meal" in crush_line
+
+
+def test_dce_section_never_blends_nov_beans_with_jan_products(patched_db: Path) -> None:
+    """The 2026-10-16 defect: B2611 against Y2701/M2701 printed CNY 49 as a margin."""
+    from analysis.briefing.sections import dce
+
+    session = _crush_session()
+    legs = _next_crush_month_legs()
+    later = _next_crush_month_legs_after(legs[0][1])
+    _seed_dce_months(patched_db, [legs[0], later[1], later[2]], session)
+
+    crush_line = next(line for line in dce.format({}, None).splitlines() if "DCE board crush" in line)
+    assert "withheld" in crush_line
+    assert "CNY" not in crush_line
+
+
+def _next_crush_month_legs_after(bean_contract: str) -> list[tuple[str, str, float]]:
+    from datetime import date
+
+    from fetchers.akshare import crush_delivery_months
+
+    first = f"20{bean_contract[1:3]}-{bean_contract[3:5]}"
+    month = next(m for m in crush_delivery_months(date.fromisoformat(_crush_session()), 4) if m > first)
+    yymm = f"{month[2:4]}{month[5:7]}"
+    return [
+        ("DCE Soybean No.2", f"B{yymm}", 4050.0),
+        ("DCE Soybean Oil", f"Y{yymm}", 8844.0),
+        ("DCE Soybean Meal", f"M{yymm}", 3281.0),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -603,11 +664,15 @@ def test_dce_premium_is_withheld_when_the_legs_printed_on_different_sessions(
 
 
 def test_dce_board_crush_converts_at_the_crush_sessions_rate(patched_db: Path) -> None:
+    from datetime import date, timedelta
+
     from analysis.briefing.sections import dce
 
-    _seed_dce(patched_db, _DCE_ROWS)
-    cny = _close_frame({"2026-08-06": 0.14, "2026-08-12": 0.20})
+    session = _crush_session()
+    _seed_dce_months(patched_db, _next_crush_month_legs(), session)
+    later = (date.fromisoformat(session) + timedelta(days=1)).isoformat()
+    cny = _close_frame({session: 0.14, later: 0.20})
 
     text = dce.format({}, {"CNY/USD": cny})
 
-    assert "DCE board crush: CNY -333/MT (-47 USD/MT)" in text
+    assert "CNY -333/MT (-47 USD/MT)" in text

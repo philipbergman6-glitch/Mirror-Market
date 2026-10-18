@@ -16,12 +16,20 @@ Key concepts for learning:
 """
 
 import logging
+from datetime import date
 
 import akshare as ak
 import pandas as pd
 import requests
 
-from config import DCE_CONTRACTS, MAX_RETRIES
+from config import (
+    DCE_CONTRACTS,
+    DCE_CRUSH_MONTH_ROOTS,
+    DCE_CRUSH_MONTHS,
+    DCE_CRUSH_MONTHS_AHEAD,
+    DCE_NAMED_MONTH_KEYS,
+    MAX_RETRIES,
+)
 from fetchers._backoff import retry_sleep
 
 logger = logging.getLogger(__name__)
@@ -91,6 +99,50 @@ def fetch_dce_futures() -> dict[str, pd.DataFrame]:
                 len(df), df["date"].min(), df["date"].max(),
             )
 
+    return results
+
+
+def crush_delivery_months(today: date, count: int = DCE_CRUSH_MONTHS_AHEAD) -> list[str]:
+    """The next ``count`` crush months (YYYY-MM) whose delivery has not begun.
+
+    Strictly after today's month: the crush never strikes a month in delivery
+    (analysis.futures.crush.strike_month_crush), so fetching one buys nothing.
+    """
+    out: list[str] = []
+    year, month = today.year, today.month
+    while len(out) < count:
+        month += 1
+        if month > 12:
+            year, month = year + 1, 1
+        if month in DCE_CRUSH_MONTHS:
+            out.append(f"{year:04d}-{month:02d}")
+    return out
+
+
+def fetch_dce_crush_months(today: date | None = None) -> dict[str, pd.DataFrame]:
+    """Named delivery months for the three Dalian crush legs (B29 #503).
+
+    One frame per product, keyed by ``config.DCE_NAMED_MONTH_KEYS``, every
+    row carrying its ``contract`` ("B2611") and ``delivery_month``
+    ("2026-11"). A contract Sina does not answer is logged and left out — the
+    crush then falls to a month that is present, or is withheld naming the
+    gap; it is never filled from the continuous series.
+    """
+    today = today or date.today()
+    months = crush_delivery_months(today)
+    names = {name: key for key, name in DCE_NAMED_MONTH_KEYS.items()}
+    results: dict[str, pd.DataFrame] = {}
+    for name, (root, _) in DCE_CRUSH_MONTH_ROOTS.items():
+        frames = []
+        for delivery_month in months:
+            symbol = f"{root}{delivery_month[2:4]}{delivery_month[5:7]}"
+            logger.info("Fetching %s (DCE %s) ...", name, symbol)
+            df = fetch_one(symbol)
+            if df.empty:
+                logger.warning("DCE %s returned no bars — %s %s is absent", symbol, name, delivery_month)
+                continue
+            frames.append(df.assign(contract=symbol, delivery_month=delivery_month))
+        results[names[name]] = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     return results
 
 

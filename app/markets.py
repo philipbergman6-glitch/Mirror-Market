@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
 import config
+from analysis.futures.crush import MonthTable
 from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 from pipeline.connection import get_connection, managed_connection
@@ -313,6 +314,10 @@ class Crush:
     value_column: str
     unit: str
     provisional: bool = False
+    #: Set where the table stores a delivery month per row (B29 #503): the
+    #: margin is struck on one month by ``analysis.futures.crush``, never on
+    #: whichever contract each leg's continuous series happened to hold.
+    months: MonthTable | None = None
 
     @property
     def yields(self) -> dict[str, float]:
@@ -462,6 +467,7 @@ class Market:
 _LAYER_BY_TABLE = {
     "prices": "prices",
     "dce_futures": "dce",
+    "dce_contract_bars": "dce",
     "argentina_fob": "magyp_fob",
     "brazil_spot_prices": "cepea",
     "india_domestic_prices": "india_domestic",
@@ -589,6 +595,7 @@ def _crush(raw: dict, *, slug: str) -> Crush:
         value_column=raw["value_column"],
         unit=raw["unit"],
         provisional=bool(raw.get("provisional", False)),
+        months=MonthTable.from_descriptor(raw),
     )
 
 

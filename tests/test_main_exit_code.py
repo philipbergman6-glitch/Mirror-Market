@@ -82,6 +82,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_nhc_storms": empty_dict,
         "fetch_jtwc_storms": empty_dict,
         "fetch_dce_futures": empty_dict,
+        "fetch_dce_crush_months": empty_dict,
         "fetch_all_export_sales": empty_dict,
         "fetch_all_forward_curves": empty_dict,
         "fetch_wasde_estimates": empty_dict,

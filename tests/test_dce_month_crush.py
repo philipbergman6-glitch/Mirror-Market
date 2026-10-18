@@ -18,12 +18,12 @@ from datetime import date
 
 import pytest
 
+import config
 from analysis.futures.crush import (
     CrushWithheld,
     MonthCrush,
     MonthQuote,
     WithheldReason,
-    crush_months,
     strike_month_crush,
 )
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
@@ -56,17 +56,9 @@ def _quotes(table=OCT16, session=SESSION) -> dict[str, list[MonthQuote]]:
 
 
 def test_crush_months_are_the_months_every_leg_lists():
-    roster = {
-        "bean": tuple(range(1, 13)),
-        "oil": (1, 3, 5, 7, 8, 9, 11, 12),
-        "meal": (1, 3, 5, 7, 8, 9, 11, 12),
-    }
-    assert crush_months(roster) == DCE_MONTHS
-
-
-def test_crush_months_refuses_a_roster_with_no_shared_month():
-    with pytest.raises(ValueError, match="no delivery month"):
-        crush_months({"bean": (1,), "oil": (2,), "meal": (2,)})
+    """No.2 lists every month; meal and oil 1,3,5,7,8,9,11,12 (Sina, 2026-10-18)."""
+    assert config.DCE_CRUSH_MONTHS == DCE_MONTHS
+    assert config.MARKETS["dalian"]["crush"]["crush_months"] == DCE_MONTHS
 
 
 def test_the_nearest_month_all_three_legs_traded_is_the_strike():

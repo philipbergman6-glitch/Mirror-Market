@@ -40,7 +40,7 @@ Three rules, the first two the same ones the landed cost keeps:
   module exists to prevent.
 * **What the legs structurally are is carried, not implied.**
   :class:`~analysis.futures.crush.ContractBasis` rides on every result. A
-  margin off continuous main-contract series (Dalian) is arithmetically fine
+  margin off continuous main-contract series is arithmetically fine
   and structurally unhedgeable, and the page must be able to tell the two
   apart without reading a docstring.
 """
@@ -56,10 +56,13 @@ from typing import Any
 import config
 from analysis.futures.crush import (
     CRUSH_CONVENTION_NOTE,
+    MONTH_CRUSH_CONVENTION_NOTE,
     ContractBasis,
     CrushLevel,
     CrushWithheld,
+    MonthTable,
     NamedCrush,
+    month_board_crush,
     named_board_crush,
 )
 from analysis.origins.assumptions import AssumptionMiss, AssumptionSet
@@ -430,11 +433,12 @@ def _margin(legs: dict[str, CrushLeg], yields: dict[str, float]) -> tuple[Money,
 def board_crush(conn, market_slug: str, *, today: date) -> CrushResult:
     """The board level for one market — named contracts wherever they exist.
 
-    Two paths, and which one a market takes is registry data (``contracts``),
-    not a code path here. ``named`` markets are struck by
-    ``analysis.futures.crush`` on explicit delivery months and are withheld
-    with a reason when those cannot be had coherently. ``continuous`` markets
-    (Dalian's main-contract series) keep the generic engine and are stamped
+    Which path a market takes is registry data, not a code path here. A
+    descriptor with a ``month_column`` (Dalian, B29 #503) is struck on one
+    stored delivery month by ``analysis.futures.crush.month_board_crush``;
+    other ``named`` markets by the forward-curve engine. Both are withheld
+    with a reason when the legs cannot be had coherently. ``continuous``
+    markets keep the generic engine and are stamped
     :attr:`ContractBasis.CONTINUOUS`, which is what stops a surface rendering
     them as something an order can be placed against.
     """
@@ -461,6 +465,9 @@ def board_crush(conn, market_slug: str, *, today: date) -> CrushResult:
             contract_basis=_contract_basis(descriptor),
         )
     basis = _contract_basis(descriptor)
+    months = MonthTable.from_descriptor(descriptor)
+    if months is not None:
+        return _month_board_crush(conn, market_slug, descriptor, months, today=today)
     if basis is ContractBasis.NAMED_CONTRACT:
         return _named_board_crush(conn, market_slug, descriptor, today=today)
     return _build(
@@ -518,6 +525,91 @@ def _named_board_crush(conn, market_slug: str, descriptor: dict, *, today: date)
             withheld_code=outcome.code.value,
         )
     return _from_named(market_slug, outcome, descriptor)
+
+
+def _month_board_crush(
+    conn, market_slug: str, descriptor: dict, months: MonthTable, *, today: date
+) -> CrushResult:
+    """The month-struck board crush (B29 #503) in this module's result shape.
+
+    Same thin-adapter rule as the CBOT path: the month, the session and every
+    refusal are ``analysis.futures.crush.month_board_crush``'s, shared with the
+    market page and the briefing. Only the FX conversion happens here.
+    """
+    if conn is None:
+        return _blocked(
+            market_slug, CrushLevel.BOARD_REFERENCE, "no database connection",
+            code="no_source", contract_basis=ContractBasis.NAMED_CONTRACT,
+        )
+    outcome = month_board_crush(conn, months, today=today)
+    if isinstance(outcome, CrushWithheld):
+        return _blocked(
+            market_slug,
+            CrushLevel.BOARD_REFERENCE,
+            outcome.reason,
+            remedy=outcome.remedy,
+            code=outcome.code.value,
+            contract_basis=ContractBasis.NAMED_CONTRACT,
+            withheld_code=outcome.code.value,
+        )
+    from analysis.origins.domain import CONFIDENCE_BY_QUOTE_KIND
+
+    unit = descriptor["unit"]
+    fx = fx_resolution_on(conn, config.MARKETS[market_slug].get("currency_pair"), outcome.session)
+    quote_kind = QuoteKind(descriptor.get("quote_kind", "board"))
+    built: dict[str, CrushLeg] = {}
+    for role, quote in outcome.legs.items():
+        key = months.legs[role]
+        usd = to_usd_per_mt(quote.close, unit=unit, key=key, fx=fx.rate)
+        if usd is None:
+            return _blocked(
+                market_slug,
+                CrushLevel.BOARD_REFERENCE,
+                (
+                    f"the {role} leg quotes in {config.MARKETS[market_slug]['home_currency']} "
+                    f"and cannot be stated in USD/MT for {outcome.session.isoformat()} — {fx.note}"
+                ),
+                contract_basis=ContractBasis.NAMED_CONTRACT,
+            )
+        built[role] = CrushLeg(
+            name=role,
+            key=key,
+            price=usd_mt(usd),
+            native_price=float(quote.close),  # type: ignore[arg-type]
+            native_unit=unit,
+            quote_kind=quote_kind,
+            source=SourceRef(
+                layer=descriptor.get("layer", months.table),
+                table=months.table,
+                key=quote.contract,
+                href=f"markets/{market_slug}.html",
+            ),
+            contract_symbol=quote.contract,
+            contract_month=quote.delivery_month,
+            observation_date=quote.session,
+            price_type=outcome.price_type.value,
+            provider=months.provider_display,
+            settlement_proven=False,
+            fx=fx.alignment if unit == "home_per_mt" else None,
+        )
+    yields = YIELD_SETS[descriptor.get("yield_set", "soy_board")]
+    revenue, bean_cost, margin = _margin(built, yields)
+    return CrushResult(
+        market=market_slug,
+        level=CrushLevel.BOARD_REFERENCE,
+        label=LEVEL_LABELS[CrushLevel.BOARD_REFERENCE],
+        meaning=LEVEL_MEANINGS[CrushLevel.BOARD_REFERENCE],
+        legs=tuple(built[name] for name in ("bean", "oil", "meal")),
+        yields=dict(yields),
+        revenue=revenue,
+        bean_cost=bean_cost,
+        margin=margin,
+        as_of=outcome.session,
+        confidence=CONFIDENCE_BY_QUOTE_KIND[quote_kind],
+        contract_basis=ContractBasis.NAMED_CONTRACT,
+        period_label=outcome.label,
+        note=MONTH_CRUSH_CONVENTION_NOTE,
+    )
 
 
 def _from_named(market_slug: str, crush: NamedCrush, descriptor: dict) -> CrushResult:
