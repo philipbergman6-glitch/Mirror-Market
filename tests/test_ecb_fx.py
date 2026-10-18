@@ -81,6 +81,26 @@ def test_shape_drift_raises_rather_than_returning_nothing(monkeypatch) -> None:
         ecb_fx.download_ecb_cross("CNY", period="5d", today=date(2026, 10, 18))
 
 
+def test_an_empty_200_body_raises_rather_than_escaping_as_a_pandas_error(monkeypatch) -> None:
+    _serve(monkeypatch, "")
+    with pytest.raises(ecb_fx.EcbShapeError, match="empty"):
+        ecb_fx.download_ecb_cross("CNY", period="5d", today=date(2026, 10, 18))
+
+
+def test_an_empty_body_withholds_cny_and_leaves_the_other_pairs_standing(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(yf_module, "fetch_one", lambda ticker, period=None, rule=None: pd.DataFrame())
+    _serve(monkeypatch, "")
+    frames = yf_module.fetch_currencies(period="5d")
+    assert frames["CNY/USD"].empty and len(frames) == 10
+    assert "empty response body" in caplog.text
+
+
+def test_a_duplicated_leg_on_one_day_raises_rather_than_picking_one(monkeypatch) -> None:
+    _serve(monkeypatch, ECB_CSV + "EXR.D.CNY.EUR.SP00.A,D,CNY,EUR,SP00,A,2026-10-16,7.530\n")
+    with pytest.raises(ecb_fx.EcbShapeError, match="duplicated"):
+        ecb_fx.download_ecb_cross("CNY", period="5d", today=date(2026, 10, 18))
+
+
 def test_a_non_positive_rate_raises(monkeypatch) -> None:
     _serve(monkeypatch, ECB_CSV.replace("2026-10-16,7.524", "2026-10-16,0"))
     with pytest.raises(ecb_fx.EcbShapeError, match="positive"):

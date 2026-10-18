@@ -4,7 +4,8 @@ Layer 7 — ECB euro reference rates, as USD crosses (B25 #495).
 For a pair in ``config.FX_ECB_CROSS_PAIRS`` the publisher of record is the
 ECB, not Yahoo: Yahoo's ``CNYUSD=X`` print is a day behind its own label by
 an inconstant lag (see the config comment). The ECB publishes each currency
-per euro at 14:15 CET on every TARGET day, keyless, via SDMX REST; the USD
+per euro on every TARGET day (concertation ~14:10 CET, published ~16:00 CET),
+keyless, via SDMX REST; the USD
 cross is ``(USD per EUR) / (unit per EUR)`` on a day *both* legs printed.
 
 The frame is shaped like ``fetchers.yfinance.download_bars`` output — one
@@ -90,11 +91,20 @@ def download_ecb_cross(
 
 
 def _cross(text: str, currency: str) -> pd.DataFrame:
-    raw = pd.read_csv(io.StringIO(text))
+    try:
+        raw = pd.read_csv(io.StringIO(text))
+    except pd.errors.EmptyDataError as exc:
+        # An HTTP-200 empty body: an answer, but not the series asked for.
+        raise EcbShapeError(f"ECB {currency}/USD: empty response body") from exc
     missing = [column for column in _REQUIRED_COLUMNS if column not in raw.columns]
     if missing:
         raise EcbShapeError(f"ECB {currency}/USD: response lacks column(s) {missing}")
-    legs = raw.pivot_table(index="TIME_PERIOD", columns="CURRENCY", values="OBS_VALUE", aggfunc="first")
+    duplicated = raw.duplicated(subset=["TIME_PERIOD", "CURRENCY"], keep=False)
+    if duplicated.any():
+        # Two values for one leg on one day: picking either is a guess.
+        pairs = sorted({(row.TIME_PERIOD, row.CURRENCY) for row in raw[duplicated].itertuples()})
+        raise EcbShapeError(f"ECB {currency}/USD: duplicated (date, currency) rows {pairs}")
+    legs = raw.pivot(index="TIME_PERIOD", columns="CURRENCY", values="OBS_VALUE")
     absent = [leg for leg in ("USD", currency) if leg not in legs.columns]
     if absent:
         raise EcbShapeError(f"ECB {currency}/USD: response carries no {absent} series")

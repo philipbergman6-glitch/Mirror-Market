@@ -765,8 +765,8 @@ CURRENCY_TICKERS = {
 # business day — ECB D vs Yahoo-labelled D median 5.74 bp, ECB D-1 0.69 bp;
 # Fed H.10 noon rate D-1 matches to the 4th decimal on 263 of 458 bars since
 # 2025, but on 74 the print is 2-7 business days stale and on 121 it matches
-# no H.10 day, so no fixed relabel is honest. The ECB fix (14:15 CET on D) is
-# genuinely D. Yahoo is not a fallback: an ECB outage leaves the pair
+# no H.10 day, so no fixed relabel is honest. The ECB rate for D (published
+# ~16:00 CET on D) is genuinely D. Yahoo is not a fallback: an ECB outage leaves the pair
 # unrefreshed and pricing.fx_alignment withholds past its gap cap. Value is
 # the ECB currency code. The ticker in CURRENCY_TICKERS stays for the trusted
 # pilot, which still ingests the Yahoo series (see trust.read_path).
