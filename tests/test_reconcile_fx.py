@@ -319,3 +319,16 @@ def test_a_sunday_run_resolves_to_friday_not_the_saturday_live_row() -> None:
     assert run.session == date(2026, 10, 16)
     assert run.status == STATUS_RECONCILED
     assert all(item.report.matched_rows == 1 for item in run.pairs)
+
+
+def test_the_report_says_cny_reconciles_a_series_v1_no_longer_reads() -> None:
+    """B25 (#495): the Yahoo bars still prove guard and adapter agree, but v1
+    now converts China legs at the ECB cross — the report must not let a
+    "reconciled" CNY read as v1 parity."""
+    run = reconcile_once(
+        download=sessions([date(2026, 8, 11), date(2026, 8, 12)]),
+        now=AFTER_FX_CLOSE,
+    )
+    assert run.to_dict()["v1_source_differs"] == [
+        {"pair": "CNY/USD", "v1_source": "ECB reference cross (EUR legs)"}
+    ]

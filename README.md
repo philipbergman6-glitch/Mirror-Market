@@ -44,7 +44,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 4 | CFTC | What big speculators are betting (published weekly) |
 | 5 | Open-Meteo | Weather in 19 growing regions across 6 continents |
 | 6 | USDA PSD | Global supply and demand, 10 commodities × 28 countries |
-| 7 | Yahoo Finance | 10 currency pairs (a weak Brazilian real makes Brazilian beans cheaper) |
+| 7 | Yahoo Finance; ECB (CNY) | 10 currency pairs (a weak Brazilian real makes Brazilian beans cheaper) |
 | 8 | World Bank | Monthly benchmark prices (palm oil, rapeseed oil) |
 | 9 | AKShare | Chinese futures prices — what the biggest soy buyer is paying |
 | 10 | USDA FAS* | Weekly US export sales and who bought |

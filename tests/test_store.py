@@ -832,3 +832,44 @@ def test_save_currency_data_refuses_a_weekend_row(patched_db):
     with pytest.raises(ValueError, match="weekend"):
         store.save_currency_data("BRL/USD", _currency_df(["2026-10-16", "2026-10-17"], close=0.19))
     assert _fetchall(patched_db, "SELECT COUNT(*) FROM currencies") == [(0,)]
+
+
+# ---------------------------------------------------------------------------
+# B25 (#495) — an ECB-cross pair's window is the publisher's, whole
+# ---------------------------------------------------------------------------
+
+
+def test_ecb_pair_save_evicts_yahoo_rows_the_ecb_did_not_publish(patched_db):
+    """The cached DB holds years of Yahoo CNYUSD=X rows. ECB values overwrite
+    them date for date, but a Yahoo row on a TARGET holiday (Good Friday
+    2026-04-03) would survive the upsert and convert a China leg at a
+    D-1-suspect rate. Inside the incoming window it goes; before it, and for
+    other pairs, nothing is touched."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.executemany(
+        "INSERT INTO currencies (pair, Date, Open, High, Low, Close) VALUES (?, ?, 1, 1, 1, ?)",
+        [
+            ("CNY/USD", "2026-03-30", 0.1450),  # before the window: untouched
+            ("CNY/USD", "2026-04-02", 0.1451),  # overwritten by the ECB value
+            ("CNY/USD", "2026-04-03", 0.1452),  # Good Friday, no ECB fix: evicted
+            ("BRL/USD", "2026-04-03", 0.1990),  # another pair: untouched
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    store.save_currency_data("CNY/USD", _currency_df(["2026-04-02", "2026-04-06"], close=0.1460))
+
+    rows = _fetchall(patched_db, "SELECT pair, Date, Close FROM currencies ORDER BY pair, Date")
+    assert rows == [
+        ("BRL/USD", "2026-04-03", 0.1990),
+        ("CNY/USD", "2026-03-30", 0.1450),
+        ("CNY/USD", "2026-04-02", pytest.approx(0.1460)),
+        ("CNY/USD", "2026-04-06", pytest.approx(0.1460)),
+    ]
+
+
+def test_a_yahoo_pair_save_keeps_dates_missing_from_the_incoming_window(patched_db):
+    store.save_currency_data("BRL/USD", _currency_df(["2026-04-02", "2026-04-03"], close=0.199))
+    store.save_currency_data("BRL/USD", _currency_df(["2026-04-02"], close=0.199))
+    assert _fetchall(patched_db, "SELECT COUNT(*) FROM currencies") == [(2,)]

@@ -20,6 +20,7 @@ from config import (
     DB_PATH,
     EC_OILSEEDS_CADENCE,
     EC_OILSEEDS_QUOTE_KIND,
+    FX_ECB_CROSS_PAIRS,
     FX_SESSION_WEEKDAYS,
     GTR_OCEAN_ATTRIBUTION,
     GTR_OCEAN_CADENCE,
@@ -660,13 +661,19 @@ def save_currency_data(pair: str, df: pd.DataFrame):
             f"{sorted(_date(df.loc[weekend, 'Date']))} — a provider live tick, not an FX close"
         )
     df["Date"] = _date(df["Date"])
-    placeholders = ", ".join("?" * len(_FX_OFF_DAYS_SQLITE))
+    off_days = ", ".join("?" * len(_FX_OFF_DAYS_SQLITE))
+    where = f"strftime('%w', Date) IN ({off_days})"
+    params: tuple = (pair, *_FX_OFF_DAYS_SQLITE)
+    if pair in FX_ECB_CROSS_PAIRS:
+        # B25 (#495): the ECB is this pair's publisher of record, so inside the
+        # incoming window a stored date it did not publish (a TARGET holiday
+        # Yahoo printed on) is a leftover D-1-suspect rate, not history.
+        dates = sorted(set(df["Date"].dropna()))
+        where += f" OR (Date >= ? AND Date NOT IN ({', '.join('?' * len(dates))}))"
+        params = (*params, dates[0], *dates)
     _save("currencies", df[["pair", "Date", "Open", "High", "Low", "Close"]],
           ["pair", "Date"], f"currencies/{pair}",
-          clear=(
-              f"DELETE FROM currencies WHERE pair = ? AND strftime('%w', Date) IN ({placeholders})",
-              (pair, *_FX_OFF_DAYS_SQLITE),
-          ))
+          clear=(f"DELETE FROM currencies WHERE pair = ? AND ({where})", params))
 
 
 def save_worldbank_data(commodity: str, df: pd.DataFrame):

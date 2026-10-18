@@ -273,9 +273,16 @@ def test_currencies_fetch_uses_the_fx_rule(monkeypatch):
         seen.append(rule)
         return pd.DataFrame()
 
+    def fake_ecb_guard(df, label="", now=None, rule=None):
+        seen.append(rule)
+        return df
+
     monkeypatch.setattr(yf_module, "fetch_one", fake_fetch_one)
+    # The ECB-cross pair (B25 #495) passes the same rule through its own call.
+    monkeypatch.setattr(yf_module, "download_ecb_cross", lambda *a, **k: _frame(["2026-08-18"]))
+    monkeypatch.setattr(yf_module, "drop_unsettled_session", fake_ecb_guard)
     yf_module.fetch_currencies(period="5d")
-    assert seen and all(rule is FX_SESSION for rule in seen)
+    assert len(seen) == 10 and all(rule is FX_SESSION for rule in seen)
 
 
 def test_prices_fetch_uses_the_exchange_rule(monkeypatch):

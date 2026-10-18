@@ -132,7 +132,7 @@ PRODUCTION_LAYERS = (
     ("cot", "4", "CFTC", "Weekly", "10 commodities positioning"),
     ("weather", "5", "Open-Meteo", "Daily + forecast", "19 growing regions"),
     ("psd", "6", "USDA FAS (PSD)", "Monthly", "10 commodities × 28 countries + World"),
-    ("currencies", "7", "Yahoo Finance (FX)", "Daily", "10 currency pairs"),
+    ("currencies", "7", "Yahoo Finance (FX); ECB reference rates (CNY)", "Daily", "10 currency pairs"),
     ("worldbank", "8", "World Bank Pink Sheet", "Monthly", "Palm and rapeseed oil benchmarks"),
     ("dce", "9", "AKShare (DCE/CZCE)", "Daily", "Chinese oilseed futures"),
     ("export_sales", "10", "USDA FAS (Export Sales)", "Weekly", "6 commodities and buyers"),
@@ -757,6 +757,22 @@ CURRENCY_TICKERS = {
     "ZAR/USD": "ZARUSD=X",   # South African Rand — emerging soy producer
     "NGN/USD": "NGNUSD=X",   # Nigerian Naira — emerging soy market (may have limited data)
 }
+
+# B25 (#495): pairs Layer 7 reads from the ECB euro reference rates instead of
+# Yahoo, as the cross USD-per-unit = (USD per EUR) / (unit per EUR), both legs
+# from the same TARGET day. Yahoo CNYUSD=X is not a London-day bar: it is a
+# once-a-day print (79% of 2026 bars O=H=L=C) that matches the *previous*
+# business day — ECB D vs Yahoo-labelled D median 5.74 bp, ECB D-1 0.69 bp;
+# Fed H.10 noon rate D-1 matches to the 4th decimal on 263 of 458 bars since
+# 2025, but on 74 the print is 2-7 business days stale and on 121 it matches
+# no H.10 day, so no fixed relabel is honest. The ECB fix (14:15 CET on D) is
+# genuinely D. Yahoo is not a fallback: an ECB outage leaves the pair
+# unrefreshed and pricing.fx_alignment withholds past its gap cap. Value is
+# the ECB currency code. The ticker in CURRENCY_TICKERS stays for the trusted
+# pilot, which still ingests the Yahoo series (see trust.read_path).
+FX_ECB_CROSS_PAIRS = {"CNY/USD": "CNY"}
+FX_ECB_CROSS_LABEL = "ECB reference cross (EUR legs)"
+ECB_EXR_URL = "https://data-api.ecb.europa.eu/service/data/EXR/D.{series}.EUR.SP00.A"
 
 # ---------------------------------------------------------------------------
 # Layer 8 — World Bank Pink Sheet (monthly Palm Oil, Rapeseed Oil, etc.)

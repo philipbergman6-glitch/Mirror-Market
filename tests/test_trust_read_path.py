@@ -74,3 +74,12 @@ def test_every_benchmark_key_the_switch_names_exists_in_the_registry() -> None:
     switch = load_trusted_read_switch({TRUSTED_READ_ENV_VAR: ",".join(CBOT_BENCHMARK_DATASET_KEYS)})
 
     assert switch.dataset_keys == set(CBOT_BENCHMARK_DATASET_KEYS)
+
+
+def test_cny_cannot_cut_over_to_a_trusted_series_v1_no_longer_reads() -> None:
+    """B25 (#495): v1 reads CNY from the ECB cross; the trusted fx-cny-usd
+    contract is still the Yahoo series. Cutting reads over would swap the
+    publisher of record back to the D-1-suspect print."""
+    with pytest.raises(TrustedReadSwitchError, match="fx-cny-usd"):
+        load_trusted_read_switch({TRUSTED_READ_ENV_VAR: "fx-cny-usd"})
+    assert load_trusted_read_switch({TRUSTED_READ_ENV_VAR: "fx-brl-usd"}).enabled_for("fx-brl-usd")
