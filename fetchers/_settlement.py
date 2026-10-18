@@ -77,6 +77,7 @@ from config import (
     FX_SESSION_CLOSE_DAY_OFFSET,
     FX_SESSION_CLOSE_LOCAL,
     FX_SESSION_TIMEZONE,
+    FX_SESSION_WEEKDAYS,
     SETTLEMENT_CUTOFF_LOCAL,
     SETTLEMENT_TIMEZONE,
 )
@@ -94,18 +95,31 @@ class SessionRule:
     ``close_day_offset`` is how many calendar days after its label a bar
     closes: 0 for an exchange session that settles on its own trade date,
     1 for a bar that runs to the local midnight ending its label date.
+
+    ``session_weekdays`` is the set of label weekdays (Monday = 0) a real
+    bar can carry, or ``None`` for no such rule. A row labelled any other
+    weekday is not a session at all, finished or not — for FX it is Yahoo's
+    weekend live row (B26 #496) — and is dropped whatever the clock says.
     """
 
     name: str
     timezone: str
     close_local: tuple[int, int]
     close_day_offset: int = 0
+    session_weekdays: frozenset[int] | None = None
 
     def __post_init__(self) -> None:
         if self.close_day_offset < 0:
             raise ValueError(
                 f"{self.name}: close_day_offset must be >= 0, got {self.close_day_offset} "
                 "— a bar cannot close before the day it is labelled with"
+            )
+        if self.session_weekdays is not None and (
+            not self.session_weekdays or not self.session_weekdays <= frozenset(range(7))
+        ):
+            raise ValueError(
+                f"{self.name}: session_weekdays must be a non-empty subset of 0-6 "
+                f"(Monday = 0), got {sorted(self.session_weekdays)}"
             )
 
     @property
@@ -131,6 +145,10 @@ class SessionRule:
             return closed_today
         return closed_today - timedelta(days=1)
 
+    def is_session_day(self, label: date) -> bool:
+        """Can a real bar carry this label date at all?"""
+        return self.session_weekdays is None or label.weekday() in self.session_weekdays
+
 
 # CME/CBOT/ICE futures. See config.SETTLEMENT_CUTOFF_LOCAL for the per-venue
 # settlement times this one cutoff clears.
@@ -141,12 +159,14 @@ EXCHANGE_SESSION = SessionRule(
 )
 
 # Spot FX. Not a settlement — the London midnight that ends the London
-# calendar day Yahoo labels the bar with (B20 #482).
+# calendar day Yahoo labels the bar with (B20 #482), Monday-Friday only
+# (B26 #496: a weekend label is the live row, never a London-day bar).
 FX_SESSION = SessionRule(
     name="FX London day end",
     timezone=FX_SESSION_TIMEZONE,
     close_local=FX_SESSION_CLOSE_LOCAL,
     close_day_offset=FX_SESSION_CLOSE_DAY_OFFSET,
+    session_weekdays=frozenset(FX_SESSION_WEEKDAYS),
 )
 
 
@@ -213,22 +233,36 @@ def drop_unsettled_session(
     index = df.index
     if index.tz is not None:
         index = index.tz_localize(None)
-    unsettled = index.normalize() > cutoff
-    if not unsettled.any():
+    labels = index.normalize()
+    unsettled = labels > cutoff
+    off_day = ~labels.map(lambda label: rule.is_session_day(label.date())).to_numpy(dtype=bool)
+    if not unsettled.any() and not off_day.any():
         return df
 
     prefix = f"[{label}] " if label else ""
-    logger.warning(
-        "%sDropping %d unsettled bar(s) dated after %s — the newest finished "
-        "session under the %s rule (%02d:%02d %s, label day +%d). Those sessions "
-        "will appear on a later run.",
-        prefix,
-        int(unsettled.sum()),
-        cutoff.date(),
-        rule.name,
-        rule.close_time.hour,
-        rule.close_time.minute,
-        rule.timezone,
-        rule.close_day_offset,
-    )
-    return df.loc[~unsettled]
+    if unsettled.any():
+        logger.warning(
+            "%sDropping %d unsettled bar(s) dated after %s — the newest finished "
+            "session under the %s rule (%02d:%02d %s, label day +%d). Those sessions "
+            "will appear on a later run.",
+            prefix,
+            int(unsettled.sum()),
+            cutoff.date(),
+            rule.name,
+            rule.close_time.hour,
+            rule.close_time.minute,
+            rule.timezone,
+            rule.close_day_offset,
+        )
+    stray = off_day & ~unsettled
+    if stray.any():
+        logger.warning(
+            "%sDropping %d row(s) labelled %s — not a session day under the %s rule "
+            "(weekdays %s, Monday = 0); a provider live row, never a finished bar.",
+            prefix,
+            int(stray.sum()),
+            ", ".join(sorted({str(d.date()) for d in labels[stray]})),
+            rule.name,
+            sorted(rule.session_weekdays or ()),
+        )
+    return df.loc[~(unsettled | off_day)]

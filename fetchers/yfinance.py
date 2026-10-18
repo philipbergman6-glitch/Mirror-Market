@@ -13,6 +13,7 @@ Key concepts for learning:
 """
 
 import logging
+from datetime import datetime, timezone
 
 import pandas as pd
 import requests
@@ -22,6 +23,8 @@ from config import (
     COMMODITY_TICKERS,
     CURRENCY_TICKERS,
     DEFAULT_HISTORY_PERIOD,
+    FX_ECB_CROSS_LABEL,
+    FX_ECB_CROSS_PAIRS,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
 )
@@ -32,6 +35,7 @@ from fetchers._settlement import (
     SessionRule,
     drop_unsettled_session,
 )
+from fetchers.ecb_fx import EcbShapeError, download_ecb_cross
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +186,9 @@ def fetch_currencies(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataF
     export-competitive each country is (a weaker Real makes Brazil's
     soybeans cheaper in dollar terms).
 
+    Pairs in ``config.FX_ECB_CROSS_PAIRS`` (CNY, B25 #495) are read from the
+    ECB reference rates instead, under the same FX guard.
+
     The one thing it does NOT share with commodity prices is the session
     rule. Spot FX has no settlement; Yahoo's bar is a London calendar day
     and closes at London midnight (B20 #482). Judged by the exchange cutoff
@@ -199,6 +206,10 @@ def fetch_currencies(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataF
     results = {}
 
     for name, ticker in CURRENCY_TICKERS.items():
+        if name in FX_ECB_CROSS_PAIRS:
+            df = _fetch_ecb_cross(name, period)
+            results[name] = df
+            continue
         logger.info("Fetching %s (%s) ...", name, ticker)
         df = fetch_one(ticker, period=period, rule=FX_SESSION)
         results[name] = df
@@ -209,6 +220,36 @@ def fetch_currencies(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataF
             )
 
     return results
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _fetch_ecb_cross(name: str, period: str) -> pd.DataFrame:
+    """One ``FX_ECB_CROSS_PAIRS`` pair: the ECB cross under the same FX guard.
+
+    No Yahoo fallback (B25 #495): Yahoo's print for these pairs is a day
+    behind its label. A miss is logged and left empty, so the layer reports
+    the key missing and ``pricing.fx_alignment`` withholds past its gap cap.
+    """
+    currency = FX_ECB_CROSS_PAIRS[name]
+    logger.info("Fetching %s (%s) ...", name, FX_ECB_CROSS_LABEL)
+    now = _utc_now()
+    try:
+        raw = download_ecb_cross(currency, period=period, today=now.date())
+    except EcbShapeError as exc:
+        logger.error("%s withheld: %s", name, exc)
+        return pd.DataFrame()
+    if raw.empty:
+        logger.error("%s withheld: the ECB returned no reference rates (no Yahoo fallback)", name)
+        return raw
+    df = drop_unsettled_session(raw, label=f"{name} ECB", now=now, rule=FX_SESSION)
+    logger.info(
+        "  Got %d rows, date range: %s → %s",
+        len(df), df.index.min().date(), df.index.max().date(),
+    )
+    return df
 
 
 # ── Quick self-test ─────────────────────────────────────────────────

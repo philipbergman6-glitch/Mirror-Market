@@ -428,3 +428,26 @@ def test_reconciliation_names_every_missing_row_and_differing_field(tmp_path) ->
     assert not report.reconciled
     assert [row["Date"] for row in report.missing_in_trusted] == ["2026-08-11"]
     assert sorted(diff["field"] for diff in report.field_differences) == ["Close", "High", "Low", "Open"]
+
+
+def test_a_weekend_live_row_is_never_a_trusted_candidate(tmp_path) -> None:
+    """B26 (#496): the trusted adapter applies the same weekday rule as v1, or
+    the dual write would accept a Saturday tick v1 refuses."""
+    sunday = datetime(2026, 10, 18, 8, 0, tzinfo=timezone.utc)
+    replay = artifact_from_bars(
+        "BRL/USD",
+        [
+            bar(day=date(2026, 10, 16), close="0.1962"),
+            bar(day=date(2026, 10, 17), close="0.1973", open_="0.1973", high="0.1973", low="0.1973"),
+        ],
+        retrieved_at=sunday,
+    )
+
+    parsed = parse_fx_candidates(replay, now=sunday)
+    assert [candidate.identity.effective_date for candidate in parsed.candidates] == [date(2026, 10, 16)]
+    assert parsed.unfinished_sessions == (date(2026, 10, 17),)
+
+    store = repository(tmp_path)
+    ingest_fx_replays(store, [replay], ingested_at=sunday)
+    sessions = {revision.identity.effective_date for revision in store.all_observation_revisions()}
+    assert sessions == {date(2026, 10, 16)}
