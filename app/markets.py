@@ -38,6 +38,8 @@ from datetime import date, datetime, timezone
 import config
 from analysis.futures.crush import MonthTable
 from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
+from analysis.origins.domain import ShipmentWindow
+from analysis.origins.sources import parse_ams_slot, parse_magyp_window
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 from pipeline.connection import get_connection, managed_connection
 from pipeline.units import native_label, to_metric_tons
@@ -143,6 +145,17 @@ PRICE_UNITS = frozenset({"native_exchange", "usd_per_bushel", "home_per_mt", "us
 # exactly the failure that would never be noticed in review.
 ARBITRAGE_KINDS = frozenset({"open", "policy_blocked"})
 
+# How a venue names the shipment window each of its rows is priced for, and
+# how many stored columns that name spans (B30 #504). A source that prints
+# several windows per session declares its scheme, and every surface then reads
+# one named window rather than a mean across them: averaging MAGyP's Oct-26,
+# Nov–Apr and May–Sep bands published 483.0, a price nobody quoted. The parsers
+# are the origins page's own, so a window reads the same on every surface.
+WINDOW_SCHEMES: dict[str, int] = {
+    "ams_delivery": 1,   # AMS 3147 delivery slot — Current, Oct, Nov¹, Nov²
+    "magyp_months": 2,   # MAGyP ship_from / ship_to, YYYY-MM bounds
+}
+
 # M12 #161 decision 3: two selection rules, not one, and each ledger states the
 # one it was built under. The sentences live here rather than in the registry
 # so eight pages cannot end up with eight paraphrases of the same rule; the
@@ -201,6 +214,18 @@ class Source:
     # arbitrage is blocked and rides onto the block with the number.
     arbitrage: str | None = None
     caveat: str | None = None
+    # B30 #504: set where the venue prints several shipment windows per
+    # session. Both or neither — `_source` refuses half a declaration.
+    window_scheme: str | None = None
+    window_columns: tuple[str, ...] = ()
+
+    def parse_window(self, raw: tuple, session: date) -> ShipmentWindow | None:
+        """One stored row's shipment window, or None where it is unreadable."""
+        if self.window_scheme == "ams_delivery":
+            return parse_ams_slot(raw[0], session)
+        if self.window_scheme == "magyp_months":
+            return parse_magyp_window(raw[0], raw[1])
+        raise ValueError(f"{self.table} declares no shipment-window scheme")
 
     @property
     def max_age_days(self) -> int:
@@ -540,6 +565,21 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
             )
     elif arbitrage is not None:
         raise ValueError(f"market {slug!r} {block} source declares arbitrage — basis-only")
+    window_scheme = raw.get("window_scheme")
+    window_columns = tuple(raw.get("window_columns") or ())
+    if window_scheme is not None or window_columns:
+        arity = WINDOW_SCHEMES.get(window_scheme or "")
+        if arity is None:
+            raise ValueError(
+                f"market {slug!r} {block} window_scheme {window_scheme!r} not in "
+                f"{sorted(WINDOW_SCHEMES)}"
+            )
+        if len(window_columns) != arity:
+            raise ValueError(
+                f"market {slug!r} {block} window_scheme {window_scheme!r} reads {arity} "
+                f"column(s), got window_columns {window_columns!r} — a source that prints "
+                "several windows per session and declares none is read as their mean (#504)"
+            )
     return Source(
         layer=raw["layer"],
         table=raw["table"],
@@ -556,6 +596,8 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         key_labels=tuple(sorted(key_labels.items())),
         arbitrage=arbitrage,
         caveat=caveat,
+        window_scheme=window_scheme,
+        window_columns=window_columns,
     )
 
 

@@ -67,6 +67,8 @@
         {#- A1 #298: which day's rate, where it is not the print's own. -#}
         {%- if row.fx_label %}<div class="caption">struck at {{ row.fx_label }}</div>
         {%- elif row.fx_reason %}<div class="caption">withheld — {{ row.fx_reason }}</div>{% endif %}
+        {#- B30 #504: which shipment window this print is for, where the venue prints several. -#}
+        {%- if row.window %}<div class="caption">window {{ row.window }}</div>{% endif %}
         {%- if d.has_drilldown and row.band and row.band.since_label %}
         {#- Variant C's band: "high in its own range" is often the whole
             question, so it is stated in the collapsed row rather than behind a
@@ -90,7 +92,10 @@
         <span class="muted">—</span>
         {%- endif -%}
       </td>
-      <td class="num">{{ f.pct(row.usd_chg_pct) }}</td>
+      <td class="num">{{ f.pct(row.usd_chg_pct) }}
+        {#- B30 #504: a move blank across a window roll says why. -#}
+        {%- if row.move_note %}<div class="caption">{{ row.move_note }}</div>{% endif -%}
+      </td>
       <td class="num">
         {%- if row.has_home_quote -%}{{ f.pct(row.home_chg_pct) }}{%- else -%}<span class="muted">—</span>{%- endif -%}
         {%- if row.fx_tag %} <span class="fx-tag" title="{{ row.fx_note }}">FX</span>{% endif -%}
