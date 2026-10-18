@@ -22,6 +22,18 @@ ZAR and INR — no one-day shift. Tests: BST and GMT fixtures for the 23:00Z
 bar (open at 22:00Z, closed after the London day end), the shared close
 between guard and latency clock, and the FX late-start case.
 
+## Unreleased — the partial streak can reset again (2026-10-18)
+
+**#492.** `layer_partial_streak` rides along in `data/history/`, but
+`export_history` refused to write an empty or shrinking table — guards
+meant for downloaded history. A success run cleared the streak in the DB
+and the CSV kept the old row, so every runner re-imported it: #490 counted
+19 consecutive partial runs for weather across a full success (true streak
+1). `AUTHORITATIVE_STATE_TABLES` now exports verbatim, header-only
+included, once `import_history()` has seeded the table in this process;
+an un-imported local DB still cannot clobber the committed state. Four
+tests; +0 coverage change of note.
+
 ## Unreleased — India captcha gate named; the OHLC rule keeps the close (2026-10-13)
 
 **#449 · #447**, the two source discrepancies the 2026-10-13 quality

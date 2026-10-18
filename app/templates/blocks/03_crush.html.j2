@@ -89,7 +89,7 @@
   </table>
   </div>
   <div class="caption">
-    USD/MT. Week {{ c.week_start }} – {{ c.week_end }}, published {{ c.published_at }} — {{ c.source }}.
+    USD/MT. Week {{ c.week_start }} – {{ c.week_end }}, published {{ c.published_label }} — {{ c.source }}.
     A range of processor <em>asks</em> a market reporter collected over the week: not a trade, not a settlement, and not firm to us.
     {% if c.strike_session %}Board legs are CBOT closes of {{ c.strike_session }}, the session AMS struck its basis against ({{ c.strike_note }}); the premium is ask less board on that one session.
     {% else %}Board and premium withheld: {{ c.strike_note }}.{% endif %}
