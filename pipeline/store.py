@@ -20,6 +20,8 @@ from config import (
     DB_PATH,
     EC_OILSEEDS_CADENCE,
     EC_OILSEEDS_QUOTE_KIND,
+    FX_ECB_CROSS_PAIRS,
+    FX_SESSION_WEEKDAYS,
     GTR_OCEAN_ATTRIBUTION,
     GTR_OCEAN_CADENCE,
     GTR_OCEAN_QUOTE_KIND,
@@ -632,15 +634,56 @@ def save_psd_data(commodity: str, df: pd.DataFrame):
           ["commodity", "country", "year", "attribute"], f"psd/{commodity}")
 
 
+# SQLite's strftime('%w') numbers Sunday 0; config's weekdays number Monday 0.
+_FX_OFF_DAYS_SQLITE = tuple(
+    str((weekday + 1) % 7) for weekday in range(7) if weekday not in FX_SESSION_WEEKDAYS
+)
+
+
 def save_currency_data(pair: str, df: pd.DataFrame):
-    """Write currency OHLC → 'currencies'."""
+    """Write currency OHLC → 'currencies'.
+
+    A weekend-labelled row is Yahoo's live tick, never a London-day bar
+    (B26 #496; config.FX_SESSION_WEEKDAYS). The guard drops it before it gets
+    here, so one arriving is a bug and raises. One already stored — written
+    before the guard knew, and kept by the cached CI database because an
+    upsert never deletes — is purged in the same transaction as the pair's
+    next save. The purge only fires on a non-empty save for that pair: a pair
+    whose fetch came back empty keeps its stored weekend row until it next
+    returns bars.
+
+    A row with no parseable Date also raises: it has no session to judge.
+    """
     if df.empty:
         return
     df = df.reset_index().copy()
     df["pair"] = pair
+    dates = pd.to_datetime(df["Date"], errors="coerce")
+    if dates.isna().any():
+        raise ValueError(
+            f"currencies/{pair}: refusing {int(dates.isna().sum())} row(s) with no parseable Date "
+            "— an FX close must carry its session date"
+        )
+    weekend = dates.dt.weekday.map(lambda d: d not in FX_SESSION_WEEKDAYS)
+    if weekend.any():
+        raise ValueError(
+            f"currencies/{pair}: refusing weekend-labelled row(s) "
+            f"{sorted(_date(df.loc[weekend, 'Date']))} — a provider live tick, not an FX close"
+        )
     df["Date"] = _date(df["Date"])
+    off_days = ", ".join("?" * len(_FX_OFF_DAYS_SQLITE))
+    where = f"strftime('%w', Date) IN ({off_days})"
+    params: tuple = (pair, *_FX_OFF_DAYS_SQLITE)
+    if pair in FX_ECB_CROSS_PAIRS:
+        # B25 (#495): the ECB is this pair's publisher of record, so inside the
+        # incoming window a stored date it did not publish (a TARGET holiday
+        # Yahoo printed on) is a leftover D-1-suspect rate, not history.
+        published = sorted(set(df["Date"]))
+        where += f" OR (Date >= ? AND Date NOT IN ({', '.join('?' * len(published))}))"
+        params = (*params, published[0], *published)
     _save("currencies", df[["pair", "Date", "Open", "High", "Low", "Close"]],
-          ["pair", "Date"], f"currencies/{pair}")
+          ["pair", "Date"], f"currencies/{pair}",
+          clear=(f"DELETE FROM currencies WHERE pair = ? AND ({where})", params))
 
 
 def save_worldbank_data(commodity: str, df: pd.DataFrame):

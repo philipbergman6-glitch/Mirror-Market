@@ -52,6 +52,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import fetchers.yfinance as yfinance_fetcher  # noqa: E402
+from config import FX_ECB_CROSS_LABEL, FX_ECB_CROSS_PAIRS  # noqa: E402
 from fetchers._settlement import FX_SESSION, drop_unsettled_session  # noqa: E402
 from trust.fx_ingestion import (  # noqa: E402
     DEFAULT_PERIOD,
@@ -166,6 +167,13 @@ class ReconciliationRun:
                 {"pair": pair, "session": session.isoformat()} for pair, session in self.unfinished_sessions
             ],
             "pairs": [item.to_dict() for item in self.pairs],
+            # B25 (#495): these pairs' bars still prove guard and adapter agree,
+            # but v1 no longer converts at them — "reconciled" is not v1 parity.
+            "v1_source_differs": [
+                {"pair": item.pair, "v1_source": FX_ECB_CROSS_LABEL}
+                for item in self.pairs
+                if item.pair in FX_ECB_CROSS_PAIRS
+            ],
         }
 
 
