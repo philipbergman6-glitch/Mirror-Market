@@ -98,7 +98,7 @@ def issue(
 NUMERICAL_ISSUE = issue(
     IssueClass.NUMERICAL_ERROR,
     Severity.MAJOR,
-    summary=f"{MARK} Paranagua FOB reads 3 USD/MT above the source",
+    summary=f"{MARK} Paranagua port bid reads 3 USD/MT above the source",
     page="origins.html",
     affected_decision=f"{MARK} which origin to buy",
     expected="418",
