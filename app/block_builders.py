@@ -1562,12 +1562,7 @@ def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
     the briefing read the same call. This only converts: each leg at the
     session's own FX rate (A1 #298), through ``Source.to_usd_mt``.
     """
-    from analysis.futures.crush import (
-        MONTH_CRUSH_CONVENTION_NOTE,
-        CrushWithheld,
-        month_board_crush,
-        month_label,
-    )
+    from analysis.futures.crush import CrushWithheld, month_board_crush, month_label
 
     if ctx.conn is None:
         return STATE_EMPTY, "no database connection", {}
@@ -1594,7 +1589,6 @@ def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
             "contract_month": month_label(quote.delivery_month),
             "price_label": outcome.price_type.label,
             "settlement_proven": False,
-            "volume": quote.volume,
         }
     if any(leg["usd_mt"] is None for leg in legs.values()):
         return STATE_EMPTY, (
@@ -1621,8 +1615,8 @@ def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         "provisional": crush.provisional,
         "provisional_note": None,
         "contract_basis": "named_contract",
-        # Named, but no DCE trading calendar is encoded, so no last trade date
-        # proves the month still placeable — the same bar the CBOT block keeps.
+        # Never placeable: MONTH_CRUSH_UNPLACEABLE_REASON — the Origins
+        # CrushResult carries the same reason, so the two surfaces agree.
         "hedgeable": False,
         # The headline card's inline month label; block 03 renders the
         # period label and caption instead (legs_named).
@@ -1634,9 +1628,8 @@ def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         "legs_named": True,
         "period_label": outcome.label,
         "delivery_month": outcome.month,
-        "convention": MONTH_CRUSH_CONVENTION_NOTE,
+        "convention": crush.months.convention,
         "provider_display": crush.months.provider_display,
-        "months_skipped": list(outcome.considered),
     }
 
 

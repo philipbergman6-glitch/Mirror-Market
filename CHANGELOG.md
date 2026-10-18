@@ -10,15 +10,20 @@ any), and the test/coverage impact.
 `B0`/`Y0`/`M0` series, which roll on their own schedules: on 2026-10-16 the
 bean leg was B2611 and the products Y2701/M2701, so the CNY 49 "margin" was a
 Nov→Jan calendar spread nobody disclosed (V1 #474; same-month Nov +9.1,
-Jan −0.5). Layer 9 now also fetches the next four crush months of B/Y/M into
+Jan −0.5). Layer 9 now also fetches the next five crush months of B/Y/M into
 `dce_contract_bars`, and `analysis.futures.crush.strike_month_crush` strikes
-the nearest month all three legs list and traded on the newest common session
-— else the next month, else withheld with each skipped month named. Block 03,
-the headline crush card (now labelled inline, "Nov-26 crush — B2611 / Y2611 /
-M2611"), its range (that month's own history), the Origins board level and
-the briefing DCE line all read the one call. `compute_dce_crush_margin` is
-removed. Tests: `tests/test_dce_month_crush.py` (20); Dalian fixtures in four
-suites moved to named months; the removed function's seven tests go with it.
+one month all three legs list and traded on the newest common session, chosen
+by the descriptor's `month_rule` — for Dalian the main contract, the month
+whose thinner oil/meal leg holds the most open interest (owner decision), else
+withheld with each skipped month named. Block 03, the headline crush card (now
+labelled inline, "Jan-27 crush — B2701 / Y2701 / M2701"), its range (that
+month's own history), the Origins board level and the briefing DCE line all
+read the one call. It is never placeable: both block 03 and the Origins
+`CrushResult` say `hedgeable: False`, and the opportunity board keeps a
+`LIQUIDITY_UNPROVEN` blocker, until a DCE last-trading-day calendar is
+encoded. `compute_dce_crush_margin` is removed. Tests:
+`tests/test_dce_month_crush.py`; Dalian fixtures in four suites moved to named
+months; the removed function's seven tests go with it.
 
 ## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
 

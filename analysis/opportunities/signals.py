@@ -965,6 +965,15 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
                     "can be placed."
                 ),
             ))
+        elif chosen.unplaceable_reason is not None:
+            blockers.append(Blocker(
+                code=BlockerCode.LIQUIDITY_UNPROVEN,
+                message=chosen.unplaceable_reason,
+                remedy=(
+                    "Read it as a direction, not as a hedge, until the venue's "
+                    "last-trading-day calendar is encoded."
+                ),
+            ))
         out.append(Detection(
             signal=signal,
             rule_id="crush_margin",

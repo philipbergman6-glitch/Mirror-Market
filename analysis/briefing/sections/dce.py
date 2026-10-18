@@ -101,7 +101,7 @@ def format(  # noqa: A001
     try:
         lines.append(_board_crush_line(cny_df, datetime.now(timezone.utc).date()))
     except Exception as exc:
-        logger.debug("DCE board crush failed: %s", exc)
+        logger.warning("DCE board crush failed: %s", exc)
 
     return "\n".join(lines)
 

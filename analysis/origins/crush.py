@@ -56,7 +56,7 @@ from typing import Any
 import config
 from analysis.futures.crush import (
     CRUSH_CONVENTION_NOTE,
-    MONTH_CRUSH_CONVENTION_NOTE,
+    MONTH_CRUSH_UNPLACEABLE_REASON,
     ContractBasis,
     CrushLevel,
     CrushWithheld,
@@ -193,6 +193,10 @@ class CrushResult:
     #: The withheld code when a *named* calculation refused, so a surface can
     #: distinguish "we hold no source" from "the legs did not share a session".
     withheld_code: str | None = None
+    #: Why named-contract legs still cannot take an order, where that is so —
+    #: a month-struck margin keeps no last-trade bound (B29 #503). Set, it
+    #: makes :attr:`hedgeable` False whatever the contract basis says.
+    unplaceable_reason: str | None = None
 
     @property
     def hedgeable(self) -> bool:
@@ -200,6 +204,7 @@ class CrushResult:
         return bool(
             self.contract_basis is not None
             and self.contract_basis.is_hedgeable
+            and self.unplaceable_reason is None
             and self.margin is not None
         )
 
@@ -609,7 +614,8 @@ def _month_board_crush(
         confidence=CONFIDENCE_BY_QUOTE_KIND[quote_kind],
         contract_basis=ContractBasis.NAMED_CONTRACT,
         period_label=outcome.label,
-        note=MONTH_CRUSH_CONVENTION_NOTE,
+        note=months.convention,
+        unplaceable_reason=MONTH_CRUSH_UNPLACEABLE_REASON,
     )
 
 

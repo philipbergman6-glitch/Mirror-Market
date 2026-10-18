@@ -73,8 +73,8 @@ def db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> sqlite3.Connection:
         ("DCE Soybean Meal", "M2611", 3000.0),
     ):
         conn.execute(
-            "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, Volume) "
-            "VALUES (?,?,?,?,?,?)", (key, contract, "2026-11", _iso(D), close, 100.0),
+            "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, Volume, "
+            "Open_Interest) VALUES (?,?,?,?,?,?,?)", (key, contract, "2026-11", _iso(D), close, 100.0, 100.0),
         )
     conn.commit()
     monkeypatch.setattr(markets_mod, "get_connection", lambda: sqlite3.connect(str(path)))

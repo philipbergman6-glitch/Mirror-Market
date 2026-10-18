@@ -163,8 +163,8 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     ):
         conn.execute(
             "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, "
-            "Volume) VALUES (?,?,?,?,?,?)",
-            (key, f"{root}{month[2:4]}{month[5:7]}", month, _day(0), close, 100.0),
+            "Volume, Open_Interest) VALUES (?,?,?,?,?,?,?)",
+            (key, f"{root}{month[2:4]}{month[5:7]}", month, _day(0), close, 100.0, 100.0),
         )
     conn.execute("INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
                  (_day(0), "Soybean (CEPEA)", 2000.0))

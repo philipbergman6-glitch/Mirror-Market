@@ -104,8 +104,8 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         ):
             conn.execute(
                 "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, "
-                "Close, Volume) VALUES (?,?,?,?,?,?)",
-                (key, contract, "2026-09", _day(offset), close, 100.0),
+                "Close, Volume, Open_Interest) VALUES (?,?,?,?,?,?,?)",
+                (key, contract, "2026-09", _day(offset), close, 100.0, 100.0),
             )
 
     # Argentina — natively USD/MT, and a handful of sessions only.
@@ -328,8 +328,8 @@ def test_the_range_only_counts_sessions_every_leg_printed(seeded, registry):
     """A margin struck across two days is not a margin — in history either."""
     seeded.conn.execute(
         "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, "
-        "Volume) VALUES (?,?,?,?,?,?)",
-        ("DCE Soybean Oil", "Y2609", "2026-09", _day(DALIAN_SESSIONS + 3), DCE_OIL, 100.0),
+        "Volume, Open_Interest) VALUES (?,?,?,?,?,?,?)",
+        ("DCE Soybean Oil", "Y2609", "2026-09", _day(DALIAN_SESSIONS + 3), DCE_OIL, 100.0, 100.0),
     )
     seeded.conn.commit()
     row = _rows(SiteContext(conn=seeded.conn, today=TODAY), registry)["dalian"]

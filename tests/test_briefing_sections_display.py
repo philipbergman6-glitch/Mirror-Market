@@ -514,9 +514,9 @@ def _seed_dce_months(db: Path, legs: list[tuple[str, str, float]], session: str)
     _seed_dce(db, [("DCE Soybean No.2", session, 3978.0)])
     conn = sqlite3.connect(str(db))
     conn.executemany(
-        "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, Volume) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        [(key, contract, f"20{contract[1:3]}-{contract[3:5]}", session, close, 100.0)
+        "INSERT INTO dce_contract_bars (commodity, contract, delivery_month, Date, Close, Volume, "
+        "Open_Interest) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [(key, contract, f"20{contract[1:3]}-{contract[3:5]}", session, close, 100.0, 100.0)
          for key, contract, close in legs],
     )
     conn.commit()

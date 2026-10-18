@@ -1204,9 +1204,10 @@ if not DCE_CRUSH_MONTHS:
     raise ValueError(
         "DCE_CRUSH_MONTH_ROOTS share no delivery month — a one-month crush cannot exist"
     )
-# How many crush months ahead Layer 9 fetches per leg. Four covers the
-# nearest month plus three to fall to when it has not printed on all legs.
-DCE_CRUSH_MONTHS_AHEAD = 4
+# How many crush months ahead Layer 9 fetches per leg. Five keeps the next
+# main contract (01/05/09) in the window all year: in July the next five are
+# Aug/Sep/Nov/Dec/Jan, and Jan takes the main from Sep around August.
+DCE_CRUSH_MONTHS_AHEAD = 5
 # Layer 9 frame key for one product's named months — its own catalog key, so a
 # product whose named months all failed is a named gap in coverage, not a
 # silent one.
@@ -2827,6 +2828,12 @@ MARKETS: dict[str, dict[str, Any]] = {
         # schedules: the 2026-10-16 margin was Nov beans against Jan products.
         # `month_column` is what says the table carries a delivery month per
         # row; the CBOT descriptor has none and keeps its forward-curve engine.
+        # `month_rule` (owner decision on #503): the main contract — the
+        # eligible month whose thinner product leg holds the most open
+        # interest. Ranked on oil/meal, not beans: on 2026-10-16 No.2's open
+        # interest peaked in B2611 (122,705) while oil and meal sat in Jan
+        # (Y2701 549,171, M2701 2,321,910 vs Y2611 79,923), so a three-leg
+        # minimum picks Nov and a desk reads Jan. Beans must still have traded.
         "crush": {
             "kind": "board",
             "contracts": "named",
@@ -2840,6 +2847,9 @@ MARKETS: dict[str, dict[str, Any]] = {
             "volume_column": "Volume",
             "crush_months": DCE_CRUSH_MONTHS,
             "provider_display": "Sina Finance via AKShare",
+            "month_rule": "max_min_open_interest",
+            "open_interest_column": "Open_Interest",
+            "open_interest_legs": ("oil", "meal"),
             "legs": {
                 "bean": "DCE Soybean No.2",
                 "oil": "DCE Soybean Oil",
