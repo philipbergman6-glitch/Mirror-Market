@@ -508,3 +508,101 @@ def test_india_csv_from_before_arrivals_still_imports(
     export_history()
     header = (history_env / "india_domestic_prices.csv").read_text().splitlines()[0]
     assert header.split(",")[-1] == "arrivals_mt"
+
+
+# ---------------------------------------------------------------------------
+# Authoritative state tables (#492): an absent row is the state, so the
+# empty/shrink guards must not resurrect a cleared streak on the next runner.
+# ---------------------------------------------------------------------------
+
+
+def _streak_rows(db_path: Path) -> list[tuple]:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        return conn.execute(
+            "SELECT layer_name, consecutive_runs FROM layer_partial_streak ORDER BY layer_name"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def _partial(layer: str, missing: str) -> None:
+    store.save_freshness(
+        layer, 100, status="usable_partial",
+        keys_returned=23, keys_expected=24, missing_keys=[missing],
+    )
+
+
+@pytest.fixture
+def seeded(history_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A fresh process that ran import_history() (no CSVs yet) — the CI shape."""
+    monkeypatch.setattr(history, "_SEEDED_TABLES", set())
+    assert import_history() == 0
+    return history_env
+
+
+def test_streak_table_is_authoritative_state() -> None:
+    assert "layer_partial_streak" in history.AUTHORITATIVE_STATE_TABLES
+    assert set(history.HISTORY_TABLES) >= history.AUTHORITATIVE_STATE_TABLES
+
+
+def test_cleared_streak_exports_header_only_and_does_not_resurrect(
+    seeded: Path, patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run 1 partial → CSV holds the streak. Run 2 success clears it → the CSV
+    must follow, and run 3 must start again at 1, not at 3 (#490 counted 19)."""
+    _partial("weather", "Indonesia Riau (Sumatra)")
+    export_history()
+    csv_path = seeded / "layer_partial_streak.csv"
+    assert "weather" in csv_path.read_text()
+
+    store.save_freshness("weather", 100)  # success clears the row in the DB
+    assert _streak_rows(patched_db) == []
+    export_history()
+    lines = csv_path.read_text().splitlines()
+    assert len(lines) == 1, "cleared streak must leave a header-only CSV"
+    assert lines[0].startswith("layer_name,")
+
+    # Next runner: wipe, re-seed from the CSV, go partial once.
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM layer_partial_streak")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(history, "_SEEDED_TABLES", set())
+    import_history()
+    assert _streak_rows(patched_db) == []
+    _partial("weather", "Indonesia Riau (Sumatra)")
+    assert _streak_rows(patched_db) == [("weather", 1)]
+
+
+def test_state_shrink_two_streaks_to_one_is_exported(seeded: Path, patched_db: Path) -> None:
+    _partial("weather", "Riau")
+    _partial("cot", "Soybean Oil")
+    export_history()
+    store.save_freshness("cot", 100)
+    export_history()
+    text = (seeded / "layer_partial_streak.csv").read_text()
+    assert "weather" in text and "cot" not in text
+
+
+def test_state_table_not_seeded_leaves_populated_csv_untouched(
+    seeded: Path, patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An un-imported local DB knows nothing about the committed streak and
+    must not overwrite it with an empty table."""
+    _partial("weather", "Riau")
+    export_history()
+    csv_path = seeded / "layer_partial_streak.csv"
+    before = csv_path.read_text()
+
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DELETE FROM layer_partial_streak")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(history, "_SEEDED_TABLES", set())  # import never ran
+    export_history()
+    assert csv_path.read_text() == before
+
+    monkeypatch.setenv("MIRROR_HISTORY_ALLOW_SHRINK", "1")
+    export_history()
+    assert len(csv_path.read_text().splitlines()) == 1

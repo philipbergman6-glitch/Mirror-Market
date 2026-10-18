@@ -165,6 +165,22 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Tables whose row *set* after a run is the state — an absent row carries
+# meaning (a layer's usable_partial streak was cleared by a success). For
+# these, export_history writes the table verbatim, header-only included,
+# instead of applying the empty/shrink guards: those guards exist to protect
+# downloaded history from a failed fetch, and applied here they resurrect a
+# cleared streak on the next runner forever (#492 — #490 counted 19 runs
+# across a full success). Only state the pipeline itself writes in full
+# every run may be listed; never a fetched-data table.
+AUTHORITATIVE_STATE_TABLES: frozenset[str] = frozenset({"layer_partial_streak"})
+
+# Tables import_history() seeded (or found no CSV for) in this process. A
+# state table is only exported verbatim once it is here — otherwise an
+# un-imported local DB would overwrite the committed state with nothing.
+_SEEDED_TABLES: set[str] = set()
+
+
 class HistoryImportError(RuntimeError):
     """A history CSV exists but could not be loaded into its table."""
 
@@ -301,6 +317,7 @@ def import_history() -> int:
     """
     if not os.path.isdir(HISTORY_DIR):
         logger.info("History import: %s not present — nothing to seed", HISTORY_DIR)
+        _SEEDED_TABLES.update(HISTORY_TABLES)
         return 0
 
     total = 0
@@ -308,6 +325,7 @@ def import_history() -> int:
         for table in HISTORY_TABLES:
             path = _csv_path(table)
             if not os.path.exists(path):
+                _SEEDED_TABLES.add(table)
                 continue
             try:
                 with open(path, newline="", encoding="utf-8") as fh:
@@ -328,6 +346,7 @@ def import_history() -> int:
                     raise
                 inserted = conn.total_changes - before
                 total += inserted
+                _SEEDED_TABLES.add(table)
                 logger.info(
                     "History import: %s ← %d rows (%d already held)",
                     table,
@@ -371,6 +390,10 @@ def export_history() -> int:
     with a shorter file. Set MIRROR_HISTORY_ALLOW_SHRINK=1 to override
     when a shrink is genuinely intended (a deliberate prune or a schema
     change that drops rows).
+
+    AUTHORITATIVE_STATE_TABLES are the exception: there an absent row is
+    itself the state, so they export verbatim (empty included) once
+    import_history() has seeded them in this process.
     """
     allow_shrink = os.getenv("MIRROR_HISTORY_ALLOW_SHRINK", "").strip() == "1"
     os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -381,11 +404,46 @@ def export_history() -> int:
                 f"SELECT * FROM {table} ORDER BY {', '.join(pk_cols)}"
             )
             rows = cursor.fetchall()
+            header = [d[0] for d in cursor.description]
+            path = _csv_path(table)
+            if table in AUTHORITATIVE_STATE_TABLES:
+                # Absence of a row *is* the state (a cleared streak), so the
+                # empty and shrink guards below would freeze stale state in
+                # the CSV — the defect of #492. Write the table verbatim,
+                # but only when this process seeded it from the CSV first;
+                # an un-imported local DB knows nothing and must not clobber.
+                if table not in _SEEDED_TABLES and not allow_shrink:
+                    existing_rows, _ = _csv_shape(path)
+                    if existing_rows:
+                        logger.error(
+                            "History export: %s is authoritative state but "
+                            "import_history() did not seed it in this process "
+                            "— CSV left untouched (%d rows). Run import_history() "
+                            "first, or set MIRROR_HISTORY_ALLOW_SHRINK=1.",
+                            table,
+                            existing_rows,
+                        )
+                        continue
+                existing_rows, _ = _csv_shape(path)
+                if len(rows) < existing_rows:
+                    logger.info(
+                        "History export: %s state shrank %d → %d rows (cleared state)",
+                        table,
+                        existing_rows,
+                        len(rows),
+                    )
+                tmp_path = path + ".tmp"
+                with open(tmp_path, "w", newline="", encoding="utf-8") as fh:
+                    writer = csv.writer(fh)
+                    writer.writerow(header)
+                    writer.writerows(rows)
+                os.replace(tmp_path, path)
+                total += len(rows)
+                logger.info("History export: %s → %d rows", table, len(rows))
+                continue
             if not rows:
                 logger.warning("History export: %s is empty — CSV left untouched", table)
                 continue
-            header = [d[0] for d in cursor.description]
-            path = _csv_path(table)
             existing_rows, existing_header = _csv_shape(path)
             if len(rows) < existing_rows and not allow_shrink:
                 logger.error(
