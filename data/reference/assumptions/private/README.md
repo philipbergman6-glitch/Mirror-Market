@@ -36,7 +36,8 @@ fabricated number wearing an assumption's clothes.
 |---|---|
 | `ocean_freight` | Panamax/Supramax route assessments are Baltic and Platts products. Per origin **and** per destination — US Gulf and Paranaguá to North China are different voyages, and the difference between them is routinely larger than the FOB spread the page is comparing. |
 | `elevation` | Barge-to-vessel at the NOLA area. Published nowhere free, and required only by the US Gulf leg, whose AMS bid is CIF onto a barge rather than FOB into a vessel. Leaving it at zero would make the US structurally cheapest every single day. |
-| `inland_transport`, `origin_port_costs` | Only where a leg's delivery term needs them; derived per route by `analysis/origins/readiness.py`. |
+| `origin_port_costs` | Truck-to-vessel at Paranaguá: unloading, elevation and the terminal's margin. Required by the Brazil leg because AgRural's level is a "sobre rodas" bid for beans on a truck at the port, not FOB vessel (B21 #483). No publisher of record prices it — free Paranaguá FOB premiums are broker indications 15–25 ¢/bu apart on the same day — so the Brazil landed row is withheld until it is entered. |
+| `inland_transport` | Only where a leg's delivery term needs it (ex-works, FCA truck/rail); derived per route by `analysis/origins/readiness.py`. |
 | `marine_insurance` | The buyer's own cover rate, as a fraction of the insured value. |
 | `destination_port_costs` | Discharge, handling and storage at the destination range. |
 | `financing` | Rate and carry days. Both depend on the buyer's own credit and shipment terms, so there is no market-wide number to enter — only yours. |

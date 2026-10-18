@@ -36,7 +36,7 @@ Dalian discharge range, which is how freight to China is quoted.
 | Route | Leg id | Origin key | What the price leg is | Delivery term |
 |---|---|---|---|---|
 | US Gulf → North China | `us_gulf` | `us_gulf` | AMS report 3147 CIF NOLA barge bid | **CIF barge** |
-| Brazil Paranaguá → North China | `br_paranagua` | `br_paranagua` | AgRural Paranaguá FOB (BRL/MT) | FOB vessel |
+| Brazil Paranaguá → North China | `br_paranagua` | `br_paranagua` | AgRural Paranaguá "sobre rodas" port bid (BRL/MT) | **DAP truck** (on truck at the port) |
 | Argentina Up River → North China | `ar_up_river` | `ar_up_river` | MAGyP official FOB (USD/MT) | FOB vessel |
 
 A fourth leg, **US PNW (`us_pnw`)**, is declared with no price series and is
@@ -67,13 +67,14 @@ value, so the sequence is part of the arithmetic.
 | Route | Extra input | Why |
 |---|---|---|
 | **US Gulf** | `elevation` (`usd_per_mt`, origin-scoped) | The AMS bid is CIF *onto a barge* — one lift short of being on a vessel. Published nowhere free. Defaulted to zero it would make the US structurally cheapest every single day, in the same direction, and never look like an error. |
-| Brazil Paranaguá | — | Already FOB vessel. |
+| **Brazil Paranaguá** | `origin_port_costs` (`usd_per_mt`, origin-scoped) | AgRural publishes a bid for beans *on a truck at the terminal* ("sobre rodas"), not an FOB-vessel level (B21 #483). Unloading, elevation and the terminal's margin to a loaded vessel are owed, and no publisher of record prices them — free Paranaguá FOB premiums are broker indications that disagree by 15–25 ¢/bu on the same day. Until entered, the Brazil landed row is withheld. |
 | Argentina Up River | — | Already FOB vessel. |
 
 **Route-specific inland cost** (`inland_transport`, plus `origin_port_costs`)
-is required only by a leg quoted away from the berth — an ex-works or FCA
+is required by a leg quoted away from the berth — an ex-works or FCA
 truck/rail price. None of the three routes above is quoted that way today, so
-neither input is asked for; add such a leg to `config.ORIGIN_LEGS` and the
+`inland_transport` is not asked for (Paranaguá's bid is already delivered to the
+port, so it owes `origin_port_costs` alone); add such a leg to `config.ORIGIN_LEGS` and the
 checklist grows the two rungs on its own, because the requirement is derived
 from the delivery term rather than listed per origin.
 

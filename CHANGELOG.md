@@ -4,6 +4,24 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
+
+**B21 #483.** AgRural's Paranaguá number is a gross R$/60 kg *Compra* the
+page footnotes as "'sobre rodas' portos" — beans on a truck at the terminal
+— yet `ORIGIN_LEGS.br_paranagua` called it FOB vessel, so the landed
+builder costed the cargo from a rung it never reached. The leg is now
+`DAP truck`, labelled "Brazil Paranaguá port bid (on truck)", and
+`INCOTERM_BRIDGE_TO_FOB_VESSEL[("DAP", "truck")]` owes an
+`origin_port_costs` desk rung (unload, elevation, terminal margin). No
+publisher of record prices that gap, so it is lapsed by default and the
+Brazil FOB-equivalent and landed cells withhold with the missing-rung
+reason until a named owner enters it. Every rendered "Paranaguá FOB" label
+(basis block, venue line, ledger leg, briefing basis headline and
+cross-origin board, layer roster) now says "port bid"; the stored
+commodity key keeps its historical name so `data/history/` continues.
+Tests: 8 new; the readiness test and Brazil-basis assertions updated; the
+fixture set gains the bridge entry.
+
 ## Unreleased — India captcha gate named; the OHLC rule keeps the close (2026-10-13)
 
 **#449 · #447**, the two source discrepancies the 2026-10-13 quality
