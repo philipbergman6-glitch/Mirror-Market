@@ -26,9 +26,10 @@ from scripts.reconcile_fx import (
 )
 from trust.fx_ingestion import FX_PAIRS, ticker_for
 
-# 17:00 New York ends the FX bar; in August that is 21:00 UTC.
+# London midnight ends the FX bar Yahoo labels with that London day's date
+# (B20 #482); in August (BST) that is 23:00 UTC.
 BEFORE_FX_CLOSE = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
-AFTER_FX_CLOSE = datetime(2026, 8, 13, 22, 0, tzinfo=timezone.utc)
+AFTER_FX_CLOSE = datetime(2026, 8, 13, 23, 30, tzinfo=timezone.utc)
 
 RATES = {"BRL/USD": 0.1840, "CNY/USD": 0.1390, "INR/USD": 0.0115, "ZAR/USD": 0.0560}
 

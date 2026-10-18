@@ -40,9 +40,9 @@ Why observation is an instant and not a date
 Almost every source here publishes a *date*, not a timestamp. Calling a
 daily bar's age "0 days" the moment the date rolls over would understate it
 by most of a day. So each layer declares the venue-local time at which its
-observation for day D came into being — CBOT settlement, the FX 17:00 New
-York rollover, an assessment's publication hour — and the age is measured
-from that instant.
+observation for day D came into being — CBOT settlement, the end of the
+London day an FX bar covers, an assessment's publication hour — and the age
+is measured from that instant.
 
 Where that hour is genuinely unknown, ``observation_close`` is ``None`` and
 the layer is ``DAY`` granular: age is reported in whole days with the
@@ -57,6 +57,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
+
+from config import FX_SESSION_CLOSE_DAY_OFFSET, FX_SESSION_CLOSE_LOCAL, FX_SESSION_TIMEZONE
 
 # ---------------------------------------------------------------------------
 # Stages
@@ -168,16 +170,15 @@ OBJECTIVES: dict[LatencyClass, LatencyObjective] = {
         acquisition_target=timedelta(hours=6),
         pipeline_target=_PIPELINE_TARGET,
         basis=(
-            "Spot FX has no settlement; the bar labelled D closes at 17:00 New York "
-            "on D, which is 21:00 UTC in EDT and 22:00 UTC in EST. The daily build "
-            "lands 20:00-24:00 UTC, so on a summer evening it can straddle the close "
-            "and on a winter one it usually misses it — publishing D-1 FX, correctly, "
-            "because the guard drops the open bar. The fast refresh was first scheduled "
-            "at 21:30 UTC against a +64 to +298 minute scheduler delay, landing "
-            "22:34-02:28 UTC, past the close on both sides of US DST, giving 0h34m to "
-            "5h28m. Six hours is that envelope (the slot has since moved to 20:07 UTC "
-            "and lands inside it), and it is a target a single daily "
-            "build cannot meet — which is precisely why the fast path exists."
+            "Spot FX has no settlement; Yahoo's bar labelled D is the London day D, "
+            "closing at London midnight — 23:00 UTC in BST, 00:00 UTC in GMT (B20 "
+            "#482; it was first modelled as a 17:00 New York session). The daily "
+            "build lands 20:00-24:00 UTC and the 20:07 UTC fast refresh 22:01-23:42 "
+            "UTC, so both usually publish D-1 FX, correctly, because the guard drops "
+            "the open bar. The 23:30 UTC catch-up lands 01:11-02:38 UTC, past the "
+            "close in both seasons, giving 1h11m to 3h38m. Six hours is that "
+            "envelope with room for scheduler drift, and it is a target a single "
+            "daily build cannot meet — which is precisely why the fast path exists."
         ),
     ),
     LatencyClass.PHYSICAL_ORIGIN: LatencyObjective(
@@ -237,6 +238,9 @@ class ObservationClock:
     # None means no calendar: a closed day is indistinguishable from an
     # outage and reads as a breach, which is the honest default.
     venue: str | None = None
+    # Calendar days after D on which D's observation closes: 1 for a bar
+    # that runs to the local midnight ending D (Yahoo FX, B20 #482).
+    close_day_offset: int = 0
 
     @property
     def granularity(self) -> Granularity:
@@ -249,7 +253,9 @@ class ObservationClock:
         if self.timezone is None or self.close_local is None:
             return None
         return datetime.combine(
-            observed_on, time(*self.close_local), tzinfo=ZoneInfo(self.timezone)
+            observed_on + timedelta(days=self.close_day_offset),
+            time(*self.close_local),
+            tzinfo=ZoneInfo(self.timezone),
         )
 
     def local_date(self, at: datetime) -> date | None:
@@ -257,6 +263,18 @@ class ObservationClock:
         if self.timezone is None:
             return None
         return at.astimezone(ZoneInfo(self.timezone)).date()
+
+    def session_of(self, instant: datetime) -> date | None:
+        """The session date D whose observation instant is ``instant``.
+
+        The inverse of :meth:`instant`: the venue-local date, less the close
+        day offset. Without it a bar closing at midnight would be read as
+        the next day's session.
+        """
+        day = self.local_date(instant)
+        if day is None:
+            return None
+        return day - timedelta(days=self.close_day_offset)
 
     def is_closure(self, day: date) -> bool | None:
         """True if ``day`` is a declared holiday; None if the calendar is unknown.
@@ -317,7 +335,11 @@ class LayerLatency:
 
 
 _CBOT = ObservationClock("America/Chicago", (13, 15))
-_FX_CLOSE = ObservationClock("America/New_York", (17, 0))
+# The same instant the settlement guard closes the bar at — read from config,
+# never restated, so the age and the guard cannot disagree.
+_FX_CLOSE = ObservationClock(
+    FX_SESSION_TIMEZONE, FX_SESSION_CLOSE_LOCAL, close_day_offset=FX_SESSION_CLOSE_DAY_OFFSET
+)
 
 # Measured on 2026-08-19 at 03:45 UTC: ZS=F carried a complete bar for the
 # 2026-08-18 session, which settled at 18:15 UTC, so the settled bar was
@@ -631,7 +653,7 @@ class LayerMeasurement:
         latest = clock.latest_completed_session(fetched)
         if latest is None:
             return False
-        observed_on = clock.local_date(observed)
+        observed_on = clock.session_of(observed)
         fetched_on = clock.local_date(fetched)
         if observed_on != latest or fetched_on is None:
             return False
@@ -720,7 +742,7 @@ def started_after_objective(
     if clock.granularity is not Granularity.SESSION_CLOSE:
         return False
     newest = _newest_session_at(clock, fetch_started_at)
-    if newest is None or clock.local_date(observed_at) != newest:
+    if newest is None or clock.session_of(observed_at) != newest:
         return False
     return fetch_started_at - observed_at > spec.objective.acquisition_target
 

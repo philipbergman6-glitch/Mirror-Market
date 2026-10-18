@@ -4,6 +4,24 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — FX bar closes at the London day end (2026-10-18)
+
+**#482 (B20).** Yahoo's `XXXUSD=X` daily bar is a London calendar day —
+chart API `exchangeTimezoneName: Europe/London`, regular period 00:00→23:59
+London, bars stamped 00:00 London, labelled by yfinance with the London date
+— not the 17:00 New York session the FX settlement guard assumed. The guard
+kept the bar labelled D from 21:00/22:00 UTC, 1.5–2.5 h before it finished;
+freshness stamps show that bar stored before 23:00 UTC on 2026-10-07, 10-14,
+10-15 and 10-16. `FX_SESSION` now closes at 00:00 Europe/London on the label
+day + 1 (`SessionRule.close_day_offset`), and `latency.domain`'s FX clock
+reads the same constants. The 20:07 UTC refresh therefore carries D−1 FX by
+design; the FX latency gate moves to the 23:30 UTC slot (lands 01:11–02:38
+UTC). No cron time changed. Labels checked against the ECB reference cross:
+the ECB fix for D sits inside Yahoo's bar labelled D on 100/100 days for BRL,
+ZAR and INR — no one-day shift. Tests: BST and GMT fixtures for the 23:00Z
+bar (open at 22:00Z, closed after the London day end), the shared close
+between guard and latency clock, and the FX late-start case.
+
 ## Unreleased — the partial streak can reset again (2026-10-18)
 
 **#492.** `layer_partial_streak` rides along in `data/history/`, but
