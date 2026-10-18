@@ -13,7 +13,7 @@ from __future__ import annotations
 import copy
 import json
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -90,7 +90,8 @@ def test_live_week_maps_every_row_as_its_own_series() -> None:
     assert len(df) == 12
     assert set(df["week_end"]) == {"2026-10-02"}
     assert set(df["week_start"]) == {"2026-09-28"}
-    assert set(df["published_at"]) == {"2026-10-02 13:47:14"}
+    # AMS prints 13:47:14 Mountain (MDT, UTC-6); stored as the UTC instant (#486).
+    assert set(df["published_at"]) == {"2026-10-02 19:47:14+00:00"}
     # FOB and delivered, truck and rail: never pooled.
     illinois_meal = df[(df.location == "Illinois") & (df.commodity == "Soybean Meal")]
     assert sorted(illinois_meal["trans_mode"]) == ["Rail", "Truck"]
@@ -154,6 +155,54 @@ def test_drift_raises_rather_than_storing(overrides: dict, match: str) -> None:
     row.update(overrides)
     with pytest.raises(ScraperShapeError, match=match):
         map_rows([row])
+
+
+# ── Publication time: America/Denver at source, UTC when stored (#486) ───────
+
+
+@pytest.mark.parametrize(
+    ("published_date", "stored"),
+    [
+        # Archive values. December is MST (UTC-7), August/October MDT (UTC-6).
+        ("12/08/2023 13:39:16", "2023-12-08 20:39:16+00:00"),
+        ("08/22/2025 13:45:19", "2025-08-22 19:45:19+00:00"),
+        ("10/02/2026 13:47:14", "2026-10-02 19:47:14+00:00"),
+        # The keyless listPublishedReport form names its zone; a matching one passes.
+        ("12/08/2023 13:39:16 MST", "2023-12-08 20:39:16+00:00"),
+        ("10/02/2026 13:47:14 MDT", "2026-10-02 19:47:14+00:00"),
+    ],
+)
+def test_published_date_is_mountain_time_stored_as_utc(published_date: str, stored: str) -> None:
+    df = map_rows([_row(published_date=published_date)])
+    assert df.loc[0, "published_at"] == stored
+    parsed = datetime.fromisoformat(df.loc[0, "published_at"])
+    assert parsed.utcoffset() == timedelta(0)
+
+
+@pytest.mark.parametrize(
+    ("published_date", "match"),
+    [
+        ("10/02/2026 13:47:14 CDT", "zone 'CDT'"),
+        ("10/02/2026 13:47:14 UTC", "zone 'UTC'"),
+        # A zone that contradicts Denver's own calendar for that instant.
+        ("10/02/2026 13:47:14 MST", "Denver keeps MDT"),
+        ("12/08/2023 13:39:16 MDT", "Denver keeps MST"),
+        # The fall-back hour happens twice and the spring-forward hour never.
+        ("11/01/2026 01:30:00", "ambiguous"),
+        ("03/08/2026 02:30:00", "does not exist"),
+        ("2026-10-02 13:47:14", "unparseable published_date"),
+    ],
+)
+def test_a_published_date_that_is_not_one_mountain_instant_raises(
+    published_date: str, match: str,
+) -> None:
+    with pytest.raises(ScraperShapeError, match=match):
+        map_rows([_row(published_date=published_date)])
+
+
+def test_a_zone_named_fall_back_hour_is_one_instant() -> None:
+    df = map_rows([_row(published_date="11/01/2026 01:30:00 MST")])
+    assert df.loc[0, "published_at"] == "2026-11-01 08:30:00+00:00"
 
 
 def test_two_quotes_for_one_series_raise() -> None:
@@ -271,6 +320,17 @@ def test_store_round_trip_keeps_null_months(patched_db) -> None:  # noqa: ANN001
     assert io[io.week_end == "2025-11-21"]["futures_month_low"].isna().all()
 
 
+def test_stored_published_at_is_utc_aware(patched_db) -> None:  # noqa: ANN001
+    """What lands in the table is the UTC instant, never a naive Mountain stamp (#486)."""
+    df = map_rows(json.loads(_SHAPES.read_text())["results"] + _week_rows())
+    store.save_processor_cash("us_processor_cash", df)
+    back = query.read_processor_cash()
+    stamps = {datetime.fromisoformat(v) for v in back["published_at"]}
+    assert all(s.utcoffset() == timedelta(0) for s in stamps)
+    assert datetime(2023, 12, 8, 20, 39, 16, tzinfo=timezone.utc) in stamps  # 13:39:16 MST
+    assert datetime(2026, 10, 2, 19, 47, 14, tzinfo=timezone.utc) in stamps  # 13:47:14 MDT
+
+
 def test_not_a_history_table() -> None:
     """The whole archive re-downloads every run (Layers 22/26 precedent)."""
     from pipeline.history import HISTORY_TABLES
@@ -324,6 +384,28 @@ def test_panel_strikes_on_the_session_ams_used(cash_db) -> None:  # noqa: ANN001
     assert "crush" not in data["label"].lower()
 
 
+def test_panel_states_the_publication_instant_in_utc(cash_db) -> None:  # noqa: ANN001
+    _bars(cash_db)
+    data = cash_leg_panel(cash_db, "cbot", today=date(2026, 10, 5))["data"]
+    assert data["published_at"] == "2026-10-02 19:47:14+00:00"
+    assert data["published_label"] == "2026-10-02 19:47 UTC"
+
+
+def test_a_legacy_naive_stamp_is_labelled_not_reinterpreted(cash_db) -> None:  # noqa: ANN001
+    """Rows stored before #486 hold Denver wall time with no zone.
+
+    The table is re-pulled whole every run, so the next Layer 30 run replaces
+    them; until then the time is withheld with that reason, never read as UTC.
+    """
+    cash_db.execute("UPDATE us_processor_cash SET published_at = '2026-10-02 13:47:14'")
+    _bars(cash_db)
+    data = cash_leg_panel(cash_db, "cbot", today=date(2026, 10, 5))["data"]
+    assert data["published_at"] is None
+    assert data["published_label"].startswith("2026-10-02 (time withheld")
+    assert "#486" in data["published_label"]
+    assert data["strike_session"] == "2026-10-01"
+
+
 def test_no_matching_session_withholds_board_but_keeps_the_ask(cash_db) -> None:  # noqa: ANN001
     _bars(cash_db, shift=3.0)   # no stored close equals AMS's arithmetic
     panel = cash_leg_panel(cash_db, "cbot", today=date(2026, 10, 5))
@@ -368,4 +450,5 @@ def test_crush_template_renders_the_panel(cash_db) -> None:  # noqa: ANN001
     assert "US processor cash" in html
     assert "not a crush margin" in html
     assert "CA-South" in html and "delivered · rail" in html
+    assert "published 2026-10-02 19:47 UTC" in html
     assert "2026-10-01" in html

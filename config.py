@@ -1748,6 +1748,10 @@ def missing_api_keys() -> dict[str, str]:
 
 
 MARS_BASE_URL = "https://marsapi.ams.usda.gov/services/v1.2/reports"
+# MARS `published_date` is AMS's own clock, Mountain time, printed with no zone
+# in Report Detail; the keyless /v3.1/public/listPublishedReport names it
+# ("2026-10-16 12:50:09 MDT" = epoch 18:50:09 UTC, probed 2026-10-18, #486).
+MARS_PUBLISHED_TIMEZONE = "America/Denver"
 MARS_GULF_BIDS_SLUG = 3147
 # First report date slug 3147's *metadata* lists (probed 2026-08-21, #253) —
 # the walk floor, not a promise of data. `Report Detail` answers HTTP 200 with

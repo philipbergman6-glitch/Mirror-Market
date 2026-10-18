@@ -27,8 +27,9 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import config
 from analysis.futures.domain import ContractQuote, NamedContract, named_contract
@@ -75,6 +76,27 @@ class _Leg:
     commodity: str
     contract: NamedContract
     implied: float                # price − basis, native futures units
+
+
+def _publication(stored: str | None, week_end: date) -> tuple[str | None, date, str]:
+    """The stored stamp → (UTC instant or None, AMS's calendar day, display label).
+
+    Stored UTC since #486. A naive stamp is a row stored before then: Denver
+    wall time with no zone. Its date is still AMS's day, but its time is
+    withheld rather than read as UTC — the next Layer 30 run re-pulls the
+    whole archive and replaces it.
+    """
+    if not stored:
+        return None, week_end, f"{week_end.isoformat()} (publication time not stored)"
+    instant = datetime.fromisoformat(stored)
+    if instant.tzinfo is None:
+        return None, instant.date(), (
+            f"{instant.date().isoformat()} (time withheld: stored before its zone was "
+            "recorded, #486; replaced on the next Layer 30 run)"
+        )
+    day = instant.astimezone(ZoneInfo(config.MARS_PUBLISHED_TIMEZONE)).date()
+    utc = instant.astimezone(timezone.utc)
+    return stored, day, f"{utc:%Y-%m-%d %H:%M} UTC"
 
 
 def _contract_year(month: int, week_start: date) -> int:
@@ -202,10 +224,7 @@ def cash_leg_panel(conn, market_slug: str, *, today: date, provider=None) -> dic
             f"the layer's {budget}-day budget, so the feed is treated as stopped, not quiet"
         )
 
-    published = rows[0]["published_at"]
-    published_day = (
-        datetime.fromisoformat(published).date() if published else week_end
-    )
+    published, published_day, published_label = _publication(rows[0]["published_at"], week_end)
     if provider is None:
         from analysis.futures.providers import open_provider
 
@@ -277,6 +296,7 @@ def cash_leg_panel(conn, market_slug: str, *, today: date, provider=None) -> dic
             "week_start": week_start.isoformat(),
             "week_end": week_end.isoformat(),
             "published_at": published,
+            "published_label": published_label,
             "age_days": age,
             "strike_session": strike.isoformat() if strike else None,
             "strike_note": strike_note,
