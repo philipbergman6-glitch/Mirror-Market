@@ -724,8 +724,14 @@ MAGYP_FOB_CONTRACT = _pilot_contract(
 
 AGRURAL_PARANAGUA_CONTRACT = _pilot_contract(
     source=AGRURAL_SOURCE,
+    # The key keeps its historical "fob" for the same reason as MAGyP's above:
+    # it is this dataset's stored identity, and it moves only together with the
+    # storage key ``Soybean (AgRural Paranaguá FOB)`` in one deploy-side history
+    # migration. Name, price_type and rule id say what AgRural publishes — a
+    # "sobre rodas" port bid for beans on a truck at the terminal, not FOB
+    # vessel (B21 #483, B27 #501).
     key="paranagua-soybean-fob",
-    name="Paranagua soybean FOB physical price",
+    name="Paranagua soybean on-truck port bid physical price",
     cadence=_BUSINESS_DAILY_UTC,
     required_fields=(
         "commodity",
@@ -740,7 +746,7 @@ AGRURAL_PARANAGUA_CONTRACT = _pilot_contract(
         "commodity": "soybean",
         "product_form": "beans",
         "location": "paranagua",
-        "price_type": "physical-fob",
+        "price_type": "physical-port-bid",
         "currency": "brl",
         "unit": "brl-mt",
     },
@@ -748,7 +754,7 @@ AGRURAL_PARANAGUA_CONTRACT = _pilot_contract(
     coverage_key_fields=("commodity", "product_form", "location"),
     unit="brl-mt",
     criticality=Criticality.CRITICAL,
-    rules=("identity.required", "value.positive", "coverage.paranagua-fob"),
+    rules=("identity.required", "value.positive", "coverage.paranagua"),
     raw_retention=RawRetention.METADATA_ONLY,
     rights=_AGRURAL_RIGHTS,
 )
