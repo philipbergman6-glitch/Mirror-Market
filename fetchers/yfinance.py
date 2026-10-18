@@ -183,9 +183,10 @@ def fetch_currencies(period: str = DEFAULT_HISTORY_PERIOD) -> dict[str, pd.DataF
     soybeans cheaper in dollar terms).
 
     The one thing it does NOT share with commodity prices is the session
-    rule. Spot FX has no settlement; its bar closes at 17:00 New York.
-    Judged by the exchange cutoff instead, an FX bar opened at 17:00 was
-    stored as that day's close from 14:30 Chicago onwards — verified live
+    rule. Spot FX has no settlement; Yahoo's bar is a London calendar day
+    and closes at London midnight (B20 #482). Judged by the exchange cutoff
+    instead, a barely-opened FX bar was stored as that day's close from
+    14:30 Chicago onwards — verified live
     on 2026-08-19 (see fetchers/_settlement.py). Every ``home_per_mt`` leg
     on the site converts at that row's own date, so this is a landed-cost
     error on every physical origin, not just a wrong FX cell.

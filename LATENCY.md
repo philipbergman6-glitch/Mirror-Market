@@ -41,8 +41,8 @@ the only part any change here can move. Code is `latency/domain.py`;
 **Observation is an instant, not a date.** Almost every source publishes a
 date. Calling a daily bar "0 days old" the moment the date rolls over would
 understate it by most of a day, so each layer declares the venue-local hour its
-observation for day D came into being (CBOT settlement 13:15 CT, the FX 17:00
-New York rollover, AMS 3147 at ~13:48 CT). Where that hour is genuinely
+observation for day D came into being (CBOT settlement 13:15 CT, the London
+midnight that ends an FX bar's day, AMS 3147 at ~13:48 CT). Where that hour is genuinely
 unknown the layer is marked `DAY` granular and its age is a stated lower bound
 — never converted to a false hour.
 
@@ -55,7 +55,7 @@ unknown the layer is marked `DAY` granular and its age is a stated lower bound
 | Measurement | Result |
 |---|---|
 | Settled CBOT daily bar available on Yahoo | ZS=F carried a complete 2026-08-18 session (settled 18:15 UTC) at the 03:45 UTC probe → **≤ 9h30m**, one observation, no SLA published |
-| Yahoo FX daily bar | The bar labelled D is **in progress until 17:00 New York on D**. Measured directly: `BRL=X` returned a bar labelled 2026-08-19 at 03:45 UTC with `High == Open` and `Low == Close` |
+| Yahoo FX daily bar | The bar labelled D is the **London calendar day D**, in progress until London midnight ending D — **23:00 UTC in BST, 00:00 UTC in GMT**. Chart API, 2026-10-13 and 2026-10-18, `BRLUSD=X` `ZARUSD=X` `CNYUSD=X` `INRUSD=X`: `exchangeTimezoneName: Europe/London`, `currentTradingPeriod.regular` 23:00Z→22:59Z (00:00→23:59 London), bars stamped 23:00Z, which yfinance labels with the London date (2026-10-15T23:00Z → `2026-10-16`). A year of history carries Monday–Friday labels only. First recorded here (2026-08-19) as a 17:00 New York session — wrong, B20 #482. The original partial-bar observation stands: `BRL=X` returned a bar labelled 2026-08-19 at 03:45 UTC with `High == Open` and `Low == Close` |
 | Transient throttling | `ZL=F` returned empty once and succeeded 2.8 s later on retry; `ZS=F` failed outright on a 15-year request and succeeded on a 7-day one. `MAX_RETRIES = 3` covers it |
 
 The working provider floor used to split `cadence_wait` out of `acquisition` is
@@ -95,8 +95,8 @@ and ~6 seconds at 1mo.
 | Daily build | `0 19 * * 1-5` | 20:00–24:00 UTC (workflow's own note: +64 to +298 min over 30 runs, median +138) |
 | DCE refresh | none — `workflow_dispatch` with `layers=dce`, fired at **10:30 UTC** weekdays by cron-job.org | on time by construction; GitHub's scheduler is not in the path |
 | DCE backstop | `0 8 * * 1-5` | 13:15–16:38 UTC (+5h15 to +8h38, seven runs 2026-09-21 to 09-29) — past the 13:00 UTC deadline every time, which is why it is only a backstop |
-| Fast refresh | `7 20 * * 1-5` | 22:01–23:42 UTC expected, from the +1h54 to +3h35 delay this slot showed over thirteen runs, 2026-09-11 to 09-29, while it was still `30 21` |
-| Catch-up refresh | `30 23 * * 1-5` | 01:11–02:38 UTC; a second shot for FX and the board on a day the 20:07 run failed |
+| Fast refresh | `7 20 * * 1-5` | 22:01–23:42 UTC expected, from the +1h54 to +3h35 delay this slot showed over thirteen runs, 2026-09-11 to 09-29, while it was still `30 21`. Before the London FX close in GMT always, in BST mostly: carries D−1 FX; its latency gate covers the board only |
+| Catch-up refresh | `30 23 * * 1-5` | 01:11–02:38 UTC; past the London FX close in both seasons, so **the slot where FX day D first arrives** and the one whose gate covers FX; a second shot for the board |
 
 ---
 
@@ -346,7 +346,18 @@ trade date, the bar it produced compared unequal and survived.
 `fetchers/_settlement.py` now asks **which session date is the newest one that
 has finished**, and drops every row labelled after it. Two `SessionRule`
 instances, one function: `EXCHANGE_SESSION` (14:30 America/Chicago) and
-`FX_SESSION` (17:00 America/New_York). Both holes close with one comparison.
+`FX_SESSION` — first 17:00 America/New_York, corrected by B20 #482 to 00:00
+Europe/London on the day after the label, because the Yahoo bar is a London
+calendar day. Both holes close with one comparison.
+
+**The FX calendar was itself wrong (B20 #482, 2026-10-18).** Between 17:00 New
+York and London midnight — 21:00→23:00 UTC in summer, 22:00→00:00 UTC in
+winter — the 17:00 rule kept a bar with up to two hours still to run. It
+happened routinely: `data/history/data_freshness.csv` records currencies
+stored with that day's `observed_at` at 21:21 UTC on 2026-10-07, 22:13 on
+10-14, 22:06 on 10-15 and 22:02 on 10-16, each before the 23:00 UTC London
+close. A later run re-fetched and overwrote each one (`INSERT OR REPLACE`),
+but the edition published from the earlier run carried the partial bar.
 
 Confirmed fixed against live data the same evening: a fast refresh at 04:27 UTC
 stored FX and board prices for the **2026-08-18** session and logged the
@@ -365,10 +376,14 @@ build, with the 20:07 UTC refresh as a backstop. Never fresher than 1 h 15 m,
 because the settlement guard will not publish an unfinished bar. Meets the 6 h
 objective on the observed scheduler envelope.
 
-**FX.** The 17:00 New York close is publicly readable in **minutes to 2 h 42 m**
-via the fast refresh (a 22:01–23:42 UTC landing against a 21:00 UTC close in
-EDT, 22:00 in EST; the 23:30 catch-up covers a landing that beats the close) — where before this work it was **either D−1 or, worse,
-a partial bar mislabelled as the close**. Meets the 6 h objective.
+**FX.** The London-day close (23:00 UTC in BST, 00:00 UTC in GMT) is publicly
+readable in **1 h 11 m to 3 h 38 m** via the 23:30 catch-up (a 01:11–02:38 UTC
+landing). The 20:07 slot reaches it only on a BST landing after 23:00 UTC;
+otherwise it publishes D−1, correctly. Never fresher than the London close
+itself, because the settlement guard will not publish an unfinished bar —
+where before this work it was **either D−1 or, worse, a partial bar
+mislabelled as the close**, and until B20 #482 the guard closed the bar at
+17:00 New York, up to two hours early. Meets the 6 h objective.
 
 **Physical origin legs.** Fetched once a day by the daily build. AMS Gulf bids
 (~18:48 UTC) and Argentina MAGyP (~15:05 UTC) are same-day, within about
