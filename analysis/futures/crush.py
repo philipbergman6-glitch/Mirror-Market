@@ -924,6 +924,14 @@ class MonthCrush:
                 f"a month crush is one month on one session; legs span {sorted(months)} "
                 f"on {sorted(d.isoformat() for d in sessions)}"
             )
+        untraded = sorted(leg.contract for leg in self.legs.values() if not leg.traded)
+        if untraded:
+            raise ValueError(f"a crush leg must have traded on its session; {untraded} did not")
+
+    @property
+    def closes(self) -> dict[str, float]:
+        """Each leg's close, native units. Non-null by construction (``traded``)."""
+        return {role: float(leg.close or 0.0) for role, leg in self.legs.items()}
 
     @property
     def label(self) -> str:
@@ -931,7 +939,7 @@ class MonthCrush:
 
     def margin(self, yields: Mapping[str, float]) -> float:
         """``oil × yield + meal × yield − bean`` in the legs' one native unit."""
-        close = {role: float(self.legs[role].close) for role in _ROLES}  # type: ignore[arg-type]
+        close = self.closes
         return close["oil"] * yields["oil"] + close["meal"] * yields["meal"] - close["bean"]
 
 

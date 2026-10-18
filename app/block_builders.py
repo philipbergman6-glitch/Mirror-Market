@@ -1581,6 +1581,7 @@ def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
     when = outcome.session
     fx = ctx.fx_on(market.currency_pair, when)
     legs: dict[str, dict] = {}
+    closes = outcome.closes
     for role, quote in outcome.legs.items():
         commodity = crush.legs[role]
         legs[role] = {
@@ -1588,8 +1589,8 @@ def _month_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
             # template renders both, and the commodity rides beside it.
             "key": quote.contract,
             "commodity": commodity,
-            "home_value": quote.close,
-            "usd_mt": source.to_usd_mt(quote.close, commodity, fx.rate),
+            "home_value": closes[role],
+            "usd_mt": source.to_usd_mt(closes[role], commodity, fx.rate),
             "contract_month": month_label(quote.delivery_month),
             "price_label": outcome.price_type.label,
             "settlement_proven": False,
@@ -1915,8 +1916,8 @@ def _month_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
     ):
         rate = ctx.fx_on(market.currency_pair, strike.session).rate
         legs: dict[str, float] = {}
-        for role, quote in strike.legs.items():
-            usd = source.to_usd_mt(quote.close, crush.legs[role], rate)
+        for role, close in strike.closes.items():
+            usd = source.to_usd_mt(close, crush.legs[role], rate)
             if usd is None:
                 break
             legs[role] = usd

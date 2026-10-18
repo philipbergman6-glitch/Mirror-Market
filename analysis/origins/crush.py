@@ -560,7 +560,8 @@ def _month_board_crush(
     built: dict[str, CrushLeg] = {}
     for role, quote in outcome.legs.items():
         key = months.legs[role]
-        usd = to_usd_per_mt(quote.close, unit=unit, key=key, fx=fx.rate)
+        native = outcome.closes[role]
+        usd = to_usd_per_mt(native, unit=unit, key=key, fx=fx.rate)
         if usd is None:
             return _blocked(
                 market_slug,
@@ -575,7 +576,7 @@ def _month_board_crush(
             name=role,
             key=key,
             price=usd_mt(usd),
-            native_price=float(quote.close),  # type: ignore[arg-type]
+            native_price=native,
             native_unit=unit,
             quote_kind=quote_kind,
             source=SourceRef(

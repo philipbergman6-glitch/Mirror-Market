@@ -32,7 +32,6 @@ from app import block_builders
 from app import markets as markets_mod
 from app.block_builders import SiteContext, build_blocks
 from app.markets import compute_tiers, load_markets
-from fetchers.akshare import crush_delivery_months
 from app.sections import (
     CHART_WINDOW_SESSIONS,
     clip,
@@ -43,6 +42,7 @@ from app.sections import (
     seasonal_section,
     section,
 )
+from fetchers.akshare import crush_delivery_months
 from pipeline import schema
 from pipeline.units import native_label
 

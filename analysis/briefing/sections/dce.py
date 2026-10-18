@@ -128,8 +128,8 @@ def _board_crush_line(cny_df: pd.DataFrame | None, today: date) -> str:
 
     yields = {"oil": CRUSH_OIL_YIELD_MT, "meal": CRUSH_MEAL_YIELD_MT}
     value_cny = outcome.margin(yields)
-    oil_value = float(outcome.legs["oil"].close) * yields["oil"]  # type: ignore[arg-type]
-    meal_value = float(outcome.legs["meal"].close) * yields["meal"]  # type: ignore[arg-type]
+    oil_value = outcome.closes["oil"] * yields["oil"]
+    meal_value = outcome.closes["meal"] * yields["meal"]
 
     # Converted at the crush session's own rate, never the newest (A1 #298).
     crush_fx = fx_close_on(cny_df, pd.Timestamp(outcome.session), "CNY/USD")
