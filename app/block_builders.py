@@ -49,6 +49,7 @@ from app.blocks import (
     absent_reason,
     make_block,
 )
+from analysis.origins.domain import ShipmentWindow
 from app.markets import Market, Source, TierResult, _ingest_status
 from pipeline.units import kg_to_metric_tons, kg_to_million_metric_tons
 from pricing.fx_alignment import FxResolution, align_fx
@@ -119,6 +120,88 @@ LEDGER_LINE_MIN_OBS = 8
 LEDGER_CHART_MIN_OBS = 3
 
 
+# ---- shipment windows (B30 #504) -------------------------------------------
+@dataclass(frozen=True)
+class WindowQuote:
+    """One shipment window's print on one session.
+
+    ``quotes`` counts stored rows *inside this one window* (two AMS barge
+    locations quoting the same slot) — a mean over places, never over windows.
+    """
+
+    window: ShipmentWindow
+    value: float
+    quotes: int
+
+    @property
+    def label(self) -> str:
+        return self.window.describe()
+
+
+@dataclass(frozen=True)
+class SessionWindows:
+    """Every window a windowed source printed on one session, nearest first.
+
+    ``chosen`` is what the session's print *is* on every surface: the nearest
+    window still open on that date (B30 #504). A venue printing Oct-26,
+    Nov–Apr and May–Sep on one circular has published three prices, and their
+    mean — 483.0 on 2026-10-16 — is none of them.
+    """
+
+    printed: tuple[WindowQuote, ...]
+
+    @property
+    def chosen(self) -> WindowQuote:
+        return self.printed[0]
+
+    @property
+    def identity(self) -> tuple[str, date]:
+        """Which window, across sessions. ``(label, end)`` and not ``start``:
+        AMS's Current slot starts on its own report date, so its start moves
+        every day while the window it names stays the month's balance."""
+        return self.chosen.label, self.chosen.window.end
+
+
+@dataclass(frozen=True)
+class _Prints:
+    series: dict[str, list[tuple[date, float, int]]]
+    # Empty for a source that prints one window (or none) per session.
+    windows: dict[str, dict[date, SessionWindows]]
+
+
+def _same_window(windows: dict[date, SessionWindows], now: date, prior: date) -> bool:
+    """Whether two sessions' prints are the same window — a move is only a
+    move inside one. Across a roll (Oct-26 → Nov–Apr) it is a calendar spread
+    wearing a session-change label. A source with no windows never rolls."""
+    if not windows:
+        return True
+    return windows[now].identity == windows[prior].identity
+
+
+def _window_fields(windows: dict[date, SessionWindows], when: date) -> dict:
+    """The window a rendered print names, and the session's other windows.
+
+    Same keys on every row, windowed or not, so templates never branch on
+    their presence.
+    """
+    session = windows.get(when)
+    if session is None:
+        return {"window": None, "windows_printed": None, "window_rows": []}
+    return {
+        "window": session.chosen.label,
+        "windows_printed": len(session.printed),
+        "window_rows": [
+            {
+                "window": quote.label,
+                "home_value": quote.value,
+                "quotes": quote.quotes,
+                "is_chosen": index == 0,
+            }
+            for index, quote in enumerate(session.printed)
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Shared reads
 # ---------------------------------------------------------------------------
@@ -183,13 +266,30 @@ class SiteContext:
     def series(self, source: Source) -> dict[str, list[tuple[date, float, int]]]:
         """``{key: [(date, value, n_rows), ...]}`` oldest-first, per key.
 
-        ``n_rows`` is how many stored rows one key/date collapsed into. Several
-        sources legitimately print more than one row per key per day — AMS
-        quotes each barge location and delivery window, MAGyP each shipment
-        window — so the value is their mean and the count travels with it, to
-        be rendered rather than hidden ("avg of 3 quotes").
+        ``n_rows`` is how many stored rows one key/date collapsed into, and
+        the value is their mean — the count travels with it, to be rendered
+        rather than hidden. A source that prints several *shipment windows*
+        per session (AMS 3147, MAGyP) declares a ``window_scheme`` and is never
+        averaged across them: its value is the nearest window's, named by
+        ``session_windows`` (B30 #504). Only rows inside that one window — two
+        barge locations quoting it — are still collapsed into a mean.
         """
-        return self.cached(("series", source), lambda: _read_series(self.conn, source, self.today))
+        return self._prints(source).series
+
+    def _prints(self, source: Source, proof_column: str | None = None) -> _Prints:
+        return self.cached(
+            ("prints", source, proof_column),
+            lambda: _read_prints(self.conn, source, self.today, proof_column=proof_column),
+        )
+
+    def session_windows(self, source: Source, key: str) -> dict[date, SessionWindows]:
+        """``{session: SessionWindows}`` for one key of a windowed source (B30
+        #504); empty where the source prints one window, or none, a session."""
+        return self._prints(source).windows.get(key) or {}
+
+    def leg_windows(self, leg) -> dict[date, SessionWindows]:
+        """``session_windows`` for a ledger leg's own read (its proof column)."""
+        return self._prints(leg.source, leg.trade_proof_column).windows.get(leg.key) or {}
 
     def latest(self, source: Source, key: str) -> tuple[date, float, int] | None:
         rows = self.series(source).get(key) or []
@@ -205,14 +305,7 @@ class SiteContext:
         rather than trusting the fetcher to have done it — the invariant is
         cheap to state at both ends and expensive to discover at neither.
         """
-        source = leg.source
-
-        def build():
-            rows = _read_series(
-                self.conn, source, self.today, proof_column=leg.trade_proof_column
-            )
-            return rows.get(leg.key) or []
-        return self.cached(("leg", leg.leg_id), build)
+        return self._prints(leg.source, leg.trade_proof_column).series.get(leg.key) or []
 
     # -- cyclone hazards (S2 #374 slice 4, #390) --------------------------------
     @property
@@ -504,6 +597,100 @@ def hazard_flag_rows(ctx: SiteContext, markets: dict[str, Market], *, run_date: 
     return rows
 
 
+def _read_prints(
+    conn,
+    source: Source,
+    today: date,
+    *,
+    proof_column: str | None = None,
+) -> _Prints:
+    if source.window_scheme is None:
+        return _Prints(_read_series(conn, source, today, proof_column=proof_column), {})
+    return _read_windowed(conn, source, today, proof_column=proof_column)
+
+
+def _proof_clause(proof_column: str | None) -> str:
+    # M12/#157: where a venue publishes a field that proves a trade happened,
+    # a row failing it is not a print. `<= 0` is proof of no trade and the row
+    # goes; NULL is proof of nothing and the row stays — dropping it would
+    # invent an outage, which is the one thing a "who has repriced" surface
+    # must never do.
+    return f"AND ({proof_column} IS NULL OR {proof_column} > 0) " if proof_column else ""
+
+
+def _read_windowed(
+    conn,
+    source: Source,
+    today: date,
+    *,
+    proof_column: str | None = None,
+) -> _Prints:
+    """A windowed source's prints: one named window per key per session.
+
+    The SQL ``AVG`` the unwindowed read uses is exactly the defect here (B30
+    #504) — MAGyP's circular and AMS 3147 each print a forward curve per
+    session, and their mean is a cargo nobody can ship. The nearest window
+    still open on the session is the print; the rest ride along so a page can
+    list them. Rows sharing one window (two barge locations) are still
+    averaged, and counted, because that is a mean over places for one cargo.
+
+    A row whose window cannot be read raises rather than being skipped: the
+    nearest window cannot be named while one row's window is unknown — that
+    row may be the nearest.
+    """
+    series: dict[str, list[tuple[date, float, int]]] = {key: [] for key in source.keys}
+    windows: dict[str, dict[date, SessionWindows]] = {}
+    if conn is None:
+        return _Prints(series, windows)
+    lookback = LOOKBACK_DAYS_BY_CADENCE.get(source.cadence, 400)
+    cutoff = (today - _days(lookback)).isoformat()
+    placeholders = ",".join("?" for _ in source.keys)
+    window_select = ", ".join(source.window_columns)
+    sql = (
+        f"SELECT {source.key_column}, {source.date_column}, "  # noqa: S608 — identifiers come from the registry
+        f"{source.value_column}, {window_select} "
+        f"FROM {source.table} "
+        f"WHERE {source.key_column} IN ({placeholders}) "
+        f"AND {source.date_column} >= ? AND {source.value_column} IS NOT NULL "
+        f"{_proof_clause(proof_column)}"
+        f"ORDER BY {source.date_column}"
+    )
+    try:
+        rows = conn.execute(sql, (*source.keys, cutoff)).fetchall()
+    except Exception as exc:  # noqa: BLE001 — a missing table is data, not a crash
+        log.debug("block read: %s unavailable (%s)", source.table, exc)
+        return _Prints(series, windows)
+
+    sessions: dict[tuple[str, date], dict[ShipmentWindow, list[float]]] = {}
+    for key, raw_date, value, *raw_window in rows:
+        day = _parse_date(raw_date)
+        if day is None:
+            continue
+        window = source.parse_window(tuple(raw_window), day)
+        if window is None:
+            raise ValueError(
+                f"{source.table}: {key} on {day.isoformat()} carries an unreadable "
+                f"shipment window {tuple(raw_window)!r} ({source.window_scheme}) — the "
+                "nearest window cannot be named while one row's window is unknown"
+            )
+        sessions.setdefault((str(key), day), {}).setdefault(window, []).append(float(value))
+
+    for (key, day), by_window in sorted(sessions.items(), key=lambda item: item[0][1]):
+        printed = tuple(
+            WindowQuote(window=window, value=sum(values) / len(values), quotes=len(values))
+            # Open windows first (one that has sailed is a stale quote, not
+            # the prompt), then the earliest start, then the earliest end.
+            for window, values in sorted(
+                by_window.items(),
+                key=lambda item: (item[0].end < day, item[0].start, item[0].end),
+            )
+        )
+        session = SessionWindows(printed)
+        windows.setdefault(key, {})[day] = session
+        series.setdefault(key, []).append((day, session.chosen.value, session.chosen.quotes))
+    return _Prints(series, windows)
+
+
 def _read_series(
     conn,
     source: Source,
@@ -516,14 +703,7 @@ def _read_series(
     lookback = LOOKBACK_DAYS_BY_CADENCE.get(source.cadence, 400)
     cutoff = (today - _days(lookback)).isoformat()
     placeholders = ",".join("?" for _ in source.keys)
-    # M12/#157: where a venue publishes a field that proves a trade happened,
-    # a row failing it is not a print. `<= 0` is proof of no trade and the row
-    # goes; NULL is proof of nothing and the row stays — dropping it would
-    # invent an outage, which is the one thing a "who has repriced" surface
-    # must never do.
-    proof_clause = (
-        f"AND ({proof_column} IS NULL OR {proof_column} > 0) " if proof_column else ""
-    )
+    proof_clause = _proof_clause(proof_column)
     sql = (
         f"SELECT {source.key_column}, {source.date_column}, "  # noqa: S608 — identifiers come from the registry
         f"AVG({source.value_column}), COUNT({source.value_column}) "
@@ -617,10 +797,17 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             continue
         when, value, n_rows = rows[-1]
         fx = ctx.fx_on(market.currency_pair, when)
+        windows = ctx.session_windows(source, key)
         changes = {}
         for back in CHANGE_LOOKBACK_OBS:
             prior = rows[-1 - back] if len(rows) > back else None
+            # B30 #504: a move is only a move inside one window.
+            if prior is not None and not _same_window(windows, when, prior[0]):
+                prior = None
             changes[f"chg_{back}_pct"] = _pct_change(value, prior[1] if prior else None)
+        window = _window_fields(windows, when)
+        for window_row in window["window_rows"]:
+            window_row["usd_mt"] = source.to_usd_mt(window_row["home_value"], key, fx.rate)
         legs.append({
             "key": key,
             "label": source.key_label(key),
@@ -637,8 +824,13 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             "as_of": when.isoformat(),
             "age_days": _age_days(ctx.today, when),
             # Several quotes on one date are averaged (see SiteContext.series);
-            # say so rather than presenting a mean as a single print.
+            # say so rather than presenting a mean as a single print. On a
+            # windowed source these are places quoting one window, never
+            # several windows (B30 #504).
             "quotes": n_rows,
+            # B30 #504: the shipment window this print is for, and every
+            # window the venue printed that session for the per-window table.
+            **window,
             # A1 #298: which day's rate the USD figure was struck at, or why
             # there is none. Rendered wherever it differs from `as_of`.
             **_fx_fields(source, fx),
@@ -1026,6 +1218,10 @@ def _ledger_row(
         "fx_tag": False,
         "fx_note": None,
         "quotes": None,
+        # B30 #504: the shipment window the row's print is for, where the
+        # venue prints several. None on an unwindowed leg.
+        "window": None,
+        "windows_printed": None,
         "spread_usd_mt": None,
         "spread_as_of": None,
         "spread_note": None,
@@ -1042,16 +1238,22 @@ def _ledger_row(
 
     when, value, quotes = prints[-1]
     fx = ctx.fx_on(owner.currency_pair, when)
+    windows = ctx.leg_windows(leg)
+    window = _window_fields(windows, when)
     row.update({
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
         "usd_mt": source.to_usd_mt(value, leg.key, fx.rate),
         "home_value": value,
         "quotes": quotes,
+        "window": window["window"],
+        "windows_printed": window["windows_printed"],
         **_fx_fields(source, fx),
     })
 
-    if len(prints) > 1:
+    # B30 #504: across a window roll the "move" is a calendar spread, so it is
+    # withheld (rendered as a dash) rather than credited to the market.
+    if len(prints) > 1 and _same_window(windows, when, prints[-2][0]):
         prior_when, prior_value, _ = prints[-2]
         row["home_chg_pct"] = _pct_change(value, prior_value)
         prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when).rate)
@@ -1845,8 +2047,16 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
 
     when, local, board, basis, fx = history[-1]
     spreads = [row[3] for row in history]
+    # B30 #504: the local leg is one named window's print, and the session's
+    # other windows are listed beside it — as flat prices, never as a basis
+    # over this board: AMS quotes its later slots over later contracts.
+    window = _window_fields(ctx.session_windows(source, key), when)
+    for window_row in window["window_rows"]:
+        window_row["usd_mt"] = source.to_usd_mt(window_row["home_value"], key, fx.rate)
     return STATE_OK, "", {
         "label": source.label or key,
+        **window,
+        "home_unit": source.quote_unit(key, market.home_currency),
         "basis_usd_mt": basis,
         "local_usd_mt": local,
         "board_usd_mt": board,

@@ -2737,9 +2737,12 @@ MARKETS: dict[str, dict[str, Any]] = {
             "quote_kind": "physical",
             # AMS 3147 prints a flat CIF price in $/bu (the basis column is
             # cents/bu over the named contract); several barge locations and
-            # delivery windows print on one report date.
+            # delivery windows print on one report date. B30 #504: every
+            # surface reads the nearest delivery slot, named — never their mean.
             "value_column": "average",
             "unit": "usd_per_bushel",
+            "window_scheme": "ams_delivery",
+            "window_columns": ("delivery",),
             "arbitrage": "open",
         },
         # (region, role) — the role says why this pin is on this page. M14 #207
@@ -2923,8 +2926,12 @@ MARKETS: dict[str, dict[str, Any]] = {
             "cadence": "daily",
             "quote_kind": "administered",
             # Natively USD/MT, and several shipment windows print per day.
+            # B30 #504: the nearest window, named — their mean (483.0 on
+            # 2026-10-16) was a price no circular published.
             "value_column": "price_usd_mt",
             "unit": "usd_per_mt",
+            "window_scheme": "magyp_months",
+            "window_columns": ("ship_from", "ship_to"),
         },
         "crush": {
             "kind": "administered",
@@ -2957,6 +2964,8 @@ MARKETS: dict[str, dict[str, Any]] = {
             "quote_kind": "administered",
             "value_column": "price_usd_mt",
             "unit": "usd_per_mt",
+            "window_scheme": "magyp_months",
+            "window_columns": ("ship_from", "ship_to"),
             # Administered minimum, but on physical cargoes that do move —
             # export duty and the FX regime widen it, they don't block it.
             "arbitrage": "open",

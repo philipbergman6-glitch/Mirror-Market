@@ -12,12 +12,15 @@
     <div class="mc-label">{{ d.label }}</div>
     <div class="mc-val {{ 'up' if d.basis_usd_mt > 0 else 'down' }}">{{ f.signed(d.basis_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT · {{ d.direction }} to the board</div>
+    {% if d.window %}<div class="caption">local leg: window {{ d.window }}</div>{% endif %}
     {{ f.asof(d.as_of, d.age_days) }}
   </div>
   <div class="mc">
     <div class="mc-label">Local{% if d.local_quote_kind %} <span class="kind">{{ d.local_kind_label or d.local_quote_kind|replace('_', ' ') }}</span>{% endif %}</div>
     <div class="mc-val">{{ f.usd(d.local_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT</div>
+    {#- B30 #504: one named window's print, never a mean across windows. -#}
+    {% if d.window %}<div class="caption">window {{ d.window }}{% if d.windows_printed > 1 %} · nearest of {{ d.windows_printed }} printed{% endif %}</div>{% endif %}
     {#- A1 #298: the local leg's rate may be a prior close; the board needs none. -#}
     {% if d.fx_label %}<div class="caption">struck at {{ d.fx_label }}</div>{% endif %}
   </div>
@@ -31,6 +34,23 @@
    worked and the page must say so beside the number — not below the fold. #}
 {% if d.caveat %}
 <div class="alert alert-warn">{{ d.caveat }}</div>
+{% endif %}
+{#- B30 #504: the session's other windows as flat prices. No basis column:
+    a later slot is quoted over a later contract than the board leg above. -#}
+{% if d.windows_printed and d.windows_printed > 1 %}
+<details class="window-rows">
+  <summary class="caption">All {{ d.windows_printed }} windows printed on {{ d.as_of }}</summary>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Window</th><th class="num">Local print</th><th class="num">USD/MT</th></tr></thead>
+    <tbody>
+    {% for w in d.window_rows %}
+      <tr><td>{{ w.window }}{% if w.is_chosen %} <span class="muted">· shown above</span>{% endif %}{% if w.quotes > 1 %} <span class="muted">· mean of {{ w.quotes }} quotes</span>{% endif %}</td><td class="num">{{ f.num(w.home_value, 4 if d.home_unit == 'USD/bu' else 1) }} <span class="muted">{{ d.home_unit }}</span></td><td class="num">{{ f.usd(w.usd_mt) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
 {% endif %}
 {% if d.avg is not none %}
 <div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}</div>

@@ -9,6 +9,9 @@
   <div class="mc">
     <div class="mc-label">{{ leg.key }}{% if leg.is_headline %} · headline{% endif %}</div>
     {% if leg.label %}<div class="mc-delta muted">{{ leg.label }}</div>{% endif %}
+    {#- B30 #504: a venue printing several shipment windows a session has
+        published several prices; this card is one of them, and says which. -#}
+    {% if leg.window %}<div class="mc-delta muted">window {{ leg.window }}{% if leg.windows_printed > 1 %} · nearest of {{ leg.windows_printed }} printed{% endif %}</div>{% endif %}
     <div class="mc-val">{{ f.usd(leg.usd_mt) }}<small class="muted"> /MT</small></div>
     {# A1 #298: a USD figure struck at a prior day's close says which day, and
        one withheld for want of a rate inside the cap says why — the home print
@@ -31,6 +34,24 @@
   </div>
   {% endfor %}
 </div>
+{#- B30 #504: every window the venue printed on each leg's session, one click
+    away — the card above is the nearest, never a mean across these. -#}
+{%- set windowed = d.legs|selectattr('windows_printed')|selectattr('windows_printed', 'gt', 1)|list %}
+{% if windowed %}
+<details class="window-rows">
+  <summary class="caption">Every shipment window printed{% if windowed|length == 1 %} on {{ windowed[0].as_of }}{% endif %}</summary>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Leg</th><th>Window</th><th class="num">USD/MT</th>{% if windowed[0].has_home_quote %}<th class="num">Home print</th>{% endif %}<th>Session</th></tr></thead>
+    <tbody>
+    {% for leg in windowed %}{% for w in leg.window_rows %}
+      <tr><td>{{ leg.key }}</td><td>{{ w.window }}{% if w.is_chosen %} <span class="muted">· shown above</span>{% endif %}{% if w.quotes > 1 %} <span class="muted">· mean of {{ w.quotes }} quotes</span>{% endif %}</td><td class="num">{{ f.usd(w.usd_mt) }}</td>{% if windowed[0].has_home_quote %}<td class="num">{{ f.num(w.home_value, 2) }} <span class="muted">{{ leg.home_unit }}</span></td>{% endif %}<td>{{ leg.as_of }}</td></tr>
+    {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
 {% if d.signals %}
 {# M2 #144: signals ride inside block 01 as severity chips rather than growing
    a tenth block. Price-only detectors — a generic source carries no volume

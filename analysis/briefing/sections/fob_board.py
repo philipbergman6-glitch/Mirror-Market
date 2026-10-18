@@ -43,7 +43,9 @@ def _gulf_leg() -> tuple[float, str] | None:
     usd_mt = to_metric_tons(avg_bu * 100.0, "Soybeans")  # $/bu → ¢/bu → USD/MT
     if usd_mt is None:
         return None
-    return usd_mt, latest_date.date().isoformat()
+    # B30 #504: the slot is the shipment window — say which one was taken.
+    window = str(current["delivery"].iloc[0])
+    return usd_mt, f"{latest_date.date().isoformat()} · window {window}"
 
 
 def _brazil_leg(
@@ -76,7 +78,13 @@ def _argentina_leg() -> tuple[float, str] | None:
     rows = fob[fob["date"] == latest_date].sort_values("ship_from")
     if rows.empty:
         return None
-    return float(rows["price_usd_mt"].iloc[0]), latest_date.date().isoformat()
+    nearest = rows.iloc[0]
+    # B30 #504: one shipment band of the circular's curve — say which one.
+    window = str(nearest["ship_from"])
+    ship_to = nearest.get("ship_to")
+    if pd.notna(ship_to) and str(ship_to) != window:
+        window = f"{window}..{ship_to}"
+    return float(nearest["price_usd_mt"]), f"{latest_date.date().isoformat()} · window {window}"
 
 
 def format(  # noqa: A001
