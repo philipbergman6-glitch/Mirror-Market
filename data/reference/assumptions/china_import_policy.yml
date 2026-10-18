@@ -8,24 +8,24 @@
 # last quarter is exactly as wrong as a stale freight number, and rather less
 # likely to be noticed.
 #
-# PROVENANCE: both rates are the ones this repository already states, in
-# config.MARKETS["dalian"]["basis"] ("bounded by freight, tariff (3%) and VAT
-# (9%), not closed to zero") and in the Layer 9 section of LAYERS.md. They were
-# not re-derived for Phase 2 and are recorded as `indicative` on that basis.
+# PROVENANCE: every entry cites its publisher of record and the date the rate
+# was last checked against it (`source`, `citation`). Re-check on renewal;
+# never extend an expiry without re-reading the publisher.
 #
-# KNOWN LIMITATION, and the reason both entries are destination-scoped rather
-# than global: China has at times applied ORIGIN-DIFFERENTIATED retaliatory
-# duties on US-origin soybeans on top of the MFN rate. That is not modelled
-# here. If a retaliatory rate is in force, enter an origin-scoped duty — it
-# wins on specificity and overrides these — rather than editing these entries:
+# ORIGIN-DIFFERENTIATED DUTY (B22 #485). China charges US-origin goods an
+# additional tariff on top of the MFN rate. config.ORIGIN_DIFFERENTIATED_IMPORT_DUTY
+# lists the (US, CN) pair, so the MFN entry below is NEVER used for a US
+# origin: only an entry naming the origin prices that duty rung, and with none
+# live the US row is withheld as `origin_duty_unmodelled`. When the US entry
+# lapses, renew it from the publisher — do not edit the MFN entry, and do not
+# delete the registry pair unless the additional tariff is gone (then enter a
+# US-origin entry at the MFN rate, citing the instrument that removed it).
 #
-#   python scripts/enter_assumption.py --component import_duty --value 0.28 \
-#     --unit fraction --origin us_gulf --destination cn_north \
-#     --basis "MFN 3% + retaliatory 25%" --entered-by you@example.com \
-#     --expires 2026-12-31 --confidence indicative
-#
-# Reading this file as complete tariff coverage would understate the US landed
-# cost in exactly the periods when the answer matters most.
+# CONVENTION: each rate is the one in force on the day the landed cost is
+# computed, not on the cargo's future customs-clearance date. A policy change
+# between loading and clearance is a scenario (`tariff_shock`), not an input;
+# the expiry on each entry is set at or before the next known policy date so
+# the row withholds rather than carrying a rate past it.
 
 - id: import_duty.cn_north.mfn
   component: import_duty
@@ -34,14 +34,52 @@
   destination: cn_north
   basis: >-
     China MFN ad-valorem import duty on soybeans, applied to the CIF value.
-    Origin-differentiated retaliatory duties are NOT included — see the file
-    header.
-  source: "repo-established (config.MARKETS['dalian']['basis'], LAYERS.md Layer 9)"
-  entered_by: "mirror-market phase-2 build (repo constant, not a trader entry)"
-  entered_at: 2026-08-18
-  expires_on: 2027-02-18
+    2026 schedule: HS 1201.9011 (non-GM yellow), 1201.9019 (other yellow),
+    1201.9020 (black), 1201.9030 (green) and 1201.9090 (other) all MFN 3; no
+    2026 provisional (暂定) rate for any 1201 line (税委会公告2025年第11号
+    annex 1) and soybeans are not a tariff-rate-quota good (annex 2). Not the
+    rate a US-origin cargo pays — see the file header.
+  source: >-
+    Customs Tariff Commission of the State Council, 税委会公告2025年第12号
+    《中华人民共和国进出口税则（2026）》 (2025-12-31), MOF Customs Tariff
+    Department, PDF p.168; cross-checked against 税委会公告2025年第11号
+    (2026年关税调整方案, 2025-12-26); checked 2026-10-18
+  entered_by: "mirror-market B22 #485 (published policy rate, not a trader entry)"
+  entered_at: 2026-10-18
+  # The 2026 schedule runs to 31 December; the 2027 schedule replaces it.
+  expires_on: 2026-12-31
   confidence: indicative
-  citation: "config.py MARKETS['dalian']['basis'] arbitrage note"
+  citation: "https://gss.mof.gov.cn/gzdt/zhengcefabu/202512/t20251231_3981044.htm ; https://www.gov.cn/zhengce/zhengceku/202512/content_7053062.htm"
+
+- id: import_duty.us_gulf.cn_north
+  component: import_duty
+  value: 0.13
+  unit: fraction
+  origin: us_gulf
+  destination: cn_north
+  basis: >-
+    US-origin soybeans into China: MFN 3% plus the 10% additional tariff on
+    all US-origin goods retained by 税委会公告2025年第10号 (24% of the 34%
+    suspended "in one year" from 2025-11-10 13:01, 10% kept); the
+    soybean-specific March-2025 add-on was removed by 第9号 from the same
+    date. 13% is USDA FAS's "Total Applied Tariff with 301 Exclusion" — it
+    ASSUMES the importer holds a Section 301 exclusion; without one the 2018
+    retaliatory tariff (27.5% on 1201.9011/9019) applies on top. Expires the
+    day before the 第10号 year ends: the 2027-01-10 extension announced
+    2026-09-28 had no Tariff Commission instrument on gss.mof.gov.cn as of
+    2026-10-18, so renew only once one is published.
+  source: >-
+    Customs Tariff Commission of the State Council, 税委会公告2025年第10号
+    (2025-11-05, MOF Customs Tariff Department); corroborated by USDA FAS
+    GAIN CH2026-0113 (2026-09-04, "China's current 10 percent retaliatory
+    tariff on U.S. soybeans"), GAIN CH2026-0032 Table 30 (2026-03-19,
+    12019011 total 13.0%) and Reuters 2026-09-28 ("US soybeans, however,
+    still face an additional tariff of 10%"); checked 2026-10-18
+  entered_by: "mirror-market B22 #485 (published policy rate, not a trader entry)"
+  entered_at: 2026-10-18
+  expires_on: 2026-11-09
+  confidence: indicative
+  citation: "https://gss.mof.gov.cn/gzdt/zhengcejiedu/202511/t20251105_3975759.htm ; https://www.investing.com/news/commodities-news/china-says-to-cut-tariffs-on-us-farm-goods-but-soybeans-excluded-4919307"
 
 - id: import_vat.cn_north
   component: import_vat
@@ -51,10 +89,16 @@
   basis: >-
     China import VAT on soybeans, applied to the duty-paid value. Charged on
     top of duty, which is why the landed waterfall applies it at its own rung
-    rather than adding the two rates together.
-  source: "repo-established (config.MARKETS['dalian']['basis'], LAYERS.md Layer 9)"
-  entered_by: "mirror-market phase-2 build (repo constant, not a trader entry)"
-  entered_at: 2026-08-18
-  expires_on: 2027-02-18
+    rather than adding the two rates together. VAT Law art. 10(二): importing
+    agricultural products (农产品) is taxed at 9%; MOF/STA 2026 No. 9 keeps
+    soybeans (油料植物 … 大豆) inside that scope. USDA FAS GAIN publishes no
+    soybean VAT figure, so the statute is the citation.
+  source: >-
+    Value Added Tax Law of the PRC, art. 10(二), in force 2026-01-01 (State
+    Taxation Administration law database); scope per MOF/STA Announcement
+    2026 No. 9 (2026-01-30, read in a secondary copy); checked 2026-10-18
+  entered_by: "mirror-market B22 #485 (published policy rate, not a trader entry)"
+  entered_at: 2026-10-18
+  expires_on: 2027-04-18
   confidence: indicative
-  citation: "config.py MARKETS['dalian']['basis'] arbitrage note"
+  citation: "https://fgk.chinatax.gov.cn/zcfgk/c100009/c5237365/content.html"
