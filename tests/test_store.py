@@ -834,6 +834,14 @@ def test_save_currency_data_refuses_a_weekend_row(patched_db):
     assert _fetchall(patched_db, "SELECT COUNT(*) FROM currencies") == [(0,)]
 
 
+def test_save_currency_data_refuses_an_undated_row_with_its_own_reason(patched_db):
+    df = _currency_df(["2026-10-15", "2026-10-16"], close=0.19)
+    df.index = pd.DatetimeIndex([pd.Timestamp("2026-10-15"), pd.NaT], name="Date")
+    with pytest.raises(ValueError, match="no parseable Date"):
+        store.save_currency_data("BRL/USD", df)
+    assert _fetchall(patched_db, "SELECT COUNT(*) FROM currencies") == [(0,)]
+
+
 # ---------------------------------------------------------------------------
 # B25 (#495) — an ECB-cross pair's window is the publisher's, whole
 # ---------------------------------------------------------------------------

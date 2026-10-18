@@ -33,6 +33,11 @@ other weekend label). v1's guard and the trusted adapter both drop the row;
 the cached DB on the pair's next save. The exchange rule is unchanged.
 Tests: 10 new (guard, trusted parser, store, reconciler).
 
+**B28 #502 (measurement only).** `scripts/measure_fx_bar_finalisation.py`
+samples the four pairs' newest bars at chosen London times (`--at`) into a
+gitignored CSV and lists closes that moved (`--summary`), so the FX close
+margin can be set from data. The margin itself is unchanged. 4 tests.
+
 ## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
 
 **B21 #483.** AgRural's Paranaguá number is a gross R$/60 kg *Compra* the
