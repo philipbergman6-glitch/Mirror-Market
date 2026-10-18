@@ -32,6 +32,7 @@
   entered_at: 2026-08-01
   expires_on: 2027-12-31
   confidence: indicative
+  caveat: FIXTURE caveat — assumes a Section 301 exclusion
 
 - id: fixture.import_vat.cn_north
   component: import_vat

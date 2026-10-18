@@ -40,8 +40,8 @@ do not enter one. The blocked state is a correct answer.
 
 ## Fields
 
-Every field below is required except `origin`, `destination`, `window`, `days`
-and `citation`. A missing required field fails the load — a silently skipped
+Every field below is required except `origin`, `destination`, `window`, `days`,
+`citation` and `caveat`. A missing required field fails the load — a silently skipped
 assumption file is the same failure as an expired one with better manners.
 
 ```yaml
@@ -62,6 +62,7 @@ assumption file is the same failure as an expired one with better manners.
   expires_on: 2026-09-17                          # HARD stop; past this the row blocks again
   confidence: indicative                          # indicative | administered | provisional
   citation: "optional URL or document reference"
+  caveat: "optional; printed beside the rate on its waterfall rung"
 ```
 
 ### Units are checked against the component

@@ -190,6 +190,11 @@ class Assumption:
     window: ShipmentWindow | None = None
     days: int | None = None
     citation: str | None = None
+    # A short qualification the reader must see beside the rate wherever it is
+    # applied (the waterfall prints it on the rung). `basis` is the full record;
+    # this is the clause without which the rendered number over-claims — e.g. a
+    # duty that holds only if the importer has a tariff exclusion (B22 #485).
+    caveat: str | None = None
 
     def __post_init__(self) -> None:
         if self.unit not in UNITS:
@@ -272,6 +277,9 @@ class Assumption:
             "expires_on": self.expires_on.isoformat(),
             "confidence": self.confidence.value,
             "citation": self.citation,
+            # Only when present, so a set with no caveats keeps the set_id it
+            # has always had and stored rankings do not read as re-entered.
+            **({"caveat": self.caveat} if self.caveat else {}),
         }
 
 
@@ -362,6 +370,7 @@ def parse_assumption(raw: dict, *, where: str) -> Assumption:
         window=_parse_window(raw.get("window"), where),
         days=int(raw["days"]) if raw.get("days") is not None else None,
         citation=raw.get("citation"),
+        caveat=str(raw["caveat"]) if raw.get("caveat") not in (None, "") else None,
     )
 
 

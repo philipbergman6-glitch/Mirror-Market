@@ -11,6 +11,7 @@ policy file to them.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -109,6 +110,30 @@ def test_an_expired_origin_scoped_entry_withholds_and_mfn_is_not_substituted():
     assert "expired" in blocker.message and "MFN rate is not substituted" in blocker.message
 
 
+def test_a_caveat_is_printed_on_the_rung_it_qualifies_even_under_override():
+    caveated = AssumptionSet(assumptions=tuple(
+        replace(a, caveat="holds only with a tariff exclusion") if a.id == "duty.us" else a
+        for a in _full_set().assumptions
+    ))
+    plain = compute_landed_cost(_gulf_quote(), CN, SEP, caveated, today=TODAY)
+    shocked = compute_landed_cost(
+        _gulf_quote(), CN, SEP, caveated, today=TODAY,
+        overrides={CostComponent.IMPORT_DUTY: 0.20},
+    )
+    for result in (plain, shocked):
+        assert _duty_step(result).basis.endswith("— holds only with a tariff exclusion")
+    # Only the rung it belongs to.
+    vat = next(s for s in plain.steps if s.component is CostComponent.IMPORT_VAT)
+    assert "tariff exclusion" not in vat.basis
+
+
+def test_an_uncaveated_set_keeps_its_fingerprint():
+    """`caveat` is serialised only when present, so stored set_ids stay stable."""
+    assert all("caveat" not in a.to_dict() for a in _full_set().assumptions)
+    with_one = replace(_full_set().assumptions[0], caveat="x")
+    assert with_one.to_dict()["caveat"] == "x"
+
+
 def test_a_scenario_override_cannot_unblock_a_withheld_us_duty():
     result = compute_landed_cost(
         _gulf_quote(), CN, SEP, _without_us_duty(), today=TODAY,
@@ -167,6 +192,35 @@ def test_every_shipped_policy_rate_cites_its_publisher_and_a_dated_check(shipped
         assert "repo-established" not in assumption.source, assumption.id
         assert re.search(r"checked \d{4}-\d{2}-\d{2}", assumption.source), assumption.id
         assert assumption.citation and "https://" in assumption.citation, assumption.id
+
+
+def test_the_shipped_us_duty_renders_with_its_section_301_qualification(shipped):
+    """The 13% holds only with a Section 301 exclusion; the rung must say so."""
+    desk = tuple(
+        a for a in _full_set().assumptions if a.component is not CostComponent.IMPORT_DUTY
+        and a.component is not CostComponent.IMPORT_VAT
+    )
+    stack = AssumptionSet(assumptions=shipped.assumptions + desk)
+    on = date(2026, 10, 18)
+    result = compute_landed_cost(_gulf_quote(), CN, SEP, stack, today=on)
+    duty = _duty_step(result)
+    assert duty.assumption_id == "import_duty.us_gulf.cn_north"
+    assert duty.rate == pytest.approx(0.13)
+    assert "Section 301 exclusion" in duty.basis and "40.5%" in duty.basis
+
+
+def test_every_shipped_origin_differentiated_rate_carries_a_caveat(shipped):
+    for assumption in shipped.assumptions:
+        if assumption.origin and origin_differentiated_duty(
+            assumption.origin, assumption.destination
+        ):
+            assert assumption.caveat, assumption.id
+
+
+def test_the_shipped_us_duty_does_not_claim_a_number_its_cited_page_omits(shipped):
+    us = next(a for a in shipped.assumptions if a.id == "import_duty.us_gulf.cn_north")
+    assert "number not shown" in us.source
+    assert "第10号" not in us.source + us.basis
 
 
 def test_the_shipped_us_duty_expires_no_later_than_the_policy_it_records(shipped):

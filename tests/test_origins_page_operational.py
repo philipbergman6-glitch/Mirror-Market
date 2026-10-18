@@ -172,6 +172,13 @@ def test_a_shared_input_is_rendered_as_unable_to_flip_rather_than_as_a_big_numbe
     assert all(m["move"] is None and m["reason"] for m in shared)
 
 
+def test_a_qualified_duty_rate_renders_with_its_caveat_on_the_waterfall(db, complete):
+    """B22 #485: the US-origin duty is conditional, and the rendered rung says so."""
+    view = build_view(db, today=TODAY, assumptions=complete)
+    waterfall = _section(_render(view), "waterfall")
+    assert "FIXTURE caveat — assumes a Section 301 exclusion" in waterfall
+
+
 def test_the_renewals_section_reports_a_clear_queue_when_nothing_lapses(db, complete):
     view = build_view(db, today=TODAY, assumptions=complete)
     renewals = next(s for s in view["sections"] if s["id"] == "renewals")
