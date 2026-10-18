@@ -221,6 +221,21 @@ def parse_magyp_window(ship_from: str | None, ship_to: str | None) -> ShipmentWi
     return ShipmentWindow(start, end, label=label)
 
 
+def nearest_window_key(window: ShipmentWindow, session: date) -> tuple[int, int, int]:
+    """Sort key putting a session's *nearest* window first (B30 #504).
+
+    The one rule every surface that shows "the" price of a forward-curve
+    venue uses — the market pages and the briefing alike. Windows still open
+    on the session come first, earliest start then earliest end: the prompt
+    cargo. A window that has sailed is a stale quote, never the prompt; only
+    if *every* window has ended is the latest-ending one taken (and labelled
+    with its own window), rather than the session being withheld.
+    """
+    if window.end >= session:
+        return (0, window.start.toordinal(), window.end.toordinal())
+    return (1, -window.end.toordinal(), -window.start.toordinal())
+
+
 # ---------------------------------------------------------------------------
 # Database reads
 # ---------------------------------------------------------------------------
@@ -466,6 +481,7 @@ __all__ = [
     "fx_resolution_on",
     "offered_windows",
     "parse_ams_slot",
+    "nearest_window_key",
     "parse_magyp_window",
     "port_for",
     "read_origin_quotes",

@@ -15,6 +15,7 @@ from __future__ import annotations
 import calendar
 import re
 import sqlite3
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -215,6 +216,38 @@ def test_a_window_that_has_sailed_is_never_the_prompt(registry):
     assert prints.series["Soybeans"] == [(date(2025, 3, 18), 10.20, 1)]
 
 
+def test_when_every_window_has_sailed_the_latest_is_taken_and_named(registry):
+    """LAYERS.md (Layer 21, B30 #504): labelled, never withheld, and never the
+    oldest stale band."""
+    connection = sqlite3.connect(":memory:")
+    connection.execute(schema._CREATE_ARGENTINA_FOB)
+    for ship_from, ship_to, price in (("2026-07", "2026-07", 470.0), ("2026-08", "2026-09", 480.0)):
+        connection.execute(
+            "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, "
+            "price_usd_mt) VALUES (?,?,?,?,?,?)",
+            ("2026-10-16", "Soybeans", "12019000190C", ship_from, ship_to, price),
+        )
+    prints = block_builders._read_prints(
+        connection, registry["argentina"].price, date(2026, 10, 18)
+    )
+    session = prints.windows["Soybeans"][date(2026, 10, 16)]
+    assert session.chosen.label == "2026-08..2026-09"
+    assert prints.series["Soybeans"] == [(date(2026, 10, 16), 480.0, 1)]
+
+
+def test_a_mistyped_window_column_raises_rather_than_reading_as_no_data(conn, registry):
+    broken = replace(registry["argentina"].price, window_columns=("ship_frm", "ship_to"))
+    with pytest.raises(sqlite3.OperationalError, match="ship_frm"):
+        block_builders._read_prints(conn, broken, TODAY)
+
+
+def test_a_missing_table_is_still_no_data(registry):
+    prints = block_builders._read_prints(
+        sqlite3.connect(":memory:"), registry["argentina"].price, TODAY
+    )
+    assert prints.series == {key: [] for key in registry["argentina"].price.keys}
+
+
 # ---------------------------------------------------------------------------
 # One window per move
 # ---------------------------------------------------------------------------
@@ -223,11 +256,18 @@ def test_a_move_across_a_window_roll_is_withheld(conn, registry):
     # is Nov–Apr: 495 → 493 is a calendar spread, not a session move.
     _seed_argentina(conn, D1, bands=((1, 6, 480.0), (7, 11, 450.0)))
     conn.commit()
-    headline = _block(conn, registry, "argentina", "price").data["headline"]
+    rolled = f"window rolled {_month(D0, 1)}..{_month(D0, 6)} → {_month(D0, 0)}"
+    price = _block(conn, registry, "argentina", "price")
+    headline = price.data["headline"]
     assert headline["chg_1_pct"] is None
+    # Withheld with its reason, never a bare blank (review of #508).
+    assert headline["move_notes"] == [f"session move withheld — {rolled}"]
+    assert f"session move withheld — {rolled}" in _render("blocks/01_price.html.j2", block=price)
     state, _, data = ledger_block(registry["argentina"], _ctx(conn), markets=registry)
     row = next(r for r in data["rows"] if r["leg_id"] == "argentina:fob")
     assert row["usd_chg_pct"] is None and row["home_chg_pct"] is None
+    assert row["move_note"] == f"move withheld — {rolled}"
+    assert f"move withheld — {rolled}" in _render("blocks/_ledger_table.html.j2", d=data)
 
 
 def test_a_move_inside_one_window_is_reported(conn, registry):
@@ -368,6 +408,32 @@ def test_the_briefing_fob_board_names_each_legs_window(monkeypatch):
     board = fob_board.format({}, {})
     gulf = next(line for line in board.splitlines() if "US Gulf" in line)
     argentina = next(line for line in board.splitlines() if "Argentina" in line)
-    assert "window Current" in gulf and "$497.2" in gulf
+    # The site's own labels, so the briefing and the pages name one window.
+    assert "window Current (prompt))" in gulf and "$497.2" in gulf
     assert "window 2026-10)" in argentina and "$493.0" in argentina
+
+
+def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch):
+    """Not "Current, else the first listed row": on 18 Mar 2025 AMS listed a
+    sailed Mar¹ slot first; the nearest open one is Mar² (same rule as
+    `_read_windowed`)."""
+    bids = pd.DataFrame({
+        "report_date": pd.to_datetime(["2025-03-18"] * 3),
+        "delivery": ["Mar¹", "Mar²", "Apr"],
+        "average": [10.10, 10.20, 10.30],
+    })
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2025-03-18"] * 2),
+        "ship_from": ["2025-06", "2025-04"],
+        "ship_to": ["2025-12", "2025-05"],
+        "price_usd_mt": [300.0, 310.0],
+    })
+    monkeypatch.setattr(fob_board, "read_gulf_bids", lambda _c: bids)
+    monkeypatch.setattr(fob_board, "read_argentina_fob", lambda _p: fob)
+    gulf = fob_board._gulf_leg()
+    argentina = fob_board._argentina_leg()
+    assert gulf is not None and argentina is not None
+    assert gulf[0] == pytest.approx(_gulf_usd(10.20))
+    assert gulf[1] == "2025-03-18 · window Mar 2025 2nd half"
+    assert argentina == (310.0, "2025-03-18 · window 2025-04..2025-05")
 

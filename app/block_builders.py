@@ -29,6 +29,7 @@ market block cannot tombstone a page.
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
@@ -40,6 +41,7 @@ import config
 from analysis import hazards, weather_alerts
 from analysis.hazards import LegHazard, PlaceHazard
 from analysis.origins.domain import ShipmentWindow
+from analysis.origins.sources import nearest_window_key
 from app.blocks import (
     BLOCK_IDS,
     GENERATION_ERROR,
@@ -176,6 +178,14 @@ def _same_window(windows: dict[date, SessionWindows], now: date, prior: date) ->
     if not windows:
         return True
     return windows[now].identity == windows[prior].identity
+
+
+def _roll_note(windows: dict[date, SessionWindows], now: date, prior: date, move: str) -> str:
+    """Why a move is blank across a window roll — never a bare dash."""
+    return (
+        f"{move} withheld — window rolled {windows[prior].chosen.label} → "
+        f"{windows[now].chosen.label}"
+    )
 
 
 def _window_fields(windows: dict[date, SessionWindows], when: date) -> dict:
@@ -657,7 +667,12 @@ def _read_windowed(
     )
     try:
         rows = conn.execute(sql, (*source.keys, cutoff)).fetchall()
-    except Exception as exc:  # noqa: BLE001 — a missing table is data, not a crash
+    except sqlite3.OperationalError as exc:
+        # A missing table is data (a fresh clone, a docs-only job). Anything
+        # else — a mistyped `window_columns` above all — is a registry bug
+        # that would otherwise render as a quiet "no data".
+        if "no such table" not in str(exc):
+            raise
         log.debug("block read: %s unavailable (%s)", source.table, exc)
         return _Prints(series, windows)
 
@@ -678,11 +693,10 @@ def _read_windowed(
     for (key, day), by_window in sorted(sessions.items(), key=lambda item: item[0][1]):
         printed = tuple(
             WindowQuote(window=window, value=sum(values) / len(values), quotes=len(values))
-            # Open windows first (one that has sailed is a stale quote, not
-            # the prompt), then the earliest start, then the earliest end.
+            # The origins domain's one nearest-window rule, shared with the
+            # briefing: open windows first, a sailed one only if all have.
             for window, values in sorted(
-                by_window.items(),
-                key=lambda item: (item[0].end < day, item[0].start, item[0].end),
+                by_window.items(), key=lambda item: nearest_window_key(item[0], day)
             )
         )
         session = SessionWindows(printed)
@@ -799,10 +813,14 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         fx = ctx.fx_on(market.currency_pair, when)
         windows = ctx.session_windows(source, key)
         changes = {}
+        move_notes: list[str] = []
         for back in CHANGE_LOOKBACK_OBS:
             prior = rows[-1 - back] if len(rows) > back else None
-            # B30 #504: a move is only a move inside one window.
+            # B30 #504: a move is only a move inside one window, and a move
+            # withheld across a roll says so rather than rendering blank.
             if prior is not None and not _same_window(windows, when, prior[0]):
+                move = "session move" if back == 1 else f"{back}-obs move"
+                move_notes.append(_roll_note(windows, when, prior[0], move))
                 prior = None
             changes[f"chg_{back}_pct"] = _pct_change(value, prior[1] if prior else None)
         window = _window_fields(windows, when)
@@ -831,6 +849,7 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             # B30 #504: the shipment window this print is for, and every
             # window the venue printed that session for the per-window table.
             **window,
+            "move_notes": move_notes,
             # A1 #298: which day's rate the USD figure was struck at, or why
             # there is none. Rendered wherever it differs from `as_of`.
             **_fx_fields(source, fx),
@@ -1222,6 +1241,7 @@ def _ledger_row(
         # venue prints several. None on an unwindowed leg.
         "window": None,
         "windows_printed": None,
+        "move_note": None,
         "spread_usd_mt": None,
         "spread_as_of": None,
         "spread_note": None,
@@ -1252,8 +1272,10 @@ def _ledger_row(
     })
 
     # B30 #504: across a window roll the "move" is a calendar spread, so it is
-    # withheld (rendered as a dash) rather than credited to the market.
-    if len(prints) > 1 and _same_window(windows, when, prints[-2][0]):
+    # withheld — with its reason, like spread_note — never credited to the market.
+    if len(prints) > 1 and not _same_window(windows, when, prints[-2][0]):
+        row["move_note"] = _roll_note(windows, when, prints[-2][0], "move")
+    elif len(prints) > 1:
         prior_when, prior_value, _ = prints[-2]
         row["home_chg_pct"] = _pct_change(value, prior_value)
         prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when).rate)

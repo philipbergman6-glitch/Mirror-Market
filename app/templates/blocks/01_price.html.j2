@@ -22,6 +22,8 @@
       {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>
       {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">21 obs</span>{% endif %}
     </div>
+    {#- B30 #504: a move withheld across a window roll names the roll. -#}
+    {%- for note in leg.move_notes %}<div class="caption">{{ note }}</div>{% endfor %}
     {# #230: the venue's own print, in the venue's own unit, and only where it
        is a second view of the number above. A `usd_per_mt` venue (Argentina's
        FOB, the EC workbook) already published the headline — re-labelling it

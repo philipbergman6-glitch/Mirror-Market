@@ -92,7 +92,10 @@
         <span class="muted">—</span>
         {%- endif -%}
       </td>
-      <td class="num">{{ f.pct(row.usd_chg_pct) }}</td>
+      <td class="num">{{ f.pct(row.usd_chg_pct) }}
+        {#- B30 #504: a move blank across a window roll says why. -#}
+        {%- if row.move_note %}<div class="caption">{{ row.move_note }}</div>{% endif -%}
+      </td>
       <td class="num">
         {%- if row.has_home_quote -%}{{ f.pct(row.home_chg_pct) }}{%- else -%}<span class="muted">—</span>{%- endif -%}
         {%- if row.fx_tag %} <span class="fx-tag" title="{{ row.fx_note }}">FX</span>{% endif -%}

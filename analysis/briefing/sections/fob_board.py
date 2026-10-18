@@ -16,6 +16,8 @@ import logging
 
 import pandas as pd
 
+from analysis.origins.domain import ShipmentWindow
+from analysis.origins.sources import nearest_window_key, parse_ams_slot, parse_magyp_window
 from analysis.spreads import compute_brazil_basis
 from pipeline.query import read_argentina_fob, read_brazil_spot, read_gulf_bids
 from pipeline.units import to_metric_tons
@@ -25,27 +27,41 @@ logger = logging.getLogger(__name__)
 _AGRURAL_SERIES = "Soybean (AgRural Paranaguá FOB)"
 
 
+def _nearest(day: pd.DataFrame, parse, session) -> tuple[ShipmentWindow, pd.DataFrame] | None:
+    """The session's nearest shipment window and its rows (B30 #504) — the
+    origins domain's one rule (``nearest_window_key``), shared with the site.
+    An unreadable window raises: it may be the nearest one."""
+    if day.empty:
+        return None
+    windows: list[ShipmentWindow] = []
+    for _, row in day.iterrows():
+        window = parse(row)
+        if window is None:
+            raise ValueError(f"unreadable shipment window on {session}: {row.to_dict()!r}")
+        windows.append(window)
+    chosen = min(windows, key=lambda w: nearest_window_key(w, session))
+    return chosen, day[[w == chosen for w in windows]]
+
+
 def _gulf_leg() -> tuple[float, str] | None:
-    """Latest Current-delivery CIF NOLA soybean bid in USD/MT."""
+    """Latest CIF NOLA soybean bid for the nearest delivery slot, USD/MT."""
     bids = read_gulf_bids("Soybeans")
     if bids.empty:
         return None
     latest_date = bids["report_date"].max()
     day = bids[bids["report_date"] == latest_date]
-    # Prefer the "Current" delivery slot; some sessions quote only named
-    # forward months, so fall back to the first (nearest) listed slot.
-    current = day[day["delivery"] == "Current"]
-    if current.empty:
-        current = day.head(1)
-    if current.empty:
+    # B30 #504: the site's own nearest-window rule and label, so the briefing
+    # and the CBOT page name the same slot ("Current (prompt)").
+    session = latest_date.date()
+    nearest = _nearest(day, lambda r: parse_ams_slot(str(r["delivery"]), session), session)
+    if nearest is None:
         return None
-    avg_bu = float(current["average"].iloc[0])
+    window, rows = nearest
+    avg_bu = float(rows["average"].mean())  # places quoting one slot, as the site
     usd_mt = to_metric_tons(avg_bu * 100.0, "Soybeans")  # $/bu → ¢/bu → USD/MT
     if usd_mt is None:
         return None
-    # B30 #504: the slot is the shipment window — say which one was taken.
-    window = str(current["delivery"].iloc[0])
-    return usd_mt, f"{latest_date.date().isoformat()} · window {window}"
+    return usd_mt, f"{session.isoformat()} · window {window.describe()}"
 
 
 def _brazil_leg(
@@ -75,16 +91,17 @@ def _argentina_leg() -> tuple[float, str] | None:
     if fob.empty:
         return None
     latest_date = fob["date"].max()
-    rows = fob[fob["date"] == latest_date].sort_values("ship_from")
-    if rows.empty:
+    session = latest_date.date()
+    nearest = _nearest(
+        fob[fob["date"] == latest_date],
+        lambda r: parse_magyp_window(r["ship_from"], r["ship_to"] if pd.notna(r["ship_to"]) else None),
+        session,
+    )
+    if nearest is None:
         return None
-    nearest = rows.iloc[0]
-    # B30 #504: one shipment band of the circular's curve — say which one.
-    window = str(nearest["ship_from"])
-    ship_to = nearest.get("ship_to")
-    if pd.notna(ship_to) and str(ship_to) != window:
-        window = f"{window}..{ship_to}"
-    return float(nearest["price_usd_mt"]), f"{latest_date.date().isoformat()} · window {window}"
+    # B30 #504: one band of the circular's curve, labelled as the site labels it.
+    window, rows = nearest
+    return float(rows["price_usd_mt"].iloc[0]), f"{session.isoformat()} · window {window.describe()}"
 
 
 def format(  # noqa: A001
