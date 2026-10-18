@@ -39,6 +39,7 @@ import pandas as pd
 import config
 from analysis import hazards, weather_alerts
 from analysis.hazards import LegHazard, PlaceHazard
+from analysis.origins.domain import ShipmentWindow
 from app.blocks import (
     BLOCK_IDS,
     GENERATION_ERROR,
@@ -49,7 +50,6 @@ from app.blocks import (
     absent_reason,
     make_block,
 )
-from analysis.origins.domain import ShipmentWindow
 from app.markets import Market, Source, TierResult, _ingest_status
 from pipeline.units import kg_to_metric_tons, kg_to_million_metric_tons
 from pricing.fx_alignment import FxResolution, align_fx

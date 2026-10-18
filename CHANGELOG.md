@@ -4,6 +4,25 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — one shipment window, named, never a mean of windows (2026-10-18)
+
+**B30 #504**, from V1 #474. The site read every source through one SQL
+`AVG(...) GROUP BY key, date`, so Argentina's headline was the mean of
+MAGyP's Oct-26 / Nov–Apr / May–Sep bands (483.0 on 2026-10-16; no circular
+published it) and the US Gulf leg the mean of six AMS 3147 slots, Current →
+Feb, over three CBOT months. A source now declares `window_scheme` +
+`window_columns` (`config.MARKETS` argentina price/basis, cbot basis;
+validated at load), and `SiteContext` reads it as the **nearest window
+still open on the session** — 493.0 "window 2026-10", Gulf "window Current
+(prompt)" — with the session's other windows listed under a `<details>`
+on the same block. Rows sharing one window (two barge locations) still
+average, labelled. A day-over-day move across a window roll is withheld,
+not credited to the market. The ledger row, the landed stack's origin
+step and the briefing's FOB board name their window too. An unreadable
+stored window raises. Tests: 17 new (`tests/test_window_headlines.py`);
+one ledger fixture's fake `ship_from` made real. Glossary: "Shipment
+window" and "Labelled blend" added to CONTEXT.md as proposals for V4 #477.
+
 ## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
 
 **B21 #483.** AgRural's Paranaguá number is a gross R$/60 kg *Compra* the
