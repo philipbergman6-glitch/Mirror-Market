@@ -109,6 +109,14 @@ _Avoid_: error (until unexplained and material), drift (reserved for reconciliat
 A discrepancy that exceeds both the dataset's tick/rounding tolerance and the economic threshold in USD/MT, or is a metadata fail. A labelled D−1 against the publisher's D is not a discrepancy.
 _Avoid_: significant, large
 
+**Shipment window** _(proposal for V4 #477 — not yet adopted by the ledger)_
+The loading/delivery period a physical quote is priced for — an AMS 3147 delivery slot ("Current", "Nov¹") or a MAGyP circular band ("2026-11..2027-04"). A venue that prints several windows in one session has published several prices. A displayed physical number names its window inline; one that does not fails the window check of **Verified** as a metadata fail.
+_Avoid_: shipment period (on its own), month, slot (except for AMS's own term)
+
+**Labelled blend** _(proposal for V4 #477 — not yet adopted by the ledger)_
+A displayed mean across shipment windows of one session, stating inline "mean of N windows (first–last)" with each window's own quote one click away on the same page. Proposed rule: a labelled blend **passes** when every window's quote verifies and the stated mean is recomputed exactly from them (Tier 3 arithmetic); the label is what makes it checkable. An unlabelled blend, or one whose label omits the count or the window range, **fails** as a metadata fail whatever its value — no published price equals it (V1 #474 rows 6–7). A mean of places quoting *one* window ("mean of 2 quotes" under a named window) is not a blend. B30 #504 removed the only two blends the site rendered; none is rendered today.
+_Avoid_: average price, composite, "mean of N quotes" for windows
+
 **Accuracy ledger**
 The published, dated record of a verification pass: sample count per stratum, tolerances, and every discrepancy with its explanation. Shows pass/fail and delta only for licence-restricted series.
 _Avoid_: scorecard, accuracy rate

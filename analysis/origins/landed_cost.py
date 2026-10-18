@@ -263,8 +263,16 @@ def compute_landed_cost(
             running_total=running,
             basis=(
                 f"{quote.quote_kind.value} quote, {quote.incoterm.value} "
-                f"{quote.carrier.value} {quote.origin.name}, observed "
-                f"{quote.observation_date.isoformat()}"
+                f"{quote.carrier.value} {quote.origin.name}, "
+                # B30 #504: the leg names the window it was priced for — a
+                # venue printing a forward curve has published several prices
+                # on this date, and the step must say which one it took.
+                + (
+                    f"shipment window {quote.shipment_window.describe()}, "
+                    if quote.shipment_window is not None
+                    else "no shipment window published, "
+                )
+                + f"observed {quote.observation_date.isoformat()}"
                 + (
                     f", converted at {quote.fx.pair} {quote.fx.usd_per_unit:.6g} "
                     f"({quote.fx.observed_on.isoformat()})"
