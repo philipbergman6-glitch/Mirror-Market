@@ -290,7 +290,7 @@ def test_synthetic_private_route_through_cost_ranking_sensitivity_and_hedge(db, 
     assert default["decision"]["window_start"] == "2026-09-01"
     assert gulf["incoterm"] == "CIF barge"
     assert gulf["grade"]
-    assert gulf["landed_usd_mt"] == pytest.approx(609.61, abs=0.3)
+    assert gulf["landed_usd_mt"] == pytest.approx(668.21, abs=0.3)  # US-origin duty, B22 #485
     components = {step["component"] for step in gulf["steps"]}
     assert {"elevation", "ocean_freight", "marine_insurance", "financing",
             "destination_port_costs", "quality_adjustment"} <= components

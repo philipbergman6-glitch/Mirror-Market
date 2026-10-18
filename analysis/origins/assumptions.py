@@ -138,6 +138,39 @@ class AssumptionError(ValueError):
     """An assumption file is malformed. Never swallowed — see module docstring."""
 
 
+# The miss code for a route whose destination applies a duty that depends on
+# the cargo's origin, when no live origin-scoped duty entry exists (B22 #485).
+ORIGIN_DUTY_UNMODELLED = "origin_duty_unmodelled"
+
+
+def origin_differentiated_duty(origin: str | None, destination: str | None) -> str | None:
+    """Why this route's import duty must be origin-scoped, or ``None`` if it need not be.
+
+    Reads ``config.ORIGIN_DIFFERENTIATED_IMPORT_DUTY`` through each port's
+    ``country_iso``, because a duty follows the cargo's country of origin and
+    not its loading berth — US PNW beans pay what US Gulf beans pay. An unknown
+    or absent key raises rather than answering "no": "we could not tell" read
+    as "no differentiated duty" is exactly the bare-MFN row this exists to stop.
+    """
+    import config
+
+    if origin is None or destination is None:
+        raise ValueError(
+            "an import_duty lookup must name both origin and destination — whether a "
+            "differentiated duty applies depends on the pair"
+        )
+    try:
+        origin_iso = config.ORIGIN_PORTS[origin]["country_iso"]
+        destination_iso = config.DESTINATION_PORTS[destination]["country_iso"]
+    except KeyError as exc:
+        raise ValueError(
+            f"cannot resolve the country of {origin!r} -> {destination!r} "
+            f"({exc.args[0]!r} is not a known port key), so whether an "
+            "origin-differentiated duty applies is unknown"
+        ) from exc
+    return config.ORIGIN_DIFFERENTIATED_IMPORT_DUTY.get((origin_iso, destination_iso))
+
+
 @dataclass(frozen=True)
 class Assumption:
     """One entered cost input, scoped to a route, a window and a lifetime."""
@@ -256,9 +289,12 @@ class AssumptionMiss:
     component: CostComponent
     reason: str
     expired: tuple[Assumption, ...] = ()
+    withheld_code: str | None = None
 
     @property
     def code(self) -> str:
+        if self.withheld_code:
+            return self.withheld_code
         return "assumption_expired" if self.expired else "assumption_missing"
 
 
@@ -373,6 +409,27 @@ class AssumptionSet:
                 component=component, origin=origin, destination=destination, window=window
             )
         ]
+        # Where the destination charges this origin a different duty from
+        # everyone else, the destination-scoped (MFN) entry is not an answer at
+        # any specificity: only an entry naming this origin is. Filtering here,
+        # rather than in one caller, is what makes the bare-MFN row impossible
+        # for the page and the onboarding checklist alike (B22 #485).
+        differentiated = (
+            origin_differentiated_duty(origin, destination)
+            if component is CostComponent.IMPORT_DUTY else None
+        )
+        if differentiated is not None:
+            candidates = [assumption for assumption in candidates if assumption.origin]
+            if not candidates:
+                return AssumptionMiss(
+                    component,
+                    f"{destination} applies an origin-differentiated duty to "
+                    f"{origin} cargo ({differentiated}) and no origin-scoped "
+                    f"{component.value} entry covers {origin} → {destination} for "
+                    f"{window.describe()} — the destination's MFN rate is deliberately "
+                    "not used, because it is not the rate this cargo pays",
+                    withheld_code=ORIGIN_DUTY_UNMODELLED,
+                )
         if not candidates:
             return AssumptionMiss(
                 component,
@@ -403,8 +460,14 @@ class AssumptionSet:
                     f", and the {wider} less specific assumption(s) that would still match "
                     "are deliberately not substituted"
                     if wider else ""
+                )
+                + (
+                    f"; {destination} applies an origin-differentiated duty to {origin} "
+                    f"cargo ({differentiated}), so its MFN rate is not substituted either"
+                    if differentiated is not None else ""
                 ),
                 expired=lapsed,
+                withheld_code=ORIGIN_DUTY_UNMODELLED if differentiated is not None else None,
             )
         finalists = live
         if len(finalists) > 1:
@@ -535,6 +598,7 @@ def load_assumptions(
 
 __all__ = [
     "DESK_COMPONENTS",
+    "ORIGIN_DUTY_UNMODELLED",
     "POLICY_COMPONENTS",
     "PRIVATE_SUBDIR",
     "REQUIRED_UNIT",
@@ -546,6 +610,7 @@ __all__ = [
     "AssumptionMiss",
     "AssumptionSet",
     "load_assumptions",
+    "origin_differentiated_duty",
     "parse_assumption",
     "private_assumptions_dir",
 ]

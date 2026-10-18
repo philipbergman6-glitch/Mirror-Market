@@ -47,6 +47,7 @@ from analysis.origins.assumptions import (
     Assumption,
     AssumptionMiss,
     AssumptionSet,
+    origin_differentiated_duty,
 )
 from analysis.origins.domain import CostComponent, ShipmentWindow
 from analysis.origins.landed_cost import COMPONENT_LABELS, bridge_components
@@ -254,6 +255,21 @@ def required_components(leg_id: str) -> tuple[CostComponent, ...]:
     return (*bridge, *stack)
 
 
+def _names_origin(component: CostComponent, *, origin: str | None, destination: str) -> bool:
+    """Whether this route's entry must carry ``--origin``.
+
+    Always for a voyage-shaped component; for import duty only where the
+    destination charges this origin a differentiated rate — there an entry
+    without the origin is never selected (B22 #485), so a command that omitted
+    it would produce an entry that unblocks nothing.
+    """
+    if component in _ORIGIN_SCOPED:
+        return True
+    return component is CostComponent.IMPORT_DUTY and (
+        origin_differentiated_duty(origin, destination) is not None
+    )
+
+
 def _command(
     component: CostComponent,
     *,
@@ -276,7 +292,7 @@ def _command(
     ]
     if unit == UNIT_RATE_PER_ANNUM:
         parts.append("--days <CARRY_DAYS>")
-    if component in _ORIGIN_SCOPED:
+    if _names_origin(component, origin=origin, destination=destination):
         parts.append(f"--origin {origin}")
     if component in _DESTINATION_SCOPED:
         parts.append(f"--destination {destination}")
@@ -308,7 +324,9 @@ def _requirement(
         "component": component,
         "label": COMPONENT_LABELS[component],
         "unit": REQUIRED_UNIT[component],
-        "origin": origin if component in _ORIGIN_SCOPED else None,
+        "origin": (
+            origin if _names_origin(component, origin=origin, destination=destination) else None
+        ),
         "destination": destination,
         "window": window,
         "guidance": COMPONENT_GUIDANCE.get(component, ""),

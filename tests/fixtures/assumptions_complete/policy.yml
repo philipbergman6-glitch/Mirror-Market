@@ -17,6 +17,22 @@
   expires_on: 2027-12-31
   confidence: indicative
 
+- id: fixture.import_duty.us_gulf.cn_north
+  component: import_duty
+  value: 0.13
+  unit: fraction
+  origin: us_gulf
+  destination: cn_north
+  basis: >-
+    FIXTURE — stands in for the US-origin duty (MFN plus China's additional
+    duty on US goods); without it the US leg is withheld as
+    origin_duty_unmodelled (B22 #485). Do not read as authoritative.
+  source: fixture
+  entered_by: fixture
+  entered_at: 2026-08-01
+  expires_on: 2027-12-31
+  confidence: indicative
+
 - id: fixture.import_vat.cn_north
   component: import_vat
   value: 0.09

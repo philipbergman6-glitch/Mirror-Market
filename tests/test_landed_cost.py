@@ -74,6 +74,7 @@ def _full_set(**overrides) -> AssumptionSet:
         "freight_ar": 46.50,
         "insurance": 0.0012,
         "duty": 0.03,
+        "duty_us": 0.13,
         "vat": 0.09,
         "port": 6.00,
         "financing": 0.065,
@@ -92,6 +93,10 @@ def _full_set(**overrides) -> AssumptionSet:
                     origin="ar_up_river", destination="cn_north", id="freight.ar"),
         _assumption("marine_insurance", values["insurance"], "fraction", destination="cn_north"),
         _assumption("import_duty", values["duty"], "fraction", destination="cn_north"),
+        # China charges US-origin beans an additional duty on top of MFN, so the
+        # US leg needs its own entry and never reads the MFN one (B22 #485).
+        _assumption("import_duty", values["duty_us"], "fraction",
+                    origin="us_gulf", destination="cn_north", id="duty.us"),
         _assumption("import_vat", values["vat"], "fraction", destination="cn_north"),
         _assumption("destination_port_costs", values["port"], "usd_per_mt", destination="cn_north"),
         _assumption("financing", values["financing"], "rate_per_annum",
@@ -134,11 +139,15 @@ def test_scenario_1_us_gulf_cif_barge_to_north_china():
                               + 14.50 =  480.69   elevation -> FOB vessel
                               + 52.00 =  532.69   ocean freight -> CFR
               0.12% x 532.69 =   0.64 =  533.33   marine insurance -> CIF
-                 3% x 533.33 =  16.00 =  549.33   import duty
-                 9% x 549.33 =  49.44 =  598.77   import VAT
-                              +  6.00 =  604.77   destination port
-        6.5%/yr x 45/365 x 604.77 = 4.85 = 609.62 financing
-                              +  0.00 =  609.62   quality
+                13% x 533.33 =  69.33 =  602.66   import duty (US-origin, origin-scoped)
+                 9% x 602.66 =  54.24 =  656.90   import VAT
+                              +  6.00 =  662.90   destination port
+        6.5%/yr x 45/365 x 662.90 = 5.31 = 668.22 financing
+                              +  0.00 =  668.22   quality
+
+    The duty is the US-origin entry, not the 3% MFN one every other origin
+    pays: China's additional duty on US beans makes the bare MFN rate a wrong
+    number on this leg (B22 #485).
     """
     result = compute_landed_cost(
         _quote(GULF, 466.1919, incoterm=Incoterm.CIF, carrier=Carrier.BARGE),
@@ -149,11 +158,11 @@ def test_scenario_1_us_gulf_cif_barge_to_north_china():
     assert amounts[CostComponent.ELEVATION] == pytest.approx(14.50)
     assert amounts[CostComponent.OCEAN_FREIGHT] == pytest.approx(52.00)
     assert amounts[CostComponent.MARINE_INSURANCE] == pytest.approx(0.6392, abs=0.001)
-    assert amounts[CostComponent.IMPORT_DUTY] == pytest.approx(16.00, abs=0.01)
-    assert amounts[CostComponent.IMPORT_VAT] == pytest.approx(49.44, abs=0.01)
-    assert amounts[CostComponent.FINANCING] == pytest.approx(4.85, abs=0.01)
+    assert amounts[CostComponent.IMPORT_DUTY] == pytest.approx(69.33, abs=0.01)
+    assert amounts[CostComponent.IMPORT_VAT] == pytest.approx(54.24, abs=0.01)
+    assert amounts[CostComponent.FINANCING] == pytest.approx(5.31, abs=0.01)
     assert result.fob_equivalent.amount == pytest.approx(480.69, abs=0.01)
-    assert result.landed.amount == pytest.approx(609.61, abs=0.02)
+    assert result.landed.amount == pytest.approx(668.22, abs=0.02)
 
 
 # ---------------------------------------------------------------------------
