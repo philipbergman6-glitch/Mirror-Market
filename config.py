@@ -3531,6 +3531,24 @@ LANDED_COST_METHOD_VERSION = "1.0.0"
 # calendar, and the ranking says so instead of publishing it.
 ORIGIN_MAX_OBSERVATION_SPREAD_DAYS = 3
 
+# Destinations known to charge one origin a different import duty from the
+# MFN rate everyone else pays, keyed by (origin country_iso, destination
+# country_iso) -> why. For a listed pair the destination-scoped MFN
+# `import_duty` entry is never used: the duty rung resolves only an entry that
+# names the origin, and with none live the row is withheld as
+# `origin_duty_unmodelled` (B22 #485; enforced in AssumptionSet.lookup). The
+# rate itself is NOT here — it is a published policy rate with provenance and
+# an expiry, and lives in data/reference/assumptions/china_import_policy.yml.
+# Removing a pair is a policy finding with a citation, not a cleanup: a stale
+# pair costs a gap, a missing one prints the MFN rate on a cargo that does not
+# pay it.
+ORIGIN_DIFFERENTIATED_IMPORT_DUTY: dict[tuple[str, str], str] = {
+    ("US", "CN"): (
+        "China's additional tariff on US-origin goods, soybeans included, on top "
+        "of the MFN rate since March 2025"
+    ),
+}
+
 # Pricing locations. `key` is the id used by every assumption's `origin` and
 # `destination` field, so a typo in a freight entry fails to match rather than
 # matching the wrong route.
