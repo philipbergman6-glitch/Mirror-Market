@@ -34,11 +34,47 @@ def test_the_brazil_basis_headline_names_the_port_bid_not_fob(monkeypatch):
     assert "FOB" not in line
 
 
-def test_the_cross_origin_board_labels_brazil_as_a_port_bid(monkeypatch):
+def _three_legs(monkeypatch) -> str:
     monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (466.2, "2026-10-16"))
     monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (440.0, "2026-10-16"))
     monkeypatch.setattr(fob_board, "_argentina_leg", lambda: (452.0, "2026-10-16"))
-    board = fob_board.format({}, {})
+    return fob_board.format({}, {})
+
+
+def test_the_cross_origin_board_labels_brazil_as_a_port_bid(monkeypatch):
+    board = _three_legs(monkeypatch)
     brazil = next(line for line in board.splitlines() if "Brazil" in line)
     assert "port bid" in brazil and "FOB" not in brazil
-    assert "only Argentina is FOB vessel" in board
+
+
+def test_each_board_row_names_its_own_delivery_term(monkeypatch):
+    """B27 #501: three delivery terms, so each row carries its own inline."""
+    rows = {
+        line.split()[0]: line
+        for line in _three_legs(monkeypatch).splitlines()
+        if line.startswith("  ") and "$" in line
+    }
+    assert "CIF NOLA barge" in rows["US"]
+    assert "DAP truck" in rows["Brazil"]
+    assert "FOB vessel" in rows["Argentina"]
+
+
+def test_the_board_never_ranks_mixed_delivery_terms(monkeypatch):
+    """B27 #501: a CIF-barge bid, an on-truck port bid and an FOB-vessel price
+    are not one animal. The origins page refuses to rank them without a costed
+    bridge to FOB vessel; the briefing withholds the same ranking with a reason
+    instead of printing "Cheapest origin" over a footer disclaimer.
+    """
+    board = _three_legs(monkeypatch)
+    assert "FOB BOARD" not in board
+    assert "Cheapest" not in board and "cheapest" not in board
+    assert "Ranking withheld" in board
+    assert "no costed path" in board and "FOB vessel" in board
+
+
+def test_an_insufficient_board_is_not_titled_fob(monkeypatch):
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: None)
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: None)
+    monkeypatch.setattr(fob_board, "_argentina_leg", lambda: (452.0, "2026-10-16"))
+    line = fob_board.format({}, {})
+    assert "Insufficient data" in line and "FOB BOARD" not in line

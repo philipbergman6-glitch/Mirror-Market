@@ -1,15 +1,21 @@
-"""CROSS-ORIGIN FOB BOARD — soybean export offers from the three origins.
+"""CROSS-ORIGIN PORT LEVELS — soybean export-side levels from the three origins.
 
-US Gulf CIF (Layer 20, AMS) vs Brazil Paranaguá port bid (Layer 19, AgRural)
-vs Argentina up-river FOB (Layer 21, MAGyP official) in USD/MT — the
-"which origin is cheap" view for a physical buyer.
+US Gulf CIF NOLA barge bid (Layer 20, AMS), Brazil Paranaguá on-truck port bid
+(Layer 19, AgRural — DAP truck, "sobre rodas", B21 #483) and Argentina
+up-river official FOB vessel (Layer 21, MAGyP), each in USD/MT and each on its
+own delivery term, printed inline on its row.
+
+**No ranking.** The three numbers are three delivery terms, and the step from
+each to FOB vessel (barge elevation at NOLA, truck unload + terminal margin at
+Paranaguá) is a real, unpublished cost. The origins page ranks only legs with
+a costed path to FOB vessel (``analysis.origins.comparison.fob_board``); this
+section applies no bridge, so it withholds the ranking with that reason rather
+than print "cheapest" over a footer disclaimer (B27 #501).
 
 The Brazil leg is computed as CBOT + date-aligned AgRural basis
 (`compute_brazil_basis`), not by converting the raw quote directly:
 that keeps date alignment honest and publishes no more than the basis
-line already does. The Gulf leg is a CIF barge bid (pre-elevation) and the
-Brazil leg an on-truck "sobre rodas" port bid (pre-elevation, B21 #483) —
-comparable direction, not an identical Incoterm; the footer says so.
+line already does.
 """
 
 import logging
@@ -79,40 +85,45 @@ def _argentina_leg() -> tuple[float, str] | None:
     return float(rows["price_usd_mt"].iloc[0]), latest_date.date().isoformat()
 
 
+# (origin, delivery term) per leg, in print order. The term is part of the
+# price, so it is printed on the row, never left to a footer.
+_LEGS: tuple[tuple[str, str], ...] = (
+    ("US Gulf", "CIF NOLA barge bid"),
+    ("Brazil Paranaguá", "port bid (DAP truck)"),
+    ("Argentina up-river", "official FOB vessel"),
+)
+
+
 def format(  # noqa: A001
     price_data: dict[str, pd.DataFrame],
     currency_data: dict[str, pd.DataFrame],
 ) -> str:
-    legs: dict[str, tuple[float, str]] = {}
-    for label, loader in (
-        ("US Gulf (CIF NOLA barge)", _gulf_leg),
-        ("Brazil Paranaguá (port bid)", lambda: _brazil_leg(price_data, currency_data)),
-        ("Argentina up-river (FOB)", _argentina_leg),
-    ):
+    loaders = {
+        "US Gulf": _gulf_leg,
+        "Brazil Paranaguá": lambda: _brazil_leg(price_data, currency_data),
+        "Argentina up-river": _argentina_leg,
+    }
+    legs: list[tuple[str, str, float, str]] = []
+    for origin, term in _LEGS:
         try:
-            leg = loader()
+            leg = loaders[origin]()
         except Exception as exc:
-            logger.debug("FOB board leg %s failed: %s", label, exc)
+            logger.debug("Cross-origin leg %s failed: %s", origin, exc)
             leg = None
         if leg is not None:
-            legs[label] = leg
+            legs.append((origin, term, *leg))
 
     if len(legs) < 2:
-        return "CROSS-ORIGIN FOB BOARD: Insufficient data"
+        return "CROSS-ORIGIN PORT LEVELS: Insufficient data"
 
-    lines = ["CROSS-ORIGIN FOB BOARD (Soybeans, USD/MT):"]
-    for label, (price, when) in legs.items():
-        lines.append(f"  {label + ':':<27} ${price:,.1f}/MT  ({when})")
-
-    cheapest = min(legs.items(), key=lambda kv: kv[1][0])
-    others = [v[0] for k, v in legs.items() if k != cheapest[0]]
-    edge = min(others) - cheapest[1][0]
+    lines = ["CROSS-ORIGIN PORT LEVELS (Soybeans, USD/MT, each on its own delivery term):"]
+    for origin, term, price, when in legs:
+        lines.append(f"  {origin + ':':<20} ${price:,.1f}/MT  {term:<20} ({when})")
+    terms = "; ".join(term for _, term, _, _ in legs)
     lines.append(
-        f"  Cheapest origin: {cheapest[0].split(' (')[0]} — ${edge:,.1f}/MT under next"
-    )
-    lines.append(
-        "  (Gulf leg is a CIF barge bid pre-elevation; Brazil is an on-truck port bid "
-        "pre-elevation; only Argentina is FOB vessel — directional comparison, not an "
-        "Incoterm-identical quote)"
+        f"  Ranking withheld: {len(legs)} delivery terms ({terms}), and no costed path "
+        "from each to FOB vessel is applied here, so the gap between them is barge "
+        "elevation and port margin as much as market. The origins page ranks only "
+        "legs bridged to FOB vessel."
     )
     return "\n".join(lines)
