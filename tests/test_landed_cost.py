@@ -331,6 +331,13 @@ def test_cif_barge_owes_an_elevation():
     assert bridge_components("CIF", "barge") == (CostComponent.ELEVATION,)
 
 
+def test_a_port_bid_delivered_on_truck_owes_the_port_margin_to_reach_fob_vessel():
+    """B21 #483: AgRural's Paranaguá level is a "sobre rodas" bid — beans on a
+    truck at the terminal gate. Unloading, elevation and the terminal's margin
+    still sit between it and FOB vessel; inland freight does not."""
+    assert bridge_components("DAP", "truck") == (CostComponent.ORIGIN_PORT_COSTS,)
+
+
 def test_an_unknown_delivery_term_blocks_rather_than_being_treated_as_free():
     result = compute_landed_cost(
         _quote(GULF, 466.19, incoterm=Incoterm.DDP, carrier=Carrier.RAIL),

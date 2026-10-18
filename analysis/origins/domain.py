@@ -14,7 +14,7 @@ sourced from four venues in three currencies; the one failure mode that would
 never be caught in review is a clean-looking total whose terms were not the
 same animal.
 
-**An incoterm is part of the price.** A CIF NOLA barge bid and a Paranaguá FOB
+**An incoterm is part of the price.** A CIF NOLA barge bid and an Up-river FOB
 vessel offer are not comparable numbers, and the difference is roughly the cost
 of elevating grain from a barge into a vessel — a real, non-zero, *unpublished*
 figure. So a quote carries its incoterm and its carrier, and turning one into
@@ -73,7 +73,7 @@ class Incoterm(str, Enum):
     FOB = "FOB"    # free on board — over the rail at the origin port
     CFR = "CFR"    # cost and freight — ocean freight included, no insurance
     CIF = "CIF"    # cost, insurance and freight — to the named destination
-    DAP = "DAP"    # delivered at place — duty NOT paid
+    DAP = "DAP"    # delivered at place — duty NOT paid; also on-truck at a port gate
     DDP = "DDP"    # delivered duty paid
 
 
@@ -403,8 +403,8 @@ class SourceRef:
 class ContractRef:
     """The board contract a physical price is hedged or quoted against.
 
-    AMS report 3147 names one (``futures_month``); a Paranaguá FOB assessment
-    does not. ``None`` is therefore a real answer and means "this price has no
+    AMS report 3147 names one (``futures_month``); the AgRural Paranaguá port
+    bid does not. ``None`` is therefore a real answer and means "this price has no
     stated hedge leg", which is different from "we did not look".
     """
 

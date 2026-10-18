@@ -20,6 +20,18 @@
   expires_on: 2027-12-31
   confidence: indicative
 
+- id: fixture.origin_port_costs.br_paranagua
+  component: origin_port_costs
+  value: 11.0
+  unit: usd_per_mt
+  origin: br_paranagua
+  basis: FIXTURE — invented on-truck-to-vessel terminal margin, not a quote
+  source: fixture
+  entered_by: fixture
+  entered_at: 2026-08-01
+  expires_on: 2027-12-31
+  confidence: indicative
+
 - id: fixture.ocean_freight.us_gulf
   component: ocean_freight
   value: 52.0

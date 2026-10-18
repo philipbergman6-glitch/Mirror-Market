@@ -146,7 +146,7 @@ PRODUCTION_LAYERS = (
     ("india_domestic", "16", "Agmarknet 2.0", "Daily", "MP and Maharashtra mandi soy"),
     ("cepea", "17", "CEPEA via Notícias Agrícolas", "Daily", "Brazil soy indicators"),
     ("safex", "18", "JSE SAFEX via Grain SA", "Daily", "South Africa soy futures"),
-    ("agrural", "19", "AgRural", "Daily", "Paranaguá FOB soy"),
+    ("agrural", "19", "AgRural", "Daily", "Paranaguá port soy bid"),
     ("gulf_bids", "20", "USDA AMS", "Daily", "CIF NOLA Gulf bids"),
     ("magyp_fob", "21", "Argentina MAGyP", "Daily", "Official FOB beans, oil and meal"),
     ("ec_oilseeds", "22", "European Commission", "Weekly", "EU Moselle rapeseed FOB"),
@@ -1595,7 +1595,7 @@ MANDI_STATES = {
 # ---------------------------------------------------------------------------
 # Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
 # Farm-gate reference indicator for Paraná state in BRL per 60kg bag.
-# This is NOT the Paranaguá port FOB — see Layer 19 (AgRural) for that.
+# This is NOT the Paranaguá port bid — see Layer 19 (AgRural) for that.
 # ---------------------------------------------------------------------------
 CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
 CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
@@ -1612,7 +1612,7 @@ NOTICIAS_AGRICOLAS_URLS = {
         "https://www.noticiasagricolas.com.br/cotacoes/soja/"
         "indicador-cepea-esalq-soja-parana"
     ),
-    # ESALQ/B3 Paranaguá — port-side indicator, cross-check for AgRural FOB
+    # ESALQ/B3 Paranaguá — port-side indicator, cross-check for the AgRural port bid
     "Soybean (ESALQ/B3 Paranaguá)": (
         "https://www.noticiasagricolas.com.br/cotacoes/soja/"
         "soja-indicador-cepea-esalq-porto-paranagua"
@@ -1880,9 +1880,12 @@ SAFEX_COMMODITIES = (
 )
 
 # ---------------------------------------------------------------------------
-# Layer 19 — AgRural Paranaguá FOB soy quote (free, no API key)
+# Layer 19 — AgRural Paranaguá port soy bid (free, no API key)
 # Trade-convention Brazil basis benchmark: daily Paranaguá port buy price
-# in BRL per 60kg bag, converted to BRL/MT downstream.
+# in BRL per 60kg bag, converted to BRL/MT downstream. It is a "sobre rodas"
+# bid (beans on truck at the terminal), not an FOB-vessel level, and no
+# publisher of record exists for a Paranaguá FOB premium (B21 #483). The
+# commodity key below keeps its historical "FOB" so stored history continues.
 #
 # Publication disposition (CONTEXT.md): ``open``. AgRural's footer forbids
 # table reproduction, and the owner decided (A18 #468, 2026-10-13) to keep
@@ -2287,7 +2290,7 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # last week's number forever, which is exactly what the budget catches.
     # Long weekend plus a holiday, like the exchange legs (A3 #300 §7).
     "cepea": 7,       # CEPEA/ESALQ indicators via Notícias Agrícolas
-    "agrural": 7,     # AgRural Paranaguá FOB
+    "agrural": 7,     # AgRural Paranaguá port bid
     "gulf_bids": 7,   # AMS 3147 Gulf export bids (daily PDF)
     # MAGyP publishes the official FOB daily but posts it with an official
     # lag of several working days, and skips Argentine holidays; 14 is that
@@ -2658,7 +2661,7 @@ QUARANTINE_CONFIRMATION_TOLERANCE = 0.001
 # number a trader can work only where trade actually connects the two legs;
 # India's mandi bean prints +66% over CBOT because GM imports are banned
 # behind a tariff wall, and there is no cargo that closes it. Rendering that
-# beside Paranaguá FOB with the same treatment invites a trade that cannot be
+# beside the Paranaguá port bid with the same treatment invites a trade that cannot be
 # taken. `policy_blocked` therefore *requires* a `caveat` — enforced at load in
 # app/markets.py, so the spread cannot ship unlabelled.
 # ---------------------------------------------------------------------------
@@ -2828,7 +2831,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "brazil": {
         "name": "Brazil",
-        "venue": "CEPEA/ESALQ Paraná · Paranaguá FOB",
+        "venue": "CEPEA/ESALQ Paraná · Paranaguá port bid",
         "home_currency": "BRL",
         "currency_pair": "BRL/USD",
         "price": {
@@ -2857,7 +2860,7 @@ MARKETS: dict[str, dict[str, Any]] = {
             "key_column": "commodity",
             "keys": ["Soybean (AgRural Paranaguá FOB)"],
             "reference": "cbot",
-            "label": "Paranaguá FOB over CBOT",
+            "label": "Paranaguá port bid over CBOT",
             "quote_kind": "physical",
             "value_column": "price_brl",
             "unit": "home_per_mt",
@@ -3209,7 +3212,7 @@ LEDGER_LEGS = {
         "market": "brazil",
         "block": "basis",
         "key": "Soybean (AgRural Paranaguá FOB)",
-        "label": "Brazil Paranaguá FOB",
+        "label": "Brazil Paranaguá port bid",
     },
     "argentina:fob": {
         "market": "argentina",
@@ -3602,15 +3605,22 @@ ORIGIN_LEGS: dict[str, dict[str, Any]] = {
     },
     "br_paranagua": {
         "port": "br_paranagua",
-        "label": "Brazil Paranaguá FOB",
-        "incoterm": "FOB",
-        "carrier": "vessel",
+        "label": "Brazil Paranaguá port bid (on truck)",
+        # B21 #483: AgRural publishes a R$/60 kg "sobre rodas" port bid — beans
+        # delivered on a truck at the Paranaguá terminal, ready for unloading.
+        # That is DAP truck in Incoterms 2020, not FOB vessel: unloading,
+        # elevation and the terminal's margin still sit between it and a loaded
+        # vessel, and no publisher of record prices that gap. The storage key
+        # keeps its historical "FOB" so stored history continues; it is an id,
+        # never a label.
+        "incoterm": "DAP",
+        "carrier": "truck",
         "market": "brazil",
         "block": "basis",
         "key": "Soybean (AgRural Paranaguá FOB)",
-        # AgRural publishes a port-side FOB level with no shipment period
-        # attached. That absence is data: the row is priced, but it cannot be
-        # said to be priced FOR October, so it is never ranked against one.
+        # No shipment period is attached either. That absence is data: the row
+        # is priced, but it cannot be said to be priced FOR October, so it is
+        # never ranked against one.
         "window_scheme": "none",
         "grade": "Brazilian soybeans, contract standard",
         "hedge_exchange": "cbot",
@@ -3649,6 +3659,12 @@ INCOTERM_BRIDGE_TO_FOB_VESSEL = {
     # per tonne) and published nowhere free, so it is an entered assumption and
     # its absence blocks the US row rather than defaulting to zero.
     ("CIF", "barge"): ("elevation",),
+    # Delivered on truck at the port terminal ("sobre rodas", AgRural Paranaguá
+    # — B21 #483) -> loaded into an ocean vessel. Inland freight is already in
+    # the price; the unload/elevation/terminal margin is not, and no publisher
+    # of record prices it (same-day broker FOB premiums differ by 15-25 c/bu),
+    # so it is a desk entry and its absence withholds the Brazil row.
+    ("DAP", "truck"): ("origin_port_costs",),
     ("FCA", "truck"): ("inland_transport", "origin_port_costs"),
     ("FCA", "rail"): ("inland_transport", "origin_port_costs"),
     ("EXW", "gate"): ("inland_transport", "origin_port_costs"),
@@ -3914,8 +3930,8 @@ PHYSICAL_CRUSH: dict[str, dict[str, Any]] = {
         "label": "Paranaguá physical legs",
         "kind": "physical",
         "absent_reason": (
-            "the Paranaguá premium trio is an unbuilt scrape (M7 #149) — a bean FOB "
-            "level exists, the oil and meal cash quotes do not"
+            "the Paranaguá premium trio is an unbuilt scrape (M7 #149) — a bean port "
+            "bid exists, the oil and meal cash quotes do not"
         ),
         "missing_legs": ("oil", "meal"),
     },

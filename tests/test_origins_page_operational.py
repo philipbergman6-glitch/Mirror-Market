@@ -318,3 +318,37 @@ def test_an_fob_board_observed_days_apart_is_withheld_with_its_reason(db, comple
     assert "withheld" in fob.lower()
     assert "4 days apart" in fob
     assert "leads the next by" not in fob
+
+
+def test_the_brazil_row_is_withheld_with_the_missing_port_margin_named(db, complete):
+    """B21 #483: AgRural's level is an on-truck port bid, not FOB vessel.
+
+    With every post-FOB rung entered and only the truck-to-vessel port margin
+    absent, the page must withhold the Brazil total and say which rung is
+    missing — never read the bid as FOB and cost the cargo from there.
+    """
+    without_bridge = AssumptionSet(
+        assumptions=tuple(
+            item for item in complete.assumptions
+            if item.id != "fixture.origin_port_costs.br_paranagua"
+        ),
+        loaded_from=complete.loaded_from,
+    )
+    view = build_view(db, today=TODAY, assumptions=without_bridge)
+    default = next(v for v in view["views"] if v["is_default"])
+    brazil = next(
+        r for r in default["readiness"]["routes"] if r["leg_id"] == "br_paranagua"
+    )
+    assert brazil["is_ready"] is False
+    assert brazil["blocking"] == ["origin_port_costs"]
+    assert brazil["incoterm"] == "DAP truck"
+
+    row = next(r for r in default["decision"]["rows"] if r["origin_key"] == "br_paranagua")
+    assert row["landed_usd_mt"] is None
+    assert "FOB" not in row["label"]
+
+    soup = _render(view)
+    assert "Origin port costs are not entered for this route" in _section(soup, "decision")
+    readiness = _section(soup, "readiness")
+    assert "--component origin_port_costs" in readiness
+    assert "--origin br_paranagua" in readiness

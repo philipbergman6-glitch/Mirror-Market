@@ -61,8 +61,13 @@ def _assumption(component: str, value: float, unit: str, **kw) -> Assumption:
 
 
 def _complete_route(origin: str = "br_paranagua", **overrides) -> AssumptionSet:
-    """Every input one FOB-vessel leg into North China needs. Fixture values."""
+    """Every input the Paranaguá port-bid leg into North China needs. Fixture values.
+
+    Includes the port margin that bridges its on-truck bid to FOB vessel (B21 #483).
+    """
     return AssumptionSet(assumptions=(
+        _assumption("origin_port_costs", 12.0, "usd_per_mt",
+                    origin=origin, id=f"port.{origin}"),
         _assumption("ocean_freight", 44.0, "usd_per_mt",
                     origin=origin, destination="cn_north", id=f"freight.{origin}"),
         _assumption("marine_insurance", 0.0012, "fraction", destination="cn_north"),
@@ -205,14 +210,21 @@ def test_the_shipped_assumption_directory_validates():
 # ---------------------------------------------------------------------------
 # Readiness
 # ---------------------------------------------------------------------------
-def test_the_us_gulf_leg_needs_elevation_and_the_fob_legs_do_not():
-    """The bridge is derived from the delivery term, not listed per origin."""
+def test_each_leg_needs_the_bridge_its_own_delivery_term_owes():
+    """The bridge is derived from the delivery term, not listed per origin.
+
+    US Gulf is CIF barge (elevation); Paranaguá is an on-truck port bid that owes
+    the terminal margin (B21 #483); Argentina is already FOB vessel and owes nothing.
+    """
     gulf = required_components("us_gulf")
     brazil = required_components("br_paranagua")
+    argentina = required_components("ar_up_river")
     assert CostComponent.ELEVATION in gulf
     assert CostComponent.ELEVATION not in brazil
     assert gulf[0] is CostComponent.ELEVATION  # the bridge comes before the stack
-    assert brazil[0] is CostComponent.OCEAN_FREIGHT
+    assert brazil[0] is CostComponent.ORIGIN_PORT_COSTS
+    assert CostComponent.INLAND_TRANSPORT not in brazil  # already delivered to the port
+    assert argentina[0] is CostComponent.OCEAN_FREIGHT
 
 
 def test_all_three_supported_routes_are_declared_into_north_china():
