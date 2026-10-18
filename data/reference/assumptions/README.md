@@ -85,6 +85,12 @@ An **expired** assumption is never replaced by a wider one. If your
 `us_gulf → cn_north` freight lapses, the row blocks; it does not silently fall
 back to a global rate.
 
+**An origin-differentiated duty needs an origin-scoped entry** (B22 #485).
+Where `config.ORIGIN_DIFFERENTIATED_IMPORT_DUTY` lists the pair — today US
+origin into China — the destination's MFN `import_duty` is never selected for
+that origin. Only an entry naming the origin prices the duty rung; with none
+live, the row is withheld as `origin_duty_unmodelled`.
+
 ## Entering one
 
 ```bash
