@@ -60,7 +60,7 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # The usable_partial streak (A3 #300 §6): "three consecutive runs" is a
     # fact about previous runners, so it has to ride along with data_freshness.
     "layer_partial_streak": ("layer_name",),
-    # AgRural Paranaguá FOB (1 row/day, the Brazil basis source) + CEPEA
+    # AgRural Paranaguá port bid (1 row/day, the Brazil basis source) + CEPEA
     # via Notícias Agrícolas (~10 sessions deep — only recent self-heals).
     "brazil_spot_prices": ("Date", "commodity"),
     # Grain SA settlement page carries only the current session.

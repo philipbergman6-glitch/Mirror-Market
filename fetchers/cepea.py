@@ -7,9 +7,9 @@ this fetcher hits returns the standard CEPEA/ESALQ Soybean Indicator — a
 daily farm-gate reference price for **Paraná state** (the country's
 benchmark soy origin), quoted in BRL per 60kg bag.
 
-This is NOT the Paranaguá port FOB/CIF premium. CEPEA publishes a separate
-Paranaguá indicator with port-specific pricing; a future fetcher (AgRural
-or CEPEA Paranaguá) will add that as a parallel layer.
+This is NOT a Paranaguá port price. The port leg is Layer 19 (AgRural), an
+on-truck "sobre rodas" port bid — not FOB vessel (B21 #483); CEPEA's separate
+Paranaguá indicator is not fetched.
 
 Why it matters:
     Brazilian farm-gate prices drive planting decisions. When BRL weakens,

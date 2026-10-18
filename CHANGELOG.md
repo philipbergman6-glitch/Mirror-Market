@@ -4,6 +4,20 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the briefing stops ranking mixed delivery terms (2026-10-18)
+
+**B27 #501.** Three residues of B21 #483. The briefing section that printed
+"CROSS-ORIGIN FOB BOARD … Cheapest origin" over a CIF-barge bid, an on-truck
+port bid and an official FOB-vessel price is now "CROSS-ORIGIN PORT LEVELS":
+each row names its own delivery term inline, and the ranking is withheld
+with the reason the origins page uses — no costed path from each term to FOB
+vessel. The trust contract for AgRural is renamed "on-truck port bid" with
+`price_type` `physical-port-bid` and rule id `coverage.paranagua`; its
+dataset key `paranagua-soybean-fob` and the storage key
+`Soybean (AgRural Paranaguá FOB)` stay until one deploy-side history
+migration moves them together. Stale "Paranaguá FOB" docstrings and fixture
+labels fixed. Tests: 4 new (3 briefing, 1 registry).
+
 ## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
 
 **B21 #483.** AgRural's Paranaguá number is a gross R$/60 kg *Compra* the
