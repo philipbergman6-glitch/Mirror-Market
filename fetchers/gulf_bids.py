@@ -4,7 +4,7 @@ Layer 20 — US Gulf export basis bids (USDA AMS report 3147).
 The daily "Louisiana and Texas Export Bids" report carries CIF Gulf
 (NOLA barge-delivered) export-elevator bids for soybeans, corn, and
 wheat — the standard US-origin price basis a physical buyer compares
-against Brazil Paranaguá FOB. Published as a PDF (prelim ~midday,
+against Brazil Paranaguá. Published as a PDF (prelim ~midday,
 Final later), keyless:
 
     https://www.ams.usda.gov/mnreports/ams_3147.pdf

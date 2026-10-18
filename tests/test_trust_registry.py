@@ -283,3 +283,19 @@ def test_validation_policy_records_whether_empty_publication_is_permitted() -> N
     assert required.allows_empty_publication is False
     assert optional.allows_empty_publication is True
     assert ValidationPolicy.from_dict(optional.to_dict()) == optional
+
+
+def test_the_agrural_contract_never_calls_the_paranagua_bid_fob() -> None:
+    """B27 #501: AgRural publishes a "sobre rodas" port bid, not FOB vessel (B21 #483).
+
+    The contract's own vocabulary is invariant 3's vocabulary, so neither its
+    name, its price_type nor its rule ids may assert a delivery term the source
+    does not publish. The dataset *key* keeps its historical spelling: it is a
+    stored identity, renamed only together with the storage key by one
+    deploy-side history migration.
+    """
+    contract = PILOT_REGISTRY.dataset_by_key("agrural", "paranagua-soybean-fob")
+    assert contract.identity is not None and contract.validation is not None
+    assert contract.identity.fixed_fields["price_type"] == "physical-port-bid"
+    assert "fob" not in contract.dataset.name.lower()
+    assert not any("fob" in rule for rule in contract.validation.rule_ids)

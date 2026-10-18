@@ -11,7 +11,7 @@ Why it matters:
     exporter. The official FOB is the reference price the export tax
     (derechos de exportación) is levied on, so it tracks the up-river
     (Rosario/San Lorenzo) export market a physical buyer would compare
-    against Paranaguá FOB and Gulf CIF.
+    against the Paranaguá port bid and Gulf CIF.
 
     The same circular carries **crude sunflower oil** (#162), which is
     Argentina's contribution to the four-oil veg-oil board: no exchange

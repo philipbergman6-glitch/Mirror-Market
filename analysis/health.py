@@ -293,14 +293,14 @@ def _check_india_domestic() -> list[dict]:
 def _check_brazil_spot() -> list[dict]:
     """Check Brazil domestic soy prices for freshness (daily = >2 days stale).
 
-    Expectations are AgRural Paranaguá FOB plus the CEPEA indicators
+    Expectations are the AgRural Paranaguá port bid plus the CEPEA indicators
     (re-enabled 2026-07-30 via Notícias Agrícolas — see main.py Layer 17);
     both layers write to brazil_spot_prices. The CONAB farmgate series
     (Layer 15b) also lives there but is weekly — the daily staleness
     threshold would flag it constantly, so it is stale-exempt.
     """
     from config import AGRURAL_COMMODITIES, CEPEA_COMMODITIES, CONAB_FARMGATE_SERIES
-    # TODO Phase 2.1: also flag when Paranaguá FOB (AgRural) vs CEPEA Paraná
+    # TODO Phase 2.1: also flag when the Paranaguá port bid (AgRural) vs CEPEA Paraná
     # diverges beyond the historical port-vs-farm wedge band — a structural break
     # there is a stronger trade signal than either source's absolute freshness.
     return _check_table_freshness(
