@@ -12,25 +12,31 @@ name: Refresh Prices
 # GitHub's observed scheduler delay. That window straddles two closes it
 # cannot reliably be on the right side of:
 #
-#   FX          the bar labelled D closes 17:00 New York = 21:00 UTC in EDT,
-#               22:00 UTC in EST. A build landing at 20:30 gets D-1 FX, and
-#               correctly so — the settlement guard drops the open bar.
+#   FX          the bar labelled D is the London day D and closes at London
+#               midnight = 23:00 UTC in BST, 00:00 UTC in GMT (B20 #482; it
+#               was first read as a 17:00 New York session, 21:00/22:00 UTC).
+#               A build landing before that gets D-1 FX, and correctly so —
+#               the settlement guard drops the open bar.
 #   CEPEA       publishes day D's indicator after 21:01 UTC.
 #
 # So the single daily build publishes FX and the Brazilian physical leg a day
-# behind on any early landing. This run exists to close the FX half of that
-# gap: 20:07 UTC nominal. The scheduler delay on this slot, measured over the
-# thirteen runs of 2026-09-11 to 2026-09-29, was +1h54 to +3h35, so it lands
-# 22:01-23:42 UTC — past the FX close on both sides of US DST, and a backstop
-# for the board if the daily build landed early or failed.
+# behind on any early landing. This run was scheduled to close the FX half of
+# that gap: 20:07 UTC nominal. The scheduler delay on this slot, measured over
+# the thirteen runs of 2026-09-11 to 2026-09-29, was +1h54 to +3h35, so it
+# lands 22:01-23:42 UTC — a backstop for the board if the daily build landed
+# early or failed. Against the London close it is only sometimes past it in
+# BST and never in GMT, so FX day D now arrives on the 23:30 catch-up, which
+# lands 01:11-02:38 UTC, past the London close in both seasons.
 #
 # 20:07 is a two-sided choice and the window is narrow. The board objective
 # is six hours from an 18:15 UTC settlement, so the fetch must land by 00:15
-# UTC (01:15 in EST); FX needs it after 21:00 UTC (22:00 in EST). The slot
+# UTC (01:15 in EST). FX cannot share that deadline: its close is 23:00 or
+# 00:00 UTC, so no single slot both meets the board objective and lands past
+# the FX close on every day. The slot
 # was 21:30 until 2026-09-30: the delay grew from about +2h15 to +3h35 and
 # +3h07 on 2026-09-28/29, both runs landed after 00:15, and both went red on
 # a board breach after a deploy that had succeeded. 83 minutes earlier puts
-# the worst observed delay at 23:42. An early landing (before the FX close)
+# the worst observed delay at 23:42. A landing before the FX close
 # publishes D-1 FX, correctly, and the 23:30 catch-up picks FX up. The
 # off-the-hour minute is deliberate: GitHub names the start of every hour as
 # its highest-load, most-delayed moment.
@@ -70,10 +76,11 @@ name: Refresh Prices
 #               daily endpoint was observed NOT to emit a next-trade-date
 #               row from the 21:00 CST night session (probed 2026-08-19), so
 #               a late landing is a breach risk, not a bad-data risk.
-#   20:07 UTC — the FX/board refresh described above.
-#   23:30 UTC — a catch-up. The gates make a redundant run a safe no-op, so
-#               this exists purely to give FX and the board a second shot on
-#               a day the 20:07 run failed or landed absurdly late.
+#   20:07 UTC — the board refresh described above; usually D-1 FX.
+#   23:30 UTC — the FX slot, and a catch-up for the board. It lands past the
+#               London close in both seasons, so it is where FX day D first
+#               arrives, and the board gets a second shot on a day the 20:07
+#               run failed or landed absurdly late.
 #
 # It deliberately does NOT re-scrape the physical origin legs. Those are
 # scrapers against unfriendly upstreams and doubling their request rate
@@ -166,16 +173,27 @@ jobs:
           if [[ -n "$LAYERS" ]]; then
             GATE="$LAYERS"
           elif [[ "${{ github.event.schedule }}" == "30 23 * * 1-5" ]]; then
-            # The catch-up slot publishes; it does not prove latency. CBOT
-            # settles 18:15 UTC and the board objective is six hours, so a
-            # 23:30 cron that lands after 00:15 UTC — every observed run,
+            # The catch-up slot does not prove board latency. CBOT settles
+            # 18:15 UTC and the board objective is six hours, so a 23:30
+            # cron that lands after 00:15 UTC — every observed run,
             # 2026-09-05 to 2026-09-29 landed 01:11-02:38 — breaches by
             # construction, after the deploy has already succeeded. A red
             # that cannot be green is a red nobody reads (#176). The report
-            # still prints; only the exit code is ungated.
-            GATE=""
+            # still prints for the board; only its exit code is ungated.
+            #
+            # It is, though, the slot that proves FX: the London-day bar
+            # closes 23:00 UTC (BST) / 00:00 UTC (GMT), so this landing is
+            # 1h11m-3h38m after it against a 6h objective (B20 #482). A
+            # start delayed past that objective is the scheduler, as on the
+            # 20:07 slot, and reported as LATE START rather than failed.
+            GATE="currencies"
+            LATE_START_OK=true
           else
-            GATE="prices,currencies,forward_curve"
+            # FX is not gated here: this slot lands before the London close
+            # in GMT every day and in BST on most, so it holds D-1 FX by
+            # design, and gating it would report a 22-24h acquisition as a
+            # scheduler-late start every day (B20 #482).
+            GATE="prices,forward_curve"
             # The 20:07 slot is the one whose start delay alone decides the
             # board verdict: +1h54 to +3h35 measured, against a fetch that has
             # to land by 00:15 UTC. Runs that started after that deadline

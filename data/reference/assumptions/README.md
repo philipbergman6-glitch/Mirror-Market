@@ -40,8 +40,8 @@ do not enter one. The blocked state is a correct answer.
 
 ## Fields
 
-Every field below is required except `origin`, `destination`, `window`, `days`
-and `citation`. A missing required field fails the load — a silently skipped
+Every field below is required except `origin`, `destination`, `window`, `days`,
+`citation` and `caveat`. A missing required field fails the load — a silently skipped
 assumption file is the same failure as an expired one with better manners.
 
 ```yaml
@@ -62,6 +62,7 @@ assumption file is the same failure as an expired one with better manners.
   expires_on: 2026-09-17                          # HARD stop; past this the row blocks again
   confidence: indicative                          # indicative | administered | provisional
   citation: "optional URL or document reference"
+  caveat: "optional; printed beside the rate on its waterfall rung"
 ```
 
 ### Units are checked against the component
@@ -84,6 +85,12 @@ component is an error, not a tie-break — one of them is stale, so retire it.
 An **expired** assumption is never replaced by a wider one. If your
 `us_gulf → cn_north` freight lapses, the row blocks; it does not silently fall
 back to a global rate.
+
+**An origin-differentiated duty needs an origin-scoped entry** (B22 #485).
+Where `config.ORIGIN_DIFFERENTIATED_IMPORT_DUTY` lists the pair — today US
+origin into China — the destination's MFN `import_duty` is never selected for
+that origin. Only an entry naming the origin prices the duty rung; with none
+live, the row is withheld as `origin_duty_unmodelled`.
 
 ## Entering one
 

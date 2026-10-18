@@ -188,6 +188,8 @@ def _step(
     amount, basis, rate = _apply(component, assumption, running)
     if override is not None:
         basis = f"{basis} [scenario override of {assumption.id}]"
+    if assumption.caveat:
+        basis = f"{basis} — {assumption.caveat}"
     return WaterfallStep(
         component=component,
         label=COMPONENT_LABELS[component],

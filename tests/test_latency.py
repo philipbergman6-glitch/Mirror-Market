@@ -108,6 +108,31 @@ def test_observation_clock_resolves_a_session_close():
     assert instant.astimezone(UTC) == datetime(2026, 8, 18, 18, 15, tzinfo=UTC)
 
 
+def test_fx_observation_is_the_end_of_the_london_day_it_is_labelled_with():
+    """B20 #482: the FX bar labelled D closes at London midnight ending D —
+    23:00 UTC in BST, 00:00 UTC the next day in GMT — not 17:00 New York."""
+    fx = LAYER_LATENCY_BY_KEY["currencies"].clock
+    summer = fx.instant(datetime(2026, 10, 13).date())
+    winter = fx.instant(datetime(2026, 12, 3).date())
+    assert summer.astimezone(UTC) == datetime(2026, 10, 13, 23, 0, tzinfo=UTC)
+    assert winter.astimezone(UTC) == datetime(2026, 12, 4, 0, 0, tzinfo=UTC)
+    # The inverse maps the instant back to its own session, not the next day.
+    assert fx.session_of(summer) == datetime(2026, 10, 13).date()
+    assert fx.session_of(winter) == datetime(2026, 12, 3).date()
+
+
+def test_fx_age_and_settlement_guard_share_one_close():
+    """The age clock and the guard read the same constants: at the instant the
+    observation clock says D closed, the guard first lets D through."""
+    from fetchers._settlement import FX_SESSION
+
+    fx = LAYER_LATENCY_BY_KEY["currencies"].clock
+    for day in (datetime(2026, 10, 13).date(), datetime(2026, 12, 3).date()):
+        close = fx.instant(day)
+        assert FX_SESSION.last_settled_session(close) == day
+        assert FX_SESSION.last_settled_session(close - timedelta(minutes=1)) < day
+
+
 @pytest.mark.parametrize(
     "delta,expected",
     [

@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pandas as pd
@@ -47,10 +47,10 @@ from trust.fx_ingestion import (
 )
 from trust.registry import RawRetention
 
-# 17:00 New York ends the FX bar Yahoo labels with that day's date; in August
-# that is 21:00 UTC. 2026-08-13 is a Thursday.
+# London midnight ends the FX bar Yahoo labels with that London day's date
+# (B20 #482); in August (BST) that is 23:00 UTC. 2026-08-13 is a Thursday.
 BEFORE_FX_CLOSE = datetime(2026, 8, 13, 19, 0, tzinfo=timezone.utc)
-AFTER_FX_CLOSE = datetime(2026, 8, 13, 22, 0, tzinfo=timezone.utc)
+AFTER_FX_CLOSE = datetime(2026, 8, 13, 23, 30, tzinfo=timezone.utc)
 SESSION = date(2026, 8, 12)
 
 
@@ -364,7 +364,7 @@ def test_an_extreme_move_quarantines_and_leaves_the_prior_session_accepted(tmp_p
         ],
         # A later run: two collection cycles are two runs, and a repository
         # that let them share a run id would be losing one of them.
-        ingested_at=AFTER_FX_CLOSE.replace(hour=23),
+        ingested_at=AFTER_FX_CLOSE + timedelta(minutes=20),
     )
 
     frame = trusted_currency_frame(store, "BRL/USD")

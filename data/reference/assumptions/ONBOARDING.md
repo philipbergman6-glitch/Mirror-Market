@@ -56,7 +56,7 @@ value, so the sequence is part of the arithmetic.
 |---|---|---|---|---|
 | 1 | `ocean_freight` | `usd_per_mt` | origin **and** destination | The voyage rate for that exact leg. Per route — the US Gulf and Paranaguá voyages to North China are different distances, and the difference between them is routinely larger than the FOB spread being compared. |
 | 2 | `marine_insurance` | `fraction` | destination | Cargo insurance as a fraction of the CFR value (`0.0012` = 0.12%). |
-| 3 | `import_duty` | `fraction` | destination | Ad-valorem duty on the CIF value. **Shipped** for `cn_north` as a published policy rate — see `china_import_policy.yml`, and enter an *origin-scoped* entry if a retaliatory rate is in force rather than editing the MFN one. |
+| 3 | `import_duty` | `fraction` | destination — **plus origin** where the destination charges that origin a differentiated rate | Ad-valorem duty on the CIF value. **Shipped** for `cn_north` as a published policy rate — see `china_import_policy.yml`. For a pair in `config.ORIGIN_DIFFERENTIATED_IMPORT_DUTY` (today US → China) the MFN entry is never used: only an *origin-scoped* entry prices the leg, and without a live one the row is withheld as `origin_duty_unmodelled`. Enter or renew that origin-scoped entry; never edit the MFN one. |
 | 4 | `import_vat` | `fraction` | destination | VAT on the duty-paid value. **Shipped** for `cn_north` on the same terms. |
 | 5 | `destination_port_costs` | `usd_per_mt` | destination | Discharge, handling and storage at the destination range. |
 | 6 | `financing` | `rate_per_annum` **+ `--days`** | destination | Your cost of carry and the period it runs over. There is no market-wide number here — the rate and the days are yours. |

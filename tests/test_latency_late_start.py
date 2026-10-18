@@ -43,6 +43,16 @@ def test_missing_stamps_never_excuse():
     assert started_after_objective(PRICES, SETTLED_OCT_8, None) is False
 
 
+def test_an_fx_bar_closing_at_london_midnight_is_its_own_session():
+    """B20 #482: FX day D closes at 00:00 London on D+1, so the observation
+    instant's local date is D+1. Read as the session, it never matched the
+    newest session and a genuine late start was never recognised."""
+    fx = LAYER_LATENCY_BY_KEY["currencies"]
+    closed_dec_3 = datetime(2026, 12, 4, 0, 0, tzinfo=UTC)   # London day 12-03 ends
+    late = datetime(2026, 12, 4, 6, 30, tzinfo=UTC)          # 6h30m later
+    assert started_after_objective(fx, closed_dec_3, late) is True
+
+
 def test_a_day_granular_clock_never_excuses():
     """No session close to measure from means no proof of a late start."""
     cot = LAYER_LATENCY_BY_KEY["cot"]

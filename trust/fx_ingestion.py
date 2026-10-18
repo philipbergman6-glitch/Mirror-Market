@@ -22,7 +22,7 @@ that dropped it — a one-row divergence on every pre-cutoff run, every day. A
 job that cries wolf daily is worse than no job.
 
 So this adapter applies the same time-based cutoff v1 applies, by importing
-:data:`fetchers._settlement.FX_SESSION` rather than restating the rollover.
+:data:`fetchers._settlement.FX_SESSION` rather than restating the close.
 Two definitions of "finished" that can drift apart is exactly the duplication
 the trusted path exists to remove. What it does *not* do is silently forget:
 the dropped session is recorded as a ``fx.session-unfinished`` Finding at

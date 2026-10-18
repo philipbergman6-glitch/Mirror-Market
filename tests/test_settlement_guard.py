@@ -21,6 +21,7 @@ import pytest
 from fetchers._settlement import (
     EXCHANGE_SESSION,
     FX_SESSION,
+    SessionRule,
     drop_unsettled_session,
     session_is_settled,
 )
@@ -141,9 +142,9 @@ def test_session_is_settled(now, expected):
 def test_fx_bar_opened_at_the_ny_close_is_not_a_close():
     """The live 2026-08-19 defect, pinned.
 
-    At 03:45 UTC on 2026-08-19 (22:45 Chicago, 23:45 New York) yfinance
+    At 03:45 UTC on 2026-08-19 (22:45 Chicago, 04:45 London) yfinance
     returned a BRL=X bar labelled 2026-08-19 whose High equalled its Open and
-    Low equalled its Close — an FX day under four hours old. Chicago was past
+    Low equalled its Close — an FX day under five hours old. Chicago was past
     14:30, so the exchange rule declared everything settled and it was stored
     as that day's FX close.
     """
@@ -154,34 +155,72 @@ def test_fx_bar_opened_at_the_ny_close_is_not_a_close():
     assert list(kept.index.strftime("%Y-%m-%d")) == ["2026-08-17", "2026-08-18"]
 
 
-def test_fx_bar_is_complete_once_the_ny_close_has_passed():
-    """18:00 New York on D: the bar labelled D closed an hour ago."""
-    now = datetime(2026, 8, 19, 22, 0, tzinfo=timezone.utc)  # 18:00 EDT
-    df = _frame(["2026-08-18", "2026-08-19"])
+# B20 (#482). Yahoo's FX daily bar is a London calendar day: the chart API
+# reports exchangeTimezoneName Europe/London, a regular period of
+# 00:00-23:59 London, and stamps each bar at 00:00 London — 23:00 UTC in BST.
+# yfinance hands the bar over labelled with that London date (2026-10-12T23:00Z
+# arrives as 2026-10-13; measured 2026-10-18 for BRL/ZAR/CNY/INR), either
+# naive or as a Europe/London-aware midnight. Both forms are pinned.
+
+
+def _london_day_frame(dates: list[str], aware: bool) -> pd.DataFrame:
+    df = _frame(dates)
+    if aware:
+        df.index = df.index.tz_localize("Europe/London")
+    return df
+
+
+@pytest.mark.parametrize("aware", [False, True], ids=["naive", "london-aware"])
+def test_fx_bar_stamped_23z_is_open_at_22z_in_bst(aware):
+    """Ticket fixture, summer: the 2026-10-12T23:00Z bar is London day 10-13,
+    which ends 23:00 UTC on 10-13. At 22:00 UTC it has an hour to run."""
+    df = _london_day_frame(["2026-10-12", "2026-10-13"], aware)
+    now = datetime(2026, 10, 13, 22, 0, tzinfo=timezone.utc)  # 23:00 BST
+    out = drop_unsettled_session(df, label="BRLUSD=X", now=now, rule=FX_SESSION)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-10-12"]
+
+
+@pytest.mark.parametrize("aware", [False, True], ids=["naive", "london-aware"])
+def test_fx_bar_stamped_23z_is_closed_after_the_london_day_end_in_bst(aware):
+    df = _london_day_frame(["2026-10-12", "2026-10-13"], aware)
+    now = datetime(2026, 10, 13, 23, 0, tzinfo=timezone.utc)  # 00:00 BST on 10-14
     pdt.assert_frame_equal(drop_unsettled_session(df, now=now, rule=FX_SESSION), df)
 
 
-def test_fx_bar_is_still_open_at_1659_new_york():
-    """One minute before the roll, D's bar is still being written."""
-    now = datetime(2026, 8, 19, 20, 59, tzinfo=timezone.utc)  # 16:59 EDT
+@pytest.mark.parametrize("aware", [False, True], ids=["naive", "london-aware"])
+def test_fx_bar_is_open_until_utc_midnight_in_gmt(aware):
+    """Ticket fixture, winter: London day 12-03 ends 00:00 UTC on 12-04, so
+    both the 22:00 UTC clock and the 23:30 UTC catch-up cron still see it open."""
+    df = _london_day_frame(["2026-12-02", "2026-12-03"], aware)
+    for now in (
+        datetime(2026, 12, 3, 22, 0, tzinfo=timezone.utc),
+        datetime(2026, 12, 3, 23, 30, tzinfo=timezone.utc),
+    ):
+        out = drop_unsettled_session(df, now=now, rule=FX_SESSION)
+        assert list(out.index.strftime("%Y-%m-%d")) == ["2026-12-02"], now
+
+
+@pytest.mark.parametrize("aware", [False, True], ids=["naive", "london-aware"])
+def test_fx_bar_is_closed_after_the_london_day_end_in_gmt(aware):
+    df = _london_day_frame(["2026-12-02", "2026-12-03"], aware)
+    now = datetime(2026, 12, 4, 0, 0, tzinfo=timezone.utc)  # 00:00 GMT on 12-04
+    pdt.assert_frame_equal(drop_unsettled_session(df, now=now, rule=FX_SESSION), df)
+
+
+def test_fx_bar_is_still_open_after_the_new_york_rollover():
+    """The window the 17:00 New York rule leaked: 18:00 EDT is 23:00 BST.
+
+    The old rule kept this bar from 21:00 UTC; it has an hour left to run.
+    """
+    now = datetime(2026, 8, 19, 22, 0, tzinfo=timezone.utc)
     df = _frame(["2026-08-18", "2026-08-19"])
     out = drop_unsettled_session(df, now=now, rule=FX_SESSION)
     assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-18"]
 
 
-def test_fx_rule_follows_us_dst():
-    """21:30 UTC is past 17:00 New York in EDT but not in EST."""
-    df = _frame(["2026-12-03", "2026-12-04"])
-    winter = datetime(2026, 12, 4, 21, 30, tzinfo=timezone.utc)  # 16:30 EST
-    assert list(
-        drop_unsettled_session(df, now=winter, rule=FX_SESSION).index.strftime("%Y-%m-%d")
-    ) == ["2026-12-03"]
-
-    summer_df = _frame(["2026-08-18", "2026-08-19"])
-    summer = datetime(2026, 8, 19, 21, 30, tzinfo=timezone.utc)  # 17:30 EDT
-    pdt.assert_frame_equal(
-        drop_unsettled_session(summer_df, now=summer, rule=FX_SESSION), summer_df
-    )
+def test_session_rule_rejects_a_negative_close_day_offset():
+    with pytest.raises(ValueError, match="close_day_offset"):
+        SessionRule(name="bad", timezone="UTC", close_local=(0, 0), close_day_offset=-1)
 
 
 def test_futures_overnight_session_bar_is_dropped():
@@ -206,8 +245,8 @@ def test_weekend_run_touches_nothing():
 
 
 def test_sunday_fx_reopen_does_not_publish_mondays_open_bar():
-    """FX reopens 17:00 New York Sunday; the bar it starts is labelled Monday."""
-    now = datetime(2026, 8, 24, 1, 0, tzinfo=timezone.utc)  # 21:00 EDT Sunday
+    """FX reopens Sunday evening; the London-day bar it feeds is labelled Monday."""
+    now = datetime(2026, 8, 24, 1, 0, tzinfo=timezone.utc)  # 02:00 BST Monday
     df = _frame(["2026-08-21", "2026-08-24"])
     out = drop_unsettled_session(df, now=now, rule=FX_SESSION)
     assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-21"]

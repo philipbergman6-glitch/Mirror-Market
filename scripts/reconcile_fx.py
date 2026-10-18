@@ -195,7 +195,7 @@ def reconcile_once(
     session = _resolve_session(legacy_frames)
     if session is None:
         # Every pair empty means the provider published no finished session —
-        # a weekend, a holiday, or a run before the 17:00 New York rollover.
+        # a weekend, a holiday, or a run before the London-day FX close.
         # Grading that as a failure would fire the job every Saturday.
         log.info("Required FX: no finished session published for any pair")
         return ReconciliationRun(
@@ -282,7 +282,7 @@ def _v1_frame(pair: str, download, *, period: str, now: datetime) -> pd.DataFram
     ``drop_unsettled_session`` call, the same ``FX_SESSION`` rule — rather than
     a call to ``fetch_one`` itself, for one reason: the guard's clock has to be
     the *run's* instant. ``fetch_one`` reads the wall clock, so a run straddling
-    the 17:00 New York rollover would judge the two paths at two different
+    the London-day FX close would judge the two paths at two different
     moments and report the difference as a divergence. Nothing else about v1's
     policy is restated here; the rule and the drop are both imported.
     """

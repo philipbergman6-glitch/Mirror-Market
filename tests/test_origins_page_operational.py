@@ -172,6 +172,13 @@ def test_a_shared_input_is_rendered_as_unable_to_flip_rather_than_as_a_big_numbe
     assert all(m["move"] is None and m["reason"] for m in shared)
 
 
+def test_a_qualified_duty_rate_renders_with_its_caveat_on_the_waterfall(db, complete):
+    """B22 #485: the US-origin duty is conditional, and the rendered rung says so."""
+    view = build_view(db, today=TODAY, assumptions=complete)
+    waterfall = _section(_render(view), "waterfall")
+    assert "FIXTURE caveat — assumes a Section 301 exclusion" in waterfall
+
+
 def test_the_renewals_section_reports_a_clear_queue_when_nothing_lapses(db, complete):
     view = build_view(db, today=TODAY, assumptions=complete)
     renewals = next(s for s in view["sections"] if s["id"] == "renewals")
@@ -290,7 +297,7 @@ def test_synthetic_private_route_through_cost_ranking_sensitivity_and_hedge(db, 
     assert default["decision"]["window_start"] == "2026-09-01"
     assert gulf["incoterm"] == "CIF barge"
     assert gulf["grade"]
-    assert gulf["landed_usd_mt"] == pytest.approx(609.61, abs=0.3)
+    assert gulf["landed_usd_mt"] == pytest.approx(668.21, abs=0.3)  # US-origin duty, B22 #485
     components = {step["component"] for step in gulf["steps"]}
     assert {"elevation", "ocean_freight", "marine_insurance", "financing",
             "destination_port_costs", "quality_adjustment"} <= components
