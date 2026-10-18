@@ -1192,7 +1192,7 @@ def relative_value_analysis() -> dict:
     Returns dict with:
         crush: full crush spread DataFrame + current value
         basis: dict with keys primary (str), sources (per-source stats dict),
-            and wedge_usd_mt (Paranaguá FOB − CEPEA Paraná in USD/MT, None if
+            and wedge_usd_mt (Paranaguá port bid − CEPEA Paraná in USD/MT, None if
             only one source is available).
         oil_meal_ratio: soy oil / soy meal price ratio (tracks protein vs oil demand)
         oil_vs_palm: soybean oil vs palm oil comparison
@@ -1237,10 +1237,11 @@ def relative_value_analysis() -> dict:
         except Exception:
             logger.warning("Relative-value crush computation failed", exc_info=True)
 
-    # --- Brazil basis: AgRural Paranaguá FOB (primary) + CEPEA Paraná (secondary) ---
-    # Paranaguá port FOB is the export-relevant number; CEPEA Paraná farm-gate is the
-    # widely-cited reference. When both are available, the difference reveals how much
-    # margin the export chain is capturing between farm and port.
+    # --- Brazil basis: AgRural Paranaguá port bid (primary) + CEPEA Paraná (secondary) ---
+    # The Paranaguá port bid ("sobre rodas", not FOB vessel — B21 #483) is the
+    # export-relevant number; CEPEA Paraná farm-gate is the widely-cited reference.
+    # When both are available, the difference reveals how much margin the export
+    # chain is capturing between farm and port.
     brl_usd = currencies.get("BRL/USD")
     if (
         beans is not None and not beans.empty
@@ -1248,7 +1249,7 @@ def relative_value_analysis() -> dict:
     ):
         sources: dict[str, dict[str, Any]] = {}
         for label, commodity in (
-            ("Paranaguá FOB", "Soybean (AgRural Paranaguá FOB)"),
+            ("Paranaguá port bid", "Soybean (AgRural Paranaguá FOB)"),
             ("CEPEA Paraná", "Soybean (CEPEA)"),
         ):
             try:
@@ -1291,11 +1292,11 @@ def relative_value_analysis() -> dict:
             sources[label] = entry
 
         if sources:
-            primary = "Paranaguá FOB" if "Paranaguá FOB" in sources else "CEPEA Paraná"
+            primary = "Paranaguá port bid" if "Paranaguá port bid" in sources else "CEPEA Paraná"
             wedge = None
-            if "Paranaguá FOB" in sources and "CEPEA Paraná" in sources:
+            if "Paranaguá port bid" in sources and "CEPEA Paraná" in sources:
                 wedge = (
-                    sources["Paranaguá FOB"]["current_usd_mt"]
+                    sources["Paranaguá port bid"]["current_usd_mt"]
                     - sources["CEPEA Paraná"]["current_usd_mt"]
                 )
             result["basis"] = {
@@ -1910,7 +1911,7 @@ def emerging_markets_analysis() -> dict:
                                 (cepea_brl - farmgate_brl) / farmgate_brl * 100, 1
                             )
 
-                    # AgRural Paranaguá FOB — rendered as USD/MT basis (display
+                    # AgRural Paranaguá port bid — rendered as USD/MT basis (display
                     # choice; disposition is ``open``, see config.AGRURAL_PUBLICATION_DISPOSITION).
                     agrural_rows = brl_df[
                         brl_df["commodity"] == "Soybean (AgRural Paranaguá FOB)"

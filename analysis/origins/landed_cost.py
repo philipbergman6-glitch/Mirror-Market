@@ -39,12 +39,16 @@ in one place and carries a version.
 two complete ones is the single most dangerous artefact this module could
 produce, because it is cheaper than both of them and looks like a finding.
 
-Rung 2 has the same discipline for a subtler reason. A CIF-barge NOLA bid and a
-Paranaguá FOB offer differ by the cost of lifting grain out of a barge and into
+Rung 2 has the same discipline for a subtler reason. A CIF-barge NOLA bid and an
+FOB-vessel offer differ by the cost of lifting grain out of a barge and into
 a vessel. That number is real, it is tens of dollars a tonne, and it is
 published nowhere free. Defaulting it to zero would make the US origin look
 structurally cheapest, every single day, in the same direction — a bias that
-would survive review precisely because it never looks like an error.
+would survive review precisely because it never looks like an error. The
+Paranaguá leg owes the same kind of step: AgRural's level is a "sobre rodas"
+bid for beans on a truck at the terminal (DAP truck, B21 #483), so the port
+margin to a loaded vessel is an entered rung too, and its absence withholds
+the Brazil row rather than reading the bid as FOB.
 """
 
 from __future__ import annotations

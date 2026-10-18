@@ -14,7 +14,7 @@ from datetime import date
 import pytest
 
 import config
-from analysis.origins.assumptions import AssumptionSet
+from analysis.origins.assumptions import Assumption, AssumptionSet
 from analysis.origins.comparison import (
     build_ranking,
     default_window,
@@ -23,7 +23,15 @@ from analysis.origins.comparison import (
     fob_board_refusal,
     select_quote,
 )
-from analysis.origins.domain import Carrier, Freshness, Incoterm, Money, ShipmentWindow
+from analysis.origins.domain import (
+    Carrier,
+    Confidence,
+    CostComponent,
+    Freshness,
+    Incoterm,
+    Money,
+    ShipmentWindow,
+)
 from analysis.origins.sources import (
     offered_windows,
     parse_ams_slot,
@@ -394,3 +402,90 @@ def test_fob_quotes_observed_too_far_apart_refuse_the_board(db, monkeypatch):
     assert fob_advantage(ranking) == (None, None)
     reason = fob_board_refusal(ranking)
     assert reason is not None and "6 days apart" in reason
+
+
+# ---------------------------------------------------------------------------
+# The Brazil leg's delivery term (B21 #483)
+# ---------------------------------------------------------------------------
+def _desk(component: str, value: float, unit: str, **kw) -> Assumption:
+    return Assumption(
+        id=kw.pop("id", f"{component}.{kw.get('origin') or 'any'}"),
+        component=CostComponent(component),
+        value=value,
+        unit=unit,
+        basis="fixture",
+        source="test",
+        entered_by="tests@example.com",
+        entered_at=date(2026, 8, 1),
+        expires_on=date(2026, 12, 31),
+        confidence=Confidence.INDICATIVE,
+        **kw,
+    )
+
+
+def _brazil_stack_without_the_bridge() -> tuple[Assumption, ...]:
+    """Every post-FOB rung into North China for Paranaguá. Fixture values."""
+    return (
+        _desk("ocean_freight", 44.0, "usd_per_mt",
+              origin="br_paranagua", destination="cn_north"),
+        _desk("marine_insurance", 0.0012, "fraction", destination="cn_north"),
+        _desk("import_duty", 0.03, "fraction", destination="cn_north"),
+        _desk("import_vat", 0.09, "fraction", destination="cn_north"),
+        _desk("destination_port_costs", 6.0, "usd_per_mt", destination="cn_north"),
+        _desk("financing", 0.065, "rate_per_annum", destination="cn_north", days=45),
+        _desk("quality_adjustment", -3.0, "usd_per_mt",
+              origin="br_paranagua", destination="cn_north"),
+    )
+
+
+def test_the_brazil_leg_is_read_as_a_port_bid_on_truck_not_fob_vessel(db):
+    """AgRural publishes a "sobre rodas" port bid, not a vessel-loaded level."""
+    (quote,) = read_origin_quotes(db, "br_paranagua", today=TODAY)
+    assert quote.incoterm is Incoterm.DAP
+    assert quote.carrier is Carrier.TRUCK
+
+
+def test_the_brazil_landed_row_is_withheld_until_the_port_margin_is_entered(db):
+    """Every post-FOB rung entered, the bridge lapsed: no total, and the reason names it."""
+    ranking = build_ranking(
+        db, destination_key="cn_north", window=SEP, today=TODAY,
+        assumptions=AssumptionSet(_brazil_stack_without_the_bridge()),
+        leg_ids=("br_paranagua",),
+    )
+    (row,) = ranking.rows
+    assert row.landed is None
+    assert row.fob_equivalent is None
+    assert [blocker.component for blocker in row.blockers] == [CostComponent.ORIGIN_PORT_COSTS]
+    assert "no origin_port_costs assumption covers br_paranagua" in row.blockers[0].message
+
+
+def test_entering_the_port_margin_is_what_unblocks_the_brazil_landed_row(db):
+    bridged = AssumptionSet((
+        *_brazil_stack_without_the_bridge(),
+        _desk("origin_port_costs", 12.0, "usd_per_mt", origin="br_paranagua"),
+    ))
+    ranking = build_ranking(
+        db, destination_key="cn_north", window=SEP, today=TODAY,
+        assumptions=bridged, leg_ids=("br_paranagua",),
+    )
+    (row,) = ranking.rows
+    assert row.blockers == ()
+    assert row.fob_equivalent.amount == pytest.approx(2433.33 * 0.1958480179309845 + 12.0, abs=0.01)
+    assert row.landed is not None
+
+
+def test_no_label_for_the_agrural_series_claims_fob():
+    """The source publishes no FOB level, so no rendered name for it may say one."""
+    leg = config.ORIGIN_LEGS["br_paranagua"]
+    assert leg["incoterm"] != "FOB"
+    labels = [
+        leg["label"],
+        config.MARKETS["brazil"]["venue"],
+        config.MARKETS["brazil"]["basis"]["label"],
+        *(
+            entry["label"] for entry in config.LEDGER_LEGS.values()
+            if entry.get("key") in config.AGRURAL_COMMODITIES
+        ),
+        *(row[4] for row in config.PRODUCTION_LAYERS if row[0] == "agrural"),
+    ]
+    assert all("FOB" not in label for label in labels), labels

@@ -1,10 +1,15 @@
 """
-Layer 19 — AgRural Paranaguá FOB soy price.
+Layer 19 — AgRural Paranaguá port soy bid.
 
 AgRural publishes a daily Paranaguá port soybean buy price (BRL per 60-kg
-bag) on its public ``precossojaemilho`` page. This is the trade-convention
-"Brazil basis" benchmark: Paranaguá FOB minus CBOT, in USD/MT after the
-display-layer conversion in ``analysis.spreads.compute_brazil_basis``.
+bag) on its public ``precossojaemilho`` page. The page footnotes it as a
+gross "sobre rodas" port bid — beans on a truck at the terminal — so it is
+NOT an FOB-vessel level, and no publisher of record exists for a Paranaguá
+FOB premium (B21 #483). This is the trade-convention "Brazil basis"
+benchmark: Paranaguá port bid minus CBOT, in USD/MT after the display-layer
+conversion in ``analysis.spreads.compute_brazil_basis``. The commodity key
+keeps its historical "FOB" so stored history continues; it is an id, not a
+label.
 
 Paranaguá vs Paraná farm-gate (CEPEA):
     CEPEA Paraná is the farm-gate indicator (Layer 17). The Paranaguá port
@@ -298,21 +303,21 @@ def _parse_agrural_table(html: str) -> pd.DataFrame:
     }])
 
     logger.info(
-        "AgRural: Parsed Paranaguá FOB = %.2f BRL/MT (%.2f BRL/saca, %s)",
+        "AgRural: Parsed Paranaguá port bid = %.2f BRL/MT (%.2f BRL/saca, %s)",
         price_brl_mt, price_per_bag, indicator_date,
     )
     return df
 
 
 def fetch_agrural() -> FetchResult:
-    """Fetch AgRural Paranaguá FOB soybean price.
+    """Fetch AgRural Paranaguá port soybean bid.
 
     Returns ``FetchResult.ok({"Soybean (AgRural Paranaguá FOB)": df})`` on
     success. There is no legitimate "quiet day" for this source — the table
     always carries a quote — so a download failure, structure change, or
     empty parse is always ``FetchResult.failed``.
     """
-    logger.info("Fetching AgRural Paranaguá FOB soy quote ...")
+    logger.info("Fetching AgRural Paranaguá port soy bid ...")
     html = _fetch_agrural_page()
 
     if not html:

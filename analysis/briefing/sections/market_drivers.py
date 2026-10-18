@@ -380,8 +380,8 @@ def _brl_driver(currency_data: dict[str, pd.DataFrame]) -> Driver | None:
         else "Brazilian soy dearer in USD at an unchanged BRL price — export competitiveness declining"
     )
     falsifier = (
-        "refuted if Paranaguá FOB in USD moves in step with the currency (Brazil basis, section 4); "
-        "confirmed by the Gulf–Paranaguá FOB spread widening the same way"
+        "refuted if the Paranaguá port bid in USD moves in step with the currency (Brazil basis, section 4); "
+        "confirmed by the Gulf–Paranaguá spread widening the same way"
     )
     return Driver(observation, falsifier, interpretation=interpretation)
 

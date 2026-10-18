@@ -1,13 +1,14 @@
 """CROSS-ORIGIN FOB BOARD — soybean export offers from the three origins.
 
-US Gulf CIF (Layer 20, AMS) vs Brazil Paranaguá FOB (Layer 19, AgRural)
+US Gulf CIF (Layer 20, AMS) vs Brazil Paranaguá port bid (Layer 19, AgRural)
 vs Argentina up-river FOB (Layer 21, MAGyP official) in USD/MT — the
 "which origin is cheap" view for a physical buyer.
 
 The Brazil leg is computed as CBOT + date-aligned AgRural basis
 (`compute_brazil_basis`), not by converting the raw quote directly:
 that keeps date alignment honest and publishes no more than the basis
-line already does. The Gulf leg is a CIF barge bid (pre-elevation) —
+line already does. The Gulf leg is a CIF barge bid (pre-elevation) and the
+Brazil leg an on-truck "sobre rodas" port bid (pre-elevation, B21 #483) —
 comparable direction, not an identical Incoterm; the footer says so.
 """
 
@@ -85,7 +86,7 @@ def format(  # noqa: A001
     legs: dict[str, tuple[float, str]] = {}
     for label, loader in (
         ("US Gulf (CIF NOLA barge)", _gulf_leg),
-        ("Brazil Paranaguá (FOB)", lambda: _brazil_leg(price_data, currency_data)),
+        ("Brazil Paranaguá (port bid)", lambda: _brazil_leg(price_data, currency_data)),
         ("Argentina up-river (FOB)", _argentina_leg),
     ):
         try:
@@ -110,7 +111,8 @@ def format(  # noqa: A001
         f"  Cheapest origin: {cheapest[0].split(' (')[0]} — ${edge:,.1f}/MT under next"
     )
     lines.append(
-        "  (Gulf leg is a CIF barge bid pre-elevation; Brazil/Argentina are port FOB "
-        "— directional comparison, not an Incoterm-identical quote)"
+        "  (Gulf leg is a CIF barge bid pre-elevation; Brazil is an on-truck port bid "
+        "pre-elevation; only Argentina is FOB vessel — directional comparison, not an "
+        "Incoterm-identical quote)"
     )
     return "\n".join(lines)

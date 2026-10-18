@@ -385,7 +385,7 @@ LAYER_LATENCIES: tuple[LayerLatency, ...] = (
         "agrural", LatencyClass.PHYSICAL_ORIGIN,
         ObservationClock("America/Sao_Paulo", (15, 0)),
         timedelta(0),
-        "AgRural posts the Paranagua FOB quote during the Brazilian afternoon; "
+        "AgRural posts the Paranagua port bid during the Brazilian afternoon; "
         "an assessment's publication is its observation.",
     ),
     LayerLatency(

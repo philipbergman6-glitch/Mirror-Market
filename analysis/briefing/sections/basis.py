@@ -1,4 +1,4 @@
-"""BRAZIL BASIS section — Paranaguá FOB (primary) + CEPEA Paraná (secondary) vs CBOT in USD/MT."""
+"""BRAZIL BASIS section — Paranaguá port bid (primary) + CEPEA Paraná (secondary) vs CBOT in USD/MT."""
 
 import logging
 
@@ -58,7 +58,7 @@ def format(  # noqa: A001
             return "BRAZIL BASIS: Insufficient data"
         return _format_basis_line("CEPEA Paraná", cepea_basis)
 
-    headline = _format_basis_line("Paranaguá FOB", agrural_basis)
+    headline = _format_basis_line("Paranaguá port bid", agrural_basis)
     if cepea_basis is None:
         return headline
 

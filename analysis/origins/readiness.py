@@ -108,8 +108,9 @@ COMPONENT_GUIDANCE: dict[CostComponent, str] = {
         "same lane, so enter the mode you will actually use."
     ),
     CostComponent.ORIGIN_PORT_COSTS: (
-        "Loading-port charges — terminal, handling, statutory fees — USD per tonne, "
-        "for a leg not already quoted FOB vessel."
+        "Loading-port charges — unloading, elevation, terminal margin, statutory fees "
+        "— USD per tonne, for a leg not already quoted FOB vessel (e.g. the Paranaguá "
+        "on-truck port bid)."
     ),
     CostComponent.IMPORT_DUTY: (
         "Ad-valorem import duty on the CIF value, as a fraction. A published policy "
