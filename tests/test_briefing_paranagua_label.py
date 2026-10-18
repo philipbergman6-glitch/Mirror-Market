@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+import config
 from analysis.briefing.sections import basis, fob_board
 
 
@@ -54,9 +55,18 @@ def test_each_board_row_names_its_own_delivery_term(monkeypatch):
         for line in _three_legs(monkeypatch).splitlines()
         if line.startswith("  ") and "$" in line
     }
-    assert "CIF NOLA barge" in rows["US"]
+    assert "CIF barge" in rows["US"]
     assert "DAP truck" in rows["Brazil"]
     assert "FOB vessel" in rows["Argentina"]
+
+
+def test_board_labels_and_terms_come_from_the_origin_registry(monkeypatch):
+    """One vocabulary: the origins page's label and incoterm+carrier, per leg."""
+    board = _three_legs(monkeypatch)
+    for leg_id in ("us_gulf", "br_paranagua", "ar_up_river"):
+        leg = config.ORIGIN_LEGS[leg_id]
+        row = next(line for line in board.splitlines() if leg["label"] + ":" in line)
+        assert f"{leg['incoterm']} {leg['carrier']}" in row
 
 
 def test_the_board_never_ranks_mixed_delivery_terms(monkeypatch):

@@ -22,6 +22,7 @@ import logging
 
 import pandas as pd
 
+import config
 from analysis.spreads import compute_brazil_basis
 from pipeline.query import read_argentina_fob, read_brazil_spot, read_gulf_bids
 from pipeline.units import to_metric_tons
@@ -85,13 +86,17 @@ def _argentina_leg() -> tuple[float, str] | None:
     return float(rows["price_usd_mt"].iloc[0]), latest_date.date().isoformat()
 
 
-# (origin, delivery term) per leg, in print order. The term is part of the
-# price, so it is printed on the row, never left to a footer.
-_LEGS: tuple[tuple[str, str], ...] = (
-    ("US Gulf", "CIF NOLA barge bid"),
-    ("Brazil Paranaguá", "port bid (DAP truck)"),
-    ("Argentina up-river", "official FOB vessel"),
-)
+# ``config.ORIGIN_LEGS`` keys, in print order. Label and delivery term come
+# from that one registry — the strings the origins page prints — so the
+# briefing never keeps a second vocabulary. The term is part of the price, so
+# it is printed on the row, never left to a footer.
+_LEGS: tuple[str, ...] = ("us_gulf", "br_paranagua", "ar_up_river")
+
+
+def _term(leg_id: str) -> str:
+    """``"DAP truck"`` — incoterm + carrier, as ``app/origins_page.py`` prints it."""
+    leg = config.ORIGIN_LEGS[leg_id]
+    return f"{leg['incoterm']} {leg['carrier']}"
 
 
 def format(  # noqa: A001
@@ -99,26 +104,27 @@ def format(  # noqa: A001
     currency_data: dict[str, pd.DataFrame],
 ) -> str:
     loaders = {
-        "US Gulf": _gulf_leg,
-        "Brazil Paranaguá": lambda: _brazil_leg(price_data, currency_data),
-        "Argentina up-river": _argentina_leg,
+        "us_gulf": _gulf_leg,
+        "br_paranagua": lambda: _brazil_leg(price_data, currency_data),
+        "ar_up_river": _argentina_leg,
     }
     legs: list[tuple[str, str, float, str]] = []
-    for origin, term in _LEGS:
+    for leg_id in _LEGS:
         try:
-            leg = loaders[origin]()
+            leg = loaders[leg_id]()
         except Exception as exc:
-            logger.debug("Cross-origin leg %s failed: %s", origin, exc)
+            logger.debug("Cross-origin leg %s failed: %s", leg_id, exc)
             leg = None
         if leg is not None:
-            legs.append((origin, term, *leg))
+            legs.append((config.ORIGIN_LEGS[leg_id]["label"], _term(leg_id), *leg))
 
     if len(legs) < 2:
         return "CROSS-ORIGIN PORT LEVELS: Insufficient data"
 
+    width = max(len(label) for label, _, _, _ in legs) + 1
     lines = ["CROSS-ORIGIN PORT LEVELS (Soybeans, USD/MT, each on its own delivery term):"]
-    for origin, term, price, when in legs:
-        lines.append(f"  {origin + ':':<20} ${price:,.1f}/MT  {term:<20} ({when})")
+    for label, term, price, when in legs:
+        lines.append(f"  {label + ':':<{width}} ${price:,.1f}/MT  {term:<10} ({when})")
     terms = "; ".join(term for _, term, _, _ in legs)
     lines.append(
         f"  Ranking withheld: {len(legs)} delivery terms ({terms}), and no costed path "
