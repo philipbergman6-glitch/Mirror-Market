@@ -297,6 +297,17 @@ FX_SESSION_TIMEZONE = "Europe/London"
 FX_SESSION_CLOSE_LOCAL = (0, 0)  # (hour, minute) in FX_SESSION_TIMEZONE ...
 FX_SESSION_CLOSE_DAY_OFFSET = 1  # ... on the label date plus this many days
 
+# B26 (#496): the London-day FX bar exists Monday-Friday only (Python
+# weekday numbers). At weekends Yahoo appends a *live row* stamped at the
+# last tick (BRLUSD=X 2026-10-17T09:58:16Z on the chart API), and yfinance
+# floors it to that tick's London date — a Saturday- or Sunday-labelled
+# single tick that the clock above counts as a finished day once that day
+# has ended. Measured 2026-10-18: two years of daily bars for all ten
+# CURRENCY_TICKERS pairs (519 rows each) carry no weekend label apart from
+# that live row. The raw stamp cannot be kept instead: yfinance discards it
+# (scrapers/history.py rebuilds a daily index from `.date`).
+FX_SESSION_WEEKDAYS = (0, 1, 2, 3, 4)
+
 # A1 (#298) / B2 (#308) — the one FX-date rule. A `home_per_mt` leg converts
 # at its own date's FX close, else at the newest *prior* close at most this
 # many calendar days older, else renders blank with reason `fx_gap_exceeded`.

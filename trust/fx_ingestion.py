@@ -371,7 +371,9 @@ def parse_fx_candidates(
             raise FxShapeError(
                 f"Required FX: artifact for {replay.pair} carries a {bar.pair} bar"
             )
-        if bar.session_date > cutoff:
+        if bar.session_date > cutoff or not FX_SESSION.is_session_day(bar.session_date):
+            # A weekend label is Yahoo's live row (B26 #496): never a
+            # finished London day, refused by the same rule v1 applies.
             unfinished.append(bar.session_date)
             continue
         identity = ObservationIdentity(

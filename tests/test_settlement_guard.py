@@ -316,3 +316,59 @@ def test_the_guard_sits_in_fetch_one_not_in_the_download(monkeypatch):
 
     assert len(yf_module.download_bars("ZS=F", period="5d")) == 2
     assert len(yf_module.fetch_one("ZS=F", period="5d")) == 1
+
+
+# B26 (#496): at weekends Yahoo appends a *live row* stamped at the last tick
+# (BRLUSD=X 2026-10-17T09:58:16Z, ZARUSD=X 2026-10-18T04:21:18Z — chart API,
+# measured 2026-10-18), and yfinance floors it to that tick's London date, so
+# it arrives looking exactly like a 00:00-London bar labelled Saturday or
+# Sunday. Two years of daily bars for all ten configured pairs (519 rows
+# each) carry no weekend label apart from that live row.
+
+
+def test_saturday_live_fx_row_is_dropped_on_sunday():
+    """Ticket fixture: by Sunday the clock counts Saturday as a finished
+    London day, so only the weekday rule stands between the single tick and
+    the store."""
+    now = datetime(2026, 10, 18, 8, 0, tzinfo=timezone.utc)  # Sunday 09:00 BST
+    df = _frame(["2026-10-15", "2026-10-16", "2026-10-17"])
+    df = df.astype({"Open": float, "High": float, "Low": float, "Close": float})
+    df.loc[pd.Timestamp("2026-10-17"), ["Open", "High", "Low", "Close"]] = 0.197266
+    out = drop_unsettled_session(df, label="BRLUSD=X", now=now, rule=FX_SESSION)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-10-15", "2026-10-16"]
+
+
+@pytest.mark.parametrize("aware", [False, True], ids=["naive", "london-aware"])
+def test_friday_london_day_bar_passes_the_weekday_rule(aware):
+    df = _london_day_frame(["2026-10-15", "2026-10-16"], aware)
+    now = datetime(2026, 10, 18, 8, 0, tzinfo=timezone.utc)
+    pdt.assert_frame_equal(drop_unsettled_session(df, now=now, rule=FX_SESSION), df)
+
+
+def test_sunday_live_fx_row_is_dropped_once_sunday_has_ended():
+    """The same row on Monday morning is past the London-day clock too."""
+    now = datetime(2026, 10, 19, 6, 0, tzinfo=timezone.utc)  # Monday 07:00 BST
+    df = _frame(["2026-10-16", "2026-10-18"])
+    out = drop_unsettled_session(df, label="ZARUSD=X", now=now, rule=FX_SESSION)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-10-16"]
+
+
+def test_weekend_fx_drop_is_logged_with_its_own_reason(caplog):
+    now = datetime(2026, 10, 18, 8, 0, tzinfo=timezone.utc)
+    df = _frame(["2026-10-16", "2026-10-17"])
+    with caplog.at_level(logging.WARNING, logger="fetchers._settlement"):
+        drop_unsettled_session(df, label="BRLUSD=X", now=now, rule=FX_SESSION)
+    assert "BRLUSD=X" in caplog.text
+    assert "2026-10-17" in caplog.text
+    assert "not a session day" in caplog.text
+
+
+def test_exchange_rule_has_no_weekday_filter():
+    """Narrow by design: the weekday rule is FX evidence, not a futures one."""
+    assert EXCHANGE_SESSION.session_weekdays is None
+    assert FX_SESSION.session_weekdays == frozenset({0, 1, 2, 3, 4})
+
+
+def test_session_rule_rejects_an_impossible_weekday():
+    with pytest.raises(ValueError, match="session_weekdays"):
+        SessionRule(name="bad", timezone="UTC", close_local=(0, 0), session_weekdays=frozenset({7}))

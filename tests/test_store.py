@@ -800,3 +800,35 @@ def test_init_db_adds_arrivals_to_a_pre_arrivals_india_table(patched_db):
 
     rows = _fetchall(patched_db, "SELECT Close, arrivals_mt FROM india_domestic_prices")
     assert rows == [(67250.0, None)]
+
+
+# ---------------------------------------------------------------------------
+# B26 (#496) — a weekend FX row is a live tick, never a London-day bar
+# ---------------------------------------------------------------------------
+
+
+def test_save_currency_data_purges_a_stored_weekend_row(patched_db):
+    """A Saturday tick stored before the guard refused it (the cached CI DB
+    carried BRL 2026-10-17 from the 2026-10-18 run) is deleted on the pair's
+    next save; INSERT OR REPLACE alone would keep it forever."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute(
+        "INSERT INTO currencies (pair, Date, Open, High, Low, Close) VALUES "
+        "('BRL/USD', '2026-10-17', 0.197266, 0.197266, 0.197266, 0.197266), "
+        "('ZAR/USD', '2026-10-18', 0.060698, 0.060698, 0.060698, 0.060698)"
+    )
+    conn.commit()
+    conn.close()
+    store.save_currency_data("BRL/USD", _currency_df(["2026-10-15", "2026-10-16"], close=0.19))
+    rows = _fetchall(patched_db, "SELECT pair, Date FROM currencies ORDER BY pair, Date")
+    assert rows == [
+        ("BRL/USD", "2026-10-15"),
+        ("BRL/USD", "2026-10-16"),
+        ("ZAR/USD", "2026-10-18"),  # another pair's row waits for that pair's save
+    ]
+
+
+def test_save_currency_data_refuses_a_weekend_row(patched_db):
+    with pytest.raises(ValueError, match="weekend"):
+        store.save_currency_data("BRL/USD", _currency_df(["2026-10-16", "2026-10-17"], close=0.19))
+    assert _fetchall(patched_db, "SELECT COUNT(*) FROM currencies") == [(0,)]

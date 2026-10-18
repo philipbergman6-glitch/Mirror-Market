@@ -4,6 +4,21 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — a weekend FX row is a live tick, never a close (2026-10-18)
+
+**B26 #496.** At weekends Yahoo appends a live row stamped at the last tick
+(`BRLUSD=X` 2026-10-17T09:58:16Z), yfinance floors it to that tick's London
+date, and by Sunday the FX guard's clock counted Saturday as a finished
+London day — so a single tick was stored as Saturday's FX close (the
+2026-10-18 09:20 UTC run did exactly that: `currencies` observed_at
+2026-10-17) and `scripts/reconcile_fx.py` resolved its session to a
+Saturday. `SessionRule` gains `session_weekdays`; `FX_SESSION` takes
+Monday–Friday (`config.FX_SESSION_WEEKDAYS`; two years × ten pairs carry no
+other weekend label). v1's guard and the trusted adapter both drop the row;
+`save_currency_data` refuses one arriving and purges one already stored in
+the cached DB on the pair's next save. The exchange rule is unchanged.
+Tests: 10 new (guard, trusted parser, store, reconciler).
+
 ## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
 
 **B21 #483.** AgRural's Paranaguá number is a gross R$/60 kg *Compra* the
