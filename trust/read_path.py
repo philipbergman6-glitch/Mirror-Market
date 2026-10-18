@@ -32,7 +32,14 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from config import FX_ECB_CROSS_PAIRS
 from trust.registry import PILOT_REGISTRY
+
+#: FX datasets whose v1 publisher of record is no longer the trusted
+#: contract's source (B25 #495) — refused until the registry follows.
+_V1_SOURCE_DIFFERS = frozenset(
+    f"fx-{pair.lower().replace('/', '-')}" for pair in FX_ECB_CROSS_PAIRS
+)
 
 #: The environment variable read by every consumer.
 TRUSTED_READ_ENV_VAR = "MIRROR_TRUSTED_READ_DATASETS"
@@ -101,6 +108,13 @@ def load_trusted_read_switch(env: Mapping[str, str] | None = None) -> TrustedRea
         raise TrustedReadSwitchError(
             f"{TRUSTED_READ_ENV_VAR} names datasets that are not in the trust registry: "
             f"{', '.join(unknown)} (known: {', '.join(sorted(known))})"
+        )
+    diverged = sorted(keys & _V1_SOURCE_DIFFERS)
+    if diverged:
+        raise TrustedReadSwitchError(
+            f"{TRUSTED_READ_ENV_VAR} names {', '.join(diverged)}, whose trusted contract is still the "
+            "Yahoo series while v1 reads the ECB reference cross (B25 #495, "
+            "config.FX_ECB_CROSS_PAIRS); a cutover would restore the D-1-suspect print"
         )
     return TrustedReadSwitch(dataset_keys=frozenset(keys))
 

@@ -247,7 +247,7 @@ def test_cepea_parse_brazilian_number_format() -> None:
     assert _parse_brl_price("") is None
 
 
-# ── AgRural (Paranaguá FOB) ─────────────────────────────────────────────────
+# ── AgRural (Paranaguá port bid) ────────────────────────────────────────────
 
 _AGRURAL_FIXTURE = FIXTURES / "agrural_paranagua.html"
 

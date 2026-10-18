@@ -23,6 +23,54 @@ stored window raises. Tests: 17 new (`tests/test_window_headlines.py`);
 one ledger fixture's fake `ship_from` made real. Glossary: "Shipment
 window" and "Labelled blend" added to CONTEXT.md as proposals for V4 #477.
 
+## Unreleased — CNY converts at the ECB cross, not a day-old Yahoo print (2026-10-18)
+
+**B25 #495.** Yahoo `CNYUSD=X` is a once-a-day print one business day
+behind its label (ECB D−1 median 0.69 bp vs ECB D 5.74 bp). It matches the
+Fed H.10 noon rate of D−1 to four decimals on only 263 of 458 bars since
+2025, with 2–7-day stale repeats and 121 unmatched, so relabelling it D−1
+could not be proven and was not done. Layer 7 now reads CNY/USD from the ECB
+euro reference rates (`fetchers/ecb_fx.py`, keyless SDMX, both legs from
+one TARGET day) through the same FX guard. No Yahoo fallback: an outage is
+a logged missing key and `align_fx` withholds past its cap. The CNY save
+evicts stored Yahoo rows on dates the ECB did not publish. The trusted
+`fx-cny-usd` contract is still Yahoo: the read switch refuses it and
+`reconcile_fx` reports it under `v1_source_differs`. Tests: 18 new.
+
+## Unreleased — a weekend FX row is a live tick, never a close (2026-10-18)
+
+**B26 #496.** At weekends Yahoo appends a live row stamped at the last tick
+(`BRLUSD=X` 2026-10-17T09:58:16Z), yfinance floors it to that tick's London
+date, and by Sunday the FX guard's clock counted Saturday as a finished
+London day — so a single tick was stored as Saturday's FX close (the
+2026-10-18 09:20 UTC run did exactly that: `currencies` observed_at
+2026-10-17) and `scripts/reconcile_fx.py` resolved its session to a
+Saturday. `SessionRule` gains `session_weekdays`; `FX_SESSION` takes
+Monday–Friday (`config.FX_SESSION_WEEKDAYS`; two years × ten pairs carry no
+other weekend label). v1's guard and the trusted adapter both drop the row;
+`save_currency_data` refuses one arriving and purges one already stored in
+the cached DB on the pair's next save. The exchange rule is unchanged.
+Tests: 10 new (guard, trusted parser, store, reconciler).
+
+**B28 #502 (measurement only).** `scripts/measure_fx_bar_finalisation.py`
+samples the four pairs' newest bars at chosen London times (`--at`) into a
+gitignored CSV and lists closes that moved (`--summary`), so the FX close
+margin can be set from data. The margin itself is unchanged. 4 tests.
+
+## Unreleased — the briefing stops ranking mixed delivery terms (2026-10-18)
+
+**B27 #501.** Three residues of B21 #483. The briefing section that printed
+"CROSS-ORIGIN FOB BOARD … Cheapest origin" over a CIF-barge bid, an on-truck
+port bid and an official FOB-vessel price is now "CROSS-ORIGIN PORT LEVELS":
+each row names its own delivery term inline, and the ranking is withheld
+with the reason the origins page uses — no costed path from each term to FOB
+vessel. The trust contract for AgRural is renamed "on-truck port bid" with
+`price_type` `physical-port-bid` and rule id `coverage.paranagua`; its
+dataset key `paranagua-soybean-fob` and the storage key
+`Soybean (AgRural Paranaguá FOB)` stay until one deploy-side history
+migration moves them together. Stale "Paranaguá FOB" docstrings and fixture
+labels fixed. Tests: 4 new (3 briefing, 1 registry).
+
 ## Unreleased — the Paranaguá leg is a port bid, not FOB (2026-10-18)
 
 **B21 #483.** AgRural's Paranaguá number is a gross R$/60 kg *Compra* the
