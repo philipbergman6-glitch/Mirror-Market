@@ -12,7 +12,7 @@ username), ``Report Detail`` section, one request per commodity. The whole
 archive (2022-02-07 →) comes back in two ~1.6 s requests, so every run pulls
 all of it: the table is self-healing and never round-trips ``data/history/``.
 
-Five things the mapping depends on, each verified against the live archive on
+Six things the mapping depends on, each verified against the live archive on
 2026-10-05 rather than read off a label:
 
 * **The oil basis is in points, not the cents/lb its unit field says.** The
@@ -27,6 +27,12 @@ Five things the mapping depends on, each verified against the live archive on
 * **The week is the identity.** ``report_date`` is the Monday the asks were
   collected from (== ``report_begin_date``), the report covers Monday–Friday,
   and it is published Friday afternoon. Rows are keyed by the Friday.
+* **``published_date`` is Mountain time, printed without a zone (#486).** The
+  keyless ``/v3.1/public/listPublishedReport/3511`` names it
+  (``"2026-10-16 13:51:26 MDT"``, epoch ms 19:51:26 UTC; probed 2026-10-18).
+  It is localized to America/Denver and stored as UTC at
+  :func:`_published_utc`, the one parse site; a zone other than MST/MDT, or a
+  wall time Denver's calendar makes ambiguous or skips, raises.
 * **A row is one series.** (location, F.O.B./Delivered, truck/rail) is unique
   per week across the whole archive; nothing here pools FOB with delivered or
   rail with truck.
@@ -44,7 +50,8 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -54,6 +61,7 @@ from config import (
     MARS_API_KEY,
     MARS_BASE_URL,
     MARS_PROCESSOR_CASH_SLUG,
+    MARS_PUBLISHED_TIMEZONE,
     MAX_RETRIES,
     PROCESSOR_CASH_COMMODITIES,
     PROCESSOR_CASH_MAX_RECONCILE_FAILURE_RATE,
@@ -132,6 +140,56 @@ def _date(value: object, fmt: str, field: str) -> datetime:
         return datetime.strptime(str(value), fmt)
     except ValueError as exc:
         raise ScraperShapeError(f"AMS 3511: unparseable {field} {value!r}") from exc
+
+
+# MARS stamps ``published_date`` on AMS's own clock — Mountain time, never
+# labelled in Report Detail (#486). The only abbreviations that zone prints.
+_PUBLISHED_ZONE = ZoneInfo(MARS_PUBLISHED_TIMEZONE)
+_PUBLISHED_ABBREVIATIONS = frozenset({"MST", "MDT"})
+_PUBLISHED_RE = re.compile(
+    r"^(?P<wall>\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})(?: (?P<zone>[A-Z]{2,5}))?$"
+)
+
+
+def _published_utc(value: object) -> datetime:
+    """``"10/02/2026 13:47:14"`` (Denver wall time) → the aware UTC instant.
+
+    A named zone must be MST/MDT and agree with Denver's calendar for that wall
+    time; an unnamed one must be a single instant — the fall-back hour happens
+    twice and the spring-forward hour never, and neither is guessed at.
+    """
+    match = _PUBLISHED_RE.match(str(value))
+    if not match:
+        raise ScraperShapeError(f"AMS 3511: unparseable published_date {value!r}")
+    zone = match["zone"]
+    if zone is not None and zone not in _PUBLISHED_ABBREVIATIONS:
+        raise ScraperShapeError(
+            f"AMS 3511: published_date {value!r} names zone {zone!r}; MARS stamps "
+            "Mountain time (MST/MDT) and any other zone is a different clock"
+        )
+    wall = _date(match["wall"], "%m/%d/%Y %H:%M:%S", "published_date")
+    early, late = (wall.replace(tzinfo=_PUBLISHED_ZONE, fold=f) for f in (0, 1))
+    if early.astimezone(timezone.utc).astimezone(_PUBLISHED_ZONE).replace(tzinfo=None) != wall:
+        raise ScraperShapeError(
+            f"AMS 3511: published_date {value!r} does not exist in America/Denver "
+            "(the spring-forward hour)"
+        )
+    candidates = {early.tzname(): early, late.tzname(): late}
+    if zone is None:
+        if len(candidates) > 1:
+            raise ScraperShapeError(
+                f"AMS 3511: published_date {value!r} is ambiguous in America/Denver "
+                "(the fall-back hour) and names no zone"
+            )
+        local = early
+    elif zone in candidates:
+        local = candidates[zone]
+    else:
+        raise ScraperShapeError(
+            f"AMS 3511: published_date {value!r} names {zone}, but Denver keeps "
+            f"{early.tzname()} on that date"
+        )
+    return local.astimezone(timezone.utc)
 
 
 def _futures_month(label: object, which: str) -> int | None:
@@ -230,7 +288,7 @@ def _map_row(row: dict) -> dict[str, object] | None:
         raise ScraperShapeError(
             f"AMS 3511: week {begin:%Y-%m-%d}→{end:%Y-%m-%d} is not Monday-Friday"
         )
-    published = _date(row.get("published_date"), "%m/%d/%Y %H:%M:%S", "published_date")
+    published = _published_utc(row.get("published_date"))
 
     def num(field: str) -> float | None:
         value = row.get(field)
