@@ -138,7 +138,7 @@ PRICE_UNITS = frozenset({"native_exchange", "usd_per_bushel", "home_per_mt", "us
 # GM imports are banned behind a tariff wall, and nothing closes it (it reached
 # ~2x in 2021). The distinction is closed and load-validated for the same
 # reason QUOTE_KINDS is: rendering a policy spread with the same treatment as
-# Paranaguá FOB invites a trade that cannot be taken, and a missing label is
+# the Paranaguá port bid invites a trade that cannot be taken, and a missing label is
 # exactly the failure that would never be noticed in review.
 ARBITRAGE_KINDS = frozenset({"open", "policy_blocked"})
 

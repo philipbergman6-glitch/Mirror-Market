@@ -210,12 +210,12 @@ def test_relative_value_analysis_promotes_agrural_to_primary_when_present(monkey
 
     assert "basis" in result
     basis = result["basis"]
-    assert basis["primary"] == "Paranaguá FOB"
-    assert set(basis["sources"].keys()) == {"Paranaguá FOB", "CEPEA Paraná"}
+    assert basis["primary"] == "Paranaguá port bid"
+    assert set(basis["sources"].keys()) == {"Paranaguá port bid", "CEPEA Paraná"}
 
     # Hand-check the wedge: both use the same BRL/USD = 0.20 and same CBOT,
     # so the wedge is purely the BRL/MT spread × FX.
-    ag_curr = basis["sources"]["Paranaguá FOB"]["current_usd_mt"]
+    ag_curr = basis["sources"]["Paranaguá port bid"]["current_usd_mt"]
     cepea_curr = basis["sources"]["CEPEA Paraná"]["current_usd_mt"]
     expected_wedge = ag_curr - cepea_curr
     assert basis["wedge_usd_mt"] == pytest.approx(expected_wedge)
@@ -232,7 +232,7 @@ def test_relative_value_analysis_falls_back_to_cepea_when_agrural_empty(monkeypa
 
     basis = result["basis"]
     assert basis["primary"] == "CEPEA Paraná"
-    assert "Paranaguá FOB" not in basis["sources"]
+    assert "Paranaguá port bid" not in basis["sources"]
     assert basis["wedge_usd_mt"] is None
 
 

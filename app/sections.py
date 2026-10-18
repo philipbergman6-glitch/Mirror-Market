@@ -685,7 +685,7 @@ def _brazil_groups(info: dict) -> list[dict | None]:
         ]),
         # AgRural: USD only. The raw BRL/saca quote is not redistributable
         # under AgRural's terms; the derived USD basis is the publishable one.
-        _group("AgRural Paranaguá FOB", [
+        _group("AgRural Paranaguá port bid", [
             _card("AgRural (USD)", brazil.get("agrural_soy_usd"), places=1, prefix="$",
                   caption=f"USD/MT{f' · {agrural_date}' if agrural_date else ''}"),
             _card("AgRural−CBOT basis", agrural_basis, places=1, prefix="$",

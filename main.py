@@ -1080,7 +1080,7 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         empty_fails=False,
     )
     results["agrural"] = _run_scraper_layer(
-        "agrural", "Layer 19", "AgRural Paranaguá FOB soy quote",
+        "agrural", "Layer 19", "AgRural Paranaguá port soy bid",
         fetch=lambda: fetch_agrural(),
         save=lambda n, d: save_brazil_spot(n, d),
         clean=lambda d: clean_brazil_spot(d),
