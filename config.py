@@ -284,13 +284,18 @@ SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
 # bar labelled 2026-08-19 with High == Open and Low == Close, an FX day less
 # than four hours old, while Chicago local time was already past 14:30.
 #
-# The FX market runs continuously from Sunday 17:00 New York to Friday
-# 17:00, and Yahoo labels the bar that *closes* at 17:00 on day D with day
-# D's date. So the bar labelled D is unfinished until 17:00 New York on D.
-# Expressed in venue-local time for the same reason as the cutoff above:
-# US DST moves it against UTC twice a year.
-FX_SESSION_TIMEZONE = "America/New_York"
-FX_SESSION_CLOSE_LOCAL = (17, 0)  # (hour, minute) in FX_SESSION_TIMEZONE
+# B20 (#482): a Yahoo `XXXUSD=X` daily bar is a *London calendar day*, not
+# a 17:00 New York session. Measured from the chart API (BRL, ZAR, CNY, INR
+# — 2026-10-13 and again 2026-10-18): exchangeTimezoneName Europe/London,
+# currentTradingPeriod.regular 00:00 -> 23:59 London, daily bars stamped
+# 00:00 London (23:00 UTC in BST), and yfinance labels each bar with that
+# London date. So the bar labelled D is unfinished until London midnight
+# ending D — 23:00 UTC in BST, 00:00 UTC in GMT. The close therefore falls
+# on the day *after* the label: 00:00 London, one day on. Expressed in
+# venue-local time so UK DST is handled by zoneinfo.
+FX_SESSION_TIMEZONE = "Europe/London"
+FX_SESSION_CLOSE_LOCAL = (0, 0)  # (hour, minute) in FX_SESSION_TIMEZONE ...
+FX_SESSION_CLOSE_DAY_OFFSET = 1  # ... on the label date plus this many days
 
 # A1 (#298) / B2 (#308) — the one FX-date rule. A `home_per_mt` leg converts
 # at its own date's FX close, else at the newest *prior* close at most this
