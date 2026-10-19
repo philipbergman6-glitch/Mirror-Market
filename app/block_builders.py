@@ -1672,6 +1672,57 @@ def _crush_sessions(crush, rows_by_key: dict) -> set[date]:
     return common or set()
 
 
+@dataclass(frozen=True)
+class _CrushStrike:
+    """One session's three leg values, and the band each was quoted for.
+
+    ``band`` and ``windows`` are None on a source that prints one quote a
+    session; on a windowed one (MAGyP, #507) they name the shared band the
+    margin is for and each leg's own band inside it.
+    """
+
+    values: dict[str, float]
+    band: str | None = None
+    windows: dict[str, str] | None = None
+
+
+def _crush_strike(crush, source: Source, ctx: SiteContext, day: date) -> _CrushStrike | str:
+    """The three legs on ``day``, or why that session strikes no margin.
+
+    A windowed source is struck on ONE band all three products share — the
+    origins page's rule, ``analysis.origins.crush.shared_crush_band``, read
+    here rather than restated (#507). Each leg's mean across its bands is a
+    price nobody quoted, and each leg's nearest window taken alone need not be
+    one cargo — the products' bands are cut differently from the bean's.
+    Shared by the level and its history.
+    """
+    if source.window_scheme is None:
+        values = {}
+        for name, key in crush.legs.items():
+            values[name] = next(v for d, v, _ in ctx.series(source)[key] if d == day)
+        return _CrushStrike(values)
+
+    from analysis.origins.crush import shared_crush_band
+
+    picked = shared_crush_band(
+        {
+            name: [
+                (quote.window, quote.value)
+                for quote in ctx.session_windows(source, key)[day].printed
+            ]
+            for name, key in crush.legs.items()
+        },
+        day,
+    )
+    if isinstance(picked, str):
+        return picked
+    return _CrushStrike(
+        values=picked.values,
+        band=picked.window.describe(),
+        windows={name: window.describe() for name, window in picked.windows.items()},
+    )
+
+
 def _crush_margin(legs: dict[str, float], yields: dict[str, float]) -> float:
     """``oil x yield + meal x yield − bean``, in whatever one unit the legs share.
 
@@ -1714,14 +1765,20 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         ), {}
 
     when = max(common)
+    # The newest shared session or nothing: falling back to an older one where
+    # the bands happen to line up would publish yesterday's margin as today's.
+    strike = _crush_strike(crush, source, ctx, when)
+    if isinstance(strike, str):
+        return STATE_EMPTY, f"{strike} ({when.isoformat()})", {}
     fx = ctx.fx_on(market.currency_pair, when)
     legs: dict[str, dict] = {}
     for leg_name, key in crush.legs.items():
-        value = next(v for day, v, _ in rows_by_key[key] if day == when)
+        value = strike.values[leg_name]
         legs[leg_name] = {
             "key": key,
             "home_value": value,
             "usd_mt": source.to_usd_mt(value, key, fx.rate),
+            "window": strike.windows[leg_name] if strike.windows else None,
         }
 
     if any(leg["usd_mt"] is None for leg in legs.values()):
@@ -1752,6 +1809,9 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         "home_currency": market.home_currency,
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
+        # #507: the bean's band, which oil and meal were matched to by overlap.
+        # None where the source prints one quote a session.
+        "shipment_window": strike.band,
         # A1 #298: the three legs share one session; the rate may be a labelled
         # prior close. Not a same-session claim about the FX leg (invariant 8).
         **_fx_fields(source, fx),
@@ -1979,6 +2039,7 @@ def _crush_board_card(market: Market, ctx: SiteContext) -> dict:
         "contract_note": None,
         "provisional": None,
         "provisional_note": None,
+        "shipment_window": None,
         "range": None,
         "range_note": "",
     }
@@ -2019,6 +2080,7 @@ def _crush_board_card(market: Market, ctx: SiteContext) -> dict:
         contract_note=data["contract_note"],
         provisional=data["provisional"],
         provisional_note=data["provisional_note"],
+        shipment_window=data.get("shipment_window"),
         range=band,
         range_note=range_note,
     )
@@ -2038,18 +2100,19 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     crush = market.crush
     assert crush is not None, f"crush range requested for {market.slug} with no crush source"
     if crush.months is not None:
-        history = _month_margin_history(market, ctx)
+        history, band = _month_margin_history(market, ctx), None
     elif crush.contracts == "named":
         return None, (
             "no range yet — struck on named delivery months; a mean off the "
             "front-month series would be a range around a different margin"
         )
     else:
-        history = _crush_margin_history(market, ctx)
+        history, band = _crush_margin_history(market, ctx)
+    on_band = f" on the {band} band" if band else ""
     if len(history) < CRUSH_RANGE_MIN_OBS:
         return None, (
-            f"no range yet — {len(history)} session(s) all three legs struck, short "
-            f"of the {CRUSH_RANGE_MIN_OBS} a mean needs"
+            f"no range yet — {len(history)} session(s) all three legs struck{on_band}, "
+            f"short of the {CRUSH_RANGE_MIN_OBS} a mean needs"
         )
     values = [margin for _, margin in history]
     return {
@@ -2058,7 +2121,7 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
         # (`LOOKBACK_DAYS_BY_CADENCE`) and a leg's stored depth is its own, so
         # a year is a claim about coverage this cannot make. The count is the
         # honest label and it is also the more useful one.
-        "window": f"{len(values)}-session",
+        "window": f"{len(values)}-session{on_band}",
         "mean": sum(values) / len(values),
         "low": min(values),
         "high": max(values),
@@ -2067,8 +2130,11 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     }, ""
 
 
-def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:
-    """The generic engine's margin restruck for every session it can be.
+def _crush_margin_history(
+    market: Market, ctx: SiteContext
+) -> tuple[list[tuple[date, float]], str | None]:
+    """The generic engine's margin restruck for every session it can be, and
+    the shared band it is the history of (None on an unwindowed source).
 
     The two rules the level keeps, kept here too rather than relaxed because
     these are old numbers nobody reads individually:
@@ -2076,6 +2142,12 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
     * **One session for all three legs.** A day the oil did not print is not a
       day with a margin, and interpolating one would put a shape into the range
       that the market never traded.
+    * **The level's own band, on a windowed source (#507).** Each session is
+      struck by the level's shared-band rule, and only sessions struck on the
+      band the level is struck on count — an Oct cargo's margin beside a
+      Nov–Apr one is a range around a different margin, the run B29 #503
+      refuses to stitch across Dalian months. A session with no shared band
+      is dropped, never restruck on means.
     * **That row's own date's rate, under A1 (#298).** ``ctx.fx_on`` never
       converts at a later-dated rate and only at a prior one inside the cap;
       a session with no such rate is dropped rather than restruck at a rate
@@ -2088,26 +2160,27 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
 
     common = _crush_sessions(crush, rows_by_key)
     if not common:
-        return []
+        return [], None
+    level = _crush_strike(crush, source, ctx, max(common))
+    if isinstance(level, str):
+        return [], None
 
     yields = crush.yields
-    values_by_key = {
-        key: {day: value for day, value, _ in rows_by_key.get(key) or []}
-        for key in crush.legs.values()
-    }
-
     history: list[tuple[date, float]] = []
     for day in sorted(common):
+        strike = _crush_strike(crush, source, ctx, day)
+        if isinstance(strike, str) or strike.band != level.band:
+            continue
         rate = ctx.fx_on(market.currency_pair, day).rate
         legs: dict[str, float] = {}
         for leg_name, key in crush.legs.items():
-            usd = source.to_usd_mt(values_by_key[key][day], key, rate)
+            usd = source.to_usd_mt(strike.values[leg_name], key, rate)
             if usd is None:
                 break
             legs[leg_name] = usd
         else:
             history.append((day, _crush_margin(legs, yields)))
-    return history
+    return history, level.band
 
 
 def _month_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:

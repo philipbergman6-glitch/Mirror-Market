@@ -355,6 +355,12 @@ class Crush:
     #: margin is struck on one month by ``analysis.futures.crush``, never on
     #: whichever contract each leg's continuous series happened to hold.
     months: MonthTable | None = None
+    #: #507: set where the table prints several shipment bands per session
+    #: (MAGyP). The legs are then struck on one band all three share
+    #: (``analysis.origins.crush.shared_crush_band``), never on each leg's
+    #: mean across its own bands. Both or neither, as on ``Source``.
+    window_scheme: str | None = None
+    window_columns: tuple[str, ...] = ()
 
     @property
     def yields(self) -> dict[str, float]:
@@ -369,6 +375,8 @@ class Crush:
             keys=tuple(self.legs.values()),
             value_column=self.value_column,
             unit=self.unit,
+            window_scheme=self.window_scheme,
+            window_columns=self.window_columns,
         )
 
 
@@ -577,21 +585,7 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
             )
     elif arbitrage is not None:
         raise ValueError(f"market {slug!r} {block} source declares arbitrage — basis-only")
-    window_scheme = raw.get("window_scheme")
-    window_columns = tuple(raw.get("window_columns") or ())
-    if window_scheme is not None or window_columns:
-        arity = WINDOW_SCHEMES.get(window_scheme or "")
-        if arity is None:
-            raise ValueError(
-                f"market {slug!r} {block} window_scheme {window_scheme!r} not in "
-                f"{sorted(WINDOW_SCHEMES)}"
-            )
-        if len(window_columns) != arity:
-            raise ValueError(
-                f"market {slug!r} {block} window_scheme {window_scheme!r} reads {arity} "
-                f"column(s), got window_columns {window_columns!r} — a source that prints "
-                "several windows per session and declares none is read as their mean (#504)"
-            )
+    window_scheme, window_columns = _window_declaration(raw, slug=slug, block=block)
     contract_board = raw.get("contract_board")
     contract_columns = tuple(raw.get("contract_columns") or ())
     if contract_board is not None or contract_columns:
@@ -642,6 +636,28 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
     )
 
 
+def _window_declaration(
+    raw: dict, *, slug: str, block: str
+) -> tuple[str | None, tuple[str, ...]]:
+    """A descriptor's ``window_scheme``/``window_columns`` — both or neither."""
+    window_scheme = raw.get("window_scheme")
+    window_columns = tuple(raw.get("window_columns") or ())
+    if window_scheme is not None or window_columns:
+        arity = WINDOW_SCHEMES.get(window_scheme or "")
+        if arity is None:
+            raise ValueError(
+                f"market {slug!r} {block} window_scheme {window_scheme!r} not in "
+                f"{sorted(WINDOW_SCHEMES)}"
+            )
+        if len(window_columns) != arity:
+            raise ValueError(
+                f"market {slug!r} {block} window_scheme {window_scheme!r} reads {arity} "
+                f"column(s), got window_columns {window_columns!r} — a source that prints "
+                "several windows per session and declares none is read as their mean (#504)"
+            )
+    return window_scheme, window_columns
+
+
 def _crush(raw: dict, *, slug: str) -> Crush:
     missing = {
         "kind", "contracts", "yield_set", "table", "date_column", "key_column", "legs",
@@ -667,6 +683,7 @@ def _crush(raw: dict, *, slug: str) -> Crush:
             f"market {slug!r} crush contracts {raw['contracts']!r} not in "
             f"{sorted(CONTRACT_BASIS_BY_DESCRIPTOR)}"
         )
+    window_scheme, window_columns = _window_declaration(raw, slug=slug, block="crush")
     return Crush(
         kind=raw["kind"],
         contracts=raw["contracts"],
@@ -679,6 +696,8 @@ def _crush(raw: dict, *, slug: str) -> Crush:
         unit=raw["unit"],
         provisional=bool(raw.get("provisional", False)),
         months=MonthTable.from_descriptor(raw),
+        window_scheme=window_scheme,
+        window_columns=window_columns,
     )
 
 

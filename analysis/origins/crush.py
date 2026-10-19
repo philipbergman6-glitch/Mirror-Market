@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
@@ -82,7 +83,12 @@ from analysis.origins.domain import (
     worst_confidence,
 )
 from analysis.origins.landed_cost import COMPONENT_LABELS, DAYS_PER_YEAR
-from analysis.origins.sources import fx_resolution_on, parse_magyp_window, to_usd_per_mt
+from analysis.origins.sources import (
+    fx_resolution_on,
+    nearest_window_key,
+    parse_magyp_window,
+    to_usd_per_mt,
+)
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
 from pricing.fx_alignment import FxAlignment
 
@@ -283,6 +289,78 @@ def _blocked(
 
 
 # ---------------------------------------------------------------------------
+# The shared shipment band (one rule: this page, the market pages — #507)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CrushBand:
+    """The band one session's crush is struck on, and each leg's quote for it.
+
+    ``window`` is the bean's band — what the margin is *for*. ``windows`` is
+    the band each leg's value was actually printed for, which differs where a
+    product's bands are cut differently (meal Oct–Nov against an Oct bean).
+    """
+
+    window: ShipmentWindow
+    values: dict[str, float]
+    windows: dict[str, ShipmentWindow]
+
+
+NO_SHARED_BAND_REASON = (
+    "no shipment band on this session is quoted for all three products — "
+    "this source publishes its own set of bands per product, and a margin "
+    "combining two that do not overlap is a margin for a cargo nobody can ship"
+)
+
+
+def shared_crush_band(
+    day_rows: Mapping[str, Sequence[tuple[ShipmentWindow | None, float]]],
+    session: date,
+) -> CrushBand | str:
+    """One session's bean/oil/meal quotes, struck on a band all three share.
+
+    Bands are matched by OVERLAP, never by label. MAGyP publishes the bean for
+    2026-08 and the oil for 2026-08..2026-09 on the same circular: those are
+    the same August cargo, and string equality rejects the pair while quietly
+    falling through to an older session where the labels happen to line up.
+    The bean band leads — a plant buys beans for a crush period and sells the
+    products against it — taken nearest first by the site's one
+    nearest-window rule (B30 #504), so a band that has sailed never leads.
+    Each product takes the band overlapping the bean's most; on a tie, the
+    nearer band, never the dearer one.
+
+    Returns the reason as a string where no band works; the caller withholds
+    with it rather than falling back to another session.
+    """
+    bean_dated = sorted(
+        ((window, value) for window, value in day_rows["bean"] if window is not None),
+        key=lambda pair: nearest_window_key(pair[0], session),
+    )
+    if not bean_dated:
+        return "the bean leg carries no readable shipment band on its newest session"
+    for bean_window, bean_value in bean_dated:
+        values = {"bean": bean_value}
+        windows = {"bean": bean_window}
+        for name in ("oil", "meal"):
+            overlapping = sorted(
+                (
+                    (window, value)
+                    for window, value in day_rows[name]
+                    if window is not None and window.overlaps(bean_window)
+                ),
+                key=lambda pair: nearest_window_key(pair[0], session),
+            )
+            if overlapping:
+                # index() finds the first of equals: the nearer band wins a tie.
+                overlap = [window.overlap_days(bean_window) for window, _ in overlapping]
+                window, value = overlapping[overlap.index(max(overlap))]
+                values[name] = value
+                windows[name] = window
+        if len(values) == 3:
+            return CrushBand(window=bean_window, values=values, windows=windows)
+    return NO_SHARED_BAND_REASON
+
+
+# ---------------------------------------------------------------------------
 # Leg reads
 # ---------------------------------------------------------------------------
 def _read_legs(
@@ -357,43 +435,14 @@ def _read_legs(
     when = max(common_days)
     observed = date.fromisoformat(when)
 
-    # Bands are matched by OVERLAP, never by label. MAGyP publishes the bean for
-    # 2026-08 and the oil for 2026-08..2026-09 on the same circular: those are
-    # the same August cargo, and string equality rejects the pair while quietly
-    # falling through to an older session where the labels happen to line up.
-    # The bean band leads — a plant buys beans for a crush period and sells the
-    # products against it — and each product takes the band overlapping it most.
     day_rows = {name: by_key[key][when] for name, key in legs.items()}
     window_label: str | None = None
     if window_columns:
-        bean_dated = sorted(
-            ((window, value) for window, value in day_rows["bean"] if window is not None),
-            key=lambda pair: pair[0].start,
-        )
-        if not bean_dated:
-            return "the bean leg carries no readable shipment band on its newest session"
-        chosen: dict[str, float] | None = None
-        for bean_window, bean_value in bean_dated:
-            picks = {"bean": bean_value}
-            for name in ("oil", "meal"):
-                overlapping = [
-                    (window.overlap_days(bean_window), value)
-                    for window, value in day_rows[name]
-                    if window is not None and window.overlaps(bean_window)
-                ]
-                if overlapping:
-                    picks[name] = max(overlapping)[1]
-            if len(picks) == 3:
-                chosen = picks
-                window_label = bean_window.describe()
-                break
-        if chosen is None:
-            return (
-                "no shipment band on this session is quoted for all three products — "
-                "this source publishes its own set of bands per product, and a margin "
-                "combining two that do not overlap is a margin for a cargo nobody can ship"
-            )
-        values = chosen
+        band = shared_crush_band(day_rows, observed)
+        if isinstance(band, str):
+            return band
+        values = band.values
+        window_label = band.window.describe()
     else:
         values = {name: rows_for_day[0][1] for name, rows_for_day in day_rows.items()}
 
@@ -934,6 +983,8 @@ __all__ = [
     "LEVEL_MEANINGS",
     "YIELD_SETS",
     "ContractBasis",
+    "NO_SHARED_BAND_REASON",
+    "CrushBand",
     "CrushLeg",
     "CrushLevel",
     "CrushResult",
@@ -942,5 +993,6 @@ __all__ = [
     "gross_physical_crush",
     "margin_at_yields",
     "net_plant_margin",
+    "shared_crush_band",
     "yields_with_override",
 ]

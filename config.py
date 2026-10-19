@@ -3028,6 +3028,11 @@ MARKETS: dict[str, dict[str, Any]] = {
             "legs": {"bean": "Soybeans", "oil": "Soybean Oil", "meal": "Soybean Meal"},
             "value_column": "price_usd_mt",
             "unit": "usd_per_mt",
+            # #507: each product prints its own set of bands (3/5/6 on circular
+            # 2081). Struck on one band all three share — the origins page's
+            # rule — never on three means over three horizons.
+            "window_scheme": "magyp_months",
+            "window_columns": ("ship_from", "ship_to"),
             # No longer provisional (#162). The meal position 23040010100B was
             # the inferred leg M7 #149 flagged; it is now cross-checked against
             # dataset 358's labelled "Harina de soja, Pellets, de harina de
