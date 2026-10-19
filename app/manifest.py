@@ -14,7 +14,8 @@ consumer:
     perfectly valid-looking site; nothing in the HTML says "this edition
     knows less than the one it is replacing". The coverage block does.
 
-``reliability``  per-layer availability over the last 30 weekday sessions
+``reliability``  per-layer availability over the last 30 weekday sessions,
+    restarted after any no-run gap longer than T1 tolerates (#533)
     ``pipeline.reliability.reliability`` over ``data/history/layer_runs.csv``
     (B34 #520). Read by the A11 re-audit (#315) from the edition itself.
 

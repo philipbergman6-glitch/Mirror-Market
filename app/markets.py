@@ -521,6 +521,55 @@ _LAYER_BY_TABLE = {
     "sagis_deliveries": "sagis",
 }
 
+# Tables a block reads beyond its own descriptor's, each with the layer that
+# writes it. FX: every price, basis and crush builder converts through
+# `SiteContext.fx_on(market.currency_pair, …)`. Named closes: Layer 11b, read
+# through `analysis.futures.providers.close_history` wherever a leg strikes
+# over a named CBOT contract's own close (#512, #352).
+_FX_READS = {"currencies": "currencies"}
+_NAMED_CLOSE_READS = {"contract_bars": "contract_bars"}
+
+
+def block_reads(market: Market, block: str, markets: dict[str, Market]) -> dict[str, str]:
+    """``{table: the layer that writes it}`` for every table ``block`` reads.
+
+    Read off the descriptor by fixed rules that mirror the builders — the
+    market's currency pair adds FX, a named-contract board or a cash leg adds
+    Layer 11b, a front-month basis adds the reference board's price read — so
+    the availability basket can be checked against them (B37 #534). The rules
+    are held to the builders by tests that run each basket-grade block under
+    a SQLite read recorder. Raises where the market has no source for the block.
+    """
+    fx = _FX_READS if market.currency_pair else {}
+    if block == "currency":
+        if not market.currency_pair:
+            raise ValueError(f"{market.slug} has no currency pair")
+        return dict(_FX_READS)
+    if block == "price":
+        if market.price is None:
+            raise ValueError(f"{market.slug} has no price source")
+        return {market.price.table: market.price.layer, **fx}
+    if block == "basis":
+        if market.basis is None:
+            raise ValueError(f"{market.slug} has no basis source")
+        if market.basis.contract_board is not None:
+            board = _NAMED_CLOSE_READS
+        elif market.basis.reference is None:
+            raise ValueError(f"{market.slug} basis names no reference board")
+        else:
+            board = block_reads(markets[market.basis.reference], "price", markets)
+        return {market.basis.table: market.basis.layer, **fx, **board}
+    if block == "crush":
+        if market.crush is None:
+            raise ValueError(f"{market.slug} has no crush source")
+        source = market.crush.as_source()
+        reads = {source.table: source.layer, **fx}
+        cash = config.CRUSH_CASH_LEGS.get(market.slug)
+        if cash is not None:
+            reads.update({cash["table"]: cash["layer"], **_NAMED_CLOSE_READS})
+        return reads
+    raise KeyError(f"block_reads derives no reads for block {block!r}")
+
 
 # ---------------------------------------------------------------------------
 # Loading and validation

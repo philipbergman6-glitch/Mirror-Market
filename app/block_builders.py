@@ -2395,8 +2395,10 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
 
     board_market = markets.get(REFERENCE_MARKET)
     board_kind = board_market.price.quote_kind if board_market and board_market.price else None
-    reference = dict(ctx.reference_series(markets))
-    # A named-contract basis (#512) does not strike on this series at all.
+    # A named-contract basis (#512) does not strike on this series at all, so
+    # it does not read it either: `markets.block_reads` states this block's
+    # tables and the availability basket is checked against them (B37 #534).
+    reference = dict(ctx.reference_series(markets)) if source.contract_board is None else {}
     if not reference and source.contract_board is None:
         return STATE_EMPTY, "the CBOT reference leg has no rows to strike a basis against", {}
 

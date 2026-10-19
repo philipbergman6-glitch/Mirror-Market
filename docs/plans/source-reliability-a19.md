@@ -16,26 +16,29 @@ This is a requirements note. It changes no code or workflow. The store and the c
 
 | Basket v1 stratum | Layer (`config.PRODUCTION_LAYERS` key) | Cadence |
 |---|---|---|
-| 1 CBOT ZS/ZL/ZM named-contract closes | `forward_curve` | Daily |
+| 1 CBOT ZS/ZL/ZM named-contract closes | `forward_curve` (curve snapshot); `contract_bars` (Layer 11b per-contract closes, B37 #534) | Daily |
 | 2 DCE beans/meal/oil | `dce` | Daily |
 | 3 AgRural Paranaguá + CEPEA indicator | `agrural`, `cepea` | Daily |
 | 4 MAGyP official FOB | `magyp_fob` | Daily |
-| 5 US Gulf basis (AMS 3147) | `gulf_bids` | Daily |
+| 5 US Gulf basis (AMS 3147) | `gulf_bids`; board leg `contract_bars` | Daily |
 | 6 FX BRL/CNY/INR/ZAR | `currencies` | Daily |
 | 7 Board crush (CBOT named) + DCE crush | none. Available when strata 1 and 2 are | — |
 | 8 One landed origin→destination row | none. Available when strata 1, 3–6 are (the assumption stack is desk-entered, not a layer) | — |
-| 9 US processor cash oil/meal (AMS 3511) | `us_processor_cash` | Weekly |
+| 9 US processor cash oil/meal (AMS 3511) | `us_processor_cash`; board leg `contract_bars` | Weekly |
 
-**Eight layers.** Derived strata (7, 8) get no availability figure of their own. A derived number is available exactly when every leg is, which follows from invariant 8 (one session's number, every leg printed).
+**Nine layers** (eight as first drawn; `contract_bars` joined with B37 #534, below). Derived strata (7, 8) get no availability figure of their own. A derived number is available exactly when every leg is, which follows from invariant 8 (one session's number, every leg printed).
 
 **Deliberately outside**, each with its reason:
 
 - `prices` (CBOT continuous front month): not in basket v1 because named contracts carry a month. It is already in `main.CRITICAL_LAYERS`, so its failure fails the pipeline's exit code. That is a stronger rule than this one.
-- `contract_bars`: named-contract history for charts and technicals. Today's decision prices come from `forward_curve`.
 - India (`india_domestic`, `sea_india`, `sopa_crop`): out of v1 for the same reason as accuracy (private edition, geo-block, Agmarknet dead #449). They join when #472's India strata do.
 - `safex`, CONAB, Comex Stat, weather, macro, balance sheets, freight, rivers, cyclones: each degrades a market page or the context frame. None is a leg of a basket number.
 
-**There is already a second list.** `config.TRIAL_CRITICAL_LAYERS` (config.py:4368, 12 layers, read by `analysis/trial/metrics.py` and `scripts/trial.py day`) measures "critical source availability" for the Phase 5 trial. It holds `fred`, `export_sales`, `psd`, `weather` and `prices`, which are context rather than legs, and it lacks `us_processor_cash`. Its comment still says "all 27". Two availability baskets is the parallel-vocabulary drift invariant 3 warns about. **Requirement 1.1:** one tuple, `config.AVAILABILITY_BASKET`, holding the eight layers above. The trial reads it in place of `TRIAL_CRITICAL_LAYERS`, which is deleted, so the trial and A11 measure one thing. A test pins it to basket v1's strata.
+**A layer is in the basket because a basket number reads it, not because its name matches a stratum** (B37 [#534](https://github.com/philipbergman6-glitch/Mirror-Market/issues/534), fifth audit finding 1). The basket was first drawn as eight layers, with `contract_bars` outside as "history for charts and technicals". Then #512 (PR #525) moved the Gulf basis (stratum 5) onto the AMS-named contract's own Layer 11b close, read through `close_history`. The AMS 3511 cash legs (stratum 9) were already struck that way. So the basket could read 100 % available while block 04 withheld for want of a close. `contract_bars` joined, and the 30-session window restarts for it.
+
+The rule is now tested, not just stated. `config.AVAILABILITY_BASKET_BLOCKS` names the basket-grade market blocks, each with its stratum. `app.markets.block_reads` reads off each block's descriptor the tables it reads and the layer that writes each one. `tests/test_availability_basket.py` fails when any of those layers is outside the basket. Every basket-grade builder is also run, struck end to end, against SQLite with an authorizer that records every table read (`tests/test_market_blocks.py`; tighter fixtures for the Gulf basis in `tests/test_availability_basket.py` and the cash-leg panel in `tests/test_processor_cash.py`). A read the derivation omits fails too: that is how the FX rule was found to follow the market's currency pair, not the leg's unit (Argentina's USD-native price block still reads `currencies`). Block 04 is basket-grade only for the Gulf. Brazil's, Argentina's and Dalian's basis is struck over the provider front month (`prices`), which basket v1 excludes, so those spreads are not basket numbers. AgRural's level (stratum 3) appears only as the local leg of Brazil's block 04. "Leg available, spread withheld" is calculation availability, which belongs to A12 (#406), not to this basket.
+
+**There is already a second list.** `config.TRIAL_CRITICAL_LAYERS` (config.py:4368, 12 layers, read by `analysis/trial/metrics.py` and `scripts/trial.py day`) measures "critical source availability" for the Phase 5 trial. It holds `fred`, `export_sales`, `psd`, `weather` and `prices`, which are context rather than legs, and it lacks `us_processor_cash`. Its comment still says "all 27". Two availability baskets is the parallel-vocabulary drift invariant 3 warns about. **Requirement 1.1:** one tuple, `config.AVAILABILITY_BASKET`, holding the layers above (eight as built by B34, nine since B37). The trial reads it in place of `TRIAL_CRITICAL_LAYERS`, which is deleted, so the trial and A11 measure one thing. A test pins it to basket v1's strata.
 
 ## 2. Where the record comes from
 
@@ -82,7 +85,7 @@ This is a requirements note. It changes no code or workflow. The store and the c
 
 The computation is one function over `layer_runs.csv` (A9 §4's rule: computed once, existing states only). Its output goes in `manifest.json` beside `coverage` and `latency`, so A11 reads it from the edition and not from a side script.
 
-**Window:** the last **30 weekday CBOT sessions** that ended before the audit, counted on `session_date`. Weekend dispatches add runs, never sessions.
+**Window:** the last **30 weekday CBOT sessions** that ended before the audit, counted on `session_date`. Weekend dispatches add runs, never sessions. The window never reaches back across a gap T1 does not tolerate: the last gap of more than 2 sessions with no run anywhere in the record **restarts** it at the first logged session after that gap, and every figure below — T1 to T4 — is computed over the restarted window (`manifest.json` → `reliability.window.restarted_at`, with `restart_gap` and `evidence_sessions`). Taking the last 30 first and measuring the gap inside the cut would trim the gap instead of enforcing it (#533). While such a gap is still open at the window's end there is no evidence yet: the block's state is `restarting`, its figures are absent, and `data` still states the gap (`record_started`, `gap_first_session`, `restart_gap`) and `T1_continuous.met: false`.
 
 **Per basket layer:**
 
@@ -102,7 +105,7 @@ Non-basket layers get the same figures, reported, never gating. Edition level: s
 
 | # | Threshold | Why this number |
 |---|---|---|
-| T1 | The record is **continuous**: 30 consecutive weekday sessions logged by the store, with **no gap of more than 2 sessions without a run**, else the window restarts. Shorter gaps stay in the window as `no_run` and count against T2 | A record with holes is not a record. The 2026-09-08→09-18 deploy outage would have reset it |
+| T1 | The record is **continuous**: 30 consecutive weekday sessions logged by the store, with **no gap of more than 2 sessions without a run**, else the window restarts at the first logged session after the gap and T1 waits for 30 weekday sessions from there. Shorter gaps stay in the window as `no_run` and count against T2 | A record with holes is not a record. The 2026-09-08→09-18 deploy outage would have reset it |
 | T2 | Every basket layer **≥ 90 %** available (≤ 3 of 30 sessions down) | One bad session a fortnight on a decision leg, retries included. Today's replay sits at 93–100 % for the basket, so this is a floor to hold, not a stretch |
 | T3 | Every basket layer's **longest streak ≤ 5 sessions**, and every streak of ≥ 3 sessions raised a dead-source alert (§4) | Five sessions is one desk week. Past that a buyer has priced a week of cargoes without the leg. The alert clause tests that the dead-source rule fires, not just exists |
 | T4 | **Surfaced within one run = 100 %**, all 39 layers | Invariant 1. One unsurfaced failure is a silent failure |
@@ -144,7 +147,7 @@ The per-run #398 comment stays as it is. It is T4's evidence.
 
 ## Checklist for A11 (one line each)
 
-- [ ] 1.1 one `AVAILABILITY_BASKET` tuple (8 layers, basket v1 strata); `TRIAL_CRITICAL_LAYERS` retired into it; test pins it
+- [ ] 1.1 one `AVAILABILITY_BASKET` tuple (9 layers: basket v1 strata + `contract_bars`, B37 #534); `TRIAL_CRITICAL_LAYERS` retired into it; test pins it; every table a basket-grade block reads is written by a basket layer (tested)
 - [ ] 2 `data/history/layer_runs.csv` append-only, deploy/retry only, one row per (run, layer), `no_run` sessions detected; backfill rows labelled `reconstructed`
 - [ ] 3 reliability figures computed once into `manifest.json`; 30 weekday sessions logged
 - [ ] T1 record continuous (no gap > 2 sessions)
