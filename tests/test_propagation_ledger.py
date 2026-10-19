@@ -101,9 +101,9 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     )
     # Argentina — natively USD/MT, so it has no second currency to quote in.
     conn.execute(
-        "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
-        "VALUES (?,?,?,?,?)",
-        (_day(1), "Soybeans", "12010090100W", "2026-08", 450.0),
+        "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
+        "VALUES (?,?,?,?,?,?)",
+        (_day(1), "Soybeans", "12010090100W", "2026-08", "2026-08", 450.0),
     )
     # SAFEX — the carry-forward trap (#157). The NEWEST row is the venue
     # re-stamping a price that did not trade (Volume 0); the real last print is

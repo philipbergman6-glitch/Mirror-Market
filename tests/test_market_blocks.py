@@ -256,9 +256,9 @@ def test_a_usd_native_price_leg_is_not_relabelled_as_the_home_currency(seeded, r
     """
     for product, price in (("Soybeans", 451.67), ("Sunflower Oil", 1367.33)):
         seeded.conn.execute(
-            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
-            "VALUES (?,?,?,?,?)",
-            (_day(0), product, f"pos-{product}", "2026-08", price),
+            "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
+            "VALUES (?,?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", "2026-08", price),
         )
     seeded.conn.commit()
 
@@ -522,9 +522,9 @@ def test_a_provisional_crush_still_carries_its_caveat_into_the_block(seeded, reg
     """
     for product, price in (("Soybeans", 449.0), ("Soybean Oil", 1201.0), ("Soybean Meal", 345.0)):
         seeded.conn.execute(
-            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
-            "VALUES (?,?,?,?,?)",
-            (_day(0), product, f"pos-{product}", "2026-08", price),
+            "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
+            "VALUES (?,?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", "2026-08", price),
         )
     seeded.conn.commit()
 
@@ -570,9 +570,9 @@ def test_a_basket_grade_builder_reads_only_what_block_reads_derives(seeded, regi
     tighter fixtures in test_availability_basket / test_processor_cash)."""
     for product in ("Soybeans", "Soybean Oil", "Soybean Meal"):
         seeded.conn.execute(
-            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
-            "VALUES (?,?,?,?,?)",
-            (_day(0), product, f"pos-{product}", "2026-08", 450.0),
+            "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
+            "VALUES (?,?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", "2026-08", 450.0),
         )
     for pair, rate in (("ARS/USD", 0.0007), ("INR/USD", 0.012), ("ZAR/USD", 0.055)):
         seeded.conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",

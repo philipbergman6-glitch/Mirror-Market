@@ -262,6 +262,7 @@ def test_reconciliation_report_accounts_for_missing_rows_and_field_differences()
                 "date": "2026-08-05",
                 "position": "12019000190C",
                 "ship_from": "2026-08",
+                "ship_to": "2026-08",
             },
             "field": "price_usd_mt",
             "legacy": 450.0,
