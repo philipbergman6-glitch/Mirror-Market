@@ -2336,6 +2336,7 @@ def _crush_margin_history(
     history: list[tuple[date, float]] = []
     for day in sorted(common):
         strike = _crush_strike(crush, source, ctx, day)
+        # Re-keyed on the loading month by B39 #540 (A20 #536's identity).
         if isinstance(strike, str) or _band_identity(strike) != _band_identity(level):
             continue
         rate = ctx.fx_on(market.currency_pair, day).rate

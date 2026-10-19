@@ -378,13 +378,11 @@ def shared_crush_band(
     Oil and meal are chosen as a PAIR (B35 #532): each overlapping the bean
     is not enough, because a July oil and an Aug–Sep meal both overlap a
     Jul–Sep bean and share no day with each other. Among the pairs sharing at
-    least one day with the bean, a shared period still open on the session
-    comes before one that has ended (B30 again: a sailed cargo is never the
-    prompt); then the pair overlapping the bean's band most in total wins;
-    on a tie, the nearer oil band, then the nearer meal band, never the
-    dearer one. Where each product's own best band already ships with the
-    other's, that is the pair taken — the window policy is #536's, not this
-    rule's. The band returned names the period all three share.
+    least one day with the bean, the one whose shared period is nearest by
+    the same B30 rule wins — the prompt cargo all three can ship, never a
+    later one because a wider product band covers more of the bean's; on a
+    tie, the nearer oil band, then the nearer meal band, never the dearer
+    one. The band returned names that shared period.
     Where no pair shares a day with the bean, the next bean band is tried.
 
     Returns the reason as a string where no band works; the caller withholds
@@ -411,8 +409,7 @@ def shared_crush_band(
         common, oil_window, oil_value, meal_window, meal_value = min(
             trios,
             key=lambda trio: (
-                trio[0].end < session,
-                -(trio[1].overlap_days(bean_window) + trio[3].overlap_days(bean_window)),
+                nearest_window_key(trio[0], session),
                 nearest_window_key(trio[1], session),
                 nearest_window_key(trio[3], session),
             ),

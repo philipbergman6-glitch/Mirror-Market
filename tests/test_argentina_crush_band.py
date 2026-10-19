@@ -349,10 +349,10 @@ def test_july_22_stored_circular_strikes_a_trio_that_ships_together():
     assert (picked.window.start, picked.window.end) == (
         _shared(picked).start, _shared(picked).end
     )
-    # Oil Aug with meal Aug–Sep overlaps the bean 31 + 61 days — more than
-    # Jul/Jul (62) or Sep/Aug–Sep (91) — and the three ship together in August.
-    assert picked.window.describe() == "2026-08"
-    assert picked.values == {"bean": 469.0, "oil": 1203.0, "meal": 363.0}
+    # July oil and July meal ship with the Jul–Sep bean in July, the prompt
+    # cargo — not August, however much more of the bean Aug–Sep meal covers.
+    assert picked.window.describe() == "2026-07"
+    assert picked.values == {"bean": 469.0, "oil": 1217.0, "meal": 361.0}
 
 
 def test_the_band_shrinks_to_the_period_all_three_legs_ship():
@@ -446,11 +446,10 @@ def test_one_band_printed_twice_at_two_prices_is_refused():
         )
 
 
-def test_a_pair_whose_own_best_bands_already_ship_together_is_unchanged():
-    """Circular of 2024-11-01: oil Dec–Feb and meal Nov–Dec are each the band
-    overlapping the Nov–Feb bean most, and they share December. That pair
-    stands, even though oil Dec–Feb with meal Jan–Mar shares more months —
-    which band to prefer is the window policy (#536), not this fix."""
+def test_the_nearest_shared_period_wins_over_a_wider_product_band():
+    """Circular of 2024-11-01: oil Dec–Feb overlaps the Nov–Feb bean most and
+    ships with meal Nov–Dec in December, but oil Nov ships with the same meal
+    in November — the prompt cargo all three share is November's."""
     picked = shared_crush_band(
         {
             "bean": [(_w((2024, 11), (2025, 2)), 413.0), (_w((2025, 3), (2025, 10)), 389.0)],
@@ -469,8 +468,8 @@ def test_a_pair_whose_own_best_bands_already_ship_together_is_unchanged():
         date(2024, 11, 1),
     )
     assert not isinstance(picked, str)
-    assert picked.values == {"bean": 413.0, "oil": 1109.0, "meal": 337.0}
-    assert picked.window.describe() == "2024-12"
+    assert picked.values == {"bean": 413.0, "oil": 1120.0, "meal": 337.0}
+    assert picked.window.describe() == "2024-11"
 
 
 def test_equal_overlap_takes_the_nearer_meal_band_not_the_dearer():
