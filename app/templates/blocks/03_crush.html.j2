@@ -22,12 +22,16 @@
     {{ f.asof(d.as_of, d.age_days) }}
     {#- A1 #298: the three legs share one session; the rate may be a prior close. -#}
     {% if d.fx_label %}<div class="caption">legs struck at {{ d.fx_label }}</div>{% endif %}
+    {#- #507: a venue printing several bands a session is struck on one band all
+        three products share — the bean's, each product at the band overlapping it. -#}
+    {% if d.shipment_window %}<div class="caption">struck on the {{ d.shipment_window }} band — the bean's; oil and meal at their band overlapping it most</div>{% endif %}
   </div>
   {% for name in ['bean', 'oil', 'meal'] %}
   <div class="mc">
     <div class="mc-label">{{ name }} — {{ d.legs[name].key }}</div>
     <div class="mc-val">{{ f.usd(d.legs[name].usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT{% if name != 'bean' %} · yield {{ '%.3f'|format(d.yields[name]) }} MT/MT{% endif %}</div>
+    {% if d.legs[name].window %}<div class="mc-delta muted">window {{ d.legs[name].window }}</div>{% endif %}
     {% if d.legs_named %}
     <div class="mc-delta muted">{{ d.legs[name].contract_month }} · {{ d.legs[name].price_label }}{% if not d.legs[name].settlement_proven %} · settlement not proven{% endif %}</div>
     {% endif %}
