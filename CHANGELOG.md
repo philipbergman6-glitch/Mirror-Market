@@ -24,12 +24,18 @@ a reason on two rows for its band instead of taking the first row, and a
 leg whose loader raised is printed as `withheld — failed (<reason>)` and
 logged at warning instead of dropped at debug; `parse_magyp_window` returns
 None for an unreadable `ship_to` instead of a single-month band (every
-caller already treats None as unreadable). Latent: 0/8514 stored MAGyP rows
+caller already treats None as unreadable). Both surfaces read a NaN `ship_to` the same way — unreadable — so the board
+no longer prices it as a one-month band. Every reason (archived, printed and
+logged) comes from `analysis.briefing.failures.failure_reason`: exception type
+plus the message's first line, cut before the first path-like token and capped
+at 120 characters, because `briefings.csv` and the briefing text are
+published. Latent: 0/8514 stored MAGyP rows
 have an unreadable band or a duplicate band; no block raises on an empty DB.
-Tests: seven new (`test_snapshot`: raising builder → entry + warning, nested
+Tests: fourteen new (`test_snapshot`: raising builder → entry + warning, nested
 dotted name, no leak between snapshots, archive reader on v3 and v4 rows,
-Argentina per-product withhold; `test_window_headlines`: FOB-board
-duplicate-band withhold, failed leg named),
+Argentina per-product withhold, NaN `ship_to` withhold, four `failure_reason`
+cases; `test_window_headlines`: FOB-board duplicate-band withhold, failed leg
+named, NaN band end withheld, printed reason carries no path),
 the empty-DB skeleton asserts `failed_blocks == {}`, and
 `test_magyp_unreadable_bounds_are_none` gains three unreadable-end cases (NaN included).
 

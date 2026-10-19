@@ -23,6 +23,7 @@ import logging
 import pandas as pd
 
 import config
+from analysis.briefing.failures import failure_reason
 from analysis.origins.domain import ShipmentWindow
 from analysis.origins.sources import nearest_open_window, parse_ams_slot, parse_magyp_window
 from analysis.spreads import compute_brazil_basis
@@ -107,7 +108,8 @@ def _argentina_leg() -> tuple[float, str] | str | None:
     session = latest_date.date()
     nearest = _nearest(
         fob[fob["date"] == latest_date],
-        lambda r: parse_magyp_window(r["ship_from"], r["ship_to"] if pd.notna(r["ship_to"]) else None),
+        # A NaN end is unreadable, as in the snapshot — never a one-month band (#558).
+        lambda r: parse_magyp_window(r["ship_from"], r["ship_to"]),
         session,
     )
     if nearest is None or isinstance(nearest, str):
@@ -155,8 +157,9 @@ def format(  # noqa: A001
             leg = loaders[leg_id]()
         except Exception as exc:
             # #558: a leg that raised is named on the board, never read as "no data".
-            logger.warning("Cross-origin leg %s failed: %s", leg_id, exc)
-            leg = f"failed ({type(exc).__name__}: {exc})"
+            reason = failure_reason(exc)
+            logger.warning("Cross-origin leg %s failed: %s", leg_id, reason)
+            leg = f"failed ({reason})"
         if isinstance(leg, str):
             withheld.append((config.ORIGIN_LEGS[leg_id]["label"], leg))
         elif leg is not None:

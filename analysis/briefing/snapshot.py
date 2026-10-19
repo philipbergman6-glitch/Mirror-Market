@@ -43,6 +43,7 @@ from typing import Any
 
 import pandas as pd
 
+from analysis.briefing.failures import failure_reason
 from analysis.briefing.sections.cot import _LOOKBACK as _COT_LOOKBACK
 from analysis.briefing.sections.export_sales import (
     soy_marketing_year,
@@ -214,12 +215,14 @@ def _safe(name: str, builder: Callable[[], Any], default: Any) -> Any:
 
     The failure is not silent (#558): it is logged at warning and, inside
     ``build_snapshot``, recorded under ``failed_blocks`` — an empty block alone
-    would read as "the source published nothing".
+    would read as "the source published nothing". The reason is
+    ``failure_reason``'s: type plus a cleaned first line, since the row is
+    published.
     """
     try:
         return builder()
     except Exception as exc:
-        reason = f"{type(exc).__name__}: {exc}"
+        reason = failure_reason(exc)
         logger.warning("Snapshot block %s failed: %s", name, reason)
         failed = _FAILED_BLOCKS.get()
         if failed is not None:

@@ -593,3 +593,74 @@ def test_the_archive_reader_works_on_old_and_new_rows(
     module.get_connection = lambda: sqlite3.connect(str(patched_db))  # type: ignore[attr-defined]
 
     assert module.backfill() == 1
+
+
+def test_a_nan_ship_to_withholds_the_product(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A NaN end is unreadable, never a single-month band (#558): the snapshot
+    withholds the product, as the FOB board withholds its leg."""
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2026-09-15"]),
+        "product": ["Soybeans"],
+        "ship_from": ["2026-09"],
+        "ship_to": [float("nan")],
+        "price_usd_mt": [404.0],
+    })
+    monkeypatch.setattr("analysis.briefing.snapshot.read_argentina_fob", lambda: fob)
+
+    snapshot = build_snapshot(_empty_briefing())
+
+    assert snapshot["argentina_fob"] == {}
+    assert "unreadable band" in snapshot["failed_blocks"]["argentina_fob.Soybeans"]
+
+
+# ---------------------------------------------------------------------------
+# failure_reason — what of an exception is archived and printed
+# ---------------------------------------------------------------------------
+
+
+def test_failure_reason_keeps_type_and_first_line() -> None:
+    from analysis.briefing.failures import failure_reason
+
+    exc = ValueError("two rows for band 2026-09\nTraceback detail\nmore")
+    assert failure_reason(exc) == "ValueError: two rows for band 2026-09"
+    assert failure_reason(RuntimeError()) == "RuntimeError"
+
+
+def test_failure_reason_drops_everything_from_a_path_on() -> None:
+    from analysis.briefing.failures import failure_reason
+
+    for message, kept in [
+        ("unable to open database file /Users/someone/data/mirror.db", "unable to open database file"),
+        ("[Errno 2] No such file or directory: '/home/runner/work/x.csv'", "[Errno 2] No such file or directory"),
+        ("cannot read ~/secrets/key.txt now", "cannot read"),
+        ("cannot read ./data/raw.csv", "cannot read"),
+        ("bad file C:\\Users\\me\\x.db", "bad file"),
+    ]:
+        assert failure_reason(OSError(message)) == f"OSError: {kept}"
+    # A unit is not a path.
+    assert failure_reason(ValueError("price 404 USD/MT out of range")) == (
+        "ValueError: price 404 USD/MT out of range"
+    )
+
+
+def test_failure_reason_truncates_a_long_first_line() -> None:
+    from analysis.briefing.failures import MAX_REASON_CHARS, failure_reason
+
+    reason = failure_reason(ValueError("x" * 500))
+    message = reason.removeprefix("ValueError: ")
+    assert len(message) == MAX_REASON_CHARS and message.endswith("…")
+
+
+def test_failed_blocks_archive_the_sanitised_reason(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom() -> dict:
+        raise sqlite3.OperationalError("unable to open database file /Users/someone/x.db")
+
+    monkeypatch.setattr("analysis.briefing.snapshot._cot_block", boom)
+
+    snapshot = build_snapshot(_empty_briefing())
+
+    assert snapshot["failed_blocks"] == {"cot": "OperationalError: unable to open database file"}
