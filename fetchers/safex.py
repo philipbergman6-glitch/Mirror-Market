@@ -1,7 +1,7 @@
 """
 Layer 18 — SAFEX South Africa domestic soy prices via Grain SA.
 
-Source: Grain SA SAFEX Feeds page (https://www.grainsa.co.za/pages/industry-reports/safex-feeds)
+Source: Grain SA SAFEX Feeds page (config.SAFEX_STATS_URL — moved in Oct 2026, #515)
 Data provider: BVG (credited on the page)
 Prices: ZAR/MT — the *last traded price* for JSE Agricultural futures contracts.
 
@@ -156,7 +156,12 @@ def _fetch_page() -> str:
             )
             if resp.status_code == 200:
                 return resp.text
-            logger.warning("Grain SA SAFEX: HTTP %d (attempt %d)", resp.status_code, attempt)
+            # resp.url names where a redirect landed — a moved page reads
+            # as "HTTP 404 at <new address>", not a bare 404 (#515).
+            logger.warning(
+                "Grain SA SAFEX: HTTP %d at %s (attempt %d)",
+                resp.status_code, resp.url, attempt,
+            )
         except requests.RequestException as exc:
             logger.warning("Grain SA SAFEX: Request failed (attempt %d): %s", attempt, exc)
 

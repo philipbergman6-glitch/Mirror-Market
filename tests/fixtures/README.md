@@ -13,6 +13,7 @@ parsing without hitting the network.
 | `ams_3511_2026-09-28_api.json` | USDA MARS `reports/3511/Report Detail` (AMS 3511 "National Grain and Oilseed Processor Feedstuff Report"), the soybean oil and meal rows of the week 09/28–10/02/2026 (12 of the report's 56), verbatim. Its prices less its basis reproduce the CBOT closes of Thu 2026-10-01 exactly (ZLV26 66.97, ZLZ26 67.38, ZMV26 352.1, ZMZ26 353.3) | live download 2026-10-05 |
 | `ams_3511_archive_shapes_api.json` | Same endpoint, full-archive pull: three verbatim rows exhibiting the shapes the mapping must keep — a basis printed with only its high-leg month (Indiana-Ohio meal, week of 11/17/2025), a `Price` quote with no basis (Portland meal, 08/18/2025), and a basis with neither months nor a price (KC Region meal, 12/04/2023) | live download 2026-10-05 |
 | `safex_grainsa.html` | Grain SA SAFEX feeds page | live download 2026-05-11 |
+| `safex_grainsa_wordpress_2026-10-19.html.gz` | Grain SA SAFEX feeds page after the WordPress move, `https://grainsa.co.za/applied-economics/safex-feeds/` (gzip of the verbatim 395,637-byte body; the old address 301s to a 404, #515) | live download 2026-10-19 |
 | `cepea_soybean.html` | CEPEA/ESALQ soybean indicator | synthetic (live returned HTTP 403 anti-bot) |
 | `ncdex_bhavcopy.csv` | NCDEX Bhav Copy | synthetic (live URL templates 404 — see config.py) |
 | `agrural_paranagua.html` | AgRural soja+milho price page | live download 2026-05-11 |
