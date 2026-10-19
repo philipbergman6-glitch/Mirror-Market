@@ -303,6 +303,35 @@ def test_run_writes_pipeline_status_file(stub_fetchers, monkeypatch, tmp_path):
     assert "psd" in status["classifications"]["upstream_failure"]
 
 
+def test_run_records_its_roster_and_key_configuration_as_evidence(stub_fetchers, monkeypatch, tmp_path):
+    """B38 #535: the record step reads this, never its own env or checkout.
+
+    Written at the start of the run (so a crash still leaves it) and again in
+    the summary; per-key booleans only, never a key's value.
+    """
+    import json
+
+    import config
+
+    main = stub_fetchers
+    for name in config.API_KEY_CATALOG:
+        monkeypatch.delenv(name, raising=False)
+    sentinel = "not-a-real-value-9876543210"
+    monkeypatch.setenv("USDA_API_KEY", sentinel)
+
+    main.run()
+
+    start = (tmp_path / "run_evidence.json").read_text()
+    summary = json.loads((tmp_path / "pipeline_status.json").read_text())
+    assert json.loads(start) == summary["run_evidence"]
+    block = summary["run_evidence"]
+    assert block["roster"] == list(config.PRODUCTION_LAYER_KEYS)
+    assert block["api_keys"]["USDA_API_KEY"]["configured"] is True
+    assert block["api_keys"]["FRED_API_KEY"]["configured"] is False
+    assert sentinel not in start
+    assert sentinel not in (tmp_path / "pipeline_status.json").read_text()
+
+
 def test_failed_layer_writes_freshness_row(stub_fetchers, monkeypatch):
     """A failed layer leaves a status='failed' row so the dashboard can render it."""
     main = stub_fetchers
