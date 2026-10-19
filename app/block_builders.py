@@ -255,8 +255,10 @@ def _window_fields(windows: dict[date, SessionWindows], when: date) -> dict:
 # nearest band holds at most 21 sessions in a row, median 2, because the
 # circular re-cuts its curve daily and flips Sep ↔ Sep–Oct (58 flips a year on
 # beans). Keyed on the loading month instead (A20 #536), beans, oil and meal
-# roll 11.8 times a year, median run ≈ 20 sessions; AMS's Current slot rolls
-# monthly by either key. Ranges and the drill-down chart *label* the loading
+# roll 11.8 times a year, median run ≈ 20 sessions. The key is venue-neutral,
+# so AMS's switches inside a month (Current ↔ a half-month slot: 59 of 139
+# exact-slot changes on Gulf soybeans since 2020-08) are band changes too —
+# shown with the note, no longer withheld; month changes still roll. Ranges and the drill-down chart *label* the loading
 # months they span and break only at rolls — a band change is a tick, not a
 # break; the signal chips, which a label cannot repair, read the current
 # loading month alone (`_current_window_run`).
@@ -273,12 +275,19 @@ class WindowSpan:
     # Sessions since the last roll (all of them where there is none).
     last_run: int
 
+    @property
+    def current(self) -> LoadingMonth:
+        """The newest session's loading month — not ``months[-1]``, which is the
+        last month *first seen*: a circular that skips its prompt month for a
+        session and prints it again (Sep → Oct → Sep) has rolled back."""
+        return self.rolls[-1][2] if self.rolls else self.months[0]
+
     def run(self) -> str:
         """``Sep loading · 20 sessions, 3 band changes`` — the newest month's run."""
         since = self.rolls[-1][0] if self.rolls else None
         changes = len([day for day in self.band_changes if since is None or day >= since])
         return (
-            f"{self.months[-1].name} loading · {self.last_run} "
+            f"{self.current.name} loading · {self.last_run} "
             f"session{'' if self.last_run == 1 else 's'}, {changes} "
             f"band change{'' if changes == 1 else 's'}"
         )

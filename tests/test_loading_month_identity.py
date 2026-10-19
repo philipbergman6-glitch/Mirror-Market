@@ -128,6 +128,18 @@ def test_a_loading_month_names_its_run_and_band_changes(registry):
     assert span.describe() == "Sep loading · 8 sessions, 5 band changes"
 
 
+def test_a_run_back_to_an_earlier_month_is_named_by_the_newest_session(registry):
+    """Sep → Oct → Sep: two rolls, and the run is September's, not October's."""
+    _, windows = _windows(registry)
+    back = date(2026, 10, 1)
+    windows = {**windows, back: windows[date(2026, 9, 29)]}
+    span = block_builders._window_span(windows, [*SESSIONS, back])
+    assert span is not None
+    assert span.rolls[-1] == (back, OCT, SEP)
+    assert span.current == SEP
+    assert span.describe().endswith("Sep loading · 1 session, 0 band changes")
+
+
 def test_identity_is_the_start_month_of_the_chosen_band():
     """Venue-neutral: AMS's Current slot keys on its report month too."""
     magyp = ShipmentWindow(date(2026, 9, 1), date(2026, 11, 30), "2026-09..2026-11")

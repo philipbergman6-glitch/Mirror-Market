@@ -18,9 +18,13 @@ move is withheld with `loading month rolled Sep → Oct — no like-for-like
 change`. One selector for block 01 (moves, signal run), the ledger (move,
 range band, drill-down breaks + new band-change ticks), block 04's history
 label, the headline ledger and the briefing's FOB board; labels read
-`Sep loading (band Sep–Oct 2026)`. AMS's Current slot keys on its report
-month, so the Gulf rolls monthly as before and stays on its named contract
-(#512). The crush range keys on the loading month of B35's three-way shared
+`Sep loading (band Sep–Oct 2026)`. The key is venue-neutral, so AMS's
+Gulf slot keys on its loading month too and stays on its named contract
+(#512): its month changes still roll, but its switches inside a month
+(Current ↔ a half-month slot, which AMS prints on one day at different
+prices) are now band changes, shown with the note — 59 of 139 exact-slot
+changes on Gulf soybeans since 2020-08 (rolls 139 → 80), flagged on #540 for
+the owner since A20's like-for-like evidence was measured on MAGyP. The crush range keys on the loading month of B35's three-way shared
 period instead of (shared band, bean band), and block 03 names it: `crush for
 Oct loading (overlap Oct 2026 of bean Oct / oil Oct / meal Oct–Nov)`.
 Retroactive, no stored row changes. Replay over `data/history/argentina_fob.csv`
