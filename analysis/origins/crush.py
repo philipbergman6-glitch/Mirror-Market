@@ -295,8 +295,11 @@ def _blocked(
 class CrushBand:
     """The band one session's crush is struck on, and each leg's quote for it.
 
-    ``window`` is the bean's band — what the margin is *for*. ``windows`` is
-    the band each leg's value was actually printed for, which differs where a
+    ``window`` is the period all three legs' bands cover — what the margin is
+    *for* (B35 #532). It is the bean's band wherever the products' bands span
+    it, and shrinks to the shared months where they do not: a Jul–Sep bean
+    against Aug–Sep oil and August meal is an August margin. ``windows`` is the
+    band each leg's value was actually printed for, which differs where a
     product's bands are cut differently (meal Oct–Nov against an Oct bean).
     """
 
@@ -312,6 +315,47 @@ NO_SHARED_BAND_REASON = (
 )
 
 
+def _common_band(windows: Sequence[ShipmentWindow]) -> ShipmentWindow | None:
+    """The period every one of ``windows`` covers, or None where none is.
+
+    Labelled as the first labelled band it equals, so an unshrunk margin
+    keeps the bean's own label; otherwise by the whole months it spans in the
+    circular's ``YYYY-MM[..YYYY-MM]`` form, or by its dates where it is not
+    whole months.
+    """
+    start = max(window.start for window in windows)
+    end = min(window.end for window in windows)
+    if end < start:
+        return None
+    for window in windows:
+        if (window.start, window.end) == (start, end) and window.label:
+            return window
+    label = None
+    if start.day == 1 and (end + timedelta(days=1)).day == 1:
+        first, last = f"{start:%Y-%m}", f"{end:%Y-%m}"
+        label = first if first == last else f"{first}..{last}"
+    return ShipmentWindow(start, end, label=label)
+
+
+def _dated_bands(
+    name: str, rows: Sequence[tuple[ShipmentWindow | None, float]]
+) -> list[tuple[ShipmentWindow, float]]:
+    """One product's dated bands, refusing a band printed at two prices."""
+    seen: dict[tuple[date, date], float] = {}
+    for window, value in rows:
+        if window is None:
+            continue
+        bounds = (window.start, window.end)
+        if bounds in seen and seen[bounds] != value:
+            raise ValueError(
+                f"the {name} leg prints {window.describe()} twice on one session "
+                f"({seen[bounds]} and {value}) — which is the quote is not a "
+                "question list order may answer"
+            )
+        seen[bounds] = value
+    return [(window, value) for window, value in rows if window is not None]
+
+
 def shared_crush_band(
     day_rows: Mapping[str, Sequence[tuple[ShipmentWindow | None, float]]],
     session: date,
@@ -325,38 +369,51 @@ def shared_crush_band(
     The bean band leads — a plant buys beans for a crush period and sells the
     products against it — taken nearest first by the site's one
     nearest-window rule (B30 #504), so a band that has sailed never leads.
-    Each product takes the band overlapping the bean's most; on a tie, the
-    nearer band, never the dearer one.
+
+    Oil and meal are chosen as a PAIR (B35 #532): each overlapping the bean
+    is not enough, because a July oil and an Aug–Sep meal both overlap a
+    Jul–Sep bean and share no day with each other. Among the pairs sharing at
+    least one day with the bean, the pair overlapping the bean's band most
+    in total wins; on a tie, the nearer oil band, then the nearer meal band,
+    never the dearer one. Where each product's own best band already ships
+    with the other's, that is the pair taken — the window policy is #536's,
+    not this rule's. The band returned names the period all three share.
+    Where no pair shares a day with the bean, the next bean band is tried.
 
     Returns the reason as a string where no band works; the caller withholds
-    with it rather than falling back to another session.
+    with it rather than falling back to another session. Raises where one
+    product prints one band at two prices.
     """
     bean_dated = sorted(
-        ((window, value) for window, value in day_rows["bean"] if window is not None),
+        _dated_bands("bean", day_rows["bean"]),
         key=lambda pair: nearest_window_key(pair[0], session),
     )
     if not bean_dated:
         return "the bean leg carries no readable shipment band on its newest session"
+    oil_dated = _dated_bands("oil", day_rows["oil"])
+    meal_dated = _dated_bands("meal", day_rows["meal"])
     for bean_window, bean_value in bean_dated:
-        values = {"bean": bean_value}
-        windows = {"bean": bean_window}
-        for name in ("oil", "meal"):
-            overlapping = sorted(
-                (
-                    (window, value)
-                    for window, value in day_rows[name]
-                    if window is not None and window.overlaps(bean_window)
-                ),
-                key=lambda pair: nearest_window_key(pair[0], session),
-            )
-            if overlapping:
-                # index() finds the first of equals: the nearer band wins a tie.
-                overlap = [window.overlap_days(bean_window) for window, _ in overlapping]
-                window, value = overlapping[overlap.index(max(overlap))]
-                values[name] = value
-                windows[name] = window
-        if len(values) == 3:
-            return CrushBand(window=bean_window, values=values, windows=windows)
+        trios = []
+        for oil_window, oil_value in oil_dated:
+            for meal_window, meal_value in meal_dated:
+                common = _common_band((bean_window, oil_window, meal_window))
+                if common is not None:
+                    trios.append((common, oil_window, oil_value, meal_window, meal_value))
+        if not trios:
+            continue
+        common, oil_window, oil_value, meal_window, meal_value = min(
+            trios,
+            key=lambda trio: (
+                -(trio[1].overlap_days(bean_window) + trio[3].overlap_days(bean_window)),
+                nearest_window_key(trio[1], session),
+                nearest_window_key(trio[3], session),
+            ),
+        )
+        return CrushBand(
+            window=common,
+            values={"bean": bean_value, "oil": oil_value, "meal": meal_value},
+            windows={"bean": bean_window, "oil": oil_window, "meal": meal_window},
+        )
     return NO_SHARED_BAND_REASON
 
 

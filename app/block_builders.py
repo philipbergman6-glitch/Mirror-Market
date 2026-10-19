@@ -1966,7 +1966,8 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         "home_currency": market.home_currency,
         "as_of": when.isoformat(),
         "age_days": _age_days(ctx.today, when),
-        # #507: the bean's band, which oil and meal were matched to by overlap.
+        # #507 / B35 #532: the period all three legs' bands ship (their
+        # three-way intersection), the margin's own period.
         # None where the source prints one quote a session.
         "shipment_window": strike.band,
         # A1 #298: the three legs share one session; the rate may be a labelled

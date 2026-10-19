@@ -4,6 +4,26 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the Argentina crush band is one all three legs ship (2026-10-19)
+
+**B35 #532**, from the fifth audit. `shared_crush_band` checked oil and meal
+each against the bean's band, never against each other: on 2026-07-22 a
+Jul–Sep bean took July oil and Aug–Sep meal, two bands sharing no day, and a
+margin was printed for a cargo nobody can ship. Oil and meal are now chosen
+as a pair: among pairs sharing at least one day with the bean, the one
+overlapping the bean most in total (a tie to the nearer oil, then the nearer
+meal — never the dearer), the next bean band where none does, the existing
+`NO_SHARED_BAND_REASON` where no bean band works. Where each product's own
+best band already shipped with the other's, the pick is unchanged — the
+window policy is A20 #536's. `CrushBand.window` is now the three-way shared
+period, not the bean's band: a Jul–Sep bean against Aug–Sep oil and August
+meal is an August margin, labelled `2026-08`. Both block 03 and the origins
+crush page read the one function. A band printed twice at two prices on one
+session raises. Replay over the stored Argentina history (462 sessions):
+selections with no three-way intersection 6 → 0; leg values change on those
+6 sessions only; 214 labels shrink to the shared period (newest session
+2026-10-16 unchanged, `2026-10`). Tests: `tests/test_argentina_crush_band.py`.
+
 ## Unreleased — Argentina's crush is struck on one shared band (2026-10-19)
 
 **#507**, found while fixing B30 #504. Block 03's generic crush engine built
