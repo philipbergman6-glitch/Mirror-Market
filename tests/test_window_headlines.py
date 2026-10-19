@@ -25,6 +25,7 @@ from jinja2 import Environment, FileSystemLoader
 
 import config
 from analysis.briefing.sections import fob_board
+from analysis.futures.domain import contracts_from
 from analysis.origins.landed_cost import compute_landed_cost
 from app import block_builders
 from app.block_builders import SiteContext, build_blocks, headline_ledger, ledger_block
@@ -77,12 +78,22 @@ def _seed_argentina(conn, day: date, bands=AR_BANDS, *, anchor: date = D0) -> No
 
 
 def _seed_gulf(conn, day: date) -> None:
+    # Every slot over the front named contract, whose own close on the session
+    # is the basis's board leg (#512).
+    contract = contracts_from("Soybeans", day, count=1)[0]
     for spec, average in GULF_SLOTS:
         conn.execute(
-            "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average) "
-            "VALUES (?,?,?,?,?)",
-            (day.isoformat(), "Soybeans", "Gulf Coast Ports", _slot(day, spec), average),
+            "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average, "
+            "futures_month, futures_month_high) VALUES (?,?,?,?,?,?,?)",
+            (day.isoformat(), "Soybeans", "Gulf Coast Ports", _slot(day, spec), average,
+             contract.month, contract.month),
         )
+    conn.execute(
+        "INSERT INTO contract_bars (commodity, ticker, contract_month, Date, Close, "
+        "fetched_date) VALUES (?,?,?,?,?,?)",
+        ("Soybeans", contract.provider_symbol, contract.contract_month_date.isoformat(),
+         day.isoformat(), 1050.0, day.isoformat()),
+    )
 
 
 @pytest.fixture
@@ -94,6 +105,7 @@ def conn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         schema._CREATE_CURRENCIES,
         schema._CREATE_ARGENTINA_FOB,
         schema._CREATE_GULF_BIDS,
+        schema._CREATE_CONTRACT_BARS,
     ):
         connection.execute(ddl)
     for day in (D0, D1):
@@ -186,10 +198,11 @@ def test_ledger_rows_carry_the_window_their_print_is_for(conn, registry):
 
 def test_a_session_on_two_places_still_averages_inside_one_window(conn, registry):
     """Two barge locations quoting one slot are one cargo at two places."""
+    month = contracts_from("Soybeans", D0, count=1)[0].month
     conn.execute(
-        "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average) "
-        "VALUES (?,?,?,?,?)",
-        (D0.isoformat(), "Soybeans", "Texas Gulf", "Current", 13.6325),
+        "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average, "
+        "futures_month, futures_month_high) VALUES (?,?,?,?,?,?,?)",
+        (D0.isoformat(), "Soybeans", "Texas Gulf", "Current", 13.6325, month, month),
     )
     conn.commit()
     basis = _block(conn, registry, "cbot", "basis")

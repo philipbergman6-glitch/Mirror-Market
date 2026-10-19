@@ -12,7 +12,8 @@
     <div class="mc-label">{{ d.label }}</div>
     <div class="mc-val {{ 'up' if d.basis_usd_mt > 0 else 'down' }}">{{ f.signed(d.basis_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT · {{ d.direction }} to the board</div>
-    {% if d.window %}<div class="caption">local leg: window {{ d.window }}</div>{% endif %}
+    {#- #512: the slot is quoted over a named contract, and that contract is the board leg. -#}
+    {% if d.window %}<div class="caption">local leg: window {{ d.window }}{% if d.board_contract %} · over {{ d.board_contract }}{% endif %}</div>{% endif %}
     {{ f.asof(d.as_of, d.age_days) }}
   </div>
   <div class="mc">
@@ -28,6 +29,7 @@
     <div class="mc-label">CBOT board{% if d.board_quote_kind %} <span class="kind">{{ d.board_kind_label or d.board_quote_kind|replace('_', ' ') }}</span>{% endif %}</div>
     <div class="mc-val">{{ f.usd(d.board_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT · same session</div>
+    {% if d.board_contract %}<div class="caption">{{ d.board_contract }} close — the contract the local leg is quoted over</div>{% endif %}
   </div>
 </div>
 {# M19 #222: where no trade route connects the two legs, the spread cannot be
@@ -53,8 +55,8 @@
 </details>
 {% endif %}
 {% if d.avg is not none %}
-<div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}</div>
+<div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}{% if d.history_board %} · struck on the {{ d.history_board }}{% endif %}</div>
 {% else %}
 {# A level with no range behind it can mislead as easily as a wrong number. #}
-<div class="caption">{{ d.history_note }}</div>
+<div class="caption">{{ d.history_note }}{% if d.history_board %} · sessions counted on the {{ d.history_board }}{% endif %}</div>
 {% endif %}

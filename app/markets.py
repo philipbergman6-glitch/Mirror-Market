@@ -37,6 +37,7 @@ from datetime import date, datetime, timezone
 
 import config
 from analysis.futures.crush import MonthTable
+from analysis.futures.domain import UnknownContract, spec_for
 from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.origins.domain import ShipmentWindow
 from analysis.origins.sources import parse_ams_slot, parse_magyp_window
@@ -161,9 +162,14 @@ WINDOW_SCHEMES: dict[str, int] = {
 # so eight pages cannot end up with eight paraphrases of the same rule; the
 # registry declares only which rule applies.
 LEDGER_RULE_STATEMENTS = {
+    # B33 #516: never "offer" or "arbitrage" — the rows include administered
+    # minimums, delivered bids and assessments, and no price type here is a
+    # firm offer (pricing.semantics). The Kind column names what each row is.
     "origin": (
-        "Origin page — who else is offering this cargo. These are competing "
-        "physical offers, so the spread is an arbitrage a cargo can close."
+        "Origin page — the same good priced at other origins. Each row is a "
+        "dated price reference on its own delivery term and shipment window, "
+        "and its Kind says what sort of price it is; a spread compares two rows "
+        "only as far as those rows say, and is a price difference, not a trade."
     ),
     "destination": (
         "Destination page — what landed supply costs from the origins this "
@@ -218,6 +224,12 @@ class Source:
     # session. Both or neither — `_source` refuses half a declaration.
     window_scheme: str | None = None
     window_columns: tuple[str, ...] = ()
+    # #512: set where each window is quoted over a named contract of the
+    # reference board, stored as a month number with no year — the low and
+    # high leg's columns, in that order. Basis-only, windowed-only, both or
+    # neither; `_source` refuses anything less.
+    contract_board: str | None = None
+    contract_columns: tuple[str, ...] = ()
 
     def parse_window(self, raw: tuple, session: date) -> ShipmentWindow | None:
         """One stored row's shipment window, or None where it is unreadable."""
@@ -574,6 +586,33 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
     elif arbitrage is not None:
         raise ValueError(f"market {slug!r} {block} source declares arbitrage — basis-only")
     window_scheme, window_columns = _window_declaration(raw, slug=slug, block=block)
+    contract_board = raw.get("contract_board")
+    contract_columns = tuple(raw.get("contract_columns") or ())
+    if contract_board is not None or contract_columns:
+        if block != "basis":
+            raise ValueError(f"market {slug!r} {block} source declares a contract board — basis-only")
+        if contract_board is None or not contract_columns:
+            raise ValueError(
+                f"market {slug!r} basis contract_board and contract_columns are both or neither "
+                "— a contract with no columns, or columns with no board, names no contract"
+            )
+        if len(contract_columns) != 2:
+            raise ValueError(
+                f"market {slug!r} basis contract_columns must name the low and high leg's "
+                f"month columns, got {contract_columns!r} (#196: a range can span two contracts)"
+            )
+        if window_scheme is None:
+            raise ValueError(
+                f"market {slug!r} basis declares a contract board without a window_scheme — "
+                "the contract is per shipment window, so the window must be named first"
+            )
+        try:
+            spec_for(contract_board)
+        except UnknownContract as exc:
+            raise ValueError(
+                f"market {slug!r} basis contract_board {contract_board!r} is not a known "
+                f"contract spec ({exc})"
+            ) from exc
     return Source(
         layer=raw["layer"],
         table=raw["table"],
@@ -592,6 +631,8 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         caveat=caveat,
         window_scheme=window_scheme,
         window_columns=window_columns,
+        contract_board=contract_board,
+        contract_columns=contract_columns,
     )
 
 

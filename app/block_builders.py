@@ -39,6 +39,7 @@ import pandas as pd
 
 import config
 from analysis import hazards, weather_alerts
+from analysis.futures.domain import NamedContract, named_contract
 from analysis.hazards import LegHazard, PlaceHazard
 from analysis.origins.domain import ShipmentWindow
 from analysis.origins.sources import nearest_window_key
@@ -2228,7 +2229,8 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
     board_market = markets.get(REFERENCE_MARKET)
     board_kind = board_market.price.quote_kind if board_market and board_market.price else None
     reference = dict(ctx.reference_series(markets))
-    if not reference:
+    # A named-contract basis (#512) does not strike on this series at all.
+    if not reference and source.contract_board is None:
         return STATE_EMPTY, "the CBOT reference leg has no rows to strike a basis against", {}
 
     key = source.headline_key or source.keys[0]
@@ -2246,7 +2248,27 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
             continue
         history.append((when, local, board, local - board, fx))
 
-    if not history:
+    board_contract: str | None = None
+    if source.contract_board is not None:
+        # #512: the newest print's own window, over the contract that window
+        # names, at that contract's close on the same session — or nothing.
+        # The front-month series above feeds only the range (#513).
+        if not rows:
+            return STATE_EMPTY, f"{source.label or key} has no rows to strike a basis on", {}
+        when, value, _n = rows[-1]
+        fx = ctx.fx_on(market.currency_pair, when)
+        local = source.to_usd_mt(value, key, fx.rate)
+        if local is None:
+            return STATE_EMPTY, (
+                f"{source.label or key} printed on {when.isoformat()} but cannot be stated "
+                f"in USD/MT — {fx.note}"
+            ), {}
+        struck = _named_board(ctx, source, key, when)
+        if isinstance(struck, str):
+            return STATE_EMPTY, struck, {}
+        board_contract, board = struck
+        basis = local - board
+    elif not history:
         if withheld is not None and withheld.reason is not None:
             return STATE_EMPTY, (
                 f"{source.label or key} printed on a session the board shares, but "
@@ -2256,8 +2278,8 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
             f"{source.label or key} and the CBOT board share no session — the basis "
             "is only defined where both printed"
         ), {}
-
-    when, local, board, basis, fx = history[-1]
+    else:
+        when, local, board, basis, fx = history[-1]
     spreads = [row[3] for row in history]
     # B30 #504: the local leg is one named window's print, and the session's
     # other windows are listed beside it — as flat prices, never as a basis
@@ -2283,6 +2305,8 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         "local_quote_kind": source.quote_kind,
         "local_kind_label": quote_kind_label(source.quote_kind) if source.quote_kind else None,
         "board_quote_kind": board_kind,
+        # #512: the named contract the board leg is, where the venue names one.
+        "board_contract": board_contract,
         "board_kind_label": quote_kind_label(board_kind) if board_kind else None,
         "direction": "premium" if basis > 0 else "discount",
         "as_of": when.isoformat(),
@@ -2305,7 +2329,84 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         "history_note": None if len(spreads) >= 20 else (
             f"history building — {len(spreads)} common session(s); range shown at 20"
         ),
+        # The mean and range above are still struck on the reference board's
+        # front-month series, session by session (#513 owns them). Where the
+        # headline is struck on a named contract, the range says which board
+        # it was struck on rather than borrowing the headline's.
+        "history_board": "CBOT front month" if board_contract else None,
     }
+
+
+def _named_board(ctx: SiteContext, source: Source, key: str, when: date) -> tuple[str, float] | str:
+    """The named contract the session's chosen window is quoted over, and its
+    close on that session in USD/MT — or the reason there is none (#512).
+
+    The venue prints a month with no year; it is this year's at or after the
+    session's month and next year's before it, the rule ``parse_ams_slot``
+    applies to the windows themselves. The close is Layer 11b's, read through
+    the quote provider, and must be the session's own — invariant 8.
+    """
+    from analysis.futures.providers import open_provider
+
+    board = source.contract_board
+    assert board is not None, f"{source.table} declares no contract board"
+    label = source.label or key
+    if ctx.conn is None:
+        return f"no database to read {label}'s contract months from"
+    session = ctx.session_windows(source, key).get(when)
+    if session is None:
+        raise ValueError(f"{source.table}: {key} on {when.isoformat()} has a print but no window")
+    window = session.chosen.window
+    columns = ", ".join((*source.window_columns, *source.contract_columns))
+    rows = ctx.conn.execute(
+        f"SELECT {columns} FROM {source.table} "  # noqa: S608 — identifiers come from the registry
+        f"WHERE {source.key_column} = ? AND date({source.date_column}) = ? "
+        f"AND {source.value_column} IS NOT NULL",
+        (key, when.isoformat()),
+    ).fetchall()
+    arity = len(source.window_columns)
+    months = {
+        tuple(row[arity:])
+        for row in rows
+        if source.parse_window(tuple(row[:arity]), when) == window
+    }
+    if not months:
+        raise ValueError(f"{source.table}: no stored row carries {key}'s chosen window on {when}")
+    where = f"{label} {window.describe()} on {when.isoformat()}"
+    if any(month is None for pair in months for month in pair):
+        return f"{where} names no CBOT contract month — no board to strike its basis against"
+
+    def contract(month) -> NamedContract:
+        month = int(month)
+        year = when.year if month >= when.month else when.year + 1
+        return named_contract(board, year, month)
+
+    contracts = sorted({contract(m) for pair in months for m in pair}, key=lambda c: c.symbol)
+    if len(contracts) != 1:
+        return (
+            f"{where} is quoted over {' and '.join(c.symbol for c in contracts)} — a basis "
+            "over more than one contract has no single board, and an average of them is "
+            "neither contract's"
+        )
+    (named,) = contracts
+    closes = open_provider(ctx.conn).close_history(named, as_of=when, sessions=1)
+    quote = closes[-1] if closes else None
+    if quote is None or quote.observation_date != when:
+        seen = f"its newest is {quote.observation_date.isoformat()}" if quote else "no close is stored"
+        return (
+            f"{where} is quoted over {named.symbol}, and no {named.symbol} close is stored "
+            f"for that session ({seen}) — basis withheld rather than struck against "
+            "another session or the front month"
+        )
+    if quote.volume is not None and quote.volume <= 0:
+        # The board's own trade proof (#157, `_proof_clause`): a close printed
+        # against zero volume is not a session the contract traded. NULL is
+        # proof of nothing and stays.
+        return (
+            f"{where} is quoted over {named.symbol}, whose {when.isoformat()} close printed "
+            "against zero volume — not a traded session, so the basis is withheld"
+        )
+    return named.symbol, quote.usd_per_mt
 
 
 # ---------------------------------------------------------------------------

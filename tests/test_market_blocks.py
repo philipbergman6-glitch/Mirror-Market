@@ -28,6 +28,7 @@ from analysis.futures.crush import (
     CrushContracts,
     crush_contract_candidates,
 )
+from analysis.futures.domain import contracts_from
 from app import block_builders
 from app import markets as markets_mod
 from app.block_builders import SiteContext, build_blocks
@@ -102,6 +103,7 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         schema._CREATE_SAGIS_DELIVERIES,
         schema._CREATE_EC_OILSEED_PRICES,
         schema._CREATE_FORWARD_CURVE,
+        schema._CREATE_CONTRACT_BARS,
     ):
         conn.execute(ddl)
 
@@ -133,13 +135,22 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 (contract.spec.name, contract.contract_month_date.isoformat(),
                  contract.symbol, contract.provider_symbol, close, _day(0), _day(0)),
             )
-    # Two Gulf locations on one report date — the averaging case.
+    # Two Gulf locations on one report date — the averaging case. Quoted over
+    # the front named contract, whose own close is the board leg (#512).
+    gulf_contract = contracts_from("Soybeans", TODAY, count=1)[0]
     for location, average in (("NOLA", 11.20), ("TEXAS", 11.60)):
         conn.execute(
-            "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average) "
-            "VALUES (?,?,?,?,?)",
-            (_day(0), "Soybeans", location, "SPOT", average),
+            "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average, "
+            "futures_month, futures_month_high) VALUES (?,?,?,?,?,?,?)",
+            (_day(0), "Soybeans", location, "SPOT", average,
+             gulf_contract.month, gulf_contract.month),
         )
+    conn.execute(
+        "INSERT INTO contract_bars (commodity, ticker, contract_month, Date, Close, "
+        "fetched_date) VALUES (?,?,?,?,?,?)",
+        ("Soybeans", gulf_contract.provider_symbol, gulf_contract.contract_month_date.isoformat(),
+         _day(0), 1050.0, _day(0)),
+    )
     conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
                  ("BRL/USD", _day(0), 0.20))
     # Dalian: four price keys — the crush triplet plus the standalone No.1
@@ -366,15 +377,22 @@ def test_both_basis_legs_carry_their_quote_kind(seeded, registry):
 def test_a_basis_with_no_shared_session_is_empty_not_a_cross_day_subtraction(
     seeded, registry
 ):
-    seeded.conn.execute("DELETE FROM gulf_bids")
-    seeded.conn.execute(
-        "INSERT INTO gulf_bids (report_date, commodity, location, delivery, average) "
-        "VALUES (?,?,?,?,?)", (_day(3), "Soybeans", "NOLA", "SPOT", 11.20))
+    """The board's only close is on _day(0); the local leg printed on _day(3).
+
+    India's leg strikes against the reference series; the Gulf leg against the
+    named contract its slot is quoted over (#512). Neither borrows a session.
+    """
+    _seed_india_mandi(seeded.conn)
+    seeded.conn.execute("UPDATE india_domestic_prices SET Date = ?", (_day(3),))
+    seeded.conn.execute("UPDATE gulf_bids SET report_date = ?", (_day(3),))
     seeded.conn.commit()
     ctx = SiteContext(conn=seeded.conn, today=TODAY)
-    basis = _block(build_blocks(registry["cbot"], None, ctx, markets=registry), "basis")
-    assert basis.state == "empty"
-    assert "share no session" in basis.reason
+    india = _block(build_blocks(registry["india"], None, ctx, markets=registry), "basis")
+    assert india.state == "empty"
+    assert "share no session" in india.reason
+    gulf = _block(build_blocks(registry["cbot"], None, ctx, markets=registry), "basis")
+    assert gulf.state == "empty"
+    assert "no close is stored" in gulf.reason
 
 
 def _seed_india_mandi(conn) -> None:
@@ -562,6 +580,23 @@ def test_the_ledger_renders_its_registry_counterpart_set(seeded, registry):
     ledger = _block(_build("cbot", seeded, registry, tiers["cbot"]), "ledger")
     assert ledger.state == "ok", ledger.reason
     assert [row["leg_id"] for row in ledger.data["rows"]][0] == "cbot:board"
+
+
+def test_the_origin_ledger_caption_reaches_the_markup_beside_kind_chips(seeded, registry):
+    """B33 #516: the caption defers to each row's Kind chip, so every chip it
+    points at must come from the price-semantics vocabulary (invariant 3)."""
+    from app.templating import site_environment
+    from pricing.semantics import QUOTE_KIND_LABELS
+
+    statement = markets_mod.LEDGER_RULE_STATEMENTS["origin"]
+    tiers = compute_tiers(registry, today=TODAY)
+    ledger = _block(_build("cbot", seeded, registry, tiers["cbot"]), "ledger")
+    assert ledger.data["rule_statement"] == statement
+    for row in ledger.data["rows"]:
+        if row["kind"]:
+            assert row["kind_label"] in QUOTE_KIND_LABELS.values(), row["leg_id"]
+    html = site_environment().get_template("blocks/02_ledger.html.j2").render(block=ledger)
+    assert statement in html
 
 
 def test_a_market_with_no_counterpart_set_renders_absent_not_empty(seeded, registry):
