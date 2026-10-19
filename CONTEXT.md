@@ -112,6 +112,11 @@ _Avoid_: significant, large
 **Shipment window** _(proposal for V4 #477 — not yet adopted by the ledger)_
 The loading/delivery period a physical quote is priced for — an AMS 3147 delivery slot ("Current", "Nov¹") or a MAGyP circular band ("2026-11..2027-04"). A venue that prints several windows in one session has published several prices. A displayed physical number names its window inline; one that does not fails the window check of **Verified** as a metadata fail.
 _Avoid_: shipment period (on its own), month, slot (except for AMS's own term)
+See **Loading-month identity** for how a band is compared across sessions.
+
+**Loading-month identity**
+The comparison key for a venue that prints several shipment windows per session: the start month of the nearest open window. A change of window within one loading month (a single month and the multi-month band starting on it) is like-for-like — the day-over-day change is shown, with the printed window named. A change of loading month is a **roll**: the day's figure shows with its label and the day-over-day change is withheld with a reason, never bridged. A crush struck across bands takes the start month of the period all three legs share.
+_Avoid_: window (on its own, meaning the identity), contract month, prompt
 
 **Labelled blend** _(proposal for V4 #477 — not yet adopted by the ledger)_
 A displayed mean across shipment windows of one session, stating inline "mean of N windows (first–last)" with each window's own quote one click away on the same page. Proposed rule: a labelled blend **passes** when every window's quote verifies and the stated mean is recomputed exactly from them (Tier 3 arithmetic); the label is what makes it checkable. An unlabelled blend, or one whose label omits the count or the window range, **fails** as a metadata fail whatever its value — no published price equals it (V1 #474 rows 6–7). A mean of places quoting *one* window ("mean of 2 quotes" under a named window) is not a blend. B30 #504 removed the only two blends the site rendered; none is rendered today.
