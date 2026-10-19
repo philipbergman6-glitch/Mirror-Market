@@ -94,7 +94,8 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     "inspections": ("commodity", "week_ending"),
     "inspection_port_flows": ("week_ending", "region", "port_area", "commodity"),
     "inspection_destinations": ("week_ending", "region", "country", "commodity"),
-    "argentina_fob": ("date", "position", "ship_from"),
+    # Keyed on the whole band, ship_to included (B40 #541) — see schema.py.
+    "argentina_fob": ("date", "position", "ship_from", "ship_to"),
     # CONAB survey values are stamped with the fetch date; prior surveys
     # are unrecoverable from the source file.
     "brazil_estimates": ("source", "commodity", "crop_year", "attribute", "report_date"),

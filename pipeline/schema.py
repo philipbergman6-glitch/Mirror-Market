@@ -471,11 +471,17 @@ CREATE TABLE IF NOT EXISTS argentina_fob (
     product       TEXT NOT NULL,
     position      TEXT NOT NULL,
     ship_from     TEXT NOT NULL,
-    ship_to       TEXT,
+    ship_to       TEXT NOT NULL,
     price_usd_mt  REAL,
-    PRIMARY KEY (date, position, ship_from)
+    PRIMARY KEY (date, position, ship_from, ship_to)
 );
 """
+# The key is the whole shipment band (B40 #541): MAGyP prints one price per
+# (position, ship_from, ship_to), and two bands sharing a start month on one
+# day (2026-09 and 2026-09..2026-10) are two prices, not a revision. ship_to
+# is NOT NULL because a NULL key part never matches itself — INSERT OR
+# REPLACE would duplicate instead of replace. store._migrate_argentina_fob_pk
+# rebuilds an older table onto this key.
 
 _CREATE_GULF_BIDS = """
 CREATE TABLE IF NOT EXISTS gulf_bids (

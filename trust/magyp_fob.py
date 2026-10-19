@@ -289,8 +289,10 @@ def reconcile_magyp_fob(legacy: pd.DataFrame, trusted: pd.DataFrame) -> Reconcil
     return reconcile_frames(
         legacy,
         trusted,
-        key_columns=("date", "position", "ship_from"),
-        value_columns=("product", "ship_to", "price_usd_mt"),
+        # The band, not its start month: on (date, position, ship_from) two
+        # same-start bands would collapse into one map entry (B40 #541).
+        key_columns=("date", "position", "ship_from", "ship_to"),
+        value_columns=("product", "price_usd_mt"),
         text_columns=("date", "ship_from", "ship_to", "position", "product"),
     )
 
