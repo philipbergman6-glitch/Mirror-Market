@@ -4,6 +4,31 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — failed briefing blocks are relayed, not left in the log (2026-10-19)
+
+**B45 #562**, from the review of PR #561 (#558). A block named in the
+snapshot's `failed_blocks` left the edition built with that block withheld
+and told only the deploy log: `ci_layer_alert.py` runs before the briefing is
+built and `ci_deploy_alert.py` means "not promoted". New
+`scripts/ci_briefing_blocks.py`, the deploy step "Relay failed briefing
+blocks" after "Export history after briefing" (main runs,
+`continue-on-error` like the other relays): one `::warning::` annotation per
+failed block, and a rolling `ci-briefing-blocks` issue — opened on the first
+failing run, commented only when the failed set changes, closed by a run
+whose snapshot says `failed_blocks == {}`. It reads the row this run archived
+in the runner DB (`generated_at` at or after `PIPELINE_STARTED_AT`); "before"
+is the set the open issue last named, via a marker, since deploys run on
+every push to `main` and a same-day re-run replaces the row. A run that
+archived no row is a failure on the same issue, `(no briefing archived)`: the
+orchestrator swallows a whole-snapshot or save failure, so the missing row is
+its only trace; a later run that archives a row clears it. A pre-v4 snapshot
+without the key (never recorded) leaves the issue untouched with an
+annotation — not reported as clean (invariant 2); a v4+ snapshot without the
+key raises; an unparseable issue marker reads as nothing on record.
+Tests: `tests/test_ci_briefing_blocks.py`, 29 cases over a fixture snapshot
+in a temp DB with `gh` stubbed. The workflow step itself is verifiable only
+on the first `main` deploy after merge.
+
 ## Unreleased — the briefing snapshot withholds an all-sailed Argentina spot (2026-10-19)
 
 **B44 #560**, found by the review of PR #561 (#558). B41 #550 made

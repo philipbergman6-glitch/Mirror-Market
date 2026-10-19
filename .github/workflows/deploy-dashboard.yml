@@ -53,7 +53,8 @@ permissions:
   pages: write
   id-token: write
   # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue,
-  # scripts/ci_dead_source.py the dead-source issue
+  # scripts/ci_dead_source.py the dead-source issue,
+  # scripts/ci_briefing_blocks.py the briefing-blocks issue
   issues: write
 
 # One group, so two runs can never call deploy-pages at the same time.
@@ -234,6 +235,23 @@ jobs:
       - name: Export history after briefing
         if: ${{ !cancelled() }}
         run: python -c "from pipeline.history import export_history; export_history()"
+
+      # A briefing block that raised publishes the edition with that block
+      # withheld and names it in the snapshot's `failed_blocks` (#558) — a
+      # warning only the deploy log saw. Relay it (B45 #562): one annotation
+      # per failed block on the run page, and a rolling `ci-briefing-blocks`
+      # issue commented only when the failed set changes, closed by a run
+      # whose snapshot says `failed_blocks == {}`. Reads the row this run
+      # archived in the runner DB (generated after PIPELINE_STARTED_AT). Not
+      # folded into ci-deploy-alert: that means "the edition was not
+      # promoted", this means it was, with a hole. continue-on-error so a
+      # broken relay never blocks the deploy.
+      - name: Relay failed briefing blocks
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_briefing_blocks.py
 
       # Snapshot-only sources (AgRural, SAFEX, forward curve, CONAB,
       # inspections, Gulf bids, briefings) have no upstream history, and
