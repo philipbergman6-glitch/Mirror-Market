@@ -140,8 +140,34 @@
 
   var W = 600, H = 140, PAD_L = 46, PAD_R = 10, PAD_T = 12, PAD_B = 22;
 
-  /* One pane's chart. `sets` is [{points, treatment, cls}] — the leg first, the
-     dashed overlay second where there is one. */
+  /* Where a windowed series' line restarts (#513): the ms instants at which a
+     new shipment window opens. Unwindowed payloads carry no `breaks`. */
+  function breaksOf(payload) {
+    if (!payload || !payload.breaks) return [];
+    var base = Date.parse(payload.origin);
+    var out = [];
+    each(payload.breaks, function (d) { out.push(base + d * DAY); });
+    return out;
+  }
+
+  /* A line's runs, split wherever a window opened between two drawn points —
+     between, not at: the print that opened it may be one we could not convert. */
+  function runs(pts, breaks) {
+    var out = [[]];
+    each(pts, function (p, i) {
+      if (i) {
+        var prev = pts[i - 1][0];
+        for (var b = 0; b < breaks.length; b++) {
+          if (breaks[b] > prev && breaks[b] <= p[0]) { out.push([]); break; }
+        }
+      }
+      out[out.length - 1].push(p);
+    });
+    return out;
+  }
+
+  /* One pane's chart. `sets` is [{points, treatment, cls, breaks}] — the leg
+     first, the dashed overlay second where there is one. */
   function svg(sets, from, label) {
     var drawn = [];
     each(sets, function (s) { if (s.points.length) drawn.push(s); });
@@ -180,11 +206,13 @@
       '<text class="lbl dt end" x="' + (W - PAD_R) + '" y="' + (H - 6) + '">' + shortDate(TODAY, withYear) + '</text>'
     ];
     each(drawn, function (s) {
-      var coords = [];
-      each(s.points, function (p) { coords.push(x(p[0]) + ',' + y(p[1])); });
-      if (s.treatment === 'line' && coords.length > 1) {
-        parts.push('<polyline class="ln ' + s.cls + '" points="' + coords.join(' ') + '"/>');
-      }
+      each(runs(s.points, s.breaks || []), function (run) {
+        var coords = [];
+        each(run, function (p) { coords.push(x(p[0]) + ',' + y(p[1])); });
+        if (s.treatment === 'line' && coords.length > 1) {
+          parts.push('<polyline class="ln ' + s.cls + '" points="' + coords.join(' ') + '"/>');
+        }
+      });
       each(s.points, function (p) {
         parts.push('<circle class="pt ' + s.cls + '" cx="' + x(p[0]) + '" cy="' + y(p[1]) + '" r="2.2"/>');
       });
@@ -222,6 +250,7 @@
     if (drill.history_from_label) parts.push('page reads back to ' + drill.history_from_label);
     if (win.truncated) parts.push(win.truncation_note);
     if (win.withheld_note) parts.push(win.withheld_note);
+    if (win.roll_note) parts.push(win.roll_note);
     if (overlayNote) parts.push(overlayNote);
     if (win.treatment === 'dots') {
       parts.push('dots only: under ' + CTX.line_min_obs +
@@ -235,7 +264,7 @@
     if (win.treatment === 'none') {
       return pane(drill.label + ' · USD/MT', tooSparse(win, usd, 'USD/MT'), null);
     }
-    var sets = [{ points: usd, treatment: win.treatment, cls: 'own' }];
+    var sets = [{ points: usd, treatment: win.treatment, cls: 'own', breaks: breaksOf(drill) }];
     var overlay = '', overlayNote = null;
     if (CTX.reference && CTX.reference.leg_id !== drill.leg_id) {
       var ref = points(CTX.reference, 'usd', from);
@@ -247,7 +276,7 @@
         overlayNote = 'no overlay in this window: ' + CTX.reference.label + ' has ' +
           ref.length + ' print' + (ref.length === 1 ? '' : 's') + ' here, too few to draw';
       } else {
-        sets.push({ points: ref, treatment: refTreatment, cls: 'ref' });
+        sets.push({ points: ref, treatment: refTreatment, cls: 'ref', breaks: breaksOf(CTX.reference) });
         overlay = ' · dashed: ' + CTX.reference.label + ' (pinned)';
         if (CTX.reference.truncated) overlayNote = CTX.reference.truncation_note;
       }

@@ -54,9 +54,12 @@
   </div>
 </details>
 {% endif %}
+{#- #513: the range says which board each session was struck over and which
+    windows the local leg spans — a roll is a calendar-spread step, not a move. -#}
+{%- set history_labels %}{% if d.history_board %} · {{ d.history_board }}{% endif %}{% if d.history_windows %} · {{ d.history_windows }}{% endif %}{% endset %}
 {% if d.avg is not none %}
-<div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}{% if d.history_board %} · struck on the {{ d.history_board }}{% endif %}</div>
+<div class="caption">{{ d.n_obs }} common sessions · mean {{ f.signed(d.avg) }} · range {{ f.signed(d.low) }} to {{ f.signed(d.high) }}{{ history_labels }}</div>
 {% else %}
 {# A level with no range behind it can mislead as easily as a wrong number. #}
-<div class="caption">{{ d.history_note }}{% if d.history_board %} · sessions counted on the {{ d.history_board }}{% endif %}</div>
+<div class="caption">{{ d.history_note }}{{ history_labels }}</div>
 {% endif %}

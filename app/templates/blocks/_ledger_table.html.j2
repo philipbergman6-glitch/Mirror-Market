@@ -73,11 +73,12 @@
         {#- Variant C's band: "high in its own range" is often the whole
             question, so it is stated in the collapsed row rather than behind a
             click. Under eight prints it says how few there are instead of
-            drawing a range across two points, which would invent one. -#}
+            drawing a range across two points, which would invent one. A range
+            across shipment-window rolls says how many windows it spans (#513). -#}
         {% if row.band.has_range %}
-        <div class="range-band" title="range of this leg's prints over the last {{ d.drilldown_default_days }} days">
+        <div class="range-band" title="range of this leg's prints over the last {{ d.drilldown_default_days }} days{% if row.band.window_note %} — {{ row.band.window_note }}{% endif %}">
           <span class="rb-track"><span class="rb-tick" style="left:{{ (row.band.position * 100)|round(1) }}%"></span></span>
-          <span class="rb-text">{{ f.num(row.band.low, 0) }}–{{ f.num(row.band.high, 0) }} since {{ row.band.since_label }}</span>
+          <span class="rb-text">{{ f.num(row.band.low, 0) }}–{{ f.num(row.band.high, 0) }} since {{ row.band.since_label }}{% if row.band.windows_spanned %} · {{ row.band.windows_spanned }} windows{% endif %}</span>
         </div>
         {% else %}
         <div class="range-band no-range"><span class="rb-text">{{ row.band.count }} obs since {{ row.band.since_label }} — no range yet</span></div>

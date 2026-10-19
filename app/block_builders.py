@@ -71,6 +71,10 @@ LOOKBACK_DAYS_BY_CADENCE = {"daily": 400, "weekly": 1100, "monthly": 1900}
 # last time it *did*, or a holiday reads as a flat market.
 CHANGE_LOOKBACK_OBS = (1, 5, 21)
 
+# Sessions block 01's signal chips need: MA_50 and the slow MACD are NaN on
+# fewer. On a windowed source they are counted on one window (#513).
+SIGNAL_MIN_OBS = 60
+
 # PSD attributes the supply & demand block renders, in balance-sheet order.
 PSD_ATTRIBUTES = ("Production", "Imports", "Exports", "Ending Stocks")
 
@@ -211,6 +215,77 @@ def _window_fields(windows: dict[date, SessionWindows], when: date) -> dict:
             for index, quote in enumerate(session.printed)
         ],
     }
+
+
+# ---- window rolls across sessions (#513) ------------------------------------
+# A statistic over many sessions of a windowed source reads the nearest window
+# of each session, so it crosses every roll in between — and a roll is a
+# calendar-spread step, Oct cargo to Nov cargo, not a market move. Measured
+# 2026-10-19: MAGyP's nearest band never holds more than 11 sessions in a row
+# and AMS's Current slot at most 22, so a range computed on one window alone
+# would almost never exist. Ranges and the drill-down chart therefore *label*
+# the windows they span; the signal chips, which a label cannot repair, read
+# the current window alone (`_current_window_run`).
+def _window_name(identity: tuple[str, date]) -> str:
+    """A window's name *across* sessions. AMS labels its prompt slot "Current
+    (prompt)" every month, so the label alone names twelve windows a year; a
+    MAGyP band already spells out its year and months."""
+    label, end = identity
+    return label if str(end.year) in label else f"{label} {end.strftime('%b %Y')}"
+
+
+@dataclass(frozen=True)
+class WindowSpan:
+    """Which windows a run of sessions' prints were for, and where it rolled."""
+
+    names: tuple[str, ...]
+    # (the session the new window was first printed, from, to), oldest first
+    rolls: tuple[tuple[date, str, str], ...]
+
+    def describe(self) -> str:
+        if not self.rolls:
+            return f"all on the {self.names[0]} window"
+        count = len(self.rolls)
+        when, before, after = self.rolls[-1]
+        return (
+            f"spans {len(self.names)} windows, rolled "
+            f"{'once' if count == 1 else f'{count} times'} — last on "
+            f"{_short_date(when)} ({before} → {after})"
+        )
+
+
+def _window_span(windows: dict[date, SessionWindows], sessions) -> WindowSpan | None:
+    """The windows a set of sessions spans; None for an unwindowed source (or
+    no sessions), which is what keeps every other leg's output unchanged."""
+    days = sorted(sessions)
+    if not windows or not days:
+        return None
+    names = [_window_name(windows[day].identity) for day in days]
+    rolls = tuple(
+        (day, before, after)
+        for day, before, after in zip(days[1:], names[:-1], names[1:], strict=True)
+        if before != after
+    )
+    return WindowSpan(tuple(dict.fromkeys(names)), rolls)
+
+
+def _current_window_run(
+    rows: list[tuple[date, float, int]], windows: dict[date, SessionWindows]
+) -> list[tuple[date, float, int]]:
+    """The newest sessions printed on the newest session's window, unbroken.
+
+    Unbroken rather than every session on that window: MAGyP's nearest band
+    flickers between a single month and a multi-month band, and an indicator
+    stitched over the gaps between is still stitched. An unwindowed series is
+    returned as it came — never rolls.
+    """
+    if not windows or not rows:
+        return rows
+    identity = windows[rows[-1][0]].identity
+    start = len(rows)
+    while start and windows[rows[start - 1][0]].identity == identity:
+        start -= 1
+    return rows[start:]
 
 
 # ---------------------------------------------------------------------------
@@ -865,6 +940,11 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
 
     headline = next(leg for leg in legs if leg["is_headline"]) if any(
         leg["is_headline"] for leg in legs) else legs[0]
+    signals, signals_note = _windowed_signals(
+        rows_by_key.get(headline["key"]) or [],
+        ctx.session_windows(source, headline["key"]),
+        headline["key"],
+    )
     return STATE_OK, "", {
         "legs": legs,
         "headline": headline,
@@ -874,7 +954,10 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         # No block-level `home_currency`: the unit belongs to the leg, not the
         # market (#230). One table can hold three units; a page-wide currency
         # label is the assumption that produced "ARS 451.67/MT" for dollars.
-        "signals": _signal_chips(rows_by_key.get(headline["key"]) or [], headline["key"]),
+        "signals": signals,
+        # #513: on a windowed source, which window the chips were read on, or
+        # why there are none. None on every other source.
+        "signals_note": signals_note,
         # M3 #145: the stack stores no time of day, so a page can honestly show
         # the date a venue printed and never a timestamp.
         "no_timestamp_note": "dates only — this stack stores no time of day",
@@ -889,6 +972,37 @@ def _headline_first(source: Source) -> list[str]:
     return keys
 
 
+def _windowed_signals(
+    rows: list[tuple[date, float, int]], windows: dict[date, SessionWindows], key: str
+) -> tuple[list[dict], str | None]:
+    """The chips, read on the current window alone where the source has windows.
+
+    A4 #301's rule for futures rolls, applied to window rolls (#513): an MA
+    crossover or MACD turn a roll manufactured is a wrong signal, and a label
+    beside it would not make it a right one. So the chips see only the newest
+    window's unbroken run, and until that run holds ``SIGNAL_MIN_OBS`` sessions
+    they are withheld — with the reason, never a silent blank.
+    """
+    run = _current_window_run(rows, windows)
+    if run is rows:
+        return _signal_chips(rows, key), None
+    name = _window_name(windows[run[-1][0]].identity)
+    since = _short_date(run[0][0])
+    if len(run) == len(rows):
+        return _signal_chips(run, key), f"signals read on the {name} window alone, since {since}"
+    rolled = (
+        f"the series rolled {_window_name(windows[rows[-len(run) - 1][0]].identity)} → "
+        f"{name} on {since}"
+    )
+    if len(run) < SIGNAL_MIN_OBS:
+        return [], (
+            f"signals withheld — {rolled}, and the {name} window has {len(run)} "
+            f"session{'' if len(run) == 1 else 's'} of the {SIGNAL_MIN_OBS} they need; "
+            "read across the roll they would call a calendar-spread step a move"
+        )
+    return _signal_chips(run, key), f"signals read on the {name} window alone — {rolled}"
+
+
 def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
     """M2 #144: signals ride inside block 01 as severity chips, not a tenth block.
 
@@ -896,7 +1010,7 @@ def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
     treatment — the price-only detectors, since a generic source has no volume
     column and a volume signal we cannot compute must be absent, not faked.
     """
-    if len(rows) < 60:
+    if len(rows) < SIGNAL_MIN_OBS:
         return []
     try:
         from analysis.signals import (
@@ -1402,6 +1516,7 @@ def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]])
 
     origin = kept[0][0]
     usd = _usd_at_each_date(leg, ctx, kept)
+    leg_windows = ctx.leg_windows(leg)
     home_unit = _home_unit(leg.source, leg.key, leg.market.home_currency)
     # Two different questions, and collapsing them was a defect. Whether the
     # venue's own number is a *second view* is `has_native_quote` — #230's
@@ -1424,7 +1539,7 @@ def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]])
         in_window = len([point for point in prints if start <= point[0] <= ctx.today])
         shown = len([day for day, _, _ in kept if day >= start])
         withheld = shown - len(drawn)
-        windows.append({
+        entry = {
             "days": days,
             "label": "1y" if days >= 365 else f"{days}d",
             "count": len(drawn),
@@ -1445,9 +1560,19 @@ def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]])
                 "the venue's name"
                 if withheld else None
             ),
-        })
+        }
+        if leg_windows:
+            # #513: only a windowed leg carries the key — the payload ships
+            # inline, and a null on every other leg would change its page.
+            span = _window_span(leg_windows, drawn)
+            entry["roll_note"] = (
+                f"nearest window each print — {span.describe()}; the line breaks "
+                "at each roll, a calendar-spread step rather than a move"
+                if span is not None and span.rolls else None
+            )
+        windows.append(entry)
 
-    return {
+    payload = {
         "leg_id": leg.leg_id,
         "label": leg.label,
         "origin": origin.isoformat(),
@@ -1482,6 +1607,20 @@ def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]])
         "windows": windows,
         "default_days": LEDGER_DRILLDOWN_DEFAULT_DAYS,
     }
+    if leg_windows:
+        payload["breaks"] = _roll_breaks(leg_windows, kept, origin)
+    return payload
+
+
+def _roll_breaks(windows: dict[date, SessionWindows], kept, origin: date) -> list[int]:
+    """Day offsets (from ``origin``) of each print that opens a new window —
+    where the drawn line restarts rather than joining a roll's calendar-spread
+    step to the market's moves (#513)."""
+    return [
+        (day - origin).days
+        for (prior, _, _), (day, _, _) in zip(kept[:-1], kept[1:], strict=True)
+        if windows[prior].identity != windows[day].identity
+    ]
 
 
 def _range_band(leg, ctx: SiteContext, prints, current_usd: float | None) -> dict:
@@ -1517,9 +1656,20 @@ def _range_band(leg, ctx: SiteContext, prints, current_usd: float | None) -> dic
         "low": None,
         "high": None,
         "position": None,
+        # #513: how many windows a windowed leg's range spans, and the rolls
+        # between; None on every other leg and on a range inside one window.
+        "windows_spanned": None,
+        "window_note": None,
     }
     if len(values) < LEDGER_LINE_MIN_OBS:
         return band
+    span = _window_span(ctx.leg_windows(leg), [day for day, _ in priced])
+    if span is not None and span.rolls:
+        band["windows_spanned"] = len(span.names)
+        band["window_note"] = (
+            f"nearest window each print — {span.describe()}; a roll is a "
+            "calendar-spread step, not a market move"
+        )
     low, high = min(values), max(values)
     latest = current_usd if current_usd is not None else values[-1]
     band.update({
@@ -1548,7 +1698,7 @@ def _reference_payload(own_leg, ctx: SiteContext, own_prints) -> dict | None:
         # drill-down's widest window. No overlay rather than an invented one.
         return None
     origin = kept[0][0]
-    return {
+    payload = {
         "leg_id": own_leg.leg_id,
         "label": own_leg.label,
         "origin": origin.isoformat(),
@@ -1562,6 +1712,11 @@ def _reference_payload(own_leg, ctx: SiteContext, own_prints) -> dict | None:
             if total > len(kept) else None
         ),
     }
+    own_windows = ctx.leg_windows(own_leg)
+    if own_windows:
+        # #513: the overlay breaks at the pinned leg's own rolls, as its row does.
+        payload["breaks"] = _roll_breaks(own_windows, kept, origin)
+    return payload
 
 
 def _fx_payload(pair: str, ctx: SiteContext) -> dict | None:
@@ -2239,20 +2394,29 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
     withheld: FxResolution | None = None
     for when, value, _n in rows:
         board = reference.get(when)
-        if board is None:
+        if board is None and source.contract_board is None:
             continue  # M3: no cross-day joins — a basis is one session's number
         fx = ctx.fx_on(market.currency_pair, when)
         local = source.to_usd_mt(value, key, fx.rate)
         if local is None:
             withheld = fx  # the newest session lost to A1, for the reason below
             continue
+        if source.contract_board is not None:
+            # #513: the range is struck by the engine that struck the level —
+            # each session over the contract its own window names, at that
+            # contract's close on the session. A session that cannot be is
+            # left out of the range, never padded with the front month.
+            struck = _named_board(ctx, source, key, when)
+            if isinstance(struck, str):
+                continue
+            board = struck[1]
+        assert board is not None  # narrowed above, on both paths
         history.append((when, local, board, local - board, fx))
 
     board_contract: str | None = None
     if source.contract_board is not None:
         # #512: the newest print's own window, over the contract that window
         # names, at that contract's close on the same session — or nothing.
-        # The front-month series above feeds only the range (#513).
         if not rows:
             return STATE_EMPTY, f"{source.label or key} has no rows to strike a basis on", {}
         when, value, _n = rows[-1]
@@ -2329,12 +2493,32 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
         "history_note": None if len(spreads) >= 20 else (
             f"history building — {len(spreads)} common session(s); range shown at 20"
         ),
-        # The mean and range above are still struck on the reference board's
-        # front-month series, session by session (#513 owns them). Where the
-        # headline is struck on a named contract, the range says which board
-        # it was struck on rather than borrowing the headline's.
-        "history_board": "CBOT front month" if board_contract else None,
+        # #513: the mean and range are struck as the level is — over the
+        # contract each session's window names — and say so.
+        "history_board": (
+            "each session struck over the contract its window names"
+            if source.contract_board is not None else None
+        ),
+        # #513: the local leg is each session's nearest window, so the range
+        # crosses every roll between — labelled, because computed on one
+        # window alone it would almost never exist (see `_window_span`).
+        "history_windows": _history_windows(
+            ctx.session_windows(source, key), [row[0] for row in history]
+        ),
     }
+
+
+def _history_windows(windows: dict[date, SessionWindows], sessions: list[date]) -> str | None:
+    """Block 04's label for the windows its mean and range span (#513)."""
+    span = _window_span(windows, sessions)
+    if span is None:
+        return None
+    if not span.rolls:
+        return span.describe()
+    return (
+        f"nearest window each session — {span.describe()}: a roll is a "
+        "calendar-spread step, not a market move"
+    )
 
 
 def _named_board(ctx: SiteContext, source: Source, key: str, when: date) -> tuple[str, float] | str:
