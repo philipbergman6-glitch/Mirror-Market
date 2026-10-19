@@ -24,7 +24,7 @@ import pandas as pd
 
 import config
 from analysis.origins.domain import ShipmentWindow
-from analysis.origins.sources import nearest_window_key, parse_ams_slot, parse_magyp_window
+from analysis.origins.sources import nearest_open_window, parse_ams_slot, parse_magyp_window
 from analysis.spreads import compute_brazil_basis
 from pipeline.query import read_argentina_fob, read_brazil_spot, read_gulf_bids
 from pipeline.units import to_metric_tons
@@ -34,10 +34,11 @@ logger = logging.getLogger(__name__)
 _AGRURAL_SERIES = "Soybean (AgRural Paranaguá FOB)"
 
 
-def _nearest(day: pd.DataFrame, parse, session) -> tuple[ShipmentWindow, pd.DataFrame] | None:
-    """The session's nearest shipment window and its rows (B30 #504) — the
-    origins domain's one rule (``nearest_window_key``), shared with the site.
-    An unreadable window raises: it may be the nearest one."""
+def _nearest(day: pd.DataFrame, parse, session) -> tuple[ShipmentWindow, pd.DataFrame] | str | None:
+    """The session's nearest open shipment window and its rows (B30 #504) — the
+    origins domain's one rule (``nearest_open_window``), shared with the site.
+    The rule's reason where every window had sailed (B41 #550). An unreadable
+    window raises: it may be the nearest one."""
     if day.empty:
         return None
     windows: list[ShipmentWindow] = []
@@ -46,12 +47,15 @@ def _nearest(day: pd.DataFrame, parse, session) -> tuple[ShipmentWindow, pd.Data
         if window is None:
             raise ValueError(f"unreadable shipment window on {session}: {row.to_dict()!r}")
         windows.append(window)
-    chosen = min(windows, key=lambda w: nearest_window_key(w, session))
+    chosen = nearest_open_window(windows, session)
+    if isinstance(chosen, str):
+        return chosen
     return chosen, day[[w == chosen for w in windows]]
 
 
-def _gulf_leg() -> tuple[float, str] | None:
-    """Latest CIF NOLA soybean bid for the nearest delivery slot, USD/MT."""
+def _gulf_leg() -> tuple[float, str] | str | None:
+    """Latest CIF NOLA soybean bid for the nearest delivery slot, USD/MT, or
+    why the newest session carries none (B41 #550)."""
     bids = read_gulf_bids("Soybeans")
     if bids.empty:
         return None
@@ -62,8 +66,8 @@ def _gulf_leg() -> tuple[float, str] | None:
     # ("Oct loading (Current (prompt))").
     session = latest_date.date()
     nearest = _nearest(day, lambda r: parse_ams_slot(str(r["delivery"]), session), session)
-    if nearest is None:
-        return None
+    if nearest is None or isinstance(nearest, str):
+        return nearest
     window, rows = nearest
     avg_bu = float(rows["average"].mean())  # places quoting one slot, as the site
     usd_mt = to_metric_tons(avg_bu * 100.0, "Soybeans")  # $/bu → ¢/bu → USD/MT
@@ -93,8 +97,9 @@ def _brazil_leg(
     return level, when
 
 
-def _argentina_leg() -> tuple[float, str] | None:
-    """Latest MAGyP official bean FOB, nearest shipment slot, USD/MT."""
+def _argentina_leg() -> tuple[float, str] | str | None:
+    """Latest MAGyP official bean FOB, nearest shipment slot, USD/MT, or
+    why the newest session carries none (B41 #550)."""
     fob = read_argentina_fob("Soybeans")
     if fob.empty:
         return None
@@ -105,8 +110,8 @@ def _argentina_leg() -> tuple[float, str] | None:
         lambda r: parse_magyp_window(r["ship_from"], r["ship_to"] if pd.notna(r["ship_to"]) else None),
         session,
     )
-    if nearest is None:
-        return None
+    if nearest is None or isinstance(nearest, str):
+        return nearest
     # B30 #504 / B39 #540: one band of the circular's curve, labelled as the
     # site labels it — "Sep loading (band Sep–Oct 2026)".
     window, rows = nearest
@@ -136,22 +141,29 @@ def format(  # noqa: A001
         "ar_up_river": _argentina_leg,
     }
     legs: list[tuple[str, str, float, str]] = []
+    # B41 #550: a leg whose newest session printed only sailed windows is
+    # withheld with its reason, not dropped silently and not priced.
+    withheld: list[tuple[str, str]] = []
     for leg_id in _LEGS:
         try:
             leg = loaders[leg_id]()
         except Exception as exc:
             logger.debug("Cross-origin leg %s failed: %s", leg_id, exc)
             leg = None
-        if leg is not None:
+        if isinstance(leg, str):
+            withheld.append((config.ORIGIN_LEGS[leg_id]["label"], leg))
+        elif leg is not None:
             legs.append((config.ORIGIN_LEGS[leg_id]["label"], _term(leg_id), *leg))
 
     if len(legs) < 2:
         return "CROSS-ORIGIN PORT LEVELS: Insufficient data"
 
-    width = max(len(label) for label, _, _, _ in legs) + 1
+    width = max(len(label) for label in [leg[0] for leg in legs] + [w[0] for w in withheld]) + 1
     lines = ["CROSS-ORIGIN PORT LEVELS (Soybeans, USD/MT, each on its own delivery term):"]
     for label, term, price, when in legs:
         lines.append(f"  {label + ':':<{width}} ${price:,.1f}/MT  {term:<10} ({when})")
+    for label, reason in withheld:
+        lines.append(f"  {label + ':':<{width}} withheld — {reason}")
     terms = "; ".join(term for _, term, _, _ in legs)
     lines.append(
         f"  Ranking withheld: {len(legs)} delivery terms ({terms}), and no costed path "

@@ -64,6 +64,11 @@ def _day(offset: int) -> str:
     return (TODAY - timedelta(days=offset)).isoformat()
 
 
+# A MAGyP band still open on `_day(0)`: a band that has sailed is withheld
+# (B41 #550), so a fixed month would stop rendering once the calendar passed it.
+_OPEN_BAND = TODAY.strftime("%Y-%m")
+
+
 def _crush_candidates() -> tuple[CrushContracts, ...]:
     """The three nearest listed crush periods at TODAY, from the roll rule.
 
@@ -258,7 +263,7 @@ def test_a_usd_native_price_leg_is_not_relabelled_as_the_home_currency(seeded, r
         seeded.conn.execute(
             "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
             "VALUES (?,?,?,?,?,?)",
-            (_day(0), product, f"pos-{product}", "2026-08", "2026-08", price),
+            (_day(0), product, f"pos-{product}", _OPEN_BAND, _OPEN_BAND, price),
         )
     seeded.conn.commit()
 
@@ -524,7 +529,7 @@ def test_a_provisional_crush_still_carries_its_caveat_into_the_block(seeded, reg
         seeded.conn.execute(
             "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
             "VALUES (?,?,?,?,?,?)",
-            (_day(0), product, f"pos-{product}", "2026-08", "2026-08", price),
+            (_day(0), product, f"pos-{product}", _OPEN_BAND, _OPEN_BAND, price),
         )
     seeded.conn.commit()
 
@@ -572,7 +577,7 @@ def test_a_basket_grade_builder_reads_only_what_block_reads_derives(seeded, regi
         seeded.conn.execute(
             "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
             "VALUES (?,?,?,?,?,?)",
-            (_day(0), product, f"pos-{product}", "2026-08", "2026-08", 450.0),
+            (_day(0), product, f"pos-{product}", _OPEN_BAND, _OPEN_BAND, 450.0),
         )
     for pair, rate in (("ARS/USD", 0.0007), ("INR/USD", 0.012), ("ZAR/USD", 0.055)):
         seeded.conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",

@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from typing import Any
@@ -42,7 +42,7 @@ from analysis import hazards, weather_alerts
 from analysis.futures.domain import NamedContract, named_contract
 from analysis.hazards import LegHazard, PlaceHazard
 from analysis.origins.domain import LoadingMonth, ShipmentWindow
-from analysis.origins.sources import nearest_window_key
+from analysis.origins.sources import nearest_open_window, nearest_window_key
 from app.blocks import (
     BLOCK_IDS,
     GENERATION_ERROR,
@@ -157,6 +157,29 @@ class SessionWindows:
 
     printed: tuple[WindowQuote, ...]
 
+    @classmethod
+    def on(cls, session: date, quotes: Iterable[WindowQuote]) -> SessionWindows | str:
+        """The session's windows, nearest first, or why it carries no price.
+
+        ``chosen`` is the origins domain's one rule (``nearest_open_window``,
+        shared with the briefing and the crush band). A session whose every
+        window has sailed returns that rule's reason instead (B41 #550): the
+        session is withheld like one the venue did not print, so no surface
+        serves a sailed quote as the venue's price and no roll is reported
+        across it.
+        """
+        quotes = list(quotes)
+        chosen = nearest_open_window((quote.window for quote in quotes), session)
+        if isinstance(chosen, str):
+            return chosen
+        ordered = sorted(quotes, key=lambda quote: nearest_window_key(quote.window, session))
+        if ordered[0].window != chosen:
+            raise RuntimeError(
+                f"nearest_window_key and nearest_open_window disagree on {session.isoformat()}: "
+                f"{ordered[0].window.describe()} vs {chosen.describe()}"
+            )
+        return cls(tuple(ordered))
+
     @property
     def chosen(self) -> WindowQuote:
         return self.printed[0]
@@ -185,6 +208,9 @@ class _Prints:
     series: dict[str, list[tuple[date, float, int]]]
     # Empty for a source that prints one window (or none) per session.
     windows: dict[str, dict[date, SessionWindows]]
+    # Sessions withheld because every window printed on them had sailed
+    # (B41 #550), with the reason — absent from ``series`` and ``windows``.
+    withheld: dict[str, dict[date, str]] = field(default_factory=dict)
 
 
 def _same_identity(windows: dict[date, SessionWindows], now: date, prior: date) -> bool:
@@ -431,6 +457,11 @@ class SiteContext:
         """``{session: SessionWindows}`` for one key of a windowed source (B30
         #504); empty where the source prints one window, or none, a session."""
         return self._prints(source).windows.get(key) or {}
+
+    def withheld_sessions(self, source: Source, key: str) -> dict[date, str]:
+        """``{session: reason}`` for sessions of a windowed source withheld
+        because every window printed on them had sailed (B41 #550)."""
+        return self._prints(source).withheld.get(key) or {}
 
     def leg_windows(self, leg) -> dict[date, SessionWindows]:
         """``session_windows`` for a ledger leg's own read (its proof column)."""
@@ -785,6 +816,7 @@ def _read_windowed(
     """
     series: dict[str, list[tuple[date, float, int]]] = {key: [] for key in source.keys}
     windows: dict[str, dict[date, SessionWindows]] = {}
+    withheld: dict[str, dict[date, str]] = {}
     if conn is None:
         return _Prints(series, windows)
     lookback = LOOKBACK_DAYS_BY_CADENCE.get(source.cadence, 400)
@@ -826,18 +858,16 @@ def _read_windowed(
         sessions.setdefault((str(key), day), {}).setdefault(window, []).append(float(value))
 
     for (key, day), by_window in sorted(sessions.items(), key=lambda item: item[0][1]):
-        printed = tuple(
+        session = SessionWindows.on(day, (
             WindowQuote(window=window, value=sum(values) / len(values), quotes=len(values))
-            # The origins domain's one nearest-window rule, shared with the
-            # briefing: open windows first, a sailed one only if all have.
-            for window, values in sorted(
-                by_window.items(), key=lambda item: nearest_window_key(item[0], day)
-            )
-        )
-        session = SessionWindows(printed)
+            for window, values in by_window.items()
+        ))
+        if isinstance(session, str):
+            withheld.setdefault(key, {})[day] = session
+            continue
         windows.setdefault(key, {})[day] = session
         series.setdefault(key, []).append((day, session.chosen.value, session.chosen.quotes))
-    return _Prints(series, windows)
+    return _Prints(series, windows, withheld)
 
 
 def _read_series(
@@ -940,10 +970,25 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     legs: list[dict] = []
     ordered = _headline_first(source)
 
+    withheld_reasons: list[str] = []
     for key in ordered:
         rows = rows_by_key.get(key) or []
+        # B41 #550: sessions whose every window had sailed carry no price; the
+        # newest one is named — beside the print shown where it is newer, or
+        # as the leg's reason where no session had an open window at all.
+        withheld = ctx.withheld_sessions(source, key)
         if not rows:
+            if withheld:
+                newest = max(withheld)
+                withheld_reasons.append(
+                    f"{key}: no session with an open shipment window — newest, "
+                    f"{newest.isoformat()}, withheld: {withheld[newest]}"
+                )
             continue
+        newer = max((day for day in withheld if day > rows[-1][0]), default=None)
+        withheld_note = (
+            f"newer session {newer.isoformat()} withheld: {withheld[newer]}" if newer else None
+        )
         when, value, n_rows = rows[-1]
         fx = ctx.fx_on(market.currency_pair, when)
         windows = ctx.session_windows(source, key)
@@ -989,6 +1034,7 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             # window the venue printed that session for the per-window table.
             **window,
             "move_notes": move_notes,
+            "withheld_note": withheld_note,
             # A1 #298: which day's rate the USD figure was struck at, or why
             # there is none. Rendered wherever it differs from `as_of`.
             **_fx_fields(source, fx),
@@ -996,10 +1042,13 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         })
 
     if not legs:
-        return STATE_EMPTY, (
+        reason = (
             f"{source.table} holds no {source.cadence} observation inside its "
             f"{source.max_age_days}-day budget"
-        ), {}
+        )
+        if withheld_reasons:
+            reason = f"{reason}; {'; '.join(withheld_reasons)}"
+        return STATE_EMPTY, reason, {}
 
     headline = next(leg for leg in legs if leg["is_headline"]) if any(
         leg["is_headline"] for leg in legs) else legs[0]

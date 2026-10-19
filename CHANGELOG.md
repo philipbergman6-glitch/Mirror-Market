@@ -4,6 +4,29 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — a session whose every shipment window has sailed is withheld (2026-10-19)
+
+**B41 #550**, from the sixth audit's "repair expired-period selection".
+`nearest_window_key` fell back to the latest-ending band when every window a
+windowed source (MAGyP, AMS 3147) printed on a session had already ended, so a
+quote for a cargo nobody could load became the venue's price and the
+loading-month identity reported a roll into the next session's open band. The
+one rule is now `analysis.origins.sources.nearest_open_window`: the nearest
+open window, or the reason `every shipment window printed on <session> had
+ended by that session`. `SessionWindows.on` applies it and `_read_prints`
+withholds such a session like one the venue did not print — no price, no roll.
+Block 01 names a withheld session newer than the print it shows (one
+`.caption`); the briefing's FOB board withholds the leg with the reason;
+`shared_crush_band` leads only with open bean bands and never returns a shared
+period that ended before the session (it could, with an open bean band).
+Latent: 0 all-sailed sessions in stored history (0/1848 MAGyP product-sessions,
+0/4546 Gulf), and 0/462 crush results change on replay. Tests: the pinned
+fallback test is inverted; six new tests (session withheld, sailed-then-open
+→ no roll and no inherited price, newest-withheld note, briefing withhold, two
+crush-band cases); three `test_market_blocks` fixtures that seeded a fixed
+2026-08 band on today's session — passing only through the fallback — now seed
+an open band.
+
 ## Unreleased — MAGyP prints compared by loading month (2026-10-19)
 
 **B39 #540**, decided by A20 #536. The nearest open MAGyP band flips

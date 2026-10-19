@@ -84,7 +84,9 @@ from analysis.origins.domain import (
 )
 from analysis.origins.landed_cost import COMPONENT_LABELS, DAYS_PER_YEAR
 from analysis.origins.sources import (
+    all_sailed_reason,
     fx_resolution_on,
+    has_sailed,
     nearest_window_key,
     parse_magyp_window,
     to_usd_per_mt,
@@ -373,7 +375,8 @@ def shared_crush_band(
     falling through to an older session where the labels happen to line up.
     The bean band leads — a plant buys beans for a crush period and sells the
     products against it — taken nearest first by the site's one
-    nearest-window rule (B30 #504), so a band that has sailed never leads.
+    nearest-window rule (B30 #504), and only while still open: a band that
+    has sailed never leads (B41 #550).
 
     Oil and meal are chosen as a PAIR (B35 #532): each overlapping the bean
     is not enough, because a July oil and an Aug–Sep meal both overlap a
@@ -382,19 +385,26 @@ def shared_crush_band(
     the same B30 rule wins — the prompt cargo all three can ship, never a
     later one because a wider product band covers more of the bean's; on a
     tie, the nearer oil band, then the nearer meal band, never the dearer
-    one. The band returned names that shared period.
-    Where no pair shares a day with the bean, the next bean band is tried.
+    one. The band returned names that shared period, and that period is
+    still open on the session: an open bean whose only shared period with
+    the products has ended strikes no margin (B41 #550).
+    Where no pair shares an open day with the bean, the next bean band is
+    tried.
 
-    Returns the reason as a string where no band works; the caller withholds
+    Returns the reason as a string where no band works — every bean band
+    sailed, or no open shared period — and the caller withholds
     with it rather than falling back to another session. Raises where one
     product prints one band at two prices or under two labels.
     """
+    bean_all = _dated_bands("bean", day_rows["bean"])
+    if not bean_all:
+        return "the bean leg carries no readable shipment band on its newest session"
     bean_dated = sorted(
-        _dated_bands("bean", day_rows["bean"]),
+        (pair for pair in bean_all if not has_sailed(pair[0], session)),
         key=lambda pair: nearest_window_key(pair[0], session),
     )
     if not bean_dated:
-        return "the bean leg carries no readable shipment band on its newest session"
+        return all_sailed_reason(session)
     oil_dated = _dated_bands("oil", day_rows["oil"])
     meal_dated = _dated_bands("meal", day_rows["meal"])
     for bean_window, bean_value in bean_dated:
@@ -402,7 +412,7 @@ def shared_crush_band(
         for oil_window, oil_value in oil_dated:
             for meal_window, meal_value in meal_dated:
                 common = _common_band((bean_window, oil_window, meal_window))
-                if common is not None:
+                if common is not None and not has_sailed(common, session):
                     trios.append((common, oil_window, oil_value, meal_window, meal_value))
         if not trios:
             continue

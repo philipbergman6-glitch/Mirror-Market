@@ -338,7 +338,7 @@ class LoadingMonth:
     beans. Those two never print on one day and move like one market, so a
     change of band *within* a loading month is like-for-like; a change of the
     loading month is a roll. Band selection is unchanged (nearest open,
-    ``analysis.origins.sources.nearest_window_key``); only the comparison key
+    ``analysis.origins.sources.nearest_open_window``); only the comparison key
     is this. Venue-neutral: AMS's Current slot starts in its report month.
     """
 
