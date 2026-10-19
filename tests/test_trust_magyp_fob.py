@@ -271,6 +271,37 @@ def test_reconciliation_report_accounts_for_missing_rows_and_field_differences()
     )
 
 
+def test_reconciliation_keeps_two_same_start_bands_apart() -> None:
+    """Keyed on the whole band (B40 #541): 2026-09 and 2026-09..2026-10 on one
+    day are two rows, not one row seen twice, and a difference on one of them
+    is reported against that band alone."""
+    def bands(second_price: float) -> pd.DataFrame:
+        base = {"date": "2026-09-15", "product": "Soybeans", "position": "12019000190C",
+                "ship_from": "2026-09"}
+        return pd.DataFrame([
+            {**base, "ship_to": "2026-09", "price_usd_mt": 401.0},
+            {**base, "ship_to": "2026-10", "price_usd_mt": second_price},
+        ])
+
+    report = reconcile_magyp_fob(bands(398.0), bands(399.0))
+
+    assert report.matched_rows == 2
+    assert not report.missing_in_trusted and not report.missing_in_legacy
+    assert report.field_differences == (
+        {
+            "key": {
+                "date": "2026-09-15",
+                "position": "12019000190C",
+                "ship_from": "2026-09",
+                "ship_to": "2026-10",
+            },
+            "field": "price_usd_mt",
+            "legacy": 398.0,
+            "trusted": 399.0,
+        },
+    )
+
+
 def test_magyp_contract_keeps_durable_raw_artifact_metadata_only() -> None:
     replay = artifact_from_response(content=_content([_post("12019000190C", 450)]), retrieved_at=NOW)
 

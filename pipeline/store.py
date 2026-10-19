@@ -359,6 +359,12 @@ def _migrate_argentina_fob_pk(conn) -> None:
     pk_cols = {r[1] for r in info if r[5]}
     if not info or pk_cols == set(_ARGENTINA_FOB_KEY):
         return
+    missing = [c for c in _ARGENTINA_FOB_COLUMNS if c not in {r[1] for r in info}]
+    if missing:
+        raise MigrationError(
+            f"argentina_fob: column(s) {missing} absent — this shape cannot be "
+            "carried onto the band key without inventing them; table left as-is"
+        )
     cols = ", ".join(_ARGENTINA_FOB_COLUMNS)
     key = ", ".join(_ARGENTINA_FOB_KEY)
     null_ends = conn.execute(

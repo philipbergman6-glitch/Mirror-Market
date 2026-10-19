@@ -195,9 +195,9 @@ def test_migration_hard_fails_on_a_null_ship_to(old_db: Path) -> None:
     conn.close()
 
 
-def test_a_rebuild_that_fails_midway_rolls_back_to_the_old_table(old_db: Path) -> None:
-    """A shape the copy cannot read (no price column) fails inside the
-    savepoint: the old table comes back whole and no scratch table is left."""
+def test_a_table_missing_a_column_hard_fails_untouched(old_db: Path) -> None:
+    """A shape without a price column cannot be carried across without
+    inventing the column; the migration names it and stops."""
     conn = sqlite3.connect(str(old_db))
     conn.execute("DROP TABLE argentina_fob")
     conn.execute(
@@ -208,6 +208,33 @@ def test_a_rebuild_that_fails_midway_rolls_back_to_the_old_table(old_db: Path) -
     conn.execute(
         "INSERT INTO argentina_fob VALUES "
         "('2026-09-15', 'Soybeans', '12019000190C', '2026-09', '2026-10')"
+    )
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(store.MigrationError, match="price_usd_mt"):
+        store.init_database()
+
+    conn = sqlite3.connect(str(old_db))
+    assert _pk(conn) == ["date", "position", "ship_from"]
+    assert conn.execute("SELECT COUNT(*) FROM argentina_fob").fetchone()[0] == 1
+    conn.close()
+
+
+def test_a_rebuild_that_fails_midway_rolls_back_to_the_old_table(old_db: Path) -> None:
+    """A row the new table refuses (NULL product, which the current schema
+    forbids) fails the copy inside the savepoint: the old table comes back
+    whole and no scratch table is left behind."""
+    conn = sqlite3.connect(str(old_db))
+    conn.execute("DROP TABLE argentina_fob")
+    conn.execute(
+        "CREATE TABLE argentina_fob (date TEXT NOT NULL, product TEXT, "
+        "position TEXT NOT NULL, ship_from TEXT NOT NULL, ship_to TEXT, "
+        "price_usd_mt REAL, PRIMARY KEY (date, position, ship_from))"
+    )
+    conn.execute(
+        "INSERT INTO argentina_fob VALUES "
+        "('2026-09-15', NULL, '12019000190C', '2026-09', '2026-10', 398.0)"
     )
     conn.commit()
     conn.close()

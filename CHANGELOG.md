@@ -23,7 +23,7 @@ triples) both paths — a fresh CI DB seeded from the CSV, and a local old-shape
 DB migrated in place — keep 8,514 rows and re-export the CSV byte-identical,
 so the deploy commits no diff. Not fixed here: the briefing snapshot's
 Argentina `curve` is still a dict keyed by `ship_from` (briefing code, owned
-by B39 #540 in parallel). Tests: `tests/test_argentina_fob_key.py`; four
+by B39 #540 in parallel) — follow-up #549. Tests: `tests/test_argentina_fob_key.py`; four
 fixtures that seeded a NULL `ship_to` now seed `ship_to = ship_from`.
 
 ## Unreleased — the Argentina crush band is one all three legs ship (2026-10-19)
