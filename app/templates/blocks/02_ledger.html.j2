@@ -141,12 +141,18 @@
   var W = 600, H = 140, PAD_L = 46, PAD_R = 10, PAD_T = 12, PAD_B = 22;
 
   /* Where a windowed series' line restarts (#513): the ms instants at which a
-     new shipment window opens. Unwindowed payloads carry no `breaks`. */
-  function breaksOf(payload) {
-    if (!payload || !payload.breaks) return [];
+     new loading month opens (B39 #540). Unwindowed payloads carry no `breaks`. */
+  function breaksOf(payload) { return instants(payload, 'breaks'); }
+
+  /* Where its band changed inside one loading month (B39 #540): a tick on an
+     unbroken line — like-for-like, but visible. */
+  function ticksOf(payload) { return instants(payload, 'ticks'); }
+
+  function instants(payload, key) {
+    if (!payload || !payload[key]) return [];
     var base = Date.parse(payload.origin);
     var out = [];
-    each(payload.breaks, function (d) { out.push(base + d * DAY); });
+    each(payload[key], function (d) { out.push(base + d * DAY); });
     return out;
   }
 
@@ -166,7 +172,7 @@
     return out;
   }
 
-  /* One pane's chart. `sets` is [{points, treatment, cls, breaks}] — the leg
+  /* One pane's chart. `sets` is [{points, treatment, cls, breaks, ticks}] — the leg
      first, the dashed overlay second where there is one. */
   function svg(sets, from, label) {
     var drawn = [];
@@ -216,6 +222,11 @@
       each(s.points, function (p) {
         parts.push('<circle class="pt ' + s.cls + '" cx="' + x(p[0]) + '" cy="' + y(p[1]) + '" r="2.2"/>');
       });
+      each(s.ticks || [], function (t) {
+        if (t < from || t > TODAY) return;
+        parts.push('<line class="tk" x1="' + x(t) + '" y1="' + (H - PAD_B) + '" x2="' + x(t) +
+          '" y2="' + (H - PAD_B - 6) + '"/>');
+      });
     });
     parts.push('</svg>');
     return parts.join('');
@@ -264,7 +275,7 @@
     if (win.treatment === 'none') {
       return pane(drill.label + ' · USD/MT', tooSparse(win, usd, 'USD/MT'), null);
     }
-    var sets = [{ points: usd, treatment: win.treatment, cls: 'own', breaks: breaksOf(drill) }];
+    var sets = [{ points: usd, treatment: win.treatment, cls: 'own', breaks: breaksOf(drill), ticks: ticksOf(drill) }];
     var overlay = '', overlayNote = null;
     if (CTX.reference && CTX.reference.leg_id !== drill.leg_id) {
       var ref = points(CTX.reference, 'usd', from);

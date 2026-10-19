@@ -6,15 +6,15 @@ series straight across the rolls: block 04's mean and range, block 01's signal
 chips, and the ledger's drill-down chart and range band. A roll is a
 calendar-spread step — Oct cargo to Nov cargo — not a market move.
 
-Measured before building (``data/history`` CSVs, 2026-10-19): MAGyP's nearest
-window never holds more than 11 sessions in a row, because the circular flips
-between a single-month and a multi-month band; AMS's Current slot holds at most
-22. Computing on one window at a time would leave block 04's 20-session range
-dark for Argentina always and for the Gulf ~2 days a month, so the *ranges*
-label the windows they span and the chart breaks its line at every roll. The
-signal chips are the other rule: a crossover a roll manufactured is not fixed
-by a label, so chips read the current window only and are withheld until it
-holds enough sessions — A4 #301's suppression, for windows.
+Measured (``data/history`` CSVs, 2026-10-19): MAGyP's exact nearest band holds
+at most 21 sessions in a row, median 2, because the circular flips between a
+single-month and a multi-month band; AMS's Current slot holds at most 22. B39
+#540 (A20 #536) therefore compares by **loading month** — a band change inside
+a month is like-for-like — and the *ranges* label the loading months they span
+while the chart breaks its line only at loading-month rolls. The signal chips
+are the other rule: a crossover a roll manufactured is not fixed by a label, so
+chips read the current loading month only and are withheld until it holds
+enough sessions — A4 #301's suppression, for windows.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from datetime import date, timedelta
 import pytest
 from jinja2 import Environment, FileSystemLoader
 
+from analysis.origins.domain import LoadingMonth
 from app import block_builders
 from app.block_builders import SiteContext, basis_block, ledger_block, price_block
 from app.markets import load_markets
@@ -33,6 +34,7 @@ from pipeline.units import to_metric_tons
 
 TODAY = date(2026, 10, 16)
 ROLL = date(2026, 10, 1)
+SEP, OCT = LoadingMonth(2026, 9), LoadingMonth(2026, 10)
 TEMPLATES = block_builders.__file__.rsplit("/", 1)[0] + "/templates"
 
 # Before the roll the circular's nearest band is September's; from 1 Oct it is
@@ -130,10 +132,11 @@ def test_a_span_names_its_windows_and_every_roll(conn, registry):
     windows = _ctx(conn).session_windows(source, "Soybeans")
     span = block_builders._window_span(windows, SESSIONS)
     assert span is not None
-    assert span.names == ("2026-09", "2026-10")
-    assert span.rolls == ((ROLL, "2026-09", "2026-10"),)
-    assert "spans 2 windows" in span.describe()
-    assert "1 Oct" in span.describe() and "2026-09 → 2026-10" in span.describe()
+    assert span.months == (SEP, OCT)
+    assert span.rolls == ((ROLL, SEP, OCT),)
+    assert "spans 2 loading months" in span.describe()
+    assert "1 Oct" in span.describe() and "(Sep → Oct)" in span.describe()
+    assert span.describe().endswith("Oct loading · 12 sessions, 0 band changes")
 
 
 def test_a_span_inside_one_window_says_so(conn, registry):
@@ -141,16 +144,17 @@ def test_a_span_inside_one_window_says_so(conn, registry):
     windows = _ctx(conn).session_windows(source, "Soybeans")
     span = block_builders._window_span(windows, [d for d in SESSIONS if d >= ROLL])
     assert span is not None and span.rolls == ()
-    assert span.describe() == "all on the 2026-10 window"
+    assert span.describe() == "Oct loading · 12 sessions, 0 band changes"
 
 
-def test_amss_current_slot_is_named_by_its_month(conn, registry):
-    """"Current (prompt)" is twelve windows a year; the name says which."""
+def test_amss_current_slot_is_keyed_by_its_loading_month(conn, registry):
+    """"Current (prompt)" is twelve windows a year; the loading month says which."""
     source = registry["cbot"].basis
     windows = _ctx(conn).session_windows(source, "Soybeans")
     span = block_builders._window_span(windows, SESSIONS)
     assert span is not None
-    assert span.names == ("Current (prompt) Sep 2026", "Current (prompt) Oct 2026")
+    assert span.months == (SEP, OCT)
+    assert span.band_changes == ()
 
 
 def test_an_unwindowed_series_has_no_span_and_no_run_cut():
@@ -162,17 +166,17 @@ def test_an_unwindowed_series_has_no_span_and_no_run_cut():
 # ---------------------------------------------------------------------------
 # Block 04 — the mean and range
 # ---------------------------------------------------------------------------
-def test_argentinas_basis_range_names_the_windows_it_spans(conn, registry):
+def test_argentinas_basis_range_names_the_loading_months_it_spans(conn, registry):
     state, reason, data = basis_block(registry["argentina"], _ctx(conn), markets=registry)
     assert state == "ok", reason
     assert data["n_obs"] == len(SESSIONS) >= 20
     assert data["avg"] is not None
     assert data["high"] - data["low"] == pytest.approx(50.0)  # the roll's step, all of it
-    assert "spans 2 windows" in data["history_windows"]
-    assert "2026-09 → 2026-10" in data["history_windows"]
+    assert "spans 2 loading months" in data["history_windows"]
+    assert "Sep → Oct" in data["history_windows"]
     assert data["history_board"] is None
     html = _render("blocks/04_basis.html.j2", data)
-    assert "spans 2 windows" in html
+    assert "spans 2 loading months" in html
     assert "calendar-spread step" in html
 
 
@@ -184,8 +188,8 @@ def test_the_history_building_note_names_its_windows_too(conn, registry):
     state, reason, data = basis_block(registry["argentina"], ctx, markets=registry)
     assert state == "ok", reason
     assert data["avg"] is None
-    assert data["history_windows"] == "all on the 2026-09 window"
-    assert "all on the 2026-09 window" in _render("blocks/04_basis.html.j2", data)
+    assert data["history_windows"] == "Sep loading · 8 sessions, 0 band changes"
+    assert "Sep loading · 8 sessions" in _render("blocks/04_basis.html.j2", data)
 
 
 def test_the_gulf_range_is_struck_over_the_named_contract_not_the_front_month(conn, registry):
@@ -197,7 +201,7 @@ def test_the_gulf_range_is_struck_over_the_named_contract_not_the_front_month(co
     assert data["avg"] == pytest.approx(sum(bases) / len(bases))
     assert data["low"] == pytest.approx(min(bases))
     assert data["high"] == pytest.approx(max(bases))
-    assert "Current (prompt) Sep 2026 → Current (prompt) Oct 2026" in data["history_windows"]
+    assert "(Sep → Oct)" in data["history_windows"]
     html = _render("blocks/04_basis.html.j2", data)
     assert "front month" not in html
     assert "over the contract its window names" in html
@@ -235,7 +239,8 @@ def test_chips_read_only_the_current_window_and_say_why_they_are_withheld(
     assert seen == []  # never computed across the roll, not computed-then-hidden
     assert data["signals"] == []
     note = data["signals_note"]
-    assert "withheld" in note and "2026-10" in note and "1 Oct" in note
+    assert "withheld" in note and "Oct loading" in note and "1 Oct" in note
+    assert "loading month rolled Sep → Oct" in note
     assert str(block_builders.SIGNAL_MIN_OBS) in note
     assert note in _render("blocks/01_price.html.j2", data)
 
@@ -246,7 +251,7 @@ def test_chips_on_a_window_long_enough_are_computed_on_it_alone(conn, registry, 
     state, reason, data = price_block(registry["argentina"], _ctx(conn), markets=registry)
     assert state == "ok", reason
     assert [day for day, _, _ in seen[0]] == [d for d in SESSIONS if d >= ROLL]
-    assert "2026-10" in data["signals_note"] and "withheld" not in data["signals_note"]
+    assert "Oct loading" in data["signals_note"] and "withheld" not in data["signals_note"]
 
 
 def test_an_unwindowed_price_feeds_its_whole_series_to_the_chips(conn, registry, monkeypatch):
@@ -266,22 +271,23 @@ def _ledger_rows(conn, registry, slug="argentina") -> dict[str, dict]:
     return {row["leg_id"]: row for row in data["rows"]}
 
 
-def test_the_range_band_counts_the_windows_it_spans(conn, registry):
+def test_the_range_band_counts_the_loading_months_it_spans(conn, registry):
     band = _ledger_rows(conn, registry)["argentina:fob"]["band"]
     assert band["has_range"]
     assert (band["low"], band["high"]) == (400.0, 450.0)
-    assert band["windows_spanned"] == 2
-    assert "2026-09 → 2026-10" in band["window_note"]
+    assert band["loading_months"] == 2
+    assert "Sep → Oct" in band["window_note"]
 
 
 def test_the_drilldown_breaks_its_line_at_every_roll(conn, registry):
     drill = _ledger_rows(conn, registry)["argentina:fob"]["drill"]
     origin = date.fromisoformat(drill["origin"])
     assert drill["breaks"] == [(ROLL - origin).days]
+    assert drill["ticks"] == []
     by_label = {w["label"]: w for w in drill["windows"]}
-    assert "spans 2 windows" in by_label["90d"]["roll_note"]
+    assert "spans 2 loading months" in by_label["90d"]["roll_note"]
     # 16 Sep → 16 Oct still contains the 1 Oct roll.
-    assert "spans 2 windows" in by_label["30d"]["roll_note"]
+    assert "spans 2 loading months" in by_label["30d"]["roll_note"]
 
 
 def test_a_drill_window_inside_one_window_carries_no_roll_note(conn, registry):
@@ -323,7 +329,7 @@ def test_an_unwindowed_legs_drill_payload_has_exactly_its_old_keys(conn, registr
     assert set(drill) == PRE_513_DRILL_KEYS
     assert all(set(w) == PRE_513_DRILL_WINDOW_KEYS for w in drill["windows"])
     band = rows["cbot:board"]["band"]
-    assert band["windows_spanned"] is None and band["window_note"] is None
+    assert band["loading_months"] is None and band["window_note"] is None
 
 
 def test_an_unwindowed_pinned_overlay_has_exactly_its_old_keys(conn, registry):
@@ -351,9 +357,10 @@ def test_an_unwindowed_basis_renders_no_window_or_board_label(conn, registry):
     assert line.endswith("</div>") and "window" not in line and "struck" not in line
 
 
-def test_the_roll_note_names_an_ams_window_by_its_month():
+def test_the_roll_note_names_an_ams_window_by_its_loading_month():
     """AMS calls every month's prompt slot "Current (prompt)"; the day-over-day
-    note must not read as a roll from a window to itself (#513 follow-up)."""
+    note must not read as a roll from a window to itself (#513 follow-up) —
+    the loading month names it (B39 #540)."""
     from analysis.origins.domain import ShipmentWindow
     from app.block_builders import SessionWindows, WindowQuote, _roll_note
 
@@ -366,6 +373,4 @@ def test_the_roll_note_names_an_ams_window_by_its_month():
         date(2026, 10, 1): session(date(2026, 10, 1), date(2026, 10, 31)),
     }
     note = _roll_note(windows, date(2026, 10, 1), date(2026, 9, 30), "move")
-    assert note == (
-        "move withheld — window rolled Current (prompt) Sep 2026 → Current (prompt) Oct 2026"
-    )
+    assert note == "move withheld: loading month rolled Sep → Oct — no like-for-like change"

@@ -32,8 +32,10 @@ plainly what may not.
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
+import re
 from dataclasses import dataclass, replace
 from datetime import date
 from enum import Enum
@@ -285,8 +287,72 @@ class ShipmentWindow:
     def describe(self) -> str:
         return self.label or f"{self.start.isoformat()}..{self.end.isoformat()}"
 
+    @property
+    def loading_month(self) -> LoadingMonth:
+        """The comparison key across sessions (A20 #536): the month the window
+        starts loading. The one selector every surface compares by — see
+        :class:`LoadingMonth`."""
+        return LoadingMonth(self.start.year, self.start.month)
+
+    def band_name(self, *, year: bool = True) -> str:
+        """``Sep–Oct 2026`` for a band in the circular's ``YYYY-MM[..YYYY-MM]``
+        form (``Sep–Oct`` without the year); any other label as printed."""
+        match = _MONTH_BAND_RE.match(self.label or "")
+        if match is None:
+            return self.describe()
+        first = (int(match.group(1)), int(match.group(2)))
+        last = (int(match.group(3)), int(match.group(4))) if match.group(3) else first
+        if not 1 <= first[1] <= 12 or not 1 <= last[1] <= 12:
+            raise ValueError(f"shipment window label {self.label!r} names no calendar month")
+        start, end = calendar.month_abbr[first[1]], calendar.month_abbr[last[1]]
+        if not year:
+            return start if first == last else f"{start}–{end}"
+        if first == last:
+            return f"{start} {first[0]}"
+        if first[0] == last[0]:
+            return f"{start}–{end} {last[0]}"
+        return f"{start} {first[0]}–{end} {last[0]}"
+
+    def loading_label(self) -> str:
+        """``Sep loading (band Sep–Oct 2026)`` / ``Sep loading (Sep 2026)`` —
+        the identity first, then the band actually printed (B39 #540)."""
+        multi = (self.start.year, self.start.month) != (self.end.year, self.end.month)
+        return f"{self.loading_month.name} loading ({'band ' if multi else ''}{self.band_name()})"
+
     def to_dict(self) -> dict[str, Any]:
         return {"start": self.start.isoformat(), "end": self.end.isoformat(), "label": self.label}
+
+
+# MAGyP's own band form, and the one ``analysis.origins.crush`` names a shared
+# period in: ``2026-09`` or ``2026-09..2026-10``.
+_MONTH_BAND_RE = re.compile(r"^(\d{4})-(\d{2})(?:\.\.(\d{4})-(\d{2}))?$")
+
+
+@dataclass(frozen=True, order=True)
+class LoadingMonth:
+    """Loading-month identity (A20 #536, B39 #540): which cargo a windowed
+    venue's print is for, across sessions.
+
+    A venue printing several bands a session (MAGyP) re-cuts its curve every
+    day, so the nearest band flips ``Sep`` ↔ ``Sep–Oct`` — 58 times a year on
+    beans. Those two never print on one day and move like one market, so a
+    change of band *within* a loading month is like-for-like; a change of the
+    loading month is a roll. Band selection is unchanged (nearest open,
+    ``analysis.origins.sources.nearest_window_key``); only the comparison key
+    is this. Venue-neutral: AMS's Current slot starts in its report month.
+    """
+
+    year: int
+    month: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.month <= 12:
+            raise ValueError(f"loading month {self.month} is not a calendar month")
+
+    @property
+    def name(self) -> str:
+        """``Sep`` — the ticket's own vocabulary; the band beside it carries the year."""
+        return calendar.month_abbr[self.month]
 
 
 @dataclass(frozen=True)
@@ -786,6 +852,7 @@ __all__ = [
     "Grade",
     "Incoterm",
     "LandedCost",
+    "LoadingMonth",
     "Money",
     "OriginQuote",
     "OriginRanking",

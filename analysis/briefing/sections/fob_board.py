@@ -57,8 +57,9 @@ def _gulf_leg() -> tuple[float, str] | None:
         return None
     latest_date = bids["report_date"].max()
     day = bids[bids["report_date"] == latest_date]
-    # B30 #504: the site's own nearest-window rule and label, so the briefing
-    # and the CBOT page name the same slot ("Current (prompt)").
+    # B30 #504 / B39 #540: the site's own nearest-window rule and loading-month
+    # label, so the briefing and the CBOT page name the same slot
+    # ("Oct loading (Current (prompt))").
     session = latest_date.date()
     nearest = _nearest(day, lambda r: parse_ams_slot(str(r["delivery"]), session), session)
     if nearest is None:
@@ -68,7 +69,7 @@ def _gulf_leg() -> tuple[float, str] | None:
     usd_mt = to_metric_tons(avg_bu * 100.0, "Soybeans")  # $/bu → ¢/bu → USD/MT
     if usd_mt is None:
         return None
-    return usd_mt, f"{session.isoformat()} · window {window.describe()}"
+    return usd_mt, f"{session.isoformat()} · {window.loading_label()}"
 
 
 def _brazil_leg(
@@ -106,9 +107,10 @@ def _argentina_leg() -> tuple[float, str] | None:
     )
     if nearest is None:
         return None
-    # B30 #504: one band of the circular's curve, labelled as the site labels it.
+    # B30 #504 / B39 #540: one band of the circular's curve, labelled as the
+    # site labels it — "Sep loading (band Sep–Oct 2026)".
     window, rows = nearest
-    return float(rows["price_usd_mt"].iloc[0]), f"{session.isoformat()} · window {window.describe()}"
+    return float(rows["price_usd_mt"].iloc[0]), f"{session.isoformat()} · {window.loading_label()}"
 
 
 # ``config.ORIGIN_LEGS`` keys, in print order. Label and delivery term come

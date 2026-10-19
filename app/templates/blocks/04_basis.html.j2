@@ -13,7 +13,7 @@
     <div class="mc-val {{ 'up' if d.basis_usd_mt > 0 else 'down' }}">{{ f.signed(d.basis_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT · {{ d.direction }} to the board</div>
     {#- #512: the slot is quoted over a named contract, and that contract is the board leg. -#}
-    {% if d.window %}<div class="caption">local leg: window {{ d.window }}{% if d.board_contract %} · over {{ d.board_contract }}{% endif %}</div>{% endif %}
+    {% if d.window %}<div class="caption">local leg: {{ d.loading }}{% if d.board_contract %} · over {{ d.board_contract }}{% endif %}</div>{% endif %}
     {{ f.asof(d.as_of, d.age_days) }}
   </div>
   <div class="mc">
@@ -21,7 +21,7 @@
     <div class="mc-val">{{ f.usd(d.local_usd_mt) }}</div>
     <div class="mc-delta muted">USD/MT</div>
     {#- B30 #504: one named window's print, never a mean across windows. -#}
-    {% if d.window %}<div class="caption">window {{ d.window }}{% if d.windows_printed > 1 %} · nearest of {{ d.windows_printed }} printed{% endif %}</div>{% endif %}
+    {% if d.window %}<div class="caption">{{ d.loading }}{% if d.windows_printed > 1 %} · nearest of {{ d.windows_printed }} printed{% endif %}</div>{% endif %}
     {#- A1 #298: the local leg's rate may be a prior close; the board needs none. -#}
     {% if d.fx_label %}<div class="caption">struck at {{ d.fx_label }}</div>{% endif %}
   </div>
