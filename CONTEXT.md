@@ -89,6 +89,10 @@ _Avoid_: licence-blocked (a reason, not a state), redacted, hidden
 The named set of displayed numbers (by product, venue, contract, origin, FX pair, crush, landed row) whose accuracy the product is judged on. Membership is a decision, labelled "pre-buyer" until physical buyers have revised it.
 _Avoid_: sample (the sample is drawn from the basket), panel
 
+**Basket-grade block**
+A market-page block whose number is a critical-basket stratum (`config.AVAILABILITY_BASKET_BLOCKS`). Every table it reads must be written by a layer in the availability basket, so the basket cannot read available while the block is withheld (B37 #534). A spread struck over the provider front month is not basket-grade, even where its local leg is a basket number.
+_Avoid_: critical block, basket block
+
 **Verified**
 A displayed number whose value, unit, observation date and contract month were checked against a source independent of the fetcher that produced it: the publisher of record (Tier 1) or a second provider publishing the same definition (Tier 2). A derived number is verified only when its legs are verified and its arithmetic recomputed (Tier 3).
 _Avoid_: reconciled (see below), validated, tested

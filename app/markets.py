@@ -521,54 +521,52 @@ _LAYER_BY_TABLE = {
     "sagis_deliveries": "sagis",
 }
 
-# Layer 11b's table, read through `analysis.futures.providers.close_history`
-# wherever a leg strikes over a named CBOT contract's own close (#512, #352).
-_CONTRACT_BARS = "contract_bars"
-_FX_TABLE = "currencies"
+# Tables a block reads beyond its own descriptor's, each with the layer that
+# writes it. FX: every price, basis and crush builder converts through
+# `SiteContext.fx_on(market.currency_pair, …)`. Named closes: Layer 11b, read
+# through `analysis.futures.providers.close_history` wherever a leg strikes
+# over a named CBOT contract's own close (#512, #352).
+_FX_READS = {"currencies": "currencies"}
+_NAMED_CLOSE_READS = {"contract_bars": "contract_bars"}
 
 
 def block_reads(market: Market, block: str, markets: dict[str, Market]) -> dict[str, str]:
-    """``{table: the layer that writes it}`` for every table ``block`` strikes on.
+    """``{table: the layer that writes it}`` for every table ``block`` reads.
 
-    Derived from the descriptor, so a basket-grade block cannot gain a leg the
-    availability basket does not cover without a test saying so (B37 #534).
-    A ``home_per_mt`` leg adds the FX table (invariant 7); a named-contract
-    board adds Layer 11b; a front-month basis adds the reference market's
-    price read. Raises where the market has no source for the block.
+    Read off the descriptor by fixed rules that mirror the builders — the
+    market's currency pair adds FX, a named-contract board or a cash leg adds
+    Layer 11b, a front-month basis adds the reference board's price read — so
+    the availability basket can be checked against them (B37 #534). The rules
+    are held to the builders by tests that run each basket-grade block under
+    a SQLite read recorder. Raises where the market has no source for the block.
     """
-    def leg(source: Source) -> dict[str, str]:
-        reads = {source.table: source.layer}
-        if source.unit == "home_per_mt":
-            reads[_FX_TABLE] = "currencies"
-        return reads
-
+    fx = _FX_READS if market.currency_pair else {}
     if block == "currency":
         if not market.currency_pair:
             raise ValueError(f"{market.slug} has no currency pair")
-        return {_FX_TABLE: "currencies"}
+        return dict(_FX_READS)
     if block == "price":
         if market.price is None:
             raise ValueError(f"{market.slug} has no price source")
-        return leg(market.price)
+        return {market.price.table: market.price.layer, **fx}
     if block == "basis":
         if market.basis is None:
             raise ValueError(f"{market.slug} has no basis source")
-        reads = leg(market.basis)
         if market.basis.contract_board is not None:
-            reads[_CONTRACT_BARS] = _CONTRACT_BARS
+            board = _NAMED_CLOSE_READS
+        elif market.basis.reference is None:
+            raise ValueError(f"{market.slug} basis names no reference board")
         else:
-            if market.basis.reference is None:
-                raise ValueError(f"{market.slug} basis names no reference board")
-            reads.update(block_reads(markets[market.basis.reference], "price", markets))
-        return reads
+            board = block_reads(markets[market.basis.reference], "price", markets)
+        return {market.basis.table: market.basis.layer, **fx, **board}
     if block == "crush":
         if market.crush is None:
             raise ValueError(f"{market.slug} has no crush source")
-        reads = leg(market.crush.as_source())
+        source = market.crush.as_source()
+        reads = {source.table: source.layer, **fx}
         cash = config.CRUSH_CASH_LEGS.get(market.slug)
         if cash is not None:
-            reads[cash["table"]] = cash["layer"]
-            reads[_CONTRACT_BARS] = _CONTRACT_BARS
+            reads.update({cash["table"]: cash["layer"], **_NAMED_CLOSE_READS})
         return reads
     raise KeyError(f"block_reads derives no reads for block {block!r}")
 

@@ -84,12 +84,12 @@ def test_a_front_month_basis_reads_prices_and_is_not_basket_grade(registry):
     assert "prices" not in config.AVAILABILITY_BASKET
 
 
-def test_a_block_with_no_source_has_no_reads(registry):
+def test_a_block_with_no_source_is_refused(registry):
     with pytest.raises(ValueError, match="no basis source"):
         block_reads(registry["europe"], "basis", registry)
 
 
-def test_an_unknown_block_is_refused(registry):
+def test_an_unknown_block_id_is_refused(registry):
     with pytest.raises(KeyError):
         block_reads(registry["cbot"], "weather", registry)
 
@@ -128,11 +128,9 @@ def gulf_db():
 
 
 def test_the_gulf_basis_builder_reads_no_table_outside_its_derivation_or_the_basket(gulf_db, registry):
-    result: list = []
-    read = tables_read(gulf_db, lambda: result.append(block_builders.basis_block(
+    (state, reason, data), read = tables_read(gulf_db, lambda: block_builders.basis_block(
         registry["cbot"], SiteContext(conn=gulf_db, today=D0), markets=registry,
-    )))
-    state, reason, data = result[0]
+    ))
     assert state == "ok", reason  # the strike ran end to end, so every read happened
     assert data["board_contract"] == "ZSX26"
 

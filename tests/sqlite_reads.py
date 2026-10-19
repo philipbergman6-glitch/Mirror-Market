@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable
+from typing import TypeVar
+
+T = TypeVar("T")
 
 
-def tables_read(conn: sqlite3.Connection, run: Callable[[], object]) -> set[str]:
-    """Every table a statement prepared during ``run`` reads a column of.
+def tables_read(conn: sqlite3.Connection, run: Callable[[], T]) -> tuple[T, set[str]]:
+    """``run()``'s result, and every table a statement it prepared reads a column of.
 
     The authorizer sees each column a statement reads at prepare time, so a
     read is recorded even where the table holds no rows. SQLite's own catalog
@@ -27,7 +30,7 @@ def tables_read(conn: sqlite3.Connection, run: Callable[[], object]) -> set[str]
 
     conn.set_authorizer(authorize)
     try:
-        run()
+        result = run()
     finally:
         conn.set_authorizer(None)
-    return seen
+    return result, seen

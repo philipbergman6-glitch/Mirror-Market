@@ -32,7 +32,7 @@ from analysis.futures.domain import contracts_from
 from app import block_builders
 from app import markets as markets_mod
 from app.block_builders import SiteContext, build_blocks
-from app.markets import compute_tiers, load_markets
+from app.markets import block_reads, compute_tiers, load_markets
 from app.sections import (
     CHART_WINDOW_SESSIONS,
     clip,
@@ -46,6 +46,7 @@ from app.sections import (
 from fetchers.akshare import crush_delivery_months
 from pipeline import schema
 from pipeline.units import native_label
+from tests.sqlite_reads import tables_read
 
 # Anchored to the clock, not to a literal date. A frozen anchor rots: the
 # seeded rows are struck at `TODAY - offset`, but
@@ -559,6 +560,31 @@ def test_every_market_builds_every_block_without_raising(seeded, registry):
             __import__("app.blocks", fromlist=["BLOCK_IDS"]).BLOCK_IDS)
         for block in blocks:
             assert block.state == "ok" or block.reason.strip()
+
+
+@pytest.mark.parametrize("slug, block_id", sorted(config.AVAILABILITY_BASKET_BLOCKS))
+def test_a_basket_grade_builder_reads_only_what_block_reads_derives(seeded, registry, slug, block_id):
+    """B37 #534: the derivation the availability basket is checked against
+    must name every table the real builder reads, so it is run, struck end to
+    end, under a read recorder (the Gulf basis and cash legs have their own,
+    tighter fixtures in test_availability_basket / test_processor_cash)."""
+    for product in ("Soybeans", "Soybean Oil", "Soybean Meal"):
+        seeded.conn.execute(
+            "INSERT INTO argentina_fob (date, product, position, ship_from, price_usd_mt) "
+            "VALUES (?,?,?,?,?)",
+            (_day(0), product, f"pos-{product}", "2026-08", 450.0),
+        )
+    for pair, rate in (("ARS/USD", 0.0007), ("INR/USD", 0.012), ("ZAR/USD", 0.055)):
+        seeded.conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                            (pair, _day(0), rate))
+    seeded.conn.commit()
+
+    (state, reason, _data), read = tables_read(seeded.conn, lambda: block_builders.BUILDERS[block_id](
+        registry[slug], seeded, markets=registry,
+    ))
+    assert state == "ok", reason  # struck end to end, so every read happened
+    derived = block_reads(registry[slug], block_id, registry)
+    assert read <= set(derived), f"{slug} {block_id} read {sorted(read - set(derived))}, which block_reads omits"
 
 
 def test_a_builder_that_raises_becomes_a_reasoned_empty_state(

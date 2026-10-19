@@ -22,6 +22,7 @@ from jinja2 import Environment, FileSystemLoader
 
 import config
 from analysis.processor_cash import cash_leg_panel
+from app.markets import block_reads, load_markets
 from fetchers import processor_cash
 from fetchers.processor_cash import check_reconciliation, map_rows
 from pipeline import query, store
@@ -366,12 +367,9 @@ def _bars(conn: sqlite3.Connection, *, shift: float = 0.0) -> None:
 def test_panel_reads_only_what_the_crush_blocks_derivation_names(cash_db) -> None:  # noqa: ANN001
     # B37 #534: the board leg is Layer 11b's close, not the forward curve the
     # crush beside it strikes on — and both must sit in the availability basket.
-    from app.markets import block_reads, load_markets
-
     _bars(cash_db)
-    panels: list = []
-    read = tables_read(cash_db, lambda: panels.append(cash_leg_panel(cash_db, "cbot", today=date(2026, 10, 5))))
-    assert panels[0] is not None and panels[0]["state"] == "ok"
+    panel, read = tables_read(cash_db, lambda: cash_leg_panel(cash_db, "cbot", today=date(2026, 10, 5)))
+    assert panel is not None and panel["state"] == "ok"
     assert read == {"us_processor_cash", "contract_bars"}
     registry = load_markets()
     derived = block_reads(registry["cbot"], "crush", registry)
