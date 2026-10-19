@@ -169,6 +169,19 @@ def test_a_snapshot_without_the_key_is_never_recorded_not_clean(patched_db, gh_c
     assert "::warning" in out and "never recorded" in out
 
 
+@pytest.mark.parametrize("snapshot", [{"prices": {}}, {"schema_version": 2}])
+def test_pre_v4_snapshots_are_never_recorded(snapshot):
+    assert relay.failed_blocks(json.dumps(snapshot)) is None
+
+
+def test_annotations_past_the_cap_count_the_rest():
+    failed = {f"block{i:02d}": "ValueError: x" for i in range(13)}
+    lines = relay.warning_lines(failed)
+    assert len(lines) == relay.ANNOTATION_CAP
+    assert "block08" in lines[-2] and "4 more failed block(s)" in lines[-1]
+    assert len(relay.warning_lines(dict(list(failed.items())[:10]))) == 10
+
+
 def test_a_run_that_archived_no_briefing_leaves_the_issue_alone(patched_db, gh_calls, capsys):
     """The DB is seeded from the committed CSV: an older row is a previous run's."""
     calls, state = gh_calls
@@ -196,6 +209,7 @@ def test_the_newest_row_this_run_wrote_is_the_one_read(patched_db, gh_calls):
     json.dumps(["a list"]),
     json.dumps({"schema_version": 4, "failed_blocks": ["cot"]}),
     json.dumps({"schema_version": 4, "failed_blocks": {"cot": None}}),
+    json.dumps({"schema_version": 4, "prices": {}}),
 ])
 def test_an_unreadable_snapshot_hard_fails(patched_db, gh_calls, snapshot):
     calls, _ = gh_calls

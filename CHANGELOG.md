@@ -7,8 +7,8 @@ any), and the test/coverage impact.
 ## Unreleased — failed briefing blocks are relayed, not left in the log (2026-10-19)
 
 **B45 #562**, from the review of PR #561 (#558). A block named in the
-snapshot's `failed_blocks` published an edition with that block withheld and
-told only the deploy log: `ci_layer_alert.py` runs before the briefing is
+snapshot's `failed_blocks` left the edition built with that block withheld
+and told only the deploy log: `ci_layer_alert.py` runs before the briefing is
 built and `ci_deploy_alert.py` means "not promoted". New
 `scripts/ci_briefing_blocks.py`, the deploy step "Relay failed briefing
 blocks" after "Export history after briefing" (main runs,
@@ -20,8 +20,9 @@ in the runner DB (`generated_at` at or after `PIPELINE_STARTED_AT`); "before"
 is the set the open issue last named, via a marker, since deploys run on
 every push to `main` and a same-day re-run replaces the row. No row from this
 run, or a pre-v4 snapshot without the key (never recorded), leaves the issue
-untouched with an annotation — neither is reported as clean (invariant 2).
-Tests: `tests/test_ci_briefing_blocks.py`, 17 cases over a fixture snapshot
+untouched with an annotation — neither is reported as clean (invariant 2);
+a v4+ snapshot without the key raises.
+Tests: `tests/test_ci_briefing_blocks.py`, 21 cases over a fixture snapshot
 in a temp DB with `gh` stubbed. The workflow step itself is verifiable only
 on the first `main` deploy after merge.
 

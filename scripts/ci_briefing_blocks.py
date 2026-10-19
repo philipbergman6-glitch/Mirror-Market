@@ -1,14 +1,15 @@
 """CI relay: a briefing block that failed reaches the run page and an issue (B45 #562).
 
 Since #558 a snapshot block whose builder raised is recorded in the archived
-snapshot as ``failed_blocks: {name: reason}`` — but the edition still
-publishes, with that block withheld, and the warning lived only in the deploy
+snapshot as ``failed_blocks: {name: reason}`` — but the candidate edition is
+still built, with that block withheld, and the warning lived only in the deploy
 log. Neither ``scripts/ci_layer_alert.py`` (layers, before the briefing is
 built) nor ``scripts/ci_deploy_alert.py`` ("the edition was not promoted")
 can see it. This relay reads it and:
 
 - prints one ``::warning::`` annotation per failed block, so it shows on the
-  run summary page;
+  run summary page (GitHub keeps ``ANNOTATION_CAP`` warnings per step, so past
+  that the last one counts the rest, which the issue lists in full);
 - keeps a rolling issue (label ``ci-briefing-blocks``): opened on the first
   failing run, commented **only when the set of failed blocks changes**,
   closed by a run whose snapshot says ``failed_blocks == {}``.
@@ -27,7 +28,7 @@ Two outcomes are neither failing nor clean (invariant 2), and leave the issue
 as it was with a warning annotation: no row archived by this run, and a
 snapshot without the ``failed_blocks`` key (schema v1–v3: never recorded).
 Anything unreadable — no start stamp, no DB, a snapshot or ``failed_blocks``
-of the wrong shape — raises. The workflow step is ``continue-on-error``, so a
+of the wrong shape, a v4+ snapshot without the key — raises. The workflow step is ``continue-on-error``, so a
 broken relay never reddens a run.
 
 Usage:
@@ -55,9 +56,13 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s — %(message)s")
 logger = logging.getLogger(__name__)
 
 LABEL = "ci-briefing-blocks"
-TITLE = "CI: briefing blocks failed — withheld from the published edition"
+TITLE = "CI: briefing blocks failed — withheld from the edition"
 # The stored format of briefings.generated_at (pipeline.store.save_briefing).
 GENERATED_AT_FORMAT = "%Y-%m-%d %H:%M:%S"
+# The first snapshot schema that always writes failed_blocks (#558).
+FAILED_BLOCKS_SINCE_SCHEMA = 4
+# Warning annotations GitHub keeps per step; more are dropped from the run page.
+ANNOTATION_CAP = 10
 _MARKER = re.compile(r"<!-- ci-briefing-blocks: (\[.*?\]) -->")
 
 
@@ -88,12 +93,24 @@ def annotation(name: str, reason: str) -> str:
     return f"::warning title=Briefing block failed::{_escape(f'{name} — {reason}')}"
 
 
+def warning_lines(failed: dict[str, str]) -> list[str]:
+    """One per failed block; past ``ANNOTATION_CAP`` the last one counts the rest."""
+    items = sorted(failed.items())
+    if len(items) <= ANNOTATION_CAP:
+        return [annotation(name, reason) for name, reason in items]
+    shown = items[: ANNOTATION_CAP - 1]
+    rest = len(items) - len(shown)
+    return [*[annotation(name, reason) for name, reason in shown],
+            f"::warning title=Briefing blocks failed::{rest} more failed block(s) — "
+            f"listed in the {LABEL} issue and this step's log"]
+
+
 def this_runs_briefing(db: Path, started: datetime) -> tuple[str, str | None] | None:
     """``(briefing_date, snapshot_json)`` of the newest row this run archived; None if none."""
     if not db.exists():
         raise BriefingBlocksError(f"no database at {db}")
     since = started.astimezone(timezone.utc).strftime(GENERATED_AT_FORMAT)
-    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
     try:
         row = conn.execute(
             "SELECT briefing_date, snapshot_json FROM briefings WHERE generated_at >= ? "
@@ -114,6 +131,11 @@ def failed_blocks(snapshot_json: str | None) -> dict[str, str] | None:
     if not isinstance(snapshot, dict):
         raise BriefingBlocksError(f"snapshot_json is a {type(snapshot).__name__}, not an object")
     if "failed_blocks" not in snapshot:
+        version = snapshot.get("schema_version", 1)
+        if not isinstance(version, int) or version >= FAILED_BLOCKS_SINCE_SCHEMA:
+            raise BriefingBlocksError(
+                f"schema_version {version!r} snapshot has no failed_blocks — the #558 contract is broken"
+            )
         return None
     failed = snapshot["failed_blocks"]
     if not isinstance(failed, dict) or not all(
@@ -144,7 +166,7 @@ def last_reported(thread_json: str) -> set[str] | None:
 def build_body(briefing_date: str, failed: dict[str, str], *, before: set[str] | None) -> str:
     lines = [
         f"The briefing archived for **{briefing_date}** withheld {len(failed)} block(s) "
-        "whose builder raised. The edition still published, without them:",
+        "whose builder raised. The candidate edition was built without them:",
         "",
         *[f"- `{name}` — {reason}" for name, reason in sorted(failed.items())],
         "",
@@ -159,8 +181,8 @@ def build_body(briefing_date: str, failed: dict[str, str], *, before: set[str] |
         if newly or recovered:
             lines.append("")
     lines += [
-        "Source: `failed_blocks` in the `briefings` row's `snapshot_json` "
-        "(committed as `data/history/briefings.csv`).",
+        "Source: `failed_blocks` in the `snapshot_json` of the `briefings` row this run "
+        "archived in the runner DB.",
         f"Run: {run_url()}",
         f"<!-- ci-briefing-blocks: {json.dumps(sorted(failed))} -->",
     ]
@@ -194,8 +216,8 @@ def main(argv: list[str] | None = None) -> int:
               f"is not the same as none — the {LABEL} issue is left as it was.")
         return 0
 
-    for name, reason in sorted(failed.items()):
-        print(annotation(name, reason))
+    for line in warning_lines(failed):
+        print(line)
     existing = find_open_issue()
 
     if not failed:
