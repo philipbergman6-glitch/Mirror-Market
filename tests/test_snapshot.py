@@ -21,7 +21,7 @@ import pytest
 from analysis.briefing.snapshot import SCHEMA_VERSION, build_snapshot
 from analysis.briefing.types import BriefingData
 from analysis.loaders import clear_loader_cache
-from analysis.origins.sources import all_sailed_reason
+from analysis.origins.sources import ALL_SAILED, all_sailed_reason
 from analysis.technical import compute_all_technicals
 
 
@@ -508,12 +508,30 @@ def test_argentina_fob_all_sailed_session_archives_no_spot_and_its_reason(
 
     assert block == {
         "date": "2026-09-15",
-        "withheld": "all_sailed",
+        "withheld": ALL_SAILED,
         "reason": all_sailed_reason(date(2026, 9, 15)),
         "curve": {"2026-07": 397.0, "2026-08": 399.0},
     }
     assert snapshot["failed_blocks"] == {}
     json.dumps(block)
+
+
+def test_argentina_fob_an_unknown_rule_reason_fails_the_product(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the all-sailed text is archived as ``ALL_SAILED`` (#560): a second
+    reason the rule might one day return fails the product, never mislabelled."""
+    _seed_magyp(patched_db, [
+        ("2026-09-15", "Soybeans", "12019000190C", "2026-09", "2026-09", 404.0),
+    ])
+    monkeypatch.setattr(
+        "analysis.briefing.snapshot.nearest_open_window", lambda _w, _s: "some new reason"
+    )
+
+    snapshot = build_snapshot(_empty_briefing())
+
+    assert "Soybeans" not in snapshot["argentina_fob"]
+    assert "unknown reason" in snapshot["failed_blocks"]["argentina_fob.Soybeans"]
 
 
 def test_argentina_fob_two_rows_for_one_band_withhold_only_that_product(
@@ -617,7 +635,7 @@ def test_the_archive_reader_works_on_old_and_new_rows(
         "Soybeans": (
             {
                 "date": "2026-09-15",
-                "withheld": "all_sailed",
+                "withheld": ALL_SAILED,
                 "reason": all_sailed_reason(date(2026, 9, 15)),
                 "curve": {"2026-08": 399.0},
             }

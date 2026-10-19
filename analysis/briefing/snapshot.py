@@ -19,7 +19,7 @@ did — so a block that failed reads differently from one with no data. A v1–v
 row has no such key: its failures were never recorded, which is not the same
 as there having been none. v5 (#560) lets an ``argentina_fob`` product carry
 no spot: where every band printed on the session had ended (B41 #550) the
-product archives ``withheld: "all_sailed"`` and the ``reason`` in place of the
+product archives ``withheld: ALL_SAILED`` and the ``reason`` in place of the
 ``spot_*`` keys, as ``crush_spread`` archives ``{withheld, reason}``, and keeps
 its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. Design
 rules carried by the schema:
@@ -63,7 +63,12 @@ from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
 from analysis.origins.domain import ShipmentWindow
-from analysis.origins.sources import nearest_open_window, parse_magyp_window
+from analysis.origins.sources import (
+    ALL_SAILED,
+    all_sailed_reason,
+    nearest_open_window,
+    parse_magyp_window,
+)
 from analysis.seasonal import current_vs_seasonal
 from analysis.spreads import compute_brazil_basis
 from analysis.stocks_to_use import (
@@ -739,7 +744,7 @@ def _argentina_fob_block() -> dict[str, dict[str, Any]]:
     use (``nearest_open_window``, B30 #504, B41 #550), never by sort order
     (#549). ``spot_ship_from`` is the spot's loading month (A20 #536). A
     session whose every band had ended has no spot: the product archives
-    ``withheld: "all_sailed"`` and the rule's ``reason`` instead, with its whole
+    ``withheld: ALL_SAILED`` and the rule's ``reason`` instead, with its whole
     ``curve`` — the bands are real prints (#560). That is withheld, not failed,
     so it is not named in ``failed_blocks``.
 
@@ -786,7 +791,12 @@ def _argentina_fob_product(product: str, subset: pd.DataFrame) -> dict[str, Any]
     curve = {w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))}
     chosen = nearest_open_window(bands, session)
     if isinstance(chosen, str):
-        return {"date": on, "withheld": "all_sailed", "reason": chosen, "curve": curve}
+        # The rule has one text answer today; a second must get its own code.
+        if chosen != all_sailed_reason(session):
+            raise ValueError(
+                f"argentina_fob {product} {session}: no spot and an unknown reason {chosen!r}"
+            )
+        return {"date": on, "withheld": ALL_SAILED, "reason": chosen, "curve": curve}
     ship_from, ship_to, spot_price = bands[chosen]
     return {
         "date": on,
