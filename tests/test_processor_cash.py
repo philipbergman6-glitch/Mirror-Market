@@ -33,6 +33,7 @@ from pipeline.units import (
     points_to_cents_per_lb,
     usd_per_short_ton_to_usd_mt,
 )
+from tests.sqlite_reads import tables_read
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 _WEEK = _FIXTURES / "ams_3511_2026-09-28_api.json"
@@ -360,6 +361,22 @@ def _bars(conn: sqlite3.Connection, *, shift: float = 0.0) -> None:
                 "Volume, fetched_date) VALUES (?, ?, ?, ?, ?, 1000, '2026-10-05')",
                 (commodity, ticker, month, day, close + offset),
             )
+
+
+def test_panel_reads_only_what_the_crush_blocks_derivation_names(cash_db) -> None:  # noqa: ANN001
+    # B37 #534: the board leg is Layer 11b's close, not the forward curve the
+    # crush beside it strikes on — and both must sit in the availability basket.
+    from app.markets import block_reads, load_markets
+
+    _bars(cash_db)
+    panels: list = []
+    read = tables_read(cash_db, lambda: panels.append(cash_leg_panel(cash_db, "cbot", today=date(2026, 10, 5))))
+    assert panels[0] is not None and panels[0]["state"] == "ok"
+    assert read == {"us_processor_cash", "contract_bars"}
+    registry = load_markets()
+    derived = block_reads(registry["cbot"], "crush", registry)
+    assert read <= set(derived)
+    assert {derived[table] for table in read} <= set(config.AVAILABILITY_BASKET)
 
 
 def test_panel_strikes_on_the_session_ams_used(cash_db) -> None:  # noqa: ANN001

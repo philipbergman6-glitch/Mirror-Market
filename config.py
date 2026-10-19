@@ -4096,7 +4096,9 @@ CRUSH_CASH_LEGS: dict[str, dict[str, Any]] = {
         "source": "USDA AMS report 3511 (National Grain and Oilseed Processor Feedstuff Report)",
         "quote_kind": "weekly_ask",
         # The board months AMS quotes basis over are CBOT's, so the board leg
-        # is read from the same named-contract store the crush above uses.
+        # is each named contract's Layer 11b close (`contract_bars`, through
+        # the quote provider's `close_history`) — the Gulf basis's read, not
+        # the forward-curve snapshot the board crush strikes on.
         "board_commodities": {"Soybean Oil": "Soybean Oil", "Soybean Meal": "Soybean Meal"},
     },
 }
@@ -4387,9 +4389,13 @@ TRIAL_SCORECARD_DIMENSIONS = (
 # available exactly when every leg is (invariant 8). Pre-buyer and
 # owner-defined, like basket v1: A12 (#406) may revise it, and the 30-session
 # window restarts for any layer that joins. It replaced TRIAL_CRITICAL_LAYERS,
-# so the Phase 5 trial and the A11 re-audit measure one thing.
+# so the Phase 5 trial and the A11 re-audit measure one thing. A layer belongs
+# here when a basket-grade block (AVAILABILITY_BASKET_BLOCKS) strikes on a
+# table it writes, not only when its name matches a stratum: `contract_bars`
+# joined for that reason (B37 #534).
 AVAILABILITY_BASKET = (
-    "forward_curve",      # 1 CBOT ZS/ZL/ZM named-contract closes
+    "forward_curve",      # 1 CBOT ZS/ZL/ZM named-contract closes (curve snapshot)
+    "contract_bars",      # 5, 9 CBOT named-contract closes the Gulf basis and cash legs strike on
     "dce",                # 2 DCE beans/meal/oil
     "agrural",            # 3 AgRural Paranaguá port bid
     "cepea",              # 3 CEPEA indicator
@@ -4398,6 +4404,35 @@ AVAILABILITY_BASKET = (
     "currencies",         # 6 FX BRL/CNY/INR/ZAR
     "us_processor_cash",  # 9 US processor cash oil/meal (AMS 3511), weekly
 )
+
+# The basket-grade blocks (B37 #534): each market-page block whose number is a
+# basket v1 stratum, with that stratum. `app.markets.block_reads` derives the
+# tables each one strikes on from its descriptor, and a test fails when one of
+# them is written by a layer outside AVAILABILITY_BASKET. Since #512 the Gulf
+# basis strikes over a named contract's Layer 11b close, and the cash legs
+# (stratum 9, inside the CBOT crush block) do the same.
+#
+# Block 04 is basket-grade only there. Brazil's, Argentina's and Dalian's
+# strike over the provider front month (`prices`), which basket v1 keeps out
+# because it names no contract, so those spreads are not basket numbers.
+# AgRural (stratum 3) renders only as Brazil's block-04 local leg, beside one
+# of them: the leg reads a basket layer, the spread does not. Saying "leg
+# available, spread withheld" is the calculation-availability vocabulary routed
+# to A12 (#406), not a reason to put `prices` in the basket. Stratum 1 has no
+# market block of its own (the board crush is its basket reader); stratum 8 is
+# the origins page's landed row, not a market block.
+AVAILABILITY_BASKET_BLOCKS: dict[tuple[str, str], int] = {
+    ("dalian", "price"): 2,
+    ("brazil", "price"): 3,
+    ("argentina", "price"): 4,
+    ("cbot", "basis"): 5,
+    ("brazil", "currency"): 6,
+    ("dalian", "currency"): 6,
+    ("india", "currency"): 6,
+    ("south_africa", "currency"): 6,
+    ("cbot", "crush"): 7,  # also stratum 9: the AMS 3511 cash legs ride in this block
+    ("dalian", "crush"): 7,
+}
 
 # Source reliability record (B34 #520, requirements docs/plans/source-reliability-a19.md).
 # The window the figures in manifest.json are computed over, in weekday CBOT

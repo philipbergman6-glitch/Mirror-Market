@@ -521,6 +521,57 @@ _LAYER_BY_TABLE = {
     "sagis_deliveries": "sagis",
 }
 
+# Layer 11b's table, read through `analysis.futures.providers.close_history`
+# wherever a leg strikes over a named CBOT contract's own close (#512, #352).
+_CONTRACT_BARS = "contract_bars"
+_FX_TABLE = "currencies"
+
+
+def block_reads(market: Market, block: str, markets: dict[str, Market]) -> dict[str, str]:
+    """``{table: the layer that writes it}`` for every table ``block`` strikes on.
+
+    Derived from the descriptor, so a basket-grade block cannot gain a leg the
+    availability basket does not cover without a test saying so (B37 #534).
+    A ``home_per_mt`` leg adds the FX table (invariant 7); a named-contract
+    board adds Layer 11b; a front-month basis adds the reference market's
+    price read. Raises where the market has no source for the block.
+    """
+    def leg(source: Source) -> dict[str, str]:
+        reads = {source.table: source.layer}
+        if source.unit == "home_per_mt":
+            reads[_FX_TABLE] = "currencies"
+        return reads
+
+    if block == "currency":
+        if not market.currency_pair:
+            raise ValueError(f"{market.slug} has no currency pair")
+        return {_FX_TABLE: "currencies"}
+    if block == "price":
+        if market.price is None:
+            raise ValueError(f"{market.slug} has no price source")
+        return leg(market.price)
+    if block == "basis":
+        if market.basis is None:
+            raise ValueError(f"{market.slug} has no basis source")
+        reads = leg(market.basis)
+        if market.basis.contract_board is not None:
+            reads[_CONTRACT_BARS] = _CONTRACT_BARS
+        else:
+            if market.basis.reference is None:
+                raise ValueError(f"{market.slug} basis names no reference board")
+            reads.update(block_reads(markets[market.basis.reference], "price", markets))
+        return reads
+    if block == "crush":
+        if market.crush is None:
+            raise ValueError(f"{market.slug} has no crush source")
+        reads = leg(market.crush.as_source())
+        cash = config.CRUSH_CASH_LEGS.get(market.slug)
+        if cash is not None:
+            reads[cash["table"]] = cash["layer"]
+            reads[_CONTRACT_BARS] = _CONTRACT_BARS
+        return reads
+    raise KeyError(f"block_reads derives no reads for block {block!r}")
+
 
 # ---------------------------------------------------------------------------
 # Loading and validation
