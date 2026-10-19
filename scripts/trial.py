@@ -213,11 +213,12 @@ def cmd_day(args: argparse.Namespace) -> int:
     from analysis.trial.records import DAYS_SUBDIR, _resolve, day_to_document
     from analysis.trial.release import capture_release_stamp
     from analysis.trial.sanitize import assert_private_path
+    from pipeline.reliability import AVAILABLE_STATUSES
 
     when = _parse_date(args.date, date.today())
-    critical = tuple(getattr(config, "TRIAL_CRITICAL_LAYERS", ()))
+    critical = tuple(config.AVAILABILITY_BASKET)
     if not critical:
-        raise SystemExit("config.TRIAL_CRITICAL_LAYERS is empty; nothing to measure availability against")
+        raise SystemExit("config.AVAILABILITY_BASKET is empty; nothing to measure availability against")
 
     available, degraded = 0, []
     try:
@@ -235,7 +236,9 @@ def cmd_day(args: argparse.Namespace) -> int:
         rows = {str(row.get("layer_name")): row for row in freshness.to_dict(orient="records")}
         for layer in critical:
             row = rows.get(layer)
-            if row is not None and str(row.get("status")) == "success":
+            # The availability words the A11 record counts (pipeline.reliability),
+            # so the trial and the re-audit measure one thing (A19 #518 §1).
+            if row is not None and str(row.get("status")) in AVAILABLE_STATUSES:
                 available += 1
             else:
                 degraded.append(layer)
