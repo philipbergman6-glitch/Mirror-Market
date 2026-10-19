@@ -34,7 +34,7 @@ from config import (
 )
 from pipeline import divergence, grading
 from pipeline.connection import get_connection, managed_connection
-from pipeline.schema import ALL_SCHEMAS, INDEXES
+from pipeline.schema import _CREATE_ARGENTINA_FOB, ALL_SCHEMAS, INDEXES
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +332,82 @@ def _migrate_contract_bars_ohlc(conn) -> None:
                 logger.warning("Could not add %s column to contract_bars: %s", column, exc)
 
 
+class MigrationError(RuntimeError):
+    """A schema migration found rows it cannot carry across without guessing."""
+
+
+_ARGENTINA_FOB_COLUMNS = ("date", "product", "position", "ship_from", "ship_to", "price_usd_mt")
+_ARGENTINA_FOB_KEY = ("date", "position", "ship_from", "ship_to")
+
+
+def _migrate_argentina_fob_pk(conn) -> None:
+    """Rebuild argentina_fob onto the band key, ship_to included. Idempotent.
+
+    The old (date, position, ship_from) key let two same-start bands on one
+    day replace each other (B40 #541). SQLite can't alter a PK in place, so
+    detect any other shape and rebuild from the schema's own DDL.
+
+    Unlike the older PK migrations above, this one raises rather than logs:
+    the table is snapshot-only history (pipeline.history), so a half-done or
+    lossy rebuild is unrecoverable. Every row is carried across or none is —
+    a NULL ship_to or two rows on one band stop the run with the table
+    untouched, because picking a survivor or inventing an end month would be
+    a guess (invariant 1). The old key is a subset of the new one, so a table
+    that really had it cannot collide; the check is for any other shape.
+    """
+    info = conn.execute("PRAGMA table_info(argentina_fob)").fetchall()
+    pk_cols = {r[1] for r in info if r[5]}
+    if not info or pk_cols == set(_ARGENTINA_FOB_KEY):
+        return
+    missing = [c for c in _ARGENTINA_FOB_COLUMNS if c not in {r[1] for r in info}]
+    if missing:
+        raise MigrationError(
+            f"argentina_fob: column(s) {missing} absent — this shape cannot be "
+            "carried onto the band key without inventing them; table left as-is"
+        )
+    cols = ", ".join(_ARGENTINA_FOB_COLUMNS)
+    key = ", ".join(_ARGENTINA_FOB_KEY)
+    null_ends = conn.execute(
+        "SELECT COUNT(*) FROM argentina_fob WHERE ship_to IS NULL"
+    ).fetchone()[0]
+    if null_ends:
+        raise MigrationError(
+            f"argentina_fob: {null_ends} row(s) have a NULL ship_to — it is part "
+            "of the key now and cannot be guessed; table left as-is"
+        )
+    collisions = conn.execute(
+        f"SELECT {key}, COUNT(*) FROM argentina_fob GROUP BY {key} "
+        "HAVING COUNT(*) > 1 LIMIT 5"
+    ).fetchall()
+    if collisions:
+        raise MigrationError(
+            f"argentina_fob: rows collide under the key ({key}) — no survivor "
+            f"will be picked; table left as-is. First collisions: {collisions}"
+        )
+    before = conn.execute("SELECT COUNT(*) FROM argentina_fob").fetchone()[0]
+    conn.execute("SAVEPOINT migrate_argentina_fob_pk")
+    try:
+        conn.execute("ALTER TABLE argentina_fob RENAME TO argentina_fob_old_pk")
+        conn.execute(_CREATE_ARGENTINA_FOB)
+        conn.execute(
+            f"INSERT INTO argentina_fob ({cols}) SELECT {cols} FROM argentina_fob_old_pk"
+        )
+        after = conn.execute("SELECT COUNT(*) FROM argentina_fob").fetchone()[0]
+        if after != before:
+            raise MigrationError(
+                f"argentina_fob: rebuild carried {after} of {before} rows — rolled back"
+            )
+        conn.execute("DROP TABLE argentina_fob_old_pk")
+    except Exception as exc:
+        conn.execute("ROLLBACK TO migrate_argentina_fob_pk")
+        conn.execute("RELEASE migrate_argentina_fob_pk")
+        if isinstance(exc, MigrationError):
+            raise
+        raise MigrationError(f"argentina_fob PK migration failed: {exc}") from exc
+    conn.execute("RELEASE migrate_argentina_fob_pk")
+    logger.info("Migrated argentina_fob PK to include ship_to (%d rows kept)", before)
+
+
 def _migrate_quarantined_revisions(conn) -> None:
     """Add the A2 (#299) verdict columns to quarantined_revisions if absent.
 
@@ -370,6 +446,7 @@ def init_database():
         _migrate_gulf_bids_futures_month_high(conn)
         _migrate_contract_bars_ohlc(conn)
         _migrate_quarantined_revisions(conn)
+        _migrate_argentina_fob_pk(conn)
         for index_sql in INDEXES:
             conn.execute(index_sql)
         _migrate_data_freshness(conn)
@@ -1197,13 +1274,18 @@ def save_argentina_fob(df: pd.DataFrame):
     if df.empty:
         return
     df = df.copy()
+    # Both band ends are key columns (B40 #541): _str_cols would turn a
+    # missing one into "", a band MAGyP never printed.
+    for col in ("ship_from", "ship_to"):
+        if col not in df.columns or (df[col].isna() | (df[col].astype(str).str.strip() == "")).any():
+            raise ValueError(f"argentina_fob: blank {col} — a band needs both ends")
     if "date" in df.columns:
         df["date"] = _date(df["date"])
     df = _str_cols(df, "product", "position", "ship_from", "ship_to")
     _save(
         "argentina_fob",
-        df[["date", "product", "position", "ship_from", "ship_to", "price_usd_mt"]],
-        ["date", "position", "ship_from"],
+        df[list(_ARGENTINA_FOB_COLUMNS)],
+        list(_ARGENTINA_FOB_KEY),
         "argentina_fob",
     )
 

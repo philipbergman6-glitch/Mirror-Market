@@ -348,7 +348,7 @@ def test_an_unreadable_window_fails_the_block_rather_than_guessing(conn, registr
     conn.execute(
         "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt) "
         "VALUES (?,?,?,?,?,?)",
-        (D0.isoformat(), "Soybeans", "other", "UPRIVER", None, 400.0),
+        (D0.isoformat(), "Soybeans", "other", "UPRIVER", "UPRIVER", 400.0),
     )
     conn.commit()
     price = _block(conn, registry, "argentina", "price")

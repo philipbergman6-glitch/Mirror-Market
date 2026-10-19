@@ -35,6 +35,27 @@ rolls carry the reason; crush key changes 131 → 23. Fixes the "never holds
 more than 11 sessions" comment (measured max 21). Tests:
 `tests/test_loading_month_identity.py` (the 18–30 Sep 2026 bean circulars
 verbatim: one roll, five band changes).
+## Unreleased — argentina_fob is keyed on the whole band (2026-10-19)
+
+**B40 #541**, from A20 #536's replay. `argentina_fob` was keyed
+`(date, position, ship_from)`, so two bands sharing a start month on one day
+(`2026-09` and `2026-09..2026-10`) would `INSERT OR REPLACE` each other and the
+history CSV round-trip would keep only the last. The key is now
+`(date, position, ship_from, ship_to)` in schema, `save_argentina_fob` and
+`HISTORY_TABLES`; `ship_to` is `NOT NULL` (a NULL key part never matches
+itself, so a replace would become a duplicate) and a blank band end is
+rejected at save. `init_database` rebuilds an old-shape table in one
+savepoint: every row or none, and a NULL `ship_to` or two rows on one band
+raise `MigrationError` with the table untouched — no survivor is picked, no
+end month invented. The MAGyP trusted-reconciliation key gains `ship_to` too
+(its frame map collapsed same-key rows silently). On the committed
+`argentina_fob.csv` (8,514 rows, no blank `ship_to`, no duplicate start-month
+triples) both paths — a fresh CI DB seeded from the CSV, and a local old-shape
+DB migrated in place — keep 8,514 rows and re-export the CSV byte-identical,
+so the deploy commits no diff. Not fixed here: the briefing snapshot's
+Argentina `curve` is still a dict keyed by `ship_from` (briefing code, owned
+by B39 #540 in parallel) — follow-up #549. Tests: `tests/test_argentina_fob_key.py`; four
+fixtures that seeded a NULL `ship_to` now seed `ship_to = ship_from`.
 
 ## Unreleased — the Argentina crush band is one all three legs ship (2026-10-19)
 

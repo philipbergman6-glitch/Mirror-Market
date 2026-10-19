@@ -117,8 +117,8 @@ def seeded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         ):
             conn.execute(
                 "INSERT INTO argentina_fob (date, product, position, ship_from, "
-                "price_usd_mt) VALUES (?,?,?,?,?)",
-                (_day(offset), product, f"pos-{product}", "2026-08", price),
+                "ship_to, price_usd_mt) VALUES (?,?,?,?,?,?)",
+                (_day(offset), product, f"pos-{product}", "2026-08", "2026-08", price),
             )
     conn.commit()
 
