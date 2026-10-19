@@ -115,6 +115,12 @@ def _argentina_leg() -> tuple[float, str] | str | None:
     # B30 #504 / B39 #540: one band of the circular's curve, labelled as the
     # site labels it — "Sep loading (band Sep–Oct 2026)".
     window, rows = nearest
+    if len(rows) > 1:
+        # Two prices for one band: no survivor is chosen by row order (#558).
+        return (
+            f"{len(rows)} rows for band {window.describe()} on {session.isoformat()} "
+            "— no survivor is chosen"
+        )
     return float(rows["price_usd_mt"].iloc[0]), f"{session.isoformat()} · {window.loading_label()}"
 
 
@@ -148,7 +154,7 @@ def format(  # noqa: A001
         try:
             leg = loaders[leg_id]()
         except Exception as exc:
-            logger.debug("Cross-origin leg %s failed: %s", leg_id, exc)
+            logger.warning("Cross-origin leg %s failed: %s", leg_id, exc)
             leg = None
         if isinstance(leg, str):
             withheld.append((config.ORIGIN_LEGS[leg_id]["label"], leg))

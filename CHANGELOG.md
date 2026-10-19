@@ -4,6 +4,33 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — a failed briefing snapshot block is named, not emptied (2026-10-19)
+
+**B43 #558**, found by the review of PR #554 (#549). `snapshot._safe` wrapped
+every block builder, caught the failure, logged it at **debug** and returned
+`{}`/None — so an archived `briefings` row could not tell a block that raised
+from one whose source published nothing (invariant 1). `_safe` now logs at
+warning and records `{block: "ExceptionType: message"}` in a new top-level
+`failed_blocks` (dotted for nested blocks: `seasonal.Soybeans`,
+`brazil_basis.cepea_parana`, `argentina_fob.Soybeans`); `{}` means nothing
+raised. `SCHEMA_VERSION` 3 → 4: a v1–v3 row has no key, meaning "never
+recorded", not "none failed" (invariant 2). Surfaced to the operator by the
+warning in the deploy log and by the archived row; no new rendering, signal
+or manifest field. The Argentina block now builds each product under its own
+`_safe`, so two rows for one band withhold only that product (as
+`crush_spread` withholds only itself) instead of the whole block. Two related
+hidden failures closed: the briefing FOB board's Argentina leg withholds with
+a reason on two rows for its band instead of taking the first row, and a
+leg failure there logs at warning, not debug; `parse_magyp_window` returns
+None for an unreadable `ship_to` instead of a single-month band (every
+caller already treats None as unreadable). Latent: 0/8514 stored MAGyP rows
+have an unreadable band or a duplicate band; no block raises on an empty DB.
+Tests: six new (`test_snapshot`: raising builder → entry + warning, nested
+dotted name, no leak between snapshots, archive reader on v3 and v4 rows,
+Argentina per-product withhold; `test_window_headlines`: FOB-board withhold),
+the empty-DB skeleton asserts `failed_blocks == {}`, and
+`test_magyp_unreadable_bounds_are_none` gains two unreadable-end cases.
+
 ## Unreleased — a session whose every shipment window has sailed is withheld (2026-10-19)
 
 **B41 #550**, from the sixth audit's "repair expired-period selection".

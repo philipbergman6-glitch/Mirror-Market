@@ -139,6 +139,10 @@ def test_magyp_rejects_an_inverted_band():
 def test_magyp_unreadable_bounds_are_none():
     assert parse_magyp_window(None, None) is None
     assert parse_magyp_window("not-a-month", "2026-09") is None
+    # #558: an unreadable end is not a single-month band — it may be the
+    # eleven-month administered one.
+    assert parse_magyp_window("2026-09", "Sept") is None
+    assert parse_magyp_window("2026-09", "2026") is None
 
 
 # ---------------------------------------------------------------------------

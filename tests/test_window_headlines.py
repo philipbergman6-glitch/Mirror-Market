@@ -509,6 +509,26 @@ def test_the_briefing_withholds_a_leg_whose_every_window_has_sailed(monkeypatch)
     assert "$480.0" not in board and "$470.0" not in board
 
 
+def test_the_briefing_withholds_a_leg_with_two_rows_for_its_band(monkeypatch):
+    """#558: two prices for the nearest band are not resolved by row order —
+    the leg is withheld with its reason, as a sailed session is."""
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2026-10-16"] * 3),
+        "ship_from": ["2026-10", "2026-10", "2026-11"],
+        "ship_to": ["2026-10", "2026-10", "2027-04"],
+        "price_usd_mt": [493.0, 489.0, 495.0],
+    })
+    monkeypatch.setattr(fob_board, "read_argentina_fob", lambda _p: fob)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    leg = fob_board._argentina_leg()
+    assert isinstance(leg, str) and "2 rows for band 2026-10" in leg
+    board = fob_board.format({}, {})
+    argentina = next(line for line in board.splitlines() if "Argentina" in line)
+    assert "withheld" in argentina
+    assert "$493.0" not in board and "$489.0" not in board
+
+
 def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch):
     """Not "Current, else the first listed row": on 18 Mar 2025 AMS listed a
     sailed Mar¹ slot first; the nearest open one is Mar² (same rule as
