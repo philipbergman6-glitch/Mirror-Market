@@ -18,8 +18,9 @@ The committed mixed-ending file is not rewritten (data/history/ is
 deploy-only); from the next record commit on, `git diff --numstat` shows 0
 deletions. Replay on a copy of the committed record: `39 0` / `1 0`. Tests:
 the existing never-rewrites test now compares bytes (it compared
-universal-newline text and so could not see the defect); six new tests —
-byte prefix + LF tail for both stores from fresh and mixed-ending seeds, a
+universal-newline text and so could not see the defect); seven new tests —
+byte prefix + LF tail for both stores from fresh, mixed-ending and
+header-only CRLF seeds (a header-only file is copied, not re-headed), a
 fresh store is LF throughout, a body without a final newline only gains
 bytes, `git diff --numstat` shows insertions only, and a mixed-ending fixture
 reads as the same rows, alerts and reliability figures as its LF twin.

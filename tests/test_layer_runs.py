@@ -447,3 +447,23 @@ def test_mixed_endings_read_as_the_same_rows_and_figures(history_dir: Path) -> N
     assert safex["logged_sessions"] == 2
     assert safex["availability_pct"] == 50.0
     assert safex["surfaced_within_one_run_pct"] == 100.0
+
+
+@pytest.mark.parametrize(
+    ("name", "header"),
+    [("layer_runs.csv", _RUNS_HEADER), ("layer_alerts.csv", "run_id,layer_name")],
+)
+def test_a_header_only_crlf_store_keeps_its_header_bytes(history_dir: Path, name: str, header: str) -> None:
+    # A file with a header and no rows yet is still an existing file: its
+    # header is copied, never rewritten in this module's ending.
+    body = (header + "\r\n").encode("utf-8")
+    path = _seed(history_dir, name, body)
+    if name == "layer_runs.csv":
+        layer_runs.append_runs(_evidence(), [_run("1")])
+    else:
+        layer_runs.append_alerts(_evidence(), "1", ["safex"])
+
+    after = path.read_bytes()
+    assert after[: len(body)] == body
+    tail = after[len(body):]
+    assert tail.count(b"\n") == 1 and b"\r" not in tail
