@@ -25,6 +25,9 @@
     </div>
     {#- B30 #504: a move withheld across a window roll names the roll. -#}
     {%- for note in leg.move_notes %}<div class="caption">{{ note }}</div>{% endfor %}
+    {#- B41 #550: a newer session withheld because every window it printed had
+        sailed is named, never hidden behind the older print shown. -#}
+    {%- if leg.withheld_note %}<div class="caption">{{ leg.withheld_note }}</div>{% endif %}
     {# #230: the venue's own print, in the venue's own unit, and only where it
        is a second view of the number above. A `usd_per_mt` venue (Argentina's
        FOB, the EC workbook) already published the headline — re-labelling it

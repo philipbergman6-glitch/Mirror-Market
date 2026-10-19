@@ -234,9 +234,10 @@ def test_a_window_that_has_sailed_is_never_the_prompt(registry):
     assert prints.series["Soybeans"] == [(date(2025, 3, 18), 10.20, 1)]
 
 
-def test_when_every_window_has_sailed_the_latest_is_taken_and_named(registry):
-    """LAYERS.md (Layer 21, B30 #504): labelled, never withheld, and never the
-    oldest stale band."""
+def test_a_session_whose_every_window_has_sailed_is_withheld_with_its_reason(registry):
+    """LAYERS.md (Layer 21, B30 note; B41 #550): a quote for a cargo that has
+    already sailed is not a price a buyer can act on — the session is withheld
+    with its reason, never served as its latest-ending band."""
     connection = sqlite3.connect(":memory:")
     connection.execute(schema._CREATE_ARGENTINA_FOB)
     for ship_from, ship_to, price in (("2026-07", "2026-07", 470.0), ("2026-08", "2026-09", 480.0)):
@@ -248,9 +249,11 @@ def test_when_every_window_has_sailed_the_latest_is_taken_and_named(registry):
     prints = block_builders._read_prints(
         connection, registry["argentina"].price, date(2026, 10, 18)
     )
-    session = prints.windows["Soybeans"][date(2026, 10, 16)]
-    assert session.chosen.label == "2026-08..2026-09"
-    assert prints.series["Soybeans"] == [(date(2026, 10, 16), 480.0, 1)]
+    assert prints.series["Soybeans"] == []
+    assert date(2026, 10, 16) not in prints.windows.get("Soybeans", {})
+    assert prints.withheld["Soybeans"] == {
+        date(2026, 10, 16): "every shipment window printed on 2026-10-16 had ended by that session"
+    }
 
 
 def test_a_mistyped_window_column_raises_rather_than_reading_as_no_data(conn, registry):
@@ -294,6 +297,40 @@ def test_a_move_inside_one_window_is_reported(conn, registry):
     conn.commit()
     headline = _block(conn, registry, "argentina", "price").data["headline"]
     assert headline["chg_1_pct"] == pytest.approx((493.0 - 490.0) / 490.0 * 100.0)
+
+
+def test_a_sailed_only_session_then_an_open_one_is_no_roll_and_no_inherited_price(conn, registry):
+    """B41 #550: the publisher quoting nothing open on D1 is not a roll into
+    D0's band, and D1 carries no price — not its sailed bands', not D0's."""
+    _seed_argentina(conn, D1, bands=((-3, -3, 470.0), (-2, -2, 480.0)))
+    conn.commit()
+    ctx = _ctx(conn)
+    source = registry["argentina"].price
+    assert [day for day, _, _ in ctx.series(source)["Soybeans"]] == [D0]
+    assert D1 not in ctx.session_windows(source, "Soybeans")
+    headline = _block(conn, registry, "argentina", "price").data["headline"]
+    assert headline["home_value"] == 493.0 and headline["as_of"] == D0.isoformat()
+    assert headline["chg_1_pct"] is None
+    assert headline["move_notes"] == []
+    assert headline["withheld_note"] is None
+
+
+def test_a_newest_session_that_has_only_sailed_bands_says_why_it_is_not_shown(conn, registry):
+    """The card shows the newest print with an open band, dated, and names the
+    newer circular it withheld rather than hiding it."""
+    conn.execute("DELETE FROM argentina_fob WHERE date = ?", (D0.isoformat(),))
+    _seed_argentina(conn, D1)
+    _seed_argentina(conn, D0, bands=((-3, -3, 470.0), (-2, -2, 480.0)))
+    conn.commit()
+    price = _block(conn, registry, "argentina", "price")
+    headline = price.data["headline"]
+    assert headline["home_value"] == 493.0 and headline["as_of"] == D1.isoformat()
+    note = (
+        f"newer session {D0.isoformat()} withheld: every shipment window printed on "
+        f"{D0.isoformat()} had ended by that session"
+    )
+    assert headline["withheld_note"] == note
+    assert note in _render("blocks/01_price.html.j2", block=price)
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +468,27 @@ def test_the_briefing_fob_board_names_each_legs_window(monkeypatch):
     # The site's own labels, so the briefing and the pages name one window.
     assert "Oct loading (Current (prompt)))" in gulf and "$497.2" in gulf
     assert "Oct loading (Oct 2026))" in argentina and "$493.0" in argentina
+
+
+def test_the_briefing_withholds_a_leg_whose_every_window_has_sailed(monkeypatch):
+    """B41 #550: the newest circular quoting only sailed bands is withheld with
+    its reason — never its latest-ending band, never an older circular."""
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2026-10-16"] * 2),
+        "ship_from": ["2026-07", "2026-08"],
+        "ship_to": ["2026-07", "2026-09"],
+        "price_usd_mt": [470.0, 480.0],
+    })
+    monkeypatch.setattr(fob_board, "read_argentina_fob", lambda _p: fob)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    assert fob_board._argentina_leg() == (
+        "every shipment window printed on 2026-10-16 had ended by that session"
+    )
+    board = fob_board.format({}, {})
+    argentina = next(line for line in board.splitlines() if "Argentina" in line)
+    assert "withheld" in argentina and "had ended by that session" in argentina
+    assert "$480.0" not in board and "$470.0" not in board
 
 
 def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch):

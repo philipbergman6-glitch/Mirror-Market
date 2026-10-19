@@ -36,6 +36,7 @@ import calendar
 import logging
 import re
 import sqlite3
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 import config
@@ -224,16 +225,42 @@ def parse_magyp_window(ship_from: str | None, ship_to: str | None) -> ShipmentWi
 def nearest_window_key(window: ShipmentWindow, session: date) -> tuple[int, int, int]:
     """Sort key putting a session's *nearest* window first (B30 #504).
 
-    The one rule every surface that shows "the" price of a forward-curve
-    venue uses — the market pages and the briefing alike. Windows still open
-    on the session come first, earliest start then earliest end: the prompt
-    cargo. A window that has sailed is a stale quote, never the prompt; only
-    if *every* window has ended is the latest-ending one taken (and labelled
-    with its own window), rather than the session being withheld.
+    The one ordering every surface that lists a forward-curve venue's windows
+    uses — the market pages and the briefing alike. Windows still open on the
+    session come first, earliest start then earliest end: the prompt cargo.
+    Sailed windows sort after them, latest-ending first, so the session's
+    full table still lists them; which window *is* the session's price is
+    ``nearest_open_window``'s answer, never ``min`` over this key.
     """
-    if window.end >= session:
+    if not has_sailed(window, session):
         return (0, window.start.toordinal(), window.end.toordinal())
     return (1, -window.end.toordinal(), -window.start.toordinal())
+
+
+def has_sailed(window: ShipmentWindow, session: date) -> bool:
+    """Whether ``window`` had ended by ``session`` — a quote for a cargo nobody
+    can still load (B41 #550)."""
+    return window.end < session
+
+
+def all_sailed_reason(session: date) -> str:
+    """Why a session whose every window has sailed carries no price (B41 #550)."""
+    return f"every shipment window printed on {session.isoformat()} had ended by that session"
+
+
+def nearest_open_window(windows: Iterable[ShipmentWindow], session: date) -> ShipmentWindow | str:
+    """The session's price window: the nearest one still open (B30 #504).
+
+    Where every window printed on the session has already ended, the reason
+    instead (B41 #550). A quote for a cargo that has sailed is not a price a
+    buyer can act on, and taking the latest-ending one would serve it as the
+    venue's current quote and report a loading-month roll into the next
+    session's open band — a wrong number is worse than a gap (invariant 11).
+    """
+    open_windows = [window for window in windows if not has_sailed(window, session)]
+    if not open_windows:
+        return all_sailed_reason(session)
+    return min(open_windows, key=lambda window: nearest_window_key(window, session))
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +508,9 @@ __all__ = [
     "fx_resolution_on",
     "offered_windows",
     "parse_ams_slot",
+    "all_sailed_reason",
+    "has_sailed",
+    "nearest_open_window",
     "nearest_window_key",
     "parse_magyp_window",
     "port_for",

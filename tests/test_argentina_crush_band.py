@@ -514,6 +514,33 @@ def test_a_shared_period_that_has_ended_never_beats_one_still_open():
     assert picked.values == {"bean": 469.0, "oil": 1191.0, "meal": 363.0}
 
 
+def test_an_open_bean_band_whose_only_shared_period_has_sailed_is_no_band():
+    """B41 #550: bean Sep–Nov is open on 10 Oct, but the only period oil and
+    meal share with it is September — a margin for a cargo that has sailed."""
+    reason = shared_crush_band(
+        {
+            "bean": [(_w((2026, 9), (2026, 11)), 480.0)],
+            "oil": [(_w((2026, 9), (2026, 9)), 1200.0)],
+            "meal": [(_w((2026, 9), (2026, 10)), 420.0)],
+        },
+        date(2026, 10, 10),
+    )
+    assert reason == NO_SHARED_BAND_REASON
+
+
+def test_a_session_whose_every_bean_band_has_sailed_strikes_no_margin():
+    """Never the latest-ending sailed bean band (B41 #550)."""
+    reason = shared_crush_band(
+        {
+            "bean": [(_w((2026, 8), (2026, 9)), 480.0)],
+            "oil": [(_w((2026, 8), (2026, 9)), 1200.0)],
+            "meal": [(_w((2026, 8), (2026, 9)), 420.0)],
+        },
+        date(2026, 10, 16),
+    )
+    assert reason == "every shipment window printed on 2026-10-16 had ended by that session"
+
+
 def test_a_shared_period_that_is_not_whole_months_is_named_by_its_dates():
     picked = shared_crush_band(
         {
