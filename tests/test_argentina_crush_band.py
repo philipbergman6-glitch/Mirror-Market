@@ -20,7 +20,7 @@ import pytest
 from jinja2 import Environment, FileSystemLoader
 
 import config
-from analysis.origins.crush import shared_crush_band
+from analysis.origins.crush import NO_SHARED_BAND_REASON, shared_crush_band
 from analysis.origins.domain import ShipmentWindow
 from app.block_builders import (
     CRUSH_RANGE_MIN_OBS,
@@ -295,3 +295,257 @@ def test_the_rule_names_why_when_no_band_is_shared():
     )
     assert isinstance(reason, str)
     assert "band" in reason
+
+
+# ---------------------------------------------------------------------------
+# The three-way intersection (B35 #532)
+# ---------------------------------------------------------------------------
+# MAGyP circular of 2026-07-22 as stored in data/history/argentina_fob.csv.
+JULY_22 = date(2026, 7, 22)
+JULY_22_ROWS = {
+    "bean": [(_w((2026, 7), (2026, 9)), 469.0), (_w((2026, 10), (2027, 6)), 480.0)],
+    "oil": [
+        (_w((2026, 7), (2026, 7)), 1217.0),
+        (_w((2026, 8), (2026, 8)), 1203.0),
+        (_w((2026, 9), (2026, 9)), 1191.0),
+        (_w((2026, 10), (2026, 10)), 1189.0),
+        (_w((2026, 11), (2027, 6)), 1173.0),
+    ],
+    "meal": [
+        (_w((2026, 7), (2026, 7)), 361.0),
+        (_w((2026, 8), (2026, 9)), 363.0),
+        (_w((2026, 10), (2026, 10)), 364.0),
+        (_w((2026, 11), (2027, 6)), 369.0),
+    ],
+}
+
+
+def _shared(picked) -> ShipmentWindow:
+    """The period all three legs' own bands cover — what the band must name."""
+    windows = list(picked.windows.values())
+    start = max(window.start for window in windows)
+    end = min(window.end for window in windows)
+    assert start <= end, f"no period all three legs ship: {picked.windows}"
+    return ShipmentWindow(start, end)
+
+
+def test_july_22_bean_oil_and_meal_bands_that_only_overlap_the_bean_are_no_band():
+    """Oil Jul and meal Aug–Sep each overlap the Jul–Sep bean and not each
+    other: there is no cargo all three ship, so there is no margin."""
+    reason = shared_crush_band(
+        {
+            "bean": [JULY_22_ROWS["bean"][0]],
+            "oil": [JULY_22_ROWS["oil"][0]],
+            "meal": [JULY_22_ROWS["meal"][1]],
+        },
+        JULY_22,
+    )
+    assert reason == NO_SHARED_BAND_REASON
+
+
+def test_july_22_stored_circular_strikes_a_trio_that_ships_together():
+    picked = shared_crush_band(JULY_22_ROWS, JULY_22)
+    assert not isinstance(picked, str)
+    assert (picked.window.start, picked.window.end) == (
+        _shared(picked).start, _shared(picked).end
+    )
+    # July oil and July meal ship with the Jul–Sep bean in July, the prompt
+    # cargo — not August, however much more of the bean Aug–Sep meal covers.
+    assert picked.window.describe() == "2026-07"
+    assert picked.values == {"bean": 469.0, "oil": 1217.0, "meal": 361.0}
+
+
+def test_the_band_shrinks_to_the_period_all_three_legs_ship():
+    """Bean Jul–Sep, oil Aug–Sep, meal Aug: the margin is for August."""
+    bean, oil, meal = _w((2026, 7), (2026, 9)), _w((2026, 8), (2026, 9)), _w((2026, 8), (2026, 8))
+    picked = shared_crush_band(
+        {"bean": [(bean, 469.0)], "oil": [(oil, 1200.0)], "meal": [(meal, 363.0)]},
+        JULY_22,
+    )
+    assert not isinstance(picked, str)
+    assert (picked.window.start, picked.window.end) == (date(2026, 8, 1), date(2026, 8, 31))
+    assert picked.window.describe() == "2026-08"
+    assert picked.windows == {"bean": bean, "oil": oil, "meal": meal}
+
+
+def test_a_shrunk_band_that_is_no_legs_own_band_is_labelled_by_its_months():
+    """Bean Jul–Sep, oil Aug–Oct, meal Jun–Aug share only August — a period
+    none of the three printed as a band, named in the circular's own form."""
+    picked = shared_crush_band(
+        {
+            "bean": [(_w((2026, 7), (2026, 9)), 469.0)],
+            "oil": [(_w((2026, 8), (2026, 10)), 1200.0)],
+            "meal": [(_w((2026, 6), (2026, 8)), 363.0)],
+        },
+        JULY_22,
+    )
+    assert not isinstance(picked, str)
+    assert picked.window.describe() == "2026-08"
+    picked = shared_crush_band(
+        {
+            "bean": [(_w((2026, 7), (2026, 12)), 469.0)],
+            "oil": [(_w((2026, 8), (2026, 12)), 1200.0)],
+            "meal": [(_w((2026, 6), (2026, 10)), 363.0)],
+        },
+        JULY_22,
+    )
+    assert not isinstance(picked, str)
+    assert picked.window.describe() == "2026-08..2026-10"
+
+
+def test_a_product_takes_the_band_that_intersects_not_the_one_overlapping_the_bean_most():
+    """Oil Jul–Aug overlaps the Jul–Sep bean more than oil Sep, but only oil
+    Sep ships with the Sep meal."""
+    picked = shared_crush_band(
+        {
+            "bean": [(_w((2026, 7), (2026, 9)), 469.0)],
+            "oil": [(_w((2026, 7), (2026, 8)), 1210.0), (_w((2026, 9), (2026, 9)), 1191.0)],
+            "meal": [(_w((2026, 9), (2026, 9)), 363.0)],
+        },
+        JULY_22,
+    )
+    assert not isinstance(picked, str)
+    assert picked.values["oil"] == 1191.0
+    assert picked.window.describe() == "2026-09"
+
+
+def test_every_band_returned_is_shipped_by_all_three_legs():
+    """Exhaustive over a small family of month bands: a band is returned
+    exactly when some bean/oil/meal trio shares a day, and it is that trio's
+    shared period."""
+    months = [(2026, m) for m in range(7, 13)]
+    bands = [_w(a, b) for i, a in enumerate(months) for b in months[i:]]
+    for bean in bands[::3]:
+        for oil in bands[::4]:
+            for meal in bands[::5]:
+                picked = shared_crush_band(
+                    {"bean": [(bean, 1.0)], "oil": [(oil, 2.0)], "meal": [(meal, 3.0)]},
+                    JULY_22,
+                )
+                shares = bean.overlaps(oil) and bean.overlaps(meal) and oil.overlaps(meal)
+                if not shares:
+                    assert picked == NO_SHARED_BAND_REASON
+                    continue
+                assert not isinstance(picked, str)
+                shared = _shared(picked)
+                assert (picked.window.start, picked.window.end) == (shared.start, shared.end)
+
+
+def test_one_band_printed_twice_at_two_prices_is_refused():
+    """Which of two prices for one band is the oil leg? Not a question the
+    rule answers by list order."""
+    oil = _w((2026, 7), (2026, 7))
+    with pytest.raises(ValueError, match="twice"):
+        shared_crush_band(
+            {
+                "bean": [(_w((2026, 7), (2026, 9)), 469.0)],
+                "oil": [(oil, 1217.0), (oil, 1220.0)],
+                "meal": [(oil, 361.0)],
+            },
+            JULY_22,
+        )
+
+
+def test_the_nearest_shared_period_wins_over_a_wider_product_band():
+    """Circular of 2024-11-01: oil Dec–Feb overlaps the Nov–Feb bean most and
+    ships with meal Nov–Dec in December, but oil Nov ships with the same meal
+    in November — the prompt cargo all three share is November's."""
+    picked = shared_crush_band(
+        {
+            "bean": [(_w((2024, 11), (2025, 2)), 413.0), (_w((2025, 3), (2025, 10)), 389.0)],
+            "oil": [
+                (_w((2024, 11), (2024, 11)), 1120.0),
+                (_w((2024, 12), (2025, 2)), 1109.0),
+                (_w((2025, 3), (2025, 3)), 1031.0),
+                (_w((2025, 4), (2025, 10)), 997.0),
+            ],
+            "meal": [
+                (_w((2024, 11), (2024, 12)), 337.0),
+                (_w((2025, 1), (2025, 3)), 342.0),
+                (_w((2025, 4), (2025, 10)), 334.0),
+            ],
+        },
+        date(2024, 11, 1),
+    )
+    assert not isinstance(picked, str)
+    assert picked.values == {"bean": 413.0, "oil": 1120.0, "meal": 337.0}
+    assert picked.window.describe() == "2024-11"
+
+
+def test_equal_overlap_takes_the_nearer_meal_band_not_the_dearer():
+    bean = _w((2027, 4), (2027, 6))
+    meal_near, meal_far = _w((2027, 3), (2027, 4)), _w((2027, 6), (2027, 7))
+    picked = shared_crush_band(
+        {
+            "bean": [(bean, 493.0)],
+            "oil": [(bean, 1200.0)],
+            "meal": [(meal_far, 450.0), (meal_near, 423.0)],
+        },
+        date(2027, 3, 1),
+    )
+    assert not isinstance(picked, str)
+    assert picked.windows["meal"] == meal_near
+    assert picked.window.describe() == "2027-04"
+
+
+def test_a_shared_period_that_has_ended_never_beats_one_still_open():
+    """Mid-August, bean Jul–Sep: a July trio overlaps the bean more, but July
+    has sailed; the September trio is the cargo still to ship."""
+    picked = shared_crush_band(
+        {
+            "bean": [(_w((2026, 7), (2026, 9)), 469.0)],
+            "oil": [(_w((2026, 6), (2026, 7)), 1210.0), (_w((2026, 9), (2026, 9)), 1191.0)],
+            "meal": [(_w((2026, 7), (2026, 7)), 361.0), (_w((2026, 9), (2026, 9)), 363.0)],
+        },
+        date(2026, 8, 10),
+    )
+    assert not isinstance(picked, str)
+    assert picked.window.describe() == "2026-09"
+    assert picked.values == {"bean": 469.0, "oil": 1191.0, "meal": 363.0}
+
+
+def test_a_shared_period_that_is_not_whole_months_is_named_by_its_dates():
+    picked = shared_crush_band(
+        {
+            "bean": [(ShipmentWindow(date(2026, 8, 1), date(2026, 8, 31), "2026-08"), 469.0)],
+            "oil": [(ShipmentWindow(date(2026, 8, 10), date(2026, 9, 15)), 1200.0)],
+            "meal": [(ShipmentWindow(date(2026, 7, 20), date(2026, 8, 20)), 363.0)],
+        },
+        JULY_22,
+    )
+    assert not isinstance(picked, str)
+    assert picked.window.describe() == "2026-08-10..2026-08-20"
+
+
+def test_one_band_printed_twice_under_two_labels_is_refused():
+    oil = _w((2026, 7), (2026, 7))
+    with pytest.raises(ValueError, match="twice"):
+        shared_crush_band(
+            {
+                "bean": [(_w((2026, 7), (2026, 9)), 469.0)],
+                "oil": [
+                    (ShipmentWindow(oil.start, oil.end, "2026-07"), 1217.0),
+                    (ShipmentWindow(oil.start, oil.end, "July"), 1217.0),
+                ],
+                "meal": [(oil, 361.0)],
+            },
+            JULY_22,
+        )
+
+
+def test_the_range_never_mixes_margins_struck_on_different_bean_bands(conn, registry):
+    """Older sessions share the level's October period but price a Sep–Nov
+    bean, not the October bean: a different bean quote, so not the level's
+    history (B35 #532 — the label alone no longer names the bean's band)."""
+    wide_bean = {
+        "Soybeans": ((-1, 1, 480.0),),
+        "Soybean Oil": OIL_BANDS,
+        "Soybean Meal": MEAL_BANDS,
+    }
+    for offset in range(2, CRUSH_RANGE_MIN_OBS + 2):
+        _seed(conn, TODAY - timedelta(days=offset), wide_bean)
+    conn.commit()
+    _, _, data = headline_crush_board(registry, _ctx(conn))
+    card = next(row for row in data["rows"] if row["market_slug"] == "argentina")
+    assert card["range"] is None
+    assert f"1 session(s) all three legs struck on the {_month(D0, 0)} band" in card["range_note"]

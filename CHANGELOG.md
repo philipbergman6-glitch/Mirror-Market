@@ -4,6 +4,35 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the Argentina crush band is one all three legs ship (2026-10-19)
+
+**B35 #532**, from the fifth audit. `shared_crush_band` checked oil and meal
+each against the bean's band, never against each other: on 2026-07-22 a
+Jul–Sep bean took July oil and Aug–Sep meal, two bands sharing no day, and a
+margin was printed for a cargo nobody can ship. Oil and meal are now chosen
+as a pair: among pairs sharing at least one day with the bean, the one whose
+shared period is nearest by the B30 #504 rule (a tie to the nearer oil, then
+the nearer meal — never the dearer), the next bean band where none does, the
+existing `NO_SHARED_BAND_REASON` where no bean band works. The old pick took
+each product's band overlapping the bean most, which favoured wide product
+bands and later cargoes; the nearest shared period is the prompt cargo all
+three can ship. `CrushBand.window` is now that three-way shared period, not
+the bean's band — 2026-07-22 is a July margin on July oil and July meal,
+labelled `2026-07`. Both block 03 and the origins crush page read the one
+function. A band printed twice at two prices or under two labels on one
+session raises. The headline crush range keeps a session only if both its
+shared period and its bean band match the level's — the label alone no
+longer names the bean quote; B39 #540 re-keys it on the loading month
+(A20 #536). Replay over the stored Argentina history (462 sessions):
+selections with no three-way intersection 6 → 0; the pick now equals each
+leg's own nearest band on all 462; leg values change on 86 sessions (old
+non-prompt picks, 1–6 months later than the nearest shared period, the 6
+no-intersection sessions among them); 214 labels change (those 86, plus 128
+where the legs are unchanged and the label narrows from the bean's band to
+the period all three ship). Newest session 2026-10-16 unchanged (`2026-10`;
+its range still draws on the same 11 of the last 60 sessions). Tests:
+`tests/test_argentina_crush_band.py`.
+
 ## Unreleased — Argentina's crush is struck on one shared band (2026-10-19)
 
 **#507**, found while fixing B30 #504. Block 03's generic crush engine built
