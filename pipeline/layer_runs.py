@@ -201,21 +201,39 @@ def rows_for_run(
 # ── store ─────────────────────────────────────────────────────────────────
 
 
-def _validate(row: LayerRun) -> None:
+def _validate_shape(row: LayerRun) -> None:
+    """What every row must be, whenever it was written."""
     where = f"layer_runs row ({row.run_id!r}, {row.layer_name!r})"
     if not row.run_id:
         raise LayerRunsError(f"{where}: run_id is blank")
+    if not row.layer_name or not row.status:
+        raise LayerRunsError(f"{where}: layer_name and status are required")
+    if not isinstance(row.session_date, date) or row.session_date.weekday() >= 5:
+        raise LayerRunsError(f"{where}: session_date {row.session_date!r} is not a weekday date")
+    try:
+        _parse_stamp(row.run_started_at)
+    except ValueError as exc:
+        raise LayerRunsError(f"{where}: run_started_at {row.run_started_at!r} is not a timestamp") from exc
+
+
+def _validate(row: LayerRun) -> None:
+    """A row about to be appended: shape, plus today's roster and vocabulary.
+
+    Only on the write path. A stored row is checked for shape alone, because
+    it was valid against the roster of its own day: a layer retired or renamed
+    later must not make the whole record unreadable — and so unappendable —
+    from then on.
+    """
+    _validate_shape(row)
+    where = f"layer_runs row ({row.run_id!r}, {row.layer_name!r})"
     if row.layer_name not in PRODUCTION_LAYER_KEYS:
         raise LayerRunsError(f"{where}: layer is not in config.PRODUCTION_LAYER_KEYS")
     if row.status not in RUN_STATUSES:
         raise LayerRunsError(f"{where}: status {row.status!r} is not one of {list(RUN_STATUSES)}")
-    if not isinstance(row.session_date, date) or row.session_date.weekday() >= 5:
-        raise LayerRunsError(f"{where}: session_date {row.session_date!r} is not a weekday date")
     if row.layer_name in PRIVATE_LAYERS and (row.observed_at or row.rendered_at):
         raise LayerRunsError(
             f"{where}: private layer carries layer_name + status only (invariant 4)"
         )
-    _parse_stamp(row.run_started_at)
 
 
 def _encode(row: LayerRun) -> list[str]:
@@ -270,7 +288,7 @@ def read_runs() -> list[LayerRun]:
             session_date=session, layer_name=rec["layer_name"], status=rec["status"],
             observed_at=rec["observed_at"] or None, rendered_at=rec["rendered_at"] or None,
         )
-        _validate(row)
+        _validate_shape(row)
         rows.append(row)
     return rows
 

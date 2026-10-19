@@ -118,13 +118,20 @@ def _reliability(generated_at: datetime) -> dict[str, Any]:
     The window closes on the session *before* the one this edition serves:
     that session's own runs are still being recorded (this run's rows land
     after promotion), so including it would count a session as ``no_run``
-    that is merely unfinished.
+    that is merely unfinished. The session is resolved from
+    ``PIPELINE_STARTED_AT`` when the deploy workflow stamped it — the same
+    instant the record step files this run under — so a build straddling the
+    settlement cutoff cannot close its window on its own unrecorded session.
     """
+    import os
+
     from pipeline.layer_runs import read_alerts, read_runs, session_date_for
     from pipeline.reliability import previous_session, reliability
 
     try:
-        through = previous_session(session_date_for(generated_at))
+        stamp = os.environ.get("PIPELINE_STARTED_AT")
+        moment = datetime.fromisoformat(stamp.replace("Z", "+00:00")) if stamp else generated_at
+        through = previous_session(session_date_for(moment))
         return reliability(read_runs(), read_alerts(), through=through)
     except Exception as exc:  # noqa: BLE001 — a manifest must never fail a build
         logger.warning("could not compute reliability for the manifest", exc_info=True)

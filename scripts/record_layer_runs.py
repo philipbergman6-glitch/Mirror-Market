@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config  # noqa: E402 — needs the project root on sys.path
-from pipeline import layer_runs  # noqa: E402
+from pipeline import history, layer_runs  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s — %(message)s")
 logger = logging.getLogger(__name__)
@@ -98,7 +98,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, default=None)
     parser.add_argument("--deployment-outcome", default="",
                         help="success | failure | skipped — only success stamps rendered_at")
+    parser.add_argument("--history-dir", type=Path, default=None,
+                        help="the data/history/ to append to (default: config.HISTORY_DIR); the "
+                             "workflow passes a fresh worktree of main so this run's code records "
+                             "onto main's newest record")
     args = parser.parse_args(argv)
+    if args.history_dir is not None:
+        history.HISTORY_DIR = str(args.history_dir)
 
     if not args.started_at:
         raise layer_runs.LayerRunsError("--started-at / PIPELINE_STARTED_AT is not set")

@@ -423,13 +423,14 @@ jobs:
       #
       # Its own commit, never the snapshot commit's `-X theirs` rebase: on an
       # append-only file "prefer ours" would drop whatever another run
-      # appended. Instead each attempt starts from main's newest record and
-      # re-appends this run's rows, which the script refuses to do twice.
-      # The reset discards nothing this run still needs: the database, the
-      # run summary and the alert receipt live under gitignored data/storage/
-      # and the candidate under RUNNER_TEMP. continue-on-error: the edition
-      # is already out, and a run that failed to record shows up in the
-      # record itself as `no_run` for its session.
+      # appended. Each attempt checks main's newest commit out into a separate
+      # worktree and appends this run's rows to *that* record, which the
+      # script refuses to do twice. The code that writes is still this run's
+      # checkout — a PR merged mid-run (a new layer, a new column) must not
+      # file this run under a roster it never ran. The database, run summary
+      # and alert receipt stay where the pipeline left them (gitignored
+      # data/storage/), the candidate under RUNNER_TEMP. continue-on-error:
+      # the edition is already out; the step after it makes a failure loud.
       - name: Record layer runs
         id: record_runs
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
@@ -437,17 +438,20 @@ jobs:
         env:
           DEPLOYMENT_OUTCOME: ${{ steps.deployment_status.outputs.outcome }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          RECORD="$RUNNER_TEMP/layer-runs-record"
           for attempt in 1 2 3; do
+            git worktree remove --force "$RECORD" 2>/dev/null || true
             git fetch --depth=1 origin main
-            git reset --hard FETCH_HEAD
+            git worktree add --detach "$RECORD" FETCH_HEAD
             python scripts/record_layer_runs.py \
+              --history-dir "$RECORD/data/history" \
               --manifest "$RUNNER_TEMP/mirror-market-candidate/manifest.json" \
               --deployment-outcome "$DEPLOYMENT_OUTCOME"
-            git add -A data/history
-            git commit -m "chore(data): layer run record [skip ci]"
-            if git push origin HEAD:main; then
+            git -C "$RECORD" config user.name "github-actions[bot]"
+            git -C "$RECORD" config user.email "github-actions[bot]@users.noreply.github.com"
+            git -C "$RECORD" add data/history
+            git -C "$RECORD" commit -m "chore(data): layer run record [skip ci]"
+            if git -C "$RECORD" push origin HEAD:main; then
               exit 0
             fi
             echo "Push rejected (attempt $attempt) — re-appending onto moved main."
@@ -455,15 +459,23 @@ jobs:
           echo "::error::layer run record push failed after 3 attempts"
           exit 1
 
+      # A run that fails to record is a hole in the record — every layer
+      # `no_run` for its session unless a later run fills it — so it is said
+      # out loud rather than left as a yellow step nobody opens.
+      - name: Flag a missing record
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.record_runs.outcome == 'failure' }}
+        run: echo "::error title=Layer run record not written::This run is absent from data/history/layer_runs.csv — its session counts as no_run unless a later run records it. See the Record layer runs step."
+
       # A layer unavailable on DEAD_SOURCE_SESSIONS consecutive sessions gets
       # the rolling `ci-dead-source` issue, commented only on a state change
-      # (§4). A relay like the layer alert: never reddens a run.
+      # (§4). A relay like the layer alert: never reddens a run. It reads the
+      # record the step above just pushed.
       - name: Relay dead sources
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.record_runs.outcome == 'success' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/ci_dead_source.py
+        run: python scripts/ci_dead_source.py --history-dir "$RUNNER_TEMP/layer-runs-record/data/history"
 
       - name: Enforce publication outcome
         if: ${{ !cancelled() && (steps.generate_site.outcome == 'failure' || steps.smoke_candidate.outcome == 'failure' || steps.smoke_public.outcome == 'failure') }}

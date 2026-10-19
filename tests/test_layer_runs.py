@@ -235,3 +235,17 @@ def test_run_identity_separates_rerun_attempts() -> None:
     assert layer_runs.run_identity({**env, "GITHUB_RUN_ATTEMPT": "2"})[0] == "123-2"
     with pytest.raises(LayerRunsError, match="GITHUB_RUN_ID"):
         layer_runs.run_identity({})
+
+
+def test_a_retired_layer_in_old_rows_never_bricks_the_record(history_dir: Path) -> None:
+    # Rows were valid against their own day's roster. Retiring that layer
+    # later must leave the record readable and appendable.
+    history_dir.mkdir()
+    (history_dir / "layer_runs.csv").write_text(
+        ",".join(layer_runs.COLUMNS) + "\n"
+        "1,w,2026-10-19T20:05:00Z,2026-10-19,retired_layer,old_word,,\n",
+        encoding="utf-8",
+    )
+    assert [r.layer_name for r in layer_runs.read_runs()] == ["retired_layer"]
+    layer_runs.append_runs([_run("2")])
+    assert len(layer_runs.read_runs()) == 2

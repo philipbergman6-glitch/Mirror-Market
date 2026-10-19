@@ -21,11 +21,12 @@ Like ``scripts/ci_layer_alert.py`` it is a relay: the workflow step is
 ``continue-on-error`` and a broken relay never reddens a run.
 
 Usage:
-    python scripts/ci_dead_source.py
+    python scripts/ci_dead_source.py [--history-dir PATH]
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -36,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config  # noqa: E402 — needs the project root on sys.path
-from pipeline import layer_runs, reliability  # noqa: E402
+from pipeline import history, layer_runs, reliability  # noqa: E402
 from pipeline.reliability import Streak  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s — %(message)s")
@@ -99,6 +100,13 @@ def build_body(now: dict[str, Streak], newly: list[str], recovered: dict[str, St
 
 
 def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--history-dir", type=Path, default=None,
+                        help="the data/history/ holding layer_runs.csv (default: config.HISTORY_DIR)")
+    args = parser.parse_args(argv)
+    if args.history_dir is not None:
+        history.HISTORY_DIR = str(args.history_dir)
+
     rows = layer_runs.read_runs()
     run_id, _workflow = layer_runs.run_identity(os.environ)
     now = reliability.dead_layers(rows)

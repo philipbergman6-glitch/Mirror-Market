@@ -188,7 +188,7 @@ def _body(calls, cmd):
 def test_relay_opens_the_issue_when_a_layer_crosses_three_sessions(history_dir: Path, gh) -> None:
     calls, _ = gh
     _seed(["success", "failed", "failed", "failed"])
-    assert relay.main() == 0
+    assert relay.main([]) == 0
     assert ("issue", "create") in _cmds(calls)
     body = _body(calls, ("issue", "create"))
     assert "`safex`" in body and "3 consecutive sessions" in body
@@ -198,7 +198,7 @@ def test_relay_opens_the_issue_when_a_layer_crosses_three_sessions(history_dir: 
 def test_basket_layer_is_tagged_decision_impairing(history_dir: Path, gh) -> None:
     calls, _ = gh
     _seed(["failed", "failed", "failed"], layer="gulf_bids")
-    relay.main()
+    relay.main([])
     assert "decision-impairing" in _body(calls, ("issue", "create"))
 
 
@@ -206,7 +206,7 @@ def test_relay_is_silent_while_the_dead_set_is_unchanged(history_dir: Path, gh) 
     calls, state = gh
     state["open_issue"] = 41
     _seed(["failed", "failed", "failed", "failed"])  # already dead before this run
-    relay.main()
+    relay.main([])
     assert ("issue", "comment") not in _cmds(calls)
     assert ("issue", "create") not in _cmds(calls)
 
@@ -215,7 +215,7 @@ def test_relay_comments_on_a_new_dead_layer_when_the_issue_is_open(history_dir: 
     calls, state = gh
     state["open_issue"] = 41
     _seed(["success", "failed", "failed", "failed"], others={"cec": ["failed"] * 4})
-    relay.main()
+    relay.main([])
     body = _body(calls, ("issue", "comment"))
     assert "Now dead" in body and "`safex`" in body
     assert "Still dead" in body and "`cec`" in body
@@ -225,7 +225,7 @@ def test_relay_closes_the_issue_with_the_recovered_streak(history_dir: Path, gh)
     calls, state = gh
     state["open_issue"] = 41
     _seed(["failed", "failed", "failed", "failed", "success"])
-    relay.main()
+    relay.main([])
     assert ("issue", "close") in _cmds(calls)
     body = _body(calls, ("issue", "close"))
     assert "`safex`" in body and "4 unavailable session(s)" in body
@@ -234,7 +234,7 @@ def test_relay_closes_the_issue_with_the_recovered_streak(history_dir: Path, gh)
 def test_relay_does_nothing_when_nothing_is_or_was_dead(history_dir: Path, gh) -> None:
     calls, _ = gh
     _seed(["success", "failed", "success"])
-    relay.main()
+    relay.main([])
     assert _cmds(calls) == [("issue", "list")]
 
 
@@ -269,3 +269,28 @@ def test_manifest_reliability_withholds_a_corrupt_record_with_a_reason(history_d
     block = _reliability(datetime(2026, 10, 7, 21, tzinfo=timezone.utc))
     assert block["state"] == "unavailable"
     assert "header" in block["reason"]
+
+
+def test_manifest_window_follows_the_pipeline_start_stamp(
+    history_dir: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import datetime, timezone
+
+    from app.manifest import _reliability
+
+    _seed(["success", "failed", "success"])  # Mon 5 → Wed 7
+    # Pipeline started Wednesday before the 14:30 CT cutoff (session Tue 6),
+    # site built after it: the record files the run under Tuesday, so the
+    # window must close on Monday, not on Tuesday's unrecorded run.
+    monkeypatch.setenv("PIPELINE_STARTED_AT", "2026-10-07T18:00:00Z")
+    block = _reliability(datetime(2026, 10, 7, 21, tzinfo=timezone.utc))
+    assert block["window"]["last_session"] == "2026-10-05"
+
+
+def test_record_and_relay_write_to_the_given_history_dir(
+    history_dir: Path, patched_db: Path, tmp_path: Path, gh,
+) -> None:
+    target = tmp_path / "worktree" / "data" / "history"
+    assert recorder.main(_args(tmp_path, "--history-dir", str(target))) == 0
+    assert (target / "layer_runs.csv").exists()
+    assert relay.main(["--history-dir", str(target)]) == 0
