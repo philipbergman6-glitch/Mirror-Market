@@ -56,6 +56,11 @@ def _month(day: date, ahead: int) -> str:
     return f"{index // 12:04d}-{index % 12 + 1:02d}"
 
 
+def _mon(day: date, ahead: int) -> str:
+    """``Oct`` — a loading month's name (B39 #540)."""
+    return calendar.month_abbr[(day.month - 1 + ahead) % 12 + 1]
+
+
 def _slot(day: date, spec: str) -> str:
     """``+1¹`` → the AMS label one month after the report month, first half."""
     if spec == "Current":
@@ -269,18 +274,19 @@ def test_a_move_across_a_window_roll_is_withheld(conn, registry):
     # is Nov–Apr: 495 → 493 is a calendar spread, not a session move.
     _seed_argentina(conn, D1, bands=((1, 6, 480.0), (7, 11, 450.0)))
     conn.commit()
-    rolled = f"window rolled {_month(D0, 1)}..{_month(D0, 6)} → {_month(D0, 0)}"
+    # B39 #540: the loading month moved (Nov → Oct), so it is a roll.
+    rolled = f"loading month rolled {_mon(D0, 1)} → {_mon(D0, 0)} — no like-for-like change"
     price = _block(conn, registry, "argentina", "price")
     headline = price.data["headline"]
     assert headline["chg_1_pct"] is None
     # Withheld with its reason, never a bare blank (review of #508).
-    assert headline["move_notes"] == [f"session move withheld — {rolled}"]
-    assert f"session move withheld — {rolled}" in _render("blocks/01_price.html.j2", block=price)
+    assert headline["move_notes"] == [f"session move withheld: {rolled}"]
+    assert f"session move withheld: {rolled}" in _render("blocks/01_price.html.j2", block=price)
     state, _, data = ledger_block(registry["argentina"], _ctx(conn), markets=registry)
     row = next(r for r in data["rows"] if r["leg_id"] == "argentina:fob")
     assert row["usd_chg_pct"] is None and row["home_chg_pct"] is None
-    assert row["move_note"] == f"move withheld — {rolled}"
-    assert f"move withheld — {rolled}" in _render("blocks/_ledger_table.html.j2", d=data)
+    assert row["move_note"] == f"move withheld: {rolled}"
+    assert f"move withheld: {rolled}" in _render("blocks/_ledger_table.html.j2", d=data)
 
 
 def test_a_move_inside_one_window_is_reported(conn, registry):
@@ -308,7 +314,8 @@ def test_rendered_headlines_print_their_window_and_no_blend(conn, registry):
     price = _block(conn, registry, "argentina", "price")
     price_html = _render("blocks/01_price.html.j2", block=price)
     assert "$493.0" in price_html and "$483.0" not in price_html
-    assert f"window {_month(D0, 0)}" in price_html
+    loading = f"{_mon(D0, 0)} loading ({_mon(D0, 0)} {D0.year})"
+    assert loading in price_html
     assert "nearest of 3 printed" in price_html
     # Per-window rows on the same page, one click away.
     assert "<details" in price_html
@@ -317,20 +324,20 @@ def test_rendered_headlines_print_their_window_and_no_blend(conn, registry):
 
     basis = _block(conn, registry, "cbot", "basis")
     basis_html = _render("blocks/04_basis.html.j2", block=basis)
-    assert "window Current (prompt)" in basis_html
+    assert f"{_mon(D0, 0)} loading (Current (prompt))" in basis_html
     assert "All 6 windows printed" in basis_html
     _assert_no_unlabelled_blend(basis_html)
 
     for slug in ("argentina", "cbot"):
         _, _, data = ledger_block(registry[slug], _ctx(conn), markets=registry)
         ledger_html = _render("blocks/_ledger_table.html.j2", d=data)
-        assert "window Current (prompt)" in ledger_html
+        assert f"{_mon(D0, 0)} loading (Current (prompt))" in ledger_html
         _assert_no_unlabelled_blend(ledger_html)
 
     state, reason, data = headline_ledger(registry, _ctx(conn))
     assert state == "ok", reason
     headline_html = _render("blocks/_ledger_table.html.j2", d=data)
-    assert f"window {_month(D0, 0)}" in headline_html
+    assert loading in headline_html
     _assert_no_unlabelled_blend(headline_html)
 
 
@@ -422,8 +429,8 @@ def test_the_briefing_fob_board_names_each_legs_window(monkeypatch):
     gulf = next(line for line in board.splitlines() if "US Gulf" in line)
     argentina = next(line for line in board.splitlines() if "Argentina" in line)
     # The site's own labels, so the briefing and the pages name one window.
-    assert "window Current (prompt))" in gulf and "$497.2" in gulf
-    assert "window 2026-10)" in argentina and "$493.0" in argentina
+    assert "Oct loading (Current (prompt)))" in gulf and "$497.2" in gulf
+    assert "Oct loading (Oct 2026))" in argentina and "$493.0" in argentina
 
 
 def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch):
@@ -447,6 +454,6 @@ def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch)
     argentina = fob_board._argentina_leg()
     assert gulf is not None and argentina is not None
     assert gulf[0] == pytest.approx(_gulf_usd(10.20))
-    assert gulf[1] == "2025-03-18 · window Mar 2025 2nd half"
-    assert argentina == (310.0, "2025-03-18 · window 2025-04..2025-05")
+    assert gulf[1] == "2025-03-18 · Mar loading (Mar 2025 2nd half)"
+    assert argentina == (310.0, "2025-03-18 · Apr loading (band Apr–May 2025)")
 

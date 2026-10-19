@@ -67,18 +67,19 @@
         {#- A1 #298: which day's rate, where it is not the print's own. -#}
         {%- if row.fx_label %}<div class="caption">struck at {{ row.fx_label }}</div>
         {%- elif row.fx_reason %}<div class="caption">withheld — {{ row.fx_reason }}</div>{% endif %}
-        {#- B30 #504: which shipment window this print is for, where the venue prints several. -#}
-        {%- if row.window %}<div class="caption">window {{ row.window }}</div>{% endif %}
+        {#- B30 #504 / B39 #540: which loading month and band this print is for,
+            where the venue prints several. -#}
+        {%- if row.window %}<div class="caption">{{ row.loading }}</div>{% endif %}
         {%- if d.has_drilldown and row.band and row.band.since_label %}
         {#- Variant C's band: "high in its own range" is often the whole
             question, so it is stated in the collapsed row rather than behind a
             click. Under eight prints it says how few there are instead of
             drawing a range across two points, which would invent one. A range
-            across shipment-window rolls says how many windows it spans (#513). -#}
+            across loading-month rolls says how many months it spans (#513, B39 #540). -#}
         {% if row.band.has_range %}
         <div class="range-band" title="range of this leg's prints over the last {{ d.drilldown_default_days }} days{% if row.band.window_note %} — {{ row.band.window_note }}{% endif %}">
           <span class="rb-track"><span class="rb-tick" style="left:{{ (row.band.position * 100)|round(1) }}%"></span></span>
-          <span class="rb-text">{{ f.num(row.band.low, 0) }}–{{ f.num(row.band.high, 0) }} since {{ row.band.since_label }}{% if row.band.windows_spanned %} · {{ row.band.windows_spanned }} windows{% endif %}</span>
+          <span class="rb-text">{{ f.num(row.band.low, 0) }}–{{ f.num(row.band.high, 0) }} since {{ row.band.since_label }}{% if row.band.loading_months %} · {{ row.band.loading_months }} loading months{% endif %}</span>
         </div>
         {% else %}
         <div class="range-band no-range"><span class="rb-text">{{ row.band.count }} obs since {{ row.band.since_label }} — no range yet</span></div>
@@ -94,7 +95,8 @@
         {%- endif -%}
       </td>
       <td class="num">{{ f.pct(row.usd_chg_pct) }}
-        {#- B30 #504: a move blank across a window roll says why. -#}
+        {#- B30 #504 / B39 #540: a move blank across a loading-month roll says
+            why; one shown across a band change inside the month names the bands. -#}
         {%- if row.move_note %}<div class="caption">{{ row.move_note }}</div>{% endif -%}
       </td>
       <td class="num">

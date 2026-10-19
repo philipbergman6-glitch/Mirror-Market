@@ -10,8 +10,9 @@
     <div class="mc-label">{{ leg.key }}{% if leg.is_headline %} · headline{% endif %}</div>
     {% if leg.label %}<div class="mc-delta muted">{{ leg.label }}</div>{% endif %}
     {#- B30 #504: a venue printing several shipment windows a session has
-        published several prices; this card is one of them, and says which. -#}
-    {% if leg.window %}<div class="mc-delta muted">window {{ leg.window }}{% if leg.windows_printed > 1 %} · nearest of {{ leg.windows_printed }} printed{% endif %}</div>{% endif %}
+        published several prices; this card is one of them, and says which —
+        by loading month first, the comparison key (B39 #540). -#}
+    {% if leg.window %}<div class="mc-delta muted">{{ leg.loading }}{% if leg.windows_printed > 1 %} · nearest of {{ leg.windows_printed }} printed{% endif %}</div>{% endif %}
     <div class="mc-val">{{ f.usd(leg.usd_mt) }}<small class="muted"> /MT</small></div>
     {# A1 #298: a USD figure struck at a prior day's close says which day, and
        one withheld for want of a rate inside the cap says why — the home print

@@ -12,6 +12,7 @@ same rule, and names each leg's band on its card.
 
 from __future__ import annotations
 
+import calendar
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -51,6 +52,11 @@ LEGS = {"Soybeans": BEAN_BANDS, "Soybean Oil": OIL_BANDS, "Soybean Meal": MEAL_B
 def _month(day: date, ahead: int) -> str:
     index = day.year * 12 + day.month - 1 + ahead
     return f"{index // 12:04d}-{index % 12 + 1:02d}"
+
+
+def _mon(day: date, ahead: int) -> str:
+    """``Oct`` — a loading month's name (B39 #540)."""
+    return calendar.month_abbr[(day.month - 1 + ahead) % 12 + 1]
 
 
 def _seed(conn, day: date, legs=LEGS, *, anchor: date = D0) -> None:
@@ -187,23 +193,24 @@ def test_the_range_is_restruck_on_each_sessions_shared_band(conn, registry):
     band = card["range"]
     assert band is not None, card["range_note"]
     assert band["n_obs"] == CRUSH_RANGE_MIN_OBS
-    assert band["window"] == f"{CRUSH_RANGE_MIN_OBS}-session on the {_month(D0, 0)} band"
+    assert band["window"] == f"{CRUSH_RANGE_MIN_OBS}-session for {_mon(D0, 0)} loading"
     level = _margin(493.0, 1200.0, 423.0)
     assert band["low"] == pytest.approx(level)
     assert band["high"] == pytest.approx(level)
 
 
-def test_the_range_never_spans_a_band_roll(conn, registry):
-    """Sessions struck on last month's band are a different cargo's margin —
-    the run B29 #503 refuses to stitch for Dalian, refused here too."""
-    month_ago = D0 - timedelta(days=31)
+def test_the_range_never_spans_a_loading_month_roll(conn, registry):
+    """Sessions struck for another loading month are a different cargo's
+    margin — the run B29 #503 refuses to stitch for Dalian, refused here too
+    (B39 #540: the key is the shared period's loading month)."""
+    month_ahead = D0 + timedelta(days=31)
     for offset in range(2, CRUSH_RANGE_MIN_OBS + 1):
-        _seed(conn, TODAY - timedelta(days=offset), anchor=month_ago)
+        _seed(conn, TODAY - timedelta(days=offset), anchor=month_ahead)
     conn.commit()
     _, _, data = headline_crush_board(registry, _ctx(conn))
     card = next(row for row in data["rows"] if row["market_slug"] == "argentina")
     assert card["range"] is None
-    assert f"1 session(s) all three legs struck on the {_month(D0, 0)} band" in card["range_note"]
+    assert f"1 session(s) all three legs struck for {_mon(D0, 0)} loading" in card["range_note"]
 
 
 def test_the_headline_card_names_its_band(conn, registry):
@@ -237,7 +244,10 @@ def test_block_03_prints_each_legs_band(conn, registry):
     html = env.get_template("blocks/03_crush.html.j2").render(block=block, root="../")
     assert html.count(f"window {_month(D0, 0)}<") == 2          # bean and oil cards
     assert f"window {_month(D0, 0)}..{_month(D0, 1)}" in html   # meal card
-    assert f"struck on the {_month(D0, 0)} band" in html
+    assert (
+        f"crush for {_mon(D0, 0)} loading (overlap {_mon(D0, 0)} {D0.year} of bean "
+        f"{_mon(D0, 0)} / oil {_mon(D0, 0)} / meal {_mon(D0, 0)}–{_mon(D0, 1)})"
+    ) in html
     assert "$483.0" not in html
 
 
@@ -533,10 +543,12 @@ def test_one_band_printed_twice_under_two_labels_is_refused():
         )
 
 
-def test_the_range_never_mixes_margins_struck_on_different_bean_bands(conn, registry):
+def test_a_bean_band_change_inside_the_loading_month_is_like_for_like(conn, registry):
     """Older sessions share the level's October period but price a Sep–Nov
-    bean, not the October bean: a different bean quote, so not the level's
-    history (B35 #532 — the label alone no longer names the bean's band)."""
+    bean, not the October bean. B35 #532 keyed the range on the bean's band
+    and dropped them; A20 #536 / B39 #540 key it on the shared period's
+    loading month, so a band change inside the month is the same cargo's
+    margin — as it is on every other MAGyP surface."""
     wide_bean = {
         "Soybeans": ((-1, 1, 480.0),),
         "Soybean Oil": OIL_BANDS,
@@ -547,5 +559,6 @@ def test_the_range_never_mixes_margins_struck_on_different_bean_bands(conn, regi
     conn.commit()
     _, _, data = headline_crush_board(registry, _ctx(conn))
     card = next(row for row in data["rows"] if row["market_slug"] == "argentina")
-    assert card["range"] is None
-    assert f"1 session(s) all three legs struck on the {_month(D0, 0)} band" in card["range_note"]
+    assert card["range"] is not None, card["range_note"]
+    assert card["range"]["n_obs"] == CRUSH_RANGE_MIN_OBS + 1
+    assert card["range"]["window"] == f"{CRUSH_RANGE_MIN_OBS + 1}-session for {_mon(D0, 0)} loading"

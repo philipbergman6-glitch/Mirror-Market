@@ -22,9 +22,10 @@
     {{ f.asof(d.as_of, d.age_days) }}
     {#- A1 #298: the three legs share one session; the rate may be a prior close. -#}
     {% if d.fx_label %}<div class="caption">legs struck at {{ d.fx_label }}</div>{% endif %}
-    {#- #507: a venue printing several bands a session is struck on one band all
-        three products share — the bean's, each product at the band overlapping it. -#}
-    {% if d.shipment_window %}<div class="caption">struck on the {{ d.shipment_window }} band — the bean's; oil and meal at their band overlapping it most</div>{% endif %}
+    {#- #507 / B35 #532 / B39 #540: a venue printing several bands a session is
+        struck on the period all three products' bands share, named by its
+        loading month — the key its range is struck on. -#}
+    {% if d.loading_note %}<div class="caption">{{ d.loading_note }}</div>{% endif %}
   </div>
   {% for name in ['bean', 'oil', 'meal'] %}
   <div class="mc">

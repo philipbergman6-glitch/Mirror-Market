@@ -231,7 +231,9 @@ def test_the_card_names_the_contract_beside_the_window(conn, registry):
     env = Environment(loader=FileSystemLoader(TEMPLATES), autoescape=True)
     block = type("B", (), {"data": data})()
     html = env.get_template("blocks/04_basis.html.j2").render(root="../", block=block)
-    assert "window Current (prompt) · over ZSX26" in html
+    # B39 #540: the local leg is named by its loading month; the board stays
+    # on its named contract (#512).
+    assert "local leg: Oct loading (Current (prompt)) · over ZSX26" in html
     # #513: the range below is struck as the level is, and says so.
     assert "front month" not in html
     assert "each session struck over the contract its window names" in html

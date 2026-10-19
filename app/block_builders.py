@@ -41,7 +41,7 @@ import config
 from analysis import hazards, weather_alerts
 from analysis.futures.domain import NamedContract, named_contract
 from analysis.hazards import LegHazard, PlaceHazard
-from analysis.origins.domain import ShipmentWindow
+from analysis.origins.domain import LoadingMonth, ShipmentWindow
 from analysis.origins.sources import nearest_window_key
 from app.blocks import (
     BLOCK_IDS,
@@ -162,10 +162,21 @@ class SessionWindows:
         return self.printed[0]
 
     @property
-    def identity(self) -> tuple[str, date]:
-        """Which window, across sessions. ``(label, end)`` and not ``start``:
-        AMS's Current slot starts on its own report date, so its start moves
-        every day while the window it names stays the month's balance."""
+    def identity(self) -> LoadingMonth:
+        """Which cargo, across sessions: the chosen band's loading month (A20
+        #536, B39 #540). Every comparison across sessions keys on this — moves,
+        rolls, signal runs, ranges, the drill-down's breaks — so a band change
+        inside a month (``Sep`` ↔ ``Sep–Oct``) is like-for-like and only a
+        change of month is a roll. The one selector; no surface branches on
+        the venue."""
+        return self.chosen.window.loading_month
+
+    @property
+    def band(self) -> tuple[str, date]:
+        """Which printed band, across sessions — what a band-change note names.
+        ``(label, end)`` and not ``start``: AMS's Current slot starts on its own
+        report date, so its start moves every day while the band it names
+        stays the month's balance."""
         return self.chosen.label, self.chosen.window.end
 
 
@@ -176,22 +187,37 @@ class _Prints:
     windows: dict[str, dict[date, SessionWindows]]
 
 
-def _same_window(windows: dict[date, SessionWindows], now: date, prior: date) -> bool:
-    """Whether two sessions' prints are the same window — a move is only a
-    move inside one. Across a roll (Oct-26 → Nov–Apr) it is a calendar spread
+def _same_identity(windows: dict[date, SessionWindows], now: date, prior: date) -> bool:
+    """Whether two sessions' prints are one loading month's — a move is only a
+    move inside one. Across a roll (Sep → Oct loading) it is a calendar spread
     wearing a session-change label. A source with no windows never rolls."""
     if not windows:
         return True
     return windows[now].identity == windows[prior].identity
 
 
+def _roll_reason(before: LoadingMonth, after: LoadingMonth) -> str:
+    """B39 #540's reason text for a change withheld across a loading-month roll."""
+    return f"loading month rolled {before.name} → {after.name} — no like-for-like change"
+
+
 def _roll_note(windows: dict[date, SessionWindows], now: date, prior: date, move: str) -> str:
-    """Why a move is blank across a window roll — never a bare dash."""
-    # #513 follow-up: the *cross-session* name — AMS labels every month's
-    # prompt slot "Current (prompt)", which would read as a roll to itself.
+    """Why a move is blank across a loading-month roll — never a bare dash."""
+    return f"{move} withheld: {_roll_reason(windows[prior].identity, windows[now].identity)}"
+
+
+def _band_note(windows: dict[date, SessionWindows], now: date, prior: date) -> str | None:
+    """The inline note on a move shown across a band change inside one loading
+    month (B39 #540) — like-for-like, but the band is named. None where the
+    band did not change, the month did, or the source has no windows."""
+    if not windows or not _same_identity(windows, now, prior):
+        return None
+    before, after = windows[prior], windows[now]
+    if before.band == after.band:
+        return None
     return (
-        f"{move} withheld — window rolled {_window_name(windows[prior].identity)} → "
-        f"{_window_name(windows[now].identity)}"
+        f"band {before.chosen.window.band_name(year=False)} → "
+        f"{after.chosen.window.band_name(year=False)}, same loading month"
     )
 
 
@@ -199,13 +225,15 @@ def _window_fields(windows: dict[date, SessionWindows], when: date) -> dict:
     """The window a rendered print names, and the session's other windows.
 
     Same keys on every row, windowed or not, so templates never branch on
-    their presence.
+    their presence. ``loading`` is the label a print is rendered under —
+    ``Sep loading (band Sep–Oct 2026)`` (B39 #540).
     """
     session = windows.get(when)
     if session is None:
-        return {"window": None, "windows_printed": None, "window_rows": []}
+        return {"window": None, "loading": None, "windows_printed": None, "window_rows": []}
     return {
         "window": session.chosen.label,
+        "loading": session.chosen.window.loading_label(),
         "windows_printed": len(session.printed),
         "window_rows": [
             {
@@ -219,67 +247,87 @@ def _window_fields(windows: dict[date, SessionWindows], when: date) -> dict:
     }
 
 
-# ---- window rolls across sessions (#513) ------------------------------------
-# A statistic over many sessions of a windowed source reads the nearest window
+# ---- window rolls across sessions (#513, B39 #540) ---------------------------
+# A statistic over many sessions of a windowed source reads the nearest band
 # of each session, so it crosses every roll in between — and a roll is a
-# calendar-spread step, Oct cargo to Nov cargo, not a market move. Measured
-# 2026-10-19: MAGyP's nearest band never holds more than 11 sessions in a row
-# and AMS's Current slot at most 22, so a range computed on one window alone
-# would almost never exist. Ranges and the drill-down chart therefore *label*
-# the windows they span; the signal chips, which a label cannot repair, read
-# the current window alone (`_current_window_run`).
-def _window_name(identity: tuple[str, date]) -> str:
-    """A window's name *across* sessions. AMS labels its prompt slot "Current
-    (prompt)" every month, so the label alone names twelve windows a year; a
-    MAGyP band already spells out its year and months."""
-    label, end = identity
-    return label if str(end.year) in label else f"{label} {end.strftime('%b %Y')}"
-
-
+# calendar-spread step, Sep cargo to Oct cargo, not a market move. Measured
+# 2026-10-19 over data/history/argentina_fob.csv (462 sessions): MAGyP's exact
+# nearest band holds at most 21 sessions in a row, median 2, because the
+# circular re-cuts its curve daily and flips Sep ↔ Sep–Oct (58 flips a year on
+# beans). Keyed on the loading month instead (A20 #536), beans, oil and meal
+# roll 11.8 times a year, median run ≈ 20 sessions; AMS's Current slot rolls
+# monthly by either key. Ranges and the drill-down chart *label* the loading
+# months they span and break only at rolls — a band change is a tick, not a
+# break; the signal chips, which a label cannot repair, read the current
+# loading month alone (`_current_window_run`).
 @dataclass(frozen=True)
 class WindowSpan:
-    """Which windows a run of sessions' prints were for, and where it rolled."""
+    """Which loading months a run of sessions' prints were for, where it
+    rolled, and where the band changed inside a month."""
 
-    names: tuple[str, ...]
-    # (the session the new window was first printed, from, to), oldest first
-    rolls: tuple[tuple[date, str, str], ...]
+    months: tuple[LoadingMonth, ...]
+    # (the session the new loading month was first printed, from, to), oldest first
+    rolls: tuple[tuple[date, LoadingMonth, LoadingMonth], ...]
+    # Sessions whose band differs from the session before, same loading month.
+    band_changes: tuple[date, ...]
+    # Sessions since the last roll (all of them where there is none).
+    last_run: int
+
+    def run(self) -> str:
+        """``Sep loading · 20 sessions, 3 band changes`` — the newest month's run."""
+        since = self.rolls[-1][0] if self.rolls else None
+        changes = len([day for day in self.band_changes if since is None or day >= since])
+        return (
+            f"{self.months[-1].name} loading · {self.last_run} "
+            f"session{'' if self.last_run == 1 else 's'}, {changes} "
+            f"band change{'' if changes == 1 else 's'}"
+        )
 
     def describe(self) -> str:
         if not self.rolls:
-            return f"all on the {self.names[0]} window"
+            return self.run()
         count = len(self.rolls)
         when, before, after = self.rolls[-1]
         return (
-            f"spans {len(self.names)} windows, rolled "
+            f"spans {len(self.months)} loading months, rolled "
             f"{'once' if count == 1 else f'{count} times'} — last on "
-            f"{_short_date(when)} ({before} → {after})"
+            f"{_short_date(when)} ({before.name} → {after.name}); {self.run()}"
         )
 
 
 def _window_span(windows: dict[date, SessionWindows], sessions) -> WindowSpan | None:
-    """The windows a set of sessions spans; None for an unwindowed source (or
-    no sessions), which is what keeps every other leg's output unchanged."""
+    """The loading months a set of sessions spans; None for an unwindowed
+    source (or no sessions), which is what keeps every other leg's output
+    unchanged."""
     days = sorted(sessions)
     if not windows or not days:
         return None
-    names = [_window_name(windows[day].identity) for day in days]
     rolls = tuple(
-        (day, before, after)
-        for day, before, after in zip(days[1:], names[:-1], names[1:], strict=True)
-        if before != after
+        (day, windows[prior].identity, windows[day].identity)
+        for prior, day in zip(days[:-1], days[1:], strict=True)
+        if windows[prior].identity != windows[day].identity
     )
-    return WindowSpan(tuple(dict.fromkeys(names)), rolls)
+    band_changes = tuple(
+        day
+        for prior, day in zip(days[:-1], days[1:], strict=True)
+        if windows[prior].identity == windows[day].identity
+        and windows[prior].band != windows[day].band
+    )
+    last_run = len([day for day in days if not rolls or day >= rolls[-1][0]])
+    months = tuple(dict.fromkeys(windows[day].identity for day in days))
+    return WindowSpan(months, rolls, band_changes, last_run)
 
 
 def _current_window_run(
     rows: list[tuple[date, float, int]], windows: dict[date, SessionWindows]
 ) -> list[tuple[date, float, int]]:
-    """The newest sessions printed on the newest session's window, unbroken.
+    """The newest sessions printed for the newest session's loading month, unbroken.
 
-    Unbroken rather than every session on that window: MAGyP's nearest band
-    flickers between a single month and a multi-month band, and an indicator
-    stitched over the gaps between is still stitched. An unwindowed series is
-    returned as it came — never rolls.
+    Unbroken rather than every session of that month: a circular that skips
+    the month for a session and returns to it has rolled twice, and an
+    indicator stitched over the gap is still stitched. Band changes inside
+    the month do not cut the run — they are like-for-like (B39 #540). An
+    unwindowed series is returned as it came — never rolls.
     """
     if not windows or not rows:
         return rows
@@ -894,12 +942,16 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         move_notes: list[str] = []
         for back in CHANGE_LOOKBACK_OBS:
             prior = rows[-1 - back] if len(rows) > back else None
-            # B30 #504: a move is only a move inside one window, and a move
-            # withheld across a roll says so rather than rendering blank.
-            if prior is not None and not _same_window(windows, when, prior[0]):
-                move = "session move" if back == 1 else f"{back}-obs move"
+            # B30 #504 / B39 #540: a move is only a move inside one loading
+            # month; withheld across a roll it says so rather than rendering
+            # blank, and shown across a band change inside the month it names
+            # the bands.
+            move = "session move" if back == 1 else f"{back}-obs move"
+            if prior is not None and not _same_identity(windows, when, prior[0]):
                 move_notes.append(_roll_note(windows, when, prior[0], move))
                 prior = None
+            elif prior is not None and (band := _band_note(windows, when, prior[0])):
+                move_notes.append(f"{move}: {band}")
             changes[f"chg_{back}_pct"] = _pct_change(value, prior[1] if prior else None)
         window = _window_fields(windows, when)
         for window_row in window["window_rows"]:
@@ -977,32 +1029,32 @@ def _headline_first(source: Source) -> list[str]:
 def _windowed_signals(
     rows: list[tuple[date, float, int]], windows: dict[date, SessionWindows], key: str
 ) -> tuple[list[dict], str | None]:
-    """The chips, read on the current window alone where the source has windows.
+    """The chips, read on the current loading month alone where the source has windows.
 
-    A4 #301's rule for futures rolls, applied to window rolls (#513): an MA
-    crossover or MACD turn a roll manufactured is a wrong signal, and a label
-    beside it would not make it a right one. So the chips see only the newest
-    window's unbroken run, and until that run holds ``SIGNAL_MIN_OBS`` sessions
-    they are withheld — with the reason, never a silent blank.
+    A4 #301's rule for futures rolls, applied to loading-month rolls (#513,
+    B39 #540): an MA crossover or MACD turn a roll manufactured is a wrong
+    signal, and a label beside it would not make it a right one. So the chips
+    see only the newest loading month's unbroken run — band changes inside it
+    are like-for-like — and until that run holds ``SIGNAL_MIN_OBS`` sessions
+    they are withheld, with the reason, never a silent blank.
     """
     run = _current_window_run(rows, windows)
     if run is rows:
         return _signal_chips(rows, key), None
-    name = _window_name(windows[run[-1][0]].identity)
+    current = windows[run[-1][0]].identity
+    name = f"{current.name} loading"
     since = _short_date(run[0][0])
     if len(run) == len(rows):
-        return _signal_chips(run, key), f"signals read on the {name} window alone, since {since}"
-    rolled = (
-        f"the series rolled {_window_name(windows[rows[-len(run) - 1][0]].identity)} → "
-        f"{name} on {since}"
-    )
+        return _signal_chips(run, key), f"signals read on {name} alone, since {since}"
+    previous = windows[rows[-len(run) - 1][0]].identity
+    rolled = f"loading month rolled {previous.name} → {current.name} on {since}"
     if len(run) < SIGNAL_MIN_OBS:
         return [], (
-            f"signals withheld — {rolled}, and the {name} window has {len(run)} "
+            f"signals withheld — {rolled}, and {name} has {len(run)} "
             f"session{'' if len(run) == 1 else 's'} of the {SIGNAL_MIN_OBS} they need; "
             "read across the roll they would call a calendar-spread step a move"
         )
-    return _signal_chips(run, key), f"signals read on the {name} window alone — {rolled}"
+    return _signal_chips(run, key), f"signals read on {name} alone — {rolled}"
 
 
 def _signal_chips(rows: list[tuple[date, float, int]], key: str) -> list[dict]:
@@ -1357,6 +1409,7 @@ def _ledger_row(
         # B30 #504: the shipment window the row's print is for, where the
         # venue prints several. None on an unwindowed leg.
         "window": None,
+        "loading": None,
         "windows_printed": None,
         "move_note": None,
         "spread_usd_mt": None,
@@ -1384,16 +1437,20 @@ def _ledger_row(
         "home_value": value,
         "quotes": quotes,
         "window": window["window"],
+        "loading": window["loading"],
         "windows_printed": window["windows_printed"],
         **_fx_fields(source, fx),
     })
 
-    # B30 #504: across a window roll the "move" is a calendar spread, so it is
-    # withheld — with its reason, like spread_note — never credited to the market.
-    if len(prints) > 1 and not _same_window(windows, when, prints[-2][0]):
+    # B30 #504 / B39 #540: across a loading-month roll the "move" is a calendar
+    # spread, so it is withheld — with its reason, like spread_note — never
+    # credited to the market. Across a band change inside the month it is
+    # like-for-like: shown, with the bands named.
+    if len(prints) > 1 and not _same_identity(windows, when, prints[-2][0]):
         row["move_note"] = _roll_note(windows, when, prints[-2][0], "move")
     elif len(prints) > 1:
         prior_when, prior_value, _ = prints[-2]
+        row["move_note"] = _band_note(windows, when, prior_when)
         row["home_chg_pct"] = _pct_change(value, prior_value)
         prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when).rate)
         row["usd_chg_pct"] = _pct_change(row["usd_mt"], prior_usd)
@@ -1566,12 +1623,7 @@ def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]])
         if leg_windows:
             # #513: only a windowed leg carries the key — the payload ships
             # inline, and a null on every other leg would change its page.
-            span = _window_span(leg_windows, drawn)
-            entry["roll_note"] = (
-                f"nearest window each print — {span.describe()}; the line breaks "
-                "at each roll, a calendar-spread step rather than a move"
-                if span is not None and span.rolls else None
-            )
+            entry["roll_note"] = _drill_roll_note(_window_span(leg_windows, drawn))
         windows.append(entry)
 
     payload = {
@@ -1611,17 +1663,46 @@ def _leg_drilldown(leg, ctx: SiteContext, prints: list[tuple[date, float, int]])
     }
     if leg_windows:
         payload["breaks"] = _roll_breaks(leg_windows, kept, origin)
+        payload["ticks"] = _band_ticks(leg_windows, kept, origin)
     return payload
 
 
+def _drill_roll_note(span: WindowSpan | None) -> str | None:
+    """A drill window's note on the loading months it spans (#513, B39 #540),
+    or None where it holds one month on one band."""
+    if span is None or not (span.rolls or span.band_changes):
+        return None
+    ticks = (
+        "; band changes inside a loading month are ticks on the line, not breaks"
+        if span.band_changes else ""
+    )
+    if not span.rolls:
+        return f"{span.describe()}{ticks}"
+    return (
+        f"nearest band each print, compared by loading month — {span.describe()}; "
+        f"the line breaks at each roll, a calendar-spread step rather than a move{ticks}"
+    )
+
+
 def _roll_breaks(windows: dict[date, SessionWindows], kept, origin: date) -> list[int]:
-    """Day offsets (from ``origin``) of each print that opens a new window —
-    where the drawn line restarts rather than joining a roll's calendar-spread
-    step to the market's moves (#513)."""
+    """Day offsets (from ``origin``) of each print that opens a new loading
+    month — where the drawn line restarts rather than joining a roll's
+    calendar-spread step to the market's moves (#513, B39 #540)."""
     return [
         (day - origin).days
         for (prior, _, _), (day, _, _) in zip(kept[:-1], kept[1:], strict=True)
         if windows[prior].identity != windows[day].identity
+    ]
+
+
+def _band_ticks(windows: dict[date, SessionWindows], kept, origin: date) -> list[int]:
+    """Day offsets of each print whose band changed inside its loading month —
+    drawn as a tick on an unbroken line: like-for-like, but visible (B39 #540)."""
+    return [
+        (day - origin).days
+        for (prior, _, _), (day, _, _) in zip(kept[:-1], kept[1:], strict=True)
+        if windows[prior].identity == windows[day].identity
+        and windows[prior].band != windows[day].band
     ]
 
 
@@ -1658,20 +1739,23 @@ def _range_band(leg, ctx: SiteContext, prints, current_usd: float | None) -> dic
         "low": None,
         "high": None,
         "position": None,
-        # #513: how many windows a windowed leg's range spans, and the rolls
-        # between; None on every other leg and on a range inside one window.
-        "windows_spanned": None,
+        # #513 / B39 #540: how many loading months a windowed leg's range
+        # spans (None inside one), and its note — the months, the rolls, the
+        # newest month's run and band changes. Both None on every other leg.
+        "loading_months": None,
         "window_note": None,
     }
     if len(values) < LEDGER_LINE_MIN_OBS:
         return band
     span = _window_span(ctx.leg_windows(leg), [day for day, _ in priced])
     if span is not None and span.rolls:
-        band["windows_spanned"] = len(span.names)
+        band["loading_months"] = len(span.months)
         band["window_note"] = (
-            f"nearest window each print — {span.describe()}; a roll is a "
-            "calendar-spread step, not a market move"
+            f"nearest band each print, compared by loading month — {span.describe()}; "
+            "a roll is a calendar-spread step, not a market move"
         )
+    elif span is not None:
+        band["window_note"] = span.describe()
     low, high = min(values), max(values)
     latest = current_usd if current_usd is not None else values[-1]
     band.update({
@@ -1836,12 +1920,16 @@ class _CrushStrike:
     ``band`` and ``windows`` are None on a source that prints one quote a
     session; on a windowed one (MAGyP, #507) they name the shared band the
     margin is for — the period all three legs' bands cover (B35 #532) — and
-    each leg's own band, which contains it.
+    each leg's own band, which contains it. ``loading`` is that shared
+    period's loading month — the crush's identity across sessions (A20 #536,
+    B39 #540) — and ``loading_note`` names it with the bands it came from.
     """
 
     values: dict[str, float]
     band: str | None = None
     windows: dict[str, str] | None = None
+    loading: LoadingMonth | None = None
+    loading_note: str | None = None
 
 
 def _crush_strike(crush, source: Source, ctx: SiteContext, day: date) -> _CrushStrike | str:
@@ -1874,10 +1962,20 @@ def _crush_strike(crush, source: Source, ctx: SiteContext, day: date) -> _CrushS
     )
     if isinstance(picked, str):
         return picked
+    loading = picked.window.loading_month
     return _CrushStrike(
         values=picked.values,
         band=picked.window.describe(),
         windows={name: window.describe() for name, window in picked.windows.items()},
+        loading=loading,
+        loading_note=(
+            f"crush for {loading.name} loading (overlap {picked.window.band_name()} of "
+            + " / ".join(
+                f"{name} {window.band_name(year=False)}"
+                for name, window in picked.windows.items()
+            )
+            + ")"
+        ),
     )
 
 
@@ -1971,6 +2069,9 @@ def _board_crush_block(market: Market, ctx: SiteContext) -> tuple[str, str, dict
         # three-way intersection), the margin's own period.
         # None where the source prints one quote a session.
         "shipment_window": strike.band,
+        # B39 #540: "crush for Sep loading (overlap Sep 2026 of bean Sep–Oct /
+        # oil Sep / meal Sep–Nov)" — the identity the range is keyed on.
+        "loading_note": strike.loading_note,
         # A1 #298: the three legs share one session; the rate may be a labelled
         # prior close. Not a same-session claim about the FX leg (invariant 8).
         **_fx_fields(source, fx),
@@ -2267,7 +2368,7 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
         )
     else:
         history, band = _crush_margin_history(market, ctx)
-    on_band = f" on the {band} band" if band else ""
+    on_band = f" for {band.name} loading" if band else ""
     if len(history) < CRUSH_RANGE_MIN_OBS:
         return None, (
             f"no range yet — {len(history)} session(s) all three legs struck{on_band}, "
@@ -2289,16 +2390,11 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     }, ""
 
 
-def _band_identity(strike: _CrushStrike) -> tuple[str | None, str | None]:
-    """Which cargo a strike's margin is for: its shared band and the bean's own."""
-    return strike.band, (strike.windows or {}).get("bean")
-
-
 def _crush_margin_history(
     market: Market, ctx: SiteContext
-) -> tuple[list[tuple[date, float]], str | None]:
+) -> tuple[list[tuple[date, float]], LoadingMonth | None]:
     """The generic engine's margin restruck for every session it can be, and
-    the shared band it is the history of (None on an unwindowed source).
+    the loading month it is the history of (None on an unwindowed source).
 
     The two rules the level keeps, kept here too rather than relaxed because
     these are old numbers nobody reads individually:
@@ -2306,15 +2402,15 @@ def _crush_margin_history(
     * **One session for all three legs.** A day the oil did not print is not a
       day with a margin, and interpolating one would put a shape into the range
       that the market never traded.
-    * **The level's own band, on a windowed source (#507).** Each session is
-      struck by the level's shared-band rule, and only sessions struck on the
-      band the level is struck on count — an Oct cargo's margin beside a
-      Nov–Apr one is a range around a different margin, the run B29 #503
-      refuses to stitch across Dalian months. "Same band" is the shared
-      period AND the bean's own band (B35 #532): an October margin struck on
-      a Sep–Nov bean prices a different bean quote from one struck on an
-      October bean. A session with no shared band is dropped, never restruck
-      on means.
+    * **The level's own loading month, on a windowed source (#507, B39
+      #540).** Each session is struck by the level's shared-band rule (B35
+      #532: the period all three legs' bands cover), and only sessions whose
+      shared period starts in the month the level's does count — an Oct
+      cargo's margin beside a Nov–Apr one is a range around a different
+      margin, the run B29 #503 refuses to stitch across Dalian months. A band
+      change inside the month (a ``Sep`` bean one day, ``Sep–Oct`` the next)
+      is like-for-like, as it is for every other MAGyP surface (A20 #536); a
+      session with no shared band is dropped, never restruck on means.
     * **That row's own date's rate, under A1 (#298).** ``ctx.fx_on`` never
       converts at a later-dated rate and only at a prior one inside the cap;
       a session with no such rate is dropped rather than restruck at a rate
@@ -2336,8 +2432,8 @@ def _crush_margin_history(
     history: list[tuple[date, float]] = []
     for day in sorted(common):
         strike = _crush_strike(crush, source, ctx, day)
-        # Re-keyed on the loading month by B39 #540 (A20 #536's identity).
-        if isinstance(strike, str) or _band_identity(strike) != _band_identity(level):
+        # A20 #536's identity: the loading month of the three-way intersection.
+        if isinstance(strike, str) or strike.loading != level.loading:
             continue
         rate = ctx.fx_on(market.currency_pair, day).rate
         legs: dict[str, float] = {}
@@ -2348,7 +2444,7 @@ def _crush_margin_history(
             legs[leg_name] = usd
         else:
             history.append((day, _crush_margin(legs, yields)))
-    return history, level.band
+    return history, level.loading
 
 
 def _month_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:
@@ -2514,9 +2610,9 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
             "each session struck over the contract its window names"
             if source.contract_board is not None else None
         ),
-        # #513: the local leg is each session's nearest window, so the range
-        # crosses every roll between — labelled, because computed on one
-        # window alone it would almost never exist (see `_window_span`).
+        # #513 / B39 #540: the local leg is each session's nearest band, so the
+        # range crosses every loading-month roll between — labelled, with the
+        # newest month's run and band changes (see `_window_span`).
         "history_windows": _history_windows(
             ctx.session_windows(source, key), [row[0] for row in history]
         ),
@@ -2524,15 +2620,16 @@ def basis_block(market: Market, ctx: SiteContext, *, markets: dict[str, Market],
 
 
 def _history_windows(windows: dict[date, SessionWindows], sessions: list[date]) -> str | None:
-    """Block 04's label for the windows its mean and range span (#513)."""
+    """Block 04's label for the loading months its mean and range span (#513,
+    B39 #540)."""
     span = _window_span(windows, sessions)
     if span is None:
         return None
     if not span.rolls:
         return span.describe()
     return (
-        f"nearest window each session — {span.describe()}: a roll is a "
-        "calendar-spread step, not a market move"
+        f"nearest band each session, compared by loading month — {span.describe()}: "
+        "a roll is a calendar-spread step, not a market move"
     )
 
 

@@ -4,6 +4,34 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — MAGyP prints compared by loading month (2026-10-19)
+
+**B39 #540**, decided by A20 #536. The nearest open MAGyP band flips
+`2026-09` ↔ `2026-09..2026-10` as the circular re-cuts its curve, and every
+cross-session surface keyed on the exact band, so beans "rolled" 58 times a
+year (median run 2 sessions) and most day-over-day moves were withheld.
+`SessionWindows.identity` is now the chosen band's **loading month**
+(`ShipmentWindow.loading_month`, start month); band selection is unchanged.
+A band change inside the month is like-for-like — the move shows, with
+`band Sep → Sep–Oct, same loading month`; a change of month is a roll — the
+move is withheld with `loading month rolled Sep → Oct — no like-for-like
+change`. One selector for block 01 (moves, signal run), the ledger (move,
+range band, drill-down breaks + new band-change ticks), block 04's history
+label, the headline ledger and the briefing's FOB board; labels read
+`Sep loading (band Sep–Oct 2026)`. AMS's Current slot keys on its report
+month, so the Gulf rolls monthly as before and stays on its named contract
+(#512). The crush range keys on the loading month of B35's three-way shared
+period instead of (shared band, bean band), and block 03 names it: `crush for
+Oct loading (overlap Oct 2026 of bean Oct / oil Oct / meal Oct–Nov)`.
+Retroactive, no stored row changes. Replay over `data/history/argentina_fob.csv`
+(462 sessions, 2024-11-01 → 2026-10-16): rolls 114/87/129 → 23 each for
+beans/oil/meal (11.8/yr; basis local leg the same), median run 19.5–20
+sessions, 0 moves withheld on the 91/64/106 within-month band changes, 23/23
+rolls carry the reason; crush key changes 131 → 23. Fixes the "never holds
+more than 11 sessions" comment (measured max 21). Tests:
+`tests/test_loading_month_identity.py` (the 18–30 Sep 2026 bean circulars
+verbatim: one roll, five band changes).
+
 ## Unreleased — the Argentina crush band is one all three legs ship (2026-10-19)
 
 **B35 #532**, from the fifth audit. `shared_crush_band` checked oil and meal
