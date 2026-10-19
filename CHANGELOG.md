@@ -10,19 +10,24 @@ any), and the test/coverage impact.
 each against the bean's band, never against each other: on 2026-07-22 a
 Jul–Sep bean took July oil and Aug–Sep meal, two bands sharing no day, and a
 margin was printed for a cargo nobody can ship. Oil and meal are now chosen
-as a pair: among pairs sharing at least one day with the bean, the one
-overlapping the bean most in total (a tie to the nearer oil, then the nearer
-meal — never the dearer), the next bean band where none does, the existing
-`NO_SHARED_BAND_REASON` where no bean band works. Where each product's own
+as a pair: among pairs sharing at least one day with the bean, a shared
+period still open on the session before one that has ended (B30), then the
+pair overlapping the bean most in total (a tie to the nearer oil, then the
+nearer meal — never the dearer), the next bean band where none does, the
+existing `NO_SHARED_BAND_REASON` where no bean band works. Where each product's own
 best band already shipped with the other's, the pick is unchanged — the
 window policy is A20 #536's. `CrushBand.window` is now the three-way shared
 period, not the bean's band: a Jul–Sep bean against Aug–Sep oil and August
 meal is an August margin, labelled `2026-08`. Both block 03 and the origins
-crush page read the one function. A band printed twice at two prices on one
-session raises. Replay over the stored Argentina history (462 sessions):
+crush page read the one function. A band printed twice at two prices or
+under two labels on one session raises. The headline crush range keeps a
+session only if both its shared period and its bean band match the level's —
+the label alone no longer names the bean quote, and a range around margins
+struck on different bean bands is the stitching #507 refused. Replay over the stored Argentina history (462 sessions):
 selections with no three-way intersection 6 → 0; leg values change on those
 6 sessions only; 214 labels shrink to the shared period (newest session
-2026-10-16 unchanged, `2026-10`). Tests: `tests/test_argentina_crush_band.py`.
+2026-10-16 unchanged, `2026-10`; its range still draws on the same 11 of the
+last 60 sessions). Tests: `tests/test_argentina_crush_band.py`.
 
 ## Unreleased — Argentina's crush is struck on one shared band (2026-10-19)
 

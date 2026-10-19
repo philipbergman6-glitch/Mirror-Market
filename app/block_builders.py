@@ -1835,7 +1835,8 @@ class _CrushStrike:
 
     ``band`` and ``windows`` are None on a source that prints one quote a
     session; on a windowed one (MAGyP, #507) they name the shared band the
-    margin is for and each leg's own band inside it.
+    margin is for — the period all three legs' bands cover (B35 #532) — and
+    each leg's own band, which contains it.
     """
 
     values: dict[str, float]
@@ -2288,6 +2289,11 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     }, ""
 
 
+def _band_identity(strike: _CrushStrike) -> tuple[str | None, str | None]:
+    """Which cargo a strike's margin is for: its shared band and the bean's own."""
+    return strike.band, (strike.windows or {}).get("bean")
+
+
 def _crush_margin_history(
     market: Market, ctx: SiteContext
 ) -> tuple[list[tuple[date, float]], str | None]:
@@ -2304,8 +2310,11 @@ def _crush_margin_history(
       struck by the level's shared-band rule, and only sessions struck on the
       band the level is struck on count — an Oct cargo's margin beside a
       Nov–Apr one is a range around a different margin, the run B29 #503
-      refuses to stitch across Dalian months. A session with no shared band
-      is dropped, never restruck on means.
+      refuses to stitch across Dalian months. "Same band" is the shared
+      period AND the bean's own band (B35 #532): an October margin struck on
+      a Sep–Nov bean prices a different bean quote from one struck on an
+      October bean. A session with no shared band is dropped, never restruck
+      on means.
     * **That row's own date's rate, under A1 (#298).** ``ctx.fx_on`` never
       converts at a later-dated rate and only at a prior one inside the cap;
       a session with no such rate is dropped rather than restruck at a rate
@@ -2327,7 +2336,7 @@ def _crush_margin_history(
     history: list[tuple[date, float]] = []
     for day in sorted(common):
         strike = _crush_strike(crush, source, ctx, day)
-        if isinstance(strike, str) or strike.band != level.band:
+        if isinstance(strike, str) or _band_identity(strike) != _band_identity(level):
             continue
         rate = ctx.fx_on(market.currency_pair, day).rate
         legs: dict[str, float] = {}

@@ -340,20 +340,25 @@ def _common_band(windows: Sequence[ShipmentWindow]) -> ShipmentWindow | None:
 def _dated_bands(
     name: str, rows: Sequence[tuple[ShipmentWindow | None, float]]
 ) -> list[tuple[ShipmentWindow, float]]:
-    """One product's dated bands, refusing a band printed at two prices."""
-    seen: dict[tuple[date, date], float] = {}
+    """One product's dated bands, once each — refusing one band printed at
+    two prices or under two labels, which list order may not settle."""
+    seen: dict[tuple[date, date], tuple[ShipmentWindow, float]] = {}
     for window, value in rows:
         if window is None:
             continue
         bounds = (window.start, window.end)
-        if bounds in seen and seen[bounds] != value:
-            raise ValueError(
-                f"the {name} leg prints {window.describe()} twice on one session "
-                f"({seen[bounds]} and {value}) — which is the quote is not a "
-                "question list order may answer"
-            )
-        seen[bounds] = value
-    return [(window, value) for window, value in rows if window is not None]
+        if bounds in seen:
+            first, first_value = seen[bounds]
+            if (first.label, first_value) != (window.label, value):
+                raise ValueError(
+                    f"the {name} leg prints {first.describe()} twice on one session "
+                    f"({first_value} as {first.describe()!r}, {value} as "
+                    f"{window.describe()!r}) — which is the quote is not a "
+                    "question list order may answer"
+                )
+            continue
+        seen[bounds] = (window, value)
+    return list(seen.values())
 
 
 def shared_crush_band(
@@ -373,16 +378,18 @@ def shared_crush_band(
     Oil and meal are chosen as a PAIR (B35 #532): each overlapping the bean
     is not enough, because a July oil and an Aug–Sep meal both overlap a
     Jul–Sep bean and share no day with each other. Among the pairs sharing at
-    least one day with the bean, the pair overlapping the bean's band most
-    in total wins; on a tie, the nearer oil band, then the nearer meal band,
-    never the dearer one. Where each product's own best band already ships
-    with the other's, that is the pair taken — the window policy is #536's,
-    not this rule's. The band returned names the period all three share.
+    least one day with the bean, a shared period still open on the session
+    comes before one that has ended (B30 again: a sailed cargo is never the
+    prompt); then the pair overlapping the bean's band most in total wins;
+    on a tie, the nearer oil band, then the nearer meal band, never the
+    dearer one. Where each product's own best band already ships with the
+    other's, that is the pair taken — the window policy is #536's, not this
+    rule's. The band returned names the period all three share.
     Where no pair shares a day with the bean, the next bean band is tried.
 
     Returns the reason as a string where no band works; the caller withholds
     with it rather than falling back to another session. Raises where one
-    product prints one band at two prices.
+    product prints one band at two prices or under two labels.
     """
     bean_dated = sorted(
         _dated_bands("bean", day_rows["bean"]),
@@ -404,6 +411,7 @@ def shared_crush_band(
         common, oil_window, oil_value, meal_window, meal_value = min(
             trios,
             key=lambda trio: (
+                trio[0].end < session,
                 -(trio[1].overlap_days(bean_window) + trio[3].overlap_days(bean_window)),
                 nearest_window_key(trio[1], session),
                 nearest_window_key(trio[3], session),
