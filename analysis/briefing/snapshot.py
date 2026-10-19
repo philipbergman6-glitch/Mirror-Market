@@ -5,7 +5,7 @@ It captures the structured numbers behind the briefing so future runs
 can backtest which signals preceded large price moves without re-parsing
 the formatted text.
 
-Schema v2 (see the approved shape on wayfinder issue #11): a top-level
+Schema v2+ (see the approved shape on wayfinder issue #11): a top-level
 ``schema_version`` int plus one block per quantitative briefing section.
 Rows written before v2 lack the ``schema_version`` key — consumers treat
 its absence as v1. v3 (#549) changes one block: ``argentina_fob.curve`` is
@@ -722,7 +722,8 @@ def _argentina_fob_block() -> dict[str, dict[str, Any]]:
         if rows.empty:
             continue
         session = latest_date.date()
-        bands: dict[ShipmentWindow, float | None] = {}
+        # window -> the row's own (ship_from, ship_to) and price
+        bands: dict[ShipmentWindow, tuple[str, str, float | None]] = {}
         for _, row in rows.iterrows():
             window = parse_magyp_window(row["ship_from"], row["ship_to"])
             if window is None:
@@ -733,25 +734,21 @@ def _argentina_fob_block() -> dict[str, dict[str, Any]]:
             if window in bands:
                 raise ValueError(
                     f"argentina_fob {product} {session}: two rows for band "
-                    f"{window.label} — no survivor is chosen"
+                    f"{window.describe()} — no survivor is chosen"
                 )
-            bands[window] = _num(row["price_usd_mt"])
+            bands[window] = (str(row["ship_from"]), str(row["ship_to"]), _num(row["price_usd_mt"]))
         spot = min(bands, key=lambda w: nearest_window_key(w, session))
+        ship_from, ship_to, spot_price = bands[spot]
         out[str(product)] = {
             "date": _date_str(latest_date),
-            "spot_usd_mt": bands[spot],
-            "spot_ship_from": _month_str(spot.start),
-            "spot_ship_to": _month_str(spot.end),
+            "spot_usd_mt": spot_price,
+            "spot_ship_from": ship_from,
+            "spot_ship_to": ship_to,
             "curve": {
-                str(w.label): bands[w] for w in sorted(bands, key=lambda w: (w.start, w.end))
+                w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))
             },
         }
     return out
-
-
-def _month_str(day: date) -> str:
-    """``YYYY-MM`` — MAGyP's own bound form."""
-    return f"{day.year:04d}-{day.month:02d}"
 
 
 def _nass_crush_block() -> dict[str, Any] | None:
