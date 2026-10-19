@@ -9,8 +9,8 @@ is the run the old record could not see. Writes:
 - ``data/history/layer_alerts.csv``: the layers this run's ``ci-alert``
   comment named, from the receipt ``scripts/ci_layer_alert.py`` left.
 
-Rows are filed under the roster, and graded against the API keys, that the
-ingesting run recorded about itself (B38 #535) — the ``run_evidence`` block of
+Rows are filed under the roster, graded against the API keys and blanked for
+the private layers that the ingesting run recorded about itself (B38 #535) — the ``run_evidence`` block of
 its summary, or, when it crashed before the summary, the ``run_evidence.json``
 it wrote on starting. Never this checkout's roster (the snapshot step may have
 rebased it onto a moved main) and never this step's env (it carries no keys).
@@ -162,14 +162,13 @@ def main(argv: list[str] | None = None) -> int:
         workflow=workflow,
         run_started_at=started,
         freshness=_freshness(),
-        roster=evidence.roster,
+        evidence=evidence,
         requested=None if status is None else list(status.get("layers_requested") or []),
-        configured=evidence.configured,
         rendered_at=_rendered_at(args.manifest, args.deployment_outcome),
     )
     receipt = _receipt_layers(args.receipt)
-    written = layer_runs.append_runs(evidence.roster, rows)
-    alerted = layer_runs.append_alerts(evidence.roster, run_id, receipt)
+    written = layer_runs.append_runs(evidence, rows)
+    alerted = layer_runs.append_alerts(evidence, run_id, receipt)
     tally: dict[str, int] = {}
     for row in rows:
         tally[row.status] = tally.get(row.status, 0) + 1

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -69,6 +69,7 @@ def _evidence_block(
             name: {"configured": configured.get(name, True), "skips": list(spec.skips)}
             for name, spec in config.API_KEY_CATALOG.items()
         },
+        "private": list(config.PRIVATE_LAYERS),
     }
 
 
@@ -223,6 +224,21 @@ def test_a_key_retired_mid_run_still_marks_the_layers_it_skipped(
     assert {r.layer_name: r.status for r in layer_runs.read_runs()}["old_keyed_layer"] == "skipped_unconfigured"
 
 
+def test_record_blanks_a_layer_private_in_the_run_after_a_mid_run_rename(
+    history_dir: Path, patched_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(layer_runs, "PRIVATE_LAYERS", ("sea_india_renamed",))
+    _freshness(patched_db, "sea_india", "success", "2026-10-19 20:10:00", "2026-10-19")
+    _summary(tmp_path, roster=("safex", "sea_india"))
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"edition": {"generated_at": "2026-10-19T20:40:00+00:00"}}), encoding="utf-8")
+
+    recorder.main(_args(tmp_path, "--manifest", str(manifest), "--deployment-outcome", "success"))
+
+    sea = next(r for r in layer_runs.read_runs() if r.layer_name == "sea_india")
+    assert (sea.status, sea.observed_at, sea.rendered_at) == ("success", None, None)
+
+
 def test_a_crashed_run_files_under_its_start_evidence(
     history_dir: Path, patched_db: Path, tmp_path: Path,
 ) -> None:
@@ -269,6 +285,8 @@ def test_record_refuses_when_the_run_left_no_evidence_at_all(
         (lambda b: b.update(api_keys={}), "api_keys"),
         (lambda b: b["api_keys"].update(USDA_API_KEY=True), "USDA_API_KEY"),
         (lambda b: b["api_keys"]["FRED_API_KEY"].update(configured="yes"), "boolean"),
+        (lambda b: b.pop("private"), "private"),
+        (lambda b: b.update(private="sea_india"), "private"),
         (lambda b: b.update(started_at="2026-10-19T19:59:59Z"), "predates"),
     ],
 )
@@ -328,7 +346,10 @@ def _seed(statuses: list[str], layer: str = "safex", others: dict[str, list[str]
                 session_date=_session(i), layer_name=name, status=sts[i],
                 observed_at=None, rendered_at=None,
             ))
-    layer_runs.append_runs(config.PRODUCTION_LAYER_KEYS, rows)
+    layer_runs.append_runs(layer_runs.RunEvidence(
+        started_at=datetime(2026, 10, 5, 20, tzinfo=timezone.utc), roster=config.PRODUCTION_LAYER_KEYS,
+        unconfigured=frozenset(), private=frozenset(config.PRIVATE_LAYERS),
+    ), rows)
 
 
 def _cmds(calls):
