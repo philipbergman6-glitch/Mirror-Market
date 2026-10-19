@@ -211,11 +211,75 @@ def test_t1_fails_on_a_short_record_or_a_long_gap() -> None:
     sessions = _weekdays(MON, 30)
     rows = [_row(s, "dce", "success") for s in sessions if s not in sessions[10:13]]
     block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
-    assert block["edition"]["longest_no_run_gap"] == 3
+    assert block["window"]["restarted_at"] == sessions[13].isoformat()
+    assert block["window"]["restart_gap"] == 3
+    assert block["window"]["sessions"] == 17
     assert block["thresholds"]["T1_continuous"]["met"] is False
 
     short = reliability.reliability(rows[:5], set(), through=sessions[4], layers=("dce",), basket=("dce",))
     assert short["thresholds"]["T1_continuous"]["met"] is False
+
+
+def test_a_long_gap_restarts_the_window_never_trims_it() -> None:
+    # The fifth audit's reproduction (#533): 1 logged + 3 with no run + 28
+    # logged is 32 weekdays, and the last 30 hold only one gap day. Cutting
+    # the window first trimmed the gap away; the restart must enforce it.
+    sessions = _weekdays(MON, 32)
+    rows = [_row(sessions[0], "dce", "failed")] + [_row(s, "dce", "success") for s in sessions[4:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
+
+    window = block["window"]
+    assert window["record_started"] == sessions[0].isoformat()
+    assert window["restarted_at"] == sessions[4].isoformat()
+    assert window["restart_gap"] == 3
+    assert window["evidence_sessions"] == 28
+    assert window["sessions"] == 28
+    assert window["first_session"] == sessions[4].isoformat()
+    assert block["edition"]["longest_no_run_gap"] == 0
+    assert block["thresholds"]["T1_continuous"]["met"] is False
+    # T2–T4 compute over the same restarted window: the pre-gap failure is gone.
+    dce = _layer(block, "dce")
+    assert dce["availability_pct"] == 100.0
+    assert dce["failing_runs"] == 0
+
+
+def test_a_tolerated_gap_neither_restarts_nor_shortens_the_record() -> None:
+    sessions = _weekdays(MON, 32)
+    rows = [_row(sessions[0], "dce", "success")] + [_row(s, "dce", "success") for s in sessions[3:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
+
+    window = block["window"]
+    assert window["restarted_at"] is None
+    assert window["restart_gap"] is None
+    assert window["evidence_sessions"] == 32
+    assert window["sessions"] == 30
+    assert block["edition"]["longest_no_run_gap"] == 1
+    assert block["thresholds"]["T1_continuous"]["met"] is True
+
+
+def test_the_last_long_gap_is_the_one_that_restarts() -> None:
+    sessions = _weekdays(MON, 50)
+    logged = sessions[:5] + sessions[9:20] + sessions[25:]
+    rows = [_row(s, "dce", "success") for s in logged]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
+    assert block["window"]["restarted_at"] == sessions[25].isoformat()
+    assert block["window"]["restart_gap"] == 5
+    assert block["window"]["evidence_sessions"] == 25
+
+
+def test_an_open_long_gap_withholds_the_figures_until_a_session_is_logged() -> None:
+    # A dead deploy: the window has restarted but no session after the gap
+    # exists yet, so there is no evidence to compute over.
+    sessions = _weekdays(MON, 10)
+    rows = [_row(s, "dce", "success") for s in sessions[:7]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
+    assert block["state"] == "restarting"
+    assert sessions[7].isoformat() in block["reason"]
+
+    # Two trailing sessions are a tolerated gap, not a restart.
+    tolerated = reliability.reliability(rows, set(), through=sessions[8], layers=("dce",), basket=("dce",))
+    assert tolerated["state"] == "ok"
+    assert tolerated["window"]["restarted_at"] is None
 
 
 # ── dead source ────────────────────────────────────────────────────────────

@@ -82,7 +82,7 @@ This is a requirements note. It changes no code or workflow. The store and the c
 
 The computation is one function over `layer_runs.csv` (A9 §4's rule: computed once, existing states only). Its output goes in `manifest.json` beside `coverage` and `latency`, so A11 reads it from the edition and not from a side script.
 
-**Window:** the last **30 weekday CBOT sessions** that ended before the audit, counted on `session_date`. Weekend dispatches add runs, never sessions.
+**Window:** the last **30 weekday CBOT sessions** that ended before the audit, counted on `session_date`. Weekend dispatches add runs, never sessions. The window never reaches back across a gap T1 does not tolerate: the last gap of more than 2 sessions with no run anywhere in the record **restarts** it at the first logged session after that gap, and every figure below — T1 to T4 — is computed over the restarted window (`manifest.json` → `reliability.window.restarted_at`, with `restart_gap` and `evidence_sessions`). Taking the last 30 first and measuring the gap inside the cut would trim the gap instead of enforcing it (#533). While such a gap is still open at the window's end there is no evidence yet, and the block is withheld as `restarting`.
 
 **Per basket layer:**
 
@@ -102,7 +102,7 @@ Non-basket layers get the same figures, reported, never gating. Edition level: s
 
 | # | Threshold | Why this number |
 |---|---|---|
-| T1 | The record is **continuous**: 30 consecutive weekday sessions logged by the store, with **no gap of more than 2 sessions without a run**, else the window restarts. Shorter gaps stay in the window as `no_run` and count against T2 | A record with holes is not a record. The 2026-09-08→09-18 deploy outage would have reset it |
+| T1 | The record is **continuous**: 30 consecutive weekday sessions logged by the store, with **no gap of more than 2 sessions without a run**, else the window restarts at the first logged session after the gap and T1 waits for 30 weekday sessions from there. Shorter gaps stay in the window as `no_run` and count against T2 | A record with holes is not a record. The 2026-09-08→09-18 deploy outage would have reset it |
 | T2 | Every basket layer **≥ 90 %** available (≤ 3 of 30 sessions down) | One bad session a fortnight on a decision leg, retries included. Today's replay sits at 93–100 % for the basket, so this is a floor to hold, not a stretch |
 | T3 | Every basket layer's **longest streak ≤ 5 sessions**, and every streak of ≥ 3 sessions raised a dead-source alert (§4) | Five sessions is one desk week. Past that a buyer has priced a week of cargoes without the leg. The alert clause tests that the dead-source rule fires, not just exists |
 | T4 | **Surfaced within one run = 100 %**, all 39 layers | Invariant 1. One unsurfaced failure is a silent failure |
