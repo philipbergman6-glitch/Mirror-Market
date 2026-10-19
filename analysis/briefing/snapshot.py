@@ -8,7 +8,12 @@ the formatted text.
 Schema v2 (see the approved shape on wayfinder issue #11): a top-level
 ``schema_version`` int plus one block per quantitative briefing section.
 Rows written before v2 lack the ``schema_version`` key — consumers treat
-its absence as v1. Design rules carried by the schema:
+its absence as v1. v3 (#549) changes one block: ``argentina_fob.curve`` is
+keyed on the whole band (``2026-09`` / ``2026-09..2026-10``) and ``spot`` is
+the nearest band, with ``spot_ship_to`` beside ``spot_ship_from``; in v1/v2
+rows a curve key is ``ship_from`` alone, a multi-month band is filed under its
+start month, and same-start bands overwrote each other. Design rules carried
+by the schema:
 
 - raw numbers and components are stored, never display labels, regime
   strings, or derived values whose inputs are already present
@@ -45,6 +50,8 @@ from analysis.crop_year import is_split_crop_year, psd_year_for_crop_year
 from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
+from analysis.origins.domain import ShipmentWindow
+from analysis.origins.sources import nearest_window_key, parse_magyp_window
 from analysis.seasonal import current_vs_seasonal
 from analysis.spreads import compute_brazil_basis
 from analysis.stocks_to_use import (
@@ -93,7 +100,7 @@ from pipeline.units import to_metric_tons
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _BASIS_SOURCES = {
     "paranagua_fob": "Soybean (AgRural Paranaguá FOB)",
@@ -696,26 +703,55 @@ def _inspection_destinations_block() -> dict[str, dict[str, Any]]:
 
 
 def _argentina_fob_block() -> dict[str, dict[str, Any]]:
+    """MAGyP's latest circular per product: the spot band and the whole curve.
+
+    A band is the whole ``(ship_from, ship_to)`` pair (B40 #541): one session
+    can print ``2026-09`` and ``2026-09..2026-10``, two prices for one loading
+    month, so ``curve`` is keyed on the circular's own band form and ``spot``
+    is the session's nearest band by the rule the site and the fob board use
+    (``nearest_window_key``, B30 #504), never by sort order (#549).
+    ``spot_ship_from`` is the spot's loading month (A20 #536).
+    """
     fob = read_argentina_fob()
     if fob.empty:
         return {}
     out: dict[str, dict[str, Any]] = {}
     for product, subset in fob.groupby("product"):
         latest_date = subset["date"].max()
-        rows = subset[subset["date"] == latest_date].sort_values("ship_from")
+        rows = subset[subset["date"] == latest_date]
         if rows.empty:
             continue
-        spot = rows.iloc[0]
+        session = latest_date.date()
+        bands: dict[ShipmentWindow, float | None] = {}
+        for _, row in rows.iterrows():
+            window = parse_magyp_window(row["ship_from"], row["ship_to"])
+            if window is None:
+                raise ValueError(
+                    f"argentina_fob {product} {session}: unreadable band "
+                    f"{row['ship_from']!r}..{row['ship_to']!r}"
+                )
+            if window in bands:
+                raise ValueError(
+                    f"argentina_fob {product} {session}: two rows for band "
+                    f"{window.label} — no survivor is chosen"
+                )
+            bands[window] = _num(row["price_usd_mt"])
+        spot = min(bands, key=lambda w: nearest_window_key(w, session))
         out[str(product)] = {
             "date": _date_str(latest_date),
-            "spot_usd_mt": _num(spot["price_usd_mt"]),
-            "spot_ship_from": str(spot["ship_from"]),
+            "spot_usd_mt": bands[spot],
+            "spot_ship_from": _month_str(spot.start),
+            "spot_ship_to": _month_str(spot.end),
             "curve": {
-                str(r["ship_from"]): _num(r["price_usd_mt"])
-                for _, r in rows.iterrows()
+                str(w.label): bands[w] for w in sorted(bands, key=lambda w: (w.start, w.end))
             },
         }
     return out
+
+
+def _month_str(day: date) -> str:
+    """``YYYY-MM`` — MAGyP's own bound form."""
+    return f"{day.year:04d}-{day.month:02d}"
 
 
 def _nass_crush_block() -> dict[str, Any] | None:

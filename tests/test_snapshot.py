@@ -1,7 +1,7 @@
-"""Tests for the v2 snapshot extractor (analysis/briefing/snapshot.py).
+"""Tests for the snapshot extractor (analysis/briefing/snapshot.py).
 
 Covers the schema contract the briefings archive depends on:
-- schema_version marks v2 rows (absence = v1)
+- schema_version marks v2+ rows (absence = v1)
 - blocks degrade to None/{} on empty data instead of raising
 - seeded DB rows surface in the right blocks with plain JSON-native types
 - json.dumps succeeds without default=str (no numpy scalars / Timestamps leak)
@@ -430,3 +430,68 @@ def test_conab_block_withholds_usda_leg_for_a_calendar_year_label(patched_db: Pa
     assert row["usda_psd_year"] is None
     assert row["usda_production"] is None
     assert row["usda_reason"] == "calendar_year_label_unmapped"
+
+
+# B40 follow-up #549: MAGyP prints two bands sharing a start month on one
+# session (2026-09 and 2026-09..2026-10, both "Sep loading"). Keyed on
+# ship_from alone, one price overwrote the other and the spot was whichever
+# row sorted first — here the sailed August band.
+_MAGYP_SESSION = [
+    # Inserted out of order on purpose: the spot must not depend on row order.
+    ("2026-09-15", "Soybeans", "12019000190C", "2026-11", "2027-07", 395.0),
+    ("2026-09-15", "Soybeans", "12019000190C", "2026-09", "2026-10", 402.0),
+    ("2026-09-15", "Soybeans", "12019000190C", "2026-08", "2026-08", 399.0),
+    ("2026-09-15", "Soybeans", "12019000190C", "2026-09", "2026-09", 404.0),
+    ("2026-09-14", "Soybeans", "12019000190C", "2026-09", "2026-09", 390.0),
+]
+
+
+def _seed_magyp(db: Path, rows) -> None:
+    conn = sqlite3.connect(str(db))
+    conn.executemany(
+        "INSERT INTO argentina_fob (date, product, position, ship_from, ship_to, price_usd_mt)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_argentina_fob_curve_keeps_same_start_bands(patched_db: Path) -> None:
+    _seed_magyp(patched_db, _MAGYP_SESSION)
+
+    block = build_snapshot(_empty_briefing())["argentina_fob"]["Soybeans"]
+
+    assert block["date"] == "2026-09-15"
+    # Keyed on the whole band, in the circular's own form; both Sep bands kept.
+    assert block["curve"] == {
+        "2026-08": 399.0,
+        "2026-09": 404.0,
+        "2026-09..2026-10": 402.0,
+        "2026-11..2027-07": 395.0,
+    }
+    json.dumps(block)
+
+
+def test_argentina_fob_spot_follows_nearest_window_rule(patched_db: Path) -> None:
+    _seed_magyp(patched_db, _MAGYP_SESSION)
+
+    block = build_snapshot(_empty_briefing())["argentina_fob"]["Soybeans"]
+
+    # Nearest open band (B30 #504): August has sailed by 2026-09-15; of the two
+    # Sep-loading bands the earlier-ending one is the prompt cargo.
+    assert block["spot_usd_mt"] == 404.0
+    assert block["spot_ship_from"] == "2026-09"
+    assert block["spot_ship_to"] == "2026-09"
+
+
+def test_argentina_fob_two_rows_for_one_band_raise(patched_db: Path) -> None:
+    from analysis.briefing.snapshot import _argentina_fob_block
+
+    _seed_magyp(patched_db, [
+        ("2026-09-15", "Soybeans", "12019000190C", "2026-09", "2026-09", 404.0),
+        ("2026-09-15", "Soybeans", "12019000190X", "2026-09", "2026-09", 401.0),
+    ])
+
+    with pytest.raises(ValueError, match="2026-09"):
+        _argentina_fob_block()
