@@ -61,6 +61,8 @@ def test_empty_db_yields_v2_skeleton_without_raising(patched_db: Path) -> None:
     assert snapshot["weather"] == {}
     assert snapshot["port_flows"] == {}
     assert snapshot["nass_crush"] is None
+    # An empty table is no data, not a failure (#558): nothing raised.
+    assert snapshot["failed_blocks"] == {}
     # Whole thing must be JSON-native without default=str.
     json.dumps(snapshot)
 
@@ -485,13 +487,180 @@ def test_argentina_fob_spot_follows_nearest_window_rule(patched_db: Path) -> Non
     assert block["spot_ship_to"] == "2026-09"
 
 
-def test_argentina_fob_two_rows_for_one_band_raise(patched_db: Path) -> None:
-    from analysis.briefing.snapshot import _argentina_fob_block
-
+def test_argentina_fob_two_rows_for_one_band_withhold_only_that_product(
+    patched_db: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """No survivor is chosen (#549), and the failure is the product's alone (#558):
+    the other products still archive, and the row names what failed."""
     _seed_magyp(patched_db, [
         ("2026-09-15", "Soybeans", "12019000190C", "2026-09", "2026-09", 404.0),
         ("2026-09-15", "Soybeans", "12019000190X", "2026-09", "2026-09", 401.0),
+        ("2026-09-15", "Soybean Oil", "15071000", "2026-09", "2026-09", 1050.0),
     ])
 
-    with pytest.raises(ValueError, match="2026-09"):
-        _argentina_fob_block()
+    with caplog.at_level("WARNING", logger="analysis.briefing.snapshot"):
+        snapshot = build_snapshot(_empty_briefing())
+
+    assert "Soybeans" not in snapshot["argentina_fob"]
+    assert snapshot["argentina_fob"]["Soybean Oil"]["spot_usd_mt"] == 1050.0
+    reason = snapshot["failed_blocks"]["argentina_fob.Soybeans"]
+    assert "two rows for band 2026-09" in reason and reason.startswith("ValueError")
+    assert any("argentina_fob.Soybeans" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# failed_blocks (#558) — a builder that raised is not a block with no data
+# ---------------------------------------------------------------------------
+
+
+def test_a_raising_builder_is_recorded_in_failed_blocks_and_warned(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def boom() -> dict:
+        raise RuntimeError("cot table unreadable")
+
+    monkeypatch.setattr("analysis.briefing.snapshot._cot_block", boom)
+
+    with caplog.at_level("WARNING", logger="analysis.briefing.snapshot"):
+        snapshot = build_snapshot(_empty_briefing())
+
+    # The block still degrades to its default, so the rest of the day archives…
+    assert snapshot["cot"] == {}
+    # …but the row now says it failed, which an empty block cannot.
+    assert snapshot["failed_blocks"] == {"cot": "RuntimeError: cot table unreadable"}
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert any("cot" in r.getMessage() and "unreadable" in r.getMessage() for r in warnings)
+    json.dumps(snapshot)
+
+
+def test_a_nested_block_failure_is_recorded_under_its_dotted_name(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(_df: pd.DataFrame) -> dict:
+        raise ValueError("too few years")
+
+    monkeypatch.setattr("analysis.briefing.snapshot.current_vs_seasonal", boom)
+    data = BriefingData(text="", price_data={"Soybeans": pd.DataFrame({"Close": [1.0]})})
+
+    snapshot = build_snapshot(data)
+
+    # The parent block survives (empty); the failure is named under its child.
+    assert snapshot["seasonal"] == {}
+    assert snapshot["failed_blocks"] == {"seasonal.Soybeans": "ValueError: too few years"}
+
+
+def test_failures_do_not_leak_between_snapshots(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom() -> dict:
+        raise RuntimeError("once")
+
+    with monkeypatch.context() as patch:
+        patch.setattr("analysis.briefing.snapshot._cot_block", boom)
+        assert "cot" in build_snapshot(_empty_briefing())["failed_blocks"]
+
+    assert build_snapshot(_empty_briefing())["failed_blocks"] == {}
+
+
+@pytest.mark.parametrize("version", [3, SCHEMA_VERSION])
+def test_the_archive_reader_works_on_old_and_new_rows(
+    patched_db: Path, version: int
+) -> None:
+    """v3 rows carry no ``failed_blocks``; v4 rows do. The one archive reader
+    (``scripts/backfill_brazil_spot``) reads both."""
+    import importlib.util
+
+    from pipeline.store import save_briefing
+
+    snapshot: dict = {
+        "schema_version": version,
+        "brazil_basis": {
+            "paranagua_fob": {"spot_usd_mt": 400.0, "brl_usd": 0.2},
+            "cepea_parana": None,
+        },
+    }
+    if version >= 4:
+        snapshot["failed_blocks"] = {"brazil_basis.cepea_parana": "ValueError: x"}
+    save_briefing(briefing_date="2026-09-15", text="briefing", signals=[], snapshot=snapshot)
+
+    spec = importlib.util.spec_from_file_location(
+        "backfill_brazil_spot",
+        Path(__file__).resolve().parent.parent / "scripts" / "backfill_brazil_spot.py",
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.get_connection = lambda: sqlite3.connect(str(patched_db))  # type: ignore[attr-defined]
+
+    assert module.backfill() == 1
+
+
+def test_a_nan_ship_to_withholds_the_product(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A NaN end is unreadable, never a single-month band (#558): the snapshot
+    withholds the product, as the FOB board withholds its leg."""
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2026-09-15"]),
+        "product": ["Soybeans"],
+        "ship_from": ["2026-09"],
+        "ship_to": [float("nan")],
+        "price_usd_mt": [404.0],
+    })
+    monkeypatch.setattr("analysis.briefing.snapshot.read_argentina_fob", lambda: fob)
+
+    snapshot = build_snapshot(_empty_briefing())
+
+    assert snapshot["argentina_fob"] == {}
+    assert "unreadable band" in snapshot["failed_blocks"]["argentina_fob.Soybeans"]
+
+
+# ---------------------------------------------------------------------------
+# failure_reason — what of an exception is archived and printed
+# ---------------------------------------------------------------------------
+
+
+def test_failure_reason_keeps_type_and_first_line() -> None:
+    from analysis.briefing.failures import failure_reason
+
+    exc = ValueError("two rows for band 2026-09\nTraceback detail\nmore")
+    assert failure_reason(exc) == "ValueError: two rows for band 2026-09"
+    assert failure_reason(RuntimeError()) == "RuntimeError"
+
+
+def test_failure_reason_drops_everything_from_a_path_on() -> None:
+    from analysis.briefing.failures import failure_reason
+
+    for message, kept in [
+        ("unable to open database file /Users/someone/data/mirror.db", "unable to open database file"),
+        ("[Errno 2] No such file or directory: '/home/runner/work/x.csv'", "[Errno 2] No such file or directory"),
+        ("cannot read ~/secrets/key.txt now", "cannot read"),
+        ("cannot read ./data/raw.csv", "cannot read"),
+        ("bad file C:\\Users\\me\\x.db", "bad file"),
+    ]:
+        assert failure_reason(OSError(message)) == f"OSError: {kept}"
+    # A unit is not a path.
+    assert failure_reason(ValueError("price 404 USD/MT out of range")) == (
+        "ValueError: price 404 USD/MT out of range"
+    )
+
+
+def test_failure_reason_truncates_a_long_first_line() -> None:
+    from analysis.briefing.failures import MAX_REASON_CHARS, failure_reason
+
+    reason = failure_reason(ValueError("x" * 500))
+    message = reason.removeprefix("ValueError: ")
+    assert len(message) == MAX_REASON_CHARS and message.endswith("…")
+
+
+def test_failed_blocks_archive_the_sanitised_reason(
+    patched_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom() -> dict:
+        raise sqlite3.OperationalError("unable to open database file /Users/someone/x.db")
+
+    monkeypatch.setattr("analysis.briefing.snapshot._cot_block", boom)
+
+    snapshot = build_snapshot(_empty_briefing())
+
+    assert snapshot["failed_blocks"] == {"cot": "OperationalError: unable to open database file"}

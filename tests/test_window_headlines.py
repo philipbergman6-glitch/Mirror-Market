@@ -509,6 +509,72 @@ def test_the_briefing_withholds_a_leg_whose_every_window_has_sailed(monkeypatch)
     assert "$480.0" not in board and "$470.0" not in board
 
 
+def test_the_briefing_withholds_a_leg_with_two_rows_for_its_band(monkeypatch):
+    """#558: two prices for the nearest band are not resolved by row order —
+    the leg is withheld with its reason, as a sailed session is."""
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2026-10-16"] * 3),
+        "ship_from": ["2026-10", "2026-10", "2026-11"],
+        "ship_to": ["2026-10", "2026-10", "2027-04"],
+        "price_usd_mt": [493.0, 489.0, 495.0],
+    })
+    monkeypatch.setattr(fob_board, "read_argentina_fob", lambda _p: fob)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    leg = fob_board._argentina_leg()
+    assert isinstance(leg, str) and "2 rows for band 2026-10" in leg
+    board = fob_board.format({}, {})
+    argentina = next(line for line in board.splitlines() if "Argentina" in line)
+    assert "withheld" in argentina
+    assert "$493.0" not in board and "$489.0" not in board
+
+
+def test_the_briefing_names_a_leg_that_failed(monkeypatch):
+    """#558: a leg whose loader raised is shown as failed, not dropped as if
+    the venue had printed nothing."""
+    def boom():
+        raise ValueError("unreadable shipment window on 2026-10-16")
+
+    monkeypatch.setattr(fob_board, "_argentina_leg", boom)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    board = fob_board.format({}, {})
+    argentina = next(line for line in board.splitlines() if "Argentina" in line)
+    assert "withheld — failed (ValueError: unreadable shipment window" in argentina
+
+
+def test_the_briefing_withholds_a_leg_with_a_nan_band_end(monkeypatch):
+    """#558: a NaN ``ship_to`` is unreadable on the board as in the snapshot —
+    never priced as a single-month band."""
+    fob = pd.DataFrame({
+        "date": pd.to_datetime(["2026-10-16"]),
+        "ship_from": ["2026-10"],
+        "ship_to": [float("nan")],
+        "price_usd_mt": [493.0],
+    })
+    monkeypatch.setattr(fob_board, "read_argentina_fob", lambda _p: fob)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    with pytest.raises(ValueError, match="unreadable shipment window"):
+        fob_board._argentina_leg()
+    board = fob_board.format({}, {})
+    argentina = next(line for line in board.splitlines() if "Argentina" in line)
+    assert "withheld — failed (ValueError: unreadable shipment window" in argentina
+    assert "$493.0" not in board
+
+
+def test_a_failed_legs_printed_reason_carries_no_path(monkeypatch):
+    def boom():
+        raise OSError("unable to open database file /Users/someone/data/mirror.db")
+
+    monkeypatch.setattr(fob_board, "_argentina_leg", boom)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    board = fob_board.format({}, {})
+    assert "withheld — failed (OSError: unable to open database file)" in board
+    assert "/Users" not in board
+
+
 def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch):
     """Not "Current, else the first listed row": on 18 Mar 2025 AMS listed a
     sailed Mar¹ slot first; the nearest open one is Mar² (same rule as

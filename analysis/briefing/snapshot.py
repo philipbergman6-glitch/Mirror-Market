@@ -12,13 +12,18 @@ its absence as v1. v3 (#549) changes one block: ``argentina_fob.curve`` is
 keyed on the whole band (``2026-09`` / ``2026-09..2026-10``) and ``spot`` is
 the nearest band, with ``spot_ship_to`` beside ``spot_ship_from``; in v1/v2
 rows a curve key is ``ship_from`` alone, a multi-month band is filed under its
-start month, and same-start bands overwrote each other. Design rules carried
-by the schema:
+start month, and same-start bands overwrote each other. v4 (#558) adds a
+top-level ``failed_blocks`` — ``{block name: reason}`` for every builder that
+raised, dotted for a nested one (``argentina_fob.Soybeans``), ``{}`` when none
+did — so a block that failed reads differently from one with no data. A v1–v3
+row has no such key: its failures were never recorded, which is not the same
+as there having been none. Design rules carried by the schema:
 
 - raw numbers and components are stored, never display labels, regime
   strings, or derived values whose inputs are already present
 - every block is nullable — a failed or empty layer yields None/{} so a
-  partial pipeline day still archives everything else
+  partial pipeline day still archives everything else; a failed one is also
+  named in ``failed_blocks``
 - the whole dict is JSON-native (plain float/int/str/bool/None) so
   ``json.dumps`` never falls back to ``default=str``
 
@@ -31,12 +36,14 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from functools import partial
 from typing import Any
 
 import pandas as pd
 
+from analysis.briefing.failures import failure_reason
 from analysis.briefing.sections.cot import _LOOKBACK as _COT_LOOKBACK
 from analysis.briefing.sections.export_sales import (
     soy_marketing_year,
@@ -100,7 +107,11 @@ from pipeline.units import to_metric_tons
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+# The ``build_snapshot`` call in progress collects its failed blocks here;
+# outside one, ``_safe`` only logs.
+_FAILED_BLOCKS: ContextVar[dict[str, str] | None] = ContextVar("_FAILED_BLOCKS", default=None)
 
 _BASIS_SOURCES = {
     "paranagua_fob": "Soybean (AgRural Paranaguá FOB)",
@@ -200,11 +211,22 @@ def _jsonify(obj: Any) -> Any:
 
 
 def _safe(name: str, builder: Callable[[], Any], default: Any) -> Any:
-    """Run a block builder; a failure degrades to `default`, never raises."""
+    """Run a block builder; a failure degrades to `default`, never raises.
+
+    The failure is not silent (#558): it is logged at warning and, inside
+    ``build_snapshot``, recorded under ``failed_blocks`` — an empty block alone
+    would read as "the source published nothing". The reason is
+    ``failure_reason``'s: type plus a cleaned first line, since the row is
+    published.
+    """
     try:
         return builder()
     except Exception as exc:
-        logger.debug("Snapshot block %s failed: %s", name, exc)
+        reason = failure_reason(exc)
+        logger.warning("Snapshot block %s failed: %s", name, reason)
+        failed = _FAILED_BLOCKS.get()
+        if failed is not None:
+            failed[name] = reason
         return default
 
 
@@ -711,44 +733,57 @@ def _argentina_fob_block() -> dict[str, dict[str, Any]]:
     is the session's nearest band by the rule the site and the fob board use
     (``nearest_window_key``, B30 #504), never by sort order (#549).
     ``spot_ship_from`` is the spot's loading month (A20 #536).
+
+    A product whose session cannot be read — an unreadable band, or two rows
+    for one band — is left out and named in ``failed_blocks``
+    (``argentina_fob.<product>``, #558); the other products still archive.
     """
     fob = read_argentina_fob()
     if fob.empty:
         return {}
     out: dict[str, dict[str, Any]] = {}
     for product, subset in fob.groupby("product"):
-        latest_date = subset["date"].max()
-        rows = subset[subset["date"] == latest_date]
-        if rows.empty:
-            continue
-        session = latest_date.date()
-        # window -> the row's own (ship_from, ship_to) and price
-        bands: dict[ShipmentWindow, tuple[str, str, float | None]] = {}
-        for _, row in rows.iterrows():
-            window = parse_magyp_window(row["ship_from"], row["ship_to"])
-            if window is None:
-                raise ValueError(
-                    f"argentina_fob {product} {session}: unreadable band "
-                    f"{row['ship_from']!r}..{row['ship_to']!r}"
-                )
-            if window in bands:
-                raise ValueError(
-                    f"argentina_fob {product} {session}: two rows for band "
-                    f"{window.describe()} — no survivor is chosen"
-                )
-            bands[window] = (str(row["ship_from"]), str(row["ship_to"]), _num(row["price_usd_mt"]))
-        spot = min(bands, key=lambda w: nearest_window_key(w, session))
-        ship_from, ship_to, spot_price = bands[spot]
-        out[str(product)] = {
-            "date": _date_str(latest_date),
-            "spot_usd_mt": spot_price,
-            "spot_ship_from": ship_from,
-            "spot_ship_to": ship_to,
-            "curve": {
-                w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))
-            },
-        }
+        entry = _safe(
+            f"argentina_fob.{product}", partial(_argentina_fob_product, str(product), subset), None
+        )
+        if entry is not None:
+            out[str(product)] = entry
     return out
+
+
+def _argentina_fob_product(product: str, subset: pd.DataFrame) -> dict[str, Any] | None:
+    """One product's newest session; raises where no survivor can be chosen."""
+    latest_date = subset["date"].max()
+    rows = subset[subset["date"] == latest_date]
+    if rows.empty:
+        return None
+    session = latest_date.date()
+    # window -> the row's own (ship_from, ship_to) and price
+    bands: dict[ShipmentWindow, tuple[str, str, float | None]] = {}
+    for _, row in rows.iterrows():
+        window = parse_magyp_window(row["ship_from"], row["ship_to"])
+        if window is None:
+            raise ValueError(
+                f"argentina_fob {product} {session}: unreadable band "
+                f"{row['ship_from']!r}..{row['ship_to']!r}"
+            )
+        if window in bands:
+            raise ValueError(
+                f"argentina_fob {product} {session}: two rows for band "
+                f"{window.describe()} — no survivor is chosen"
+            )
+        bands[window] = (str(row["ship_from"]), str(row["ship_to"]), _num(row["price_usd_mt"]))
+    spot = min(bands, key=lambda w: nearest_window_key(w, session))
+    ship_from, ship_to, spot_price = bands[spot]
+    return {
+        "date": _date_str(latest_date),
+        "spot_usd_mt": spot_price,
+        "spot_ship_from": ship_from,
+        "spot_ship_to": ship_to,
+        "curve": {
+            w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))
+        },
+    }
 
 
 def _nass_crush_block() -> dict[str, Any] | None:
@@ -1094,8 +1129,19 @@ def _health_block() -> dict[str, Any] | None:
 
 def build_snapshot(data: BriefingData) -> dict[str, Any]:
     """Distill a BriefingData into the dict written to briefings.snapshot_json."""
+    failed: dict[str, str] = {}
+    collecting = _FAILED_BLOCKS.set(failed)
+    try:
+        snapshot = _build_blocks(data)
+    finally:
+        _FAILED_BLOCKS.reset(collecting)
+    snapshot["failed_blocks"] = failed
+    return _jsonify(snapshot)
+
+
+def _build_blocks(data: BriefingData) -> dict[str, Any]:
     economic = _safe("economic", _economic_block, {})
-    snapshot: dict[str, Any] = {
+    return {
         "schema_version": SCHEMA_VERSION,
         "prices": _safe("prices", lambda: _prices_block(data.enriched), {}),
         "crush_spread": _safe("crush_spread", _crush_block, None),
@@ -1139,4 +1185,3 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
         "seasonal": _safe("seasonal", lambda: _seasonal_block(data.price_data), {}),
         "health": _safe("health", _health_block, None),
     }
-    return _jsonify(snapshot)
