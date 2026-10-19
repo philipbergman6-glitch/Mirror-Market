@@ -171,3 +171,44 @@ def test_a_release_only_run_does_not_alert(tmp_path, gh_calls):
 
     assert alerter.main(["prog", str(path)]) == 0
     assert ("issue", "create") not in _commands(calls)
+
+
+# ── receipt (B34 #520, T4 evidence) ────────────────────────────────────────
+
+
+def test_alert_writes_a_receipt_naming_every_outage_layer(tmp_path, gh_calls, monkeypatch):
+    monkeypatch.setenv("GITHUB_RUN_ID", "555")
+    path = _status_file(tmp_path, {
+        "hard_failures": ["safex", "dce", "gulf_bids"],
+        "classifications": {
+            "upstream_failure": ["safex"],
+            "stale_last_known_good": ["dce"],
+            "incomplete_key_coverage": ["gulf_bids"],
+            "no_publication": ["cec"],
+        },
+    })
+
+    assert alerter.main(["prog", str(path)]) == 0
+
+    receipt = json.loads((tmp_path / "alert_receipt.json").read_text(encoding="utf-8"))
+    assert receipt == {"run_id": "555", "layers": ["dce", "gulf_bids", "safex"]}
+
+
+def test_no_receipt_when_gh_refuses_the_comment(tmp_path, monkeypatch):
+    def broken_gh(*args):
+        if args[:2] == ("issue", "list"):
+            return "[]"
+        raise RuntimeError("gh down")
+
+    monkeypatch.setattr(alerter, "_gh", broken_gh)
+    path = _status_file(tmp_path, {"hard_failures": ["safex"]})
+
+    with pytest.raises(RuntimeError):
+        alerter.main(["prog", str(path)])
+    assert not (tmp_path / "alert_receipt.json").exists()
+
+
+def test_clean_run_writes_no_receipt(tmp_path, gh_calls):
+    path = _status_file(tmp_path, {"hard_failures": [], "succeeded": ["prices"]})
+    assert alerter.main(["prog", str(path)]) == 0
+    assert not (tmp_path / "alert_receipt.json").exists()

@@ -52,7 +52,8 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue
+  # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue,
+  # scripts/ci_dead_source.py the dead-source issue
   issues: write
 
 # One group, so two runs can never call deploy-pages at the same time.
@@ -168,6 +169,12 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # The source reliability record (B34 #520) grades a layer only from the
+      # data_freshness rows written after this instant: the runner's DB is
+      # seeded from the committed CSV, so an older row is a previous run's.
+      - name: Stamp the pipeline start
+        run: echo "PIPELINE_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
       - name: Run data pipeline
         env:
@@ -405,6 +412,58 @@ jobs:
           --url "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}"
           --candidate "$RUNNER_TEMP/mirror-market-candidate"
           --browser
+
+      # The source reliability record (B34 #520, docs/plans/source-reliability-a19.md):
+      # one append-only row per (run, layer) in data/history/layer_runs.csv,
+      # plus the layers this run's ci-alert named (layer_alerts.csv). Here,
+      # after the publication outcome, because rendered_at is the promoted
+      # edition's generated_at and blank when nothing was promoted — and on
+      # every non-cancelled main run, a crashed pipeline included, since that
+      # run is the one a final-state snapshot never sees.
+      #
+      # Its own commit, never the snapshot commit's `-X theirs` rebase: on an
+      # append-only file "prefer ours" would drop whatever another run
+      # appended. Instead each attempt starts from main's newest record and
+      # re-appends this run's rows, which the script refuses to do twice.
+      # The reset discards nothing this run still needs: the database, the
+      # run summary and the alert receipt live under gitignored data/storage/
+      # and the candidate under RUNNER_TEMP. continue-on-error: the edition
+      # is already out, and a run that failed to record shows up in the
+      # record itself as `no_run` for its session.
+      - name: Record layer runs
+        id: record_runs
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          DEPLOYMENT_OUTCOME: ${{ steps.deployment_status.outputs.outcome }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch --depth=1 origin main
+            git reset --hard FETCH_HEAD
+            python scripts/record_layer_runs.py \
+              --manifest "$RUNNER_TEMP/mirror-market-candidate/manifest.json" \
+              --deployment-outcome "$DEPLOYMENT_OUTCOME"
+            git add -A data/history
+            git commit -m "chore(data): layer run record [skip ci]"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) — re-appending onto moved main."
+          done
+          echo "::error::layer run record push failed after 3 attempts"
+          exit 1
+
+      # A layer unavailable on DEAD_SOURCE_SESSIONS consecutive sessions gets
+      # the rolling `ci-dead-source` issue, commented only on a state change
+      # (§4). A relay like the layer alert: never reddens a run.
+      - name: Relay dead sources
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.record_runs.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_dead_source.py
 
       - name: Enforce publication outcome
         if: ${{ !cancelled() && (steps.generate_site.outcome == 'failure' || steps.smoke_candidate.outcome == 'failure' || steps.smoke_public.outcome == 'failure') }}

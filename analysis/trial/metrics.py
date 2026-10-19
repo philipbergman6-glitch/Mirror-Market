@@ -428,7 +428,7 @@ def compute_metrics(
             "rate",
             len(days),
             (
-                f"Mean share of the {len(config.TRIAL_CRITICAL_LAYERS)} participant-critical layers "
+                f"Mean share of the {len(config.AVAILABILITY_BASKET)} availability-basket layers "
                 f"inside their own cadence budget, across {len(days)} observed trading days."
             ),
         ),

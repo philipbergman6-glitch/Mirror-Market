@@ -1,7 +1,7 @@
 """The edition manifest — what this build published, and how old it was.
 
 Written to ``<output_dir>/manifest.json`` by ``scripts/generate_site.py`` on
-every run, fast or full. It carries three things, and each has a named
+every run, fast or full. It carries four things, and each has a named
 consumer:
 
 ``edition``   which build this was and what it produced
@@ -13,6 +13,10 @@ consumer:
     database missing two thirds of its layers would render a thin but
     perfectly valid-looking site; nothing in the HTML says "this edition
     knows less than the one it is replacing". The coverage block does.
+
+``reliability``  per-layer availability over the last 30 weekday sessions
+    ``pipeline.reliability.reliability`` over ``data/history/layer_runs.csv``
+    (B34 #520). Read by the A11 re-audit (#315) from the edition itself.
 
 ``latency``   the measured chain per trader-critical layer
     ``latency.report.to_dict``. Published rather than kept internal because
@@ -108,6 +112,25 @@ def _coverage() -> list[dict[str, Any]]:
     return coverage
 
 
+def _reliability(generated_at: datetime) -> dict[str, Any]:
+    """The source reliability figures (B34 #520) over ``layer_runs.csv``.
+
+    The window closes on the session *before* the one this edition serves:
+    that session's own runs are still being recorded (this run's rows land
+    after promotion), so including it would count a session as ``no_run``
+    that is merely unfinished.
+    """
+    from pipeline.layer_runs import read_alerts, read_runs, session_date_for
+    from pipeline.reliability import previous_session, reliability
+
+    try:
+        through = previous_session(session_date_for(generated_at))
+        return reliability(read_runs(), read_alerts(), through=through)
+    except Exception as exc:  # noqa: BLE001 — a manifest must never fail a build
+        logger.warning("could not compute reliability for the manifest", exc_info=True)
+        return {"state": "unavailable", "reason": f"{type(exc).__name__}: {exc}"}
+
+
 def build_manifest(
     *,
     generated_at: datetime,
@@ -147,6 +170,7 @@ def build_manifest(
         },
         "coverage": _coverage(),
         "latency": latency_block,
+        "reliability": _reliability(generated_at),
     }
 
 

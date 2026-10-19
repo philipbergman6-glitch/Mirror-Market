@@ -25,6 +25,10 @@ outage issue. Uses the gh CLI with the workflow-provided GH_TOKEN. Exits
 non-zero on gh errors; the workflow step is continue-on-error so a broken
 alerter never blocks the dashboard deploy.
 
+After an outage comment lands it writes `alert_receipt.json` beside the
+status file, naming the layers it surfaced; scripts/record_layer_runs.py
+carries that into the source reliability record (B34 #520, T4).
+
 Usage:
     python scripts/ci_layer_alert.py [path/to/pipeline_status.json]
 """
@@ -49,6 +53,7 @@ ALERT_LABEL = "ci-alert"
 ALERT_TITLE = "CI: data pipeline layer failures"
 DRIFT_LABEL = "ci-catalog-drift"
 DRIFT_TITLE = "CI: catalog drift — keys missing for consecutive runs"
+RECEIPT_FILENAME = "alert_receipt.json"
 DEFAULT_STATUS_PATH = Path(__file__).resolve().parent.parent / "data" / "storage" / "pipeline_status.json"
 
 
@@ -76,6 +81,38 @@ def run_url() -> str:
     return "(run URL unavailable — not running in GitHub Actions?)"
 
 
+# The outage classes the alert names layer by layer, in body order.
+ALERT_CLASS_LABELS = (
+    ("upstream_failure", "Upstream or ingest failure"),
+    ("stale_last_known_good", "Stale last-known-good data"),
+    ("incomplete_key_coverage", "Incomplete key coverage"),
+)
+
+
+def _alert_classes(status: dict) -> dict:
+    return status.get("classifications") or {
+        "upstream_failure": status.get("hard_failures", [])
+    }
+
+
+def named_layers(status: dict) -> list[str]:
+    """Every layer the alert body names as an outage — the receipt's content."""
+    classes = _alert_classes(status)
+    return sorted({layer for key, _heading in ALERT_CLASS_LABELS for layer in classes.get(key, [])})
+
+
+def write_receipt(path: Path, status: dict) -> None:
+    """Record, after gh accepted it, which layers this run's alert named.
+
+    The evidence for "surfaced within one run" (B34 #520, T4): the deploy
+    workflow's record step appends it to data/history/layer_alerts.csv. It
+    is written only once the comment exists, so a broken alerter leaves no
+    receipt and its failures count as unsurfaced — which they were.
+    """
+    receipt = {"run_id": os.environ.get("GITHUB_RUN_ID") or None, "layers": named_layers(status)}
+    path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+
+
 def build_alert_body(status: dict | None) -> str:
     """Markdown body for the alert issue / follow-up comment."""
     if status is None:
@@ -84,16 +121,9 @@ def build_alert_body(status: dict | None) -> str:
             "no layer results are available (early abort, e.g. history "
             f"import failure or an unhandled exception).\n\nRun: {run_url()}"
         )
-    classes = status.get("classifications") or {
-        "upstream_failure": status.get("hard_failures", [])
-    }
-    labels = (
-        ("upstream_failure", "Upstream or ingest failure"),
-        ("stale_last_known_good", "Stale last-known-good data"),
-        ("incomplete_key_coverage", "Incomplete key coverage"),
-    )
+    classes = _alert_classes(status)
     lines = ["The data pipeline finished with degraded production layers or held-back revisions:", ""]
-    for key, heading in labels:
+    for key, heading in ALERT_CLASS_LABELS:
         layers = classes.get(key, [])
         if layers:
             lines += [f"**{heading}:**", *[f"- `{layer}`" for layer in layers], ""]
@@ -214,6 +244,7 @@ def main(argv: list[str]) -> int:
         if held:
             logger.warning("Quarantined revisions this run: %d", held)
         raise_alert(build_alert_body(status))
+        write_receipt(path.with_name(RECEIPT_FILENAME), status)
     else:
         clear_alert(status)
 

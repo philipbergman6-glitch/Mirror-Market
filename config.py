@@ -168,6 +168,10 @@ PRODUCTION_LAYERS = (
      "Tropical-cyclone forecast tracks and wind radii — West Pacific, Indian Ocean, Southern Hemisphere"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
+# Layers whose rendered output is the private desk edition only. A public
+# record of them (data/history/layer_runs.csv) carries the layer name and its
+# graded status and nothing else — the same as the public freshness table.
+PRIVATE_LAYERS = ("sea_india", "sopa_crop")
 
 # ---------------------------------------------------------------------------
 # Fast refresh — the price-only path (`python main.py --fast`)
@@ -4374,23 +4378,40 @@ TRIAL_SCORECARD_DIMENSIONS = (
 )
 
 
-# The layers a participant's daily decisions actually rest on. Availability is
-# measured against THIS set rather than all 27, because a CEC release slipping a
-# week is not the same event as the CBOT board going dark, and averaging them
-# produces an availability number that stays green through an outage that
-# matters. main.CRITICAL_LAYERS is a different and narrower list — it decides
-# the pipeline's exit code, not what a participant needs on screen.
-TRIAL_CRITICAL_LAYERS = (
-    "prices",         # the board itself
-    "currencies",     # every non-USD leg is unreadable without it
-    "fred",           # the dollar, and the macro frame
-    "forward_curve",  # nothing can be hedged off a continuous series
-    "export_sales",   # the demand side of every China question
-    "psd",            # the balance sheet behind stocks-to-use
-    "weather",        # the supply risk the board prices first
-    "dce",            # the destination market
-    "gulf_bids",      # US origin, physical
-    "agrural",        # Brazil origin, physical
-    "magyp_fob",      # Argentina origin, physical
-    "cepea",          # Brazil domestic, the basis leg
+# The availability basket (A19 #518 §1, built by B34 #520): the layers accuracy
+# basket v1 (map #472) reads its legs from. One basket, two questions — is the
+# number right (#472), and was it there (here). A layer whose absence thins a
+# page but leaves every cargo, basis, origin or hedge decision possible stays
+# outside: its availability is reported, never decisive. Derived strata (board
+# and DCE crush, one landed origin row) get no entry — a derived number is
+# available exactly when every leg is (invariant 8). Pre-buyer and
+# owner-defined, like basket v1: A12 (#406) may revise it, and the 30-session
+# window restarts for any layer that joins. It replaced TRIAL_CRITICAL_LAYERS,
+# so the Phase 5 trial and the A11 re-audit measure one thing.
+AVAILABILITY_BASKET = (
+    "forward_curve",      # 1 CBOT ZS/ZL/ZM named-contract closes
+    "dce",                # 2 DCE beans/meal/oil
+    "agrural",            # 3 AgRural Paranaguá port bid
+    "cepea",              # 3 CEPEA indicator
+    "magyp_fob",          # 4 MAGyP official FOB
+    "gulf_bids",          # 5 US Gulf basis (AMS 3147)
+    "currencies",         # 6 FX BRL/CNY/INR/ZAR
+    "us_processor_cash",  # 9 US processor cash oil/meal (AMS 3511), weekly
 )
+
+# Source reliability record (B34 #520, requirements docs/plans/source-reliability-a19.md).
+# The window the figures in manifest.json are computed over, in weekday CBOT
+# sessions counted on layer_runs.session_date.
+RELIABILITY_WINDOW_SESSIONS = 30
+# §4: a layer unavailable on this many consecutive sessions is a dead source,
+# relayed to the rolling `ci-dead-source` issue. Sessions, never runs: one
+# morning's seven retries would otherwise call a blip dead.
+DEAD_SOURCE_SESSIONS = 3
+# The A11 thresholds (§3 T1–T4). Pre-buyer and owner-revisable at A12, the
+# same status as the basket. Reported in the manifest beside the figures they
+# judge — never a pass/fail gate on a CI run (A9 bar: drift is reported, never
+# paged).
+RELIABILITY_T1_MAX_NO_RUN_GAP = 2          # longest tolerated run of sessions with no run at all
+RELIABILITY_T2_MIN_AVAILABILITY_PCT = 90.0  # every basket layer
+RELIABILITY_T3_MAX_STREAK_SESSIONS = 5      # every basket layer's longest unavailable streak
+RELIABILITY_T4_MIN_SURFACED_PCT = 100.0     # all layers: failing runs named by that run's ci-alert
