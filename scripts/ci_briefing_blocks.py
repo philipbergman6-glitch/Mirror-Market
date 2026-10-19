@@ -14,6 +14,12 @@ can see it. This relay reads it and:
   failing run, commented **only when the set of failed blocks changes**,
   closed by a run whose snapshot says ``failed_blocks == {}``.
 
+A run that archived no row at all is a failure too, named ``NO_BRIEFING`` in
+place of a block: the orchestrator swallows a ``build_snapshot`` or
+``save_briefing`` that raised as a whole and archives nothing, so "no row" is
+the only trace that failure leaves. It rides the same issue and is cleared
+like a block, by a later run that archives a row.
+
 The source is the ``briefings`` row *this run* archived in the runner's DB —
 the row ``generated_at`` at or after ``PIPELINE_STARTED_AT``, the same "rows
 written after this instant" rule ``scripts/record_layer_runs.py`` grades
@@ -24,12 +30,13 @@ row is a previous run's and says nothing about this one.
 not the previous archived row: the deploy runs on every push to main, and
 ``INSERT OR REPLACE`` keyed on the date erases an earlier same-day run's row.
 
-Two outcomes are neither failing nor clean (invariant 2), and leave the issue
-as it was with a warning annotation: no row archived by this run, and a
-snapshot without the ``failed_blocks`` key (schema v1–v3: never recorded).
-Anything unreadable — no start stamp, no DB, a snapshot or ``failed_blocks``
-of the wrong shape, a v4+ snapshot without the key — raises. The workflow step is ``continue-on-error``, so a
-broken relay never reddens a run.
+One outcome is neither failing nor clean (invariant 2) and leaves the issue
+as it was with a warning annotation: a snapshot without the ``failed_blocks``
+key (schema v1–v3: never recorded). Anything unreadable — no start stamp, no
+DB, a snapshot or ``failed_blocks`` of the wrong shape, a v4+ snapshot
+without the key — raises. An unreadable issue marker is read as "nothing on
+record" and answered with a comment. The workflow step is
+``continue-on-error``, so a broken relay never reddens a run.
 
 Usage:
     python scripts/ci_briefing_blocks.py [--started-at ISO] [--db PATH]
@@ -63,6 +70,9 @@ GENERATED_AT_FORMAT = "%Y-%m-%d %H:%M:%S"
 FAILED_BLOCKS_SINCE_SCHEMA = 4
 # Warning annotations GitHub keeps per step; more are dropped from the run page.
 ANNOTATION_CAP = 10
+# The failed-set entry for a run that archived no briefings row. Parenthesised
+# so it can never collide with a block name (dotted identifiers).
+NO_BRIEFING = "(no briefing archived)"
 _MARKER = re.compile(r"<!-- ci-briefing-blocks: (\[.*?\]) -->")
 
 
@@ -159,14 +169,27 @@ def last_reported(thread_json: str) -> set[str] | None:
     for body in reversed(bodies):
         markers = _MARKER.findall(body)
         if markers:
-            return set(json.loads(markers[-1]))
+            try:
+                names = json.loads(markers[-1])
+            except json.JSONDecodeError:
+                return None
+            if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+                return None
+            return set(names)
     return None
 
 
-def build_body(briefing_date: str, failed: dict[str, str], *, before: set[str] | None) -> str:
-    lines = [
+def build_body(briefing_date: str | None, failed: dict[str, str], *, before: set[str] | None) -> str:
+    """``briefing_date`` is None when this run archived no row (``failed`` is ``NO_BRIEFING``)."""
+    head = (
+        "This run archived **no briefing row** — the whole snapshot or its save raised, "
+        "or no briefing was generated:"
+        if briefing_date is None else
         f"The briefing archived for **{briefing_date}** withheld {len(failed)} block(s) "
-        "whose builder raised. The candidate edition was built without them:",
+        "whose builder raised. The candidate edition was built without them:"
+    )
+    lines = [
+        head,
         "",
         *[f"- `{name}` — {reason}" for name, reason in sorted(failed.items())],
         "",
@@ -182,7 +205,8 @@ def build_body(briefing_date: str, failed: dict[str, str], *, before: set[str] |
             lines.append("")
     lines += [
         "Source: `failed_blocks` in the `snapshot_json` of the `briefings` row this run "
-        "archived in the runner DB.",
+        "archived in the runner DB (none, for the no-row entry; the cause is in the "
+        "\"Generate static site\" log).",
         f"Run: {run_url()}",
         f"<!-- ci-briefing-blocks: {json.dumps(sorted(failed))} -->",
     ]
@@ -203,21 +227,25 @@ def main(argv: list[str] | None = None) -> int:
         started = started.replace(tzinfo=timezone.utc)
 
     row = this_runs_briefing(args.db, started)
+    briefing_date: str | None
     if row is None:
+        briefing_date = None
+        failed: dict[str, str] | None = {
+            NO_BRIEFING: f"no briefings row generated at or after {args.started_at}",
+        }
         print("::warning title=No briefing archived::This run archived no briefings row "
-              f"(none generated at or after {args.started_at}), so whether any block failed "
-              f"is unknown — the {LABEL} issue is left as it was.")
-        return 0
-    briefing_date, snapshot_json = row
-    failed = failed_blocks(snapshot_json)
-    if failed is None:
-        print(f"::warning title=Briefing failures never recorded::The {briefing_date} snapshot "
-              "has no failed_blocks key (schema before v4): failures were never recorded, which "
-              f"is not the same as none — the {LABEL} issue is left as it was.")
-        return 0
-
-    for line in warning_lines(failed):
-        print(line)
+              f"(none generated at or after {args.started_at}): the snapshot or its save "
+              "raised as a whole, or no briefing was generated — see Generate static site.")
+    else:
+        briefing_date, snapshot_json = row
+        failed = failed_blocks(snapshot_json)
+        if failed is None:
+            print(f"::warning title=Briefing failures never recorded::The {briefing_date} snapshot "
+                  "has no failed_blocks key (schema before v4): failures were never recorded, which "
+                  f"is not the same as none — the {LABEL} issue is left as it was.")
+            return 0
+        for line in warning_lines(failed):
+            print(line)
     existing = find_open_issue()
 
     if not failed:
@@ -230,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
             f"(`failed_blocks == {{}}`).\n\nRun: {run_url()}")
         return 0
 
-    logger.warning("Briefing blocks failed (%s): %s", briefing_date, ", ".join(sorted(failed)))
+    logger.warning("Briefing blocks failed (%s): %s", briefing_date or "no row", ", ".join(sorted(failed)))
     if existing is None:
         _gh("label", "create", LABEL, "--force", "--description",
             "Automated alert: briefing snapshot blocks that raised", "--color", "FBCA04")

@@ -18,11 +18,14 @@ failing run, commented only when the failed set changes, closed by a run
 whose snapshot says `failed_blocks == {}`. It reads the row this run archived
 in the runner DB (`generated_at` at or after `PIPELINE_STARTED_AT`); "before"
 is the set the open issue last named, via a marker, since deploys run on
-every push to `main` and a same-day re-run replaces the row. No row from this
-run, or a pre-v4 snapshot without the key (never recorded), leaves the issue
-untouched with an annotation — neither is reported as clean (invariant 2);
-a v4+ snapshot without the key raises.
-Tests: `tests/test_ci_briefing_blocks.py`, 21 cases over a fixture snapshot
+every push to `main` and a same-day re-run replaces the row. A run that
+archived no row is a failure on the same issue, `(no briefing archived)`: the
+orchestrator swallows a whole-snapshot or save failure, so the missing row is
+its only trace; a later run that archives a row clears it. A pre-v4 snapshot
+without the key (never recorded) leaves the issue untouched with an
+annotation — not reported as clean (invariant 2); a v4+ snapshot without the
+key raises; an unparseable issue marker reads as nothing on record.
+Tests: `tests/test_ci_briefing_blocks.py`, 29 cases over a fixture snapshot
 in a temp DB with `gh` stubbed. The workflow step itself is verifiable only
 on the first `main` deploy after merge.
 

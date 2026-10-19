@@ -182,16 +182,69 @@ def test_annotations_past_the_cap_count_the_rest():
     assert len(relay.warning_lines(dict(list(failed.items())[:10]))) == 10
 
 
-def test_a_run_that_archived_no_briefing_leaves_the_issue_alone(patched_db, gh_calls, capsys):
-    """The DB is seeded from the committed CSV: an older row is a previous run's."""
-    calls, state = gh_calls
-    state["open_issue"] = 9
+def test_a_run_that_archived_no_briefing_opens_the_issue(patched_db, gh_calls, capsys):
+    """The DB is seeded from the committed CSV: an older row is a previous run's.
+
+    No row from this run is the trace of a snapshot or save that raised as a
+    whole (the orchestrator swallows it) — a failure, never silence.
+    """
+    calls, _ = gh_calls
     _briefing(patched_db, "2026-10-19", "2026-10-19 15:00:52", _v4({}))
 
     assert _run(patched_db) == 0
 
-    assert calls == []
     assert "No briefing archived" in capsys.readouterr().out
+    create = next(c for c in calls if c[:2] == ("issue", "create"))
+    body = _body(create)
+    assert "no briefing row" in body
+    assert relay.last_reported(json.dumps({"body": body})) == {relay.NO_BRIEFING}
+
+
+def test_a_second_run_without_a_row_posts_nothing_new(patched_db, gh_calls):
+    calls, state = gh_calls
+    state["open_issue"] = 9
+    state["thread"] = [relay.build_body(None, {relay.NO_BRIEFING: "x"}, before=set())]
+
+    _run(patched_db)
+
+    assert ("issue", "comment") not in _commands(calls)
+    assert ("issue", "create") not in _commands(calls)
+
+
+def test_a_missing_row_after_failed_blocks_comments(patched_db, gh_calls):
+    calls, state = gh_calls
+    state["open_issue"] = 9
+    state["thread"] = [relay.build_body("2026-10-18", FAILED, before=set())]
+
+    _run(patched_db)
+
+    body = _body(next(c for c in calls if c[:2] == ("issue", "comment")))
+    assert "Newly failing" in body and relay.NO_BRIEFING in body
+    assert "Recovered" in body and "`cot`" in body
+
+
+def test_a_later_run_that_archives_a_clean_row_closes_the_no_row_issue(patched_db, gh_calls):
+    calls, state = gh_calls
+    state["open_issue"] = 9
+    state["thread"] = [relay.build_body(None, {relay.NO_BRIEFING: "x"}, before=set())]
+    _briefing(patched_db, "2026-10-19", "2026-10-19 20:30:00", _v4({}))
+
+    _run(patched_db)
+
+    assert next(c for c in calls if c[:2] == ("issue", "close"))[2] == "9"
+
+
+def test_a_later_run_that_archives_failed_blocks_comments_the_no_row_recovery(patched_db, gh_calls):
+    calls, state = gh_calls
+    state["open_issue"] = 9
+    state["thread"] = [relay.build_body(None, {relay.NO_BRIEFING: "x"}, before=set())]
+    _briefing(patched_db, "2026-10-19", "2026-10-19 20:30:00", _v4(FAILED))
+
+    _run(patched_db)
+
+    body = _body(next(c for c in calls if c[:2] == ("issue", "comment")))
+    assert "Recovered" in body and relay.NO_BRIEFING in body
+    assert ("issue", "close") not in _commands(calls)
 
 
 def test_the_newest_row_this_run_wrote_is_the_one_read(patched_db, gh_calls):
@@ -236,6 +289,23 @@ def test_an_open_issue_without_a_readable_marker_is_commented(patched_db, gh_cal
     _run(patched_db)
 
     assert ("issue", "comment") in _commands(calls)
+
+
+@pytest.mark.parametrize("marker", ["[not json]", '["cot",]', "[1, 2]"])
+def test_an_unparseable_marker_reads_as_nothing_on_record(marker):
+    body = f"text\n<!-- ci-briefing-blocks: {marker} -->"
+    assert relay.last_reported(json.dumps({"body": body, "comments": []})) is None
+
+
+def test_an_open_issue_with_an_unparseable_marker_is_commented(patched_db, gh_calls):
+    calls, state = gh_calls
+    state["open_issue"] = 9
+    state["thread"] = ["<!-- ci-briefing-blocks: [not json] -->"]
+    _briefing(patched_db, "2026-10-19", "2026-10-19 20:30:00", _v4(FAILED))
+
+    assert _run(patched_db) == 0
+
+    assert next(c for c in calls if c[:2] == ("issue", "comment"))[2] == "9"
 
 
 def test_the_body_marker_round_trips():
