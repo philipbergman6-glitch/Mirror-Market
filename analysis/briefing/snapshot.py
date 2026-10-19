@@ -19,7 +19,7 @@ did — so a block that failed reads differently from one with no data. A v1–v
 row has no such key: its failures were never recorded, which is not the same
 as there having been none. v5 (#560) lets an ``argentina_fob`` product carry
 no spot: where every band printed on the session had ended (B41 #550) the
-product archives ``withheld: "spot"`` and the ``reason`` in place of the
+product archives ``withheld: "all_sailed"`` and the ``reason`` in place of the
 ``spot_*`` keys, as ``crush_spread`` archives ``{withheld, reason}``, and keeps
 its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. Design
 rules carried by the schema:
@@ -739,7 +739,7 @@ def _argentina_fob_block() -> dict[str, dict[str, Any]]:
     use (``nearest_open_window``, B30 #504, B41 #550), never by sort order
     (#549). ``spot_ship_from`` is the spot's loading month (A20 #536). A
     session whose every band had ended has no spot: the product archives
-    ``withheld: "spot"`` and the rule's ``reason`` instead, with its whole
+    ``withheld: "all_sailed"`` and the rule's ``reason`` instead, with its whole
     ``curve`` — the bands are real prints (#560). That is withheld, not failed,
     so it is not named in ``failed_blocks``.
 
@@ -782,13 +782,14 @@ def _argentina_fob_product(product: str, subset: pd.DataFrame) -> dict[str, Any]
                 f"{window.describe()} — no survivor is chosen"
             )
         bands[window] = (str(row["ship_from"]), str(row["ship_to"]), _num(row["price_usd_mt"]))
+    on = _date_str(latest_date)
     curve = {w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))}
-    spot = nearest_open_window(bands, session)
-    if isinstance(spot, str):
-        return {"date": _date_str(latest_date), "withheld": "spot", "reason": spot, "curve": curve}
-    ship_from, ship_to, spot_price = bands[spot]
+    chosen = nearest_open_window(bands, session)
+    if isinstance(chosen, str):
+        return {"date": on, "withheld": "all_sailed", "reason": chosen, "curve": curve}
+    ship_from, ship_to, spot_price = bands[chosen]
     return {
-        "date": _date_str(latest_date),
+        "date": on,
         "spot_usd_mt": spot_price,
         "spot_ship_from": ship_from,
         "spot_ship_to": ship_to,

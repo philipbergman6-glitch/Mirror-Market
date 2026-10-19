@@ -508,7 +508,7 @@ def test_argentina_fob_all_sailed_session_archives_no_spot_and_its_reason(
 
     assert block == {
         "date": "2026-09-15",
-        "withheld": "spot",
+        "withheld": "all_sailed",
         "reason": all_sailed_reason(date(2026, 9, 15)),
         "curve": {"2026-07": 397.0, "2026-08": 399.0},
     }
@@ -612,15 +612,25 @@ def test_the_archive_reader_works_on_old_and_new_rows(
     }
     if version >= 4:
         snapshot["failed_blocks"] = {"brazil_basis.cepea_parana": "ValueError: x"}
-    if version >= 5:
-        snapshot["argentina_fob"] = {
-            "Soybeans": {
+    # v3/v4 carry a spot on every product; v5 may withhold it (#560).
+    snapshot["argentina_fob"] = {
+        "Soybeans": (
+            {
                 "date": "2026-09-15",
-                "withheld": "spot",
+                "withheld": "all_sailed",
                 "reason": all_sailed_reason(date(2026, 9, 15)),
                 "curve": {"2026-08": 399.0},
             }
-        }
+            if version >= 5
+            else {
+                "date": "2026-09-15",
+                "spot_usd_mt": 404.0,
+                "spot_ship_from": "2026-09",
+                "spot_ship_to": "2026-09",
+                "curve": {"2026-09": 404.0},
+            }
+        )
+    }
     save_briefing(briefing_date="2026-09-15", text="briefing", signals=[], snapshot=snapshot)
 
     spec = importlib.util.spec_from_file_location(
@@ -633,6 +643,7 @@ def test_the_archive_reader_works_on_old_and_new_rows(
     module.get_connection = lambda: sqlite3.connect(str(patched_db))  # type: ignore[attr-defined]
 
     assert module.backfill() == 1
+
     from pipeline import query
 
     archived = query.read_briefing("2026-09-15")
