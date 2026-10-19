@@ -275,6 +275,14 @@ def test_an_open_long_gap_withholds_the_figures_until_a_session_is_logged() -> N
     block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
     assert block["state"] == "restarting"
     assert sessions[7].isoformat() in block["reason"]
+    # T1 is answered, not withheld: the open gap means it is not met.
+    assert block["data"]["thresholds"]["T1_continuous"]["met"] is False
+    window = block["data"]["window"]
+    assert window["record_started"] == sessions[0].isoformat()
+    assert window["gap_first_session"] == sessions[7].isoformat()
+    assert window["restart_gap"] == 3
+    assert window["restarted_at"] is None
+    assert window["evidence_sessions"] == 0
 
     # Two trailing sessions are a tolerated gap, not a restart.
     tolerated = reliability.reliability(rows, set(), through=sessions[8], layers=("dce",), basket=("dce",))

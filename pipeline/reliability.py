@@ -95,15 +95,15 @@ def _last_disqualifying_gap(
     """``(index after, length)`` of the last run of more than ``tolerated``
     sessions with no row at all, or ``None``. An index of ``len(every)``
     means the gap is still open at the record's end."""
-    found, run = None, 0
+    found, current = None, 0
     for i, session in enumerate(every):
         if session in logged:
-            if run > tolerated:
-                found = (i, run)
-            run = 0
+            if current > tolerated:
+                found = (i, current)
+            current = 0
         else:
-            run += 1
-    return (len(every), run) if run > tolerated else found
+            current += 1
+    return (len(every), current) if current > tolerated else found
 
 
 def _pct(numerator: int, denominator: int) -> float | None:
@@ -171,12 +171,25 @@ def reliability(
     gap = _last_disqualifying_gap(every, {r.session_date for r in in_scope}, tolerated)
     if gap is not None and gap[0] == len(every):
         opened = every[-gap[1]]
+        # No logged session after the gap yet: no figures to compute, but T1
+        # is answered — it is not met — and the gap is stated, not just told.
         return {
             "state": "restarting",
             "reason": (
                 f"no run on the {gap[1]} sessions {opened.isoformat()}–{through.isoformat()} "
                 f"(more than {tolerated}): the evidence window restarts at the next logged session"
             ),
+            "data": {
+                "window": {
+                    "target_sessions": window,
+                    "record_started": record_started.isoformat(),
+                    "restarted_at": None,
+                    "restart_gap": gap[1],
+                    "gap_first_session": opened.isoformat(),
+                    "evidence_sessions": 0,
+                },
+                "thresholds": {"T1_continuous": {"value": tolerated, "met": False}},
+            },
         }
     evidence = every[gap[0]:] if gap else every
     sessions = evidence[-window:]
@@ -249,7 +262,7 @@ def reliability(
         "thresholds": {
             "note": "Pre-buyer, owner-revisable at A12 (#406). Reported for A11 (#315); never gates a run.",
             "T1_continuous": {
-                "value": config.RELIABILITY_T1_MAX_NO_RUN_GAP,
+                "value": tolerated,
                 "met": len(evidence) >= window and no_run_gap <= tolerated,
             },
             "T2_min_availability_pct": {
