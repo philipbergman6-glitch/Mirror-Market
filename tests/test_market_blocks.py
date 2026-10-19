@@ -564,6 +564,23 @@ def test_the_ledger_renders_its_registry_counterpart_set(seeded, registry):
     assert [row["leg_id"] for row in ledger.data["rows"]][0] == "cbot:board"
 
 
+def test_the_origin_ledger_caption_reaches_the_markup_beside_kind_chips(seeded, registry):
+    """B33 #516: the caption defers to each row's Kind chip, so every chip it
+    points at must come from the price-semantics vocabulary (invariant 3)."""
+    from app.templating import site_environment
+    from pricing.semantics import QUOTE_KIND_LABELS
+
+    statement = markets_mod.LEDGER_RULE_STATEMENTS["origin"]
+    tiers = compute_tiers(registry, today=TODAY)
+    ledger = _block(_build("cbot", seeded, registry, tiers["cbot"]), "ledger")
+    assert ledger.data["rule_statement"] == statement
+    for row in ledger.data["rows"]:
+        if row["kind"]:
+            assert row["kind_label"] in QUOTE_KIND_LABELS.values(), row["leg_id"]
+    html = site_environment().get_template("blocks/02_ledger.html.j2").render(block=ledger)
+    assert statement in html
+
+
 def test_a_market_with_no_counterpart_set_renders_absent_not_empty(seeded, registry):
     """Europe and Nigeria have no ledger by decision — a legal configuration.
 

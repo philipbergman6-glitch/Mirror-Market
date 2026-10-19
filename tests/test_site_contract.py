@@ -186,6 +186,52 @@ def test_every_basis_says_whether_arbitrage_connects_its_two_legs():
             assert market.basis.caveat.strip(), market.slug
 
 
+# B33 #516: words that claim a row can be traded. Each is licensed by the
+# price-semantics vocabulary or not at all (invariant 3) — an "offer" or an
+# "arbitrage" needs a firm-offer price type, a "settlement" or an "executable"
+# needs a proven settlement source, and today neither exists.
+def _tradable_claims_licensed() -> dict[str, bool]:
+    from pricing import semantics
+
+    firm_offer = any("offer" in kind.value for kind in semantics.PriceType)
+    settlement = bool(semantics.PROVEN_SETTLEMENT_SOURCES)
+    return {
+        "offer": firm_offer,
+        "arbitrage": firm_offer,
+        "firm": firm_offer,
+        "settlement": settlement,
+        "executable": settlement,
+    }
+
+
+def test_no_ledger_rule_statement_claims_what_the_price_vocabulary_does_not_grant():
+    """B33 #516: the origin caption called every row 'a competing physical offer'
+    and the spread 'an arbitrage a cargo can close' — over administered minimums,
+    delivered bids and assessments on different terms and windows."""
+    licensed = _tradable_claims_licensed()
+    for rule, statement in markets_mod.LEDGER_RULE_STATEMENTS.items():
+        lowered = statement.lower()
+        for word, granted in licensed.items():
+            assert granted or word not in lowered, (rule, word)
+    # An origin page's own note renders directly under the statement, so it is
+    # held to the same words. (India's destination note says "arbitrage" only to
+    # deny one — the policy_blocked framing M19 #222 requires.)
+    for market in markets_mod.load_markets().values():
+        if market.ledger is None or market.ledger.rule != "origin":
+            continue
+        lowered = market.ledger.note.lower()
+        for word, granted in licensed.items():
+            assert granted or word not in lowered, (market.slug, word)
+
+
+def test_the_origin_rule_statement_names_what_its_rows_are():
+    """Each row is a dated price reference on its own term and window — the
+    caption says so, and points at the Kind column that names the price type."""
+    statement = markets_mod.LEDGER_RULE_STATEMENTS["origin"].lower()
+    for phrase in ("price reference", "term", "window", "kind"):
+        assert phrase in statement, phrase
+
+
 def test_unknown_arbitrage_kind_fails_the_build(monkeypatch: pytest.MonkeyPatch):
     raw = config.MARKETS["cbot"]
     broken = {"cbot": dict(raw, basis=dict(raw["basis"], arbitrage="probably fine"))}

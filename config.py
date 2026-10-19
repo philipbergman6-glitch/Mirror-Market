@@ -3349,8 +3349,9 @@ LEDGER_LEGS = {
 # LEDGERS — which legs sit on which page (M12 #161)
 #
 # Two selection rules, not one, and that is the load-bearing decision. Origin
-# pages ask "who else is offering this cargo" — a genuine, closable arbitrage
-# between competing FOBs. Destination pages ask "what does landed supply cost
+# pages ask "where else is this good priced" — dated price references at other
+# origins, each on its own term and window, never offers and never an arbitrage
+# (B33 #516). Destination pages ask "what does landed supply cost
 # from the origins this market actually buys from" — the SPECIFIC origins, not
 # all of them. One rule fits neither, so each ledger declares its own and the
 # block renders it.
@@ -3423,17 +3424,17 @@ LEDGERS = {
         ],
         "note": (
             "Domestic against own port is the internal-freight and export-premium "
-            "gap — the most actionable line on this page. Then the two competing "
-            "offers, and the reference."
+            "gap — the most actionable line on this page. Then the two other "
+            "origins, each on its own term, and the reference."
         ),
     },
     "argentina": {
         "rule": "origin",
         "legs": ["argentina:fob", "brazil:paranagua", "us_gulf:cif", "cbot:board"],
         "note": (
-            "The competing FOBs plus the reference; nothing else is connected. "
-            "The pinned leg is an administered legal minimum, not an offer — the "
-            "kind stays on the row."
+            "The two other origins plus the reference; nothing else is connected. "
+            "The pinned leg is an administered legal minimum, set by decree rather "
+            "than traded — the kind stays on the row."
         ),
     },
     "india": {

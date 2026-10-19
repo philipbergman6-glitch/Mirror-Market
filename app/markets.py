@@ -161,9 +161,14 @@ WINDOW_SCHEMES: dict[str, int] = {
 # so eight pages cannot end up with eight paraphrases of the same rule; the
 # registry declares only which rule applies.
 LEDGER_RULE_STATEMENTS = {
+    # B33 #516: never "offer" or "arbitrage" — the rows include administered
+    # minimums, delivered bids and assessments, and no price type here is a
+    # firm offer (pricing.semantics). The Kind column names what each row is.
     "origin": (
-        "Origin page — who else is offering this cargo. These are competing "
-        "physical offers, so the spread is an arbitrage a cargo can close."
+        "Origin page — the same good priced at other origins. Each row is a "
+        "dated price reference on its own delivery term and shipment window, "
+        "and its Kind says what sort of price it is; a spread compares two rows "
+        "only as far as those rows say, and is a price difference, not a trade."
     ),
     "destination": (
         "Destination page — what landed supply costs from the origins this "
