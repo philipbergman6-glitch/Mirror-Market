@@ -224,10 +224,16 @@ def test_effectiveness_is_undefined_rather_than_flattering_when_nothing_moved():
     assert result.hedge_effectiveness_pct is None
 
 
-def test_a_flat_priced_exposure_still_reports_the_futures_leg_as_a_new_position():
+def test_a_flat_priced_purchase_is_offset_by_its_futures_leg():
+    """B31 #514. Goods bought at a fixed price and not yet sold lose resale
+    value when the board falls; the short leg offsets that exactly as it does
+    for an unpriced purchase — the leg is a hedge, not a new position."""
     hedge = propose_hedge(
         exposure(Side.LONG, basis_convention=BasisConvention.FLAT_PRICE),
         curve("Soybeans", BEANS), as_of=AS_OF,
     )
-    assert any(w.code == "flat_priced" for w in hedge.warnings)
+    result = run_scenario(hedge, Scenario("board -5%", (futures_shock(-5.0),)))
+    assert result.physical_pnl_usd < 0 < result.futures_pnl_usd
+    assert result.hedge_effectiveness_pct > 99.0
+    assert [w.severity for w in hedge.warnings if w.code == "flat_priced"] == ["info"]
     assert PhysicalUnit.METRIC_TON is hedge.exposure.unit

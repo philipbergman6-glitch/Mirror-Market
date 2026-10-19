@@ -251,13 +251,35 @@ def test_basis_risk_is_reported_per_tonne_of_physical():
     assert hedge.basis_value_usd == pytest.approx(-125_000.0)
 
 
-def test_a_flat_priced_exposure_is_told_a_hedge_creates_a_position():
+def test_a_flat_priced_purchase_is_hedgeable_and_told_what_the_leg_protects():
+    """B31 #514. Bought at a fixed price and not yet sold: the price fixes the
+    *cost*, not the *value* — a price fall still lowers what the goods resell
+    for, and the short futures leg is the standard merchant hedge against it.
+    So the note is information about what the leg protects, never an alert that
+    the hedge "creates a position"."""
     analysis = curve("Soybeans", BEANS)
     hedge = propose_hedge(
         exposure(Side.LONG, basis_convention=BasisConvention.FLAT_PRICE), analysis, as_of=AS_OF
     )
     flat = [w for w in hedge.warnings if w.code == "flat_priced"]
-    assert flat and flat[0].severity == "alert"
+    assert len(flat) == 1 and flat[0].severity == "info"
+    assert "resale" in flat[0].message
+    assert "does not offset anything" not in flat[0].message
+    assert hedge.legs and hedge.legs[0].side is Side.SHORT and hedge.legs[0].contracts == 73
+    assert not any(w.severity == "alert" for w in hedge.warnings)
+
+
+def test_a_flat_priced_sale_is_hedgeable_and_told_what_the_leg_protects():
+    """Sold at a fixed price and not yet bought: the price fixes the revenue,
+    not the cost of the goods still to be bought — the long leg protects that."""
+    analysis = curve("Soybeans", BEANS)
+    hedge = propose_hedge(
+        exposure(Side.SHORT, basis_convention=BasisConvention.FLAT_PRICE), analysis, as_of=AS_OF
+    )
+    flat = [w for w in hedge.warnings if w.code == "flat_priced"]
+    assert len(flat) == 1 and flat[0].severity == "info"
+    assert "purchase" in flat[0].message
+    assert hedge.legs and hedge.legs[0].side is Side.LONG
 
 
 def test_an_incoherent_curve_is_an_alert_on_the_hedge():

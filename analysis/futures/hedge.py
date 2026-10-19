@@ -85,13 +85,15 @@ class Rounding(str, Enum):
 class BasisConvention(str, Enum):
     """How the physical is priced against the board.
 
-    This is not decoration: it decides whether a futures hedge removes price
-    risk at all. A flat-priced cargo has *no* futures exposure left to hedge —
-    the price is already fixed — and hedging one is creating a position, not
-    removing one. The calculator says so rather than sizing it silently.
+    This is not decoration: it decides what a futures hedge protects. A fixed
+    price fixes one side of the trade only — a purchase fixes the *cost*, not
+    what the goods resell for; a sale fixes the revenue, not what the goods
+    still cost to buy — so a flat-priced exposure is still hedged, and the
+    calculator says which unpriced side the leg protects (B31 #514).
     """
 
-    #: Price fixed in the contract. Futures no longer offset anything.
+    #: Price fixed in this contract. The other side of the trade is still open,
+    #: and that is what the futures leg offsets.
     FLAT_PRICE = "flat_price"
     #: Priced as a differential to a named futures month — the classic case.
     BASIS_OVER_FUTURES = "basis_over_futures"
@@ -469,13 +471,30 @@ def build_hedge(
     warnings = list(extra_warnings)
 
     if exposure.basis_convention is BasisConvention.FLAT_PRICE:
+        # The only flat-priced case with nothing to offset is back-to-back —
+        # bought fixed *and* sold fixed. `PhysicalExposure` carries one side and
+        # no sale-side pricing, so it cannot express that case and this does not
+        # guess at it; the note names it so a reader who is back-to-back knows.
+        # The exposure-state model that could is A7 #304's decision.
+        if exposure.side is Side.LONG:
+            protects = (
+                "bought at a fixed price — that fixes the cost, not the value: until the goods "
+                "are sold, a board fall lowers their resale value, and the short futures leg "
+                "protects that unpriced resale"
+            )
+        else:
+            protects = (
+                "sold at a fixed price — that fixes the revenue, not the cost: until the goods "
+                "are bought, a board rise raises what they cost, and the long futures leg "
+                "protects that unpriced purchase"
+            )
         warnings.append(HedgeWarning(
             code="flat_priced",
             message=(
-                "this exposure is flat priced — the price is already fixed, so a futures leg "
-                "does not offset anything and creates a new position instead"
+                f"{protects}; if the other side is already fixed too (back-to-back), there is "
+                "nothing left to offset and the leg would open a new position"
             ),
-            severity="alert",
+            severity="info",
         ))
     if exposure.basis_usd_per_mt is None:
         warnings.append(HedgeWarning(
