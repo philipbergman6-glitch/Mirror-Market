@@ -17,6 +17,16 @@ step (invariant 6 — never by a PR):
                       gh accepted the comment — the evidence for
                       "surfaced within one run" (§3, T4)
 
+The roster a run is filed under, the API keys it had and the layers it held
+private are the ingesting run's own evidence (B38 #535): ``main.py`` writes
+them (``build_run_evidence``, in the pipeline process, where the keys are)
+and the recorder reads them back (``parse_run_evidence``). The record step
+runs from a checkout the snapshot step may have rebased onto a moved main, in
+a step with no API keys in its env — so the recorder path reads neither the
+checkout's roster nor ``os.environ`` to decide what a run was. Privacy alone
+also consults the checkout: a layer private in either list is blanked,
+because withholding is the safe direction (invariant 4).
+
 Nothing derived is stored: age at render, streaks and recovery are computed
 by ``pipeline.reliability`` from these columns, so a stored figure can never
 disagree with its inputs (invariant 2). A row already recorded is never
@@ -28,15 +38,22 @@ from __future__ import annotations
 
 import csv
 import os
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
-from config import API_KEY_CATALOG, PRIVATE_LAYERS, PRODUCTION_LAYER_KEYS
+from config import API_KEY_CATALOG, PRIVATE_LAYERS, missing_api_keys
 from pipeline import grading
 
 LAYER_RUNS_FILENAME = "layer_runs.csv"
 LAYER_ALERTS_FILENAME = "layer_alerts.csv"
+#: Written by ``main.py`` at the start of every run, next to the run summary
+#: (gitignored data/storage/): the evidence a run that crashes before its
+#: summary still leaves behind.
+RUN_EVIDENCE_FILENAME = "run_evidence.json"
+#: The run summary's key for the same block.
+RUN_EVIDENCE_KEY = "run_evidence"
 
 #: The graded word, unchanged, plus the two a run can say about a layer it
 #: never graded. No new state words (A9 §4).
@@ -107,9 +124,7 @@ def session_date_for(moment: datetime) -> date:
     """
     from fetchers._settlement import EXCHANGE_SESSION
 
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=timezone.utc)
-    session = EXCHANGE_SESSION.last_settled_session(moment)
+    session = EXCHANGE_SESSION.last_settled_session(_as_utc(moment))
     while session.weekday() >= 5:
         session -= timedelta(days=1)
     return session
@@ -133,19 +148,115 @@ def run_identity(env: Mapping[str, str]) -> tuple[str, str]:
     return run_id, f"{workflow}/{event}"
 
 
-def layer_configured(layer: str, env: Mapping[str, str] | None = None) -> bool:
-    """False when an API key the layer is skipped without is unset."""
-    env = os.environ if env is None else env
-    return all(
-        (env.get(name) or "").strip()
-        for name, spec in API_KEY_CATALOG.items()
-        if layer in spec.skips
-    )
+def _as_utc(moment: datetime) -> datetime:
+    """A naive instant is UTC — every stamp this record handles is written in UTC."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 def _parse_stamp(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+
+
+def _utc_stamp(moment: datetime) -> str:
+    return _as_utc(moment).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ── the ingesting run's evidence (B38 #535) ───────────────────────────────
+
+
+def build_run_evidence(started_at: datetime, roster: Sequence[str]) -> dict[str, Any]:
+    """What a run is, said by the run itself: the JSON block ``main.py`` writes.
+
+    ``roster`` is the production roster the run ran under; ``api_keys`` holds,
+    per catalog key, whether it was set and which layers it skips without;
+    ``private`` the layers the run held private. A boolean, never the value
+    — this block lands in files a CI artifact carries. ``configured`` is
+    ``config.missing_api_keys``' answer, the same one the pipeline's own
+    startup warning gives. Called by the pipeline process only: it reads the
+    environment, which is the point there and the bug in the recorder.
+    """
+    missing = missing_api_keys()
+    return {
+        "started_at": _utc_stamp(started_at),
+        "roster": list(roster),
+        "api_keys": {
+            name: {"configured": name not in missing, "skips": list(spec.skips)}
+            for name, spec in API_KEY_CATALOG.items()
+        },
+        "private": list(PRIVATE_LAYERS),
+    }
+
+
+@dataclass(frozen=True)
+class RunEvidence:
+    """A run's roster, the layers its unset keys skip and its private layers, as it recorded them."""
+
+    started_at: datetime
+    roster: tuple[str, ...]
+    unconfigured: frozenset[str]
+    private: frozenset[str]
+
+    def configured(self, layer: str) -> bool:
+        """False when an API key the layer is skipped without was unset in the run."""
+        return layer not in self.unconfigured
+
+    def is_private(self, layer: str) -> bool:
+        """Private in the run or in this checkout — a mid-run rename or addition
+        must never publish a private layer's observation (invariant 4)."""
+        return layer in self.private or layer in PRIVATE_LAYERS
+
+
+def parse_run_evidence(block: object, *, source: str, not_before: datetime) -> RunEvidence:
+    """Read a ``build_run_evidence`` block back, refusing anything short of it.
+
+    Self-contained: the keys and the layers each one skips are the run's
+    own, so a key a mid-run merge added to or retired from this checkout's
+    catalog changes nothing about what the run had. Every entry must carry a
+    boolean — a guessed one invents a status. ``not_before`` is the pipeline
+    step's start stamp; a block older than it is a previous run's file, not
+    this run's word.
+    """
+    where = f"{source}: run evidence"
+    if not isinstance(block, Mapping):
+        raise LayerRunsError(f"{where} is not an object")
+    try:
+        started = _parse_stamp(str(block["started_at"]))
+    except (KeyError, ValueError) as exc:
+        raise LayerRunsError(f"{where} has no valid started_at") from exc
+    floor = _as_utc(not_before)
+    if started < floor:
+        raise LayerRunsError(
+            f"{where} predates this run (started_at {_utc_stamp(started)} < {_utc_stamp(floor)}) "
+            "— a previous run's file"
+        )
+    roster = block.get("roster")
+    if (
+        not isinstance(roster, list) or not roster
+        or not all(isinstance(name, str) and name for name in roster)
+        or len(set(roster)) != len(roster)
+    ):
+        raise LayerRunsError(f"{where}: roster must be a non-empty list of distinct layer keys")
+    keys = block.get("api_keys")
+    if not isinstance(keys, Mapping) or not keys:
+        raise LayerRunsError(f"{where}: api_keys is missing or empty")
+    unconfigured: set[str] = set()
+    for name, spec in keys.items():
+        if not isinstance(spec, Mapping):
+            raise LayerRunsError(f"{where}: api_keys.{name} is not an object")
+        configured, skips = spec.get("configured"), spec.get("skips")
+        if not isinstance(configured, bool):
+            raise LayerRunsError(f"{where}: api_keys.{name}.configured is not a boolean")
+        if not isinstance(skips, list) or not all(isinstance(layer, str) for layer in skips):
+            raise LayerRunsError(f"{where}: api_keys.{name}.skips is not a list of layer keys")
+        if not configured:
+            unconfigured.update(skips)
+    private = block.get("private")
+    if not isinstance(private, list) or not all(isinstance(layer, str) for layer in private):
+        raise LayerRunsError(f"{where}: private is not a list of layer keys")
+    return RunEvidence(
+        started_at=started, roster=tuple(roster),
+        unconfigured=frozenset(unconfigured), private=frozenset(private),
+    )
 
 
 def rows_for_run(
@@ -154,27 +265,28 @@ def rows_for_run(
     workflow: str,
     run_started_at: datetime,
     freshness: Mapping[str, Mapping[str, object]],
+    evidence: RunEvidence,
     requested: Iterable[str] | None,
-    configured: Callable[[str], bool],
     rendered_at: str | None,
 ) -> list[LayerRun]:
-    """Every production layer's row for one run.
+    """One row per layer of the run's own roster (``evidence.roster``).
 
     A layer's grade is its ``data_freshness`` row only when that row was
     written by *this* run (``last_attempt`` at or after ``run_started_at``):
     the runner's DB is seeded from the committed CSV, so an untouched row is
     yesterday's verdict, and reading it as today's would invent a run.
     Ungraded layers are ``skipped_unconfigured`` when the run summary says
-    they were asked for and their API key is unset, else ``not_run``.
+    they were asked for and the run's evidence says an API key they need was
+    unset, else ``not_run``.
     ``requested=None`` means no run summary exists (the pipeline crashed),
     and then nothing can be said beyond ``not_run``.
     """
-    started = run_started_at if run_started_at.tzinfo else run_started_at.replace(tzinfo=timezone.utc)
+    started = _as_utc(run_started_at)
     session = session_date_for(started)
     asked = None if requested is None else set(requested)
-    stamp = started.strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = _utc_stamp(started)
     rows: list[LayerRun] = []
-    for layer in PRODUCTION_LAYER_KEYS:
+    for layer in evidence.roster:
         fresh = freshness.get(layer)
         attempt = fresh.get("last_attempt") if fresh else None
         status, observed = STATUS_NOT_RUN, None
@@ -182,9 +294,9 @@ def rows_for_run(
             status = str(fresh.get("status") or "")
             raw = fresh.get("observed_at")
             observed = str(raw) if raw not in (None, "") and raw == raw else None
-        elif asked is not None and layer in asked and not configured(layer):
+        elif asked is not None and layer in asked and not evidence.configured(layer):
             status = STATUS_SKIPPED_UNCONFIGURED
-        private = layer in PRIVATE_LAYERS
+        private = evidence.is_private(layer)
         rows.append(LayerRun(
             run_id=run_id,
             workflow=workflow,
@@ -216,21 +328,23 @@ def _validate_shape(row: LayerRun) -> None:
         raise LayerRunsError(f"{where}: run_started_at {row.run_started_at!r} is not a timestamp") from exc
 
 
-def _validate(row: LayerRun) -> None:
-    """A row about to be appended: shape, plus today's roster and vocabulary.
+def _validate(row: LayerRun, evidence: RunEvidence) -> None:
+    """A row about to be appended: shape, plus its run's roster and today's vocabulary.
 
-    Only on the write path. A stored row is checked for shape alone, because
-    it was valid against the roster of its own day: a layer retired or renamed
-    later must not make the whole record unreadable — and so unappendable —
-    from then on.
+    Only on the write path, and against the roster the run itself recorded,
+    not the checkout's: the recorder may run from code a mid-run merge moved
+    on, and a layer that merge renamed is still this run's layer. A stored
+    row is checked for shape alone, because it was valid against the roster
+    of its own day: a layer retired or renamed later must not make the whole
+    record unreadable — and so unappendable — from then on.
     """
     _validate_shape(row)
     where = f"layer_runs row ({row.run_id!r}, {row.layer_name!r})"
-    if row.layer_name not in PRODUCTION_LAYER_KEYS:
-        raise LayerRunsError(f"{where}: layer is not in config.PRODUCTION_LAYER_KEYS")
+    if row.layer_name not in evidence.roster:
+        raise LayerRunsError(f"{where}: layer is not in the run's roster")
     if row.status not in RUN_STATUSES:
         raise LayerRunsError(f"{where}: status {row.status!r} is not one of {list(RUN_STATUSES)}")
-    if row.layer_name in PRIVATE_LAYERS and (row.observed_at or row.rendered_at):
+    if evidence.is_private(row.layer_name) and (row.observed_at or row.rendered_at):
         raise LayerRunsError(
             f"{where}: private layer carries layer_name + status only (invariant 4)"
         )
@@ -293,12 +407,15 @@ def read_runs() -> list[LayerRun]:
     return rows
 
 
-def append_runs(rows: Iterable[LayerRun]) -> int:
-    """Append ``rows``; refuse the whole batch if any (run, layer) is already there."""
+def append_runs(evidence: RunEvidence, rows: Iterable[LayerRun]) -> int:
+    """Append one run's ``rows``, checked against its ``evidence``.
+
+    Refuses the whole batch if any (run, layer) is already there.
+    """
     batch = list(rows)
     seen: set[tuple[str, str]] = set()
     for row in batch:
-        _validate(row)
+        _validate(row, evidence)
         key = (row.run_id, row.layer_name)
         if key in seen:
             raise LayerRunsError(f"layer_runs: {key} appears twice in one append")
@@ -319,14 +436,14 @@ def read_alerts() -> set[tuple[str, str]]:
     return {(raw[0], raw[1]) for raw in _read_csv(layer_alerts_path(), ALERT_COLUMNS)}
 
 
-def append_alerts(run_id: str, layers: Iterable[str]) -> int:
-    """Record the layers ``run_id``'s alert named. Same append-only refusal."""
+def append_alerts(evidence: RunEvidence, run_id: str, layers: Iterable[str]) -> int:
+    """Record the layers ``run_id``'s alert named, against its roster. Same append-only refusal."""
     if not run_id:
         raise LayerRunsError("layer_alerts: run_id is blank")
     names = sorted(set(layers))
-    unknown = [n for n in names if n not in PRODUCTION_LAYER_KEYS]
+    unknown = [n for n in names if n not in evidence.roster]
     if unknown:
-        raise LayerRunsError(f"layer_alerts: {unknown} not in config.PRODUCTION_LAYER_KEYS")
+        raise LayerRunsError(f"layer_alerts: {unknown} not in the run's roster")
     path = layer_alerts_path()
     existing = _read_csv(path, ALERT_COLUMNS)
     clash = sorted({(run_id, n) for n in names} & {(r[0], r[1]) for r in existing})

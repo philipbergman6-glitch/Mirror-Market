@@ -20,6 +20,7 @@ import logging
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +86,7 @@ from fetchers.worldbank import fetch_worldbank_prices
 from fetchers.yfinance import fetch_all as fetch_prices
 from fetchers.yfinance import fetch_currencies
 from latency import clock as run_clock
-from pipeline import quarantine
+from pipeline import layer_runs, quarantine
 from pipeline.clean import (
     clean_brazil_exports,
     clean_brazil_spot,
@@ -464,6 +465,22 @@ def _write_pipeline_status(payload: dict) -> None:
     path = Path(_config.STORAGE_DIR) / "pipeline_status.json"
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     logger.info("Pipeline status written to: %s", path)
+
+
+def _write_run_evidence(block: dict) -> None:
+    """Write this run's roster and key configuration before fetching anything (B38 #535).
+
+    The record step reads it when the run dies before its summary: it runs
+    from a checkout that may have moved and with no keys of its own, so this
+    file is the only word on what a crashed run was. Same block as the
+    summary's ``run_evidence``; booleans, never key values.
+    """
+    import config as _config
+
+    path = Path(_config.STORAGE_DIR) / layer_runs.RUN_EVIDENCE_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(block, indent=2) + "\n", encoding="utf-8")
+    logger.info("Run evidence written to: %s", path)
 
 
 def _empty_is_failure(layer: str, empty_fails: bool | None) -> bool:
@@ -1206,6 +1223,8 @@ def run(
         )
     restricted = layer_keys is not None
     mode = "fast" if restricted else "full"
+    run_evidence = layer_runs.build_run_evidence(datetime.now(timezone.utc), PRODUCTION_LAYER_KEYS)
+    _write_run_evidence(run_evidence)
 
     logger.info("=" * 60)
     logger.info("  Mirror Market — Data Pipeline (%s)", mode)
@@ -1380,6 +1399,10 @@ def run(
         # tallied by pipeline.quarantine for the CI alert and the briefing.
         "quarantine": quarantine_summary,
         "usable_partial_detail": usable_partial_detail,
+        # What the record step files this run under (B38 #535): this run's
+        # roster and per-key configured booleans, never the checkout's or the
+        # record step's own env.
+        layer_runs.RUN_EVIDENCE_KEY: run_evidence,
     })
 
     # ── Exit code ────────────────────────────────────────────────

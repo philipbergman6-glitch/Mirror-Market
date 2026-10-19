@@ -425,11 +425,16 @@ jobs:
       # append-only file "prefer ours" would drop whatever another run
       # appended. Each attempt checks main's newest commit out into a separate
       # worktree and appends this run's rows to *that* record, which the
-      # script refuses to do twice. The code that writes is still this run's
-      # checkout — a PR merged mid-run (a new layer, a new column) must not
-      # file this run under a roster it never ran. The database, run summary
-      # and alert receipt stay where the pipeline left them (gitignored
-      # data/storage/), the candidate under RUNNER_TEMP. continue-on-error:
+      # script refuses to do twice. The code that writes is this checkout,
+      # which the snapshot step's `git pull --rebase` may have moved onto a
+      # main a PR merged into mid-run, and this step has no API keys — so the
+      # roster a run is filed under and the keys it had are never read from
+      # either. main.py wrote them as evidence (`run_evidence` in the run
+      # summary, and data/storage/run_evidence.json at its start for a run
+      # that crashes before the summary); the script reads only that and
+      # refuses a run that left none (B38 #535). The database, run summary,
+      # evidence and alert receipt stay where the pipeline left them
+      # (gitignored data/storage/), the candidate under RUNNER_TEMP. continue-on-error:
       # the edition is already out; the step after it makes a failure loud.
       - name: Record layer runs
         id: record_runs

@@ -9,11 +9,17 @@ is the run the old record could not see. Writes:
 - ``data/history/layer_alerts.csv``: the layers this run's ``ci-alert``
   comment named, from the receipt ``scripts/ci_layer_alert.py`` left.
 
+Rows are filed under the roster, graded against the API keys and blanked for
+the private layers that the ingesting run recorded about itself (B38 #535) — the ``run_evidence`` block of
+its summary, or, when it crashed before the summary, the ``run_evidence.json``
+it wrote on starting. Never this checkout's roster (the snapshot step may have
+rebased it onto a moved main) and never this step's env (it carries no keys).
+
 ``rendered_at`` is the candidate manifest's ``generated_at`` when the deploy
 outcome is ``success`` and blank otherwise. Hard-fails on anything ambiguous
-(no run id, no start stamp, a promoted edition without its manifest, another
-run's receipt): a guessed row is worse than a missing one, and a missing one
-shows up in the record as ``no_run``.
+(no run id, no start stamp, no run evidence, a promoted edition without its
+manifest, another run's receipt): a guessed row is worse than a missing one,
+and a missing one shows up in the record as ``no_run``.
 
 Usage:
     python scripts/record_layer_runs.py --started-at 2026-10-19T20:05:00Z \\
@@ -64,6 +70,37 @@ def _freshness() -> dict[str, dict[str, object]]:
         }
 
 
+def _load(path: Path) -> dict | None:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def _run_evidence(
+    status: dict | None, status_path: Path, evidence_path: Path, started: datetime,
+) -> layer_runs.RunEvidence:
+    """The run's own roster and key configuration — the summary's, else the start file's.
+
+    Never a fallback to this checkout or this env: a run that left no
+    evidence is not recorded, and the step fails loudly instead.
+    """
+    if status is not None:
+        if layer_runs.RUN_EVIDENCE_KEY not in status:
+            raise layer_runs.LayerRunsError(
+                f"{status_path} carries no {layer_runs.RUN_EVIDENCE_KEY} — the run summary must say "
+                "which roster and API keys the run had; refusing to file it under this checkout's "
+                "roster or this step's environment"
+            )
+        block, source = status[layer_runs.RUN_EVIDENCE_KEY], status_path
+    else:
+        block = _load(evidence_path)
+        if block is None:
+            raise layer_runs.LayerRunsError(
+                f"no run summary at {status_path} and no run evidence at {evidence_path} — the "
+                "pipeline died before saying what it ran, so no roster can be named for this run"
+            )
+        source = evidence_path
+    return layer_runs.parse_run_evidence(block, source=str(source), not_before=started)
+
+
 def _rendered_at(manifest: Path | None, outcome: str) -> str | None:
     if outcome != "success":
         return None
@@ -94,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--started-at", default=os.environ.get("PIPELINE_STARTED_AT"),
                         help="UTC instant the pipeline step began (default: $PIPELINE_STARTED_AT)")
     parser.add_argument("--status", type=Path, default=STORAGE / "pipeline_status.json")
+    parser.add_argument("--evidence", type=Path, default=STORAGE / layer_runs.RUN_EVIDENCE_FILENAME,
+                        help="the run evidence main.py writes on starting, read when no summary exists")
     parser.add_argument("--receipt", type=Path, default=STORAGE / "alert_receipt.json")
     parser.add_argument("--manifest", type=Path, default=None)
     parser.add_argument("--deployment-outcome", default="",
@@ -113,7 +152,8 @@ def main(argv: list[str] | None = None) -> int:
         started = started.replace(tzinfo=timezone.utc)
 
     run_id, workflow = layer_runs.run_identity(os.environ)
-    status = json.loads(args.status.read_text(encoding="utf-8")) if args.status.exists() else None
+    status = _load(args.status)
+    evidence = _run_evidence(status, args.status, args.evidence, started)
     if status is None:
         logger.warning("no run summary at %s — the pipeline crashed; ungraded layers are not_run", args.status)
 
@@ -122,12 +162,13 @@ def main(argv: list[str] | None = None) -> int:
         workflow=workflow,
         run_started_at=started,
         freshness=_freshness(),
+        evidence=evidence,
         requested=None if status is None else list(status.get("layers_requested") or []),
-        configured=layer_runs.layer_configured,
         rendered_at=_rendered_at(args.manifest, args.deployment_outcome),
     )
-    written = layer_runs.append_runs(rows)
-    alerted = layer_runs.append_alerts(run_id, _receipt_layers(args.receipt))
+    receipt = _receipt_layers(args.receipt)
+    written = layer_runs.append_runs(evidence, rows)
+    alerted = layer_runs.append_alerts(evidence, run_id, receipt)
     tally: dict[str, int] = {}
     for row in rows:
         tally[row.status] = tally.get(row.status, 0) + 1
