@@ -2802,6 +2802,12 @@ MARKETS: dict[str, dict[str, Any]] = {
             "unit": "usd_per_bushel",
             "window_scheme": "ams_delivery",
             "window_columns": ("delivery",),
+            # #512: AMS quotes each slot as a basis over a NAMED contract (low
+            # and high leg, #196). Block 04 strikes the slot against that
+            # contract's own Layer 11b close on the session, never against the
+            # continuous front month, or withholds with the reason.
+            "contract_board": "Soybeans",
+            "contract_columns": ("futures_month", "futures_month_high"),
             "arbitrage": "open",
         },
         # (region, role) — the role says why this pin is on this page. M14 #207

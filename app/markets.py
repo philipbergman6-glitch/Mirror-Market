@@ -37,6 +37,7 @@ from datetime import date, datetime, timezone
 
 import config
 from analysis.futures.crush import MonthTable
+from analysis.futures.domain import UnknownContract, spec_for
 from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.origins.domain import ShipmentWindow
 from analysis.origins.sources import parse_ams_slot, parse_magyp_window
@@ -218,6 +219,12 @@ class Source:
     # session. Both or neither — `_source` refuses half a declaration.
     window_scheme: str | None = None
     window_columns: tuple[str, ...] = ()
+    # #512: set where each window is quoted over a named contract of the
+    # reference board, stored as a month number with no year — the low and
+    # high leg's columns, in that order. Basis-only, windowed-only, both or
+    # neither; `_source` refuses anything less.
+    contract_board: str | None = None
+    contract_columns: tuple[str, ...] = ()
 
     def parse_window(self, raw: tuple, session: date) -> ShipmentWindow | None:
         """One stored row's shipment window, or None where it is unreadable."""
@@ -580,6 +587,33 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
                 f"column(s), got window_columns {window_columns!r} — a source that prints "
                 "several windows per session and declares none is read as their mean (#504)"
             )
+    contract_board = raw.get("contract_board")
+    contract_columns = tuple(raw.get("contract_columns") or ())
+    if contract_board is not None or contract_columns:
+        if block != "basis":
+            raise ValueError(f"market {slug!r} {block} source declares a contract board — basis-only")
+        if contract_board is None or not contract_columns:
+            raise ValueError(
+                f"market {slug!r} basis contract_board and contract_columns are both or neither "
+                "— a contract with no columns, or columns with no board, names no contract"
+            )
+        if len(contract_columns) != 2:
+            raise ValueError(
+                f"market {slug!r} basis contract_columns must name the low and high leg's "
+                f"month columns, got {contract_columns!r} (#196: a range can span two contracts)"
+            )
+        if window_scheme is None:
+            raise ValueError(
+                f"market {slug!r} basis declares a contract board without a window_scheme — "
+                "the contract is per shipment window, so the window must be named first"
+            )
+        try:
+            spec_for(contract_board)
+        except UnknownContract as exc:
+            raise ValueError(
+                f"market {slug!r} basis contract_board {contract_board!r} is not a known "
+                f"contract spec ({exc})"
+            ) from exc
     return Source(
         layer=raw["layer"],
         table=raw["table"],
@@ -598,6 +632,8 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         caveat=caveat,
         window_scheme=window_scheme,
         window_columns=window_columns,
+        contract_board=contract_board,
+        contract_columns=contract_columns,
     )
 
 
