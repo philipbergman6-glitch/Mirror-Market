@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -20,6 +21,7 @@ import pytest
 from analysis.briefing.snapshot import SCHEMA_VERSION, build_snapshot
 from analysis.briefing.types import BriefingData
 from analysis.loaders import clear_loader_cache
+from analysis.origins.sources import all_sailed_reason
 from analysis.technical import compute_all_technicals
 
 
@@ -485,6 +487,33 @@ def test_argentina_fob_spot_follows_nearest_window_rule(patched_db: Path) -> Non
     assert block["spot_usd_mt"] == 404.0
     assert block["spot_ship_from"] == "2026-09"
     assert block["spot_ship_to"] == "2026-09"
+    assert "withheld" not in block and "reason" not in block
+
+
+def test_argentina_fob_all_sailed_session_archives_no_spot_and_its_reason(
+    patched_db: Path,
+) -> None:
+    """B44 #560: the snapshot applies B41's rule (#550). A session whose every
+    band had ended carries no spot — neither the latest-ending sailed band nor
+    an older session's open one — and says why; the curve is kept whole
+    because its bands are real prints. Withheld is not failed."""
+    _seed_magyp(patched_db, [
+        ("2026-09-15", "Soybeans", "12019000190C", "2026-07", "2026-07", 397.0),
+        ("2026-09-15", "Soybeans", "12019000190C", "2026-08", "2026-08", 399.0),
+        ("2026-09-14", "Soybeans", "12019000190C", "2026-09", "2026-09", 390.0),
+    ])
+
+    snapshot = build_snapshot(_empty_briefing())
+    block = snapshot["argentina_fob"]["Soybeans"]
+
+    assert block == {
+        "date": "2026-09-15",
+        "withheld": "spot",
+        "reason": all_sailed_reason(date(2026, 9, 15)),
+        "curve": {"2026-07": 397.0, "2026-08": 399.0},
+    }
+    assert snapshot["failed_blocks"] == {}
+    json.dumps(block)
 
 
 def test_argentina_fob_two_rows_for_one_band_withhold_only_that_product(
@@ -562,12 +591,14 @@ def test_failures_do_not_leak_between_snapshots(
     assert build_snapshot(_empty_briefing())["failed_blocks"] == {}
 
 
-@pytest.mark.parametrize("version", [3, SCHEMA_VERSION])
+@pytest.mark.parametrize("version", [3, 4, SCHEMA_VERSION])
 def test_the_archive_reader_works_on_old_and_new_rows(
     patched_db: Path, version: int
 ) -> None:
-    """v3 rows carry no ``failed_blocks``; v4 rows do. The one archive reader
-    (``scripts/backfill_brazil_spot``) reads both."""
+    """v3 rows carry no ``failed_blocks``; v4+ rows do; a v5 Argentina product
+    may carry ``withheld``/``reason`` and no spot (#560). Both archive readers
+    (``scripts/backfill_brazil_spot`` and ``pipeline.query.read_briefing``)
+    read every shape."""
     import importlib.util
 
     from pipeline.store import save_briefing
@@ -581,6 +612,15 @@ def test_the_archive_reader_works_on_old_and_new_rows(
     }
     if version >= 4:
         snapshot["failed_blocks"] = {"brazil_basis.cepea_parana": "ValueError: x"}
+    if version >= 5:
+        snapshot["argentina_fob"] = {
+            "Soybeans": {
+                "date": "2026-09-15",
+                "withheld": "spot",
+                "reason": all_sailed_reason(date(2026, 9, 15)),
+                "curve": {"2026-08": 399.0},
+            }
+        }
     save_briefing(briefing_date="2026-09-15", text="briefing", signals=[], snapshot=snapshot)
 
     spec = importlib.util.spec_from_file_location(
@@ -593,6 +633,10 @@ def test_the_archive_reader_works_on_old_and_new_rows(
     module.get_connection = lambda: sqlite3.connect(str(patched_db))  # type: ignore[attr-defined]
 
     assert module.backfill() == 1
+    from pipeline import query
+
+    archived = query.read_briefing("2026-09-15")
+    assert archived is not None and archived["snapshot"] == snapshot
 
 
 def test_a_nan_ship_to_withholds_the_product(

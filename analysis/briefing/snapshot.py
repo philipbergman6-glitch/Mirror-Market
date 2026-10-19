@@ -17,7 +17,12 @@ top-level ``failed_blocks`` — ``{block name: reason}`` for every builder that
 raised, dotted for a nested one (``argentina_fob.Soybeans``), ``{}`` when none
 did — so a block that failed reads differently from one with no data. A v1–v3
 row has no such key: its failures were never recorded, which is not the same
-as there having been none. Design rules carried by the schema:
+as there having been none. v5 (#560) lets an ``argentina_fob`` product carry
+no spot: where every band printed on the session had ended (B41 #550) the
+product archives ``withheld: "spot"`` and the ``reason`` in place of the
+``spot_*`` keys, as ``crush_spread`` archives ``{withheld, reason}``, and keeps
+its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. Design
+rules carried by the schema:
 
 - raw numbers and components are stored, never display labels, regime
   strings, or derived values whose inputs are already present
@@ -58,7 +63,7 @@ from analysis.forward_curve import analyze_curve, curve_slope
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
 from analysis.origins.domain import ShipmentWindow
-from analysis.origins.sources import nearest_window_key, parse_magyp_window
+from analysis.origins.sources import nearest_open_window, parse_magyp_window
 from analysis.seasonal import current_vs_seasonal
 from analysis.spreads import compute_brazil_basis
 from analysis.stocks_to_use import (
@@ -107,7 +112,7 @@ from pipeline.units import to_metric_tons
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # The ``build_snapshot`` call in progress collects its failed blocks here;
 # outside one, ``_safe`` only logs.
@@ -730,9 +735,13 @@ def _argentina_fob_block() -> dict[str, dict[str, Any]]:
     A band is the whole ``(ship_from, ship_to)`` pair (B40 #541): one session
     can print ``2026-09`` and ``2026-09..2026-10``, two prices for one loading
     month, so ``curve`` is keyed on the circular's own band form and ``spot``
-    is the session's nearest band by the rule the site and the fob board use
-    (``nearest_window_key``, B30 #504), never by sort order (#549).
-    ``spot_ship_from`` is the spot's loading month (A20 #536).
+    is the session's nearest open band by the rule the site and the fob board
+    use (``nearest_open_window``, B30 #504, B41 #550), never by sort order
+    (#549). ``spot_ship_from`` is the spot's loading month (A20 #536). A
+    session whose every band had ended has no spot: the product archives
+    ``withheld: "spot"`` and the rule's ``reason`` instead, with its whole
+    ``curve`` — the bands are real prints (#560). That is withheld, not failed,
+    so it is not named in ``failed_blocks``.
 
     A product whose session cannot be read — an unreadable band, or two rows
     for one band — is left out and named in ``failed_blocks``
@@ -773,16 +782,17 @@ def _argentina_fob_product(product: str, subset: pd.DataFrame) -> dict[str, Any]
                 f"{window.describe()} — no survivor is chosen"
             )
         bands[window] = (str(row["ship_from"]), str(row["ship_to"]), _num(row["price_usd_mt"]))
-    spot = min(bands, key=lambda w: nearest_window_key(w, session))
+    curve = {w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))}
+    spot = nearest_open_window(bands, session)
+    if isinstance(spot, str):
+        return {"date": _date_str(latest_date), "withheld": "spot", "reason": spot, "curve": curve}
     ship_from, ship_to, spot_price = bands[spot]
     return {
         "date": _date_str(latest_date),
         "spot_usd_mt": spot_price,
         "spot_ship_from": ship_from,
         "spot_ship_to": ship_to,
-        "curve": {
-            w.describe(): bands[w][2] for w in sorted(bands, key=lambda w: (w.start, w.end))
-        },
+        "curve": curve,
     }
 
 
