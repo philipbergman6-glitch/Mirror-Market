@@ -333,6 +333,24 @@ def test_a_newest_session_that_has_only_sailed_bands_says_why_it_is_not_shown(co
     assert note in _render("blocks/01_price.html.j2", block=price)
 
 
+def test_a_leg_with_no_open_session_at_all_keeps_the_budget_reason_and_names_the_withheld_one(
+    conn, registry
+):
+    """No print to be newer than: the empty state keeps the age-budget reason
+    and adds the withheld session's, rather than calling it "newer"."""
+    conn.execute("DELETE FROM argentina_fob")
+    _seed_argentina(conn, D0, bands=((-3, -3, 470.0), (-2, -2, 480.0)))
+    conn.commit()
+    price = _block(conn, registry, "argentina", "price")
+    assert price.state == "empty"
+    assert price.reason.startswith("argentina_fob holds no ")
+    assert (
+        f"Soybeans: no session with an open shipment window — newest, {D0.isoformat()}, "
+        f"withheld: every shipment window printed on {D0.isoformat()} had ended by that session"
+    ) in price.reason
+    assert "newer session" not in price.reason
+
+
 # ---------------------------------------------------------------------------
 # The markup
 # ---------------------------------------------------------------------------

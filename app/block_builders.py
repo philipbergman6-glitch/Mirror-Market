@@ -173,7 +173,11 @@ class SessionWindows:
         if isinstance(chosen, str):
             return chosen
         ordered = sorted(quotes, key=lambda quote: nearest_window_key(quote.window, session))
-        assert ordered[0].window == chosen, "nearest_window_key and nearest_open_window disagree"
+        if ordered[0].window != chosen:
+            raise RuntimeError(
+                f"nearest_window_key and nearest_open_window disagree on {session.isoformat()}: "
+                f"{ordered[0].window.describe()} vs {chosen.describe()}"
+            )
         return cls(tuple(ordered))
 
     @property
@@ -970,16 +974,21 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
     for key in ordered:
         rows = rows_by_key.get(key) or []
         # B41 #550: sessions whose every window had sailed carry no price; the
-        # newest one, where it is newer than the print shown, is named.
+        # newest one is named — beside the print shown where it is newer, or
+        # as the leg's reason where no session had an open window at all.
         withheld = ctx.withheld_sessions(source, key)
-        newer = max((day for day in withheld if not rows or day > rows[-1][0]), default=None)
+        if not rows:
+            if withheld:
+                newest = max(withheld)
+                withheld_reasons.append(
+                    f"{key}: no session with an open shipment window — newest, "
+                    f"{newest.isoformat()}, withheld: {withheld[newest]}"
+                )
+            continue
+        newer = max((day for day in withheld if day > rows[-1][0]), default=None)
         withheld_note = (
             f"newer session {newer.isoformat()} withheld: {withheld[newer]}" if newer else None
         )
-        if not rows:
-            if withheld_note:
-                withheld_reasons.append(f"{key}: {withheld_note}")
-            continue
         when, value, n_rows = rows[-1]
         fx = ctx.fx_on(market.currency_pair, when)
         windows = ctx.session_windows(source, key)
@@ -1033,12 +1042,13 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
         })
 
     if not legs:
-        if withheld_reasons:
-            return STATE_EMPTY, "; ".join(withheld_reasons), {}
-        return STATE_EMPTY, (
+        reason = (
             f"{source.table} holds no {source.cadence} observation inside its "
             f"{source.max_age_days}-day budget"
-        ), {}
+        )
+        if withheld_reasons:
+            reason = f"{reason}; {'; '.join(withheld_reasons)}"
+        return STATE_EMPTY, reason, {}
 
     headline = next(leg for leg in legs if leg["is_headline"]) if any(
         leg["is_headline"] for leg in legs) else legs[0]
