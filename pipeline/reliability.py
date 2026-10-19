@@ -12,7 +12,8 @@ the first run's is reported beside it to show how much the retry carries.
 A weekday inside the record with no row for a layer is ``no_run`` and
 counts as unavailable — absence is never a quiet day (invariant 1). The
 record's first session bounds every window: before it there is no record,
-and no record is not an outage.
+and no record is not an outage. A gap longer than T1 tolerates restarts the
+window after it — the cut never trims a gap away (#533).
 
 Thresholds T1–T4 are echoed from ``config`` with whether this window meets
 them. They are reported, never gating: nothing here fails a run.
@@ -88,6 +89,23 @@ def _streaks(down: Sequence[bool]) -> list[int]:
     return out
 
 
+def _last_disqualifying_gap(
+    every: Sequence[date], logged: set[date], tolerated: int,
+) -> tuple[int, int] | None:
+    """``(index after, length)`` of the last run of more than ``tolerated``
+    sessions with no row at all, or ``None``. An index of ``len(every)``
+    means the gap is still open at the record's end."""
+    found, current = None, 0
+    for i, session in enumerate(every):
+        if session in logged:
+            if current > tolerated:
+                found = (i, current)
+            current = 0
+        else:
+            current += 1
+    return (len(every), current) if current > tolerated else found
+
+
 def _pct(numerator: int, denominator: int) -> float | None:
     return round(100.0 * numerator / denominator, 1) if denominator else None
 
@@ -128,6 +146,11 @@ def reliability(
 ) -> dict[str, Any]:
     """The §3 figures for the ``window`` weekday sessions ending at ``through``.
 
+    A gap of more than ``RELIABILITY_T1_MAX_NO_RUN_GAP`` sessions with no run
+    restarts the evidence window at the first logged session after it, and
+    every figure (T1–T4) is computed over that restarted window. While such a
+    gap is still open at ``through`` there is no evidence yet: ``restarting``.
+
     ``alerts`` are ``layer_alerts`` receipts: ``(run_id, layer)`` pairs a
     run's own ci-alert comment named. A layer with no failing run in the
     window has no surfaced figure (``None``), never a vacuous 100 %.
@@ -144,7 +167,32 @@ def reliability(
 
     record_started = min(r.session_date for r in in_scope)
     every = weekday_sessions(record_started, through)
-    sessions = every[-window:]
+    tolerated = config.RELIABILITY_T1_MAX_NO_RUN_GAP
+    gap = _last_disqualifying_gap(every, {r.session_date for r in in_scope}, tolerated)
+    if gap is not None and gap[0] == len(every):
+        opened = every[-gap[1]]
+        # No logged session after the gap yet: no figures to compute, but T1
+        # is answered — it is not met — and the gap is stated, not just told.
+        return {
+            "state": "restarting",
+            "reason": (
+                f"no run on the {gap[1]} sessions {opened.isoformat()}–{through.isoformat()} "
+                f"(more than {tolerated}): the evidence window restarts at the next logged session"
+            ),
+            "data": {
+                "window": {
+                    "target_sessions": window,
+                    "record_started": record_started.isoformat(),
+                    "restarted_at": None,
+                    "restart_gap": gap[1],
+                    "gap_first_session": opened.isoformat(),
+                    "evidence_sessions": 0,
+                },
+                "thresholds": {"T1_continuous": {"value": tolerated, "met": False}},
+            },
+        }
+    evidence = every[gap[0]:] if gap else every
+    sessions = evidence[-window:]
     span = set(sessions)
     windowed = [r for r in in_scope if r.session_date in span]
     grouped = _by_layer_session(windowed)
@@ -199,6 +247,11 @@ def reliability(
             "first_session": sessions[0].isoformat(),
             "last_session": sessions[-1].isoformat(),
             "record_started": record_started.isoformat(),
+            # §3 T1: a gap longer than the tolerated one restarts the window
+            # at the first logged session after it — never trimmed by the cut.
+            "restarted_at": evidence[0].isoformat() if gap else None,
+            "restart_gap": gap[1] if gap else None,
+            "evidence_sessions": len(evidence),
         },
         "edition": {
             "sessions_with_run": len(logged),
@@ -209,8 +262,8 @@ def reliability(
         "thresholds": {
             "note": "Pre-buyer, owner-revisable at A12 (#406). Reported for A11 (#315); never gates a run.",
             "T1_continuous": {
-                "value": config.RELIABILITY_T1_MAX_NO_RUN_GAP,
-                "met": len(sessions) >= window and no_run_gap <= config.RELIABILITY_T1_MAX_NO_RUN_GAP,
+                "value": tolerated,
+                "met": len(evidence) >= window and no_run_gap <= tolerated,
             },
             "T2_min_availability_pct": {
                 "value": config.RELIABILITY_T2_MIN_AVAILABILITY_PCT,
