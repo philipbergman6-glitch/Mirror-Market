@@ -47,11 +47,12 @@ def _layer(block: dict, name: str) -> dict:
 # ── basket ─────────────────────────────────────────────────────────────────
 
 
-def test_availability_basket_is_basket_v1s_eight_layers() -> None:
-    # Pinned to docs/plans/source-reliability-a19.md §1: strata 1-6 and 9;
-    # derived strata 7-8 have no layer of their own.
+def test_availability_basket_is_basket_v1s_nine_layers() -> None:
+    # Pinned to docs/plans/source-reliability-a19.md §1: strata 1-6 and 9,
+    # plus the Layer 11b closes the Gulf basis strikes on (B37 #534); derived
+    # strata 7-8 have no layer of their own.
     assert config.AVAILABILITY_BASKET == (
-        "forward_curve", "dce", "agrural", "cepea",
+        "forward_curve", "contract_bars", "dce", "agrural", "cepea",
         "magyp_fob", "gulf_bids", "currencies", "us_processor_cash",
     )
     assert set(config.AVAILABILITY_BASKET) <= set(config.PRODUCTION_LAYER_KEYS)
