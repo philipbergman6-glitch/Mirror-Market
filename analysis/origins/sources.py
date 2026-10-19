@@ -200,9 +200,11 @@ def parse_magyp_window(ship_from: str | None, ship_to: str | None) -> ShipmentWi
     ``ship_to`` is inclusive of its whole month — the circular's band runs to
     the end of the named month, not to its first day. Reading it as a day would
     shrink an eleven-month administered band to a single date and would exclude
-    every window a trader actually asks about. An absent ``ship_to`` is a
-    single-month band; an unreadable one is None (#558) — it may be the
-    eleven-month band, and reading it as one month would invent a window.
+    every window a trader actually asks about. An absent ``ship_to`` (None or
+    empty — a source with no end column) is a single-month band; any other
+    value that is not ``YYYY-MM``, NaN included, is unreadable and yields None
+    (#558) — it may be the eleven-month band, and reading it as one month would
+    invent a window.
     """
     if not ship_from:
         return None

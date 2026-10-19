@@ -1129,14 +1129,14 @@ def build_snapshot(data: BriefingData) -> dict[str, Any]:
     failed: dict[str, str] = {}
     collecting = _FAILED_BLOCKS.set(failed)
     try:
-        snapshot = _blocks(data)
+        snapshot = _build_blocks(data)
     finally:
         _FAILED_BLOCKS.reset(collecting)
     snapshot["failed_blocks"] = failed
     return _jsonify(snapshot)
 
 
-def _blocks(data: BriefingData) -> dict[str, Any]:
+def _build_blocks(data: BriefingData) -> dict[str, Any]:
     economic = _safe("economic", _economic_block, {})
     return {
         "schema_version": SCHEMA_VERSION,

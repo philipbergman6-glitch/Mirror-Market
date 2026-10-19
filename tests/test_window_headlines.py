@@ -529,6 +529,20 @@ def test_the_briefing_withholds_a_leg_with_two_rows_for_its_band(monkeypatch):
     assert "$493.0" not in board and "$489.0" not in board
 
 
+def test_the_briefing_names_a_leg_that_failed(monkeypatch):
+    """#558: a leg whose loader raised is shown as failed, not dropped as if
+    the venue had printed nothing."""
+    def boom():
+        raise ValueError("unreadable shipment window on 2026-10-16")
+
+    monkeypatch.setattr(fob_board, "_argentina_leg", boom)
+    monkeypatch.setattr(fob_board, "_gulf_leg", lambda: (497.2, "2026-10-16 · Oct loading"))
+    monkeypatch.setattr(fob_board, "_brazil_leg", lambda _p, _c: (500.0, "2026-10-16"))
+    board = fob_board.format({}, {})
+    argentina = next(line for line in board.splitlines() if "Argentina" in line)
+    assert "withheld — failed (ValueError: unreadable shipment window" in argentina
+
+
 def test_the_briefing_picks_the_nearest_open_slot_by_the_sites_rule(monkeypatch):
     """Not "Current, else the first listed row": on 18 Mar 2025 AMS listed a
     sailed Mar¹ slot first; the nearest open one is Mar² (same rule as

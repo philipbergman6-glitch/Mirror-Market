@@ -143,6 +143,7 @@ def test_magyp_unreadable_bounds_are_none():
     # eleven-month administered one.
     assert parse_magyp_window("2026-09", "Sept") is None
     assert parse_magyp_window("2026-09", "2026") is None
+    assert parse_magyp_window("2026-09", float("nan")) is None
 
 
 # ---------------------------------------------------------------------------

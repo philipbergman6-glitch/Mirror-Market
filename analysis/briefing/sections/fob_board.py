@@ -154,8 +154,9 @@ def format(  # noqa: A001
         try:
             leg = loaders[leg_id]()
         except Exception as exc:
+            # #558: a leg that raised is named on the board, never read as "no data".
             logger.warning("Cross-origin leg %s failed: %s", leg_id, exc)
-            leg = None
+            leg = f"failed ({type(exc).__name__}: {exc})"
         if isinstance(leg, str):
             withheld.append((config.ORIGIN_LEGS[leg_id]["label"], leg))
         elif leg is not None:
