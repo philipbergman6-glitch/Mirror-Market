@@ -29,6 +29,29 @@ Tests: `tests/test_ci_briefing_blocks.py`, 29 cases over a fixture snapshot
 in a temp DB with `gh` stubbed. The workflow step itself is verifiable only
 on the first `main` deploy after merge.
 
+## Unreleased — the briefing snapshot withholds an all-sailed Argentina spot (2026-10-19)
+
+**B44 #560**, found by the review of PR #561 (#558). B41 #550 made
+`analysis.origins.sources.nearest_open_window` the one rule for a windowed
+session's price, but `snapshot._argentina_fob_product` still took
+`min(nearest_window_key)`, whose all-sailed fallback is the latest-ending band —
+so on a session whose every MAGyP band had ended the archive would file a
+sailed quote as that day's spot (invariant 11). The snapshot now uses the rule:
+an open session is unchanged; an all-sailed product archives
+`{date, withheld: "all_sailed", reason, curve}` — no `spot_*` keys, no fallback to an
+older session, the curve kept whole because its bands are real prints. Shape
+follows `crush_spread`'s `{withheld, reason}` — `withheld` is a code, named
+after the rule's `all_sailed_reason`; it is withheld, not failed, so it
+is not named in `failed_blocks`. `SCHEMA_VERSION` 4 → 5: a v1–v4 row may hold a
+sailed band as its spot. Readers checked: `scripts/backfill_brazil_spot` reads
+only `brazil_basis`, `pipeline.query.read_briefing` decodes generically, and
+`read_briefings` and the history CSV round-trip pass the JSON through as text;
+nothing reads `argentina_fob` back out of the archive. Latent: 0/1848 stored product-sessions are
+all-sailed (#557's replay). Tests: `test_argentina_fob_all_sailed_session_archives_no_spot_and_its_reason`
+(new), the open-session spot test asserts no `withheld`/`reason`, and
+`test_the_archive_reader_works_on_old_and_new_rows` runs on v3, v4 and v5 rows
+through both readers.
+
 ## Unreleased — a failed briefing snapshot block is named, not emptied (2026-10-19)
 
 **B43 #558**, found by the review of PR #554 (#549). `snapshot._safe` wrapped

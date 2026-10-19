@@ -247,6 +247,11 @@ def has_sailed(window: ShipmentWindow, session: date) -> bool:
     return window.end < session
 
 
+#: The withheld code for a session whose every window has sailed (#560): the
+#: one spelling an archive writes beside ``all_sailed_reason``'s text.
+ALL_SAILED = "all_sailed"
+
+
 def all_sailed_reason(session: date) -> str:
     """Why a session whose every window has sailed carries no price (B41 #550)."""
     return f"every shipment window printed on {session.isoformat()} had ended by that session"
