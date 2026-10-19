@@ -1939,7 +1939,10 @@ MAGYP_FOB_LOOKBACK_DAYS = 7
 # Grain SA table carries no settlement column and the JSE's own MTM file is
 # licensed (#157); see fetchers/safex.py for the full note.
 # ---------------------------------------------------------------------------
-SAFEX_STATS_URL = "https://www.grainsa.co.za/pages/industry-reports/safex-feeds"
+# The table is server-rendered in this page itself — there is no download
+# file to resolve. Grain SA moved it to a WordPress site in Oct 2026; the old
+# /pages/industry-reports/safex-feeds address 301s to a 404 (#515).
+SAFEX_STATS_URL = "https://grainsa.co.za/applied-economics/safex-feeds/"
 # Display names stored by fetchers/safex.py; the JSE contract-code mapping
 # (SOYB/SUNS) lives in the fetcher itself.
 SAFEX_COMMODITIES = (

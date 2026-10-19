@@ -9,10 +9,16 @@ Fixtures are trimmed from the real Grain SA page captured 2026-08-11.
 
 from __future__ import annotations
 
+import gzip
+import os
+from pathlib import Path
+
 import pytest
 
-from fetchers.safex import _parse_safex_table
+from fetchers.safex import _parse_safex_table, fetch_safex
 from pipeline.results import ScraperShapeError
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _page(rows: str) -> str:
@@ -147,3 +153,45 @@ def test_row_without_a_calendar_date_raises_rather_than_stamping_today():
         _parse_safex_table(_page(
             _row("SOYB", "DEC26", "12:45", "8039.80", "-1.00", "8040.00", "8030.00", "433")
         ))
+
+
+# ── The page moved (#515) ────────────────────────────────────────────────────
+
+def test_wordpress_page_layout_still_parses():
+    """Grain SA moved the page to a WordPress site in Oct 2026 (#515).
+
+    The old address 301s to a 404; the new one serves the same nine-column
+    table, server-rendered, inside the theme's markup. Verbatim capture of
+    2026-10-19, so the expected values are the page's own numbers.
+    """
+    html = gzip.decompress(
+        (FIXTURES / "safex_grainsa_wordpress_2026-10-19.html.gz").read_bytes()
+    ).decode("utf-8")
+
+    out = _parse_safex_table(html)
+
+    soy = out["Soybean (SAFEX)"].iloc[0]
+    assert (soy["Contract"], soy["Close"], soy["Volume"], str(soy["Date"])) == (
+        "DEC26", pytest.approx(9238.00), pytest.approx(1955), "2026-10-19",
+    )
+    sun = out["Sunflower (SAFEX)"].iloc[0]
+    assert (sun["Contract"], sun["Close"], sun["Volume"]) == (
+        "DEC26", pytest.approx(10590.00), pytest.approx(353),
+    )
+
+
+@pytest.mark.network
+@pytest.mark.skipif(
+    not os.environ.get("RUN_NETWORK_TESTS"),
+    reason="live probe of grainsa.co.za; set RUN_NETWORK_TESTS=1 to run",
+)
+def test_live_page_answers_and_parses():
+    """The configured address must serve the table today, not a 404 (#515).
+
+    Opt-in so an upstream outage cannot turn CI red; the pipeline's own
+    freshness grading is what reports an outage in production. An empty
+    result (no contract traded) is legitimate, a failure is not.
+    """
+    result = fetch_safex()
+
+    assert result.status in ("ok", "empty"), result.error
