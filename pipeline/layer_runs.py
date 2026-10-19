@@ -64,6 +64,10 @@ RUN_STATUSES: tuple[str, ...] = (
 )
 
 ALERT_COLUMNS: tuple[str, ...] = ("run_id", "layer_name")
+#: The ending every row this module writes carries (B42 #555). Rows already
+#: stored keep theirs — the committed record holds CRLF rows from before —
+#: and both read back identically through ``csv.reader``.
+RECORD_LINE_ENDING = "\n"
 
 
 class LayerRunsError(RuntimeError):
@@ -373,18 +377,26 @@ def _read_csv(path: str, columns: tuple[str, ...]) -> list[list[str]]:
         return out
 
 
-def _append_csv(path: str, columns: tuple[str, ...], existing: int, lines: list[list[str]]) -> None:
-    """Existing file + ``lines``, written atomically so git never commits half a file."""
+def _append_csv(path: str, columns: tuple[str, ...], lines: list[list[str]]) -> None:
+    """Existing file + ``lines``, written atomically so git never commits half a file.
+
+    Byte-append-only (B42 #555): an existing file — header-only included —
+    is copied with ``newline=""``, so whatever endings it holds pass through unchanged and
+    its bytes are an exact prefix of the result; new rows are LF. The B34
+    append read the body in universal-newline mode and so rewrote each
+    previous block's CRLF to LF — every record commit showed deletions.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", newline="", encoding="utf-8") as out:
-        if existing:
-            with open(path, encoding="utf-8") as src:
+        writer = csv.writer(out, lineterminator=RECORD_LINE_ENDING)
+        if os.path.exists(path):
+            with open(path, newline="", encoding="utf-8") as src:
                 body = src.read()
-            out.write(body if body.endswith("\n") else body + "\n")
+            out.write(body if body.endswith("\n") else body + RECORD_LINE_ENDING)
         else:
-            csv.writer(out).writerow(columns)
-        csv.writer(out).writerows(lines)
+            writer.writerow(columns)
+        writer.writerows(lines)
     os.replace(tmp, path)
 
 
@@ -427,7 +439,7 @@ def append_runs(evidence: RunEvidence, rows: Iterable[LayerRun]) -> int:
             f"layer_runs: {len(clash)} (run_id, layer_name) row(s) already recorded, "
             f"first {clash[0]} — the record is append-only and never rewritten"
         )
-    _append_csv(layer_runs_path(), COLUMNS, len(existing), [_encode(r) for r in batch])
+    _append_csv(layer_runs_path(), COLUMNS, [_encode(r) for r in batch])
     return len(batch)
 
 
@@ -450,5 +462,5 @@ def append_alerts(evidence: RunEvidence, run_id: str, layers: Iterable[str]) -> 
     if clash:
         raise LayerRunsError(f"layer_alerts: {clash[0]} already recorded — append-only")
     if names:
-        _append_csv(path, ALERT_COLUMNS, len(existing), [[run_id, n] for n in names])
+        _append_csv(path, ALERT_COLUMNS, [[run_id, n] for n in names])
     return len(names)

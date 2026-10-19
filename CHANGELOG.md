@@ -4,6 +4,27 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — the layer run record is byte-append-only (2026-10-19)
+
+**B42 #555**, found by A22 #551. `pipeline.layer_runs._append_csv` read the
+existing `layer_runs.csv` / `layer_alerts.csv` body in universal-newline mode
+(CRLF → LF) and wrote new rows through `csv.writer`'s CRLF default, so every
+record commit rewrote the previous block's endings: 85ba758 showed
+`78 +, 39 −` for a 39-row append, indistinguishable in git from a rewritten
+row. The body is now copied with `newline=""` (bytes pass through unchanged)
+and new rows are LF (`RECORD_LINE_ENDING`). Row content was never affected
+and `read_runs()` / the reliability figures read both endings identically.
+The committed mixed-ending file is not rewritten (data/history/ is
+deploy-only); from the next record commit on, `git diff --numstat` shows 0
+deletions. Replay on a copy of the committed record: `39 0` / `1 0`. Tests:
+the existing never-rewrites test now compares bytes (it compared
+universal-newline text and so could not see the defect); seven new tests —
+byte prefix + LF tail for both stores from fresh, mixed-ending and
+header-only CRLF seeds (a header-only file is copied, not re-headed), a
+fresh store is LF throughout, a body without a final newline only gains
+bytes, `git diff --numstat` shows insertions only, and a mixed-ending fixture
+reads as the same rows, alerts and reliability figures as its LF twin.
+
 ## Unreleased — a session whose every shipment window has sailed is withheld (2026-10-19)
 
 **B41 #550**, from the sixth audit's "repair expired-period selection".
