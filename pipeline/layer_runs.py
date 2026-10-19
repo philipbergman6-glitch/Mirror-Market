@@ -64,6 +64,10 @@ RUN_STATUSES: tuple[str, ...] = (
 )
 
 ALERT_COLUMNS: tuple[str, ...] = ("run_id", "layer_name")
+#: The ending every row this module writes carries (B42 #555). Rows already
+#: stored keep theirs — the committed record holds CRLF rows from before —
+#: and both read back identically through ``csv.reader``.
+RECORD_LINE_ENDING = "\n"
 
 
 class LayerRunsError(RuntimeError):
@@ -374,17 +378,25 @@ def _read_csv(path: str, columns: tuple[str, ...]) -> list[list[str]]:
 
 
 def _append_csv(path: str, columns: tuple[str, ...], existing: int, lines: list[list[str]]) -> None:
-    """Existing file + ``lines``, written atomically so git never commits half a file."""
+    """Existing file + ``lines``, written atomically so git never commits half a file.
+
+    Byte-append-only (B42 #555): the existing body is copied with
+    ``newline=""``, so whatever endings it holds pass through unchanged and
+    its bytes are an exact prefix of the result; new rows are LF. The B34
+    append read the body in universal-newline mode and so rewrote each
+    previous block's CRLF to LF — every record commit showed deletions.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", newline="", encoding="utf-8") as out:
+        writer = csv.writer(out, lineterminator=RECORD_LINE_ENDING)
         if existing:
-            with open(path, encoding="utf-8") as src:
+            with open(path, newline="", encoding="utf-8") as src:
                 body = src.read()
-            out.write(body if body.endswith("\n") else body + "\n")
+            out.write(body if body.endswith("\n") else body + RECORD_LINE_ENDING)
         else:
-            csv.writer(out).writerow(columns)
-        csv.writer(out).writerows(lines)
+            writer.writerow(columns)
+        writer.writerows(lines)
     os.replace(tmp, path)
 
 

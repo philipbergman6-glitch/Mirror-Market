@@ -8,6 +8,8 @@ refuses the real directory, and only the deploy workflow writes there.
 from __future__ import annotations
 
 import csv
+import shutil
+import subprocess
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -71,9 +73,9 @@ def test_append_then_read_round_trips_with_fixed_columns(history_dir: Path) -> N
 
 def test_append_adds_rows_and_never_rewrites_earlier_ones(history_dir: Path) -> None:
     layer_runs.append_runs(_evidence(), [_run("1")])
-    before = (history_dir / "layer_runs.csv").read_text(encoding="utf-8")
+    before = (history_dir / "layer_runs.csv").read_bytes()
     layer_runs.append_runs(_evidence(), [_run("2")])
-    after = (history_dir / "layer_runs.csv").read_text(encoding="utf-8")
+    after = (history_dir / "layer_runs.csv").read_bytes()
 
     assert after.startswith(before)
     assert [r.run_id for r in layer_runs.read_runs()] == ["1", "2"]
@@ -328,3 +330,120 @@ def test_a_retired_layer_in_old_rows_never_bricks_the_record(history_dir: Path) 
     assert [r.layer_name for r in layer_runs.read_runs()] == ["retired_layer"]
     layer_runs.append_runs(_evidence(), [_run("2")])
     assert len(layer_runs.read_runs()) == 2
+
+
+# ── byte-append-only (B42 #555) ───────────────────────────────────────────
+#
+# The committed record mixes endings: the B34 append read the old body in
+# universal-newline mode (CRLF → LF) and wrote its own rows CRLF, so every
+# record commit rewrote the block before it. These fixtures are that shape.
+
+_RUNS_HEADER = ",".join(layer_runs.COLUMNS)
+_MIXED_RUNS = (
+    _RUNS_HEADER + "\n"
+    "1,Update Dashboard/schedule,2026-10-19T20:05:00Z,2026-10-19,safex,success,2026-10-19,\n"
+    "2,Update Dashboard/schedule,2026-10-20T20:05:00Z,2026-10-20,safex,failed,,\r\n"
+    "2,Update Dashboard/schedule,2026-10-20T20:05:00Z,2026-10-20,dce,success,2026-10-20,\r\n"
+).encode("utf-8")
+_MIXED_ALERTS = b"run_id,layer_name\n1,safex\n2,safex\r\n"
+
+
+def _seed(history_dir: Path, name: str, body: bytes) -> Path:
+    history_dir.mkdir(exist_ok=True)
+    path = history_dir / name
+    path.write_bytes(body)
+    return path
+
+
+@pytest.mark.parametrize("seed", [None, _MIXED_RUNS], ids=["fresh", "mixed-endings"])
+def test_a_runs_append_keeps_every_earlier_byte_and_adds_lf_rows(history_dir: Path, seed: bytes | None) -> None:
+    path = history_dir / "layer_runs.csv"
+    if seed is None:
+        layer_runs.append_runs(_evidence(), [_run("1")])
+    else:
+        _seed(history_dir, "layer_runs.csv", seed)
+    before = path.read_bytes()
+
+    layer_runs.append_runs(_evidence(), [_run("3"), _run("3", layer="dce")])
+
+    after = path.read_bytes()
+    assert after[: len(before)] == before
+    tail = after[len(before):]
+    assert tail.count(b"\n") == 2 and b"\r" not in tail
+
+
+def test_an_alerts_append_keeps_every_earlier_byte_and_adds_lf_rows(history_dir: Path) -> None:
+    path = _seed(history_dir, "layer_alerts.csv", _MIXED_ALERTS)
+    layer_runs.append_alerts(_evidence(), "3", ["safex", "dce"])
+
+    after = path.read_bytes()
+    assert after[: len(_MIXED_ALERTS)] == _MIXED_ALERTS
+    tail = after[len(_MIXED_ALERTS):]
+    assert tail.count(b"\n") == 2 and b"\r" not in tail
+
+
+def test_a_fresh_store_is_lf_throughout(history_dir: Path) -> None:
+    layer_runs.append_runs(_evidence(), [_run("1")])
+    layer_runs.append_alerts(_evidence(), "1", ["safex"])
+    for name in ("layer_runs.csv", "layer_alerts.csv"):
+        assert b"\r" not in (history_dir / name).read_bytes()
+
+
+def test_an_append_onto_a_body_without_a_final_newline_only_adds_bytes(history_dir: Path) -> None:
+    body = _MIXED_RUNS.rstrip(b"\r\n")
+    path = _seed(history_dir, "layer_runs.csv", body)
+    layer_runs.append_runs(_evidence(), [_run("3")])
+    after = path.read_bytes()
+    assert after.startswith(body + b"\n")
+    assert [r.run_id for r in layer_runs.read_runs()] == ["1", "2", "2", "3"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs the git CLI")
+def test_git_sees_a_record_append_as_insertions_only(history_dir: Path) -> None:
+    # The check an auditor runs on the committed record: an append-only file's
+    # commits show 0 deletions in `git diff --numstat`.
+    _seed(history_dir, "layer_runs.csv", _MIXED_RUNS)
+    _seed(history_dir, "layer_alerts.csv", _MIXED_ALERTS)
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t",
+             "-C", str(history_dir), *args],
+            check=True, capture_output=True, text=True,
+        ).stdout
+
+    git("init", "-q")
+    git("add", ".")
+    git("commit", "-q", "-m", "seed")
+    layer_runs.append_runs(_evidence(), [_run("3"), _run("3", layer="dce")])
+    layer_runs.append_alerts(_evidence(), "3", ["safex"])
+
+    numstat = sorted(line.split("\t") for line in git("diff", "--numstat").splitlines())
+    assert numstat == [["1", "0", "layer_alerts.csv"], ["2", "0", "layer_runs.csv"]]
+
+
+def test_mixed_endings_read_as_the_same_rows_and_figures(history_dir: Path) -> None:
+    from pipeline import reliability
+
+    _seed(history_dir, "layer_runs.csv", _MIXED_RUNS)
+    _seed(history_dir, "layer_alerts.csv", _MIXED_ALERTS)
+    mixed_rows, mixed_alerts = layer_runs.read_runs(), layer_runs.read_alerts()
+
+    _seed(history_dir, "layer_runs.csv", _MIXED_RUNS.replace(b"\r\n", b"\n"))
+    _seed(history_dir, "layer_alerts.csv", _MIXED_ALERTS.replace(b"\r\n", b"\n"))
+    assert layer_runs.read_runs() == mixed_rows
+    assert layer_runs.read_alerts() == mixed_alerts
+
+    assert [(r.run_id, r.layer_name, r.status, r.observed_at) for r in mixed_rows] == [
+        ("1", "safex", "success", "2026-10-19"),
+        ("2", "safex", "failed", None),
+        ("2", "dce", "success", "2026-10-20"),
+    ]
+    assert mixed_alerts == {("1", "safex"), ("2", "safex")}
+    block = reliability.reliability(mixed_rows, mixed_alerts, through=date(2026, 10, 20),
+                                    layers=("safex", "dce"), basket=())
+    safex = next(entry for entry in block["layers"] if entry["layer"] == "safex")
+    assert block["state"] == "ok"
+    assert safex["logged_sessions"] == 2
+    assert safex["availability_pct"] == 50.0
+    assert safex["surfaced_within_one_run_pct"] == 100.0
