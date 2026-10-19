@@ -18,9 +18,11 @@ the session is struck on one band all three products share by
 extracted so both pages read one rule (bean band leads, nearest first by the
 B30 rule; each product at the band overlapping it most, a tie to the nearer,
 not the dearer). No shared band on the newest session withholds with a reason
-rather than falling back to an older session; the headline card's range drops
-such sessions. Block 03 prints each leg's band ("window 2026-10") and the
-margin card names the band it was struck on. Tests:
+rather than falling back to an older session. The headline card's range is
+the level's own band's history only — sessions on another band (a roll) or
+with none are dropped, the rule B29 #503 keeps for Dalian months — and the
+card names its band. Block 03 prints each leg's band ("window 2026-10") and
+the margin card names the band it was struck on. Tests:
 `tests/test_argentina_crush_band.py`.
 
 ## Unreleased — the Dalian crush is one delivery month (2026-10-18)

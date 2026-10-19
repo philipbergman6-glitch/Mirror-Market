@@ -43,7 +43,7 @@
     <div class="mc-delta muted">{{ row.range_note }}</div>
     {% endif %}
     <div class="caption" style="margin-bottom:0">
-      bean leg {{ row.bean_key }}{% if row.as_of %} · as of {{ row.as_of }}{% if row.age_days and row.age_days > 1 %} · {{ row.age_days }}d ago{% endif %}{% endif %}
+      bean leg {{ row.bean_key }}{% if row.shipment_window %} · {{ row.shipment_window }} band{% endif %}{% if row.as_of %} · as of {{ row.as_of }}{% if row.age_days and row.age_days > 1 %} · {{ row.age_days }}d ago{% endif %}{% endif %}
       {% if row.contract_note %}<br>{{ row.contract_note }}{% endif %}
       {% if row.provisional %}<br>{{ row.provisional_note }}{% endif %}
     </div>

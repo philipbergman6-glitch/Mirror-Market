@@ -2038,6 +2038,7 @@ def _crush_board_card(market: Market, ctx: SiteContext) -> dict:
         "contract_note": None,
         "provisional": None,
         "provisional_note": None,
+        "shipment_window": None,
         "range": None,
         "range_note": "",
     }
@@ -2078,6 +2079,7 @@ def _crush_board_card(market: Market, ctx: SiteContext) -> dict:
         contract_note=data["contract_note"],
         provisional=data["provisional"],
         provisional_note=data["provisional_note"],
+        shipment_window=data.get("shipment_window"),
         range=band,
         range_note=range_note,
     )
@@ -2097,18 +2099,19 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     crush = market.crush
     assert crush is not None, f"crush range requested for {market.slug} with no crush source"
     if crush.months is not None:
-        history = _month_margin_history(market, ctx)
+        history, band = _month_margin_history(market, ctx), None
     elif crush.contracts == "named":
         return None, (
             "no range yet — struck on named delivery months; a mean off the "
             "front-month series would be a range around a different margin"
         )
     else:
-        history = _crush_margin_history(market, ctx)
+        history, band = _crush_margin_history(market, ctx)
+    on_band = f" on the {band} band" if band else ""
     if len(history) < CRUSH_RANGE_MIN_OBS:
         return None, (
-            f"no range yet — {len(history)} session(s) all three legs struck, short "
-            f"of the {CRUSH_RANGE_MIN_OBS} a mean needs"
+            f"no range yet — {len(history)} session(s) all three legs struck{on_band}, "
+            f"short of the {CRUSH_RANGE_MIN_OBS} a mean needs"
         )
     values = [margin for _, margin in history]
     return {
@@ -2117,7 +2120,7 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
         # (`LOOKBACK_DAYS_BY_CADENCE`) and a leg's stored depth is its own, so
         # a year is a claim about coverage this cannot make. The count is the
         # honest label and it is also the more useful one.
-        "window": f"{len(values)}-session",
+        "window": f"{len(values)}-session{on_band}",
         "mean": sum(values) / len(values),
         "low": min(values),
         "high": max(values),
@@ -2126,8 +2129,11 @@ def _crush_range(market: Market, ctx: SiteContext) -> tuple[dict | None, str]:
     }, ""
 
 
-def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:
-    """The generic engine's margin restruck for every session it can be.
+def _crush_margin_history(
+    market: Market, ctx: SiteContext
+) -> tuple[list[tuple[date, float]], str | None]:
+    """The generic engine's margin restruck for every session it can be, and
+    the shared band it is the history of (None on an unwindowed source).
 
     The two rules the level keeps, kept here too rather than relaxed because
     these are old numbers nobody reads individually:
@@ -2135,9 +2141,12 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
     * **One session for all three legs.** A day the oil did not print is not a
       day with a margin, and interpolating one would put a shape into the range
       that the market never traded.
-    * **One shared band, on a windowed source (#507).** Each session is struck
-      on its own shared band by the level's rule; a session with none is
-      dropped, never restruck on means.
+    * **The level's own band, on a windowed source (#507).** Each session is
+      struck by the level's shared-band rule, and only sessions struck on the
+      band the level is struck on count — an Oct cargo's margin beside a
+      Nov–Apr one is a range around a different margin, the run B29 #503
+      refuses to stitch across Dalian months. A session with no shared band
+      is dropped, never restruck on means.
     * **That row's own date's rate, under A1 (#298).** ``ctx.fx_on`` never
       converts at a later-dated rate and only at a prior one inside the cap;
       a session with no such rate is dropped rather than restruck at a rate
@@ -2150,13 +2159,16 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
 
     common = _crush_sessions(crush, rows_by_key)
     if not common:
-        return []
+        return [], None
+    level = _crush_strike(crush, source, ctx, max(common))
+    if isinstance(level, str):
+        return [], None
 
     yields = crush.yields
     history: list[tuple[date, float]] = []
     for day in sorted(common):
         strike = _crush_strike(crush, source, ctx, day)
-        if isinstance(strike, str):
+        if isinstance(strike, str) or strike.band != level.band:
             continue
         rate = ctx.fx_on(market.currency_pair, day).rate
         legs: dict[str, float] = {}
@@ -2167,7 +2179,7 @@ def _crush_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, 
             legs[leg_name] = usd
         else:
             history.append((day, _crush_margin(legs, yields)))
-    return history
+    return history, level.band
 
 
 def _month_margin_history(market: Market, ctx: SiteContext) -> list[tuple[date, float]]:

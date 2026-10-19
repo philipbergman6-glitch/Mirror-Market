@@ -187,9 +187,32 @@ def test_the_range_is_restruck_on_each_sessions_shared_band(conn, registry):
     band = card["range"]
     assert band is not None, card["range_note"]
     assert band["n_obs"] == CRUSH_RANGE_MIN_OBS
+    assert band["window"] == f"{CRUSH_RANGE_MIN_OBS}-session on the {_month(D0, 0)} band"
     level = _margin(493.0, 1200.0, 423.0)
     assert band["low"] == pytest.approx(level)
     assert band["high"] == pytest.approx(level)
+
+
+def test_the_range_never_spans_a_band_roll(conn, registry):
+    """Sessions struck on last month's band are a different cargo's margin —
+    the run B29 #503 refuses to stitch for Dalian, refused here too."""
+    month_ago = D0 - timedelta(days=31)
+    for offset in range(2, CRUSH_RANGE_MIN_OBS + 1):
+        _seed(conn, TODAY - timedelta(days=offset), anchor=month_ago)
+    conn.commit()
+    _, _, data = headline_crush_board(registry, _ctx(conn))
+    card = next(row for row in data["rows"] if row["market_slug"] == "argentina")
+    assert card["range"] is None
+    assert f"1 session(s) all three legs struck on the {_month(D0, 0)} band" in card["range_note"]
+
+
+def test_the_headline_card_names_its_band(conn, registry):
+    _, _, data = headline_crush_board(registry, _ctx(conn))
+    card = next(row for row in data["rows"] if row["market_slug"] == "argentina")
+    assert card["shipment_window"] == _month(D0, 0)
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES)), autoescape=True)
+    html = env.get_template("sections/crush_board.html.j2").render(s=data, root="../")
+    assert f"{_month(D0, 0)} band" in html
 
 
 def test_a_session_with_no_shared_band_is_dropped_from_the_range(conn, registry):
@@ -242,20 +265,23 @@ def test_the_rule_never_leads_with_a_sailed_bean_band():
 
 
 def test_equal_overlap_takes_the_nearer_product_band_not_the_dearer():
-    session = date(2026, 10, 1)
-    bean = _w((2026, 10), (2026, 11))
+    session = date(2027, 3, 1)
+    bean = _w((2027, 4), (2027, 6))
+    # Mar–Apr overlaps the bean's April (30 days), Jun–Jul its June (30 days):
+    # a true tie. The dearer band is listed first, so order alone cannot win.
+    oil_near, oil_far = _w((2027, 3), (2027, 4)), _w((2027, 6), (2027, 7))
+    assert oil_near.overlap_days(bean) == oil_far.overlap_days(bean)
     picked = shared_crush_band(
         {
             "bean": [(bean, 493.0)],
-            # Each overlaps one of the bean's two months — a tie.
-            "oil": [(_w((2026, 11), (2026, 12)), 1300.0), (_w((2026, 9), (2026, 10)), 1200.0)],
-            "meal": [(_w((2026, 10), (2026, 11)), 423.0)],
+            "oil": [(oil_far, 1300.0), (oil_near, 1200.0)],
+            "meal": [(_w((2027, 4), (2027, 6)), 423.0)],
         },
         session,
     )
     assert not isinstance(picked, str)
     assert picked.values["oil"] == 1200.0
-    assert picked.windows["oil"].start == date(2026, 9, 1)
+    assert picked.windows["oil"] == oil_near
 
 
 def test_the_rule_names_why_when_no_band_is_shared():
