@@ -349,3 +349,23 @@ def test_an_unwindowed_basis_renders_no_window_or_board_label(conn, registry):
     assert caption in html
     line = next(line for line in html.splitlines() if caption in line)
     assert line.endswith("</div>") and "window" not in line and "struck" not in line
+
+
+def test_the_roll_note_names_an_ams_window_by_its_month():
+    """AMS calls every month's prompt slot "Current (prompt)"; the day-over-day
+    note must not read as a roll from a window to itself (#513 follow-up)."""
+    from analysis.origins.domain import ShipmentWindow
+    from app.block_builders import SessionWindows, WindowQuote, _roll_note
+
+    def session(start: date, end: date) -> SessionWindows:
+        window = ShipmentWindow(start=start, end=end, label="Current (prompt)")
+        return SessionWindows(printed=(WindowQuote(window=window, value=11.0, quotes=1),))
+
+    windows = {
+        date(2026, 9, 30): session(date(2026, 9, 30), date(2026, 9, 30)),
+        date(2026, 10, 1): session(date(2026, 10, 1), date(2026, 10, 31)),
+    }
+    note = _roll_note(windows, date(2026, 10, 1), date(2026, 9, 30), "move")
+    assert note == (
+        "move withheld — window rolled Current (prompt) Sep 2026 → Current (prompt) Oct 2026"
+    )

@@ -187,9 +187,11 @@ def _same_window(windows: dict[date, SessionWindows], now: date, prior: date) ->
 
 def _roll_note(windows: dict[date, SessionWindows], now: date, prior: date, move: str) -> str:
     """Why a move is blank across a window roll — never a bare dash."""
+    # #513 follow-up: the *cross-session* name — AMS labels every month's
+    # prompt slot "Current (prompt)", which would read as a roll to itself.
     return (
-        f"{move} withheld — window rolled {windows[prior].chosen.label} → "
-        f"{windows[now].chosen.label}"
+        f"{move} withheld — window rolled {_window_name(windows[prior].identity)} → "
+        f"{_window_name(windows[now].identity)}"
     )
 
 
