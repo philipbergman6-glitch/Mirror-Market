@@ -232,8 +232,9 @@ def test_the_card_names_the_contract_beside_the_window(conn, registry):
     block = type("B", (), {"data": data})()
     html = env.get_template("blocks/04_basis.html.j2").render(root="../", block=block)
     assert "window Current (prompt) · over ZSX26" in html
-    # The range below is still the front-month series (#513) and says so.
-    assert "front month" in html
+    # #513: the range below is struck as the level is, and says so.
+    assert "front month" not in html
+    assert "each session struck over the contract its window names" in html
 
 
 # ---------------------------------------------------------------------------

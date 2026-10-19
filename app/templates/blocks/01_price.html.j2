@@ -62,4 +62,6 @@
 <div class="sig"><span class="badge badge-{{ sig.severity }}">{{ sig.severity }}</span><span>{{ sig.message }}</span></div>
 {% endfor %}
 {% endif %}
+{#- #513: a windowed series' chips read one window only, or say why there are none. -#}
+{% if d.signals_note %}<div class="caption">{{ d.signals_note }}</div>{% endif %}
 <div class="caption">{{ d.venue }} · {{ d.cadence }} · {{ d.no_timestamp_note }}</div>
