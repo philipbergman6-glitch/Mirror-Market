@@ -160,8 +160,8 @@ CREATE TABLE IF NOT EXISTS brazil_exports (
 
 # Layer 32 — SEA India weekly comparative rates (#72). One row per series per
 # sheet date, in the unit the sheet's section heading states (USD/MT or
-# INR/MT). Never exported to data/history/ while config.SEA_PUBLISH is False:
-# SEA's sheets are all-rights-reserved and the repo is public.
+# INR/MT). Exported to data/history/ while config.SEA_PUBLISH is True
+# (owner decision 2026-10-21; SEA's sheets are all-rights-reserved, risk accepted).
 _CREATE_SEA_INDIA_RATES = """
 CREATE TABLE IF NOT EXISTS sea_india_rates (
     Date    TEXT NOT NULL,
@@ -177,10 +177,9 @@ CREATE TABLE IF NOT EXISTS sea_india_rates (
 # every run's reading is kept under the day it was read, keyed
 # (crop_year, state, fetched_date). The all-India total is stored as the
 # state config.SOPA_ALL_INDIA. Units are lakh ha / kg/ha / lakh t, proven by
-# the parser on every row. Never exported to data/history/ while
-# config.SOPA_PUBLISH is False: SOPA reserves all rights and the repo is
-# public — so on the ephemeral CI database the revision path does not
-# accumulate; it does in a local one.
+# the parser on every row. Exported to data/history/ while
+# config.SOPA_PUBLISH is True (owner decision 2026-10-21; SOPA reserves all
+# rights, risk accepted), so the revision path accumulates on CI too.
 _CREATE_SOPA_CROP_ESTIMATES = """
 CREATE TABLE IF NOT EXISTS sopa_crop_estimates (
     crop_year          INTEGER NOT NULL,   -- kharif year, as SOPA labels it

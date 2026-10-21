@@ -19,11 +19,16 @@ import config
 from pipeline import layer_runs
 from pipeline.layer_runs import LayerRun, LayerRunsError, RunEvidence
 
+# The private set as it stood until 2026-10-21, when the owner published both
+# (config.PRIVATE_LAYERS is empty now). The blanking mechanism outlives its
+# last member, so these tests declare a run's private layers themselves.
+_PRIVATE = ("sea_india", "sopa_crop")
+
 
 def _evidence(
     roster: tuple[str, ...] = config.PRODUCTION_LAYER_KEYS,
     unconfigured: tuple[str, ...] = (),
-    private: tuple[str, ...] = config.PRIVATE_LAYERS,
+    private: tuple[str, ...] = _PRIVATE,
 ) -> RunEvidence:
     """A run's evidence as ``parse_run_evidence`` hands it to the store."""
     return RunEvidence(
@@ -302,8 +307,9 @@ def test_a_layer_private_in_the_run_is_blanked_though_the_checkout_renamed_it(
         layer_runs.append_runs(evidence, [_run(layer="sea_india")])
 
 
-def test_a_layer_private_in_either_list_is_blanked() -> None:
+def test_a_layer_private_in_either_list_is_blanked(monkeypatch: pytest.MonkeyPatch) -> None:
     # A layer a mid-run merge made private: withholding is the safe direction.
+    monkeypatch.setattr(layer_runs, "PRIVATE_LAYERS", ("sea_india",))
     evidence = _evidence(roster=("sea_india", "safex"), private=())
     assert evidence.is_private("sea_india") is True
     assert evidence.is_private("safex") is False

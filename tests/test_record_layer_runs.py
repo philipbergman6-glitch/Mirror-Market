@@ -227,6 +227,9 @@ def test_a_key_retired_mid_run_still_marks_the_layers_it_skipped(
 def test_record_blanks_a_layer_private_in_the_run_after_a_mid_run_rename(
     history_dir: Path, patched_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The run declared sea_india private (as it was until 2026-10-21); the
+    # checkout's list has since renamed it.
+    monkeypatch.setattr(config, "PRIVATE_LAYERS", ("sea_india",))
     monkeypatch.setattr(layer_runs, "PRIVATE_LAYERS", ("sea_india_renamed",))
     _freshness(patched_db, "sea_india", "success", "2026-10-19 20:10:00", "2026-10-19")
     _summary(tmp_path, roster=("safex", "sea_india"))

@@ -1152,25 +1152,25 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         save=lambda n, d: save_cec_estimates(n, d),
     )
     # Layer 32: SEA India's weekly rate sheet — meal FAS Kandla and degum CIF
-    # Mumbai, the India legs no other source carries. Private while
-    # config.SEA_PUBLISH is False: stored for the local parity read
-    # (analysis/india_parity.py), never exported to data/history/ and never
-    # rendered. SEA has published weekly since 2018 and every run re-reads a
+    # Mumbai, the India legs no other source carries. Published while
+    # config.SEA_PUBLISH is True (owner decision 2026-10-21): exported to
+    # data/history/ and rendered on the headline's India panel through
+    # analysis/india_parity.py. SEA has published weekly since 2018 and every run re-reads a
     # trailing quarter, so an empty return is a broken listing (empty_fails).
     results["sea_india"] = _run_scraper_layer(
-        "sea_india", "Layer 32", "SEA India weekly rate sheet (private)",
+        "sea_india", "Layer 32", "SEA India weekly rate sheet",
         fetch=lambda: fetch_sea_rates(),
         save=lambda n, d: save_sea_india_rates(n, d),
     )
     # Layer 33: SOPA's state-wise kharif estimate, the only state-level
-    # Indian soybean crop figure in the stack. Private while
-    # config.SOPA_PUBLISH is False: the raw table is never exported or
-    # rendered; analysis/india_crop.py derives the public-safe readings.
+    # Indian soybean crop figure in the stack. Published while
+    # config.SOPA_PUBLISH is True (owner decision 2026-10-21): exported to
+    # data/history/ and rendered through analysis/india_crop.py.
     # The next kharif's page is empty until the Soy Conclave in mid-October,
     # so a run that finds no table for any year asked is no_publication,
     # not a failure (empty_fails off); a table that will not parse still is.
     results["sopa_crop"] = _run_scraper_layer(
-        "sopa_crop", "Layer 33", "SOPA India state-wise crop estimate (private)",
+        "sopa_crop", "Layer 33", "SOPA India state-wise crop estimate",
         fetch=lambda: fetch_sopa_estimates(),
         save=lambda n, d: save_sopa_crop_estimates(n, d),
         empty_fails=False,

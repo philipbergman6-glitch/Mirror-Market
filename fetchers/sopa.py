@@ -1,22 +1,21 @@
 """
-Layer 33 — SOPA all-India state-wise soybean crop estimate (private).
+Layer 33 — SOPA all-India state-wise soybean crop estimate.
 
 The Soybean Processors Association of India publishes one kharif estimate a
 year — sowing area, expected yield and estimated production by state, with
 MP/MH division and district detail beneath — on a page that is one URL per
 crop year (``config.SOPA_URL`` + ``select_year``). It is the only state-wise
 Indian soybean crop figure in the stack; Layer 16's mandi price sits on top
-of it, and ``analysis/india_crop.py`` derives the public-safe readings
-(all-India year-on-year change, state shares, one attributed total).
+of it, and ``analysis/india_crop.py`` derives its readings (all-India
+year-on-year change, state shares, the attributed total).
 
 The page is overwritten in place:
     SOPA revises the estimate after the first release (kharif 2025 opened at
     105.36 lakh t and read 110.267 by 2026-10-07) and the page keeps only the
     current figure. Rows are therefore keyed by the day they were read
     (``fetched_date``) so each run's reading survives; the revision path
-    exists only where we kept it. Because the table is private (below) it is
-    not in the history export, so that path persists only in a local DB —
-    the ephemeral CI database does not keep it.
+    exists only where we kept it — in the history export since the table
+    was published (below), so the ephemeral CI database keeps it too.
 
 Units are inferred, so every row must reproduce them:
     Nothing on the page states a unit. The columns are lakh hectares, kg/ha
@@ -39,12 +38,11 @@ document rather than trusting its head. The site's wp-json records for the
 page are empty — only the HTML carries the table.
 
 Licence:
-    SOPA's terms reserve "all rights not otherwise claimed", so the raw table
-    is kept private until SOPA agrees in writing (``config.SOPA_PUBLISH``):
-    it is not exported to the public ``data/history/`` and no page renders
-    it. What may be shown publicly is derived — a year-on-year change, state
-    shares — plus at most one attributed headline total
-    (``config.SOPA_ATTRIBUTION``).
+    SOPA's terms reserve "all rights not otherwise claimed" and no reuse
+    grant exists. Published anyway since 2026-10-21 by owner decision,
+    licence risk accepted (``config.SOPA_PUBLISH``): the raw table is
+    exported to ``data/history/`` and the read renders with
+    ``config.SOPA_ATTRIBUTION``.
 """
 
 from __future__ import annotations

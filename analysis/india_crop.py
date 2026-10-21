@@ -16,13 +16,13 @@ SOPA's kharif estimate:
 * **Has SOPA moved its number?** The readings this database has kept of
   the current kharif, oldest first, where consecutive readings differ. The
   page is overwritten upstream, so this path exists only where a run
-  snapshotted it — on a local DB, not the ephemeral CI one.
+  snapshotted it — kept on CI through the data/history/ export since
+  ``config.SOPA_PUBLISH`` opened (2026-10-21).
 
-Licence boundary: SOPA reserves all rights, so while ``config.SOPA_PUBLISH``
-is False the raw table never renders. What this module returns is the
-public-safe derivation — percentages and shares, plus one headline total
-that must carry ``data.attribution`` wherever it is shown. Read it locally:
-``python -m analysis.india_crop``.
+Licence: SOPA reserves all rights; published anyway while
+``config.SOPA_PUBLISH`` is True (owner decision 2026-10-21, risk accepted).
+The headline's India panel renders this read; ``data.attribution`` goes
+wherever it is shown. Read it locally: ``python -m analysis.india_crop``.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ def india_crop(conn: sqlite3.Connection | None, *, today: date) -> dict[str, Any
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Print the crop read from the local database (the private read)."""
+    """Print the crop read from the local database."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.parse_args(argv)
 
@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     headline = data["headline"]
     print(
         f"India kharif {data['crop_year']} — {data['attribution']} — "
-        f"PRIVATE (SOPA_PUBLISH={data['published']})"
+        f"published={data['published']}"
     )
     print(
         f"read {data['read_on']} ({data['age_days']} days ago): "

@@ -58,7 +58,7 @@ def test_the_read_is_the_newest_reading_of_the_newest_kharif(db) -> None:
     assert (data["crop_year"], data["read_on"], data["age_days"]) == (2025, "2026-10-07", 1)
     assert data["headline"] == {"production_lakh_t": 110.267, "production_mt": 11_026_700.0}
     assert data["attribution"] == config.SOPA_ATTRIBUTION
-    assert data["published"] is False
+    assert data["published"] is True
 
 
 def test_year_on_year_is_against_the_prior_kharif_as_currently_published(db) -> None:

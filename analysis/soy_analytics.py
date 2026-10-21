@@ -23,6 +23,7 @@ Key concepts for learning:
 """
 
 import logging
+import sqlite3
 from datetime import date
 from typing import Any
 
@@ -1668,6 +1669,42 @@ def _latest_aligned_basis(
     return basis_df.iloc[-1]
 
 
+def _india_sea_and_crop(today: date) -> dict[str, Any]:
+    """SEA's sheet + parity (Layer 32) and SOPA's kharif read (Layer 33).
+
+    Each lands as its envelope's ``data`` under ``india_sea``/``india_crop``,
+    or as the envelope's reason under ``*_withheld`` so the page says why it
+    is missing (invariant 2). A layer whose publish gate is closed adds
+    nothing. A read that raises — a stored unit the sheet does not state —
+    is withheld with the error rather than dropped, so it shows on the page.
+    """
+    import config
+    from analysis.india_crop import india_crop
+    from analysis.india_parity import india_parity
+    from pipeline.connection import get_connection, managed_connection
+
+    reads = (
+        ("india_sea", config.SEA_PUBLISH, india_parity),
+        ("india_crop", config.SOPA_PUBLISH, india_crop),
+    )
+    out: dict[str, Any] = {}
+    with managed_connection(get_connection()) as conn:
+        for key, published, read in reads:
+            if not published:
+                continue
+            try:
+                envelope = read(conn, today=today)
+            except (ValueError, sqlite3.Error) as exc:
+                logger.error("%s read failed: %s", key, exc)
+                out[f"{key}_withheld"] = f"the read failed ({exc})"
+                continue
+            if envelope["state"] == "ok":
+                out[key] = envelope["data"]
+            else:
+                out[f"{key}_withheld"] = envelope["reason"]
+    return out
+
+
 def emerging_markets_analysis() -> dict:
     """
     Deep dive on emerging soybean markets: South Africa, India, Nigeria.
@@ -1841,6 +1878,10 @@ def emerging_markets_analysis() -> dict:
 
             if india_domestic_entry:
                 entry["india_domestic"] = india_domestic_entry
+
+            # SEA's weekly sheet (Layer 32) and SOPA's kharif read (Layer 33),
+            # each behind its own publish gate.
+            entry.update(_india_sea_and_crop(date.today()))
 
         # --- Brazil CEPEA domestic price + CBOT basis ---
         if country == "Brazil":

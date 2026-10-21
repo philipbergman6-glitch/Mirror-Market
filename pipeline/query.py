@@ -169,7 +169,7 @@ def read_sea_india_rates(series: str | None = None) -> pd.DataFrame:
     """Read SEA weekly comparative rates (Layer 32) from SQLite.
 
     ``value`` is in the row's own ``unit`` (USD/MT or INR/MT, as the sheet's
-    section heading states). Private while config.SEA_PUBLISH is False.
+    section heading states). Published while config.SEA_PUBLISH is True.
     """
     return _read_table("sea_india_rates", "series", series, date_cols=("Date",))
 
@@ -181,8 +181,8 @@ def read_sopa_crop_estimates(crop_year: int | None = None) -> pd.DataFrame:
     because SOPA overwrites its page when it revises. A caller wanting the
     current estimate takes the newest ``fetched_date`` for the year; the
     all-India total is the row whose state is ``config.SOPA_ALL_INDIA``.
-    Units: lakh ha, kg/ha, lakh t. Private while config.SOPA_PUBLISH is
-    False — only derived figures leave ``analysis/india_crop.py``.
+    Units: lakh ha, kg/ha, lakh t. Published while config.SOPA_PUBLISH is
+    True.
     """
     return _read_table(
         "sopa_crop_estimates", "crop_year",

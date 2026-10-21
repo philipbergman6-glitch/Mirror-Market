@@ -340,18 +340,30 @@ def test_a_listing_with_no_sheet_in_the_window_is_a_failure(monkeypatch, listing
     assert not result.has_rows
 
 
-# --- the privacy gate -------------------------------------------------------
+# --- the publish gate -------------------------------------------------------
 
 
-def test_the_private_table_never_reaches_the_public_history_export() -> None:
-    """SEA's sheets are all-rights-reserved and the repo is public: a
-    committed CSV is a publication. Until SEA_PUBLISH is flipped (with SEA's
-    written permission), the table must stay out of the export."""
+def test_the_table_reaches_the_public_history_export_while_published() -> None:
+    """Opened 2026-10-21 by owner decision (A18 stance, risk accepted; SEA has
+    not granted reproduction). The export follows the flag, so flipping it
+    back withholds the CSV from the next export."""
+    import importlib.util
+
     import config
-    from pipeline.history import HISTORY_TABLES
+    from pipeline import history
 
-    assert config.SEA_PUBLISH is False
-    assert "sea_india_rates" not in HISTORY_TABLES
+    assert config.SEA_PUBLISH is True
+    assert history.HISTORY_TABLES["sea_india_rates"] == ("Date", "series")
+    # A throwaway copy of the module: reloading pipeline.history itself would
+    # swap its exception classes under every test that imported them.
+    spec = importlib.util.spec_from_file_location("_history_gate_probe", history.__file__)
+    probe = importlib.util.module_from_spec(spec)
+    try:
+        config.SEA_PUBLISH = False
+        spec.loader.exec_module(probe)
+    finally:
+        config.SEA_PUBLISH = True
+    assert "sea_india_rates" not in probe.HISTORY_TABLES
 
 
 def test_paging_past_the_last_listing_page_ends_the_listing(monkeypatch) -> None:
