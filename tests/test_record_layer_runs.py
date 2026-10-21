@@ -375,6 +375,26 @@ def test_relay_opens_the_issue_when_a_layer_crosses_three_sessions(history_dir: 
     assert "decision-impairing" not in body
 
 
+def test_a_streak_from_the_record_start_is_stated_as_a_floor(history_dir: Path, gh) -> None:
+    # #566: the record began after the outage did; the relay must not date the
+    # outage's start to the record's first session.
+    calls, _ = gh
+    _seed(["failed", "failed", "failed"])
+    relay.main([])
+    body = _body(calls, ("issue", "create"))
+    assert "at least 3 consecutive sessions" in body
+    assert "the record begins 2026-10-05" in body
+
+
+def test_a_streak_after_an_available_session_is_stated_exactly(history_dir: Path, gh) -> None:
+    calls, _ = gh
+    _seed(["success", "failed", "failed", "failed"])
+    relay.main([])
+    body = _body(calls, ("issue", "create"))
+    assert "unavailable 3 consecutive sessions" in body
+    assert "at least" not in body and "record begins" not in body
+
+
 def test_basket_layer_is_tagged_decision_impairing(history_dir: Path, gh) -> None:
     calls, _ = gh
     _seed(["failed", "failed", "failed"], layer="gulf_bids")

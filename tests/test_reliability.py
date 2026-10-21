@@ -326,3 +326,16 @@ def test_no_run_sessions_extend_a_dead_streak() -> None:
 def test_dead_streak_never_counts_sessions_before_the_record() -> None:
     rows = [_row(MON, "safex", "failed")]
     assert reliability.dead_layers(rows, layers=("safex",)) == {}
+
+
+def test_dead_streak_says_when_it_opens_at_the_record_start() -> None:
+    # #566: india_domestic was dark from 2026-10-09, the record began 10-16, so
+    # "3 sessions from 10-16" is a floor. The streak must say it cannot see
+    # further back, rather than read as an outage that began with the record.
+    sessions = _weekdays(MON, 4)
+    rows = [_row(s, "safex", "failed") for s in sessions]
+    rows += [_row(sessions[0], "dce", "success")] + [_row(s, "dce", "failed") for s in sessions[1:]]
+    dead = reliability.dead_layers(rows, layers=("safex", "dce"))
+    assert dead["safex"].opens_at_record_start is True
+    assert dead["safex"].first_session == sessions[0]
+    assert dead["dce"].opens_at_record_start is False

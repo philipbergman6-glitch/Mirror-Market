@@ -112,13 +112,20 @@ def _pct(numerator: int, denominator: int) -> float | None:
 
 @dataclass(frozen=True)
 class Streak:
-    """An open unavailable streak, counted in sessions."""
+    """An open unavailable streak, counted in sessions.
+
+    ``opens_at_record_start`` marks a streak that runs from the record's first
+    session: the record cannot see what came before, so ``sessions`` is a
+    floor and ``first_session`` is where the record begins, not where the
+    outage did (#566 — dark since 2026-10-09, record from 2026-10-16).
+    """
 
     layer: str
     sessions: int
     first_session: date
     last_session: date
     last_status: str
+    opens_at_record_start: bool
 
 
 def _open_streak(layer: str, verdicts: Sequence[tuple[str, str]], sessions: Sequence[date]) -> Streak | None:
@@ -132,6 +139,7 @@ def _open_streak(layer: str, verdicts: Sequence[tuple[str, str]], sessions: Sequ
     return Streak(
         layer=layer, sessions=length, first_session=sessions[-length],
         last_session=sessions[-1], last_status=verdicts[-1][1],
+        opens_at_record_start=length == len(sessions),
     )
 
 
