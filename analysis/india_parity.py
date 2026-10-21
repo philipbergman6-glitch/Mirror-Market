@@ -24,8 +24,10 @@ Two questions a soy buyer asks of India, each answered per SEA sheet date:
   and handling costs are not modelled: this is an indicator, not a cost
   sheet.
 
-Private while ``config.SEA_PUBLISH`` is False — nothing renders it on the
-site. Read it locally: ``python -m analysis.india_parity``.
+Published while ``config.SEA_PUBLISH`` is True (owner decision 2026-10-21,
+licence risk accepted): the headline's India panel renders the newest week
+and ``data.sheet``, the whole newest sheet. Read it locally:
+``python -m analysis.india_parity``.
 """
 
 from __future__ import annotations
@@ -64,6 +66,27 @@ def _sheets(conn: sqlite3.Connection, weeks: int) -> list[tuple[date, dict[str, 
             raise ValueError(f"sea_india_rates: {series} stored in {unit!r}, expected {expected!r}")
         by_date.setdefault(date.fromisoformat(str(raw_date)[:10]), {})[series] = float(value)
     return sorted(by_date.items())[-weeks:]
+
+
+def _newest_sheet(conn: sqlite3.Connection, day: date) -> list[dict[str, Any]]:
+    """Every series SEA quoted on ``day``, in ``config.SEA_SERIES`` order.
+
+    A series SEA marked NQ that week has no row and is absent, never zero.
+    """
+    rows = conn.execute(
+        "SELECT series, value, unit FROM sea_india_rates WHERE substr(Date, 1, 10) = ?",
+        (day.isoformat(),),
+    ).fetchall()
+    quoted = {series: (float(value), unit) for series, value, unit in rows}
+    sheet = []
+    for series, spec in config.SEA_SERIES.items():
+        if series not in quoted:
+            continue
+        value, unit = quoted[series]
+        if unit != spec["unit"]:
+            raise ValueError(f"sea_india_rates: {series} stored in {unit!r}, expected {spec['unit']!r}")
+        sheet.append({"series": series, "value": value, "unit": unit})
+    return sheet
 
 
 def duty_on(day: date) -> tuple[float, str] | None:
@@ -198,6 +221,7 @@ def india_parity(
         "reason": "",
         "data": {
             "weeks": result,
+            "sheet": _newest_sheet(conn, newest),
             "newest": newest.isoformat(),
             "age_days": age,
             "attribution": config.SEA_ATTRIBUTION,
@@ -211,7 +235,7 @@ def _fmt(value: float | None, spec: str = ",.0f") -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Print the parity table from the local database (the private read)."""
+    """Print the parity table from the local database."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--weeks", type=int, default=13)
     args = parser.parse_args(argv)
@@ -224,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"withheld: {envelope['reason']}")
         return 1
     data = envelope["data"]
-    print(f"India parity — {data['attribution']} — PRIVATE (SEA_PUBLISH={data['published']})")
+    print(f"India parity — {data['attribution']} — published={data['published']}")
     print(
         f"{'as on':<10}  {'meal FAS':>8} {'board':>14} {'premium':>8}   "
         f"{'CIF':>6} {'duty':>5} {'landed':>7} {'SE Indore':>9} {'gap':>6}  domestic vs import parity"

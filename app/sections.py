@@ -590,10 +590,23 @@ def _country_notes(name: str, info: dict) -> list[str]:
     An empty card reads as a bug. India's mandi feed goes quiet on a closed
     market day, and saying so beats omitting the series silently (#155).
     """
+    notes = []
     if name == "India" and not info.get("india_domestic"):
-        return ["Mandi domestic price (Agmarknet): no completed day stored — "
-                "the feed failed this run"]
-    return []
+        notes.append("Mandi domestic price (Agmarknet): no completed day stored — "
+                     "the feed failed this run")
+    sea = info.get("india_sea")
+    if sea:
+        # A parity group with both legs withheld has no card to carry its
+        # note, and _group drops it — so its reasons are stated here.
+        meal, oil, withheld = _sea_parity_legs(sea)
+        if meal.get("premium_usd_mt") is None and oil.get("gap_usd_mt") is None:
+            notes.append(f"India vs the board (SEA, as on {sea.get('newest', '')}): withheld — "
+                         f"{withheld or 'neither leg could be struck'}")
+    for key, label in (("india_sea_withheld", "SEA weekly rate sheet"),
+                       ("india_crop_withheld", "SOPA kharif crop estimate")):
+        if info.get(key):
+            notes.append(f"{label}: withheld — {info[key]}")
+    return notes
 
 
 def _psd_group(info: dict) -> dict | None:
@@ -627,7 +640,63 @@ def _currency_group(info: dict) -> dict | None:
 
 
 def _india_groups(info: dict) -> list[dict | None]:
-    india = info.get("india_domestic") or {}
+    extra = [g for g in (*_sea_groups(info.get("india_sea")), _crop_group(info.get("india_crop"))) if g]
+    return [*_mandi_groups(info.get("india_domestic") or {}), *extra]
+
+
+def _sea_groups(sea: dict | None) -> list[dict | None]:
+    """SEA's newest weekly sheet and the two reads struck on it (Layer 32)."""
+    if not sea:
+        return []
+    as_on = sea.get("newest", "")
+    meal, oil, withheld = _sea_parity_legs(sea)
+    premium, gap, duty = meal.get("premium_usd_mt"), oil.get("gap_usd_mt"), oil.get("duty")
+    return [
+        _group(f"SEA weekly rate sheet (as on {as_on})", [
+            _card(row["series"], row["value"], prefix="$" if row["unit"] == "USD/MT" else "₹",
+                  caption=row["unit"])
+            for row in sea.get("sheet") or []
+        ], note=sea.get("attribution", "")),
+        _group(f"India vs the board (SEA, as on {as_on})", [
+            _card("Meal FAS Kandla over CBOT", premium, places=1, prefix="$",
+                  value_class=_direction(premium),
+                  caption=f"USD/MT · vs {meal.get('board_contract')} same session"),
+            # An indicator: duty on SEA's CIF, port costs not modelled.
+            _card("Soy oil Indore vs landed import", gap, places=1, prefix="$",
+                  value_class=_direction(gap),
+                  caption=("USD/MT · " + ("domestic dearer" if (gap or 0) > 0 else "domestic cheaper")
+                           + (f" · CIF + {duty * 100:.1f}% duty" if duty is not None else ""))),
+        ], note=withheld or "Indicator: duty applied to SEA's CIF; port and handling costs not modelled."),
+    ]
+
+
+def _sea_parity_legs(sea: dict) -> tuple[dict, dict, str]:
+    """The newest week's meal and oil legs, and their joined withheld notes."""
+    week = (sea.get("weeks") or [{}])[-1]
+    meal, oil = week.get("meal") or {}, week.get("oil") or {}
+    return meal, oil, "; ".join(n for n in (meal.get("note"), oil.get("note")) if n)
+
+
+def _crop_group(crop: dict | None) -> dict | None:
+    """SOPA's newest kharif read (Layer 33): the total, its YoY, top state shares."""
+    if not crop:
+        return None
+    year = crop.get("crop_year")
+    yoy = (crop.get("yoy") or {}).get("production_lakh_t_pct")
+    cards = [_card(
+        f"Production (kharif {year})", (crop.get("headline") or {}).get("production_mt"),
+        suffix=" MT", delta=f"{yoy:+.1f}% YoY" if yoy is not None else "",
+        delta_class=_direction(yoy), caption=f"read {crop.get('read_on', '')}",
+    )]
+    cards += [
+        _card(f"{row['state']} share", row["share_pct"], places=1, suffix="%",
+              caption=f"of kharif {year} production")
+        for row in (crop.get("state_shares") or [])[:3]
+    ]
+    return _group("SOPA kharif crop estimate", cards, note=crop.get("attribution", ""))
+
+
+def _mandi_groups(india: dict) -> list[dict | None]:
     if not india:
         return []
     mandi_date = india.get("soybean_mandi_date")

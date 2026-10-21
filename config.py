@@ -160,8 +160,8 @@ PRODUCTION_LAYERS = (
     ("epa_rfs", "29", "US EPA (Renewable Fuel Standard)", "Monthly", "RIN generation, RIN prices and RVOs"),
     ("us_processor_cash", "30", "USDA AMS (MARS, report 3511)", "Weekly", "US processor cash soybean oil and meal"),
     ("comexstat", "31", "MDIC/SECEX Comex Stat", "Monthly", "Brazil soy, meal and oil exports"),
-    ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India meal FAS and oil import legs (private)"),
-    ("sopa_crop", "33", "SOPA (state-wise crop estimate)", "Annual", "India soybean crop by state (private)"),
+    ("sea_india", "32", "SEA India (weekly rate sheet)", "Weekly", "India bean, meal and oil rate sheet"),
+    ("sopa_crop", "33", "SOPA (state-wise crop estimate)", "Annual", "India soybean crop by state"),
     ("cyclones_nhc", "34", "NOAA NHC", "Per advisory, read daily",
      "Tropical-cyclone forecast tracks and wind radii — Atlantic, East/Central Pacific"),
     ("cyclones_jtwc", "35", "JTWC", "Per advisory, read daily",
@@ -171,7 +171,10 @@ PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # Layers whose rendered output is the private desk edition only. A public
 # record of them (data/history/layer_runs.csv) carries the layer name and its
 # graded status and nothing else — the same as the public freshness table.
-PRIVATE_LAYERS = ("sea_india", "sopa_crop")
+# Empty since 2026-10-21: the owner opened SEA (32) and SOPA (33), the last
+# two, under the A18 stance (#468: every series public, licence risk accepted,
+# internal use, no sale). The mechanism stays for the next private source.
+PRIVATE_LAYERS: tuple[str, ...] = ()
 
 # ---------------------------------------------------------------------------
 # Fast refresh — the price-only path (`python main.py --fast`)
@@ -1125,10 +1128,13 @@ SEA_ATTRIBUTION = (
     "Source: The Solvent Extractors' Association of India (SEA), weekly comparative rates"
 )
 
-# Publish gate. False until SEA grants reproduction in writing (#72). While
-# False the table stays out of the public history export and off every page;
-# tests/test_fetcher_sea.py pins the export half.
-SEA_PUBLISH = False
+# Publish gate. Opened 2026-10-21 by owner decision, extending A18 (#468:
+# every series public, licence risk accepted, internal use with no sale) —
+# SEA has not granted reproduction (#72), so this is the accepted risk, not a
+# licence. True puts the table in the public history export and on the
+# headline's India panel with SEA_ATTRIBUTION; tests/test_fetcher_sea.py pins
+# the export half. Flip back to False to withhold it again.
+SEA_PUBLISH = True
 
 # ---------------------------------------------------------------------------
 # Layer 33 — SOPA all-India state-wise soybean crop estimate (no API key)
@@ -1152,12 +1158,13 @@ SEA_PUBLISH = False
 # 16-17 Oct 2026); until then its page has no table and SOPA's own
 # "Found 0 posts" comment, which is no_publication, not a failure.
 #
-# Licence: SOPA's terms reserve "all rights not otherwise claimed". No reuse
-# grant, so the raw table is NOT in pipeline/history.py's export (the repo
-# is public — a committed CSV is a publication) and no page renders it.
-# What may be shown publicly is derived — year-on-year change, state shares
-# — plus at most one attributed headline total. Private tables are not
-# exported, so the revision snapshots persist only in a local DB.
+# Licence: SOPA's terms reserve "all rights not otherwise claimed" and no
+# reuse grant exists. Published anyway since 2026-10-21 by owner decision,
+# extending A18 (#468: every series public, licence risk accepted, internal
+# use with no sale): the raw table is in pipeline/history.py's export, which
+# is also what finally keeps the revision snapshots on the ephemeral CI
+# database, and the headline's India panel renders the read with
+# SOPA_ATTRIBUTION.
 # ---------------------------------------------------------------------------
 SOPA_URL = "https://sopa.org/all-india-state-wise-soybean-area-production-and-productivity/"
 
@@ -1173,11 +1180,11 @@ SOPA_ATTRIBUTION = (
     "Source: The Soybean Processors Association of India (SOPA), kharif crop estimate"
 )
 
-# Publish gate. False until SOPA grants reproduction in writing. While False
-# the raw table stays out of the public history export and off every page;
-# only derived figures and one attributed headline total may render.
-# tests/test_fetcher_sopa.py pins the export half.
-SOPA_PUBLISH = False
+# Publish gate. Opened 2026-10-21 by owner decision (see the licence note
+# above) — the accepted risk, not a licence. True puts the raw table in the
+# public history export; tests/test_fetcher_sopa.py pins the export half.
+# Flip back to False to withhold it again.
+SOPA_PUBLISH = True
 
 # India's effective import duty on crude soybean oil: (in force from, rate,
 # source). Basic customs duty + 5% AIDC + a 10% Social Welfare Surcharge on

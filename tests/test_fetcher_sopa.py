@@ -17,7 +17,6 @@ import pytest
 
 import config
 from fetchers.sopa import CropEstimate, fetch_sopa_estimates, parse_crop_table
-from pipeline.history import HISTORY_TABLES
 from pipeline.results import ScraperShapeError
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -191,10 +190,23 @@ def test_a_year_whose_table_will_not_parse_fails_the_run(monkeypatch, page) -> N
     assert "2025" in (result.error or "")
 
 
-def test_the_private_table_never_reaches_the_public_history_export() -> None:
-    """SOPA reserves all rights not otherwise claimed and the repo is public:
-    a committed CSV is a publication. Only derived figures (a YoY change,
-    state shares) and at most one attributed headline total may be shown,
-    and the raw table stays out of data/history/ until SOPA_PUBLISH flips."""
-    assert config.SOPA_PUBLISH is False
-    assert "sopa_crop_estimates" not in HISTORY_TABLES
+def test_the_table_reaches_the_public_history_export_while_published() -> None:
+    """Opened 2026-10-21 by owner decision (A18 stance, risk accepted; SOPA has
+    not granted reproduction). SOPA overwrites its page in place, so the
+    export is the only record of each revision; it follows the flag."""
+    import importlib.util
+
+    from pipeline import history
+
+    assert config.SOPA_PUBLISH is True
+    assert history.HISTORY_TABLES["sopa_crop_estimates"] == ("crop_year", "state", "fetched_date")
+    # A throwaway copy of the module: reloading pipeline.history itself would
+    # swap its exception classes under every test that imported them.
+    spec = importlib.util.spec_from_file_location("_history_gate_probe", history.__file__)
+    probe = importlib.util.module_from_spec(spec)
+    try:
+        config.SOPA_PUBLISH = False
+        spec.loader.exec_module(probe)
+    finally:
+        config.SOPA_PUBLISH = True
+    assert "sopa_crop_estimates" not in probe.HISTORY_TABLES

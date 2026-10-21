@@ -49,11 +49,11 @@ Guards — every value is checked against the sheet's own arithmetic:
 
 Licence:
     "Copyright © 2018 Solvent Extractors' Association of India. All Rights
-    Reserved." No reuse grant, so the table is kept private until SEA agrees
-    in writing (``config.SEA_PUBLISH``): it is not exported to the public
-    ``data/history/`` and no page reads it. Each run re-reads the trailing
-    ``SEA_LOOKBACK_DAYS`` of sheets instead; SEA keeps every past sheet
-    online, so nothing is lost by not persisting it.
+    Reserved." No reuse grant. Published anyway since 2026-10-21 by owner
+    decision, licence risk accepted (``config.SEA_PUBLISH``): exported to
+    ``data/history/`` and rendered on the headline's India panel with
+    ``config.SEA_ATTRIBUTION``. Each run still re-reads the trailing
+    ``SEA_LOOKBACK_DAYS`` of sheets; SEA keeps every past sheet online.
 """
 
 from __future__ import annotations

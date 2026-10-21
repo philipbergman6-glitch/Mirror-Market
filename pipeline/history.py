@@ -37,7 +37,7 @@ import os
 import sqlite3
 from dataclasses import dataclass
 
-from config import HISTORY_DIR
+from config import HISTORY_DIR, SEA_PUBLISH, SOPA_PUBLISH
 from pipeline.connection import get_connection, managed_connection
 
 logger = logging.getLogger(__name__)
@@ -82,6 +82,14 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # current-day snapshot, which no source reproduces exactly — so history
     # older than a month exists only where we keep it.
     "india_domestic_prices": ("Date", "commodity"),
+    # Layers 32/33, published by owner decision 2026-10-21 (extending A18
+    # #468, licence risk accepted). Each rides on its own publish gate, so
+    # flipping the flag back withholds the CSV from the next export. SEA keeps
+    # every sheet online, so its CSV is a publication more than a record;
+    # SOPA overwrites its page in place, so its CSV is the only copy of each
+    # revision once the day passes.
+    **({"sea_india_rates": ("Date", "series")} if SEA_PUBLISH else {}),
+    **({"sopa_crop_estimates": ("crop_year", "state", "fetched_date")} if SOPA_PUBLISH else {}),
     # One full curve per fetched_date — term-structure history.
     "forward_curve": ("fetched_date", "commodity", "contract_month"),
     # Named-contract daily bars (Layer 11b). Listed contracts self-heal by
