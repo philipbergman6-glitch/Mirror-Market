@@ -70,11 +70,20 @@ def run_url() -> str:
 
 def _line(streak: Streak) -> str:
     tag = " — **decision-impairing** (availability basket)" if streak.layer in config.AVAILABILITY_BASKET else ""
-    return (
-        f"- `{streak.layer}`{tag}: unavailable {streak.sessions} consecutive sessions "
-        f"({streak.first_session.isoformat()} → {streak.last_session.isoformat()}), "
-        f"last graded `{streak.last_status}`"
-    )
+    if streak.opens_at_record_start:
+        # The record cannot see past its own first session, so the streak is a
+        # floor; printing that session as the start would date the outage (#566).
+        span = (
+            f"at least {streak.sessions} consecutive sessions — every one on record "
+            f"(the record begins {streak.first_session.isoformat()}; through "
+            f"{streak.last_session.isoformat()})"
+        )
+    else:
+        span = (
+            f"{streak.sessions} consecutive sessions "
+            f"({streak.first_session.isoformat()} → {streak.last_session.isoformat()})"
+        )
+    return f"- `{streak.layer}`{tag}: unavailable {span}, last graded `{streak.last_status}`"
 
 
 def build_body(now: dict[str, Streak], newly: list[str], recovered: dict[str, Streak]) -> str:
