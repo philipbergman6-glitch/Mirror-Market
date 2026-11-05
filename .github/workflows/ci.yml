@@ -61,7 +61,7 @@ jobs:
         run: ruff check .
 
       - name: Type check (mypy)
-        run: mypy analysis pipeline fetchers
+        run: mypy analysis pipeline fetchers mirror_mcp
 
       - name: Tests with coverage
         run: pytest

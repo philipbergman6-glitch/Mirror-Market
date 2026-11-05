@@ -1,0 +1,5 @@
+# The hosted MCP edition (#578) — installed by the Fly image and the dev
+# requirements, never by the pipeline: the pipeline's import graph must not
+# pick up a server framework. Pinned to a release at least two weeks old.
+-r requirements.txt
+fastmcp~=4.1.3

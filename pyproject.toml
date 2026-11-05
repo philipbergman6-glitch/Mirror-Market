@@ -13,7 +13,7 @@ markers = [
 # itself — so the number still overstates coverage of *everything* by that
 # margin; read it as "product code minus scripts/".
 [tool.coverage.run]
-source = ["pipeline", "analysis", "app", "trust", "pricing", "fetchers", "main", "config"]
+source = ["pipeline", "analysis", "app", "trust", "pricing", "fetchers", "main", "config", "mirror_mcp"]
 omit = [
     "tests/*",
     "scripts/*",
