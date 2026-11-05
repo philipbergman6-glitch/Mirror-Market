@@ -1,0 +1,30 @@
+# Build context for the MCP image (#579). Everything a public server must
+# never carry is excluded here, before any COPY can see it.
+.git
+.github
+.venv
+.env
+.env.*
+.claude
+.playwright-mcp
+.scratch
+docs
+tests
+research
+pitch
+graphify-out
+**/__pycache__
+**/*.pyc
+# Client records and the private assumption tier (invariant 4).
+data/workspace
+data/history
+data/storage
+!data/storage/mirror_market.db
+data/reconciliation
+data/reference/assumptions/private
+data/reference/positions
+data/reference/options
+data/reference/clearing
+data/reference/import_profiles
+data/reference/opportunities
+data/reference/trial
