@@ -184,3 +184,21 @@ Acceptance with the design partner: in a timed morning read, the buyer can name
 what changed, why it matters to the cargo/basis decision, what they will check
 next, and which missing input prevents action. No first-screen layout has been
 changed; #406 and `DESIGN.md` require the buyer/design approval first.
+
+## Hosted MCP edition — 2026-11-05 (#578–#581)
+
+The first hosted surface: a read-only MCP server over the daily SQLite, for
+**one named trial buyer, free**. It exists to test one question before any
+positions or landed-cost workflow is built — *does conversational access to
+Mirror-Market help a physical buyer understand the market and answer useful
+questions faster?* — with pass/fail criteria written on #578 before code and
+a two-week readout from the question log (tool calls only, never answers).
+
+What it deliberately is not: not a second product, not a feed (the same daily
+edition the site publishes, baked into the image after the site smokes pass),
+not a settlement authority (the server's instructions and `check_language`
+carry the one price vocabulary), and not a licensed redistribution decision.
+The owner set the licence question aside for this one-user, no-revenue trial;
+it is recorded here once and is not reopened by this track. What would reopen
+it, and OAuth with it, is the same trigger as the rest of this file: a second
+user, or money.
