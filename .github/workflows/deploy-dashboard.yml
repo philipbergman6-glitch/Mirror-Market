@@ -45,6 +45,10 @@ on:
       - 'data/reference/assumptions/**'
       - 'config.py'
       - 'main.py'
+      - 'mirror_mcp/**'
+      - 'Dockerfile'
+      - 'fly.toml'
+      - 'requirements-mcp.txt'
 
 permissions:
   # write: the pipeline commits data/history/*.csv back to the repo — the
@@ -430,6 +434,49 @@ jobs:
           --url "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}"
           --candidate "$RUNNER_TEMP/mirror-market-candidate"
           --browser
+
+      # The hosted MCP edition (#580): the same database the site was built
+      # from, baked into a Fly image, published only after both smokes passed.
+      # Three things in order, each loud: the privacy check (invariant 4 — a
+      # non-roster table, a private-layer table, a desk assumption set or a
+      # client key in a served row fails here, before anything leaves the
+      # runner); the deploy; and the proof that the new image is the one
+      # answering — /health echoes the build stamp this run passed in.
+      # No continue-on-error: a stale edition left live is a failed run.
+      - name: Install flyctl
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.smoke_candidate.outcome == 'success' && steps.smoke_public.outcome == 'success' }}
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1  # 1.6
+        with:
+          version: 0.4.120
+      - name: Publish the MCP edition
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.smoke_candidate.outcome == 'success' && steps.smoke_public.outcome == 'success' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/mcp_privacy_check.py data/storage/mirror_market.db
+          flyctl version
+          flyctl deploy --remote-only --ha=false --yes --wait-timeout 10m \
+            --build-arg "BUILT_AT=${PIPELINE_STARTED_AT}"
+          APP=$(python - <<'PY'
+          import tomllib; print(tomllib.load(open("fly.toml", "rb"))["app"])
+          PY
+          )
+          for attempt in 1 2 3 4 5 6; do
+            if LIVE=$(curl -fsS "https://${APP}.fly.dev/health") && [ -n "$LIVE" ]; then break; fi
+            sleep 10
+          done
+          printf '%s' "${LIVE:-}" | python - "${PIPELINE_STARTED_AT}" <<'PY'
+          import json, sys
+          expected = sys.argv[1]
+          raw = sys.stdin.read()
+          if not raw:
+              raise SystemExit("MCP edition: /health never answered")
+          live = json.loads(raw)
+          if live.get("db_built_at") != expected:
+              raise SystemExit(f"MCP edition: live build stamp {live.get('db_built_at')!r} is not this run's {expected!r}")
+          print(f"MCP edition live: built {expected}, latest session {live.get('latest_session')}, {live.get('tool_count')} tools")
+          PY
 
       # The source reliability record (B34 #520, docs/plans/source-reliability-a19.md):
       # one append-only row per (run, layer) in data/history/layer_runs.csv,
