@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
 from mirror_mcp.server import build_server
@@ -18,8 +17,8 @@ def main() -> int:
         return 2
     server.run(
         transport="http",
-        host=os.environ.get("MIRROR_MCP_HOST", "127.0.0.1"),
-        port=int(os.environ.get("MIRROR_MCP_PORT", "8000")),
+        host=settings.host,
+        port=settings.port,
         path=settings.mcp_path,
         show_banner=False,
         # The secret path would otherwise be printed on every access-log line.

@@ -67,6 +67,8 @@ def test_env_is_the_one_config_site(monkeypatch, db_path, tmp_path):
     monkeypatch.setenv("MIRROR_MCP_PATH_TOKEN", TOKEN)
     monkeypatch.setenv("MIRROR_MCP_LOG_PATH", str(tmp_path / "q.jsonl"))
     monkeypatch.setenv("MIRROR_MCP_DB_BUILT_AT", "2026-11-05T00:00:00+00:00")
+    monkeypatch.setenv("MIRROR_MCP_HOST", "127.0.0.1")
+    monkeypatch.setenv("MIRROR_MCP_PORT", "8000")
     assert Settings.from_env().validated().path_token == TOKEN
     monkeypatch.delenv("MIRROR_MCP_PATH_TOKEN")
     with pytest.raises(SettingsError, match="MIRROR_MCP_PATH_TOKEN"):
@@ -76,7 +78,9 @@ def test_env_is_the_one_config_site(monkeypatch, db_path, tmp_path):
 # -- freshness ---------------------------------------------------------------
 
 async def test_freshness_reports_each_layer_against_its_budget(settings):
-    async with Client(build_server(settings)) as client:
+    from datetime import datetime, timezone
+
+    async with Client(build_server(settings, clock=lambda: datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc))) as client:
         result = await client.call_tool("freshness")
     body = result.structured_content
     assert body["state"] == "ok"
@@ -86,8 +90,11 @@ async def test_freshness_reports_each_layer_against_its_budget(settings):
     assert prices["last_success"] == "2026-11-04T21:05:00+00:00"
     assert prices["number"] == "1"
     assert prices["budget_days"] >= 1
-    # A rostered layer with no freshness row is "never learned", not a zero.
-    assert rows["fred"]["status"] == "not-run"
+    assert prices["age_days"] == 2  # judged on the injected clock, 2026-11-07 vs the 11-04 success
+    # A rostered layer with no freshness row is "never learned", not a zero — the manifest's own word.
+    from mirror_mcp.server import LAYER_NOT_RUN
+
+    assert rows["fred"]["status"] == LAYER_NOT_RUN == "not-run"
     assert rows["fred"]["last_success"] is None
     assert body["meta"]["db_built_at"] == "2026-11-05T00:00:00+00:00"
     assert body["meta"]["latest_session"] == "2026-11-04"
@@ -100,7 +107,9 @@ def _query_read_tables() -> set[str]:
     import re
     from pathlib import Path
 
-    src = Path("pipeline/query.py").read_text()
+    from pipeline import query
+
+    src = Path(query.__file__).read_text()
     return set(re.findall(r'_read_table\(\s*"([a-z_]+)"', src)) | set(re.findall(r"FROM ([a-z_]+)", src))
 
 
@@ -172,10 +181,36 @@ def test_a_table_outside_the_roster_is_refused_at_startup(settings, db_path):
         build_server(settings)
 
 
-def test_the_connection_cannot_write(settings):
-    server = build_server(settings)
+@pytest.fixture
+def opened(monkeypatch):
+    """The connections build_server opens, observed at db.open_readonly — the server's one seam to SQLite."""
+    from mirror_mcp import db
+
+    seen: list[sqlite3.Connection] = []
+    real = db.open_readonly
+
+    def spy(path):
+        conn = real(path)
+        seen.append(conn)
+        return conn
+
+    monkeypatch.setattr(db, "open_readonly", spy)
+    return seen
+
+
+def test_the_servers_connection_cannot_write(settings, opened):
+    build_server(settings)
+    (conn,) = opened
     with pytest.raises(sqlite3.OperationalError, match="readonly"):
-        server._mirror_conn.execute("INSERT INTO prices(commodity,Date) VALUES ('x','2026-01-01')")
+        conn.execute("INSERT INTO prices(commodity,Date) VALUES ('x','2026-01-01')")
+
+
+def test_an_unmapped_private_layer_is_a_startup_error(settings, monkeypatch):
+    from mirror_mcp import db
+
+    monkeypatch.setattr(config, "PRIVATE_LAYERS", ("brand_new_private_layer",))
+    with pytest.raises(db.PrivacyRefusal, match="brand_new_private_layer"):
+        build_server(settings)
 
 
 # -- market blocks: price, crush, spread, supply_demand, weather ----------------
@@ -214,6 +249,8 @@ async def test_price_is_the_site_block_with_price_semantics_in_meta(settings, ma
     assert body["meta"]["confidence"] == semantics.Confidence.BOARD_REFERENCE.value
     assert "settlement" not in body["meta"]["permitted_claims"]
     assert body["meta"]["caveat"]
+    assert body["data"]["currency"]["state"] == "absent"  # CBOT quotes in USD; the reason says so
+    assert "USD" in body["data"]["currency"]["reason"]
 
 
 async def test_market_slug_is_validated_against_the_registry(settings):
@@ -276,17 +313,20 @@ async def test_river_serves_observed_stages_per_gauge_newest_first(settings, db_
     conn.executemany(
         "INSERT INTO river_levels(gauge,Date,stage,unit,is_forecast,source) VALUES (?,?,?,?,?,?)",
         [("st_louis", "2026-11-03", 3.1, "ft", 0, "USGS"), ("st_louis", "2026-11-04", 2.9, "ft", 0, "USGS"),
-         ("st_louis", "2026-11-05", 2.5, "ft", 1, "NWS"), ("rosario", "2026-11-04", 1.2, "m", 0, "INA")],
+         ("st_louis", "2026-11-05", 2.5, "ft", 1, "NWS"), ("rosario", "2026-11-04", 1.2, "m", 0, "INA")]
+        + [("st_louis", f"2026-12-{d:02d}", 9.9, "ft", 1, "NWS") for d in range(1, 29)],  # 28 forecasts
     )
     conn.commit()
     conn.close()
     async with Client(build_server(settings)) as client:
-        body = (await client.call_tool("river", {"gauge": "st_louis"})).structured_content
+        body = (await client.call_tool("river", {"gauge": "st_louis", "per_gauge": 2})).structured_content
         everything = (await client.call_tool("river")).structured_content
     assert body["state"] == "ok"
-    assert [r["Date"] for r in body["data"]["rows"]] == ["2026-11-04", "2026-11-03"]  # forecast row excluded
+    # forecasts are excluded before the per-gauge limit, so 28 forecast rows cannot crowd out the observations
+    assert [r["Date"] for r in body["data"]["rows"]] == ["2026-11-04", "2026-11-03"]
     assert body["meta"]["as_of"] == "2026-11-04"
     assert {r["gauge"] for r in everything["data"]["rows"]} == {"st_louis", "rosario"}
+    assert all(not r["is_forecast"] for r in everything["data"]["rows"])
 
 
 async def test_provenance_names_the_layer_its_budget_and_its_freshness(settings):
@@ -308,10 +348,10 @@ async def test_check_language_reports_forbidden_claims_and_what_is_permitted(set
     async with Client(build_server(settings)) as client:
         bad = (await client.call_tool("check_language", {"text": "Soybeans' settlement price was 149 USD/MT, an executable level."})).structured_content
         ok = (await client.call_tool("check_language", {"text": "Soybeans' delayed close was 149 USD/MT on 2026-11-04 (Yahoo)."})).structured_content
-    assert bad["state"] == "withheld"
+    assert bad["state"] == "ok" and bad["data"]["verdict"] == "withheld"
     kinds = {v["kind"] for v in bad["data"]["violations"]}
     assert "settlement" in kinds and "executable" in kinds
-    assert ok["state"] == "ok" and ok["data"]["violations"] == []
+    assert ok["state"] == "ok" and ok["data"]["verdict"] == "clean" and ok["data"]["violations"] == []
     assert ok["data"]["permitted_claims"] == []  # nothing is permitted when no price type is given
 
 
@@ -340,9 +380,10 @@ async def test_question_log_records_the_call_never_the_answer(settings, market_d
     lines = [json.loads(line) for line in settings.log_path.read_text().splitlines()]
     assert [(line["tool"], line["status"]) for line in lines] == [("price", "completed"), ("freshness", "completed"), ("price", "failed")]
     assert lines[0]["args"] == {"market": "cbot"}
-    assert {"ts", "duration_ms"} <= set(lines[0])
-    raw = settings.log_path.read_text()
-    assert "149" not in raw and "usd_mt" not in raw and "Yahoo" not in raw
+    from mirror_mcp.question_log import FIELDS
+
+    assert all(set(line) <= FIELDS for line in lines)  # a closed key set: nowhere for an answer to live
+    assert "usd_mt" not in settings.log_path.read_text()
 
 
 async def test_every_tool_payload_passes_the_client_record_guard(settings, market_db):
@@ -352,3 +393,24 @@ async def test_every_tool_payload_passes_the_client_record_guard(settings, marke
     async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
         for name, args in (("price", {"market": "cbot"}), ("freshness", {}), ("origins", {}), ("weather", {"market": "cbot"})):
             assert_no_client_records((await client.call_tool(name, args)).structured_content, where=name)
+
+
+def test_block_tools_read_only_tables_the_server_may_touch(settings, market_db, opened):
+    """What the site builders actually read (sqlite authorizer) ⊆ roster − private − excluded seams."""
+    import asyncio
+
+    from mirror_mcp import db
+    from tests.sqlite_reads import tables_read
+
+    server = build_server(settings, clock=lambda: CLOCK)
+    (conn,) = opened
+
+    async def call(name: str, args: dict):
+        async with Client(server) as client:
+            return await client.call_tool(name, args)
+
+    for name, args in (("price", {"market": "cbot"}), ("crush", {"market": "dalian"}), ("spread", {"market": "argentina"}),
+                       ("weather", {"market": "brazil"}), ("supply_demand", {"market": "india"}), ("origins", {})):
+        _, seen = tables_read(conn, lambda name=name, args=args: asyncio.run(call(name, args)))
+        assert seen, name
+        assert seen <= db.readable_tables(), (name, seen - db.readable_tables())
