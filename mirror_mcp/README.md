@@ -16,7 +16,8 @@ anywhere. Paste it where each client below says `<URL from owner>`.
   you how old it is. If you need a tick, this is the wrong tool.
 - **Nothing here is a settlement.** Board prices are the provider's delayed
   close; physical prices are assessments or administered prices. The assistant
-  is told to say so and to refuse the words "settled", "executable" and "firm".
+  is told to say so, never to call a number a settlement, executable or a firm
+  offer, and to run its draft through a language check before quoting a price.
 - **Prices are USD/MT** unless a row says otherwise. Spreads and crush margins
   are only ever struck on one session's numbers; when a leg is missing the
   answer is "withheld, because …", never a guess.
@@ -84,7 +85,7 @@ Start `gemini` and run `/mcp` to confirm the eleven tools are listed.
 7. What is the Mississippi stage at St. Louis, and is that observed or forecast?
 8. Are there weather alerts in Mato Grosso this week, and what was withheld?
 9. Where does the Argentina FOB number come from, and what price type is it?
-10. Check this sentence before I send it: "Beans settled at 390 and the Gulf is firm."
+10. Check this sentence before I send it: "Beans' settlement price was 390 and the Gulf has a firm offer at 410."
 
 The right answer to several of these is "withheld" or "empty" with a reason.
 That is the tool working, not failing.
@@ -98,7 +99,7 @@ tested before any positions or landed-cost workflow.
 - Window: 10 trading days after the friend's first successful call.
 - PASS requires all of: (a) friend asks ≥1 question on ≥6 of the 10 days (from the question log); (b) owner spot-checks 5 answers the friend screenshots against the site's same-date numbers — 5/5 match and 0 forbidden-claim words; (c) exit interview: friend says it was faster than the site for the majority of his questions and names ≥1 question it answered that the site did not; (d) 0 deploy-step failures that left a stale DB live for >1 day.
 - FAIL on any of: <4 usage days; any wrong number; friend stops after week 1.
-- Readout owner-only, from `scripts/mcp_readout.py` (#581).
+- Readout owner-only, from the readout script (Ticket 4).
 
 ## For the owner: the readout
 

@@ -72,8 +72,8 @@ def render(summary: dict) -> str:
     lines = [
         f"calls            {summary['calls']}",
         f"usage days       {summary['usage_days']}",
-        f"first call       {summary['first_call']}",
-        f"last call        {summary['last_call']}",
+        f"first call       {summary['first_call'] or 'none'}",
+        f"last call        {summary['last_call'] or 'none'}",
         f"failed calls     {summary['failed']}"
         + (f" ({summary['failure_rate']:.1%})" if summary["failure_rate"] is not None else ""),
         "",
