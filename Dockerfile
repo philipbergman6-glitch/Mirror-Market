@@ -11,8 +11,10 @@ FROM python:3.12-slim
 ARG DB_PATH=data/storage/mirror_market.db
 ARG BUILT_AT
 
+# gosu: the entrypoint starts as root only to take ownership of the volume
+# mount, then drops to the unprivileged user.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates gosu \
     && update-ca-certificates \
     && apt-get clean
 
@@ -49,7 +51,9 @@ ENV MIRROR_MCP_PORT=8000
 RUN useradd --create-home --uid 10001 mirror \
     && mkdir -p /data \
     && chown -R mirror:mirror /app /data
-USER mirror
 EXPOSE 8000
 
-CMD ["python", "-m", "mirror_mcp"]
+# Root here on purpose: Fly mounts the volume root-owned, and the entrypoint
+# chowns the log directory before `exec gosu mirror` — the server itself never
+# runs as root.
+ENTRYPOINT ["/app/mirror_mcp/entrypoint.sh"]
