@@ -206,7 +206,6 @@ TOTAL_STAGES=9
 #   .env           FLY_APP, FLY_REGION, MIRROR_MCP_PATH_TOKEN (for local runs and the readout)
 #   Fly secret     MIRROR_MCP_PATH_TOKEN                          (the server reads it)
 #   GitHub secret  FLY_API_TOKEN                                  (deploy-dashboard.yml: fly deploy)
-#   GitHub secret  MIRROR_MCP_PATH_TOKEN                          (deploy-dashboard.yml: authed smoke)
 # The .env written here is gitignored; the secret-scan hook refuses a token in a commit.
 
 banner "Fly.io: the hosted MCP edition (#580)"
@@ -262,7 +261,7 @@ write_env MIRROR_MCP_PATH_TOKEN "$MIRROR_MCP_PATH_TOKEN"
 step "Run:  flyctl secrets set MIRROR_MCP_PATH_TOKEN=\"\$(grep ^MIRROR_MCP_PATH_TOKEN .env | cut -d\\' -f2)\" --app $FLY_APP --stage"
 note "--stage sets it without restarting; the first deploy picks it up."
 pause "Press Enter once 'flyctl secrets list --app $FLY_APP' shows MIRROR_MCP_PATH_TOKEN."
-set_secret MIRROR_MCP_PATH_TOKEN "$MIRROR_MCP_PATH_TOKEN"   # CI needs it for the authed smoke
+note "Not a GitHub secret: no workflow calls the token path; CI proves the edition through /health alone."
 
 # ── 6 ─────────────────────────────────────────────────────────────────────
 stage "A Fly deploy token for GitHub Actions"
@@ -278,6 +277,7 @@ stage "First deploy by hand, with a locally built DB"
 say "Proves the whole path before CI runs it. This machine needs Docker running, or use --remote-only."
 if [[ ! -f data/storage/mirror_market.db ]]; then
   warn "data/storage/mirror_market.db is missing. Build it first:  python main.py --fast  (about a minute)"
+  note "A --fast DB holds prices, FX and the curve only: enough to prove the deploy path, not a full edition."
   pause "Press Enter once the DB exists."
 fi
 step "Run:  flyctl deploy --app $FLY_APP --ha=false --yes --build-arg BUILT_AT=\"manual-\$(date -u +%FT%TZ)\""
@@ -301,6 +301,7 @@ fi
 stage "Connect your own client as the buyer would"
 say "Use the same client type as the buyer (mirror_mcp/README.md has the four)."
 say "Claude Desktop: Settings → Connectors → Add custom connector → URL below, no auth."
+note "The token is shown once here so you can paste it; it is otherwise only in .env and the Fly secret."
 printf '\n  %shttps://%s.fly.dev/mcp/%s%s\n\n' "$BOLD" "$FLY_APP" "$MIRROR_MCP_PATH_TOKEN" "$RESET"
 step "Ask three questions (a price, a crush, an origin comparison)."
 step "Then:  flyctl ssh console --app $FLY_APP -C 'wc -l /data/questions.jsonl'   → 3 lines, no answer text."

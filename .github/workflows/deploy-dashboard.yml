@@ -454,6 +454,7 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -euo pipefail
+          : "${FLY_API_TOKEN:?FLY_API_TOKEN is not set — run scripts/mcp_fly_wizard.sh once, then re-run}"
           python scripts/mcp_privacy_check.py data/storage/mirror_market.db
           flyctl version
           flyctl deploy --remote-only --ha=false --yes --wait-timeout 10m \
@@ -462,8 +463,14 @@ jobs:
           import tomllib; print(tomllib.load(open("fly.toml", "rb"))["app"])
           PY
           )
-          for attempt in 1 2 3 4 5 6; do
-            if LIVE=$(curl -fsS "https://${APP}.fly.dev/health") && [ -n "$LIVE" ]; then break; fi
+          # The old machine may still answer for a few seconds after the deploy
+          # returns, so the stamp is compared inside the retry, not after it.
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            LIVE=$(curl -fsS "https://${APP}.fly.dev/health" || true)
+            if [ -n "$LIVE" ] && printf '%s' "$LIVE" | python -c 'import json,sys; sys.exit(json.load(sys.stdin).get("db_built_at") != sys.argv[1])' "${PIPELINE_STARTED_AT}"; then
+              break
+            fi
+            LIVE=""
             sleep 10
           done
           printf '%s' "${LIVE:-}" | python - "${PIPELINE_STARTED_AT}" <<'PY'
@@ -471,10 +478,8 @@ jobs:
           expected = sys.argv[1]
           raw = sys.stdin.read()
           if not raw:
-              raise SystemExit("MCP edition: /health never answered")
+              raise SystemExit(f"MCP edition: /health never answered with this run's build stamp {expected!r} within 2 minutes")
           live = json.loads(raw)
-          if live.get("db_built_at") != expected:
-              raise SystemExit(f"MCP edition: live build stamp {live.get('db_built_at')!r} is not this run's {expected!r}")
           print(f"MCP edition live: built {expected}, latest session {live.get('latest_session')}, {live.get('tool_count')} tools")
           PY
 

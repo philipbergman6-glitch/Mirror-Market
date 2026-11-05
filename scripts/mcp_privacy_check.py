@@ -28,7 +28,9 @@ from analysis.origins.assumptions import load_assumptions  # noqa: E402
 from mirror_mcp import db  # noqa: E402
 
 SAMPLE_ROWS = 50
-SET_ID_TABLES = ("origin_rankings", "opportunity_detections")
+# Every table that records which assumption set costed its rows. A table named
+# here without the column is an error, never a skip.
+SET_ID_TABLES = ("origin_rankings",)
 
 
 class PrivacyCheckFailed(RuntimeError):
@@ -65,8 +67,12 @@ def check(db_path: Path, *, public_set_id: str | None = None) -> list[str]:
         expected = public_set_id if public_set_id is not None else load_assumptions(audience=AUDIENCE_PUBLIC).set_id
         present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         for table in SET_ID_TABLES:
-            if table not in present or "assumption_set_id" not in _columns(conn, table):
-                continue
+            if table not in present:
+                raise PrivacyCheckFailed(f"{table} is missing, so its assumption sets cannot be checked")
+            if "assumption_set_id" not in _columns(conn, table):
+                raise PrivacyCheckFailed(
+                    f"{table} has no assumption_set_id column, so its assumption sets cannot be checked"
+                )
             foreign = sorted(
                 r[0] for r in conn.execute(
                     f'SELECT DISTINCT "assumption_set_id" FROM "{table}" WHERE "assumption_set_id" != ?', (expected,)

@@ -108,3 +108,15 @@ def test_the_public_tier_id_is_read_from_the_checkout_when_not_given(clean_db):
 def test_missing_db_is_a_failure_not_a_pass(tmp_path):
     with pytest.raises(mcp_privacy_check.PrivacyCheckFailed, match="no database"):
         mcp_privacy_check.check(tmp_path / "nope.db", public_set_id=PUBLIC_ID)
+
+
+def test_every_set_id_table_really_carries_the_column(tmp_db):
+    """The check names the tables it grades; a table without the column would otherwise be a silent skip."""
+    for table in mcp_privacy_check.SET_ID_TABLES:
+        assert "assumption_set_id" in {r[1] for r in tmp_db.execute(f"pragma table_info({table})")}, table
+
+
+def test_a_renamed_assumption_column_is_an_error_not_a_skip(clean_db, monkeypatch):
+    monkeypatch.setattr(mcp_privacy_check, "SET_ID_TABLES", ("opportunity_detections",))
+    with pytest.raises(mcp_privacy_check.PrivacyCheckFailed, match="opportunity_detections has no assumption_set_id"):
+        mcp_privacy_check.check(clean_db, public_set_id=PUBLIC_ID)
