@@ -50,7 +50,11 @@ def test_image_installs_ca_certificates_and_bakes_the_db():
     assert re.search(r"^COPY \$\{DB_PATH\} /app/db/mirror_market\.db$", DOCKERFILE, re.M)
     assert f"ENV {ENV_DB_BUILT_AT}=${{BUILT_AT}}" in DOCKERFILE
     assert 'test -n "${BUILT_AT}"' in DOCKERFILE
-    assert "USER mirror" in DOCKERFILE
+    # The server never runs as root: the entrypoint takes the volume mount, then drops to `mirror`.
+    entrypoint = (ROOT / "mirror_mcp" / "entrypoint.sh").read_text()
+    assert 'ENTRYPOINT ["/app/mirror_mcp/entrypoint.sh"]' in DOCKERFILE and "USER " not in DOCKERFILE
+    assert "exec gosu mirror python -m mirror_mcp" in entrypoint
+    assert 'chown mirror:mirror "$LOG_DIR"' in entrypoint and "gosu" in DOCKERFILE
     assert "requirements-mcp.txt" in DOCKERFILE and "requirements-dev" not in DOCKERFILE
 
 
