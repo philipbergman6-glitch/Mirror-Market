@@ -327,8 +327,16 @@ def dead_layers(
         # about the source: a streak made only of `skipped_unconfigured`
         # (Layer 37 on CI, by design) is unavailable but not dead. One real
         # verdict inside the streak and it counts in full.
+        # Sessions before the layer's first record say nothing either: the
+        # roster did not carry it yet, so its leading `no_run` run is "time
+        # before the record began" for that layer, not a streak of silence.
         tail = [last for _first, last in verdicts[len(verdicts) - streak.sessions:]]
-        if all(last == STATUS_SKIPPED_UNCONFIGURED for last in tail):
+        recorded = grouped.get(layer, {})
+        if recorded:
+            first_recorded = min(recorded)
+            tail_sessions = sessions[len(sessions) - streak.sessions:]
+            tail = [last for s, last in zip(tail_sessions, tail, strict=True) if s >= first_recorded]
+        if tail and all(last == STATUS_SKIPPED_UNCONFIGURED for last in tail):
             continue
         out[layer] = streak
     return out
