@@ -218,3 +218,13 @@ def test_a_streak_of_skipped_unconfigured_is_not_a_dead_source():
     # One real verdict inside the streak and the whole streak counts.
     rows[-1] = _run("matif", days[-1], "failed")
     assert set(reliability.dead_layers(rows, layers=("matif",))) == {"matif"}
+
+
+def test_no_run_sessions_before_a_layers_first_record_do_not_make_it_dead():
+    # Seen on the first deploy after #589: weeks of `no_run` from before Layer 37
+    # joined the roster plus one `skipped_unconfigured` read as a dead source.
+    others = [_run("prices", date(2026, 10, d), "ok") for d in (20, 21, 22)]
+    rows = others + [_run("matif", date(2026, 11, 5), "skipped_unconfigured")]
+    assert reliability.dead_layers(rows, layers=("matif",)) == {}
+    # A layer with no record at all is still silent, not exempt.
+    assert set(reliability.dead_layers(others, layers=("matif",))) == {"matif"}
