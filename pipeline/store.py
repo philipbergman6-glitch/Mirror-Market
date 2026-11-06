@@ -28,6 +28,7 @@ from config import (
     GTR_VESSEL_ATTRIBUTION,
     GTR_VESSEL_CADENCE,
     GTR_VESSEL_UNIT,
+    MATIF_QUOTE_KIND,
     PROCESSOR_CASH_CADENCE,
     PROCESSOR_CASH_QUOTE_KIND,
     STORAGE_DIR,
@@ -1508,6 +1509,34 @@ def save_safex(commodity: str, df: pd.DataFrame):
         df["contract"] = None
     _save("safex_prices", df[["Date", "commodity", "Close", "Volume", "unit", "contract"]],
           ["Date", "commodity"], f"safex/{commodity}")
+
+
+_MATIF_COLUMNS = [
+    "Date", "contract_month", "isin", "firds_name", "expiry_date",
+    "open", "high", "low", "last", "vwap", "lots", "trade_count", "last_trade_at",
+    "off_book_trades", "off_book_lots", "cancelled_trades", "currency", "unit", "quote_kind",
+]
+
+
+def save_matif_futures(contract: str, df: pd.DataFrame):
+    """Write Layer 37 ECO session rows (EUR/t, last traded) → 'matif_futures'. PRIVATE.
+
+    A plain upsert on (Date, contract_month): a session re-read from the
+    PREVIOUS_TRADING_DAY file next run carries the same prints. The table is
+    deliberately absent from pipeline.history.HISTORY_TABLES — exporting it
+    would publish Euronext data (config.MATIF_PUBLISH).
+    """
+    if df.empty:
+        return
+    df = df.copy()
+    df["Date"] = _date(df["Date"])
+    for col, default in (("currency", "EUR"), ("unit", "EUR/t"), ("quote_kind", MATIF_QUOTE_KIND)):
+        if col not in df.columns:
+            df[col] = default
+    missing = [c for c in _MATIF_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"matif_futures: frame lacks column(s) {missing}")
+    _save("matif_futures", df[_MATIF_COLUMNS], ["Date", "contract_month"], f"matif/{contract}")
 
 
 _SAGIS_COLUMNS = [

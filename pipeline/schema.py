@@ -737,6 +737,36 @@ CREATE TABLE IF NOT EXISTS nigeria_spot_prices (
 );
 """
 
+# Layer 37 — Euronext MATIF rapeseed (ECO) delayed trades, one row per
+# finished Paris session per delivery month. PRIVATE (config.MATIF_PUBLISH):
+# never in pipeline/history.py's export, never read by a site builder. Every
+# price is an on-book trade statistic in EUR/t — `last` is the last on-book
+# print, never the daily settlement (quote_kind = board_last_traded).
+_CREATE_MATIF_FUTURES = """
+CREATE TABLE IF NOT EXISTS matif_futures (
+    Date             TEXT NOT NULL,            -- Paris session date
+    contract_month   TEXT NOT NULL,            -- delivery month, YYYY-MM (Feb/May/Aug/Nov)
+    isin             TEXT NOT NULL,
+    firds_name       TEXT NOT NULL,            -- ESMA FIRDS gnr_full_name, verbatim
+    expiry_date      TEXT,                     -- FIRDS drv_expiry_date (last trading day)
+    open             REAL,                     -- first on-book print
+    high             REAL,
+    low              REAL,
+    last             REAL,                     -- last on-book print — NOT the DSP
+    vwap             REAL,                     -- on-book, whole session
+    lots             REAL,                     -- on-book lots (50 t each)
+    trade_count      INTEGER,
+    last_trade_at    TEXT,                     -- UTC stamp of the last on-book print
+    off_book_trades  INTEGER,                  -- counted, never priced
+    off_book_lots    REAL,
+    cancelled_trades INTEGER,                  -- trade ids dropped for CANC/AMND
+    currency         TEXT NOT NULL DEFAULT 'EUR',
+    unit             TEXT NOT NULL DEFAULT 'EUR/t',
+    quote_kind       TEXT NOT NULL DEFAULT 'board_last_traded',
+    PRIMARY KEY (Date, contract_month)
+);
+"""
+
 _CREATE_SAFEX = """
 CREATE TABLE IF NOT EXISTS safex_prices (
     Date        TEXT NOT NULL,
@@ -981,6 +1011,7 @@ ALL_SCHEMAS = (
     _CREATE_BRAZIL_EXPORTS,
     _CREATE_SEA_INDIA_RATES,
     _CREATE_SOPA_CROP_ESTIMATES,
+    _CREATE_MATIF_FUTURES,
     _CREATE_CYCLONE_SOURCE_STATUS,
     _CREATE_CYCLONE_STORMS,
     _CREATE_CYCLONE_TRACK_POINTS,

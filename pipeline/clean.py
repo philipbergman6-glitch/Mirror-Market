@@ -700,6 +700,42 @@ def clean_nigeria_spot(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def clean_matif(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean Layer 37 MATIF ECO session rows (last traded, EUR/t — never a
+    settlement; see fetchers/matif.py). PRIVATE.
+
+    Steps:
+        1. Copy first.
+        2. Parse Date and sort by (Date, contract_month).
+        3. Coerce the price and size columns to numeric.
+        4. Drop rows whose `last` is missing or non-positive, and hard-fail
+           on a row whose last print sits outside its own high/low — the
+           aggregates come from one pass over the same prints, so that is
+           a bug here, not an upstream revision.
+
+    Returns cleaned copy.
+    """
+    if df.empty:
+        return df
+
+    df = df.copy()
+    df["Date"] = pd.to_datetime(df["Date"])
+    for col in ("open", "high", "low", "last", "vwap", "lots", "off_book_lots"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["last"])
+    df = df[df["last"] > 0]
+    if {"high", "low"} <= set(df.columns):
+        outside = (df["last"] > df["high"]) | (df["last"] < df["low"])
+        if outside.any():
+            raise ValueError(
+                f"matif: {int(outside.sum())} session row(s) with last outside high/low — "
+                "an aggregation bug, not a market fact"
+            )
+    return df.sort_values(["Date", "contract_month"]).reset_index(drop=True)
+
+
 def clean_safex(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean JSE SAFEX South Africa last-traded price data (not settlement/MTM —

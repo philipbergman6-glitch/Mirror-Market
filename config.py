@@ -167,6 +167,11 @@ PRODUCTION_LAYERS = (
     ("cyclones_jtwc", "35", "JTWC", "Per advisory, read daily",
      "Tropical-cyclone forecast tracks and wind radii — West Pacific, Indian Ocean, Southern Hemisphere"),
     ("afex", "36", "AFEX (Africa Exchange)", "Daily", "Nigeria soybean reference price"),
+    # Private desk layer (owner decision 2026-11-05): Euronext's MiFIR delayed
+    # trade file, free for internal use only. "(private)" in the description
+    # is what PRIVATE_LAYERS is derived from (tests/test_reliability.py).
+    ("matif", "37", "Euronext MiFIR delayed trades + ESMA FIRDS", "Daily",
+     "MATIF rapeseed (ECO) last trade by contract month (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # Layers whose rendered output is the private desk edition only. A public
@@ -175,7 +180,13 @@ PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # Empty since 2026-10-21: the owner opened SEA (32) and SOPA (33), the last
 # two, under the A18 stance (#468: every series public, licence risk accepted,
 # internal use, no sale). The mechanism stays for the next private source.
-PRIVATE_LAYERS: tuple[str, ...] = ()
+#
+# Layer 37 (MATIF rapeseed) reopened it on 2026-11-05: Euronext delayed data
+# is free for internal use and EUR 167.55/month to redistribute (#148), so the
+# layer runs only where MATIF_PRIVATE_FETCH is set (the desk, never CI), its
+# table is never exported to data/history/ and never read by a site builder
+# (MATIF_PUBLISH below), and mirror_mcp refuses a database holding its rows.
+PRIVATE_LAYERS: tuple[str, ...] = ("matif",)
 
 # ---------------------------------------------------------------------------
 # Fast refresh — the price-only path (`python main.py --fast`)
@@ -894,7 +905,8 @@ GTR_VESSEL_MAX_COUNT = 200
 # The EU rapeseed leg of the Europe market page. Euronext MATIF (ECO)
 # settlements are licensed — free for internal use, EUR 167.55/month to
 # redistribute, and this project publishes — so the futures curve is not
-# ingested (#148). `Rapeseed - EU Moselle` is the Commission's weekly
+# published (#148; since 2026-11-05 Layer 37 below holds ECO *last trades*
+# privately, never rendered). `Rapeseed - EU Moselle` is the Commission's weekly
 # physical FOB assessment for the same commodity in the same region,
 # CC BY 4.0, sourced by the EC from the International Grains Council.
 #
@@ -936,6 +948,53 @@ EC_OILSEEDS_SERIES = {
 # it up.
 EC_OILSEEDS_CADENCE = "weekly"
 EC_OILSEEDS_QUOTE_KIND = "physical FOB assessment"
+
+# ---------------------------------------------------------------------------
+# Layer 37 — Euronext MATIF rapeseed (ECO) delayed trades. PRIVATE DESK LAYER.
+#
+# Owner decision 2026-11-05: ingest MATIF delayed data for the private edition
+# only. Euronext's delayed data is free for internal use and costs EUR
+# 167.55/month to redistribute (#148), so the gate below is the licence line:
+#
+#   MATIF_PUBLISH = False  →  the table is absent from pipeline/history.py's
+#   export (that CSV round-trip would publish it), no builder under app/ or
+#   scripts/generate_site.py reads it, any private print goes to
+#   data/workspace/ through assert_private_path, and mirror_mcp refuses a
+#   database that holds its rows. tests/test_matif_private_gate.py enforces
+#   every clause. Flipping it True is an owner decision that also needs the
+#   redistribution licence or Euronext's written waiver — not a code change.
+#
+# Source: the MiFIR Article 13 delayed post-trade file (keyless, ~15 min
+# delay, kept ~24 h) plus ESMA FIRDS to resolve each ISIN to a contract.
+# What arrives is trades, so every row is `board_last_traded` and never a
+# settlement — the DSP sits on a terms-protected page and is not fetched
+# (research/2026-11-05-matif-rapeseed-source.md). The layer runs only where
+# MATIF_FETCH_ENV is set, so CI's database — cached as the verified seed and
+# baked into the MCP image — never carries a row.
+# ---------------------------------------------------------------------------
+MATIF_PUBLISH = False
+MATIF_FETCH_ENV = "MATIF_PRIVATE_FETCH"
+MATIF_CONTRACT = "ECO"
+MATIF_VENUE_MIC = "XMAT"
+MATIF_PRODUCT = "RPSD"                      # FIRDS drvcmd_further_sub_product
+MATIF_QUOTE_KIND = "board_last_traded"      # pricing.semantics vocabulary; never "settlement"
+MATIF_TRADES_URL = (
+    "https://marketdata.euronext.com/data-reporting-service/trades-file/download/"
+    "COMMODITY_DERIVATIVES/{selection}/PAR"
+)
+# Both each run: D-1 is complete, D is complete after 20:15 Paris. Together
+# they let one missed desk run self-heal; two missed runs are a hole, because
+# Euronext keeps each file "at least 24 hours" and no longer.
+MATIF_TRADES_SELECTIONS = ("PREVIOUS_TRADING_DAY", "CURRENT_TRADING_DAY")
+MATIF_FIRDS_URL = "https://registers.esma.europa.eu/solr/esma_registers_firds/select"
+MATIF_FIRDS_BATCH = 15                      # a broad RPSD listing 504s; 15-ISIN batches answer in 1-7 s
+# Contract spec: Feb/May/Aug/Nov delivery; the session labelled D ends 20:15
+# Europe/Paris on D (10:45-20:15 CET since 13 April 2026; the DSP range is
+# the two minutes before 18:30 CET, which this layer does not reconstruct).
+MATIF_DELIVERY_MONTHS = (2, 5, 8, 11)
+MATIF_SESSION_TIMEZONE = "Europe/Paris"
+MATIF_SESSION_CLOSE_LOCAL = (20, 15)
+MATIF_SESSION_WEEKDAYS = (0, 1, 2, 3, 4)
 
 # ---------------------------------------------------------------------------
 # Layer 31 — Brazil customs exports, MDIC/SECEX Comex Stat (no API key, #351)
@@ -1749,6 +1808,9 @@ class ApiKeySpec:
     skips: tuple[str, ...] = ()
     degrades: tuple[str, ...] = ()
     required_in_ci: bool = True
+    # False for a switch CI must never be able to set: the deploy workflow does
+    # not export it, so no secret can turn the layer on there (Layer 37).
+    ci_exports: bool = True
     signup: str = ""
     # Consumers outside PRODUCTION_LAYERS (a backfill script), named in prose.
     also: str = ""
@@ -1796,6 +1858,22 @@ _API_KEY_SPECS: tuple[ApiKeySpec, ...] = (
         required_in_ci=False,
         signup="https://mymarketnews.ams.usda.gov/mars-api/getting-started",
         also="Layer 20b Gulf-bid backfill (scripts/backfill_gulf_bids_mars.py); the daily Layer 20 PDF leg is keyless",
+    ),
+    # Not a key: an opt-in flag with the key catalog's contract — unset means
+    # the layer never ran (no freshness row, `skipped_unconfigured` in the run
+    # record, never a dead source). It is the desk's switch for the private
+    # MATIF layer and must stay unset in CI, so CI's database never holds a
+    # Euronext row (MATIF_PUBLISH above).
+    ApiKeySpec(
+        name=MATIF_FETCH_ENV,
+        unlocks="Euronext MiFIR delayed trades: MATIF rapeseed (ECO) — private desk layer, never CI",
+        skips=("matif",),
+        required_in_ci=False,
+        ci_exports=False,
+        # Not a signup: the page stating that delayed data is free for internal
+        # use. The switch itself is `export MATIF_PRIVATE_FETCH=1` on the desk.
+        signup="https://www.euronext.com/en/data/market-data/market-data-agreements",
+        also="desk switch, not a key: export MATIF_PRIVATE_FETCH=1 on the desk machine (LAYERS.md → Layer 37)",
     ),
 )
 API_KEY_CATALOG: dict[str, ApiKeySpec] = {spec.name: spec for spec in _API_KEY_SPECS}
@@ -2458,6 +2536,11 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # AFEX publishes a dated row every calendar day, flat or not, so a row
     # older than a week means the feed, not the market, has stopped (#166).
     "afex": 7,
+    # MATIF ECO session rows (Layer 37, private): one row per finished Paris
+    # session per contract month, same long-weekend-plus-holiday budget as the
+    # other daily exchange legs. Euronext keeps each delayed file ~24 h, so a
+    # desk that stops running the pipeline goes stale within the week.
+    "matif": 7,
     # Agmarknet mandi spot. Each run re-reads a trailing month of completed
     # days, so the newest Date normally trails today by one Indian day; a
     # frozen or silently-emptied upstream leaves it standing still while the
@@ -3234,7 +3317,10 @@ MARKETS: dict[str, dict[str, Any]] = {
         "crush": None,
         "crush_absent_reason": "no EU rapeseed oil or meal assessment is ingested",
         "basis": None,
-        "basis_absent_reason": "no EU futures board to take a basis against (MATIF is licensed)",
+        "basis_absent_reason": (
+            "no EU futures board renders here (MATIF delayed data is licensed for internal use only; "
+            "Layer 37 holds it privately)"
+        ),
         # M14 #207 filled the empty block on the page whose leg is the most
         # locally weather-driven one on the map. These pins are RAPESEED, not
         # soy, and the role label is what says so on the page.

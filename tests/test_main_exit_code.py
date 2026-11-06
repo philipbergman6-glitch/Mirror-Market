@@ -107,6 +107,9 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_sea_rates": FetchResult.empty(),
         "fetch_sopa_estimates": FetchResult.empty(),
         "fetch_afex": FetchResult.empty(),
+        # Layer 37 is run_if-gated on MATIF_PRIVATE_FETCH and never fetches
+        # here; stubbed all the same so the guard below cannot name it.
+        "fetch_matif_trades": FetchResult.empty(),
         "fetch_all_contract_bars": empty_dict,
         "fetch_processor_cash": empty_dict,
     }

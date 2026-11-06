@@ -65,6 +65,9 @@ ALLOWED: dict[str, TableSpec] = {
     "india_domestic_prices": TableSpec("commodity", "Date"),
     "brazil_spot_prices": TableSpec("commodity", "Date"),
     "safex_prices": TableSpec("commodity", "Date"),
+    # Layer 37, private: listed for parity with pipeline.query and subtracted
+    # from servable_tables() by PRIVATE_LAYER_TABLES below.
+    "matif_futures": TableSpec("contract_month", "Date"),
     "nigeria_spot_prices": TableSpec("commodity", "Date"),
     "sagis_deliveries": TableSpec("commodity", "week_end"),
     "sagis_supply_demand": TableSpec("commodity", "month_end"),
@@ -87,6 +90,7 @@ EXCLUDED: frozenset[str] = frozenset({
 PRIVATE_LAYER_TABLES: dict[str, str] = {
     "sea_india": "sea_india_rates",
     "sopa_crop": "sopa_crop_estimates",
+    "matif": "matif_futures",
 }
 
 MAX_LIMIT = 1000
@@ -143,9 +147,17 @@ def assert_public_roster(conn: sqlite3.Connection) -> None:
     unknown = sorted(present - roster_tables())
     if unknown:
         raise PrivacyRefusal(f"tables outside the schema roster: {unknown}")
-    leaked = sorted(present & private_tables())
+    # The schema creates every table in every database, so a private layer's
+    # *empty* table is DDL, not a leak; a row in it is Euronext data on a
+    # machine that serves third parties, and the server does not start.
+    leaked = sorted(
+        table for table in present & private_tables()
+        if conn.execute(f'SELECT 1 FROM "{table}" LIMIT 1').fetchone() is not None  # noqa: S608 — roster
+    )
     if leaked:
-        raise PrivacyRefusal(f"private-layer tables present: {leaked} (config.PRIVATE_LAYERS={config.PRIVATE_LAYERS})")
+        raise PrivacyRefusal(
+            f"private-layer tables hold rows: {leaked} (config.PRIVATE_LAYERS={config.PRIVATE_LAYERS})"
+        )
 
 
 def _check_table_and_limit(table: str, limit: int) -> TableSpec:
