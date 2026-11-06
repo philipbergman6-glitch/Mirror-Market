@@ -351,6 +351,56 @@ async def test_provenance_names_the_layer_its_budget_and_its_freshness(settings)
     assert d["markets_quoting_it"] and all("quote_kind" in m for m in d["markets_quoting_it"])
 
 
+@pytest.mark.parametrize("stamp", ["2026-11-04 21:05:00", "2026-11-04T21:05:00", "2026-11-05T00:05:00+03:00"])
+async def test_freshness_and_provenance_accept_production_utc_stamps(settings, db_path, stamp):
+    from datetime import datetime, timezone
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE data_freshness SET last_success = ?", (stamp,))
+    def clock():
+        return datetime(2026, 11, 7, 9, tzinfo=timezone.utc)
+    async with Client(build_server(settings, clock=clock)) as client:
+        body = (await client.call_tool("freshness")).structured_content
+        provenance = (await client.call_tool("provenance", {"layer": "prices"})).structured_content
+    prices = next(r for r in body["data"]["layers"] if r["layer"] == "prices")
+    assert prices["age_days"] == provenance["data"]["age_days"] == 2
+    assert prices["last_success"] == stamp
+
+
+async def test_raw_series_labels_native_futures_units_without_converting(settings, market_db):
+    async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
+        body = (await client.call_tool("series", {"table": "prices", "key": "Soybeans"})).structured_content
+    assert body["data"]["rows"][0]["Close"] == 405.5
+    assert body["meta"]["value_basis"] == "native_storage"
+    assert body["meta"]["native_price_units"] == {"Soybeans": "cents/bu"}
+    assert "not USD/MT" in body["meta"]["unit_note"]
+
+
+async def test_raw_series_carries_source_failure_beside_retained_rows(settings, market_db):
+    with sqlite3.connect(settings.db_path) as conn:
+        conn.execute("UPDATE data_freshness SET status='failed', rows_fetched=0 WHERE layer_name='prices'")
+    async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
+        body = (await client.call_tool("series", {"table": "prices", "key": "Soybeans"})).structured_content
+    assert body["data"]["rows"]  # historical rows remain inspectable
+    source = next(r for r in body["meta"]["source_health"] if r["layer"] == "prices")
+    assert source["status"] == "failed" and source["rows_fetched"] == 0
+    assert "not observation age" in source["age_basis"]
+
+
+async def test_language_check_draft_is_not_persisted_in_question_log(settings):
+    import json
+
+    draft = "My private cargo costs 1234567 at Confidential Buyer Ltd."
+    async with Client(build_server(settings)) as client:
+        await client.call_tool("check_language", {"text": draft, "price_types": ["delayed_close"]})
+    raw = settings.log_path.read_text()
+    record = json.loads(raw)
+    assert draft not in raw and "Confidential" not in raw and "1234567" not in raw
+    assert "text" not in record["args"]
+    assert record["args"]["text_length"] == len(draft)
+    assert record["args"]["price_types"] == ["delayed_close"]
+
+
 async def test_check_language_reports_forbidden_claims_and_what_is_permitted(settings):
     async with Client(build_server(settings)) as client:
         bad = (await client.call_tool("check_language", {"text": "Soybeans' settlement price was 149 USD/MT, an executable level."})).structured_content

@@ -97,6 +97,40 @@ def no_network(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def test_http_200_unavailable_page_is_retried_before_returning_workbook(monkeypatch):
+    from types import SimpleNamespace
+
+    workbook = _workbook(_fresh_rows())
+    payloads = iter([b"<html><title>Server temporarily unavailable</title></html>", workbook])
+    calls = []
+
+    def get(url, **kwargs):
+        calls.append(url)
+        return SimpleNamespace(content=next(payloads), raise_for_status=lambda: None)
+
+    monkeypatch.setattr(ec, "_resolve_world_prices_url", lambda: "https://example.test/prices.xlsx")
+    monkeypatch.setattr(ec.requests, "get", get)
+    monkeypatch.setattr(ec, "retry_sleep", lambda _: None)
+    assert ec._download_world_prices() == workbook
+    assert len(calls) == 2
+
+
+def test_persistent_http_200_non_workbook_exhausts_retries(monkeypatch):
+    from types import SimpleNamespace
+
+    calls = []
+
+    def get(url, **kwargs):
+        calls.append(url)
+        return SimpleNamespace(content=b"<html>Server temporarily unavailable</html>", raise_for_status=lambda: None)
+
+    monkeypatch.setattr(ec, "_resolve_world_prices_url", lambda: "https://example.test/prices.xlsx")
+    monkeypatch.setattr(ec.requests, "get", get)
+    monkeypatch.setattr(ec, "retry_sleep", lambda _: None)
+    assert ec._download_world_prices() == b""
+    assert len(calls) == ec.MAX_RETRIES
+
+
 def test_resolver_matches_by_link_text_not_filename(monkeypatch):
     """The href is an opaque GUID and the published filename is misspelled
     ("oliseeds"). Anchoring on the link text survives both a GUID rotation

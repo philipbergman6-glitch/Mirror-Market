@@ -28,6 +28,7 @@ from mirror_mcp import db
 from mirror_mcp.envelope import envelope, meta_for
 from mirror_mcp.question_log import QuestionLog
 from mirror_mcp.settings import Settings
+from pipeline.units import native_label
 from pricing import policy, semantics
 
 HEALTH_PATH = "/health"
@@ -40,12 +41,16 @@ INSTRUCTIONS = """Mirror-Market: public-data soy intelligence for physical buyer
 
 Rules for every answer:
 - Numbers come only from these tools. Never estimate, extrapolate or recall a price.
-- Cite the as-of date and the source with every number. All prices are USD/MT unless a row says otherwise.
+- Cite the as-of date and the source with every number. Converted block prices say USD/MT explicitly.
+- series returns RAW STORAGE values, not converted prices. Use native_price_units or a row's explicit unit.
+  If neither establishes the unit, do not quote or convert the value; use price or provenance to establish it.
 - "empty" and "absent" are answers, and so is a withheld leg inside a block. Report them with their
   reason; never fill a gap.
-- Never write "settled", "settlement", "executable" or "firm". Nothing here is a settlement.
+- Never claim a price is settled, an authoritative settlement, executable or firm. Nothing here is a settlement.
   Run check_language on any draft that quotes a price before sending it; a "withheld" verdict means rewrite.
 - This is a daily edition on honest timestamps, not a live feed. Say how old a number is.
+- Retained series rows do not prove a healthy source. Report source_health failures alongside historical values.
+- Growing-region weather is model-estimated, not a station observation; retain the row's basis and forecast flag.
 - Confidence is derived from the price type in meta; do not upgrade it in prose.
 """
 
@@ -67,14 +72,23 @@ def _layer_record(key: str, row: sqlite3.Row | None, now: datetime) -> dict[str,
     roster = {k: (n, src, cad, scope) for k, n, src, cad, scope in config.PRODUCTION_LAYERS}
     number, source, cadence, scope = roster[key]
     last = row["last_success"] if row else None
-    age = (now - datetime.fromisoformat(last)).days if last else None
+    # save_freshness writes UTC without an offset; imported editions may
+    # also carry offsets. Preserve the original stamp in the response.
+    stamp = datetime.fromisoformat(last) if last else None
+    if stamp is not None and stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    age = (now - stamp).days if stamp is not None else None
     budget = config.freshness_limit_days(key)
     return {
         "layer": key, "number": number, "source": source, "cadence": cadence, "scope": scope,
         "status": row["status"] if row else LAYER_NOT_RUN,
         "last_success": last, "age_days": age, "budget_days": budget,
+        "age_basis": "time since last successful fetch, not observation age",
         "over_budget": (age > budget) if age is not None else None,
         "rows_fetched": row["rows_fetched"] if row else None,
+        **{name: row[name] if row else None for name in (
+            "last_attempt", "observed_at", "fetch_started_at", "fetch_completed_at", "stored_at",
+        )},
     }
 
 
@@ -144,11 +158,29 @@ def build_server(settings: Settings, *, clock: Callable[[], datetime] | None = N
         end: str | None = None,
         limit: int = db.DEFAULT_LIMIT,
     ) -> ToolResult:
-        """Rows from one stored table, newest first, bounded. `key` filters the table's key column
-        (commodity, pair, region, gauge, ...); `start`/`end` bound its date column (ISO strings)."""
+        """RAW rows in native storage units, not converted USD/MT prices. Never assume a unit if not given.
+        Newest first, bounded. `key` filters the table's key column (commodity, pair, region, gauge, ...);
+        `start`/`end` bound its date column (ISO strings). Use price() for converted market prices."""
         rows = db.bounded_rows(conn, table, key=key, start=start, end=end, limit=limit)
         writers = config.HEALTH_TABLE_WRITER_LAYERS.get(table)
-        meta = base_meta(**meta_for(None), source_table=table, source_layer=list(writers) if writers else None, key=key)
+        units = {
+            str(row["commodity"]): native_label(str(row["commodity"]))
+            for row in rows
+            if table in ("prices", "forward_curve", "contract_bars") and native_label(str(row.get("commodity", "")))
+        }
+        meta = base_meta(
+            **meta_for(None), source_table=table, source_layer=list(writers) if writers else None, key=key,
+            value_basis="native_storage", native_price_units=units,
+            unit_note="Raw storage values, not USD/MT unless explicitly labelled. "
+                      "Use native_price_units or the row's unit; unknown units must not be inferred.",
+            source_health=[
+                _layer_record(
+                    layer, conn.execute("SELECT * FROM data_freshness WHERE layer_name = ?", (layer,)).fetchone(),
+                    now_utc(),
+                )
+                for layer in sorted(writers or ()) if layer in layer_keys
+            ],
+        )
         if not rows:
             reason = f"no rows in {table} for key={key!r} start={start!r} end={end!r}"
             return _result(envelope(STATE_EMPTY, reason, meta=meta))
@@ -189,7 +221,7 @@ def build_server(settings: Settings, *, clock: Callable[[], datetime] | None = N
 
     @mcp.tool
     def weather(market: str) -> ToolResult:
-        """Growing-region weather for one market: observed regions, rule-based alerts, what was withheld and why,
+        """Growing-region model-estimated weather: regions, rule-based alerts, what was withheld and why,
         river gauges and tropical storms."""
         return _result(block_envelope(market, "weather"))
 

@@ -1,8 +1,9 @@
 """One JSON line per tool call — what was asked, never what was answered.
 
 The two-week readout (#581) counts usage days, tools and failures. The answer
-text stays out by construction: the record is built from the request and the
-outcome class only, and the record's keys are a closed set (``FIELDS``).
+text stays out: check_language's draft argument is replaced by its length,
+since it can contain the buyer's own commercial information. Other request
+arguments and the outcome class use a closed set of keys (``FIELDS``).
 """
 
 from __future__ import annotations
@@ -24,10 +25,14 @@ class QuestionLog(Middleware):
     async def on_call_tool(self, context: MiddlewareContext, call_next):  # noqa: ANN001
         started = datetime.now(timezone.utc)
         ctx = context.fastmcp_context
+        arguments = dict(context.message.arguments or {})
+        if context.message.name == "check_language":
+            draft = arguments.pop("text", "")
+            arguments["text_length"] = len(draft) if isinstance(draft, str) else None
         record: dict[str, Any] = {
             "ts": started.isoformat(),
             "tool": context.message.name,
-            "args": dict(context.message.arguments or {}),
+            "args": arguments,
             "call_id": ctx.request_id if ctx is not None and ctx.request_context else None,
         }
         try:
