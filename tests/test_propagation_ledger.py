@@ -399,9 +399,13 @@ def test_every_ledger_is_one_good(registry):
             assert not any(word in leg.key for word in meal_or_oil), leg.leg_id
 
 
-def test_europe_and_nigeria_have_no_ledger_block_at_all(registry):
-    """A ledger-less page is a legal configuration, not a degraded one."""
-    for slug in ("europe", "nigeria"):
+def test_europe_has_no_ledger_block_at_all(registry):
+    """A ledger-less page is a legal configuration, not a degraded one.
+
+    Nigeria was in this set until Layer 36 (AFEX, 2026-11-05) gave it an
+    own-leg ledger on India's precedent.
+    """
+    for slug in ("europe",):
         assert registry[slug].ledger is None
         reason = absent_reason(registry[slug], "ledger")
         assert reason and len(reason) > 20
@@ -541,11 +545,17 @@ def test_europe_is_out_of_cadence_rather_than_dark(seeded, registry):
     assert europe["usd_mt"] is None
 
 
-def test_nigeria_is_dark_with_the_registrys_own_reason(seeded, registry):
+def test_nigeria_is_a_ledger_row_of_its_own_kind(seeded, registry):
+    """Since Layer 36 (2026-11-05) Nigeria is a real row: the AFEX exchange
+    reference, labelled as that kind, never a placeholder claiming an outage
+    (the `seeded` DB carries no Nigerian rows, so it is dark here — but with
+    a no-observation reason, not the old "no source" one)."""
     _state, _reason, data = headline_ledger(registry, seeded)
     nigeria = next(row for row in data["rows"] if row["market_slug"] == "nigeria")
+    assert nigeria["kind"] == "exchange_reference"
+    assert nigeria["leg_id"] == "nigeria:afex"
     assert nigeria["state"] == LEDGER_STATE_DARK
-    assert "AFEX" in nigeria["state_detail"]
+    assert "no Nigerian soybean price source" not in nigeria["state_detail"]
 
 
 def test_every_headline_row_links_to_its_market_page(seeded, registry):

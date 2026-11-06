@@ -263,10 +263,10 @@ async def test_market_slug_is_validated_against_the_registry(settings):
 
 async def test_absent_and_empty_blocks_keep_their_reasons(settings, market_db):
     async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
-        nigeria = (await client.call_tool("price", {"market": "nigeria"})).structured_content
+        nigeria = (await client.call_tool("crush", {"market": "nigeria"})).structured_content
         crush = (await client.call_tool("crush", {"market": "cbot"})).structured_content
         sd = (await client.call_tool("supply_demand", {"market": "cbot"})).structured_content
-    assert nigeria["state"] == "absent" and "no Nigerian soybean price source" in nigeria["reason"]
+    assert nigeria["state"] == "absent" and "no Nigerian meal or oil" in nigeria["reason"]
     assert crush["state"] == "empty" and "no named-contract curve" in crush["reason"]
     assert crush["meta"]["price_type"] == semantics.PriceType.DELAYED_CLOSE.value
     assert sd["state"] == "empty" and "balance sheet" in sd["reason"]

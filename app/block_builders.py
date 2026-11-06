@@ -1303,13 +1303,17 @@ def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, 
       ``out_of_cadence`` rather than a value that would invite comparison
       against seven daily prints, and rather than a ``dark`` pill that would
       report an outage that is not happening.
-    * **Nigeria is dark**, with the registry's own reason: no price leg of any
-      kind is ingested.
+    * **Nigeria is a row without a ledger.** Since Layer 36 (AFEX, 2026-11-05)
+      it has a daily leg but no counterpart set — a one-leg ledger is a price
+      block, not a ledger — so the market declares a ``headline_leg`` and
+      prints here as a level and its move, which is all a headline row is.
     """
     rows: list[dict] = []
     for market in markets.values():
-        if market.ledger is not None:
-            leg = market.ledger.own
+        leg = (
+            market.ledger.own if market.ledger is not None else market.headline_leg
+        )
+        if leg is not None:
             row = _ledger_row(
                 leg, ctx, is_own=False, is_reference=False, own_prints=None, own_leg=leg
             )

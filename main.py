@@ -42,6 +42,7 @@ from config import (
     missing_api_keys,
     setup_logging,
 )
+from fetchers.afex import fetch_afex
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_crush_months, fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
@@ -103,6 +104,7 @@ from pipeline.clean import (
     clean_fred_series,
     clean_india_domestic,
     clean_inspections,
+    clean_nigeria_spot,
     clean_ocean_freight,
     clean_ohlcv,
     clean_port_vessel_activity,
@@ -144,6 +146,7 @@ from pipeline.store import (
     save_india_domestic,
     save_inspection_destinations,
     save_inspections,
+    save_nigeria_spot,
     save_ocean_freight,
     save_port_flows,
     save_port_vessel_activity,
@@ -1174,6 +1177,16 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         fetch=lambda: fetch_sopa_estimates(),
         save=lambda n, d: save_sopa_crop_estimates(n, d),
         empty_fails=False,
+    )
+    # Layer 36: AFEX serves the whole SSBS history on every call, so an
+    # empty result means the feed is broken rather than merely quiet →
+    # empty_fails stays on. Published by owner decision 2026-11-05
+    # (config.AFEX_PUBLISH_RAW); the history export rides on the same flag.
+    results["afex"] = _run_scraper_layer(
+        "afex", "Layer 36", "AFEX Nigeria soybean reference price",
+        fetch=lambda: fetch_afex(),
+        save=lambda n, d: save_nigeria_spot(n, d),
+        clean=lambda d: clean_nigeria_spot(d),
     )
 
 

@@ -106,6 +106,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_cec_estimates": FetchResult.empty(),
         "fetch_sea_rates": FetchResult.empty(),
         "fetch_sopa_estimates": FetchResult.empty(),
+        "fetch_afex": FetchResult.empty(),
         "fetch_all_contract_bars": empty_dict,
         "fetch_processor_cash": empty_dict,
     }
