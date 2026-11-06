@@ -3,7 +3,7 @@
 [![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-GitHub_Pages-2D6A4F?style=for-the-badge)](https://philipbergman6-glitch.github.io/Mirror-Market/)
 [![Update Dashboard](https://github.com/philipbergman6-glitch/Mirror-Market/actions/workflows/deploy-dashboard.yml/badge.svg)](https://github.com/philipbergman6-glitch/Mirror-Market/actions/workflows/deploy-dashboard.yml)
 
-**Public-data soy market intelligence for physical buyers**: 40 free data sources, one SQLite database, a daily-rebuilt static site, and a 3,900-test guard against publishing a wrong number. Python, pandas, Jinja2, GitHub Actions. No paid data, no cloud database, no servers.
+**Public-data soy market intelligence for physical buyers**: 41 free data sources, one SQLite database, a daily-rebuilt static site, and a 3,900-test guard against publishing a wrong number. Python, pandas, Jinja2, GitHub Actions. No paid data, no cloud database, no servers.
 
 ## The Big Picture
 
@@ -13,7 +13,7 @@ Answering it properly means checking dozens of places — futures prices, USDA r
 
 It is three things stacked on top of each other:
 
-1. **A data collector** — a Python script that runs 40 operational data layers (36 numbered source groups plus four independently graded sub-layers) every weekday and saves everything into one database.
+1. **A data collector** — a Python script that runs 41 operational data layers (37 numbered source groups plus four independently graded sub-layers) every weekday and saves everything into one database.
 2. **An analysis engine** — code that turns that raw data into plain conclusions: "prices are overbought," "Brazil is undercutting US beans," "funds are crowded into this trade."
 3. **A morning site** — a headline page plus one page per market, rebuilt daily and published free on GitHub Pages, presented in the order a trader would scan it.
 
@@ -77,10 +77,12 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 34 | NOAA NHC | Tropical-cyclone forecast tracks — Atlantic and East Pacific ports |
 | 35 | JTWC | Tropical-cyclone forecast tracks — West Pacific, Indian Ocean, Southern Hemisphere ports |
 | 36 | AFEX (Africa Exchange)‡ | Nigeria's daily soybean reference price — not a settlement |
+| 37 | Euronext MiFIR delayed trades + ESMA FIRDS§ | MATIF rapeseed (ECO) last trade by contract month — private desk layer, never published |
 
-\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, `MARS_API_KEY`). **33 of 40 operational layers need no key at all**; `python main.py --doctor` names what each missing key costs. If any one source fails, the rest still run and the degradation stays visible on the page.
+\* needs a free API key (`USDA_API_KEY`, `FRED_API_KEY`, `FAS_API_KEY`, `EIA_API_KEY`, `MARS_API_KEY`). **34 of 41 operational layers need no key at all** (Layer 37 needs a desk flag, not a key); `python main.py --doctor` names what each missing key costs. If any one source fails, the rest still run and the degradation stays visible on the page.
 † stored and analysed, but the raw table is never published: the publisher's terms allow use, not redistribution. Only derived readings (a year-on-year change, a state share) render.
 ‡ published by owner decision (2026-11-05) although the exchange's terms reserve redistribution; `config.AFEX_PUBLISH_RAW` withdraws it in one flip.
+§ private by owner decision (2026-11-05): Euronext delayed data is free for internal use and licensed for redistribution, so `config.MATIF_PUBLISH` is False and enforced — the table never leaves the desk's database, and the layer runs only where `MATIF_PRIVATE_FETCH` is set (never in CI). Not a settlement: the rows are last on-book trades.
 
 `config.PRODUCTION_LAYERS` is the one roster; this table is checked against it in CI.
 
@@ -102,7 +104,7 @@ In plain terms, each piece answers a question a trader would ask:
 ```bash
 pip install -r requirements.txt
 
-python main.py                      # run all 40 operational layers
+python main.py                      # run all 41 operational layers
 python main.py --doctor             # which API keys are set, and what a missing one skips (no fetch)
 python scripts/generate_site.py     # build the whole site → docs/
 python scripts/generate_site.py --only india    # or one page, for the dev loop

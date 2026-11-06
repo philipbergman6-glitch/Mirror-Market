@@ -398,6 +398,39 @@ def read_nigeria_spot(commodity: str | None = None) -> pd.DataFrame:
     return _read_table("nigeria_spot_prices", "commodity", commodity)
 
 
+def read_matif_futures(contract_month: str | None = None) -> pd.DataFrame:
+    """Read Layer 37 ECO session rows (EUR/t, last traded, never a settlement). PRIVATE.
+
+    Never read by a site builder while config.MATIF_PUBLISH is False
+    (tests/test_matif_private_gate.py); the only reader is
+    analysis.matif_curve, which prints to the desk or data/workspace/.
+    """
+    return _read_table("matif_futures", "contract_month", contract_month, date_cols=("Date",))
+
+
+def read_matif_instruments() -> dict:
+    """ISIN → fetchers.matif.Instrument for every ISIN already stored in matif_futures.
+
+    The FIRDS cache: the fetcher asks ESMA only about ISINs this map lacks.
+    Imported lazily so pipeline.query stays importable without the fetcher.
+    """
+    from datetime import date as _date_type
+
+    from fetchers.matif import Instrument
+
+    df = _read_table("matif_futures", date_cols=())
+    if df.empty:
+        return {}
+    out: dict[str, Instrument] = {}
+    for row in df.drop_duplicates("isin").itertuples(index=False):
+        expiry = row.expiry_date
+        out[str(row.isin)] = Instrument(
+            isin=str(row.isin), name=str(row.firds_name), cfi="FCAPSX", product="RPSD",
+            expiry_date=_date_type.fromisoformat(str(expiry)) if expiry else None,
+        )
+    return out
+
+
 def read_safex(commodity: str | None = None) -> pd.DataFrame:
     """Read JSE SAFEX South Africa last-traded prices from SQLite.
 

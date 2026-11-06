@@ -4,6 +4,25 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — Layer 37: MATIF rapeseed delayed trades, private desk edition only (2026-11-05)
+
+Owner decision 2026-11-05 ("ingest MATIF delayed settlements, private
+edition only"). What is free, keyless and machine-readable is Euronext's
+MiFIR delayed trade file plus ESMA FIRDS for the instrument map — trades,
+not settlements; the DSP sits on a terms-protected route and is not fetched
+(`research/2026-11-05-matif-rapeseed-source.md`). New `fetchers/matif.py`
+stores one finished Paris session per delivery month of on-book ECO trades
+in EUR/t as `board_last_traded`; `analysis/matif_curve.py` prints the curve
+to the desk or `data/workspace/`. The licence gate `config.MATIF_PUBLISH =
+False` is enforced by `tests/test_matif_private_gate.py`: no history export,
+no builder reads it, the layer runs only where `MATIF_PRIVATE_FETCH` is set
+(never CI), and `mirror_mcp` now refuses a database whose private-layer
+table *holds rows* (an empty schema-created table no longer refuses — the
+old rule would have stopped the server on every database this schema
+builds). `pipeline.reliability.dead_layers` no longer calls a streak made
+only of `skipped_unconfigured` a dead source. `_run_scraper_layer` gained
+the DictLayer `run_if`/`skip_msg` pair. Roster 41 layers / 37 groups.
+
 ## Unreleased — failed briefing blocks are relayed, not left in the log (2026-10-19)
 
 **B45 #562**, from the review of PR #561 (#558). A block named in the

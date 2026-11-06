@@ -161,10 +161,17 @@ async def test_series_refuses_unknown_table_naming_the_allowed_ones(settings):
             await client.call_tool("series", {"table": "prices", "limit": 5000})
 
 
-def test_private_layer_tables_are_refused_at_startup_when_the_layer_is_private(settings, monkeypatch):
+def test_private_layer_tables_are_refused_at_startup_when_they_hold_rows(settings, db_path, monkeypatch):
     from mirror_mcp import db
 
     monkeypatch.setattr(config, "PRIVATE_LAYERS", ("sea_india",))
+    # The schema creates every table in every database: an empty private
+    # table is DDL, and the server starts. A row in it is the leak.
+    build_server(settings)
+    conn = sqlite3.connect(db_path)
+    conn.execute("INSERT INTO sea_india_rates(Date, series, value, unit) VALUES ('2026-11-04','x',1.0,'USD/MT')")
+    conn.commit()
+    conn.close()
     with pytest.raises(db.PrivacyRefusal, match="sea_india_rates"):
         build_server(settings)
 

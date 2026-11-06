@@ -81,6 +81,11 @@ def test_skipped_layers_are_run_if_gated_and_degraded_layers_are_not() -> None:
     by_key = {layer.key: layer for layer in main._build_dict_layers()}
     for name, spec in API_KEY_CATALOG.items():
         for key in spec.skips:
+            if key in main.SCRAPER_LAYER_RUN_IF:
+                # A gated scraper layer (Layer 37): its run_if is registered
+                # by name because _run_scraper_layer is a call, not a table.
+                assert key not in by_key, f"{name}: {key!r} is both a DictLayer and a gated scraper"
+                continue
             assert key in by_key, f"{name}: {key!r} is not a DictLayer, cannot be run_if-skipped"
             assert by_key[key].run_if is not None, f"{name}: {key!r} has no run_if but the catalog says it skips"
         for key in spec.degrades:
@@ -91,7 +96,12 @@ def test_skipped_layers_are_run_if_gated_and_degraded_layers_are_not() -> None:
 def test_the_deploy_workflow_passes_every_catalogued_key() -> None:
     """A key the catalog knows but the deploy job never exports is a key CI can never set."""
     workflow = (config.ENV_FILE.parent / ".github" / "workflows" / "deploy-dashboard.yml").read_text()
-    for name in API_KEY_CATALOG:
+    for name, spec in API_KEY_CATALOG.items():
+        if not spec.ci_exports:
+            # A desk-only switch (Layer 37): the workflow must NOT export it,
+            # so no secret can turn a private layer on in CI.
+            assert name not in workflow, f"{name} is desk-only and must not appear in the deploy workflow"
+            continue
         assert f"{name}: ${{{{ secrets.{name} }}}}" in workflow, name
 
 

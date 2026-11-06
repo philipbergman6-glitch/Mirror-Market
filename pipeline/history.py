@@ -90,6 +90,10 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # revision once the day passes.
     **({"sea_india_rates": ("Date", "series")} if SEA_PUBLISH else {}),
     **({"sopa_crop_estimates": ("crop_year", "state", "fetched_date")} if SOPA_PUBLISH else {}),
+    # `matif_futures` (Layer 37) is deliberately NOT here, and no flag adds
+    # it: this CSV round-trip is a publication, and Euronext delayed data is
+    # free for internal use only (config.MATIF_PUBLISH; tests/test_matif_private_gate.py).
+    # Its history accumulates in the desk's own database.
     # Layer 36, published by owner decision 2026-11-05 on the same stance.
     # AFEX re-serves its full history every run, so this CSV is a publication
     # and a fallback record, not the only copy; the flag withholds it.
