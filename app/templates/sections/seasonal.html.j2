@@ -2,6 +2,7 @@
 {% import 'sections/_cards.html.j2' as c %}
 {% for leg in s.legs %}
 <div class="subhdr">{{ leg.name }}</div>
+{% if leg.withheld_reason %}<div class="alert alert-warn">{{ leg.withheld_reason }}</div>{% endif %}
 {% if leg.has_stats %}
 <div class="grid grid-3">
   <div class="mc">

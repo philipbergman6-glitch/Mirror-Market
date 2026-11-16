@@ -1520,7 +1520,16 @@ def seasonal_analysis() -> dict:
         monthly_avg: DataFrame of avg/min/max by month
         current_vs_avg: deviation from seasonal norm
     """
-    prices = _load_soy_prices()
+    # The raw provider closes (15y), not the technicals frame. Since the
+    # named ratio-adjusted series switched on, `_load_soy_prices()` serves
+    # ~4 years of *adjusted* levels — under SEASONAL_MIN_YEARS_PER_MONTH in
+    # every month, and scaled non-prices before the last roll besides — so
+    # every leg's seasonal norm came back empty. A month's average level is
+    # a level a human reads; it is read off real closes, the same series the
+    # briefing's seasonal line uses (analysis/briefing/orchestrator.py).
+    all_prices = load_prices()
+    prices = {c: all_prices[c] for c in _SOY_PRICE_TARGETS
+              if c in all_prices and not all_prices[c].empty}
     result = {}
 
     for leg in SOY_LEGS:
