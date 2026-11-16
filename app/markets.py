@@ -58,6 +58,11 @@ log = logging.getLogger(__name__)
 # hand-written, and unchanged by the tier.
 MARKET_URL_TEMPLATE = "markets/{slug}.html"
 
+# The currency every price on the site displays in (all prices are USD/MT). A
+# market already quoting it needs no FX pair; any other market without one
+# must say why (`currency_absent_reason`, enforced at load).
+SITE_NUMERAIRE = "USD"
+
 TIER_PAGE = "page"
 TIER_BRIEF = "brief"
 TIER_STUB = "stub"
@@ -792,7 +797,7 @@ def _market(slug: str, raw: dict) -> Market:
         raise ValueError(f"market {slug!r} missing key(s): {sorted(missing)}")
 
     reasons: dict[str, str] = {}
-    for block in ("price", "crush", "basis", "weather", "flows"):
+    for block in ("price", "crush", "basis", "weather", "flows", "currency"):
         reason = raw.get(f"{block}_absent_reason")
         if reason:
             reasons[block] = reason
@@ -833,6 +838,18 @@ def _market(slug: str, raw: dict) -> Market:
             )
     if not raw["weather_regions"] and "weather" not in reasons:
         raise ValueError(f"market {slug!r} has no weather_regions and no weather_absent_reason")
+    # No pair is only self-explanatory for a market already in the numeraire;
+    # anywhere else block 05 must say why there is no rate, rather than
+    # calling the home currency the site's numeraire (#230 sibling).
+    if (
+        not raw.get("currency_pair")
+        and raw["home_currency"] != SITE_NUMERAIRE
+        and "currency" not in reasons
+    ):
+        raise ValueError(
+            f"market {slug!r} quotes in {raw['home_currency']} with no currency_pair and no "
+            f"currency_absent_reason — only a {SITE_NUMERAIRE} market needs no rate"
+        )
 
     weather_roles = _weather_roles(slug, raw["weather_regions"])
     unknown = set(weather_roles) - set(config.GROWING_REGIONS)
@@ -1383,8 +1400,13 @@ def _ingest_status(conn, layer: str) -> str | None:
     }[row[0]]
     last_success = row[1]
     if last_success:
-        return f"our {layer} ingest {state}; last good run {str(last_success)[:10]}"
-    return f"our {layer} ingest {state}; no recorded successful run"
+        verdict = f"our {layer} ingest {state}; last good run {str(last_success)[:10]}"
+    else:
+        verdict = f"our {layer} ingest {state}; no recorded successful run"
+    # The why, where the source has a documented standing gate — only ever
+    # beside an adverse verdict (see config.LAYER_STANDING_GATES).
+    gate = config.LAYER_STANDING_GATES.get(layer)
+    return f"{verdict} — {gate}" if gate else verdict
 
 
 def _is_current(conn, source: Source | None, today: date) -> tuple[bool, str]:

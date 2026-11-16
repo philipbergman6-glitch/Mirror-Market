@@ -7,9 +7,12 @@
 #}
 {% macro usd(value, places=1) %}{% if value is none %}<span class="muted">n/a</span>{% else %}${{ '{:,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
 
-{% macro signed(value, places=1, unit='') %}{% if value is none %}<span class="muted">n/a</span>{% else %}<span class="{{ 'up' if value > 0 else 'down' if value < 0 else 'muted' }}">{{ '{:+,.{}f}'.format(value, places) }}{{ unit }}</span>{% endif %}{% endmacro %}
+{#- Sign and colour follow the number as *shown*: a move that rounds to zero
+    reads a neutral "0.0", never a red "-0.0" — the colour would claim a
+    direction the printed digits deny. -#}
+{% macro signed(value, places=1, unit='') %}{% if value is none %}<span class="muted">n/a</span>{% elif value|round(places) == 0 %}<span class="muted">{{ '{:,.{}f}'.format(0, places) }}{{ unit }}</span>{% else %}<span class="{{ 'up' if value > 0 else 'down' }}">{{ '{:+,.{}f}'.format(value, places) }}{{ unit }}</span>{% endif %}{% endmacro %}
 
-{% macro pct(value, places=1) %}{% if value is none %}<span class="muted">—</span>{% else %}<span class="{{ 'up' if value > 0 else 'down' if value < 0 else 'muted' }}">{{ '{:+.{}f}'.format(value, places) }}%</span>{% endif %}{% endmacro %}
+{% macro pct(value, places=1) %}{% if value is none %}<span class="muted">—</span>{% elif value|round(places) == 0 %}<span class="muted">{{ '{:.{}f}'.format(0, places) }}%</span>{% else %}<span class="{{ 'up' if value > 0 else 'down' }}">{{ '{:+.{}f}'.format(value, places) }}%</span>{% endif %}{% endmacro %}
 
 {% macro num(value, places=0) %}{% if value is none %}<span class="muted">n/a</span>{% else %}{{ '{:,.{}f}'.format(value, places) }}{% endif %}{% endmacro %}
 

@@ -2753,6 +2753,21 @@ def validate_age_budgets(
 
 validate_age_budgets()
 
+# Standing access gates: a documented, source-side reason a layer cannot be
+# fetched unattended, printed beside our own ingest verdict on the site. The
+# run state alone says "failed upstream", which is true and tells a reader
+# nothing about why — `data_freshness` keeps no error text. Appended ONLY
+# while the layer's latest verdict is failed/stale/incomplete
+# (`app.markets._ingest_status`), so a healthy run never carries it; when the
+# gate lifts, delete the entry. Each entry cites the issue holding the probe
+# evidence (LAYERS.md carries the detail).
+LAYER_STANDING_GATES: dict[str, str] = {
+    "india_domestic": (
+        "Agmarknet's report API has demanded a captcha since 2026-10-09, which "
+        "closes it to an unattended fetch from outside India (#449)"
+    ),
+}
+
 # Key coverage (#182): which config catalog each multi-key layer iterates.
 # `keys_expected` is len(catalog), so adding a ticker/region/series moves a
 # layer's expected count with no second edit — the trailing counts in
@@ -3315,6 +3330,13 @@ MARKETS: dict[str, dict[str, Any]] = {
         # itself (and derives its own EUR column from it), so the page quotes
         # the authoritative USD leg rather than a rate we do not hold.
         "currency_pair": None,
+        # Required by the loader: a non-USD market with no pair must say why
+        # it renders no rate, or block 05 would claim EUR is the numeraire.
+        "currency_absent_reason": (
+            "no EUR/USD rate is ingested, and none is needed: the EC workbook publishes "
+            "USD/MT itself, so every Europe figure here is the venue's own USD number — "
+            "no conversion is applied"
+        ),
         # Weekly physical assessment, not the MATIF futures curve — those
         # settlements are licensed at EUR 167.55/month and are not shown.
         "price": {
