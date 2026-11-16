@@ -435,6 +435,14 @@ COT_COMMODITIES = {
 # historical rows stop accruing; that is the intended cost.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# Open-Meteo intermittently stops answering GitHub runners (shared Azure IPs)
+# for minutes at a time — every coordinate, read timeout with no response
+# (measured 2026-11-16: 8 consecutive 40 s timeouts, then 0.1 s replies).
+# One random region per run lost all three retries (Riau, Madhya Pradesh,
+# Mpumalanga…), grading the layer usable_partial for weeks (#577) and
+# lighting "1 data critical" on every masthead. Regions still empty after
+# the first pass get one more pass after this pause.
+WEATHER_SECOND_PASS_DELAY_S = 60
 # What a Layer 5 row is (B15 #455). Open-Meteo's forecast endpoint serves
 # weather-model output for its past days too — model analysis, not station
 # readings — so every row, elapsed or ahead, is an estimate. Same honesty as
