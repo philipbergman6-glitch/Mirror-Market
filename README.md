@@ -3,7 +3,15 @@
 [![Live Dashboard](https://img.shields.io/badge/Live_Dashboard-GitHub_Pages-2D6A4F?style=for-the-badge)](https://philipbergman6-glitch.github.io/Mirror-Market/)
 [![Update Dashboard](https://github.com/philipbergman6-glitch/Mirror-Market/actions/workflows/deploy-dashboard.yml/badge.svg)](https://github.com/philipbergman6-glitch/Mirror-Market/actions/workflows/deploy-dashboard.yml)
 
-**Public-data soy market intelligence for physical buyers**: 41 free data sources, one SQLite database, a daily-rebuilt static site, and a 3,900-test guard against publishing a wrong number. Python, pandas, Jinja2, GitHub Actions. No paid data, no cloud database, no servers.
+**Public-data soy market intelligence for physical buyers**: 41 free data sources, one SQLite database, a daily-rebuilt static site, and a 4,500-test guard against publishing a wrong number. Python, pandas, Jinja2, GitHub Actions. No paid data, no cloud database, no servers.
+
+| If you have 5 minutes | Look at |
+|---|---|
+| What it does | the [live site](https://philipbergman6-glitch.github.io/Mirror-Market/) — rebuilt unattended every weekday |
+| How it works | [the diagram below](#how-it-works) |
+| Why the numbers can be trusted | [How it's tested — and what happens when a test fails](#how-its-tested--and-what-happens-when-a-test-fails) |
+| The engineering rules every change must obey | [`CLAUDE.md` → Invariants](CLAUDE.md#invariants--never-break-these) |
+| A real audit of the published numbers | [`research/v1-hand-verification-2026-10-17.md`](research/v1-hand-verification-2026-10-17.md) |
 
 ## The Big Picture
 
@@ -18,6 +26,68 @@ It is three things stacked on top of each other:
 3. **A morning site** — a headline page plus one page per market, rebuilt daily and published free on GitHub Pages, presented in the order a trader would scan it.
 
 The focus is the **soy complex** — soybeans and the two products they're crushed into, soybean oil and soybean meal — plus the crops that compete with them (corn, palm oil, wheat). All prices are converted to **US dollars per metric ton** so a Chicago price, a Brazilian price, and a South African price can sit on the same chart.
+
+## How it works
+
+```mermaid
+flowchart LR
+    S["41 public sources<br/>exchanges · USDA · CONAB<br/>FX · weather · freight"] --> F["fetchers/<br/>one module per source"]
+    F --> C["pipeline/<br/>clean · validate · units → USD/MT"]
+    C --> D[("SQLite<br/>+ git-committed CSV history")]
+    D --> A["analysis/<br/>crush · basis · signals · briefing"]
+    A --> R["scripts/generate_site.py<br/>13 pages → private candidate"]
+    R --> G{"promotion contract<br/>smoke_site.py"}
+    G -- pass --> P["GitHub Pages<br/>public site"]
+    G -- fail --> K["candidate discarded<br/>yesterday's verified edition stays up"]
+```
+
+Every stage is deterministic Python. **No number on the site is produced by a language model**: each one is fetched from its publisher, parsed by code that is tested against that publisher's real documents, stored with its source and timestamp, and labelled with what kind of price it is.
+
+## How it's tested — and what happens when a test fails
+
+### Where the tests live
+
+- **`tests/`** — 206 test files, **4,511 test cases** (pytest), plus lint (ruff) and type checks (mypy). Line coverage is 88%; a drop below 70% fails the run.
+- **`tests/fixtures/`** — real documents captured from the sources: USDA PDFs, CONAB files, SAFEX and CEPEA pages, freight spreadsheets, CFTC files. Parsers are tested against what each publisher actually serves, known-bad files included (`cec_2025-02-27_wrong_formula.pdf` is a real South African crop-estimate release whose column header states the wrong formula).
+- **`tests/_guards.py`** — a sandbox around the whole suite: any test that reaches the internet, or writes into the committed history in `data/history/`, fails at the offending line. Tests can't pass by accident against live data.
+
+### What they check
+
+| Area | What a failing test would mean | Examples |
+|---|---|---|
+| Parsers | a source changed format and we'd misread it | `test_fetcher_*.py` (19 files) |
+| Units & FX | a price converted at the wrong rate or unit | `test_units.py`, `test_fx_date_rule.py`, `test_fx_alignment.py` |
+| "Nothing invented" | a gap got filled with a made-up number | `test_no_fabricated_closes.py`, `test_settlement_guard.py` |
+| One session per spread | a crush mixing two days' prices | `test_named_crush.py`, `test_dce_month_crush.py` |
+| Privacy | a desk's positions could reach the public site | `test_book_privacy.py`, `test_workstation_privacy.py`, `test_desk_assumptions_private.py` |
+| Site contract | a broken, stale or unsafe page could publish | `test_site_promotion.py`, `test_site_contract.py`, `test_template_injection.py` |
+| The docs themselves | this README drifted from the code | `test_docs_claims.py` — the source table below must match the layer roster |
+
+### What happens when something fails
+
+| Gate | When it runs | It fails on | Then |
+|---|---|---|---|
+| **1. Pull-request CI** (`ci.yml`) | every PR and push | lint, types, any of the 4,511 tests, coverage < 70%, a test that dirtied the repo, a PR that edits `data/history/` | the change can't merge |
+| **2. Deploy gate** | every weekday 19:00 UTC — the deploy re-runs gate 1 first | the same checks | nothing is built; the public site keeps the last verified edition; a GitHub issue (`ci-deploy-alert`) opens and emails me |
+| **3. Per-source grading** (`main.py`) | every run, every source | a source failed, served stale data, or answered only part of the request | that source is marked failed on every page it feeds; the others still run; a `ci-alert` issue opens, and a `ci-dead-source` issue if it stays down 3 sessions |
+| **4. Promotion contract** (`scripts/smoke_site.py --browser`) | before upload | missing benchmarks or briefing, a broken page, bad timestamps, dead links, overflow on mobile or desktop | the candidate is thrown away; yesterday's edition stays public |
+| **5. Public smoke** | after deploy | the live URLs don't serve what was promoted | the run is red and the alert issue opens |
+
+Every alert issue closes itself on the next green run. **A wrong number is treated as worse than a missing one**, so every gate fails closed: the site goes quiet or stays on yesterday's edition rather than publishing something unverified.
+
+*A real example:* in November 2026 a test with a hard-coded date expired. Gate 2 blocked every daily build, the public site stayed on its last verified edition, and alert issue [#597](https://github.com/philipbergman6-glitch/Mirror-Market/issues/597) opened. The fix pinned the date so the test can't expire again.
+
+### Checking the numbers, not just the code
+
+Tests prove the code does what it says. Three more checks test the *numbers*:
+
+- **Reconciliation** (`scripts/reconcile_*.py`, every deploy): CBOT benchmarks, required FX pairs and Argentina FOB values go through two independently written ingestion paths, and every field where they disagree is reported.
+- **Hand verification against the publishers** ([`research/v1-hand-verification-2026-10-17.md`](research/v1-hand-verification-2026-10-17.md)): 12 published numbers traced back to source documents (CME daily bulletin, USDA AMS, Dalian exchange, CEPEA, Brazil's central bank PTAX, ECB), with the arithmetic shown so anyone can recompute them. The values matched within their stated tolerances (one CNY rate was flagged for follow-up). The real findings were three *labelling* defects: a Dalian crush mixing contract months, and two prices averaged across shipment windows without saying so. Each became a ticket and was fixed.
+- **A permanent run record** (`data/history/layer_runs.csv`): every run appends each source's outcome, so reliability is measured from history, not claimed.
+
+### Built with AI agents, gated by machines
+
+Much of this code was written with AI coding agents (Claude Code) working under my direction. That is why the rules are enforced by machines, not trust: the invariants in [`CLAUDE.md`](CLAUDE.md) bind every agent, and an agent's change ships only if it clears the same five gates as mine.
 
 ## The Site
 
@@ -126,7 +196,8 @@ Free public data fails in quiet ways. Most of the engineering here is about refu
 
 GitHub Actions runs the whole thing unattended: daily (and on every push to `main`) it collects the data and builds a private candidate. The promotion contract requires current soy-complex benchmarks, a generated briefing, aligned required calculations, all expected pages without tombstones, valid timestamps, layer counts consistent with the `config.PRODUCTION_LAYERS` roster, valid internal links, and overflow-free desktop/mobile rendering. Only a passing candidate is uploaded to GitHub Pages; otherwise the previous trustworthy edition remains public. A second smoke test reads the deployed public URLs. The schedule targets a landing window after Chicago settlement, while settlement and freshness guards enforce correctness independently of cron timing. Snapshot-only observations and operational freshness state round-trip through committed CSVs so an ephemeral runner retains both history and the age of the last known good run.
 
-### Trusted Static Preview
+<details>
+<summary>Trusted static preview (operator commands)</summary>
 
 To preview a verified or candidate trust edition without changing the public dashboard, render it into a candidate directory first:
 
@@ -150,6 +221,8 @@ Only publish the rendered candidate explicitly:
   --public-dir docs
 ```
 
+</details>
+
 ## How the Code Is Organized
 
 ```
@@ -162,7 +235,7 @@ analysis/          turns stored data into indicators, signals, hazards, and the 
 app/               the market registry, the block builders, and the HTML templates
 trust/             source contracts, the promotion gate, reconciliation ledger
 scripts/           generate_site.py — the orchestrator that renders every page
-tests/             ~3,950 tests; sandboxed — no network, no writes to history
+tests/             4,511 tests + real source fixtures; sandboxed — no network, no writes to history
 docs/              local site output (gitignored) — Pages serves the CI-built artifact, not this directory
 ```
 
