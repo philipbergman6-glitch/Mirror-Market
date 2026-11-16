@@ -47,6 +47,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from enum import Enum
 from typing import Any, cast
 
@@ -427,6 +428,20 @@ class ContractSpec:
 
     def ticks(self, price_move: float) -> float:
         return price_move / self.tick_size
+
+    @property
+    def price_decimals(self) -> int:
+        """Decimals the venue quotes in: the tick's own (0.25 → 2, 0.10 → 1).
+
+        A price on this contract's tick grid has no information past these;
+        anything further is float storage noise (327.799988 for 327.8).
+        """
+        exponent = Decimal(str(self.tick_size)).normalize().as_tuple().exponent
+        return max(0, -int(exponent))
+
+    def price_display(self, price: float) -> str:
+        """A native price at the venue's tick precision."""
+        return f"{price:,.{self.price_decimals}f}"
 
 
 # The nine products the price and forward-curve layers already fetch. Sizes,

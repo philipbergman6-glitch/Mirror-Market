@@ -20,6 +20,39 @@ def _fmt(val: float) -> str:
     return f"{val:,.0f}"
 
 
+#: Decimals WASDE itself prints for each unit the fetcher stores
+#: (``data/history/wasde.csv`` → ``unit``). A farm price moves in cents, a
+#: yield in tenths of a bushel, cotton in hundredths of a million bales; the
+#: balance-sheet quantities are whole numbers. A unit not listed here falls
+#: back to :func:`_fmt`'s magnitude rule, which never cuts a small value to an
+#: integer.
+WASDE_UNIT_DECIMALS: dict[str, int] = {
+    "$/bu": 2,
+    "c/lb": 2,
+    "$/s.t.": 2,
+    "Bushels": 1,                    # yield per harvested acre
+    "Pounds": 0,                     # cotton yield, lb/acre
+    "Million Acres": 1,
+    "Million Bushels": 0,
+    "Million Pounds": 0,
+    "Thousand Short Tons": 0,
+    "Million 480 Pound Bales": 2,
+}
+
+
+def wasde_value_display(val: float, unit: str) -> str:
+    """One WASDE value at the precision WASDE publishes it in."""
+    decimals = WASDE_UNIT_DECIMALS.get(str(unit).strip())
+    if decimals is None:
+        return _fmt(val)
+    return f"{val:,.{decimals}f}"
+
+
+def wasde_commodity_display(commodity: str) -> str:
+    """``SOYBEAN_MEAL`` → ``Soybean Meal`` — the stored key is not a heading."""
+    return str(commodity).replace("_", " ").strip().title()
+
+
 def format() -> str:  # noqa: A001
     lines = ["WASDE ESTIMATES (USDA Monthly Forecasts):"]
     wasde = read_wasde()

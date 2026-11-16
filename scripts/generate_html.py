@@ -22,6 +22,10 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from analysis.briefing.sections.wasde import (  # noqa: E402
+    wasde_commodity_display,
+    wasde_value_display,
+)
 from app.charts import (  # noqa: E402  (must follow sys.path.insert above)
     COLORS,
     build_technical_chart,
@@ -703,7 +707,7 @@ def _build_supply(data: dict) -> dict | None:
         for commodity, attrs in wasde.items():
             if "SOYBEAN" not in commodity.upper():
                 continue
-            lines.append(f'<div class="subhdr" style="font-size:14px; margin-top:12px;">{_esc(commodity)}</div>')
+            lines.append(f'<div class="subhdr" style="font-size:14px; margin-top:12px;">{_esc(wasde_commodity_display(commodity))}</div>')
             for attr_name, info in attrs.items():
                 val = info.get("value")
                 if pd.isna(val):
@@ -711,12 +715,18 @@ def _build_supply(data: dict) -> dict | None:
                 rev = info.get("revision")
                 unit = info.get("unit", "")
                 rev_str = ""
-                if rev is not None and rev != 0:
-                    direction = "UP" if rev > 0 else "DOWN"
-                    rev_str = f' <span class="{"up" if rev > 0 else "down"}">(revised {direction} {abs(rev):,.0f})</span>'
+                if rev is not None and pd.notna(rev):
+                    # Printed at the value's own precision; a revision that
+                    # rounds to nothing there is "unchanged", never "UP 0".
+                    rev_abs = wasde_value_display(abs(rev), unit)
+                    if rev_abs == wasde_value_display(0.0, unit):
+                        rev_str = ' <span style="color:var(--text-dim);">(unchanged)</span>'
+                    else:
+                        direction = "UP" if rev > 0 else "DOWN"
+                        rev_str = f' <span class="{"up" if rev > 0 else "down"}">(revised {direction} {_esc(rev_abs)})</span>'
                 period = info.get("period", "")
                 period_str = f' <span style="color:var(--text-dim);">· {_esc(period)}</span>' if period else ""
-                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}{rev_str}{period_str}</div>')
+                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{_esc(wasde_value_display(val, unit))}</strong> {_esc(unit)}{rev_str}{period_str}</div>')
         out["wasde_html"] = "\n".join(lines) if lines else ""
 
     # Stocks-to-use (US balance sheet, from PSD)
@@ -751,7 +761,7 @@ def _build_supply(data: dict) -> dict | None:
         for commodity, attrs in wasde.items():
             if "SOYBEAN" in commodity.upper():
                 continue
-            lines.append(f'<div class="subhdr" style="font-size:14px; margin-top:12px;">{_esc(commodity)}</div>')
+            lines.append(f'<div class="subhdr" style="font-size:14px; margin-top:12px;">{_esc(wasde_commodity_display(commodity))}</div>')
             for attr_name, info in attrs.items():
                 val = info.get("value")
                 if pd.isna(val):
@@ -759,7 +769,7 @@ def _build_supply(data: dict) -> dict | None:
                 unit = info.get("unit", "")
                 period = info.get("period", "")
                 period_str = f' <span style="color:var(--text-dim);">· {_esc(period)}</span>' if period else ""
-                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{val:,.0f}</strong> {_esc(unit)}{period_str}</div>')
+                lines.append(f'<div style="font-size:13px; color:var(--text-muted); padding:2px 0;">- {_esc(attr_name)}: <strong style="color:var(--text)">{_esc(wasde_value_display(val, unit))}</strong> {_esc(unit)}{period_str}</div>')
         # PSD highlights
         psd = data.get("psd_highlights", [])
         if psd:
@@ -878,7 +888,11 @@ def _build_demand(data: dict) -> dict | None:
             date_str = ""
             if bio_date is not None:
                 date_str = f'<div class="caption">as of {bio_date.strftime("%Y-%m-%d") if hasattr(bio_date, "strftime") else _esc(bio_date)}</div>'
-            cards.append(f'<div class="mc"><div class="mc-label">{_esc(name)}</div><div class="mc-val">{info["value"]:,.2f}</div><div class="mc-delta {dc}">{delta_str(chg)}</div>{date_str}</div>')
+            # The unit is the one EIA returned with the series (Layer 13 stores
+            # it per row); absent, the card says nothing rather than guessing.
+            bio_unit = str(info.get("unit") or "").strip()
+            unit_str = f' <span class="caption">{_esc(bio_unit)}</span>' if bio_unit and bio_unit.lower() != "nan" else ""
+            cards.append(f'<div class="mc"><div class="mc-label">{_esc(name)}</div><div class="mc-val">{info["value"]:,.2f}{unit_str}</div><div class="mc-delta {dc}">{delta_str(chg)}</div>{date_str}</div>')
         cards.append('</div>')
         out["biofuel_html"] = "\n".join(cards)
 
