@@ -451,6 +451,8 @@ Date,commodity,price_brl,unit
 2026-10-22,Soybean (CEPEA),2454.0,BRL/MT
 2026-10-22,Soybean (ESALQ/B3 Paranaguá),2532.0,BRL/MT
 2026-10-23,Soybean (AgRural Paranaguá FOB),2558.33,BRL/MT
+2026-10-23,Soybean (CEPEA),2444.83,BRL/MT
+2026-10-23,Soybean (CONAB PR farmgate),2230.0,BRL/MT
 2026-10-23,Soybean (ESALQ/B3 Paranaguá),2540.17,BRL/MT
 2026-10-26,Soybean (AgRural Paranaguá FOB),2683.33,BRL/MT
 2026-10-26,Soybean (CEPEA),2486.33,BRL/MT
@@ -466,6 +468,7 @@ Date,commodity,price_brl,unit
 2026-10-29,Soybean (ESALQ/B3 Paranaguá),2638.0,BRL/MT
 2026-10-30,Soybean (AgRural Paranaguá FOB),2683.33,BRL/MT
 2026-10-30,Soybean (CEPEA),2537.0,BRL/MT
+2026-10-30,Soybean (CONAB PR farmgate),2290.0,BRL/MT
 2026-10-30,Soybean (ESALQ/B3 Paranaguá),2648.0,BRL/MT
 2026-11-03,Soybean (AgRural Paranaguá FOB),2683.33,BRL/MT
 2026-11-03,Soybean (CEPEA),2540.83,BRL/MT
@@ -478,5 +481,16 @@ Date,commodity,price_brl,unit
 2026-11-05,Soybean (ESALQ/B3 Paranaguá),2642.17,BRL/MT
 2026-11-06,Soybean (AgRural Paranaguá FOB),2666.67,BRL/MT
 2026-11-06,Soybean (CEPEA),2535.0,BRL/MT
+2026-11-06,Soybean (CONAB PR farmgate),2220.0,BRL/MT
 2026-11-06,Soybean (ESALQ/B3 Paranaguá),2642.0,BRL/MT
+2026-11-09,Soybean (CEPEA),2535.83,BRL/MT
+2026-11-09,Soybean (ESALQ/B3 Paranaguá),2643.67,BRL/MT
+2026-11-10,Soybean (CEPEA),2545.0,BRL/MT
+2026-11-10,Soybean (ESALQ/B3 Paranaguá),2664.5,BRL/MT
+2026-11-11,Soybean (CEPEA),2559.83,BRL/MT
+2026-11-11,Soybean (ESALQ/B3 Paranaguá),2673.5,BRL/MT
+2026-11-12,Soybean (CEPEA),2567.67,BRL/MT
+2026-11-12,Soybean (ESALQ/B3 Paranaguá),2705.17,BRL/MT
 2026-11-13,Soybean (AgRural Paranaguá FOB),2800.0,BRL/MT
+2026-11-13,Soybean (CEPEA),2624.17,BRL/MT
+2026-11-13,Soybean (ESALQ/B3 Paranaguá),2741.5,BRL/MT
