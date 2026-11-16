@@ -14,7 +14,7 @@ parsing without hitting the network.
 | `ams_3511_archive_shapes_api.json` | Same endpoint, full-archive pull: three verbatim rows exhibiting the shapes the mapping must keep — a basis printed with only its high-leg month (Indiana-Ohio meal, week of 11/17/2025), a `Price` quote with no basis (Portland meal, 08/18/2025), and a basis with neither months nor a price (KC Region meal, 12/04/2023) | live download 2026-10-05 |
 | `safex_grainsa.html` | Grain SA SAFEX feeds page | live download 2026-05-11 |
 | `safex_grainsa_wordpress_2026-10-19.html.gz` | Grain SA SAFEX feeds page after the WordPress move, `https://grainsa.co.za/applied-economics/safex-feeds/` (gzip of the verbatim 395,637-byte body; the old address 301s to a 404, #515) | live download 2026-10-19 |
-| `cepea_soybean.html` | CEPEA/ESALQ soybean indicator | synthetic (live returned HTTP 403 anti-bot) |
+| `cepea_soja_br.html` | CEPEA/ESALQ soy indicators page (Paranaguá + Paraná tables) | live download 2026-11-16 |
 | `ncdex_bhavcopy.csv` | NCDEX Bhav Copy | synthetic (live URL templates 404 — see config.py) |
 | `agrural_paranagua.html` | AgRural soja+milho price page | live download 2026-05-11 |
 | `noticias_agricolas_parana.html` | Notícias Agrícolas CEPEA/ESALQ Paraná soy indicator | live download 2026-08-07 |

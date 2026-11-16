@@ -47,6 +47,7 @@ from fetchers.afex import fetch_afex
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_crush_months, fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
+from fetchers.cepea import fetch_cepea
 from fetchers.comexstat import fetch_brazil_exports
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
@@ -68,7 +69,6 @@ from fetchers.magyp_fob import fetch_magyp_fob
 from fetchers.mandi import fetch_mandi_prices
 from fetchers.matif import fetch_matif_trades
 from fetchers.matif import is_configured as matif_configured
-from fetchers.noticias_agricolas import fetch_noticias_agricolas
 from fetchers.processor_cash import fetch_processor_cash
 from fetchers.processor_cash import is_configured as processor_cash_configured
 from fetchers.psd import fetch_psd_all
@@ -1104,14 +1104,12 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
     )
 
     # ── Layers 17-20: FetchResult scraper layers ──────────────────
-    # Layer 17: re-enabled 2026-07-30 via Notícias Agrícolas, which
-    # republishes the CEPEA/ESALQ indicators server-rendered
-    # (cepea.org.br itself is still behind a Cloudflare Turnstile
-    # challenge; fetchers/cepea.py kept on disk in case the direct
-    # source ever reopens).
+    # Layer 17: CEPEA/ESALQ indicators read from cepea.org.br itself
+    # (2026-11-16). Notícias Agrícolas, the 2026-07-30 → 11-08 source,
+    # now serves a Cloudflare challenge to every client.
     results["cepea"] = _run_scraper_layer(
-        "cepea", "Layer 17", "CEPEA indicators via Notícias Agrícolas",
-        fetch=lambda: fetch_noticias_agricolas(),
+        "cepea", "Layer 17", "CEPEA/ESALQ soy indicators",
+        fetch=lambda: fetch_cepea(),
         save=lambda n, d: save_brazil_spot(n, d),
         clean=lambda d: clean_brazil_spot(d),
     )
