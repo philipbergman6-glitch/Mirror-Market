@@ -26,12 +26,15 @@ def site_environment(**options) -> Environment:
     a template says ``| safe`` at the exact spot a trusted fragment is
     embedded. ``options`` passes through anything else (``trim_blocks`` …).
     """
+    from app.blocks import stub_rows
     from app.wayfinding import how_to_read_vocabulary
 
     if "autoescape" in options:
         raise ValueError("autoescape is always on for site templates (#313)")
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True, **options)
     env.globals["how_to_read"] = how_to_read_vocabulary
+    # The stub page's one row per block, reasons guaranteed (raises on a blank).
+    env.globals["stub_rows"] = stub_rows
     return env
 
 

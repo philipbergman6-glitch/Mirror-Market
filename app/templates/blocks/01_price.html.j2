@@ -19,9 +19,18 @@
        below still renders either way. #}
     {%- if leg.fx_label %}<div class="caption">struck at {{ leg.fx_label }}</div>
     {%- elif leg.fx_reason %}<div class="caption">USD/MT withheld — {{ leg.fx_reason }}</div>{% endif %}
+    {#- The % beside a USD price is the USD move — the headline ledger's own
+        number (`_usd_move`). Where a USD move cannot be struck (no FX rate
+        inside the cap on one side) the venue's own-unit move stands in, and
+        says so, so a home-currency move never reads as a USD one. -#}
     <div class="mc-delta">
-      {{ f.pct(leg.chg_1_pct) }} <span class="muted">session</span>
-      {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">21 obs</span>{% endif %}
+      {%- if leg.chg_1_pct is not none or leg.home_chg_1_pct is none %}
+      {{ f.pct(leg.chg_1_pct) }} <span class="muted">USD session</span>
+      {%- else %}
+      {{ f.pct(leg.home_chg_1_pct) }} <span class="muted">{{ leg.home_unit }} session</span>
+      {%- endif %}
+      {%- if leg.chg_21_pct is not none %} · {{ f.pct(leg.chg_21_pct) }} <span class="muted">USD 21 obs</span>
+      {%- elif leg.home_chg_21_pct is not none %} · {{ f.pct(leg.home_chg_21_pct) }} <span class="muted">{{ leg.home_unit }} 21 obs</span>{% endif %}
     </div>
     {#- B30 #504: a move withheld across a window roll names the roll. -#}
     {%- for note in leg.move_notes %}<div class="caption">{{ note }}</div>{% endfor %}
