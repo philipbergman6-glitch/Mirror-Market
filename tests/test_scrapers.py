@@ -24,7 +24,7 @@ import pytest
 from bs4 import BeautifulSoup
 
 from fetchers.agrural import _parse_agrural_table, fetch_agrural
-from fetchers.cepea import _parse_cepea_tables
+from fetchers.cepea import _parse_indicator_tables
 from fetchers.conab_precos import _parse_farmgate, _validate_download, _week_end_date
 from fetchers.india_domestic import _extract_soy_prices
 from fetchers.mandi import _aggregate as _mandi_aggregate
@@ -186,55 +186,79 @@ def test_safex_parse_returns_empty_when_our_instruments_absent() -> None:
     assert _parse_safex_table(foreign) == {}
 
 
-# ── CEPEA (ESALQ Brazil) ────────────────────────────────────────────────────
+# ── CEPEA (ESALQ Brazil, Layer 17) ──────────────────────────────────────────
 
 def _load_cepea_html() -> str:
-    return (FIXTURES / "cepea_soybean.html").read_text(encoding="utf-8")
+    return (FIXTURES / "cepea_soja_br.html").read_text(encoding="utf-8")
 
 
-def test_cepea_parse_converts_brl_per_bag_to_brl_per_mt() -> None:
-    """First fixture row is 142,35 BRL/60kg → 2372.50 BRL/MT."""
-    df = _parse_cepea_tables(_load_cepea_html())
+def test_cepea_maps_each_indicator_by_label_not_position() -> None:
+    """Live fixture 2026-11-16: Paranaguá is the FIRST table on the page.
+    A positional parse would file 164,49 (port) under the Paraná key."""
+    data, errors = _parse_indicator_tables(_load_cepea_html())
 
-    assert not df.empty
-    assert list(df.columns) == ["Date", "price_brl_mt", "Unit"]
-    assert df["Unit"].iloc[0] == "BRL/MT"
-    # Newest-first ordering — 09/05/2026 is the most recent row
-    assert df["Date"].iloc[0] == "2026-05-09"
-    expected = round((142.35 / 60.0) * 1000.0, 2)
-    assert df["price_brl_mt"].iloc[0] == expected
-
-
-def test_cepea_parse_drops_duplicate_dates_and_sorts_descending() -> None:
-    df = _parse_cepea_tables(_load_cepea_html())
-    dates = df["Date"].tolist()
-    assert dates == sorted(dates, reverse=True)
-    assert len(dates) == len(set(dates))
+    assert errors == []
+    assert set(data) == {"Soybean (CEPEA)", "Soybean (ESALQ/B3 Paranaguá)"}
+    parana = data["Soybean (CEPEA)"].iloc[-1]
+    port = data["Soybean (ESALQ/B3 Paranaguá)"].iloc[-1]
+    assert parana["Date"] == port["Date"] == "2026-11-13"
+    assert parana["price_brl_mt"] == pytest.approx(157.45 * 1000 / 60, abs=0.01)
+    assert port["price_brl_mt"] == pytest.approx(164.49 * 1000 / 60, abs=0.01)
 
 
-def test_cepea_parse_raises_on_missing_value_column() -> None:
-    """Renaming Value→Mystery so neither value/price keyword is present."""
-    html = _load_cepea_html().replace("Value R$", "Mystery R$")
-    with pytest.raises(ScraperShapeError, match="recognisable date\\+price header"):
-        _parse_cepea_tables(html)
+def test_cepea_overlap_matches_the_notícias_agrícolas_history() -> None:
+    """Source switch must be seamless: values stored from the republication
+    on 2026-10-29/30 equal CEPEA's own page to the cent."""
+    data, _ = _parse_indicator_tables(_load_cepea_html())
+    by_date = {k: dict(zip(v["Date"], v["price_brl_mt"], strict=True)) for k, v in data.items()}
+    assert by_date["Soybean (CEPEA)"]["2026-10-29"] == 2541.17
+    assert by_date["Soybean (CEPEA)"]["2026-10-30"] == 2537.0
+    assert by_date["Soybean (ESALQ/B3 Paranaguá)"]["2026-10-29"] == 2638.0
+    assert by_date["Soybean (ESALQ/B3 Paranaguá)"]["2026-10-30"] == 2648.0
 
 
-def test_cepea_parse_raises_on_no_table() -> None:
-    with pytest.raises(ScraperShapeError, match="no <table>"):
-        _parse_cepea_tables("<html><body><p>JavaScript only</p></body></html>")
+def test_cepea_shape_sorted_unique_brl_mt() -> None:
+    data, _ = _parse_indicator_tables(_load_cepea_html())
+    for df in data.values():
+        assert list(df.columns) == ["Date", "price_brl_mt", "Unit"]
+        assert len(df) == 15
+        assert (df["Unit"] == "BRL/MT").all()
+        assert df["Date"].tolist() == sorted(set(df["Date"]))
 
 
-def test_cepea_parse_raises_when_every_row_unparseable() -> None:
-    """Header survives but every data row has garbage values."""
-    html = """
-    <html><body><table>
-      <tr><th>Date</th><th>Value</th></tr>
-      <tr><td>not-a-date</td><td>n/a</td></tr>
-      <tr><td>nope</td><td>—</td></tr>
-    </table></body></html>
-    """
-    with pytest.raises(ScraperShapeError, match="every row failed to parse"):
-        _parse_cepea_tables(html)
+def test_cepea_missing_label_is_a_per_key_error() -> None:
+    html = _load_cepea_html().replace("CEPEA/ESALQ - PARANÁ", "CEPEA/ESALQ - XYZ")
+    data, errors = _parse_indicator_tables(html)
+    assert set(data) == {"Soybean (ESALQ/B3 Paranaguá)"}
+    assert len(errors) == 1 and "Soybean (CEPEA)" in errors[0]
+
+
+def test_cepea_unit_declaration_missing_raises() -> None:
+    html = _load_cepea_html().replace("Reais por saca de 60 kg", "Reais por tonelada")
+    with pytest.raises(ScraperShapeError, match="does not declare"):
+        _parse_indicator_tables(html)
+
+
+def test_cepea_price_column_renamed_is_a_per_key_error() -> None:
+    html = _load_cepea_html().replace("Valor R$*", "Mystery R$*")
+    data, errors = _parse_indicator_tables(html)
+    assert data == {}
+    assert all("layout changed" in e for e in errors)
+
+
+def test_cepea_unit_switch_raises() -> None:
+    """Same column silently requoted in R$/MT must raise, not ship 16x."""
+    html = _load_cepea_html().replace("164,49", "2.741,50")
+    data, errors = _parse_indicator_tables(html)
+    assert "Soybean (ESALQ/B3 Paranaguá)" not in data
+    assert any("plausibility band" in e for e in errors)
+
+
+def test_fetch_cepea_download_failure_is_failed(monkeypatch) -> None:
+    import fetchers.cepea as cepea
+    monkeypatch.setattr(cepea, "_fetch_cepea_page", lambda: "")
+    result = cepea.fetch_cepea()
+    assert result.status == "failed"
 
 
 def test_cepea_parse_brazilian_number_format() -> None:
@@ -245,6 +269,36 @@ def test_cepea_parse_brazilian_number_format() -> None:
     assert _parse_brl_price("1234.56") == 1234.56
     assert _parse_brl_price("-") is None
     assert _parse_brl_price("") is None
+
+
+def test_conab_fetchers_never_send_the_default_requests_user_agent(monkeypatch) -> None:
+    """CONAB's file server 403s python-requests' default UA (dark
+    2026-10-20 → 11-16). Both fetchers must send CONAB_HEADERS."""
+    import fetchers.conab as conab
+    import fetchers.conab_precos as conab_precos
+    from config import CONAB_HEADERS
+
+    seen: list[dict] = []
+
+    class _Resp:
+        status_code = 403
+        content = b""
+        text = ""
+        headers: dict = {}
+
+    def fake_get(url, headers=None, timeout=None, **_):
+        seen.append(headers or {})
+        return _Resp()
+
+    for mod in (conab, conab_precos):
+        monkeypatch.setattr(mod.requests, "get", fake_get)
+        monkeypatch.setattr(mod, "retry_sleep", lambda attempt: None)
+    conab.fetch_conab_estimates()
+    conab_precos._download()
+
+    assert seen, "no request was made"
+    assert all(h.get("User-Agent") == CONAB_HEADERS["User-Agent"] for h in seen)
+    assert "python-requests" not in CONAB_HEADERS["User-Agent"]
 
 
 # ── AgRural (Paranaguá port bid) ────────────────────────────────────────────

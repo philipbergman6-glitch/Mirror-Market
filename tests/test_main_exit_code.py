@@ -93,7 +93,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_conab_estimates": empty_df,
         "fetch_safex": FetchResult.empty(),
         "fetch_agrural": FetchResult.empty(),
-        "fetch_noticias_agricolas": FetchResult.empty(),
+        "fetch_cepea": FetchResult.empty(),
         "fetch_gulf_bids": FetchResult.empty(),
         # #127: these three were added to main.py after the fixture was written
         # and were NOT stubbed — the "no network" docstring lied, and the live

@@ -144,7 +144,7 @@ PRODUCTION_LAYERS = (
     ("conab", "15", "CONAB", "Monthly", "Brazil crop estimates"),
     ("conab_precos", "15b", "CONAB", "Weekly", "Paraná farmgate prices"),
     ("india_domestic", "16", "Agmarknet 2.0", "Daily", "MP and Maharashtra mandi soy"),
-    ("cepea", "17", "CEPEA via Notícias Agrícolas", "Daily", "Brazil soy indicators"),
+    ("cepea", "17", "CEPEA/ESALQ", "Daily", "Brazil soy indicators"),
     ("safex", "18", "JSE SAFEX via Grain SA", "Daily", "South Africa soy futures"),
     ("agrural", "19", "AgRural", "Daily", "Paranaguá port soy bid"),
     ("gulf_bids", "20", "USDA AMS", "Daily", "CIF NOLA Gulf bids"),
@@ -1597,6 +1597,11 @@ INSPECTIONS_URL = "https://www.ams.usda.gov/mnreports/wa_gr101.txt"
 # Brazil's official crop agency — often differs from USDA by millions of tonnes
 # ---------------------------------------------------------------------------
 CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt"
+# The portal's file server (MinIO) answers HTTP 403 to the default
+# python-requests User-Agent and 200 to any other (measured 2026-11-16 from a
+# GitHub runner and a residential address; dark from 2026-10-20). Both
+# CONAB fetchers send this header.
+CONAB_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; MirrorMarket/1.0)"}
 
 # ---------------------------------------------------------------------------
 # Layer 15b — CONAB weekly producer (farmgate) prices
@@ -1728,19 +1733,25 @@ MANDI_STATES = {
 }
 
 # ---------------------------------------------------------------------------
-# Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
-# Farm-gate reference indicator for Paraná state in BRL per 60kg bag.
-# This is NOT the Paranaguá port bid — see Layer 19 (AgRural) for that.
+# Layer 17 — CEPEA/ESALQ Brazil soy indicators (free, no API key)
+# Read from CEPEA itself since 2026-11-16 (fetchers/cepea.py): one page
+# carries both indicators, each under its own label, in R$ per 60 kg sack.
+# The Paranaguá indicator is NOT the AgRural port bid — see Layer 19.
 # ---------------------------------------------------------------------------
-CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
+CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/br/indicador/soja.aspx"
 CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
+# Stored commodity key → the page label heading that indicator's table.
+# Keys are the historical names so stored history continues unbroken.
+CEPEA_INDICATORS = {
+    "Soybean (CEPEA)": "INDICADOR DA SOJA CEPEA/ESALQ - PARANÁ",
+    "Soybean (ESALQ/B3 Paranaguá)": "INDICADOR DA SOJA CEPEA/ESALQ - PARANAGUÁ",
+}
 
-# cepea.org.br itself sits behind a Cloudflare Turnstile challenge
-# (2026-05). Notícias Agrícolas republishes the same CEPEA/ESALQ
-# indicators server-rendered — this is the active Layer 17 source.
-# Appending /YYYY-MM-DD to a URL returns that date's page (~10 sessions
-# per page), which is how the backfill script walks the gap.
-# Commodity keys reuse the historical names so stored history continues.
+# Notícias Agrícolas republishes the same CEPEA/ESALQ indicators. It was
+# the live Layer 17 source 2026-07-30 → 2026-11-08 (while cepea.org.br was
+# Turnstile-walled) until it began serving a Cloudflare JS challenge to
+# every client. Kept for its dated archive pages only: appending
+# /YYYY-MM-DD returns that date's ~10 sessions (scripts/backfill_cepea_gap.py).
 NOTICIAS_AGRICOLAS_URLS = {
     # CEPEA/ESALQ Paraná — the classic farm-gate CEPEA soy indicator
     "Soybean (CEPEA)": (
@@ -2505,7 +2516,7 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # re-serves (or 404s) on a quiet day; a frozen page answers 200 with
     # last week's number forever, which is exactly what the budget catches.
     # Long weekend plus a holiday, like the exchange legs (A3 #300 §7).
-    "cepea": 7,       # CEPEA/ESALQ indicators via Notícias Agrícolas
+    "cepea": 7,       # CEPEA/ESALQ indicators (cepea.org.br)
     "agrural": 7,     # AgRural Paranaguá port bid
     "gulf_bids": 7,   # AMS 3147 Gulf export bids (daily PDF)
     # MAGyP publishes the official FOB daily but posts it with an official

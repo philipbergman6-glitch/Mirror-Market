@@ -39,6 +39,7 @@ from config import (
     CONAB_FARMGATE_PRODUCT,
     CONAB_FARMGATE_SERIES,
     CONAB_FARMGATE_UF,
+    CONAB_HEADERS,
     CONAB_PRECOS_URL,
     MAX_RETRIES,
     REQUEST_TIMEOUT,
@@ -74,7 +75,7 @@ def _download() -> str:
     """Download the weekly-price file. Returns '' after exhausted retries."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = requests.get(CONAB_PRECOS_URL, timeout=REQUEST_TIMEOUT)
+            resp = requests.get(CONAB_PRECOS_URL, headers=CONAB_HEADERS, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200 and resp.content:
                 return resp.content.decode("latin-1")
             logger.warning("CONAB prices: HTTP %d (attempt %d)", resp.status_code, attempt)

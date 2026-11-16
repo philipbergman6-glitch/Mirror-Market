@@ -126,7 +126,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 15 | CONAB | Brazil's official crop estimates (their version of the USDA) |
 | 15b | CONAB | Weekly Paraná farmgate prices |
 | 16 | Agmarknet 2.0 | India domestic bean prices at the mandis (Madhya Pradesh + Maharashtra) |
-| 17 | CEPEA via Notícias Agrícolas | Brazil farm-gate and Paranaguá soy indicators |
+| 17 | CEPEA/ESALQ | Brazil farm-gate and Paranaguá soy indicators |
 | 18 | JSE SAFEX via Grain SA | South Africa's soy futures exchange |
 | 19 | AgRural | Soy prices at Brazil's main export port |
 | 20 | USDA AMS | Daily US Gulf export bids (CIF NOLA barge) |

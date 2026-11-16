@@ -61,7 +61,7 @@ HISTORY_TABLES: dict[str, tuple[str, ...]] = {
     # fact about previous runners, so it has to ride along with data_freshness.
     "layer_partial_streak": ("layer_name",),
     # AgRural Paranaguá port bid (1 row/day, the Brazil basis source) + CEPEA
-    # via Notícias Agrícolas (~10 sessions deep — only recent self-heals).
+    # from cepea.org.br (~15 sessions deep — only recent self-heals).
     "brazil_spot_prices": ("Date", "commodity"),
     # Grain SA settlement page carries only the current session.
     "safex_prices": ("Date", "commodity"),

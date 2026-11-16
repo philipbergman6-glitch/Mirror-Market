@@ -294,7 +294,7 @@ def _check_brazil_spot() -> list[dict]:
     """Check Brazil domestic soy prices for freshness (daily = >2 days stale).
 
     Expectations are the AgRural Paranaguá port bid plus the CEPEA indicators
-    (re-enabled 2026-07-30 via Notícias Agrícolas — see main.py Layer 17);
+    (read from cepea.org.br since 2026-11-16 — see main.py Layer 17);
     both layers write to brazil_spot_prices. The CONAB farmgate series
     (Layer 15b) also lives there but is weekly — the daily staleness
     threshold would flag it constantly, so it is stale-exempt.
