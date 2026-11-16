@@ -485,6 +485,23 @@ def rfs_section(data: dict | None) -> dict:
 # ---------------------------------------------------------------------------
 # 07 Seasonal
 # ---------------------------------------------------------------------------
+def _seasonal_withheld_reason(has_profile: bool, has_stats: bool) -> str:
+    """Why a seasonal leg shows less than a full profile, or ``""``."""
+    from config import SEASONAL_MIN_YEARS_PER_MONTH as years
+
+    if not has_profile:
+        return (
+            f"Withheld: no calendar month has {years} years of stored closes yet. "
+            "A shorter window confounds trend with season, so no seasonal norm is drawn."
+        )
+    if not has_stats:
+        return (
+            f"This calendar month has under {years} years of stored closes — no norm "
+            "to compare today's price against; the months that clear the bar are charted."
+        )
+    return ""
+
+
 def seasonal_section(data: dict | None) -> dict:
     from app.charts import build_seasonal_chart
 
@@ -501,6 +518,7 @@ def seasonal_section(data: dict | None) -> dict:
         unit = leg.get("unit", "USD/MT")
         detrended = vs_seasonal.get("detrended_delta_pct")
         deviation = vs_seasonal.get("deviation_pct")
+        has_profile = monthly is not None and not monthly.empty
         legs.append({
             "name": name,
             "unit": unit,
@@ -522,7 +540,10 @@ def seasonal_section(data: dict | None) -> dict:
                     build_seasonal_chart(
                         clip(monthly, CHART_WINDOW_MONTHLY_ROWS), vs_seasonal, name, unit),
                 f"seasonal {name}",
-            ) if monthly is not None and not monthly.empty else "",
+            ) if has_profile else "",
+            # A header with nothing beneath it is an unexplained gap: the
+            # leg says which part is withheld and why (invariant 2).
+            "withheld_reason": _seasonal_withheld_reason(has_profile, bool(vs_seasonal)),
         })
 
     if not legs:
