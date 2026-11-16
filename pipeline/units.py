@@ -227,3 +227,35 @@ def native_label(commodity: str) -> str:
         "Palm Oil (CME)": "USD/MT",
     }
     return labels.get(commodity, "")
+
+
+#: Stored unit keys → the label a page prints. The price-unit labels are the
+#: same strings :func:`native_label` and :func:`mt_label` already print, so a
+#: key and its commodity's native label can never disagree; the non-price keys
+#: are the magnitude units the opportunity engine carries (``pct``, ``sigma``,
+#: ``mt``). One table, so no template prints a raw ``usd_per_mt``.
+UNIT_KEY_LABELS: dict[str, str] = {
+    "usd_per_mt": "USD/MT",
+    "usd_per_bushel": "USD/bu",
+    "usd_per_short_ton": "$/short ton",
+    "cents_per_bushel": "cents/bu",
+    "cents_per_pound": "cents/lb",
+    "mt": "MT",
+    "pct": "%",
+    "sigma": "σ",
+}
+
+
+def unit_key_label(key: str) -> str:
+    """Display label for a stored unit key. Unknown keys raise — never echo a key.
+
+    A raw key on a page ("71.36 usd_per_mt") is a formatting defect a reader
+    sees; an unknown key is a new unit nobody has labelled yet, and printing it
+    verbatim would ship that defect silently.
+    """
+    try:
+        return UNIT_KEY_LABELS[key]
+    except KeyError:
+        raise ValueError(
+            f"no display label for unit key {key!r} — add it to pipeline.units.UNIT_KEY_LABELS"
+        ) from None

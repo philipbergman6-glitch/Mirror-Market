@@ -5,6 +5,22 @@ import pandas as pd
 from pipeline.query import read_economic
 
 
+def _fed_funds_change(chg_pp: float, prev_date: object) -> str:
+    """The move since the prior observation, in basis points — never a stance.
+
+    FEDFUNDS is the monthly *effective* rate, which drifts a basis point or
+    two inside an unchanged target range. Calling that drift "tightening" (or
+    an exact zero "easing", as this used to) reads a policy decision into
+    noise, so the line states the move and leaves the verdict to the reader.
+    """
+    bp = round(chg_pp * 100)
+    stamp = pd.Timestamp(str(prev_date)) if prev_date is not None else None
+    since = stamp.strftime("%Y-%m") if stamp is not None and not pd.isna(stamp) else "prior"
+    if bp == 0:
+        return f"(unchanged vs {since})"
+    return f"({bp:+d} bp vs {since})"
+
+
 def format_fred() -> str:
     """ECONOMIC CONTEXT (FRED) — dollar index, CPI, Fed funds, etc."""
     lines = ["ECONOMIC CONTEXT (FRED):"]
@@ -35,7 +51,7 @@ def format_fred() -> str:
                 elif "CPI" in series_name:
                     comment = f"({direction} {abs(chg_pct):.1f}%)"
                 elif "Fed Funds" in series_name:
-                    comment = f"({value:.2f}% — {'tightening' if chg > 0 else 'easing'})"
+                    comment = _fed_funds_change(chg, prev["Date"])
 
         if "Fed Funds" in series_name:
             lines.append(f"  {series_name}: {value:.2f}% {comment}")
