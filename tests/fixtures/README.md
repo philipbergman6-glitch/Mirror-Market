@@ -17,6 +17,8 @@ parsing without hitting the network.
 | `safex_grainsa_wordpress_2026-10-19.html.gz` | Grain SA SAFEX feeds page after the WordPress move, `https://grainsa.co.za/applied-economics/safex-feeds/` (gzip of the verbatim 395,637-byte body; the old address 301s to a 404, #515) | live download 2026-10-19 |
 | `cepea_soja_br.html` | CEPEA/ESALQ soy indicators page (Paranaguá + Paraná tables) | live download 2026-11-16 |
 | `ncdex_bhavcopy.csv` | NCDEX Bhav Copy | synthetic (live URL templates 404 — see config.py) |
+| `msamb_soybean_2026-11-17.html` | MSAMB `ApmcDetail/DataGridBind?commodityCode=04017&apmcCode=null` — the soybean grid fragment (8 days, 10/11 → 17/11/2026; 5 lots in नग, the rest in क्विंटल). Layer 16 Maharashtra leg | live download 2026-11-17 |
+| `ncdex_spot_sybeanidr_2026-11-17.json` | NCDEX `POST /spotprices/get_data`, symbol SYBEANIDR, 2026-11-01 → 11-17 — 20 polls, two per trading day. Layer 16 Indore leg | live download 2026-11-17 |
 | `agrural_paranagua.html` | AgRural soja+milho price page | live download 2026-05-11 |
 | `noticias_agricolas_parana.html` | Notícias Agrícolas CEPEA/ESALQ Paraná soy indicator | live download 2026-08-07 |
 | `noticias_agricolas_milho.html` | Notícias Agrícolas ESALQ/B3 corn indicator (corn-redirect fixture — must *fail* the soy parse) | live download 2026-08-07 |

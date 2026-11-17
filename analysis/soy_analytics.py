@@ -53,9 +53,9 @@ from config import (
     CRUSH_MEAL_FACTOR,
     CRUSH_OIL_FACTOR,
     INDIA_SOYBEAN_MSP,
-    MANDI_SERIES,
     MANDI_SERIES_MH,
     MARKETS,
+    NCDEX_SPOT_SERIES,
     SAGIS_ATTRIBUTION,
 )
 from pipeline.query import (
@@ -199,7 +199,9 @@ def _india_msp_on(day: date) -> tuple[float, str] | None:
 _ARRIVALS_WINDOW_DAYS = 7
 
 
-def _mandi_arrivals_pace(rows: pd.DataFrame) -> dict[str, Any] | None:
+def _mandi_arrivals_pace(
+    rows: pd.DataFrame, *, every_day: bool = False,
+) -> dict[str, Any] | None:
     """Seven-day mandi arrivals (MT) and their change on the seven before.
 
     The window ends the day *before* the newest stored date: that day is
@@ -210,6 +212,10 @@ def _mandi_arrivals_pace(rows: pd.DataFrame) -> dict[str, Any] | None:
     with NULL arrivals (it predates the column) withholds the whole figure:
     a sum around it would understate the week. So do days before the first
     stored row: they are unknown, not zero.
+
+    ``every_day=True`` is for a source whose re-read window is too short to
+    prove a missing day was a closure (MSAMB serves ~8 days): there a
+    calendar day with no row is unknown, and withholds its window.
     """
     if rows.empty or "arrivals_mt" not in rows.columns:
         return None
@@ -220,8 +226,11 @@ def _mandi_arrivals_pace(rows: pd.DataFrame) -> dict[str, Any] | None:
     def window(stop: pd.Timestamp) -> pd.Series | None:
         if dates.min() > stop - span + pd.Timedelta(days=1):
             return None
-        inside = rows.loc[(dates > stop - span) & (dates <= stop), "arrivals_mt"]
+        mask = (dates > stop - span) & (dates <= stop)
+        inside = rows.loc[mask, "arrivals_mt"]
         if inside.empty or inside.isna().any():
+            return None
+        if every_day and dates[mask].dt.normalize().nunique() < _ARRIVALS_WINDOW_DAYS:
             return None
         return inside
 
@@ -1806,30 +1815,30 @@ def emerging_markets_analysis() -> dict:
         entry["weather"] = region_weather
         entry["weather_withheld"] = weather_alerts.group_withheld(weather_withheld)
 
-        # --- India mandi domestic bean price + CBOT bean premium ---
-        # Bean-only since the 2026-08 Layer 16 rebuild: the mandi source
-        # carries no meal and unreliable oil, so the old NCDEX crush margin
-        # and crush premium retired with the exchange (SEBI suspension).
+        # --- India domestic bean price + CBOT bean premium ---
+        # Bean-only. Headline = NCDEX's polled Indore spot since 2026-11-17
+        # (Agmarknet's MP median is captcha-gated, #449); Maharashtra =
+        # MSAMB's mandi median, which also carries the arrivals.
         if country == "India":
             india_domestic_entry: dict[str, Any] = {}
             try:
-                inr_df = read_india_domestic(MANDI_SERIES)
+                inr_df = read_india_domestic(NCDEX_SPOT_SERIES)
                 inr_rows = currencies.get("INR/USD")
 
                 if not inr_df.empty:
-                    mandi_rows = inr_df.sort_values("Date")
-                    latest_close = float(mandi_rows["Close"].iloc[-1])
-                    india_domestic_entry["soybean_mandi_inr"] = latest_close
-                    india_domestic_entry["soybean_mandi_date"] = _asof(
-                        mandi_rows["Date"].iloc[-1]
+                    spot_rows = inr_df.sort_values("Date")
+                    latest_close = float(spot_rows["Close"].iloc[-1])
+                    india_domestic_entry["soybean_spot_inr"] = latest_close
+                    india_domestic_entry["soybean_spot_date"] = _asof(
+                        spot_rows["Date"].iloc[-1]
                     )
 
-                    # India bean vs CBOT bean premium (USD/MT) — mandi,
+                    # India bean vs CBOT bean premium (USD/MT) — spot,
                     # INR/USD and CBOT joined on a common date (F1).
                     soy_rows = prices.get("Soybeans", pd.DataFrame())
-                    basis_row = _latest_aligned_basis(soy_rows, mandi_rows, inr_rows)
+                    basis_row = _latest_aligned_basis(soy_rows, spot_rows, inr_rows)
                     if basis_row is not None:
-                        india_domestic_entry["soybean_mandi_usd"] = round(
+                        india_domestic_entry["soybean_spot_usd"] = round(
                             float(basis_row["domestic_usd_mt"]), 2
                         )
                         india_domestic_entry["cbot_bean_usd"] = round(
@@ -1842,28 +1851,25 @@ def emerging_markets_analysis() -> dict:
                             pd.Timestamp(basis_row["Date"]).date()
                         )
                     else:
-                        aligned = _latest_aligned_usd(mandi_rows, inr_rows)
+                        aligned = _latest_aligned_usd(spot_rows, inr_rows)
                         if aligned is not None:
-                            india_domestic_entry["soybean_mandi_usd"] = round(
+                            india_domestic_entry["soybean_spot_usd"] = round(
                                 aligned[0], 2
                             )
 
-                    # Mandi rows include weekends: a week is 7 calendar days.
-                    weekly = _pct_chg_calendar_days(mandi_rows, 7)
+                    # A week is 7 calendar days (spot polls skip weekends).
+                    weekly = _pct_chg_calendar_days(spot_rows, 7)
                     if weekly is not None:
                         india_domestic_entry["weekly_chg_pct"] = round(weekly, 2)
 
-                    msp = _india_msp_on(pd.Timestamp(mandi_rows["Date"].iloc[-1]).date())
+                    msp = _india_msp_on(pd.Timestamp(spot_rows["Date"].iloc[-1]).date())
                     if msp is not None:
                         india_domestic_entry["msp_inr"] = msp[0]
                         india_domestic_entry["msp_season"] = msp[1]
-                        india_domestic_entry["mandi_vs_msp_pct"] = round(
+                        india_domestic_entry["spot_vs_msp_pct"] = round(
                             (latest_close / msp[0] - 1) * 100, 2
                         )
 
-                    pace = _mandi_arrivals_pace(mandi_rows)
-                    if pace is not None:
-                        india_domestic_entry.update(pace)
 
                 # Maharashtra — #1 producing state since 2025-26; secondary
                 # series alongside the MP (Indore hub) headline benchmark.
@@ -1881,6 +1887,9 @@ def emerging_markets_analysis() -> dict:
                         india_domestic_entry["soybean_mandi_mh_usd"] = round(
                             aligned[0], 2
                         )
+                    pace = _mandi_arrivals_pace(mh_rows, every_day=True)
+                    if pace is not None:
+                        india_domestic_entry.update(pace)
 
             except Exception as exc:
                 logger.warning("India domestic analytics failed: %s", exc)

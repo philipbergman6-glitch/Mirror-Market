@@ -109,7 +109,7 @@ def test_a_withheld_parity_leg_says_why_and_drops_its_card() -> None:
 
 def test_withheld_reads_are_stated_on_the_page() -> None:
     notes = _country_notes("India", {
-        "india_domestic": {"soybean_mandi_inr": 1.0},
+        "india_domestic": {"soybean_spot_inr": 1.0},
         "india_sea_withheld": "the newest SEA sheet is dated 2026-09-01, 50 days ago",
         "india_crop_withheld": "no SOPA estimate is stored",
     })

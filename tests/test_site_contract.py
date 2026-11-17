@@ -263,8 +263,8 @@ def test_india_basis_is_labelled_a_policy_spread():
     assert india.basis is not None
     assert india.basis.arbitrage == "policy_blocked"
     assert "policy spread" in india.basis.label.lower()
-    # Struck on the MP median alone — the price block's own headline key.
-    assert india.basis.keys == ("Soybean (Mandi MP)",)
+    # Struck on the Indore spot alone — the price block's own headline key.
+    assert india.basis.keys == ("Soybean (NCDEX Indore spot)",)
 
 
 def test_unknown_quote_kind_fails_the_build(monkeypatch: pytest.MonkeyPatch):
@@ -372,7 +372,7 @@ def _seed_india(conn, *, days_ago: int = 0) -> None:
     """India's whole stack: one mandi leg (which is also its basis) + weather."""
     _seed_prices(
         conn,
-        ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+        ["Soybean (NCDEX Indore spot)", "Soybean (Mandi MH)"],
         days_ago=days_ago,
         table="india_domestic_prices",
     )
@@ -697,7 +697,7 @@ def test_a_market_with_no_source_is_not_blamed_on_our_ingest(site_db):
 def test_a_healthy_ingest_leaves_the_note_alone(site_db):
     _seed_prices(
         site_db,
-        ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+        ["Soybean (NCDEX Indore spot)", "Soybean (Mandi MH)"],
         table="india_domestic_prices",
     )
     _seed_freshness(site_db, "india_domestic", "success", date.today().isoformat())

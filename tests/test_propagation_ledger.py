@@ -311,7 +311,7 @@ def test_india_has_no_foreign_counterpart(registry):
     cannot be worked (#206), so the ledger is two domestic state medians.
     """
     ledger = registry["india"].ledger
-    assert [leg.leg_id for leg in ledger.legs] == ["india:mandi_mp", "india:mandi_mh"]
+    assert [leg.leg_id for leg in ledger.legs] == ["india:ncdex_indore", "india:mandi_mh"]
     assert all(leg.market.slug == "india" for leg in ledger.legs)
     assert "no origin qualifies" in ledger.note.lower()
 
@@ -640,7 +640,7 @@ def _seed_india_prints(seeded, count: int = 6) -> None:
         ("INR/USD", _day(0), 0.0115),
     )
     for offset in range(count):
-        for key, level in (("Soybean (Mandi MP)", 45000.0), ("Soybean (Mandi MH)", 46000.0)):
+        for key, level in (("Soybean (NCDEX Indore spot)", 45000.0), ("Soybean (Mandi MH)", 46000.0)):
             seeded.conn.execute(
                 "INSERT OR REPLACE INTO india_domestic_prices "
                 "(Date, commodity, Close) VALUES (?,?,?)",
