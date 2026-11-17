@@ -143,7 +143,7 @@ PRODUCTION_LAYERS = (
     ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
     ("conab", "15", "CONAB", "Monthly", "Brazil crop estimates"),
     ("conab_precos", "15b", "CONAB", "Weekly", "Paraná farmgate prices"),
-    ("india_domestic", "16", "Agmarknet 2.0", "Daily", "MP and Maharashtra mandi soy"),
+    ("india_domestic", "16", "NCDEX spot · MSAMB", "Daily", "Indore spot and Maharashtra mandi soy"),
     ("cepea", "17", "CEPEA/ESALQ", "Daily", "Brazil soy indicators"),
     ("safex", "18", "JSE SAFEX via Grain SA", "Daily", "South Africa soy futures"),
     ("agrural", "19", "AgRural", "Daily", "Paranaguá port soy bid"),
@@ -1753,6 +1753,43 @@ MANDI_STATES = {
 }
 
 # ---------------------------------------------------------------------------
+# Layer 16 sources since 2026-11-17 — Agmarknet's report API demands a
+# captcha (#449), so the layer reads two publishers that answer an
+# unattended fetch from outside India (probed IL, check-host US/DE):
+#
+# * MSAMB (Maharashtra State Agricultural Marketing Board) — the per-APMC
+#   arrivals and modal prices Agmarknet republishes for Maharashtra; every
+#   one of 202 MSAMB market-days carried the same modal as Agmarknet
+#   (2026-10, LAYERS.md Layer 16). Same measurement → same series key.
+# * NCDEX polled spot, Indore — the exchange's daily spot poll for the
+#   Indore delivery centre. A *different* measurement from a mandi median
+#   (it ran 3–8% above MSAMB's Akola modal and SEA's weekly Indore quote,
+#   2026-11-06 → 11-17), so it gets its own key and is never spliced onto
+#   "Soybean (Mandi MP)", whose history stays as stored.
+# Agmarknet (fetchers/mandi.py) stays on disk, dormant, for the day the
+# captcha lifts.
+# ---------------------------------------------------------------------------
+MSAMB_GRID_URL = "https://www.msamb.com/ApmcDetail/DataGridBind"
+MSAMB_PAGE_URL = "https://www.msamb.com/ApmcDetail/APMCPriceInformation"
+MSAMB_SOYBEAN_CODE = "04017"     # सोयाबिन in the page's commodity list (2026-11-17)
+# The quantity unit a row must carry to be read: rows in नग (pieces) price a
+# different unit and are excluded, never pooled.
+MSAMB_QUINTAL_UNIT = "क्विंटल"
+NCDEX_SPOT_PAGE_URL = "https://www.ncdex.com/markets/spotprices"
+NCDEX_SPOT_DATA_URL = "https://www.ncdex.com/spotprices/get_data"
+NCDEX_SPOT_SERIES = "Soybean (NCDEX Indore spot)"
+# Series → (NCDEX spot symbol, delivery centre the rows must name).
+NCDEX_SPOT_SYMBOLS: dict[str, tuple[str, str]] = {
+    NCDEX_SPOT_SERIES: ("SYBEANIDR", "Indore"),
+}
+# NCDEX serves only about a month of polls (earliest 2026-10-15 on
+# 2026-11-17); every run re-reads this trailing window so a missed run
+# repairs itself through the (Date, commodity) upsert.
+NCDEX_SPOT_LOOKBACK_DAYS = 31
+# Active Layer 16 series, headline first.
+INDIA_DOMESTIC_SERIES: tuple[str, ...] = (NCDEX_SPOT_SERIES, MANDI_SERIES_MH)
+
+# ---------------------------------------------------------------------------
 # Layer 17 — CEPEA/ESALQ Brazil soy indicators (free, no API key)
 # Read from CEPEA itself since 2026-11-16 (fetchers/cepea.py): one page
 # carries both indicators, each under its own label, in R$ per 60 kg sack.
@@ -2773,12 +2810,7 @@ validate_age_budgets()
 # (`app.markets._ingest_status`), so a healthy run never carries it; when the
 # gate lifts, delete the entry. Each entry cites the issue holding the probe
 # evidence (LAYERS.md carries the detail).
-LAYER_STANDING_GATES: dict[str, str] = {
-    "india_domestic": (
-        "Agmarknet's report API has demanded a captcha since 2026-10-09, which "
-        "closes it to an unattended fetch from outside India (#449)"
-    ),
-}
+LAYER_STANDING_GATES: dict[str, str] = {}
 
 # Key coverage (#182): which config catalog each multi-key layer iterates.
 # `keys_expected` is len(catalog), so adding a ticker/region/series moves a
@@ -3274,7 +3306,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "india": {
         "name": "India",
-        "venue": "Agmarknet mandi spot (MP · MH)",
+        "venue": "NCDEX Indore spot · MSAMB mandi (MH)",
         "home_currency": "INR",
         "currency_pair": "INR/USD",
         # Bean-only. NCDEX derivatives are suspended to >=2027-03-31, so there
@@ -3284,8 +3316,8 @@ MARKETS: dict[str, dict[str, Any]] = {
             "table": "india_domestic_prices",
             "date_column": "Date",
             "key_column": "commodity",
-            "keys": ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
-            "headline_key": "Soybean (Mandi MP)",
+            "keys": [NCDEX_SPOT_SERIES, MANDI_SERIES_MH],
+            "headline_key": NCDEX_SPOT_SERIES,
             "cadence": "daily",
             "quote_kind": "physical",
             "value_column": "Close",
@@ -3297,20 +3329,21 @@ MARKETS: dict[str, dict[str, Any]] = {
             "cadence (NCDEX suspended to >=2027-03-31)"
         ),
         # Unblocked by #206: the +66% is real, cross-checked against SOPA's own
-        # Indore oil and meal quotes (not Agmarknet-derived). Struck on the MP
-        # median alone — the price block's own headline key, and the Indore hub
-        # is the benchmark. MH is carried as the second price leg, not as a
-        # second basis: two lines 0.2% apart would imply a choice that isn't one.
+        # Indore oil and meal quotes (not Agmarknet-derived). Struck on the
+        # Indore hub alone — the price block's own headline key; since
+        # 2026-11-17 that is NCDEX's polled Indore spot (Agmarknet's MP median
+        # is captcha-gated, #449). MH is carried as the second price leg, not
+        # as a second basis.
         "basis": {
             "layer": "india_domestic",
             "table": "india_domestic_prices",
             "date_column": "Date",
             "key_column": "commodity",
-            "keys": ["Soybean (Mandi MP)"],
-            "headline_key": "Soybean (Mandi MP)",
+            "keys": [NCDEX_SPOT_SERIES],
+            "headline_key": NCDEX_SPOT_SERIES,
             "reference": "cbot",
-            "label": "Mandi MP over CBOT (policy spread)",
-            # An Agmarknet cash median, like the price leg it is struck on.
+            "label": "Indore spot over CBOT (policy spread)",
+            # A polled cash spot, like the price leg it is struck on.
             "quote_kind": "physical",
             # Same stored column and unit as the price leg it is struck on —
             # INR/MT through the INR/USD rate, converted only by to_usd_mt.
@@ -3573,11 +3606,11 @@ LEDGER_LEGS = {
         "label": "Dalian No.2 (crush bean)",
         "trade_proof_column": "Volume",
     },
-    "india:mandi_mp": {
+    "india:ncdex_indore": {
         "market": "india",
         "block": "price",
-        "key": "Soybean (Mandi MP)",
-        "label": "India mandi — Madhya Pradesh",
+        "key": NCDEX_SPOT_SERIES,
+        "label": "NCDEX Indore spot (polled)",
     },
     "india:mandi_mh": {
         "market": "india",
@@ -3697,7 +3730,7 @@ LEDGERS = {
     },
     "india": {
         "rule": "destination",
-        "legs": ["india:mandi_mp", "india:mandi_mh"],
+        "legs": ["india:ncdex_indore", "india:mandi_mh"],
         # Required by app/markets.py because this ledger names no foreign leg:
         # a destination ledger with no origin in it has to say why, or it reads
         # as a set someone forgot to finish.
@@ -3705,8 +3738,9 @@ LEDGERS = {
             "No origin qualifies. India bans GM soybean imports behind a tariff "
             "wall, so no foreign bean is connected to this one by trade and a "
             "counterpart row would invite an arbitrage that cannot be worked "
-            "(#206). What remains is two independent state medians — a real "
-            "check that catches one state's mandis being shut. CBOT appears on "
+            "(#206). What remains is two independent Indian measurements — NCDEX's "
+            "polled Indore spot and Maharashtra's mandi median — a real check "
+            "that catches one of them going wrong. CBOT appears on "
             "this page only in the basis block, labelled the policy spread it is."
         ),
     },
@@ -4218,7 +4252,7 @@ LEG_PLACES: dict[str, tuple[str, ...]] = {
     "brazil:paranagua":   ("P-PNG",),
     "argentina:fob":      ("P-UPR",),
     "dalian:board":       ("P-NCN", "P-PNG", "P-NOLA"),
-    "india:mandi_mp":     ("P-IDR",),
+    "india:ncdex_indore": ("P-IDR",),
     "india:mandi_mh":     (),
     "nigeria:afex":       (),
     "south_africa:safex": ("P-RFT", "P-DUR"),

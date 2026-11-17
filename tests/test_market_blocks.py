@@ -403,7 +403,7 @@ def test_a_basis_with_no_shared_session_is_empty_not_a_cross_day_subtraction(
 
 def _seed_india_mandi(conn) -> None:
     """India's daily leg at the real 2026-08-11 level, plus its FX rate."""
-    for key, close in (("Soybean (Mandi MP)", 67250.0), ("Soybean (Mandi MH)", 67000.0)):
+    for key, close in (("Soybean (NCDEX Indore spot)", 67250.0), ("Soybean (Mandi MH)", 67000.0)):
         conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
                      "VALUES (?,?,?,?)", (_day(0), key, close, "INR/MT"))
     conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
@@ -1271,7 +1271,7 @@ def _seed_india_dark(conn) -> None:
     """India as it stands on the live site: mandi rows 39 days old, the layer failing."""
     conn.execute(schema._CREATE_DATA_FRESHNESS)
     for offset in (39, 40):
-        for key, close in (("Soybean (Mandi MP)", 62000.0), ("Soybean (Mandi MH)", 63500.0)):
+        for key, close in (("Soybean (NCDEX Indore spot)", 62000.0), ("Soybean (Mandi MH)", 63500.0)):
             conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
                          "VALUES (?,?,?,?)", (_day(offset), key, close, "INR/MT"))
         conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
@@ -1287,23 +1287,32 @@ def _seed_india_dark(conn) -> None:
     conn.commit()
 
 
-def test_every_india_stub_row_carries_a_reason_and_the_captcha_gate(seeded, registry):
+def test_every_india_stub_row_carries_a_reason_and_any_standing_gate(seeded, registry, monkeypatch):
     """QA 2026-11-16: 6 of 7 India stub rows rendered a blank reason.
 
     An `ok` block has no reason by construction; the stub printed that empty
     string. Each row now says where the block stands, and the price row names
-    our failed ingest *and* why it fails — the Agmarknet captcha gate (#449).
+    our failed ingest *and*, when one is recorded, the source-side gate. The
+    Agmarknet captcha gate (#449) was lifted from Layer 16 on 2026-11-17 by
+    re-sourcing, so the mechanism is exercised with an injected gate.
     """
     _seed_india_dark(seeded.conn)
     tier = compute_tier(registry["india"], seeded.conn, today=TODAY)
     assert tier.tier == TIER_STUB
-    html = _render_stub("india", SiteContext(conn=seeded.conn, today=TODAY), registry, tier)
-    reasons = [r.strip() for r in _RV.findall(html)]
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+
+    reasons = [r.strip() for r in _RV.findall(_render_stub("india", ctx, registry, tier))]
     assert len(reasons) == len(BRIEF_BLOCK_IDS)
     assert all(reasons), f"blank stub reason(s): {reasons}"
     price = reasons[0]
     assert "39d old" in price and "failed upstream" in price
-    assert "captcha" in price and "#449" in price
+    assert "captcha" not in price  # no gate recorded → none invented
+
+    monkeypatch.setattr(config, "LAYER_STANDING_GATES",
+                        {"india_domestic": "the publisher demands a captcha (#449)"})
+    tier = compute_tier(registry["india"], seeded.conn, today=TODAY)
+    gated = [r.strip() for r in _RV.findall(_render_stub("india", ctx, registry, tier))]
+    assert "captcha" in gated[0] and "#449" in gated[0]
 
 
 def test_every_market_stub_renders_a_reason_on_every_row(seeded, registry):

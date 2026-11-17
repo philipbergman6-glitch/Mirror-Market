@@ -125,7 +125,7 @@ Each market page is **tiered from the data every run** — a full page, a brief,
 | 14 | USDA* | How many beans got crushed, how many got shipped |
 | 15 | CONAB | Brazil's official crop estimates (their version of the USDA) |
 | 15b | CONAB | Weekly Paraná farmgate prices |
-| 16 | Agmarknet 2.0 | India domestic bean prices at the mandis (Madhya Pradesh + Maharashtra) |
+| 16 | NCDEX spot · MSAMB | India domestic bean prices: NCDEX polled Indore spot + Maharashtra mandi median |
 | 17 | CEPEA/ESALQ | Brazil farm-gate and Paranaguá soy indicators |
 | 18 | JSE SAFEX via Grain SA | South Africa's soy futures exchange |
 | 19 | AgRural | Soy prices at Brazil's main export port |

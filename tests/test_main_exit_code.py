@@ -99,7 +99,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         # and were NOT stubbed — the "no network" docstring lied, and the live
         # data.gov.in call (mandi) can hang the whole suite for 25+ minutes.
         "fetch_conab_farmgate": FetchResult.empty(),
-        "fetch_mandi_prices": FetchResult.empty(),
+        "fetch_india_domestic": FetchResult.empty(),
         "fetch_magyp_fob": FetchResult.empty(),
         "fetch_sagis_deliveries": FetchResult.empty(),
         "fetch_sagis_supply_demand": FetchResult.empty(),

@@ -65,8 +65,8 @@ from fetchers.fred import fetch_all_series
 from fetchers.fred import is_configured as fred_configured
 from fetchers.gtr import fetch_gtr_ocean_freight, fetch_gtr_vessel_activity
 from fetchers.gulf_bids import fetch_gulf_bids
+from fetchers.india_prices import fetch_india_domestic
 from fetchers.magyp_fob import fetch_magyp_fob
-from fetchers.mandi import fetch_mandi_prices
 from fetchers.matif import fetch_matif_trades
 from fetchers.matif import is_configured as matif_configured
 from fetchers.processor_cash import fetch_processor_cash
@@ -1087,17 +1087,16 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         clean=lambda d: clean_brazil_spot(d),
     )
 
-    # ── Layer 16: India Mandi Domestic Soy Prices ─────────────────
-    # The official Agmarknet feed, rebuilt 2026-08 after NCDEX became
-    # unusable (SEBI derivatives suspension to ≥2027-03 + fingerprint wall
-    # on the spot pages; fetchers/india_domestic.py kept on disk as a
-    # dormant fallback) and re-sourced 2026-10 from data.gov.in to the
-    # Agmarknet 2.0 API when data.gov.in began refusing non-Indian
-    # addresses. Each run re-reads a trailing month of completed days, and
-    # MP/MH trade soybean every week, so empty is never a closed-mandi day.
+    # ── Layer 16: India Domestic Soy Prices ───────────────────────
+    # Two publishers since 2026-11-17, never pooled: NCDEX's polled Indore
+    # spot (headline) and MSAMB's Maharashtra mandi median. Agmarknet's
+    # report API demands a captcha since 2026-10-09 (#449), so
+    # fetchers/mandi.py is dormant. Each run re-reads both trailing windows
+    # of completed days, and both publish every trading day, so empty is
+    # never a closed-mandi day.
     results["india_domestic"] = _run_scraper_layer(
-        "india_domestic", "Layer 16", "India mandi soy prices (Agmarknet)",
-        fetch=lambda: fetch_mandi_prices(),
+        "india_domestic", "Layer 16", "India soy prices (NCDEX Indore spot · MSAMB)",
+        fetch=lambda: fetch_india_domestic(),
         save=lambda n, d: save_india_domestic(n, d),
         clean=lambda d: clean_india_domestic(d),
         empty_fails=True,
