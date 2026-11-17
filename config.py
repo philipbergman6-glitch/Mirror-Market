@@ -221,9 +221,21 @@ FAST_REFRESH_LAYERS = ("prices", "currencies", "forward_curve")
 # History is already stored and re-downloading it is the entire cost above. A
 # month covers any weekend-plus-holiday gap the fast path could need to backfill
 # while staying inside the cheap window; INSERT OR REPLACE makes the overlap
-# free. It is NOT used by the daily build, which still pulls DEFAULT_HISTORY_PERIOD
-# so a fresh CI database is seeded with real history.
+# free. The daily build uses it too, but only when its run started from a
+# restored R2 seed no older than SEED_SHORT_WINDOW_MAX_AGE_DAYS — the seed is
+# the history the window would otherwise re-download (measured 2026-11-17 at
+# 6–13 s for Layers 1+7 together — the benchmark above is from 2026-08 and the
+# gain today is seconds, plus fewer 15-year Yahoo requests). Any other start (no seed,
+# failed restore, stale seed) pulls DEFAULT_HISTORY_PERIOD, as every daily build
+# did before the seed existed.
 FAST_REFRESH_HISTORY_PERIOD = "1mo"
+
+# The oldest R2 seed (by its built-at stamp) that may skip the full history
+# download. A "1mo" yfinance window reaches back ~30 calendar days; 21 leaves
+# 9 days of overlap, so a seed this old still meets the window with no gap
+# between its newest stored bar and the oldest fetched one. The quick refresh
+# refuses an older seed outright (it has no full-history fallback).
+SEED_SHORT_WINDOW_MAX_AGE_DAYS = 21
 
 # ---------------------------------------------------------------------------
 # Layer 1 — yfinance ticker symbols (data sourced from CME / ICE / CBOT)
