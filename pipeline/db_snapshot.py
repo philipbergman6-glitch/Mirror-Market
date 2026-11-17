@@ -22,6 +22,17 @@ States are distinct, never collapsed (invariant 1):
   did before this module (CSV-only rebuild). Said out loud by the caller.
 * ``no_seed`` — configured, but nothing has been pushed yet (first run).
 * ``restored`` — a verified, checksummed, integrity-checked seed is in place.
+* ``stale_seed`` — only when the caller requires a fresh seed (the quick
+  refresh): the seed is older than ``SEED_SHORT_WINDOW_MAX_AGE_DAYS`` and was
+  not placed, exactly as if there were none.
+
+**The history window.** A restored seed no older than
+``SEED_SHORT_WINDOW_MAX_AGE_DAYS`` already holds the price and FX history a
+daily build would otherwise re-download over ``DEFAULT_HISTORY_PERIOD``, so
+``history_period_for`` grants the short ``FAST_REFRESH_HISTORY_PERIOD``
+window. Every other start keeps the full download. ``assert_short_window_safe``
+is the backstop: the short window is refused on a database that does not
+actually hold older price history.
 
 Anything else — a partial configuration, a checksum mismatch, a corrupt
 file, a database already present at the target — raises ``SnapshotError``
@@ -39,10 +50,15 @@ import sqlite3
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Protocol
 
+from config import (
+    DEFAULT_HISTORY_PERIOD,
+    FAST_REFRESH_HISTORY_PERIOD,
+    SEED_SHORT_WINDOW_MAX_AGE_DAYS,
+)
 from pipeline.history import HISTORY_TABLES
 
 logger = logging.getLogger(__name__)
@@ -255,17 +271,90 @@ def push(db_path: Path, store: ObjectStore, *, run_id: str, built_at: datetime) 
 
 @dataclass(frozen=True)
 class PullResult:
-    state: Literal["no_seed", "restored"]
+    state: Literal["no_seed", "restored", "stale_seed"]
     metadata: dict[str, str]
     cleared_tables: tuple[str, ...] = ()
+    age_days: float | None = None
 
 
-def pull(db_path: Path, store: ObjectStore, *, key: str = LATEST_KEY) -> PullResult:
+def seed_age_days(metadata: Mapping[str, str], now: datetime) -> float:
+    """Days between the seed's built-at stamp and ``now``; hard-fails on a bad stamp."""
+    raw = metadata.get(META_BUILT_AT, "")
+    try:
+        built = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise SnapshotError(f"seed built-at is not ISO 8601: {raw!r}") from exc
+    if built.tzinfo is None:
+        raise SnapshotError(f"seed built-at carries no timezone: {raw!r}")
+    age = (now - built).total_seconds() / 86400
+    if age < -1 / 24:
+        raise SnapshotError(f"seed built-at {raw} is in the future of {now.isoformat()}")
+    return max(age, 0.0)
+
+
+def history_period_for(result: PullResult | None) -> tuple[str, str]:
+    """(yfinance history period, the reason) for a daily build started from ``result``.
+
+    ``None`` means no restore was attempted or it failed. Only a restored seed
+    inside the age limit earns the short window.
+    """
+    if result is None or result.state != "restored":
+        state = "no restore" if result is None else result.state
+        return DEFAULT_HISTORY_PERIOD, f"{state} — full {DEFAULT_HISTORY_PERIOD} history download"
+    if result.age_days is None:
+        raise SnapshotError("restored seed has no age")
+    if result.age_days > SEED_SHORT_WINDOW_MAX_AGE_DAYS:
+        return DEFAULT_HISTORY_PERIOD, (
+            f"seed is {result.age_days:.1f} days old (limit {SEED_SHORT_WINDOW_MAX_AGE_DAYS}) "
+            f"— full {DEFAULT_HISTORY_PERIOD} history download"
+        )
+    return FAST_REFRESH_HISTORY_PERIOD, (
+        f"seed is {result.age_days:.1f} days old — fetching {FAST_REFRESH_HISTORY_PERIOD} "
+        "of prices/FX on top of its stored history"
+    )
+
+
+def assert_short_window_safe(db_path: Path, today: date, *, min_history_days: int = 60) -> None:
+    """Hard-fail unless ``db_path`` holds price history older than the short window.
+
+    The short window adds a month to stored history; on a database without
+    that history it would silently leave the prices table one month deep.
+    """
+    cutoff = (today - timedelta(days=min_history_days)).isoformat()
+    if not db_path.is_file():
+        raise SnapshotError(f"short history window requested but {db_path} does not exist")
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        try:
+            older = conn.execute(
+                "SELECT COUNT(*) FROM prices WHERE Date < ?", (cutoff,)
+            ).fetchone()[0]
+        except sqlite3.OperationalError as exc:
+            raise SnapshotError(f"short history window requested but {db_path} has no prices table") from exc
+    finally:
+        conn.close()
+    if older == 0:
+        raise SnapshotError(
+            f"short history window requested but {db_path} holds no price rows before {cutoff}"
+        )
+
+
+def pull(
+    db_path: Path,
+    store: ObjectStore,
+    *,
+    key: str = LATEST_KEY,
+    now: datetime | None = None,
+    max_age_days: float | None = None,
+) -> PullResult:
     """Restore the seed at ``key`` to ``db_path``, history tables emptied.
 
     Refuses to overwrite an existing database: on a fresh runner there is
     none, and anywhere else a silent replace would destroy local state.
+    With ``max_age_days``, a seed older than that is not placed and the
+    result is ``stale_seed``.
     """
+    when = now or datetime.now(timezone.utc)
     if db_path.exists():
         raise SnapshotError(f"{db_path} already exists — refusing to overwrite it with a seed")
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -281,6 +370,10 @@ def pull(db_path: Path, store: ObjectStore, *, key: str = LATEST_KEY) -> PullRes
         actual = _sha256(gz)
         if actual != expected:
             raise SnapshotError(f"{key}: sha256 mismatch (metadata {expected}, file {actual})")
+        age = seed_age_days(metadata, when)
+        if max_age_days is not None and age > max_age_days:
+            logger.warning("Snapshot at %s is %.1f days old (limit %s) — not placed", key, age, max_age_days)
+            return PullResult(state="stale_seed", metadata=metadata, age_days=age)
         staged = Path(tmp) / "seed.db"
         try:
             with gzip.open(gz, "rb") as src, staged.open("wb") as dst:
@@ -297,4 +390,6 @@ def pull(db_path: Path, store: ObjectStore, *, key: str = LATEST_KEY) -> PullRes
         metadata.get(META_BUILT_AT, "?"),
         len(cleared),
     )
-    return PullResult(state="restored", metadata=metadata, cleared_tables=tuple(cleared))
+    return PullResult(
+        state="restored", metadata=metadata, cleared_tables=tuple(cleared), age_days=age
+    )

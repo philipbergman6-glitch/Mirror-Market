@@ -1499,7 +1499,20 @@ def main(argv: list[str] | None = None) -> int:
             "CI-required key is missing. Fetches nothing, writes nothing."
         ),
     )
+    parser.add_argument(
+        "--history-period",
+        choices=(DEFAULT_HISTORY_PERIOD, FAST_REFRESH_HISTORY_PERIOD),
+        default=DEFAULT_HISTORY_PERIOD,
+        help=(
+            f"yfinance history window for the price and FX layers (default "
+            f"{DEFAULT_HISTORY_PERIOD}). {FAST_REFRESH_HISTORY_PERIOD} is for a run "
+            "started from a restored R2 seed (scripts/db_snapshot.py pull grants it) "
+            "and is refused on a database without older price history."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.fast and args.history_period != DEFAULT_HISTORY_PERIOD:
+        parser.error("--history-period cannot be combined with --fast (it fixes its own window)")
     if args.doctor:
         # Imported here, not at the top: the doctor is the one entry point
         # that must work before anything else does, and main's import graph
@@ -1512,7 +1525,17 @@ def main(argv: list[str] | None = None) -> int:
             layer_keys=FAST_REFRESH_LAYERS,
             history_period=FAST_REFRESH_HISTORY_PERIOD,
         )
-    return run()
+    if args.history_period != DEFAULT_HISTORY_PERIOD:
+        import config
+        from pipeline.db_snapshot import SnapshotError, assert_short_window_safe
+
+        try:
+            assert_short_window_safe(Path(config.DB_PATH), datetime.now(timezone.utc).date())
+        except SnapshotError as exc:
+            logger.error("Refusing --history-period %s: %s", args.history_period, exc)
+            return 1
+        logger.info("History window: %s (started from a restored seed)", args.history_period)
+    return run(history_period=args.history_period)
 
 
 if __name__ == "__main__":

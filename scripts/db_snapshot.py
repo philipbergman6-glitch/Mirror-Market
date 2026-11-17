@@ -1,6 +1,7 @@
 """Push or restore the durable database seed in Cloudflare R2.
 
     python scripts/db_snapshot.py pull                # before main.py
+    python scripts/db_snapshot.py pull --require-fresh  # the quick refresh
     python scripts/db_snapshot.py push --run-id ID --built-at ISO8601
 
 The logic and its states live in ``pipeline.db_snapshot``; this wrapper only
@@ -8,13 +9,20 @@ turns them into exit codes and GitHub annotations, so a run page says which
 seed it started from without anyone opening the log.
 
 Exit codes: 0 — done, or deliberately nothing to do (unconfigured / no seed
-yet), each annotated; 1 — a configured operation failed, nothing placed.
+yet / stale seed refused), each annotated; 1 — a configured operation failed,
+nothing placed.
+
+Under GitHub Actions, ``pull`` writes ``state=<state>`` to $GITHUB_OUTPUT, and
+``history_period=<period>`` only when the restored seed earns the short
+window — so a missing output (crash, failed restore) leaves main.py on its
+full-history default rather than on a guess.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -31,17 +39,30 @@ def _annotate(level: str, title: str, message: str) -> None:
     print(f"::{level} title={title}::{message}", flush=True)
 
 
-def _pull(db_path: Path) -> int:
+def _output(**values: str) -> None:
+    """Append step outputs when running under GitHub Actions."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as fh:
+        for key, value in values.items():
+            fh.write(f"{key}={value}\n")
+
+
+def _pull(db_path: Path, require_fresh: bool) -> int:
     cfg = db_snapshot.config_from_env()
     if cfg is None:
+        _output(state="unconfigured")
         _annotate(
             "warning",
             "DB seed unconfigured",
             "R2 secrets not set — this run rebuilds from data/history CSVs and re-fetches every layer.",
         )
         return 0
-    result = db_snapshot.pull(db_path, db_snapshot.R2Store(cfg))
+    max_age = config.SEED_SHORT_WINDOW_MAX_AGE_DAYS if require_fresh else None
+    result = db_snapshot.pull(db_path, db_snapshot.R2Store(cfg), max_age_days=max_age)
     if result.state == "no_seed":
+        _output(state="no_seed")
         _annotate(
             "notice",
             "No DB seed yet",
@@ -49,12 +70,25 @@ def _pull(db_path: Path) -> int:
         )
         return 0
     meta = result.metadata
+    if result.state == "stale_seed":
+        _output(state="stale_seed")
+        _annotate(
+            "warning",
+            "DB seed too old",
+            f"Seed from run {meta.get(db_snapshot.META_RUN_ID, '?')} is {result.age_days:.1f} days old "
+            f"(limit {config.SEED_SHORT_WINDOW_MAX_AGE_DAYS}) — not used.",
+        )
+        return 0
+    period, reason = db_snapshot.history_period_for(result)
+    _output(state="restored")
+    if period == config.FAST_REFRESH_HISTORY_PERIOD:
+        _output(history_period=period)
     _annotate(
         "notice",
         "DB seed restored",
         f"Started from run {meta.get(db_snapshot.META_RUN_ID, '?')} built "
         f"{meta.get(db_snapshot.META_BUILT_AT, '?')}; "
-        f"{len(result.cleared_tables)} history tables left to the committed CSVs.",
+        f"{len(result.cleared_tables)} history tables left to the committed CSVs; {reason}.",
     )
     return 0
 
@@ -85,7 +119,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--db", type=Path, default=Path(config.DB_PATH))
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("pull", help="restore the latest verified seed before the pipeline")
+    pull = sub.add_parser("pull", help="restore the latest verified seed before the pipeline")
+    pull.add_argument(
+        "--require-fresh",
+        action="store_true",
+        help="refuse (do not place) a seed older than config.SEED_SHORT_WINDOW_MAX_AGE_DAYS",
+    )
     push = sub.add_parser("push", help="save this run's verified database")
     push.add_argument("--run-id", required=True)
     push.add_argument("--built-at", required=True, help="ISO 8601, e.g. $PIPELINE_STARTED_AT")
@@ -94,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     try:
         if args.command == "pull":
-            return _pull(args.db)
+            return _pull(args.db, args.require_fresh)
         return _push(args.db, args.run_id, args.built_at)
     except Exception as exc:  # every failure is one loud line, then exit 1
         title = "DB seed restore failed" if args.command == "pull" else "DB snapshot push failed"

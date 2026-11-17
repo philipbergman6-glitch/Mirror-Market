@@ -213,7 +213,16 @@ jobs:
           # records as skipped and the CBOT cash-leg panel withholds with that
           # reason — degraded, never broken.
           MARS_API_KEY: ${{ secrets.MARS_API_KEY }}
-        run: python main.py
+          # Set only when the restore placed a seed inside
+          # config.SEED_SHORT_WINDOW_MAX_AGE_DAYS; empty otherwise, and empty
+          # keeps main.py on its full-history default.
+          SEED_HISTORY_PERIOD: ${{ steps.db_seed.outputs.history_period }}
+        run: |
+          ARGS=()
+          if [[ -n "$SEED_HISTORY_PERIOD" ]]; then
+            ARGS+=(--history-period "$SEED_HISTORY_PERIOD")
+          fi
+          python main.py "${ARGS[@]}"
 
       # Layer failures must be loud, not buried in logs: open/update a
       # `ci-alert` issue on hard failures, close it on the next green run.
@@ -400,34 +409,21 @@ jobs:
         continue-on-error: true
         run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
 
-      # The *verified seed* for the fast refresh (#453). refresh-prices.yml
-      # fetches three layers and reads the other twenty-six from whatever the
-      # database already holds. On a fresh runner that is only what
-      # data/history/*.csv carries, which is the snapshot-only tables and
-      # nothing else — so without a seed a fast refresh would render a site
-      # missing PSD, weather, COT and crop progress entirely. That candidate
-      # is caught and refused by the regression gate either way; the seed is
-      # what makes the fast path *useful* rather than merely safe.
+      # The *verified seed* (#453), kept in R2: a dated archive
+      # (daily/YYYY-MM-DD/run-<id>.db.gz, never overwritten) and then
+      # verified/latest.db.gz, which the next daily build and the next fast
+      # refresh both restore. refresh-prices.yml fetches three layers and
+      # reads the other twenty-six from whatever the database already holds,
+      # so without a seed a fast refresh would render a site missing PSD,
+      # weather, COT and crop progress — refused by its regression gate
+      # either way; the seed is what makes the fast path *useful* rather
+      # than merely safe. (Until this moved to R2 it was an Actions cache
+      # entry, mirror-market-db-verified-<run_id>; nothing reads those now.)
       #
       # Written only when the candidate passed the promotion contract, under
       # the same condition that admits the Pages upload below: the seed is
       # the database of an edition this run would publish, never of one it
-      # refused. A failed smoke leaves the previous seed as the newest entry.
-      # Keyed by run id with a prefix restore-key, because cache entries are
-      # immutable: a fixed key would pin the first day's database forever.
-      - name: Cache the verified seed for the fast refresh
-        if: ${{ github.ref == 'refs/heads/main' && steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: data/storage/mirror_market.db
-          key: mirror-market-db-verified-${{ github.run_id }}
-
-      # The same database, made durable: a dated archive
-      # (daily/YYYY-MM-DD/run-<id>.db.gz, never overwritten) and then
-      # verified/latest.db.gz, which the next daily build restores. Same
-      # condition as the verified cache above, deliberately: a refused
-      # candidate's database is never anyone's seed (#453).
+      # refused. A failed smoke leaves the previous seed as `latest`.
       - name: Save the verified DB to R2
         id: db_push
         if: ${{ github.ref == 'refs/heads/main' && steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}

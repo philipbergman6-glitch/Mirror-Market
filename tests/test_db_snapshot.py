@@ -212,7 +212,11 @@ def test_corrupt_payload_with_matching_checksum_is_refused(tmp_path: Path) -> No
     with gzip.open(gz, "wb") as fh:
         fh.write(b"definitely not sqlite" * 50)
     store = MemoryStore()
-    store.put(LATEST_KEY, gz, {META_SHA256: db_snapshot._sha256(gz)})
+    store.put(
+        LATEST_KEY,
+        gz,
+        {META_SHA256: db_snapshot._sha256(gz), "built-at": BUILT_AT.isoformat()},
+    )
     target = tmp_path / "mirror_market.db"
     with pytest.raises(SnapshotError):
         pull(target, store)
