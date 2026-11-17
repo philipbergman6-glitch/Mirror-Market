@@ -66,8 +66,9 @@ permissions:
 # the shared data.gov.in sample-key throttle and darken Layer 16 with HTTP 429
 # (#212) — and each raced the others to push data/history back to main, which
 # is how #218's deploy died. A superseded push run is worthless by
-# construction: the run behind it regenerates the whole dashboard from an
-# empty DB, so nothing it would have published is lost.
+# construction: the run behind it regenerates the whole dashboard from the
+# same durable seed and the committed CSVs, so nothing it would have
+# published is lost.
 #
 # Scheduled, manual and retry (`repository_dispatch`) runs are never cancelled
 # *by* a later run of their own kind: the daily run is the one that must land,
@@ -171,6 +172,30 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # The durable seed (pipeline/db_snapshot.py): the database of the last
+      # edition that passed the promotion contract, kept in Cloudflare R2 so
+      # it outlives the runner and the Actions cache. The history tables are
+      # emptied on restore — data/history/*.csv stays their authority, and
+      # main.py's import_history() refills them exactly as on an empty DB —
+      # so what the seed adds is the self-healing tables a bare runner had to
+      # rebuild from nothing. Unconfigured or first run: annotated, and the
+      # run is the CSV-only rebuild it always was. A configured restore that
+      # fails places nothing (checksummed, integrity-checked, atomic) and is
+      # flagged by the next step; it never blocks the day's edition.
+      - name: Restore the durable DB seed
+        id: db_seed
+        continue-on-error: true
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/db_snapshot.py pull
+
+      - name: Flag a failed seed restore
+        if: ${{ steps.db_seed.outcome == 'failure' }}
+        run: echo "::error title=DB seed not restored::This run rebuilds from data/history CSVs and re-fetches every layer. See the Restore the durable DB seed step."
+
       # The source reliability record (B34 #520) grades a layer only from the
       # data_freshness rows written after this instant: the runner's DB is
       # seeded from the committed CSV, so an older row is a previous run's.
@@ -257,7 +282,8 @@ jobs:
       # inspections, Gulf bids, briefings) have no upstream history, and
       # data_freshness preserves last-known-good run state. The committed CSVs
       # under data/history/ are their persistence layer. main.py seeds the
-      # empty runner DB from them at start and re-exports at end.
+      # runner DB's history tables from them at start (the R2 seed arrives
+      # with those tables emptied) and re-exports at end.
       # [skip ci] prevents the data commit from retriggering workflows.
       # !cancelled() because this step now runs after dashboard generation: a
       # failed dashboard build must not also cost us the day's data.
@@ -396,6 +422,26 @@ jobs:
         with:
           path: data/storage/mirror_market.db
           key: mirror-market-db-verified-${{ github.run_id }}
+
+      # The same database, made durable: a dated archive
+      # (daily/YYYY-MM-DD/run-<id>.db.gz, never overwritten) and then
+      # verified/latest.db.gz, which the next daily build restores. Same
+      # condition as the verified cache above, deliberately: a refused
+      # candidate's database is never anyone's seed (#453).
+      - name: Save the verified DB to R2
+        id: db_push
+        if: ${{ github.ref == 'refs/heads/main' && steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/db_snapshot.py push --run-id "${{ github.run_id }}" --built-at "$PIPELINE_STARTED_AT"
+
+      - name: Flag a failed DB snapshot
+        if: ${{ steps.db_push.outcome == 'failure' }}
+        run: echo "::error title=DB snapshot not saved::This run's verified database is not in R2; the next daily build starts from the previous seed. See the Save the verified DB to R2 step."
 
       - name: Upload Pages artifact
         if: ${{ steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
