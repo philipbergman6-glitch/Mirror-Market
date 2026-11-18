@@ -408,3 +408,7 @@ settlement guard, and nothing here should be used for execution. And it is not
 a claim about a *provider*: `pricing.semantics.PROVEN_SETTLEMENT_SOURCES` is
 still empty, so every board number remains a delayed close, never a settlement,
 however fast it arrives.
+
+## 10. The hosted MCP edition (#580)
+
+The MCP edition is the same database the site was built from, published by the same run after both site smokes pass, so its age is the site edition's age plus the Fly build and rollout (a few minutes). It is refreshed by the daily deploy only — the fast price refresh does not republish it — and `/health` reports the run stamp it was built from, so a reader can always tell which edition is answering.
