@@ -79,6 +79,7 @@ from analysis.futures.domain import (
     named_contract,
     trading_months,
 )
+from pipeline.units import unit_key_label
 from pricing.policy import require_hedgeable
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -405,24 +406,32 @@ class NamedCrushLeg:
         return self.contract.days_to_expiry(self.observation_date)
 
     @property
+    def native_unit_label(self) -> str:
+        """The venue's unit as a reader writes it (``cents/lb``), not the key."""
+        return unit_key_label(self.native_unit)
+
+    @property
     def native_display(self) -> str:
-        """The native price as printed. Full precision, no significant-figure cut.
+        """The native price as the venue quotes it: the tick's precision.
 
         ``%.4g`` rendered 1150.25 as "1,150", which turns a reproduction line
         into an approximation of one — the whole point of the line is that a
-        reader can redo the conversion and land on the same USD/MT.
+        reader can redo the conversion and land on the same USD/MT. The other
+        failure is the float32 store printing 327.799988 for a 327.8 meal
+        print; the tick grid is the precision that exists, so it is the one
+        printed — never fewer decimals than a tick, never noise past it.
         """
-        return f"{self.native_price:,.6f}".rstrip("0").rstrip(".")
+        return self.contract.spec.price_display(self.native_price)
 
     def working(self) -> str:
         """The one line that reproduces this leg's contribution."""
         if self.yield_mt is None:
             return (
-                f"bean  {self.symbol} {self.native_display} {self.native_unit} "
+                f"bean  {self.symbol} {self.native_display} {self.native_unit_label} "
                 f"= {self.usd_per_mt:,.4f} USD/MT (subtracted)"
             )
         return (
-            f"{self.role:<5} {self.symbol} {self.native_display} {self.native_unit} "
+            f"{self.role:<5} {self.symbol} {self.native_display} {self.native_unit_label} "
             f"= {self.usd_per_mt:,.4f} USD/MT x {self.yield_mt:.6f} MT/MT "
             f"= {self.contribution_usd_mt:,.4f} USD/MT"
         )
@@ -445,6 +454,7 @@ class NamedCrushLeg:
             "native_price": self.native_price,
             "native_display": self.native_display,
             "native_unit": self.native_unit,
+            "native_unit_label": self.native_unit_label,
             "usd_per_mt": round(self.usd_per_mt, 6),
             "yield_mt": self.yield_mt,
             "contribution_usd_mt": round(self.contribution_usd_mt, 6),

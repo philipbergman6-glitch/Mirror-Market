@@ -17,8 +17,8 @@ The page is overwritten in place:
     exists only where we kept it — in the history export since the table
     was published (below), so the ephemeral CI database keeps it too.
 
-Units are inferred, so every row must reproduce them:
-    Nothing on the page states a unit. The columns are lakh hectares, kg/ha
+Units are validated, and every row must reproduce them:
+    Older pages omit units; newer pages state them. The columns are lakh hectares, kg/ha
     and lakh tonnes (44.683 × 1169 / 1000 = 52.23 ≈ 52.229), and the parser
     requires that identity on every state row and on the total, to the
     printed rounding. A column restated in quintals or hectares still parses
@@ -81,6 +81,9 @@ _HEADERS = {
 _TABLE_SELECTOR = "table.export-table"
 _NO_POSTS = re.compile(r"<!--\s*Debug:\s*Found 0 posts\s*-->")
 _COLUMN_HEADINGS = ("Sowing Area", "Expected Yield", "Estimated Production")
+_UNIT_COLUMN_HEADINGS = (
+    "Sowing Area (Lakh Ha)", "Expected Yield (Kg per Ha)", "Estimated Production (Lakh MT)",
+)
 _TOTAL_LABEL = "Total"
 # Yield is printed to the kg (±0.5 kg/ha on the area), area and production
 # to three decimals (±0.0005 each); a little float noise on top.
@@ -167,12 +170,25 @@ def parse_crop_table(html: str, year: int) -> CropEstimate | None:
     expected_title = f"Kharif {year}"
     if len(title) != 3 or title[2] != expected_title:
         raise ScraperShapeError(f"SOPA: header {title} does not read {expected_title!r}")
-    if tuple(headings[2:]) != _COLUMN_HEADINGS or any(headings[:2]):
-        raise ScraperShapeError(f"SOPA: columns {headings} are not {list(_COLUMN_HEADINGS)}")
+    # The old table repeats two empty cells below SNo./State. The November
+    # format spans those cells from the title and prints only the three
+    # measures, now with explicit units. Accept the two verified layouts;
+    # never strip arbitrary parenthesized units, which could change scale.
+    measures = headings[2:] if len(headings) == 5 and not any(headings[:2]) else headings
+    if tuple(measures) not in (_COLUMN_HEADINGS, _UNIT_COLUMN_HEADINGS):
+        raise ScraperShapeError(
+            f"SOPA: columns {headings} are not {list(_COLUMN_HEADINGS)} "
+            f"or the verified unit-labelled columns {list(_UNIT_COLUMN_HEADINGS)}"
+        )
 
     states: list[StateRow] = []
     totals: list[StateRow] = []
     for cells in rows[2:]:
+        # Newer pages merge Total across the serial/name columns. Only that
+        # labelled row may omit the second cell; numerical fields still
+        # undergo the same unit identity and state-sum checks below.
+        if len(cells) == 4 and cells[0] == _TOTAL_LABEL:
+            cells = [cells[0], "", *cells[1:]]
         if len(cells) != 5:
             raise ScraperShapeError(f"SOPA: {year}: row {cells} has {len(cells)} cells, expected 5")
         serial, name = cells[0], cells[1]

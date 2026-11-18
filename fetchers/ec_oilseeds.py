@@ -123,12 +123,21 @@ def _download_world_prices() -> bytes:
             logger.info("Downloading EC oilseeds world prices ...")
             resp = requests.get(url, timeout=60)
             resp.raise_for_status()
+            # CIRCABC can return an HTML 'Server temporarily unavailable'
+            # page with HTTP 200. Treat it as a failed download so the normal
+            # bounded retry applies, rather than sending it to openpyxl once.
+            try:
+                with zipfile.ZipFile(io.BytesIO(resp.content)) as archive:
+                    if not {"[Content_Types].xml", "xl/workbook.xml"} <= set(archive.namelist()):
+                        raise ValueError("response is not an XLSX workbook")
+            except zipfile.BadZipFile as exc:
+                raise ValueError("response is not an XLSX workbook (possibly an HTTP-200 error page)") from exc
             logger.info(
                 "EC world prices downloaded (%d KB)", len(resp.content) // 1024
             )
             return resp.content
 
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             logger.warning(
                 "Attempt %d/%d failed for EC world prices: %s",
                 attempt, MAX_RETRIES, exc,

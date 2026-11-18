@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.markets import Market
+from app.markets import SITE_NUMERAIRE, Market, TierResult
 from pricing.semantics import price_type_for_quote_kind, quote_kind_label
 
 STATE_OK = "ok"          # we have the data and it is current
@@ -118,7 +118,7 @@ def make_block(block_id: str, *, state: str, reason: str = "", **kwargs) -> Bloc
 # Blocks whose source is site-wide rather than per-market, so the registry has
 # no per-market absent reason to give.
 _SITE_WIDE_REASONS = {
-    "currency": "{market} quotes in {ccy}, the site numeraire — no conversion applies",
+    "currency": "{market} quotes in {ccy}, the site numeraire — no FX conversion applies",
     "news": "reserved — no news layer is ingested (out of scope for map #142)",
     "supply_demand": "no PSD country is mapped to this market",
     "players": "no players country is mapped to this market",
@@ -145,7 +145,13 @@ def absent_reason(market: Market, block_id: str) -> str | None:
     if block_id == "currency":
         if market.currency_pair:
             return None
-        return _SITE_WIDE_REASONS["currency"].format(market=market.name, ccy=market.home_currency)
+        # Only a market already in the numeraire may say so; a pairless
+        # market in any other currency carries its own descriptor reason (the
+        # loader refuses one without). Europe quotes EUR, and calling that "the
+        # site numeraire" was false — the site displays USD/MT throughout.
+        if market.home_currency == SITE_NUMERAIRE:
+            return _SITE_WIDE_REASONS["currency"].format(market=market.name, ccy=SITE_NUMERAIRE)
+        return market.absent_reason("currency")
     if block_id == "weather":
         if market.weather_regions:
             return None
@@ -159,7 +165,50 @@ def absent_reason(market: Market, block_id: str) -> str | None:
     raise KeyError(f"unknown block id {block_id!r}")
 
 
+STUB_NOT_RENDERED = "a stub renders no blocks"
+
+
+def stub_rows(blocks: list[Block], tier: TierResult) -> list[tuple[str, str]]:
+    """``(title, reason)`` for every block on a stub page — never a blank reason.
+
+    A stub renders no block, only one line each saying where it stands. An
+    empty or absent block carries its own reason already. An ``ok`` block
+    carries none by construction (``Block`` only demands one off ``ok``), and
+    printing its empty string is the blank cell this function exists to stop:
+    where the tier probe graded the block (price, crush, basis, weather) its
+    note is the true reason — "newest observation … is 39d old … our ingest
+    failed upstream" for a price leg held on old rows — and every other ok
+    block says plainly that it holds data a stub does not render.
+
+    Raises rather than return a row with no reason: an empty cell on a page
+    whose whole job is to name what is missing is a silent failure
+    (invariant 1).
+    """
+    rows: list[tuple[str, str]] = []
+    for block in blocks:
+        if not block.is_ok:
+            reason = block.reason
+        else:
+            note = (tier.notes.get(block.id) or "").strip()
+            if note and block.id in tier.present:
+                # Counted toward the tier and current — just not drawn here.
+                reason = f"{note} — held; {STUB_NOT_RENDERED}"
+            elif note:
+                reason = note
+            else:
+                reason = f"data held, not shown — {STUB_NOT_RENDERED}, and this block does not count toward the tier"
+        if not reason.strip():
+            raise ValueError(
+                f"stub row {block.id!r} has no reason — every row on a stub must say why "
+                "(M1 #143 constraint 2)"
+            )
+        rows.append((block.title, reason))
+    return rows
+
+
 __all__ = [
+    "STUB_NOT_RENDERED",
+    "stub_rows",
     "BLOCK_IDS",
     "BLOCK_SPECS",
     "BRIEF_BLOCK_IDS",

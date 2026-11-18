@@ -386,3 +386,59 @@ def test_port_flows_row_width_mismatch_hard_fails() -> None:
     )
     with pytest.raises(ScraperShapeError, match="numeric columns"):
         _parse_port_flows(text)
+
+
+# ── Unquoted delivery slots (2026-11-16) ─────────────────────────────────────
+# tests/fixtures/ams_3147_2026-11-16.pdf — the first report after CBOT
+# November soybeans expired. AMS still lists the soybean Current and Nov²
+# slots, but with every quote cell blank: location, sale type, freight,
+# delivery and nothing else. Nothing was observed, so nothing is stored —
+# the same rule the MARS API mapping applies (``_api_is_unquoted``).
+
+
+def _nov16_gulf_text() -> str:
+    return _extract_text((_FIXTURES_DIR / "ams_3147_2026-11-16.pdf").read_bytes())
+
+
+def test_gulf_bids_live_pdf_skips_unquoted_soybean_slots() -> None:
+    df = _parse_gulf_bids(_nov16_gulf_text(), today=date(2026, 11, 17))
+    soy = df[df["commodity"] == "Soybeans"]
+    assert list(soy["delivery"]) == ["Dec", "Jan", "Feb", "Mar"]
+    dec = soy.iloc[0]
+    assert (dec["basis_low"], dec["basis_high"]) == (109.0, 110.0)
+    assert dec["futures_month"] == 1  # F = January
+    assert (dec["price_low"], dec["price_high"]) == (13.38, 13.39)
+    assert pd.isna(dec["year_ago"])
+    # Corn and wheat quote every slot that day; none is shed.
+    assert df["commodity"].value_counts().to_dict() == {
+        "Corn": 6, "Soybeans": 4, "Wheat": 6,
+    }
+
+
+def test_gulf_bids_unquoted_slot_in_synthetic_text_is_skipped() -> None:
+    text = _GULF_TEXT.replace(
+        "120.00Q to 122.00Q   UNCH   12.9800-13.0000   DN 0.3400   12.9900   10.5275   ",
+        "",
+    )
+    df = _parse_gulf_bids(text, today=_TODAY)
+    soy = df[df["commodity"] == "Soybeans"]
+    assert list(soy["delivery"]) == ["Sep"]
+
+
+def test_gulf_bids_partly_quoted_slot_still_hard_fails() -> None:
+    """A slot with a price but no basis is a shape we cannot read — raise."""
+    text = _GULF_TEXT.replace("120.00Q to 122.00Q   UNCH   ", "")
+    with pytest.raises(ScraperShapeError, match="unparseable bid row"):
+        _parse_gulf_bids(text, today=_TODAY)
+
+
+def test_gulf_bids_all_soybean_slots_unquoted_still_hard_fails() -> None:
+    text = _GULF_TEXT.replace(
+        "120.00Q to 122.00Q   UNCH   12.9800-13.0000   DN 0.3400   12.9900   10.5275   ",
+        "",
+    ).replace(
+        "103.00X to 108.00X   UNCH   12.9575-13.0075   DN 0.2725   12.9825   10.5375   ",
+        "",
+    )
+    with pytest.raises(ScraperShapeError, match="no bid rows matched"):
+        _parse_gulf_bids(text, today=_TODAY)

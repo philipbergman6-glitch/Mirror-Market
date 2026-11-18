@@ -161,10 +161,17 @@ async def test_series_refuses_unknown_table_naming_the_allowed_ones(settings):
             await client.call_tool("series", {"table": "prices", "limit": 5000})
 
 
-def test_private_layer_tables_are_refused_at_startup_when_the_layer_is_private(settings, monkeypatch):
+def test_private_layer_tables_are_refused_at_startup_when_they_hold_rows(settings, db_path, monkeypatch):
     from mirror_mcp import db
 
     monkeypatch.setattr(config, "PRIVATE_LAYERS", ("sea_india",))
+    # The schema creates every table in every database: an empty private
+    # table is DDL, and the server starts. A row in it is the leak.
+    build_server(settings)
+    conn = sqlite3.connect(db_path)
+    conn.execute("INSERT INTO sea_india_rates(Date, series, value, unit) VALUES ('2026-11-04','x',1.0,'USD/MT')")
+    conn.commit()
+    conn.close()
     with pytest.raises(db.PrivacyRefusal, match="sea_india_rates"):
         build_server(settings)
 
@@ -263,10 +270,10 @@ async def test_market_slug_is_validated_against_the_registry(settings):
 
 async def test_absent_and_empty_blocks_keep_their_reasons(settings, market_db):
     async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
-        nigeria = (await client.call_tool("price", {"market": "nigeria"})).structured_content
+        nigeria = (await client.call_tool("crush", {"market": "nigeria"})).structured_content
         crush = (await client.call_tool("crush", {"market": "cbot"})).structured_content
         sd = (await client.call_tool("supply_demand", {"market": "cbot"})).structured_content
-    assert nigeria["state"] == "absent" and "no Nigerian soybean price source" in nigeria["reason"]
+    assert nigeria["state"] == "absent" and "no Nigerian meal or oil" in nigeria["reason"]
     assert crush["state"] == "empty" and "no named-contract curve" in crush["reason"]
     assert crush["meta"]["price_type"] == semantics.PriceType.DELAYED_CLOSE.value
     assert sd["state"] == "empty" and "balance sheet" in sd["reason"]
@@ -342,6 +349,56 @@ async def test_provenance_names_the_layer_its_budget_and_its_freshness(settings)
     assert d["freshness"]["status"] == "success"
     assert d["budget_days"] == config.freshness_limit_days("prices")
     assert d["markets_quoting_it"] and all("quote_kind" in m for m in d["markets_quoting_it"])
+
+
+@pytest.mark.parametrize("stamp", ["2026-11-04 21:05:00", "2026-11-04T21:05:00", "2026-11-05T00:05:00+03:00"])
+async def test_freshness_and_provenance_accept_production_utc_stamps(settings, db_path, stamp):
+    from datetime import datetime, timezone
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("UPDATE data_freshness SET last_success = ?", (stamp,))
+    def clock():
+        return datetime(2026, 11, 7, 9, tzinfo=timezone.utc)
+    async with Client(build_server(settings, clock=clock)) as client:
+        body = (await client.call_tool("freshness")).structured_content
+        provenance = (await client.call_tool("provenance", {"layer": "prices"})).structured_content
+    prices = next(r for r in body["data"]["layers"] if r["layer"] == "prices")
+    assert prices["age_days"] == provenance["data"]["age_days"] == 2
+    assert prices["last_success"] == stamp
+
+
+async def test_raw_series_labels_native_futures_units_without_converting(settings, market_db):
+    async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
+        body = (await client.call_tool("series", {"table": "prices", "key": "Soybeans"})).structured_content
+    assert body["data"]["rows"][0]["Close"] == 405.5
+    assert body["meta"]["value_basis"] == "native_storage"
+    assert body["meta"]["native_price_units"] == {"Soybeans": "cents/bu"}
+    assert "not USD/MT" in body["meta"]["unit_note"]
+
+
+async def test_raw_series_carries_source_failure_beside_retained_rows(settings, market_db):
+    with sqlite3.connect(settings.db_path) as conn:
+        conn.execute("UPDATE data_freshness SET status='failed', rows_fetched=0 WHERE layer_name='prices'")
+    async with Client(build_server(settings, clock=lambda: CLOCK)) as client:
+        body = (await client.call_tool("series", {"table": "prices", "key": "Soybeans"})).structured_content
+    assert body["data"]["rows"]  # historical rows remain inspectable
+    source = next(r for r in body["meta"]["source_health"] if r["layer"] == "prices")
+    assert source["status"] == "failed" and source["rows_fetched"] == 0
+    assert "not observation age" in source["age_basis"]
+
+
+async def test_language_check_draft_is_not_persisted_in_question_log(settings):
+    import json
+
+    draft = "My private cargo costs 1234567 at Confidential Buyer Ltd."
+    async with Client(build_server(settings)) as client:
+        await client.call_tool("check_language", {"text": draft, "price_types": ["delayed_close"]})
+    raw = settings.log_path.read_text()
+    record = json.loads(raw)
+    assert draft not in raw and "Confidential" not in raw and "1234567" not in raw
+    assert "text" not in record["args"]
+    assert record["args"]["text_length"] == len(draft)
+    assert record["args"]["price_types"] == ["delayed_close"]
 
 
 async def test_check_language_reports_forbidden_claims_and_what_is_permitted(settings):

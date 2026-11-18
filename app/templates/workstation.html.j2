@@ -189,7 +189,7 @@ tr.tv-panel > td { padding: 0; }
   <div class="contract-card">
     <div class="contract-head">
       <h3>{{ c.display }}</h3>
-      <span class="ptype">{{ c.native_unit|replace('_', ' ') }}</span>
+      <span class="ptype">{{ c.native_unit_label }}</span>
       <span class="ptype">expiry rule {{ c.expiry_confidence|replace('_', ' ') }}</span>
     </div>
     <div class="spec-line">
@@ -363,7 +363,7 @@ tr.tv-panel > td { padding: 0; }
           <td>{{ leg.role }}</td>
           <td class="sym">{{ leg.symbol }}</td>
           <td>{{ leg.contract_label }}</td>
-          <td class="num">{{ leg.native_display }} {{ leg.native_unit }}</td>
+          <td class="num">{{ leg.native_display }} {{ leg.native_unit_label }}</td>
           <td class="num">{{ '{:,.2f}'.format(leg.usd_per_mt) }}</td>
           <td class="num">{% if leg.yield_mt is none %}—{% else %}{{ '{:.6f}'.format(leg.yield_mt) }}{% endif %}</td>
           <td class="num">{{ '{:+,.2f}'.format(leg.contribution_usd_mt) }}</td>

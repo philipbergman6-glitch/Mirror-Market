@@ -211,6 +211,12 @@ QUOTE_KIND_PRICE_TYPE: dict[str, PriceType] = {
     # with the label saying which side of the market it reports. Not a new
     # PriceType: it supports exactly the claim an assessment does.
     "weekly_ask": PriceType.ASSESSMENT,
+    # AFEX Nigeria (Layer 36): the exchange's own daily reference price for a
+    # security, published every calendar day — weekends included — with no
+    # session, no settlement and no volume behind it. The venue publishes it,
+    # which is more than a reporter's assessment and less than a trade, so it
+    # supports exactly the claim an assessment does: indicative, never firm.
+    "exchange_reference": PriceType.ASSESSMENT,
 }
 
 
@@ -225,6 +231,7 @@ QUOTE_KIND_LABELS: dict[str, str] = {
     "administered": "administered minimum",
     "weekly_assessment": "weekly assessment",
     "weekly_ask": "weekly processor ask",
+    "exchange_reference": "exchange reference price",
 }
 
 

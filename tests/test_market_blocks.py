@@ -403,7 +403,7 @@ def test_a_basis_with_no_shared_session_is_empty_not_a_cross_day_subtraction(
 
 def _seed_india_mandi(conn) -> None:
     """India's daily leg at the real 2026-08-11 level, plus its FX rate."""
-    for key, close in (("Soybean (Mandi MP)", 67250.0), ("Soybean (Mandi MH)", 67000.0)):
+    for key, close in (("Soybean (NCDEX Indore spot)", 67250.0), ("Soybean (Mandi MH)", 67000.0)):
         conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
                      "VALUES (?,?,?,?)", (_day(0), key, close, "INR/MT"))
     conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
@@ -631,12 +631,14 @@ def test_the_origin_ledger_caption_reaches_the_markup_beside_kind_chips(seeded, 
 
 
 def test_a_market_with_no_counterpart_set_renders_absent_not_empty(seeded, registry):
-    """Europe and Nigeria have no ledger by decision — a legal configuration.
+    """Europe has no ledger by decision — a legal configuration.
 
     `absent` says "no such thing exists here"; `empty` would say "we tried and
     got nothing", which would be a report of an outage that is not happening.
+    (Nigeria left this set on 2026-11-05 when the AFEX leg, Layer 36, gave it
+    a one-leg ledger on India's precedent.)
     """
-    for slug in ("europe", "nigeria"):
+    for slug in ("europe",):
         ledger = _block(_build(slug, seeded, registry), "ledger")
         assert ledger.state == "absent"
         assert ledger.reason
@@ -1244,3 +1246,193 @@ def test_storm_rows_alone_make_the_block_ok(registry, tmp_path):
     # Every value is the agencies' reading; the method caption names them.
     assert "National Hurricane Center" in weather.data["storms"]["method"]
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Demo-day honesty fixes (fix/market-stubs-demo)
+# ---------------------------------------------------------------------------
+from app.blocks import BRIEF_BLOCK_IDS, stub_rows  # noqa: E402
+from app.markets import TIER_STUB, TierResult, compute_tier  # noqa: E402
+
+_RV = re.compile(r'<span class="rv">(.*?)</span>', re.S)
+
+
+def _render_stub(slug, ctx, registry, tier) -> str:
+    """The stub page exactly as `generate_site._render_market` renders it."""
+    blocks = build_blocks(registry[slug], tier, ctx, markets=registry, block_ids=BRIEF_BLOCK_IDS)
+    return site_environment().get_template("market_stub.html.j2").render(
+        market=registry[slug], tier=tier, blocks=blocks, root="../", market_nav=[],
+        current_market=slug, current_page="market", day_line="MONDAY",
+        generated_at="2026-11-16 06:00 UTC", generated_at_iso="2026-11-16T06:00:00+00:00",
+    )
+
+
+def _seed_india_dark(conn) -> None:
+    """India as it stands on the live site: mandi rows 39 days old, the layer failing."""
+    conn.execute(schema._CREATE_DATA_FRESHNESS)
+    for offset in (39, 40):
+        for key, close in (("Soybean (NCDEX Indore spot)", 62000.0), ("Soybean (Mandi MH)", 63500.0)):
+            conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
+                         "VALUES (?,?,?,?)", (_day(offset), key, close, "INR/MT"))
+        conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                     ("INR/USD", _day(offset), 0.0113))
+    conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                 ("INR/USD", _day(0), 0.0113))
+    for region in ("India Madhya Pradesh", "India Maharashtra"):
+        conn.execute("INSERT INTO weather (region, Date, temp_max, temp_min, precipitation) "
+                     "VALUES (?,?,?,?,?)", (region, _day(0), 30.0, 18.0, 0.0))
+    conn.execute("INSERT INTO data_freshness (layer_name, last_success, last_attempt, "
+                 "rows_fetched, status) VALUES (?,?,?,?,?)",
+                 ("india_domestic", f"{_day(39)} 23:52:57", f"{_day(0)} 09:32:36", 0, "failed"))
+    conn.commit()
+
+
+def test_every_india_stub_row_carries_a_reason_and_any_standing_gate(seeded, registry, monkeypatch):
+    """QA 2026-11-16: 6 of 7 India stub rows rendered a blank reason.
+
+    An `ok` block has no reason by construction; the stub printed that empty
+    string. Each row now says where the block stands, and the price row names
+    our failed ingest *and*, when one is recorded, the source-side gate. The
+    Agmarknet captcha gate (#449) was lifted from Layer 16 on 2026-11-17 by
+    re-sourcing, so the mechanism is exercised with an injected gate.
+    """
+    _seed_india_dark(seeded.conn)
+    tier = compute_tier(registry["india"], seeded.conn, today=TODAY)
+    assert tier.tier == TIER_STUB
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+
+    reasons = [r.strip() for r in _RV.findall(_render_stub("india", ctx, registry, tier))]
+    assert len(reasons) == len(BRIEF_BLOCK_IDS)
+    assert all(reasons), f"blank stub reason(s): {reasons}"
+    price = reasons[0]
+    assert "39d old" in price and "failed upstream" in price
+    assert "captcha" not in price  # no gate recorded → none invented
+
+    monkeypatch.setattr(config, "LAYER_STANDING_GATES",
+                        {"india_domestic": "the publisher demands a captcha (#449)"})
+    tier = compute_tier(registry["india"], seeded.conn, today=TODAY)
+    gated = [r.strip() for r in _RV.findall(_render_stub("india", ctx, registry, tier))]
+    assert "captcha" in gated[0] and "#449" in gated[0]
+
+
+def test_every_market_stub_renders_a_reason_on_every_row(seeded, registry):
+    """Every market, stubbed on whatever the seeded DB holds, renders no blank row."""
+    for slug, market in registry.items():
+        tier = replace(compute_tier(market, seeded.conn, today=TODAY), tier=TIER_STUB)
+        html = _render_stub(slug, seeded, registry, tier)
+        reasons = [r.strip() for r in _RV.findall(html)]
+        assert reasons and all(reasons), f"{slug}: blank stub reason(s): {reasons}"
+
+
+def test_stub_rows_fails_loudly_on_a_block_with_no_reason():
+    from types import SimpleNamespace
+
+    blank = SimpleNamespace(id="price", title="Local price", is_ok=False, reason="  ")
+    with pytest.raises(ValueError, match="no reason"):
+        stub_rows([blank], TierResult("x", TIER_STUB, False, (), {}))
+
+
+def test_a_stub_ok_block_counted_by_the_tier_says_it_is_held_not_drawn(seeded, registry):
+    _seed_india_dark(seeded.conn)
+    tier = compute_tier(registry["india"], seeded.conn, today=TODAY)
+    assert "weather" in tier.present
+    blocks = build_blocks(registry["india"], tier, seeded, markets=registry,
+                          block_ids=BRIEF_BLOCK_IDS)
+    rows = dict(stub_rows(blocks, tier))
+    assert rows["Weather"].startswith(f"current to {_day(0)}")
+    assert "a stub renders no blocks" in rows["Weather"]
+
+
+def test_the_standing_gate_never_rides_on_a_healthy_ingest(seeded, registry):
+    """The captcha note explains a failure; it must not appear beside a success."""
+    seeded.conn.execute(schema._CREATE_DATA_FRESHNESS)
+    seeded.conn.execute("INSERT INTO data_freshness (layer_name, last_success, status) "
+                        "VALUES (?,?,?)", ("india_domestic", _day(0), "success"))
+    seeded.conn.commit()
+    assert markets_mod._ingest_status(seeded.conn, "india_domestic") is None
+
+
+def test_every_standing_gate_names_a_production_layer_and_an_issue():
+    for layer, reason in config.LAYER_STANDING_GATES.items():
+        assert layer in config.LAYER_MAX_DATA_AGE_DAYS, layer
+        assert re.search(r"#\d+", reason), f"{layer}: a standing gate must cite its evidence issue"
+
+
+def test_europe_currency_reason_does_not_call_eur_the_numeraire(seeded, registry):
+    """QA: 'Europe quotes in EUR, the site numeraire' — the site displays USD/MT."""
+    fx = _block(_build("europe", seeded, registry), "currency")
+    assert fx.state == "absent"
+    assert "numeraire" not in fx.reason
+    assert "USD/MT" in fx.reason
+    # CBOT really is in the numeraire, and still says so.
+    cbot = _block(_build("cbot", seeded, registry), "currency")
+    assert "quotes in USD, the site numeraire" in cbot.reason
+
+
+def test_a_pairless_non_usd_market_without_a_reason_fails_at_load():
+    raw = {k: v for k, v in config.MARKETS["europe"].items() if k != "currency_absent_reason"}
+    with pytest.raises(ValueError, match="currency_absent_reason"):
+        markets_mod._market("europe", raw)
+
+
+def _seed_brazil_fx_move(conn, *, prior_day: int, prior_fx: float | None) -> None:
+    """BRL flat at home, BRL/USD up 5% — a USD move with no home move."""
+    for key, brl in (("Soybean (CEPEA)", 2000.0), ("Soybean (AgRural Paranaguá FOB)", 2100.0)):
+        conn.execute("INSERT INTO brazil_spot_prices (Date, commodity, price_brl) VALUES (?,?,?)",
+                     (_day(prior_day), key, brl))
+    if prior_fx is not None:
+        conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                     ("BRL/USD", _day(prior_day), prior_fx))
+    conn.execute("UPDATE currencies SET Close = 0.21 WHERE pair = 'BRL/USD' AND Date = ?", (_day(0),))
+    conn.commit()
+
+
+def test_the_price_card_move_is_the_usd_move_the_headline_ledger_prints(seeded, registry):
+    """QA: South Africa '$540.3 +2.1% session' while the ledger said USD +0.4%.
+
+    The card's % sits beside a USD/MT figure, so it is the USD move, each print
+    at its own session's FX — and the same number the headline ledger prints,
+    because both call `_usd_move`.
+    """
+    _seed_brazil_fx_move(seeded.conn, prior_day=1, prior_fx=0.20)
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    price = _block(build_blocks(registry["brazil"], None, ctx, markets=registry), "price")
+    for leg in price.data["legs"]:
+        assert leg["chg_1_pct"] == pytest.approx(5.0)       # USD: 0.20 -> 0.21
+        assert leg["home_chg_1_pct"] == pytest.approx(0.0)  # BRL: flat
+    _, _, ledger = block_builders.headline_ledger(registry, ctx)
+    row = next(r for r in ledger["rows"] if r["market_slug"] == "brazil")
+    assert row["usd_chg_pct"] == pytest.approx(5.0)
+    html = site_environment().get_template("blocks/01_price.html.j2").render(block=price)
+    assert '+5.0%</span> <span class="muted">USD session' in html
+
+
+def test_a_card_with_no_usd_move_labels_the_home_move_as_home_currency(seeded, registry):
+    """No FX rate inside the cap for the prior print: no USD move can be struck
+    honestly, so the card shows the venue's own move, labelled with its unit."""
+    _seed_brazil_fx_move(seeded.conn, prior_day=config.FX_ALIGNMENT_MAX_GAP_DAYS + 6, prior_fx=None)
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    price = _block(build_blocks(registry["brazil"], None, ctx, markets=registry), "price")
+    headline = price.data["headline"]
+    assert headline["chg_1_pct"] is None
+    assert headline["home_chg_1_pct"] == pytest.approx(0.0)
+    html = site_environment().get_template("blocks/01_price.html.j2").render(block=price)
+    assert f"{headline['home_unit']} session" in html
+    assert "USD session" not in html
+
+
+@pytest.mark.parametrize(("value", "shown", "css"), [
+    (-0.04, "0.0%", "muted"),
+    (0.04, "0.0%", "muted"),
+    (0.0, "0.0%", "muted"),
+    (-0.06, "-0.1%", "down"),
+    (0.06, "+0.1%", "up"),
+])
+def test_a_move_that_rounds_to_zero_reads_neutral(value, shown, css):
+    """QA: a red '-0.0%' on the Dalian and Argentina currency cards."""
+    macros = site_environment().from_string(
+        "{% import 'blocks/_macros.html.j2' as f %}{{ f.pct(v) }}|{{ f.signed(v) }}"
+    )
+    pct, signed = macros.render(v=value).split("|")
+    assert pct == f'<span class="{css}">{shown}</span>'
+    assert signed == f'<span class="{css}">{shown[:-1]}</span>'

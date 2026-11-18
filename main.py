@@ -35,6 +35,7 @@ from config import (
     LAYER_KEY_CATALOGS,
     LAYER_MAX_DATA_AGE_DAYS,
     LAYER_MIN_KEYS,
+    MATIF_FETCH_ENV,
     MAX_FAILED_LAYERS,
     PRODUCTION_LAYER_KEYS,
     USABLE_PARTIAL_ESCALATION_RUNS,
@@ -42,9 +43,11 @@ from config import (
     missing_api_keys,
     setup_logging,
 )
+from fetchers.afex import fetch_afex
 from fetchers.agrural import fetch_agrural
 from fetchers.akshare import fetch_dce_crush_months, fetch_dce_futures
 from fetchers.cec import fetch_cec_estimates
+from fetchers.cepea import fetch_cepea
 from fetchers.comexstat import fetch_brazil_exports
 from fetchers.conab import fetch_conab_estimates
 from fetchers.conab_precos import fetch_conab_farmgate
@@ -62,9 +65,10 @@ from fetchers.fred import fetch_all_series
 from fetchers.fred import is_configured as fred_configured
 from fetchers.gtr import fetch_gtr_ocean_freight, fetch_gtr_vessel_activity
 from fetchers.gulf_bids import fetch_gulf_bids
+from fetchers.india_prices import fetch_india_domestic
 from fetchers.magyp_fob import fetch_magyp_fob
-from fetchers.mandi import fetch_mandi_prices
-from fetchers.noticias_agricolas import fetch_noticias_agricolas
+from fetchers.matif import fetch_matif_trades
+from fetchers.matif import is_configured as matif_configured
 from fetchers.processor_cash import fetch_processor_cash
 from fetchers.processor_cash import is_configured as processor_cash_configured
 from fetchers.psd import fetch_psd_all
@@ -103,6 +107,8 @@ from pipeline.clean import (
     clean_fred_series,
     clean_india_domestic,
     clean_inspections,
+    clean_matif,
+    clean_nigeria_spot,
     clean_ocean_freight,
     clean_ohlcv,
     clean_port_vessel_activity,
@@ -117,7 +123,7 @@ from pipeline.clean import (
 )
 from pipeline.grading import missing_catalog_keys, read_partial_streaks
 from pipeline.history import HistoryImportError, export_history, import_history
-from pipeline.query import captured_contract_tickers, read_prices
+from pipeline.query import captured_contract_tickers, read_matif_instruments, read_prices
 from pipeline.results import FetchResult
 from pipeline.store import (
     init_database,
@@ -144,6 +150,8 @@ from pipeline.store import (
     save_india_domestic,
     save_inspection_destinations,
     save_inspections,
+    save_matif_futures,
+    save_nigeria_spot,
     save_ocean_freight,
     save_port_flows,
     save_port_vessel_activity,
@@ -649,8 +657,15 @@ def _run_scraper_layer(
     save: Callable[[str, Any], None],
     clean: Callable[[Any], Any] | None = None,
     empty_fails: bool = True,
+    run_if: Callable[[], bool] | None = None,
+    skip_msg: str | None = None,
 ) -> bool:
     """One FetchResult-based scraper layer (Layers 17-20).
+
+    run_if/skip_msg: the DictLayer contract (#180) for a scraper layer —
+    consulted before fetch(); False logs skip_msg and writes no freshness
+    row, because the layer never ran. SCRAPER_LAYER_RUN_IF names the gated
+    scraper layers so tests/test_doctor.py can pin the catalog against them.
 
     empty_fails: a daily quote source that returns zero rows is broken
     (CEPEA, AgRural, Gulf bids); SAFEX legitimately publishes nothing on
@@ -666,6 +681,10 @@ def _run_scraper_layer(
     behaviour only for those that opt in by carrying a budget.
     """
     try:
+        if run_if is not None and not run_if():
+            logger.info("[%s] %s", label, skip_msg or f"{desc} skipped (not configured)")
+            return False
+
         clock = run_clock.start(key)
         logger.info("[%s] Fetching %s ...", label, desc)
         result = fetch()
@@ -1068,31 +1087,28 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         clean=lambda d: clean_brazil_spot(d),
     )
 
-    # ── Layer 16: India Mandi Domestic Soy Prices ─────────────────
-    # The official Agmarknet feed, rebuilt 2026-08 after NCDEX became
-    # unusable (SEBI derivatives suspension to ≥2027-03 + fingerprint wall
-    # on the spot pages; fetchers/india_domestic.py kept on disk as a
-    # dormant fallback) and re-sourced 2026-10 from data.gov.in to the
-    # Agmarknet 2.0 API when data.gov.in began refusing non-Indian
-    # addresses. Each run re-reads a trailing month of completed days, and
-    # MP/MH trade soybean every week, so empty is never a closed-mandi day.
+    # ── Layer 16: India Domestic Soy Prices ───────────────────────
+    # Two publishers since 2026-11-17, never pooled: NCDEX's polled Indore
+    # spot (headline) and MSAMB's Maharashtra mandi median. Agmarknet's
+    # report API demands a captcha since 2026-10-09 (#449), so
+    # fetchers/mandi.py is dormant. Each run re-reads both trailing windows
+    # of completed days, and both publish every trading day, so empty is
+    # never a closed-mandi day.
     results["india_domestic"] = _run_scraper_layer(
-        "india_domestic", "Layer 16", "India mandi soy prices (Agmarknet)",
-        fetch=lambda: fetch_mandi_prices(),
+        "india_domestic", "Layer 16", "India soy prices (NCDEX Indore spot · MSAMB)",
+        fetch=lambda: fetch_india_domestic(),
         save=lambda n, d: save_india_domestic(n, d),
         clean=lambda d: clean_india_domestic(d),
         empty_fails=True,
     )
 
     # ── Layers 17-20: FetchResult scraper layers ──────────────────
-    # Layer 17: re-enabled 2026-07-30 via Notícias Agrícolas, which
-    # republishes the CEPEA/ESALQ indicators server-rendered
-    # (cepea.org.br itself is still behind a Cloudflare Turnstile
-    # challenge; fetchers/cepea.py kept on disk in case the direct
-    # source ever reopens).
+    # Layer 17: CEPEA/ESALQ indicators read from cepea.org.br itself
+    # (2026-11-16). Notícias Agrícolas, the 2026-07-30 → 11-08 source,
+    # now serves a Cloudflare challenge to every client.
     results["cepea"] = _run_scraper_layer(
-        "cepea", "Layer 17", "CEPEA indicators via Notícias Agrícolas",
-        fetch=lambda: fetch_noticias_agricolas(),
+        "cepea", "Layer 17", "CEPEA/ESALQ soy indicators",
+        fetch=lambda: fetch_cepea(),
         save=lambda n, d: save_brazil_spot(n, d),
         clean=lambda d: clean_brazil_spot(d),
     )
@@ -1175,6 +1191,34 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
         save=lambda n, d: save_sopa_crop_estimates(n, d),
         empty_fails=False,
     )
+    # Layer 36: AFEX serves the whole SSBS history on every call, so an
+    # empty result means the feed is broken rather than merely quiet →
+    # empty_fails stays on. Published by owner decision 2026-11-05
+    # (config.AFEX_PUBLISH_RAW); the history export rides on the same flag.
+    results["afex"] = _run_scraper_layer(
+        "afex", "Layer 36", "AFEX Nigeria soybean reference price",
+        fetch=lambda: fetch_afex(),
+        save=lambda n, d: save_nigeria_spot(n, d),
+        clean=lambda d: clean_nigeria_spot(d),
+    )
+    # Layer 37: Euronext MATIF rapeseed delayed trades — PRIVATE. Runs only
+    # where MATIF_PRIVATE_FETCH is set (the desk), never in CI, so no CI
+    # database ever holds a Euronext row (config.MATIF_PUBLISH). A 404 on
+    # both delayed files is a closed venue, not an outage (empty_fails off).
+    results["matif"] = _run_scraper_layer(
+        "matif", "Layer 37", "Euronext MATIF rapeseed (ECO) delayed trades (private)",
+        fetch=lambda: fetch_matif_trades(known=read_matif_instruments()),
+        save=lambda n, d: save_matif_futures(n, d),
+        clean=lambda d: clean_matif(d),
+        empty_fails=False,
+        run_if=SCRAPER_LAYER_RUN_IF["matif"],
+        skip_msg=f"MATIF private layer skipped ({MATIF_FETCH_ENV} not set) — no freshness row",
+    )
+
+
+# Scraper layers gated like the key-gated DictLayers: the doctor catalog's
+# `skips` must name a gate here or a DictLayer.run_if (tests/test_doctor.py).
+SCRAPER_LAYER_RUN_IF: dict[str, Callable[[], bool]] = {"matif": matif_configured}
 
 
 def run(
@@ -1454,7 +1498,20 @@ def main(argv: list[str] | None = None) -> int:
             "CI-required key is missing. Fetches nothing, writes nothing."
         ),
     )
+    parser.add_argument(
+        "--history-period",
+        choices=(DEFAULT_HISTORY_PERIOD, FAST_REFRESH_HISTORY_PERIOD),
+        default=DEFAULT_HISTORY_PERIOD,
+        help=(
+            f"yfinance history window for the price and FX layers (default "
+            f"{DEFAULT_HISTORY_PERIOD}). {FAST_REFRESH_HISTORY_PERIOD} is for a run "
+            "started from a restored R2 seed (scripts/db_snapshot.py pull grants it) "
+            "and is refused on a database without older price history."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.fast and args.history_period != DEFAULT_HISTORY_PERIOD:
+        parser.error("--history-period cannot be combined with --fast (it fixes its own window)")
     if args.doctor:
         # Imported here, not at the top: the doctor is the one entry point
         # that must work before anything else does, and main's import graph
@@ -1467,7 +1524,17 @@ def main(argv: list[str] | None = None) -> int:
             layer_keys=FAST_REFRESH_LAYERS,
             history_period=FAST_REFRESH_HISTORY_PERIOD,
         )
-    return run()
+    if args.history_period != DEFAULT_HISTORY_PERIOD:
+        import config
+        from pipeline.db_snapshot import SnapshotError, assert_short_window_safe
+
+        try:
+            assert_short_window_safe(Path(config.DB_PATH), datetime.now(timezone.utc).date())
+        except SnapshotError as exc:
+            logger.error("Refusing --history-period %s: %s", args.history_period, exc)
+            return 1
+        logger.info("History window: %s (started from a restored seed)", args.history_period)
+    return run(history_period=args.history_period)
 
 
 if __name__ == "__main__":

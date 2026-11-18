@@ -16,6 +16,7 @@ Key concepts for learning:
 
 import json
 import logging
+import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
@@ -28,6 +29,7 @@ from config import (
     OPENMETEO_FORECAST_URL,
     REQUEST_TIMEOUT,
     WEATHER_DAILY_VARS,
+    WEATHER_SECOND_PASS_DELAY_S,
 )
 from fetchers._backoff import retry_sleep
 
@@ -192,6 +194,22 @@ def fetch_all_regions() -> dict[str, pd.DataFrame]:
             lon=coords["lon"],
         )
         results[region_name] = df
+
+    # Second pass (#577): transient upstream throttling, not the region,
+    # explains a key lost to all retries — so retry it once the window has
+    # had time to clear. A key still empty after this stays empty.
+    missing = [name for name, df in results.items() if df.empty]
+    if missing:
+        logger.warning(
+            "Weather: %d region(s) empty after first pass (%s) — retrying in %ds",
+            len(missing), ", ".join(missing), WEATHER_SECOND_PASS_DELAY_S,
+        )
+        time.sleep(WEATHER_SECOND_PASS_DELAY_S)
+        for region_name in missing:
+            coords = GROWING_REGIONS[region_name]
+            results[region_name] = fetch_region_weather(
+                region_name, lat=coords["lat"], lon=coords["lon"],
+            )
     return results
 
 

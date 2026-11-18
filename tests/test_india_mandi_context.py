@@ -98,31 +98,31 @@ def test_msp_is_the_marketing_season_in_force_on_the_mandi_date(day, expected) -
 
 def test_india_groups_put_msp_and_arrivals_in_their_own_group() -> None:
     """The price group stays three cards (DESIGN.md 4-up rows) and its
-    "median" title never sits over a tonnage."""
+    spot-price title never sits over a tonnage."""
     price, context = _india_groups({"india_domestic": {
-        "soybean_mandi_inr": 57_750.0,
-        "soybean_mandi_date": "2026-10-06",
+        "soybean_spot_inr": 57_750.0,
+        "soybean_spot_date": "2026-10-06",
         "msp_inr": 57_080.0,
         "msp_season": "2026-27",
-        "mandi_vs_msp_pct": 1.17,
+        "spot_vs_msp_pct": 1.17,
         "arrivals_7d_mt": 238_000.0,
         "arrivals_7d_end": "2026-10-05",
         "arrivals_7d_chg_pct": 31.2,
     }})
-    assert "median" in price["title"]
+    assert "Indore spot" in price["title"]
     assert "vs MSP" not in {c["label"] for c in price["cards"]}
     cards = {c["label"]: c for c in context["cards"]}
 
-    assert cards["vs MSP"]["value"] == 1.17
-    assert "₹57,080/MT" in cards["vs MSP"]["caption"]
-    assert "2026-27" in cards["vs MSP"]["caption"]
-    assert cards["Arrivals, 7 days"]["value"] == 238_000.0
-    assert cards["Arrivals, 7 days"]["delta"] == "+31.2% vs prior 7d"
-    assert "to 2026-10-05" in cards["Arrivals, 7 days"]["caption"]
+    assert cards["Indore spot vs MSP"]["value"] == 1.17
+    assert "₹57,080/MT" in cards["Indore spot vs MSP"]["caption"]
+    assert "2026-27" in cards["Indore spot vs MSP"]["caption"]
+    assert cards["MH arrivals, 7 days"]["value"] == 238_000.0
+    assert cards["MH arrivals, 7 days"]["delta"] == "+31.2% vs prior 7d"
+    assert "to 2026-10-05" in cards["MH arrivals, 7 days"]["caption"]
 
 
 def test_india_groups_omit_the_context_group_without_its_numbers() -> None:
-    price, context = _india_groups({"india_domestic": {"soybean_mandi_inr": 57_750.0}})
+    price, context = _india_groups({"india_domestic": {"soybean_spot_inr": 57_750.0}})
     assert price is not None and context is None
 
 
@@ -132,13 +132,26 @@ def test_india_groups_without_mandi_data_render_nothing() -> None:
 
 def test_briefing_prints_msp_and_arrivals_lines() -> None:
     text = _format_india_domestic({"India": {"india_domestic": {
-        "soybean_mandi_inr": 57_750.0,
+        "soybean_spot_inr": 57_750.0,
         "msp_inr": 57_080.0,
         "msp_season": "2026-27",
-        "mandi_vs_msp_pct": 1.17,
+        "spot_vs_msp_pct": 1.17,
         "arrivals_7d_mt": 238_000.0,
         "arrivals_7d_end": "2026-10-05",
         "arrivals_7d_chg_pct": 31.2,
     }}})
-    assert "MSP 2026-27: ₹57,080/MT — MP median +1.2% vs MSP" in text
-    assert "MP arrivals, 7d to 2026-10-05: 238,000 MT (+31.2% vs prior 7d)" in text
+    assert "MSP 2026-27: ₹57,080/MT — Indore spot +1.2% vs MSP" in text
+    assert "MH arrivals (MSAMB), 7d to 2026-10-05: 238,000 MT (+31.2% vs prior 7d)" in text
+
+
+def test_every_day_pace_withholds_a_window_with_a_missing_calendar_day() -> None:
+    """MSAMB serves ~8 days, so a day with no row is unknown, not zero."""
+    rows = _rows(15, "2026-10-06")
+    rows = rows[rows["Date"] != "2026-10-02"].reset_index(drop=True)
+    assert _mandi_arrivals_pace(rows, every_day=True) is None
+    assert _mandi_arrivals_pace(rows) is not None  # the Agmarknet rule reads it as 0 t
+
+
+def test_every_day_pace_with_complete_weeks_matches_the_default() -> None:
+    rows = _rows(15, "2026-10-06")
+    assert _mandi_arrivals_pace(rows, every_day=True) == _mandi_arrivals_pace(rows)

@@ -152,7 +152,7 @@ def test_india_premium_uses_common_date(stalled_spot_em):
     assert dom["bean_premium_usd"] == expected
     assert dom["basis_date"] == STALL_DATE
     assert dom["cbot_bean_usd"] == round(CBOT_USD_MT_STALL, 2)
-    assert dom["soybean_mandi_usd"] == round(MANDI_INR_MT * 0.0120, 2)
+    assert dom["soybean_spot_usd"] == round(MANDI_INR_MT * 0.0120, 2)
 
 
 def test_usd_display_degrades_to_aligned_fx_when_cbot_missing(
@@ -169,4 +169,4 @@ def test_usd_display_degrades_to_aligned_fx_when_cbot_missing(
     assert "bean_premium_usd" not in dom
     assert "cbot_bean_usd" not in dom
     # Mandi INR (07-31) × INR/USD of the same date — not the fresh 0.0115.
-    assert dom["soybean_mandi_usd"] == round(MANDI_INR_MT * 0.0120, 2)
+    assert dom["soybean_spot_usd"] == round(MANDI_INR_MT * 0.0120, 2)

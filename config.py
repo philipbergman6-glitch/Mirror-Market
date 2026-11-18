@@ -143,8 +143,8 @@ PRODUCTION_LAYERS = (
     ("crush_inspections", "14", "USDA NASS + AMS", "Monthly/Weekly", "Crush and export inspections"),
     ("conab", "15", "CONAB", "Monthly", "Brazil crop estimates"),
     ("conab_precos", "15b", "CONAB", "Weekly", "Paraná farmgate prices"),
-    ("india_domestic", "16", "Agmarknet 2.0", "Daily", "MP and Maharashtra mandi soy"),
-    ("cepea", "17", "CEPEA via Notícias Agrícolas", "Daily", "Brazil soy indicators"),
+    ("india_domestic", "16", "NCDEX spot · MSAMB", "Daily", "Indore spot and Maharashtra mandi soy"),
+    ("cepea", "17", "CEPEA/ESALQ", "Daily", "Brazil soy indicators"),
     ("safex", "18", "JSE SAFEX via Grain SA", "Daily", "South Africa soy futures"),
     ("agrural", "19", "AgRural", "Daily", "Paranaguá port soy bid"),
     ("gulf_bids", "20", "USDA AMS", "Daily", "CIF NOLA Gulf bids"),
@@ -166,6 +166,12 @@ PRODUCTION_LAYERS = (
      "Tropical-cyclone forecast tracks and wind radii — Atlantic, East/Central Pacific"),
     ("cyclones_jtwc", "35", "JTWC", "Per advisory, read daily",
      "Tropical-cyclone forecast tracks and wind radii — West Pacific, Indian Ocean, Southern Hemisphere"),
+    ("afex", "36", "AFEX (Africa Exchange)", "Daily", "Nigeria soybean reference price"),
+    # Private desk layer (owner decision 2026-11-05): Euronext's MiFIR delayed
+    # trade file, free for internal use only. "(private)" in the description
+    # is what PRIVATE_LAYERS is derived from (tests/test_reliability.py).
+    ("matif", "37", "Euronext MiFIR delayed trades + ESMA FIRDS", "Daily",
+     "MATIF rapeseed (ECO) last trade by contract month (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # Layers whose rendered output is the private desk edition only. A public
@@ -174,7 +180,13 @@ PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # Empty since 2026-10-21: the owner opened SEA (32) and SOPA (33), the last
 # two, under the A18 stance (#468: every series public, licence risk accepted,
 # internal use, no sale). The mechanism stays for the next private source.
-PRIVATE_LAYERS: tuple[str, ...] = ()
+#
+# Layer 37 (MATIF rapeseed) reopened it on 2026-11-05: Euronext delayed data
+# is free for internal use and EUR 167.55/month to redistribute (#148), so the
+# layer runs only where MATIF_PRIVATE_FETCH is set (the desk, never CI), its
+# table is never exported to data/history/ and never read by a site builder
+# (MATIF_PUBLISH below), and mirror_mcp refuses a database holding its rows.
+PRIVATE_LAYERS: tuple[str, ...] = ("matif",)
 
 # ---------------------------------------------------------------------------
 # Fast refresh — the price-only path (`python main.py --fast`)
@@ -209,9 +221,21 @@ FAST_REFRESH_LAYERS = ("prices", "currencies", "forward_curve")
 # History is already stored and re-downloading it is the entire cost above. A
 # month covers any weekend-plus-holiday gap the fast path could need to backfill
 # while staying inside the cheap window; INSERT OR REPLACE makes the overlap
-# free. It is NOT used by the daily build, which still pulls DEFAULT_HISTORY_PERIOD
-# so a fresh CI database is seeded with real history.
+# free. The daily build uses it too, but only when its run started from a
+# restored R2 seed no older than SEED_SHORT_WINDOW_MAX_AGE_DAYS — the seed is
+# the history the window would otherwise re-download (measured 2026-11-17 at
+# 6–13 s for Layers 1+7 together — the benchmark above is from 2026-08 and the
+# gain today is seconds, plus fewer 15-year Yahoo requests). Any other start (no seed,
+# failed restore, stale seed) pulls DEFAULT_HISTORY_PERIOD, as every daily build
+# did before the seed existed.
 FAST_REFRESH_HISTORY_PERIOD = "1mo"
+
+# The oldest R2 seed (by its built-at stamp) that may skip the full history
+# download. A "1mo" yfinance window reaches back ~30 calendar days; 21 leaves
+# 9 days of overlap, so a seed this old still meets the window with no gap
+# between its newest stored bar and the oldest fetched one. The quick refresh
+# refuses an older seed outright (it has no full-history fallback).
+SEED_SHORT_WINDOW_MAX_AGE_DAYS = 21
 
 # ---------------------------------------------------------------------------
 # Layer 1 — yfinance ticker symbols (data sourced from CME / ICE / CBOT)
@@ -423,6 +447,14 @@ COT_COMMODITIES = {
 # historical rows stop accruing; that is the intended cost.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# Open-Meteo intermittently stops answering GitHub runners (shared Azure IPs)
+# for minutes at a time — every coordinate, read timeout with no response
+# (measured 2026-11-16: 8 consecutive 40 s timeouts, then 0.1 s replies).
+# One random region per run lost all three retries (Riau, Madhya Pradesh,
+# Mpumalanga…), grading the layer usable_partial for weeks (#577) and
+# lighting "1 data critical" on every masthead. Regions still empty after
+# the first pass get one more pass after this pause.
+WEATHER_SECOND_PASS_DELAY_S = 60
 # What a Layer 5 row is (B15 #455). Open-Meteo's forecast endpoint serves
 # weather-model output for its past days too — model analysis, not station
 # readings — so every row, elapsed or ahead, is an estimate. Same honesty as
@@ -893,7 +925,8 @@ GTR_VESSEL_MAX_COUNT = 200
 # The EU rapeseed leg of the Europe market page. Euronext MATIF (ECO)
 # settlements are licensed — free for internal use, EUR 167.55/month to
 # redistribute, and this project publishes — so the futures curve is not
-# ingested (#148). `Rapeseed - EU Moselle` is the Commission's weekly
+# published (#148; since 2026-11-05 Layer 37 below holds ECO *last trades*
+# privately, never rendered). `Rapeseed - EU Moselle` is the Commission's weekly
 # physical FOB assessment for the same commodity in the same region,
 # CC BY 4.0, sourced by the EC from the International Grains Council.
 #
@@ -935,6 +968,53 @@ EC_OILSEEDS_SERIES = {
 # it up.
 EC_OILSEEDS_CADENCE = "weekly"
 EC_OILSEEDS_QUOTE_KIND = "physical FOB assessment"
+
+# ---------------------------------------------------------------------------
+# Layer 37 — Euronext MATIF rapeseed (ECO) delayed trades. PRIVATE DESK LAYER.
+#
+# Owner decision 2026-11-05: ingest MATIF delayed data for the private edition
+# only. Euronext's delayed data is free for internal use and costs EUR
+# 167.55/month to redistribute (#148), so the gate below is the licence line:
+#
+#   MATIF_PUBLISH = False  →  the table is absent from pipeline/history.py's
+#   export (that CSV round-trip would publish it), no builder under app/ or
+#   scripts/generate_site.py reads it, any private print goes to
+#   data/workspace/ through assert_private_path, and mirror_mcp refuses a
+#   database that holds its rows. tests/test_matif_private_gate.py enforces
+#   every clause. Flipping it True is an owner decision that also needs the
+#   redistribution licence or Euronext's written waiver — not a code change.
+#
+# Source: the MiFIR Article 13 delayed post-trade file (keyless, ~15 min
+# delay, kept ~24 h) plus ESMA FIRDS to resolve each ISIN to a contract.
+# What arrives is trades, so every row is `board_last_traded` and never a
+# settlement — the DSP sits on a terms-protected page and is not fetched
+# (research/2026-11-05-matif-rapeseed-source.md). The layer runs only where
+# MATIF_FETCH_ENV is set, so CI's database — cached as the verified seed and
+# baked into the MCP image — never carries a row.
+# ---------------------------------------------------------------------------
+MATIF_PUBLISH = False
+MATIF_FETCH_ENV = "MATIF_PRIVATE_FETCH"
+MATIF_CONTRACT = "ECO"
+MATIF_VENUE_MIC = "XMAT"
+MATIF_PRODUCT = "RPSD"                      # FIRDS drvcmd_further_sub_product
+MATIF_QUOTE_KIND = "board_last_traded"      # pricing.semantics vocabulary; never "settlement"
+MATIF_TRADES_URL = (
+    "https://marketdata.euronext.com/data-reporting-service/trades-file/download/"
+    "COMMODITY_DERIVATIVES/{selection}/PAR"
+)
+# Both each run: D-1 is complete, D is complete after 20:15 Paris. Together
+# they let one missed desk run self-heal; two missed runs are a hole, because
+# Euronext keeps each file "at least 24 hours" and no longer.
+MATIF_TRADES_SELECTIONS = ("PREVIOUS_TRADING_DAY", "CURRENT_TRADING_DAY")
+MATIF_FIRDS_URL = "https://registers.esma.europa.eu/solr/esma_registers_firds/select"
+MATIF_FIRDS_BATCH = 15                      # a broad RPSD listing 504s; 15-ISIN batches answer in 1-7 s
+# Contract spec: Feb/May/Aug/Nov delivery; the session labelled D ends 20:15
+# Europe/Paris on D (10:45-20:15 CET since 13 April 2026; the DSP range is
+# the two minutes before 18:30 CET, which this layer does not reconstruct).
+MATIF_DELIVERY_MONTHS = (2, 5, 8, 11)
+MATIF_SESSION_TIMEZONE = "Europe/Paris"
+MATIF_SESSION_CLOSE_LOCAL = (20, 15)
+MATIF_SESSION_WEEKDAYS = (0, 1, 2, 3, 4)
 
 # ---------------------------------------------------------------------------
 # Layer 31 — Brazil customs exports, MDIC/SECEX Comex Stat (no API key, #351)
@@ -1537,6 +1617,11 @@ INSPECTIONS_URL = "https://www.ams.usda.gov/mnreports/wa_gr101.txt"
 # Brazil's official crop agency — often differs from USDA by millions of tonnes
 # ---------------------------------------------------------------------------
 CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt"
+# The portal's file server (MinIO) answers HTTP 403 to the default
+# python-requests User-Agent and 200 to any other (measured 2026-11-16 from a
+# GitHub runner and a residential address; dark from 2026-10-20). Both
+# CONAB fetchers send this header.
+CONAB_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; MirrorMarket/1.0)"}
 
 # ---------------------------------------------------------------------------
 # Layer 15b — CONAB weekly producer (farmgate) prices
@@ -1668,19 +1753,62 @@ MANDI_STATES = {
 }
 
 # ---------------------------------------------------------------------------
-# Layer 17 — CEPEA/ESALQ Brazil domestic soy spot price (free, no API key)
-# Farm-gate reference indicator for Paraná state in BRL per 60kg bag.
-# This is NOT the Paranaguá port bid — see Layer 19 (AgRural) for that.
+# Layer 16 sources since 2026-11-17 — Agmarknet's report API demands a
+# captcha (#449), so the layer reads two publishers that answer an
+# unattended fetch from outside India (probed IL, check-host US/DE):
+#
+# * MSAMB (Maharashtra State Agricultural Marketing Board) — the per-APMC
+#   arrivals and modal prices Agmarknet republishes for Maharashtra; every
+#   one of 202 MSAMB market-days carried the same modal as Agmarknet
+#   (2026-10, LAYERS.md Layer 16). Same measurement → same series key.
+# * NCDEX polled spot, Indore — the exchange's daily spot poll for the
+#   Indore delivery centre. A *different* measurement from a mandi median
+#   (it ran 3–8% above MSAMB's Akola modal and SEA's weekly Indore quote,
+#   2026-11-06 → 11-17), so it gets its own key and is never spliced onto
+#   "Soybean (Mandi MP)", whose history stays as stored.
+# Agmarknet (fetchers/mandi.py) stays on disk, dormant, for the day the
+# captcha lifts.
 # ---------------------------------------------------------------------------
-CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/en/indicator/soybean.aspx"
-CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
+MSAMB_GRID_URL = "https://www.msamb.com/ApmcDetail/DataGridBind"
+MSAMB_PAGE_URL = "https://www.msamb.com/ApmcDetail/APMCPriceInformation"
+MSAMB_SOYBEAN_CODE = "04017"     # सोयाबिन in the page's commodity list (2026-11-17)
+# The quantity unit a row must carry to be read: rows in नग (pieces) price a
+# different unit and are excluded, never pooled.
+MSAMB_QUINTAL_UNIT = "क्विंटल"
+NCDEX_SPOT_PAGE_URL = "https://www.ncdex.com/markets/spotprices"
+NCDEX_SPOT_DATA_URL = "https://www.ncdex.com/spotprices/get_data"
+NCDEX_SPOT_SERIES = "Soybean (NCDEX Indore spot)"
+# Series → (NCDEX spot symbol, delivery centre the rows must name).
+NCDEX_SPOT_SYMBOLS: dict[str, tuple[str, str]] = {
+    NCDEX_SPOT_SERIES: ("SYBEANIDR", "Indore"),
+}
+# NCDEX serves only about a month of polls (earliest 2026-10-15 on
+# 2026-11-17); every run re-reads this trailing window so a missed run
+# repairs itself through the (Date, commodity) upsert.
+NCDEX_SPOT_LOOKBACK_DAYS = 31
+# Active Layer 16 series, headline first.
+INDIA_DOMESTIC_SERIES: tuple[str, ...] = (NCDEX_SPOT_SERIES, MANDI_SERIES_MH)
 
-# cepea.org.br itself sits behind a Cloudflare Turnstile challenge
-# (2026-05). Notícias Agrícolas republishes the same CEPEA/ESALQ
-# indicators server-rendered — this is the active Layer 17 source.
-# Appending /YYYY-MM-DD to a URL returns that date's page (~10 sessions
-# per page), which is how the backfill script walks the gap.
-# Commodity keys reuse the historical names so stored history continues.
+# ---------------------------------------------------------------------------
+# Layer 17 — CEPEA/ESALQ Brazil soy indicators (free, no API key)
+# Read from CEPEA itself since 2026-11-16 (fetchers/cepea.py): one page
+# carries both indicators, each under its own label, in R$ per 60 kg sack.
+# The Paranaguá indicator is NOT the AgRural port bid — see Layer 19.
+# ---------------------------------------------------------------------------
+CEPEA_SOYBEAN_URL = "https://www.cepea.org.br/br/indicador/soja.aspx"
+CEPEA_COMMODITIES = ["Soybean (CEPEA)"]
+# Stored commodity key → the page label heading that indicator's table.
+# Keys are the historical names so stored history continues unbroken.
+CEPEA_INDICATORS = {
+    "Soybean (CEPEA)": "INDICADOR DA SOJA CEPEA/ESALQ - PARANÁ",
+    "Soybean (ESALQ/B3 Paranaguá)": "INDICADOR DA SOJA CEPEA/ESALQ - PARANAGUÁ",
+}
+
+# Notícias Agrícolas republishes the same CEPEA/ESALQ indicators. It was
+# the live Layer 17 source 2026-07-30 → 2026-11-08 (while cepea.org.br was
+# Turnstile-walled) until it began serving a Cloudflare JS challenge to
+# every client. Kept for its dated archive pages only: appending
+# /YYYY-MM-DD returns that date's ~10 sessions (scripts/backfill_cepea_gap.py).
 NOTICIAS_AGRICOLAS_URLS = {
     # CEPEA/ESALQ Paraná — the classic farm-gate CEPEA soy indicator
     "Soybean (CEPEA)": (
@@ -1748,6 +1876,9 @@ class ApiKeySpec:
     skips: tuple[str, ...] = ()
     degrades: tuple[str, ...] = ()
     required_in_ci: bool = True
+    # False for a switch CI must never be able to set: the deploy workflow does
+    # not export it, so no secret can turn the layer on there (Layer 37).
+    ci_exports: bool = True
     signup: str = ""
     # Consumers outside PRODUCTION_LAYERS (a backfill script), named in prose.
     also: str = ""
@@ -1795,6 +1926,22 @@ _API_KEY_SPECS: tuple[ApiKeySpec, ...] = (
         required_in_ci=False,
         signup="https://mymarketnews.ams.usda.gov/mars-api/getting-started",
         also="Layer 20b Gulf-bid backfill (scripts/backfill_gulf_bids_mars.py); the daily Layer 20 PDF leg is keyless",
+    ),
+    # Not a key: an opt-in flag with the key catalog's contract — unset means
+    # the layer never ran (no freshness row, `skipped_unconfigured` in the run
+    # record, never a dead source). It is the desk's switch for the private
+    # MATIF layer and must stay unset in CI, so CI's database never holds a
+    # Euronext row (MATIF_PUBLISH above).
+    ApiKeySpec(
+        name=MATIF_FETCH_ENV,
+        unlocks="Euronext MiFIR delayed trades: MATIF rapeseed (ECO) — private desk layer, never CI",
+        skips=("matif",),
+        required_in_ci=False,
+        ci_exports=False,
+        # Not a signup: the page stating that delayed data is free for internal
+        # use. The switch itself is `export MATIF_PRIVATE_FETCH=1` on the desk.
+        signup="https://www.euronext.com/en/data/market-data/market-data-agreements",
+        also="desk switch, not a key: export MATIF_PRIVATE_FETCH=1 on the desk machine (LAYERS.md → Layer 37)",
     ),
 )
 API_KEY_CATALOG: dict[str, ApiKeySpec] = {spec.name: spec for spec in _API_KEY_SPECS}
@@ -1982,6 +2129,61 @@ SAFEX_COMMODITIES = (
 AGRURAL_PUBLICATION_DISPOSITION = "open"
 AGRURAL_URL = "https://agrural.com.br/precossojaemilho/"
 AGRURAL_COMMODITIES = ["Soybean (AgRural Paranaguá FOB)"]
+
+# ---------------------------------------------------------------------------
+# Layer 36 — AFEX Nigeria soybean reference price (free, no API key)
+# Nigeria's only feedable soy price. See research/2026-08-10-nigeria-price-source.md.
+#
+# What this series IS: a daily *reference* price published every calendar
+# day — including weekends, which is how we know it is not a session
+# settlement (74% of changes are day-over-day; no weekday clustering).
+# quote_kind "exchange_reference"; label it that way, never "settlement".
+#
+# Licence: AFEX's terms forbid reproducing platform data without written
+# permission, and no permission has been asked for or granted (the draft at
+# research/2026-08-10-afex-permission-request.md was never sent). Published
+# anyway by owner decision 2026-11-05, extending the A18 stance (#468: every
+# series public, internal use, no sale, risk accepted) that already covers
+# AgRural, SEA and SOPA. AFEX_PUBLISH_RAW is the one switch: False withholds
+# the table from the history export and the Nigeria price leg from every
+# page (app/markets.py reads it), so a licence objection is one flag flip.
+# ---------------------------------------------------------------------------
+AFEX_PRICE_URL = "https://api-md.afexnigeria.com/AFEXMD/api/v1/securities/price"
+# The endpoint 401s without this Origin and 200s with it (isolated by
+# controlled test, 2026-08-10; still true 2026-11-05). We send AFEX's own
+# site as Origin because that is what the endpoint requires; flagged in the
+# research note as the one detail to raise with AFEX rather than rely on
+# indefinitely.
+AFEX_ORIGIN = "https://africaexchange.com"
+# Feed key → our commodity name. 'S'-prefixed keys are NGN/kg spot;
+# the 'D'-prefixed twin (DSBS) carries the same number ×1000, which is
+# what corroborates the NGN/MT reading rather than assuming it.
+AFEX_SERIES = {
+    "SSBS": "Soybean (AFEX Nigeria)",
+}
+AFEX_COMMODITIES = tuple(AFEX_SERIES.values())
+# The request shape AFEX's own front end sends (2026-11-05): one security
+# per request, bounded by dates. The bare URL stopped carrying the soybean
+# series between 2026-08 and 2026-11 — it now answers 30 days of maize only.
+# date_from is the earliest date the SSBS series has ever carried a non-zero
+# price (2021-01-23 is the first row at all; earlier rows read 0.0).
+AFEX_HISTORY_START = "2021-01-01"
+# The feed stamps rows in Nigeria's calendar day. The current day is
+# published while it may still change and the feed does not say when it is
+# final, so only days at least this many days old are stored — the same
+# shape as MANDI_MIN_AGE_DAYS (Layer 16). The full history is re-read every
+# run, so a revised day repairs itself through the (Date, commodity) upsert.
+AFEX_TIMEZONE = "Africa/Lagos"
+AFEX_MIN_AGE_DAYS = 1
+# Longest flat run observed across the full 2021-2026 history is 26 days
+# (24 runs >= 7d, 4 runs >= 14d). A plateau below this is normal market
+# behaviour, not a stall — the default freshness threshold would false-alarm
+# several times a year. Above it, warn loudly.
+AFEX_MAX_FLAT_DAYS = 26
+# Owner decision 2026-11-05 (A18 stance extended). False withholds the raw
+# series from data/history/ and the Nigeria price leg from every page.
+AFEX_PUBLISH_RAW = True
+AFEX_ATTRIBUTION = "Source: AFEX (Africa Exchange) daily reference price — not a settlement"
 
 # ---------------------------------------------------------------------------
 # Layer 23 — SAGIS weekly producer deliveries (free, no API key)
@@ -2371,7 +2573,7 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # re-serves (or 404s) on a quiet day; a frozen page answers 200 with
     # last week's number forever, which is exactly what the budget catches.
     # Long weekend plus a holiday, like the exchange legs (A3 #300 §7).
-    "cepea": 7,       # CEPEA/ESALQ indicators via Notícias Agrícolas
+    "cepea": 7,       # CEPEA/ESALQ indicators (cepea.org.br)
     "agrural": 7,     # AgRural Paranaguá port bid
     "gulf_bids": 7,   # AMS 3147 Gulf export bids (daily PDF)
     # MAGyP publishes the official FOB daily but posts it with an official
@@ -2399,6 +2601,14 @@ LAYER_MAX_DATA_AGE_DAYS = {
     # and the layer would stay green. Same long-weekend-plus-holiday budget as
     # the other daily exchange legs (#157).
     "safex": 7,
+    # AFEX publishes a dated row every calendar day, flat or not, so a row
+    # older than a week means the feed, not the market, has stopped (#166).
+    "afex": 7,
+    # MATIF ECO session rows (Layer 37, private): one row per finished Paris
+    # session per contract month, same long-weekend-plus-holiday budget as the
+    # other daily exchange legs. Euronext keeps each delayed file ~24 h, so a
+    # desk that stops running the pipeline goes stale within the week.
+    "matif": 7,
     # Agmarknet mandi spot. Each run re-reads a trailing month of completed
     # days, so the newest Date normally trails today by one Indian day; a
     # frozen or silently-emptied upstream leaves it standing still while the
@@ -2592,6 +2802,16 @@ def validate_age_budgets(
 
 validate_age_budgets()
 
+# Standing access gates: a documented, source-side reason a layer cannot be
+# fetched unattended, printed beside our own ingest verdict on the site. The
+# run state alone says "failed upstream", which is true and tells a reader
+# nothing about why — `data_freshness` keeps no error text. Appended ONLY
+# while the layer's latest verdict is failed/stale/incomplete
+# (`app.markets._ingest_status`), so a healthy run never carries it; when the
+# gate lifts, delete the entry. Each entry cites the issue holding the probe
+# evidence (LAYERS.md carries the detail).
+LAYER_STANDING_GATES: dict[str, str] = {}
+
 # Key coverage (#182): which config catalog each multi-key layer iterates.
 # `keys_expected` is len(catalog), so adding a ticker/region/series moves a
 # layer's expected count with no second edit — the trailing counts in
@@ -2664,6 +2884,7 @@ HEALTH_TABLE_WRITER_LAYERS = {
     "india_domestic_prices": ("india_domestic",),
     "brazil_spot_prices": ("cepea", "agrural", "conab_precos"),
     "safex_prices": ("safex",),
+    "nigeria_spot_prices": ("afex",),
 }
 
 # ---------------------------------------------------------------------------
@@ -3085,7 +3306,7 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "india": {
         "name": "India",
-        "venue": "Agmarknet mandi spot (MP · MH)",
+        "venue": "NCDEX Indore spot · MSAMB mandi (MH)",
         "home_currency": "INR",
         "currency_pair": "INR/USD",
         # Bean-only. NCDEX derivatives are suspended to >=2027-03-31, so there
@@ -3095,8 +3316,8 @@ MARKETS: dict[str, dict[str, Any]] = {
             "table": "india_domestic_prices",
             "date_column": "Date",
             "key_column": "commodity",
-            "keys": ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
-            "headline_key": "Soybean (Mandi MP)",
+            "keys": [NCDEX_SPOT_SERIES, MANDI_SERIES_MH],
+            "headline_key": NCDEX_SPOT_SERIES,
             "cadence": "daily",
             "quote_kind": "physical",
             "value_column": "Close",
@@ -3108,20 +3329,21 @@ MARKETS: dict[str, dict[str, Any]] = {
             "cadence (NCDEX suspended to >=2027-03-31)"
         ),
         # Unblocked by #206: the +66% is real, cross-checked against SOPA's own
-        # Indore oil and meal quotes (not Agmarknet-derived). Struck on the MP
-        # median alone — the price block's own headline key, and the Indore hub
-        # is the benchmark. MH is carried as the second price leg, not as a
-        # second basis: two lines 0.2% apart would imply a choice that isn't one.
+        # Indore oil and meal quotes (not Agmarknet-derived). Struck on the
+        # Indore hub alone — the price block's own headline key; since
+        # 2026-11-17 that is NCDEX's polled Indore spot (Agmarknet's MP median
+        # is captcha-gated, #449). MH is carried as the second price leg, not
+        # as a second basis.
         "basis": {
             "layer": "india_domestic",
             "table": "india_domestic_prices",
             "date_column": "Date",
             "key_column": "commodity",
-            "keys": ["Soybean (Mandi MP)"],
-            "headline_key": "Soybean (Mandi MP)",
+            "keys": [NCDEX_SPOT_SERIES],
+            "headline_key": NCDEX_SPOT_SERIES,
             "reference": "cbot",
-            "label": "Mandi MP over CBOT (policy spread)",
-            # An Agmarknet cash median, like the price leg it is struck on.
+            "label": "Indore spot over CBOT (policy spread)",
+            # A polled cash spot, like the price leg it is struck on.
             "quote_kind": "physical",
             # Same stored column and unit as the price leg it is struck on —
             # INR/MT through the INR/USD rate, converted only by to_usd_mt.
@@ -3153,6 +3375,13 @@ MARKETS: dict[str, dict[str, Any]] = {
         # itself (and derives its own EUR column from it), so the page quotes
         # the authoritative USD leg rather than a rate we do not hold.
         "currency_pair": None,
+        # Required by the loader: a non-USD market with no pair must say why
+        # it renders no rate, or block 05 would claim EUR is the numeraire.
+        "currency_absent_reason": (
+            "no EUR/USD rate is ingested, and none is needed: the EC workbook publishes "
+            "USD/MT itself, so every Europe figure here is the venue's own USD number — "
+            "no conversion is applied"
+        ),
         # Weekly physical assessment, not the MATIF futures curve — those
         # settlements are licensed at EUR 167.55/month and are not shown.
         "price": {
@@ -3174,7 +3403,10 @@ MARKETS: dict[str, dict[str, Any]] = {
         "crush": None,
         "crush_absent_reason": "no EU rapeseed oil or meal assessment is ingested",
         "basis": None,
-        "basis_absent_reason": "no EU futures board to take a basis against (MATIF is licensed)",
+        "basis_absent_reason": (
+            "no EU futures board renders here (MATIF delayed data is licensed for internal use only; "
+            "Layer 37 holds it privately)"
+        ),
         # M14 #207 filled the empty block on the page whose leg is the most
         # locally weather-driven one on the map. These pins are RAPESEED, not
         # soy, and the role label is what says so on the page.
@@ -3238,26 +3470,54 @@ MARKETS: dict[str, dict[str, Any]] = {
     },
     "nigeria": {
         "name": "Nigeria",
-        "venue": "no domestic price venue ingested",
+        "venue": "AFEX (Africa Exchange) daily reference price",
         "home_currency": "NGN",
         "currency_pair": "NGN/USD",
-        # The only market on the map with no price leg of any kind. AFEX is
-        # in flight (PR #166 / X4 #134) and pending a licence answer.
-        "price": None,
-        "price_absent_reason": (
-            "no Nigerian soybean price source is ingested — AFEX is in flight "
-            "and pending a licence answer (X4 #134)"
-        ),
+        # Layer 36 (X4 #134 → PR #166, published 2026-11-05 by owner decision
+        # under the A18 stance). An EXCHANGE REFERENCE PRICE, not a settlement
+        # and not a trade: AFEX publishes one number per calendar day, weekends
+        # included, with no session and no volume behind it. The leg is the
+        # first Nigerian price in the stack; AFEX_PUBLISH_RAW=False withdraws
+        # it again (app/markets.py reads the flag so the page says why).
+        "price": {
+            "layer": "afex",
+            "table": "nigeria_spot_prices",
+            "date_column": "Date",
+            "key_column": "commodity",
+            "keys": ["Soybean (AFEX Nigeria)"],
+            "headline_key": "Soybean (AFEX Nigeria)",
+            "cadence": "daily",
+            "quote_kind": "exchange_reference",
+            "value_column": "price_ngn",
+            "unit": "home_per_mt",
+            "publish_gate": {
+                "flag": "AFEX_PUBLISH_RAW",
+                "absent_reason": (
+                    "the AFEX Nigeria reference price is ingested but withheld from "
+                    "publication (config.AFEX_PUBLISH_RAW is off — AFEX's terms forbid "
+                    "redistribution without written permission)"
+                ),
+            },
+        },
         "crush": None,
-        "crush_absent_reason": "no Nigerian price leg to build a margin from",
+        "crush_absent_reason": (
+            "AFEX publishes a bean reference only — no Nigerian meal or oil "
+            "price is ingested, so there is no margin to strike"
+        ),
         "basis": None,
-        "basis_absent_reason": "no Nigerian price leg to take a basis from",
+        "basis_absent_reason": (
+            "no Nigerian export or import assessment against a board is ingested; "
+            "the AFEX bean is a domestic reference, not a basis"
+        ),
         "weather_regions": [
             ("Nigeria Benue", "domestic crop"),
             ("Nigeria Kaduna", "domestic crop"),
         ],
         "psd_country": "Nigeria",
         "players_country": "NG",
+        # No ledger (see LEDGERS / LEDGER_ABSENT_REASONS); the AFEX leg prints
+        # on the headline ledger as a level and its move.
+        "headline_leg": "nigeria:afex",
     },
 }
 
@@ -3346,17 +3606,23 @@ LEDGER_LEGS = {
         "label": "Dalian No.2 (crush bean)",
         "trade_proof_column": "Volume",
     },
-    "india:mandi_mp": {
+    "india:ncdex_indore": {
         "market": "india",
         "block": "price",
-        "key": "Soybean (Mandi MP)",
-        "label": "India mandi — Madhya Pradesh",
+        "key": NCDEX_SPOT_SERIES,
+        "label": "NCDEX Indore spot (polled)",
     },
     "india:mandi_mh": {
         "market": "india",
         "block": "price",
         "key": "Soybean (Mandi MH)",
         "label": "India mandi — Maharashtra",
+    },
+    "nigeria:afex": {
+        "market": "nigeria",
+        "block": "price",
+        "key": "Soybean (AFEX Nigeria)",
+        "label": "AFEX Nigeria soybean (exchange reference)",
     },
     "south_africa:safex": {
         "market": "south_africa",
@@ -3464,7 +3730,7 @@ LEDGERS = {
     },
     "india": {
         "rule": "destination",
-        "legs": ["india:mandi_mp", "india:mandi_mh"],
+        "legs": ["india:ncdex_indore", "india:mandi_mh"],
         # Required by app/markets.py because this ledger names no foreign leg:
         # a destination ledger with no origin in it has to say why, or it reads
         # as a set someone forgot to finish.
@@ -3472,8 +3738,9 @@ LEDGERS = {
             "No origin qualifies. India bans GM soybean imports behind a tariff "
             "wall, so no foreign bean is connected to this one by trade and a "
             "counterpart row would invite an arbitrage that cannot be worked "
-            "(#206). What remains is two independent state medians — a real "
-            "check that catches one state's mandis being shut. CBOT appears on "
+            "(#206). What remains is two independent Indian measurements — NCDEX's "
+            "polled Indore spot and Maharashtra's mandi median — a real check "
+            "that catches one of them going wrong. CBOT appears on "
             "this page only in the basis block, labelled the policy spread it is."
         ),
     },
@@ -3498,6 +3765,10 @@ LEDGERS = {
     # Five rows of markets a country has no trade relationship with is worse
     # than nothing: it implies one.
     "europe": None,
+    # Layer 36 (2026-11-05) gave Nigeria a price leg but not a ledger: a
+    # one-leg ledger is a price block, not a ledger (app/markets.py refuses
+    # it), and no counterpart qualifies — see LEDGER_ABSENT_REASONS. The leg
+    # reaches the headline through MARKETS["nigeria"]["headline_leg"].
     "nigeria": None,
 }
 
@@ -3509,8 +3780,11 @@ LEDGER_ABSENT_REASONS = {
         "was verified dead on 2026-08-08"
     ),
     "nigeria": (
-        "no Nigerian price leg of any kind is ingested, and rows of markets "
-        "Nigeria has no trade relationship with would imply one (M12 #161)"
+        "no counterpart qualifies: Nigeria's soybean trade is domestic and "
+        "regional, with no imported bean connected to the AFEX reference by "
+        "trade, so a counterpart row would invite an arbitrage no one can work "
+        "(M12 #161), and a one-leg ledger is a price block, not a ledger. The "
+        "AFEX leg is on the headline ledger as a level and its move."
     ),
 }
 
@@ -3978,13 +4252,15 @@ LEG_PLACES: dict[str, tuple[str, ...]] = {
     "brazil:paranagua":   ("P-PNG",),
     "argentina:fob":      ("P-UPR",),
     "dalian:board":       ("P-NCN", "P-PNG", "P-NOLA"),
-    "india:mandi_mp":     ("P-IDR",),
+    "india:ncdex_indore": ("P-IDR",),
     "india:mandi_mh":     (),
+    "nigeria:afex":       (),
     "south_africa:safex": ("P-RFT", "P-DUR"),
 }
 LEG_PLACES_ABSENT_REASONS: dict[str, str] = {
     "brazil:cepea": "an in-state wholesale indicator, not a port price — it has no port to flag (K1 §3)",
     "india:mandi_mh": "a state-wide mandi median with no stated hub or port (K1 §3)",
+    "nigeria:afex": "an exchange reference price with no stated delivery hub or port (K1 §3)",
 }
 
 # Geometry and severity (spec §5.1), read by the hazard assessment.

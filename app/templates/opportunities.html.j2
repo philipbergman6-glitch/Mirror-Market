@@ -189,7 +189,7 @@
            data-status="{{ r.status }}">
     <div class="opp-head">
       <div>
-        <div class="opp-title">{{ r.rule_label }} — {{ r.lane }}</div>
+        <div class="opp-title">{{ r.rule_label }}{% if r.lane %} — {{ r.lane }}{% endif %}</div>
         <div class="opp-id">{{ r.opportunity_id }} · first seen {{ r.first_detected_on }} · expires {{ r.expires_on }}</div>
       </div>
       <div class="score">
@@ -232,7 +232,7 @@
   {% for r in s.data.cards %}
   <div class="card" id="detail-{{ r.opportunity_id }}">
     <h3>{{ r.opportunity_id }} — {{ r.rule_label }}</h3>
-    <div class="caption">{{ r.lane }} · {{ r.ladder_label }} · {{ r.ladder_meaning }}</div>
+    <div class="caption">{% if r.lane %}{{ r.lane }} · {% endif %}{{ r.ladder_label }} · {{ r.ladder_meaning }}</div>
 
     <div class="sub">Why now</div>
     <div style="font-size:13px">{{ r.why_now }}</div>
@@ -262,9 +262,9 @@
 
     {% if r.dislocation %}
     <div class="sub">Dislocation</div>
-    <div class="kv"><span class="k">{{ r.dislocation.label }}</span><span class="v">{{ '%.2f'|format(r.dislocation.value) }} {{ r.dislocation.unit }}</span></div>
+    <div class="kv"><span class="k">{{ r.dislocation.label }}</span><span class="v">{{ '%.2f'|format(r.dislocation.value) }} {{ r.dislocation.unit_label }}</span></div>
     {% if r.dislocation.baseline is not none %}
-    <div class="kv"><span class="k">{{ r.dislocation.baseline_label }}</span><span class="v">{{ '%.2f'|format(r.dislocation.baseline) }} {{ r.dislocation.unit }}</span></div>
+    <div class="kv"><span class="k">{{ r.dislocation.baseline_label }}</span><span class="v">{{ '%.2f'|format(r.dislocation.baseline) }} {{ r.dislocation.unit_label }}</span></div>
     {% endif %}
     {% if r.dislocation.z_score is not none %}
     <div class="kv"><span class="k">Standard deviations from that baseline</span><span class="v">{{ '%.2f'|format(r.dislocation.z_score) }}</span></div>
@@ -279,7 +279,7 @@
         {% for e in r.lineage %}
         <tr>
           <td>{{ e.label }}{% if e.note %}<div class="caption" style="margin:0">{{ e.note }}</div>{% endif %}</td>
-          <td class="num">{% if e.value is not none %}{{ '%.2f'|format(e.value) }} {{ e.unit }}{% else %}—{% endif %}</td>
+          <td class="num">{% if e.value is not none %}{{ '%.2f'|format(e.value) }} {{ e.unit_label }}{% else %}—{% endif %}</td>
           <td>{{ e.observed_on }}</td>
           <td>{{ e.age_days }}d / {{ e.budget_days }}d</td>
           <td><span class="kind">{{ (e.quote_kind or 'n/a')|replace('_',' ') }}</span> · {{ e.confidence }}</td>
@@ -432,7 +432,7 @@
   <div class="sub">Expired — detected, but the evidence is past its budget</div>
   {% for r in s.data.expired %}
   <div class="kv">
-    <span class="k">{{ r.opportunity_id }} · {{ r.rule_label }} · {{ r.lane }}</span>
+    <span class="k">{{ r.opportunity_id }} · {{ r.rule_label }}{% if r.lane %} · {{ r.lane }}{% endif %}</span>
     <span class="v">expired {{ r.expires_on }}</span>
   </div>
   {% endfor %}
@@ -492,7 +492,7 @@
   {% for r in s.data.records %}
   <div class="card">
     <h3>{{ r.opportunity_id }} — {{ r.workflow.status }}</h3>
-    <div class="caption">{{ r.rule_label }} · {{ r.lane }} · owner {{ r.workflow.owner or 'unassigned' }}</div>
+    <div class="caption">{{ r.rule_label }}{% if r.lane %} · {{ r.lane }}{% endif %} · owner {{ r.workflow.owner or 'unassigned' }}</div>
     <div class="kv"><span class="k">Next action</span><span class="v">{{ r.workflow.next_action or '—' }}{% if r.workflow.next_action_due %} (due {{ r.workflow.next_action_due }}){% endif %}</span></div>
     <div class="kv"><span class="k">Contacted</span><span class="v">{{ r.workflow.contacted_on or '—' }}</span></div>
     <div class="kv"><span class="k">Counterparty</span><span class="v">{{ r.workflow.counterparty_named or '—' }}</span></div>

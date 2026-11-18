@@ -210,7 +210,7 @@ def test_a_basis_with_no_named_contract_still_strikes_on_the_front_month(conn, r
     leg names no contract; it keeps the reference board, unlabelled by one."""
     conn.execute(schema._CREATE_INDIA_DOMESTIC)
     conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
-                 "VALUES (?,?,?,?)", (D0.isoformat(), "Soybean (Mandi MP)", 67250.0, "INR/MT"))
+                 "VALUES (?,?,?,?)", (D0.isoformat(), "Soybean (NCDEX Indore spot)", 67250.0, "INR/MT"))
     conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
                  ("INR/USD", D0.isoformat(), 0.0105))
     conn.commit()

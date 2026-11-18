@@ -58,6 +58,11 @@ log = logging.getLogger(__name__)
 # hand-written, and unchanged by the tier.
 MARKET_URL_TEMPLATE = "markets/{slug}.html"
 
+# The currency every price on the site displays in (all prices are USD/MT). A
+# market already quoting it needs no FX pair; any other market without one
+# must say why (`currency_absent_reason`, enforced at load).
+SITE_NUMERAIRE = "USD"
+
 TIER_PAGE = "page"
 TIER_BRIEF = "brief"
 TIER_STUB = "stub"
@@ -107,6 +112,8 @@ CRUSH_YIELD_SETS = {
 #   administered       official minimum export value (Argentina, Ley 21.453)
 #   weekly_assessment  weekly physical assessment (EC Oilseeds Observatory)
 #   weekly_ask         weekly processor ask range (AMS 3511, Layer 30)
+#   exchange_reference an exchange's daily reference price, no session or
+#                      settlement behind it (AFEX Nigeria, Layer 36)
 QUOTE_KINDS = frozenset(QUOTE_KIND_PRICE_TYPE)
 
 CADENCES = frozenset({"daily", "weekly", "monthly"})
@@ -480,6 +487,14 @@ class Market:
     # Wired in a second pass by `load_markets()` — a leg names another market,
     # so every market has to exist before any ledger can be resolved.
     ledger: Ledger | None = None
+    # A ledger-less market's own daily leg, for the headline ledger only
+    # (Layer 36, 2026-11-05): a one-leg ledger is a price block, not a ledger,
+    # but the headline's rows are markets — a level and its move, no spread —
+    # so a market with a daily leg and no counterpart set still prints there.
+    # Declared as a leg id in config.MARKETS[slug]["headline_leg"], resolved
+    # in the ledger pass; None means the headline row is a placeholder.
+    headline_leg_id: str | None = None
+    headline_leg: LedgerLeg | None = None
 
     @property
     def url(self) -> str:
@@ -782,10 +797,36 @@ def _market(slug: str, raw: dict) -> Market:
         raise ValueError(f"market {slug!r} missing key(s): {sorted(missing)}")
 
     reasons: dict[str, str] = {}
-    for block in ("price", "crush", "basis", "weather", "flows"):
+    for block in ("price", "crush", "basis", "weather", "flows", "currency"):
         reason = raw.get(f"{block}_absent_reason")
         if reason:
             reasons[block] = reason
+
+    # A block behind a publish gate (`"publish_gate": {"flag": <config name>,
+    # "absent_reason": ...}`) is withdrawn when its flag is False: the
+    # descriptor becomes None and the reason is what the page says. The gate
+    # is a descriptor field, not a slug test, so a licence flip is one config
+    # edit and no builder learns a market's name (invariant 5).
+    raw = dict(raw)
+    for block in ("price", "crush", "basis", "flows"):
+        gate = (raw.get(block) or {}).get("publish_gate") if isinstance(raw.get(block), dict) else None
+        if gate is None:
+            continue
+        missing_gate = {"flag", "absent_reason"} - set(gate)
+        if missing_gate:
+            raise ValueError(
+                f"market {slug!r} {block} publish_gate missing {sorted(missing_gate)}"
+            )
+        if not hasattr(config, gate["flag"]):
+            raise ValueError(
+                f"market {slug!r} {block} publish_gate names config.{gate['flag']}, which does not exist"
+            )
+        block_raw = {k: v for k, v in raw[block].items() if k != "publish_gate"}
+        if getattr(config, gate["flag"]):
+            raw[block] = block_raw
+        else:
+            raw[block] = None
+            reasons[block] = gate["absent_reason"]
 
     # A block that is None must say why, or the page renders a blank where
     # M1 constraint 2 requires a reason. Caught at load, not at render.
@@ -797,6 +838,18 @@ def _market(slug: str, raw: dict) -> Market:
             )
     if not raw["weather_regions"] and "weather" not in reasons:
         raise ValueError(f"market {slug!r} has no weather_regions and no weather_absent_reason")
+    # No pair is only self-explanatory for a market already in the numeraire;
+    # anywhere else block 05 must say why there is no rate, rather than
+    # calling the home currency the site's numeraire (#230 sibling).
+    if (
+        not raw.get("currency_pair")
+        and raw["home_currency"] != SITE_NUMERAIRE
+        and "currency" not in reasons
+    ):
+        raise ValueError(
+            f"market {slug!r} quotes in {raw['home_currency']} with no currency_pair and no "
+            f"currency_absent_reason — only a {SITE_NUMERAIRE} market needs no rate"
+        )
 
     weather_roles = _weather_roles(slug, raw["weather_regions"])
     unknown = set(weather_roles) - set(config.GROWING_REGIONS)
@@ -829,6 +882,7 @@ def _market(slug: str, raw: dict) -> Market:
         home_currency=raw["home_currency"],
         currency_pair=raw.get("currency_pair"),
         price=_source(raw["price"], slug=slug, block="price") if raw.get("price") else None,
+        headline_leg_id=raw.get("headline_leg"),
         crush=_crush(raw["crush"], slug=slug) if raw.get("crush") else None,
         basis=_source(raw["basis"], slug=slug, block="basis") if raw.get("basis") else None,
         flows=_source(raw["flows"], slug=slug, block="flows") if raw.get("flows") else None,
@@ -1015,8 +1069,31 @@ def _wire_ledgers(markets: dict[str, Market]) -> dict[str, Market]:
                     f"market {slug!r} has no ledger and no LEDGER_ABSENT_REASONS entry — "
                     "every empty state must name its reason (M1 #143 constraint 2)"
                 )
-            wired[slug] = replace(market, absent_reasons={**market.absent_reasons, "ledger": reason})
+            headline_leg = None
+            if market.headline_leg_id is not None:
+                headline_leg = _ledger_leg(market.headline_leg_id, markets)
+                if headline_leg.market.slug != slug:
+                    raise ValueError(
+                        f"market {slug!r} headline_leg {market.headline_leg_id!r} belongs to "
+                        f"{headline_leg.market.slug!r} — the headline row is the market's own leg"
+                    )
+            elif market.price is not None and market.price.cadence == "daily":
+                raise ValueError(
+                    f"market {slug!r} has a daily price leg and no ledger but declares no "
+                    "headline_leg — the headline would call a daily series out of cadence, "
+                    "which is a false statement about its rhythm"
+                )
+            wired[slug] = replace(
+                market,
+                absent_reasons={**market.absent_reasons, "ledger": reason},
+                headline_leg=headline_leg,
+            )
             continue
+        if market.headline_leg_id is not None:
+            raise ValueError(
+                f"market {slug!r} declares both a ledger and a headline_leg — the ledger's "
+                "own leg is already the headline row"
+            )
         wired[slug] = replace(market, ledger=_ledger(slug, raw, markets))
     return wired
 
@@ -1323,8 +1400,13 @@ def _ingest_status(conn, layer: str) -> str | None:
     }[row[0]]
     last_success = row[1]
     if last_success:
-        return f"our {layer} ingest {state}; last good run {str(last_success)[:10]}"
-    return f"our {layer} ingest {state}; no recorded successful run"
+        verdict = f"our {layer} ingest {state}; last good run {str(last_success)[:10]}"
+    else:
+        verdict = f"our {layer} ingest {state}; no recorded successful run"
+    # The why, where the source has a documented standing gate — only ever
+    # beside an adverse verdict (see config.LAYER_STANDING_GATES).
+    gate = config.LAYER_STANDING_GATES.get(layer)
+    return f"{verdict} — {gate}" if gate else verdict
 
 
 def _is_current(conn, source: Source | None, today: date) -> tuple[bool, str]:

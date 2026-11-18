@@ -241,7 +241,7 @@ def test_francine_legs():
     assert legs["argentina:fob"].state == "not_covered"
     assert legs["south_africa:safex"].state == "clear"
     assert legs["south_africa:safex"].partial is False
-    for leg_id in ("brazil:cepea", "india:mandi_mp", "india:mandi_mh"):
+    for leg_id in ("brazil:cepea", "india:ncdex_indore", "india:mandi_mh"):
         assert legs[leg_id] is None, leg_id
 
 

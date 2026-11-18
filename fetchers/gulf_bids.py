@@ -147,6 +147,28 @@ def _is_bid_row(line: str) -> bool:
     return len(fields) > 1 and fields[1] in _SALE_TYPES
 
 
+def _is_unquoted_row(line: str) -> bool:
+    """Did AMS list this delivery slot without taking a bid on it?
+
+    Such a row prints only location, sale type, freight and delivery —
+    every quote cell (basis, price, average, both changes, year ago) is
+    blank. It first appeared on 2026-11-16, the session after CBOT
+    November soybeans expired: the soybean Current and Nov² slots came
+    back empty. Nothing was observed, so nothing is stored — the PDF twin
+    of ``_api_is_unquoted``. A row that fills *some* quote cells has more
+    than four fields and still goes to ``_parse_bid_row``, which raises.
+    """
+    fields = _FIELD_SPLIT_RE.split(line.strip())
+    if len(fields) != 4 or fields[1] not in _SALE_TYPES:
+        return False
+    freight = fields[2]
+    return not (
+        _BASIS_RE.match(freight)
+        or _PRICE_RE.match(freight)
+        or _CHANGE_RE.match(freight)
+    )
+
+
 def _parse_bid_row(line: str) -> dict[str, object]:
     """Parse one bid row into typed fields, or raise ``ScraperShapeError``.
 
@@ -266,11 +288,15 @@ def _parse_gulf_bids(text: str, today: date | None = None) -> pd.DataFrame:
     positions.sort()
 
     rows: list[dict[str, object]] = []
+    unquoted: list[str] = []
     for idx, (start, commodity) in enumerate(positions):
         end = positions[idx + 1][0] if idx + 1 < len(positions) else len(text)
         section = text[start:end]
         for line in section.splitlines():
             if not _is_bid_row(line):
+                continue
+            if _is_unquoted_row(line):
+                unquoted.append(f"{commodity} {_FIELD_SPLIT_RE.split(line.strip())[-1]}")
                 continue
             rows.append({
                 "report_date": report_date,
@@ -278,6 +304,8 @@ def _parse_gulf_bids(text: str, today: date | None = None) -> pd.DataFrame:
                 **_parse_bid_row(line),
             })
 
+    if unquoted:
+        logger.info("AMS 3147: unquoted slot(s), not stored: %s", ", ".join(unquoted))
     if not any(r["commodity"] == "Soybeans" for r in rows):
         raise ScraperShapeError(
             "AMS 3147: soybean section present but no bid rows matched — "

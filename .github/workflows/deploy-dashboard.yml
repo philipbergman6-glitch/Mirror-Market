@@ -70,8 +70,9 @@ permissions:
 # the shared data.gov.in sample-key throttle and darken Layer 16 with HTTP 429
 # (#212) — and each raced the others to push data/history back to main, which
 # is how #218's deploy died. A superseded push run is worthless by
-# construction: the run behind it regenerates the whole dashboard from an
-# empty DB, so nothing it would have published is lost.
+# construction: the run behind it regenerates the whole dashboard from the
+# same durable seed and the committed CSVs, so nothing it would have
+# published is lost.
 #
 # Scheduled, manual and retry (`repository_dispatch`) runs are never cancelled
 # *by* a later run of their own kind: the daily run is the one that must land,
@@ -175,6 +176,30 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # The durable seed (pipeline/db_snapshot.py): the database of the last
+      # edition that passed the promotion contract, kept in Cloudflare R2 so
+      # it outlives the runner and the Actions cache. The history tables are
+      # emptied on restore — data/history/*.csv stays their authority, and
+      # main.py's import_history() refills them exactly as on an empty DB —
+      # so what the seed adds is the self-healing tables a bare runner had to
+      # rebuild from nothing. Unconfigured or first run: annotated, and the
+      # run is the CSV-only rebuild it always was. A configured restore that
+      # fails places nothing (checksummed, integrity-checked, atomic) and is
+      # flagged by the next step; it never blocks the day's edition.
+      - name: Restore the durable DB seed
+        id: db_seed
+        continue-on-error: true
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/db_snapshot.py pull
+
+      - name: Flag a failed seed restore
+        if: ${{ steps.db_seed.outcome == 'failure' }}
+        run: echo "::error title=DB seed not restored::This run rebuilds from data/history CSVs and re-fetches every layer. See the Restore the durable DB seed step."
+
       # The source reliability record (B34 #520) grades a layer only from the
       # data_freshness rows written after this instant: the runner's DB is
       # seeded from the committed CSV, so an older row is a previous run's.
@@ -192,7 +217,16 @@ jobs:
           # records as skipped and the CBOT cash-leg panel withholds with that
           # reason — degraded, never broken.
           MARS_API_KEY: ${{ secrets.MARS_API_KEY }}
-        run: python main.py
+          # Set only when the restore placed a seed inside
+          # config.SEED_SHORT_WINDOW_MAX_AGE_DAYS; empty otherwise, and empty
+          # keeps main.py on its full-history default.
+          SEED_HISTORY_PERIOD: ${{ steps.db_seed.outputs.history_period }}
+        run: |
+          ARGS=()
+          if [[ -n "$SEED_HISTORY_PERIOD" ]]; then
+            ARGS+=(--history-period "$SEED_HISTORY_PERIOD")
+          fi
+          python main.py "${ARGS[@]}"
 
       # Layer failures must be loud, not buried in logs: open/update a
       # `ci-alert` issue on hard failures, close it on the next green run.
@@ -261,7 +295,8 @@ jobs:
       # inspections, Gulf bids, briefings) have no upstream history, and
       # data_freshness preserves last-known-good run state. The committed CSVs
       # under data/history/ are their persistence layer. main.py seeds the
-      # empty runner DB from them at start and re-exports at end.
+      # runner DB's history tables from them at start (the R2 seed arrives
+      # with those tables emptied) and re-exports at end.
       # [skip ci] prevents the data commit from retriggering workflows.
       # !cancelled() because this step now runs after dashboard generation: a
       # failed dashboard build must not also cost us the day's data.
@@ -335,6 +370,32 @@ jobs:
           path: data/storage/mirror_market.db
           key: mirror-market-diagnostic-db-${{ github.run_id }}
 
+      # The paste-in edition for the one trial participant, whose chat client
+      # cannot speak MCP (#580, deferred 2026-11-06). Same eleven tool
+      # envelopes as the hosted edition, written as files; the owner
+      # downloads this artifact and forwards the Markdown. Public edition
+      # only (the tools refuse client records), never under docs/. Built
+      # from this run's DB, before the smoke decides whether the site is
+      # promoted: the artifact is a desk file, not a published page, and
+      # carries its own freshness rows. fastmcp is installed here, after the
+      # pipeline and site build, so the pipeline never depends on it.
+      - name: Build the paste-in trial edition
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        run: |
+          pip install -r requirements-mcp.txt
+          python scripts/trial_package.py --out "$RUNNER_TEMP/trial-package" --built-at "$PIPELINE_STARTED_AT"
+
+      - name: Upload the paste-in trial edition
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: trial-package
+          path: ${{ runner.temp }}/trial-package/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Install Chrome for viewport smoke checks
         if: ${{ !cancelled() && steps.generate_site.outcome == 'success' }}
         uses: browser-actions/setup-chrome@v1
@@ -352,28 +413,35 @@ jobs:
         continue-on-error: true
         run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
 
-      # The *verified seed* for the fast refresh (#453). refresh-prices.yml
-      # fetches three layers and reads the other twenty-six from whatever the
-      # database already holds. On a fresh runner that is only what
-      # data/history/*.csv carries, which is the snapshot-only tables and
-      # nothing else — so without a seed a fast refresh would render a site
-      # missing PSD, weather, COT and crop progress entirely. That candidate
-      # is caught and refused by the regression gate either way; the seed is
-      # what makes the fast path *useful* rather than merely safe.
+      # The *verified seed* (#453), kept in R2: a dated archive
+      # (daily/YYYY-MM-DD/run-<id>.db.gz, never overwritten) and then
+      # verified/latest.db.gz, which the next daily build and the next fast
+      # refresh both restore. refresh-prices.yml fetches three layers and
+      # reads the other twenty-six from whatever the database already holds,
+      # so without a seed a fast refresh would render a site missing PSD,
+      # weather, COT and crop progress — refused by its regression gate
+      # either way; the seed is what makes the fast path *useful* rather
+      # than merely safe. (Until this moved to R2 it was an Actions cache
+      # entry, mirror-market-db-verified-<run_id>; nothing reads those now.)
       #
       # Written only when the candidate passed the promotion contract, under
       # the same condition that admits the Pages upload below: the seed is
       # the database of an edition this run would publish, never of one it
-      # refused. A failed smoke leaves the previous seed as the newest entry.
-      # Keyed by run id with a prefix restore-key, because cache entries are
-      # immutable: a fixed key would pin the first day's database forever.
-      - name: Cache the verified seed for the fast refresh
+      # refused. A failed smoke leaves the previous seed as `latest`.
+      - name: Save the verified DB to R2
+        id: db_push
         if: ${{ github.ref == 'refs/heads/main' && steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: data/storage/mirror_market.db
-          key: mirror-market-db-verified-${{ github.run_id }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/db_snapshot.py push --run-id "${{ github.run_id }}" --built-at "$PIPELINE_STARTED_AT"
+
+      - name: Flag a failed DB snapshot
+        if: ${{ steps.db_push.outcome == 'failure' }}
+        run: echo "::error title=DB snapshot not saved::This run's verified database is not in R2; the next daily build starts from the previous seed. See the Save the verified DB to R2 step."
 
       - name: Upload Pages artifact
         if: ${{ steps.generate_site.outcome == 'success' && steps.smoke_candidate.outcome == 'success' }}

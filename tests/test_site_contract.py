@@ -263,8 +263,8 @@ def test_india_basis_is_labelled_a_policy_spread():
     assert india.basis is not None
     assert india.basis.arbitrage == "policy_blocked"
     assert "policy spread" in india.basis.label.lower()
-    # Struck on the MP median alone — the price block's own headline key.
-    assert india.basis.keys == ("Soybean (Mandi MP)",)
+    # Struck on the Indore spot alone — the price block's own headline key.
+    assert india.basis.keys == ("Soybean (NCDEX Indore spot)",)
 
 
 def test_unknown_quote_kind_fails_the_build(monkeypatch: pytest.MonkeyPatch):
@@ -335,7 +335,7 @@ def test_daily_leg_with_too_little_around_it_is_a_brief(site_db):
 
 
 def test_no_daily_leg_with_two_blocks_is_a_brief(site_db):
-    """Nigeria has no price leg at all; weather alone is one block, not two."""
+    """Only weather is seeded (no AFEX rows), so weather alone is one block, not two."""
     _seed_prices(site_db, ["Nigeria Benue", "Nigeria Kaduna"], table="weather", key_col="region")
     tiers = markets_mod.compute_tiers()
     assert tiers["nigeria"].tier == "stub"
@@ -372,7 +372,7 @@ def _seed_india(conn, *, days_ago: int = 0) -> None:
     """India's whole stack: one mandi leg (which is also its basis) + weather."""
     _seed_prices(
         conn,
-        ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+        ["Soybean (NCDEX Indore spot)", "Soybean (Mandi MH)"],
         days_ago=days_ago,
         table="india_domestic_prices",
     )
@@ -568,7 +568,10 @@ def test_stub_page_lists_a_reason_per_block(rendered):
     out, _ = rendered
     html = (out / "markets" / "nigeria.html").read_text()
     assert "has no page yet" in html
-    assert "no Nigerian soybean price source is ingested" in html
+    # Since Layer 36 (AFEX) Nigeria has a price source; with no rows seeded the
+    # stub says the leg is empty, not that the source does not exist.
+    assert "nigeria_spot_prices holds no daily observation" in html
+    assert "no Nigerian meal or oil price is ingested" in html
 
 
 def test_market_nav_lists_every_market_on_every_page(rendered):
@@ -694,7 +697,7 @@ def test_a_market_with_no_source_is_not_blamed_on_our_ingest(site_db):
 def test_a_healthy_ingest_leaves_the_note_alone(site_db):
     _seed_prices(
         site_db,
-        ["Soybean (Mandi MP)", "Soybean (Mandi MH)"],
+        ["Soybean (NCDEX Indore spot)", "Soybean (Mandi MH)"],
         table="india_domestic_prices",
     )
     _seed_freshness(site_db, "india_domestic", "success", date.today().isoformat())

@@ -20,6 +20,10 @@ websockets~=16.1.1
 # Layer 34 (NOAA NHC) publishes its forecast track and wind radii as zipped
 # ESRI shapefiles. Pure Python, no compiled wheel.
 pyshp~=3.1.6
+# The durable DB seed (pipeline/db_snapshot.py) speaks to Cloudflare R2 over
+# its S3-compatible API. Imported lazily — only the deploy workflow's
+# seed/snapshot steps use it, and only when the R2 secrets are set.
+boto3~=1.43.0
 # Loads the local .env before config.py binds its key constants. Inert in CI,
 # which sets its keys from GitHub secrets and ships no .env.
 python-dotenv~=1.2.3

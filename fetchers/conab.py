@@ -27,7 +27,7 @@ from email.utils import parsedate_to_datetime
 import pandas as pd
 import requests
 
-from config import CONAB_URL, MAX_RETRIES, REQUEST_TIMEOUT
+from config import CONAB_HEADERS, CONAB_URL, MAX_RETRIES, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
 from pipeline.results import ScraperShapeError
 
@@ -234,7 +234,7 @@ def fetch_conab_estimates() -> pd.DataFrame:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info("Fetching CONAB historical series (attempt %d) ...", attempt)
-            resp = requests.get(CONAB_URL, timeout=REQUEST_TIMEOUT)
+            resp = requests.get(CONAB_URL, headers=CONAB_HEADERS, timeout=REQUEST_TIMEOUT)
 
             if resp.status_code != 200:
                 logger.warning("HTTP %d for CONAB", resp.status_code)
