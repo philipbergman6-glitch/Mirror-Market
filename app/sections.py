@@ -485,6 +485,23 @@ def rfs_section(data: dict | None) -> dict:
 # ---------------------------------------------------------------------------
 # 07 Seasonal
 # ---------------------------------------------------------------------------
+def _seasonal_withheld_reason(has_profile: bool, has_stats: bool) -> str:
+    """Why a seasonal leg shows less than a full profile, or ``""``."""
+    from config import SEASONAL_MIN_YEARS_PER_MONTH as years
+
+    if not has_profile:
+        return (
+            f"Withheld: no calendar month has {years} years of stored closes yet. "
+            "A shorter window confounds trend with season, so no seasonal norm is drawn."
+        )
+    if not has_stats:
+        return (
+            f"This calendar month has under {years} years of stored closes — no norm "
+            "to compare today's price against; the months that clear the bar are charted."
+        )
+    return ""
+
+
 def seasonal_section(data: dict | None) -> dict:
     from app.charts import build_seasonal_chart
 
@@ -501,6 +518,7 @@ def seasonal_section(data: dict | None) -> dict:
         unit = leg.get("unit", "USD/MT")
         detrended = vs_seasonal.get("detrended_delta_pct")
         deviation = vs_seasonal.get("deviation_pct")
+        has_profile = monthly is not None and not monthly.empty
         legs.append({
             "name": name,
             "unit": unit,
@@ -522,7 +540,10 @@ def seasonal_section(data: dict | None) -> dict:
                     build_seasonal_chart(
                         clip(monthly, CHART_WINDOW_MONTHLY_ROWS), vs_seasonal, name, unit),
                 f"seasonal {name}",
-            ) if monthly is not None and not monthly.empty else "",
+            ) if has_profile else "",
+            # A header with nothing beneath it is an unexplained gap: the
+            # leg says which part is withheld and why (invariant 2).
+            "withheld_reason": _seasonal_withheld_reason(has_profile, bool(vs_seasonal)),
         })
 
     if not legs:
@@ -592,8 +613,8 @@ def _country_notes(name: str, info: dict) -> list[str]:
     """
     notes = []
     if name == "India" and not info.get("india_domestic"):
-        notes.append("Mandi domestic price (Agmarknet): no completed day stored — "
-                     "the feed failed this run")
+        notes.append("India domestic price (NCDEX Indore spot · MSAMB): no completed "
+                     "day stored — the feed failed this run")
     sea = info.get("india_sea")
     if sea:
         # A parity group with both legs withheld has no card to carry its
@@ -699,34 +720,34 @@ def _crop_group(crop: dict | None) -> dict | None:
 def _mandi_groups(india: dict) -> list[dict | None]:
     if not india:
         return []
-    mandi_date = india.get("soybean_mandi_date")
+    spot_date = india.get("soybean_spot_date")
     basis_date = india.get("basis_date")
     premium = india.get("bean_premium_usd")
-    vs_msp = india.get("mandi_vs_msp_pct")
+    vs_msp = india.get("spot_vs_msp_pct")
     msp = india.get("msp_inr")
     arrivals_chg = india.get("arrivals_7d_chg_pct")
     return [
-        _group("Mandi domestic price (Agmarknet, MP median)", [
-            _card("Soybean", india.get("soybean_mandi_inr"), prefix="₹",
-                  caption=f"INR/MT{f' · {mandi_date}' if mandi_date else ''}"),
-            _card("Soybean (USD)", india.get("soybean_mandi_usd"), places=1, prefix="$",
-                  caption=f"USD/MT{f' · {basis_date or mandi_date}' if (basis_date or mandi_date) else ''}"),
+        _group("Indore spot price (NCDEX, polled)", [
+            _card("Soybean", india.get("soybean_spot_inr"), prefix="₹",
+                  caption=f"INR/MT{f' · {spot_date}' if spot_date else ''}"),
+            _card("Soybean (USD)", india.get("soybean_spot_usd"), places=1, prefix="$",
+                  caption=f"USD/MT{f' · {basis_date or spot_date}' if (basis_date or spot_date) else ''}"),
             _card("vs CBOT beans", premium, places=1, prefix="$",
                   value_class=_direction(premium),
                   caption=("premium" if (premium or 0) > 0 else "discount")
                   + (f" · as of {basis_date}" if basis_date else "")),
         ]),
-        _group("Mandi context (Agmarknet, MP)", [
+        _group("Context (Indore spot · Maharashtra mandis)", [
             # A reference, not a quote: the floor the state defends only
             # through procurement or a price-deficit payment.
-            _card("vs MSP", vs_msp, places=1, suffix="%",
+            _card("Indore spot vs MSP", vs_msp, places=1, suffix="%",
                   value_class=_direction(vs_msp),
                   caption=(f"MSP ₹{msp:,.0f}/MT · {india.get('msp_season', '')}"
                            if msp is not None else "")),
-            _card("Arrivals, 7 days", india.get("arrivals_7d_mt"), suffix=" MT",
+            _card("MH arrivals, 7 days", india.get("arrivals_7d_mt"), suffix=" MT",
                   delta=(f"{arrivals_chg:+.1f}% vs prior 7d"
                          if arrivals_chg is not None else ""),
-                  caption=("mandis reporting to Agmarknet · "
+                  caption=("Maharashtra mandis reporting to MSAMB · "
                            f"to {india.get('arrivals_7d_end', '')}")),
         ]),
     ]

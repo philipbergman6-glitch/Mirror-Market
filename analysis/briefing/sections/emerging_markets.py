@@ -8,29 +8,29 @@ the bottom of the block.
 
 
 def _format_india_domestic(em_countries: dict) -> str:
-    """Inline India mandi domestic bean price + CBOT premium block.
+    """Inline India domestic bean price + CBOT premium block.
 
-    Bean-only since the 2026-08 Layer 16 rebuild — the Agmarknet mandi
-    source has no meal leg, so the old NCDEX crush margin is gone.
+    Bean-only. Headline = NCDEX's polled Indore spot; Maharashtra = MSAMB's
+    mandi median (Layer 16 since 2026-11-17; Agmarknet is captcha-gated, #449).
     """
     india = em_countries.get("India", {})
     dom = india.get("india_domestic", {})
     if not dom:
         return ""
 
-    lines = ["INDIA — Mandi Domestic Price (Agmarknet, state medians):"]
+    lines = ["INDIA — Domestic Price (NCDEX Indore spot · MSAMB Maharashtra mandis):"]
 
-    soy_inr = dom.get("soybean_mandi_inr")
+    soy_inr = dom.get("soybean_spot_inr")
     if soy_inr:
-        soy_usd = dom.get("soybean_mandi_usd")
+        soy_usd = dom.get("soybean_spot_usd")
         usd_str = f" / ${soy_usd:,.1f}/MT" if soy_usd else ""
-        lines.append(f"  Soybean (MP, Indore hub): ₹{soy_inr:,.0f}/MT{usd_str}")
+        lines.append(f"  Soybean (NCDEX Indore spot): ₹{soy_inr:,.0f}/MT{usd_str}")
 
     mh_inr = dom.get("soybean_mandi_mh_inr")
     if mh_inr:
         mh_usd = dom.get("soybean_mandi_mh_usd")
         usd_str = f" / ${mh_usd:,.1f}/MT" if mh_usd else ""
-        lines.append(f"  Soybean (MH, #1 state):   ₹{mh_inr:,.0f}/MT{usd_str}")
+        lines.append(f"  Soybean (MH mandi median):   ₹{mh_inr:,.0f}/MT{usd_str}")
 
     cbot_usd = dom.get("cbot_bean_usd")
     if cbot_usd is not None:
@@ -50,13 +50,13 @@ def _format_india_domestic(em_countries: dict) -> str:
 
     weekly = dom.get("weekly_chg_pct")
     if weekly is not None:
-        lines.append(f"  Weekly Chg (Mandi Soybean): {weekly:+.1f}%")
+        lines.append(f"  Weekly Chg (Indore spot): {weekly:+.1f}%")
 
-    vs_msp = dom.get("mandi_vs_msp_pct")
+    vs_msp = dom.get("spot_vs_msp_pct")
     if vs_msp is not None:
         lines.append(
             f"  MSP {dom.get('msp_season', '')}: ₹{dom['msp_inr']:,.0f}/MT — "
-            f"MP median {vs_msp:+.1f}% vs MSP"
+            f"Indore spot {vs_msp:+.1f}% vs MSP"
         )
 
     arrivals = dom.get("arrivals_7d_mt")
@@ -64,7 +64,7 @@ def _format_india_domestic(em_countries: dict) -> str:
         chg = dom.get("arrivals_7d_chg_pct")
         chg_str = f" ({chg:+.1f}% vs prior 7d)" if chg is not None else ""
         lines.append(
-            f"  MP arrivals, 7d to {dom.get('arrivals_7d_end')}: "
+            f"  MH arrivals (MSAMB), 7d to {dom.get('arrivals_7d_end')}: "
             f"{arrivals:,.0f} MT{chg_str}"
         )
 
@@ -287,12 +287,12 @@ def format() -> str:  # noqa: A001
 
         dom_india = info.get("india_domestic", {})
         if dom_india:
-            soy_inr = dom_india.get("soybean_mandi_inr")
+            soy_inr = dom_india.get("soybean_spot_inr")
             premium = dom_india.get("bean_premium_usd")
             if soy_inr:
-                soy_usd = dom_india.get("soybean_mandi_usd")
+                soy_usd = dom_india.get("soybean_spot_usd")
                 lines.append(
-                    f"    Mandi Soybean (MP): ₹{soy_inr:,.0f}/MT"
+                    f"    Indore spot Soybean (NCDEX): ₹{soy_inr:,.0f}/MT"
                     + (f" / ${soy_usd:,.1f}/MT" if soy_usd else "")
                 )
             if premium is not None:

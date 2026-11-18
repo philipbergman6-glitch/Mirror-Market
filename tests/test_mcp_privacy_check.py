@@ -50,9 +50,16 @@ def test_a_table_outside_the_roster_fails_first(clean_db):
         mcp_privacy_check.check(clean_db, public_set_id=PUBLIC_ID)
 
 
-def test_a_private_layer_table_fails(clean_db, monkeypatch):
+def test_a_private_layer_table_fails_once_it_holds_rows(clean_db, monkeypatch):
     monkeypatch.setattr(config, "PRIVATE_LAYERS", ("sea_india",))
-    with pytest.raises(mcp_privacy_check.PrivacyCheckFailed, match="private-layer tables present.*sea_india_rates"):
+    # The schema creates every table in every database: an empty private
+    # table is DDL and passes; a row in it is the leak (mirror_mcp.db).
+    mcp_privacy_check.check(clean_db, public_set_id=PUBLIC_ID)
+    conn = sqlite3.connect(clean_db)
+    conn.execute("INSERT INTO sea_india_rates(Date, series, value, unit) VALUES ('2026-11-04','x',1.0,'USD/MT')")
+    conn.commit()
+    conn.close()
+    with pytest.raises(mcp_privacy_check.PrivacyCheckFailed, match="private-layer tables hold rows.*sea_india_rates"):
         mcp_privacy_check.check(clean_db, public_set_id=PUBLIC_ID)
 
 

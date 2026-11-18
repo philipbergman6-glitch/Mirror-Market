@@ -56,6 +56,7 @@ from analysis.origins.domain import (
     SourceRef,
     worst_confidence,
 )
+from pipeline.units import unit_key_label
 from pricing.policy import assert_confidence_supported
 from pricing.semantics import is_price_quote_kind, price_type_for_quote_kind
 
@@ -372,6 +373,7 @@ class Evidence:
             "label": self.label,
             "value": self.value,
             "unit": self.unit,
+            "unit_label": unit_key_label(self.unit),
             "observed_on": self.observed_on.isoformat(),
             "age_days": self.age_days(today) if today else None,
             "freshness": self.freshness(today).value if today else None,
@@ -609,6 +611,7 @@ class Dislocation:
             "label": self.label,
             "value": self.value,
             "unit": self.unit,
+            "unit_label": unit_key_label(self.unit),
             "baseline": self.baseline,
             "baseline_label": self.baseline_label,
             "z_score": self.z_score,
@@ -956,9 +959,17 @@ class Opportunity:
 
     @property
     def lane(self) -> str:
-        origin = self.origin.country_iso if self.origin else "—"
-        destination = self.destination.country_iso if self.destination else "—"
-        return f"{origin}→{destination}"
+        """Where this sits: ``BR→CN`` for a lane, the market's name otherwise.
+
+        A crush margin, a stocks-to-use squeeze or a currency move belongs to
+        one market and has no lane. Rendering the missing side as ``—→US``
+        printed a lane that does not exist; a one-sided opportunity is named by
+        the one place it has, and one with neither names nothing.
+        """
+        if self.origin is not None and self.destination is not None:
+            return f"{self.origin.country_iso}→{self.destination.country_iso}"
+        place = self.origin or self.destination
+        return place.name if place is not None else ""
 
     @property
     def is_public_safe(self) -> bool:

@@ -39,14 +39,17 @@
 <p class="stub-lead">
   <b>{{ market.name }} has no page yet.</b> It is on the map and it keeps this address — when the
   sources below land, this becomes a brief and then a full market page at the same URL, with nothing
-  to re-link. What is missing, and why:
+  to re-link. Each block, and why it is not shown:
 </p>
 
+{#- Rows come from app.blocks.stub_rows, never block.reason directly: an `ok`
+    block carries no reason, and printing that empty string is the blank cell
+    this page must never show. stub_rows raises on a row it cannot explain. -#}
 <div style="padding-bottom: 22px;">
-  {% for block in blocks %}
+  {% for title, reason in stub_rows(blocks, tier) %}
   <div class="reason-row">
-    <span class="rk">{{ block.title }}</span>
-    <span class="rv">{{ block.reason }}</span>
+    <span class="rk">{{ title }}</span>
+    <span class="rv">{{ reason }}</span>
   </div>
   {% endfor %}
 </div>

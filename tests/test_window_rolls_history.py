@@ -343,7 +343,7 @@ def test_an_unwindowed_basis_renders_no_window_or_board_label(conn, registry):
     conn.execute(schema._CREATE_INDIA_DOMESTIC)
     for day in SESSIONS:
         conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) "
-                     "VALUES (?,?,?,?)", (day.isoformat(), "Soybean (Mandi MP)", 67250.0, "INR/MT"))
+                     "VALUES (?,?,?,?)", (day.isoformat(), "Soybean (NCDEX Indore spot)", 67250.0, "INR/MT"))
         conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
                      ("INR/USD", day.isoformat(), 0.0105))
     conn.commit()

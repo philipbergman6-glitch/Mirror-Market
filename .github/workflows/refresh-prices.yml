@@ -235,31 +235,38 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Restores the *verified seed* only (#453): the newest database saved
-      # by a daily build or refresh whose candidate passed the promotion
-      # contract. The diagnostic cache the daily build also writes
-      # (mirror-market-diagnostic-db-*) is not a prefix match and can never
-      # be picked up here — a failed or rejected run's database is not a
-      # seed. A miss is not a failure. The refresh still runs, still
-      # generates, and is then refused by the regression gate below because
-      # its coverage is thinner than the published edition's — which is the
-      # correct outcome and leaves the live site untouched.
+      # Restores the *verified seed* only (#453): verified/latest.db.gz in R2
+      # (pipeline/db_snapshot.py), the newest database saved by a daily build
+      # or refresh whose candidate passed the promotion contract. A refused
+      # run's database never reaches that key. History tables arrive emptied
+      # and are refilled from data/history/*.csv by main.py, as on the daily
+      # build. --require-fresh: this path only ever fetches a short window, so
+      # a seed older than config.SEED_SHORT_WINDOW_MAX_AGE_DAYS would leave a
+      # gap; it is not placed. A miss of any kind is not a failure. The
+      # refresh still runs, still generates, and is then refused by the
+      # regression gate below because its coverage is thinner than the
+      # published edition's — which is the correct outcome and leaves the
+      # live site untouched.
       - name: Restore the verified seed
-        id: db_cache
-        uses: actions/cache/restore@v4
-        with:
-          path: data/storage/mirror_market.db
-          key: mirror-market-db-verified-
-          restore-keys: |
-            mirror-market-db-verified-
+        id: db_seed
+        continue-on-error: true
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/db_snapshot.py pull --require-fresh
 
-      - name: Report cache state
+      - name: Report seed state
+        env:
+          SEED_STATE: ${{ steps.db_seed.outputs.state }}
         run: |
-          if [[ "${{ steps.db_cache.outputs.cache-matched-key }}" == "" ]]; then
-            echo "::warning::no verified seed — this refresh will be refused by the regression gate"
-          else
-            echo "restored ${{ steps.db_cache.outputs.cache-matched-key }}"
+          if [[ "$SEED_STATE" != "restored" ]]; then
+            echo "::warning::no usable verified seed (${SEED_STATE:-restore failed}) — this refresh will be refused by the regression gate"
           fi
+
+      - name: Stamp the refresh start
+        run: echo "REFRESH_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
       # Pipeline + generate + both gates, in one script so the gates cannot be
       # reordered or skipped by editing YAML. Exit codes: 1 pipeline, 2
@@ -289,21 +296,27 @@ jobs:
       - name: Verify candidate promotion contract
         run: python scripts/smoke_site.py --root "$RUNNER_TEMP/mirror-market-candidate" --browser
 
-      # Advance the verified seed, so the next fast refresh builds on this
-      # one rather than on the evening's daily build — two refreshes in a day
-      # would otherwise each start from the same older snapshot. Default
-      # `success()` condition, deliberately: this step is reached only when
-      # scripts/refresh_prices.py passed both its gates (promotion contract
-      # and regression) and the browser smoke above passed too. A rejected
-      # refresh fails before here and never re-caches (#453) — before that
-      # fix this step ran under `!cancelled()` after the deploy, so a refused
-      # candidate re-cached the very database that had been refused.
+      # Advance the verified seed, so the next fast refresh — and the next
+      # daily build — start from this one rather than from the evening's
+      # daily build: two refreshes in a day would otherwise each start from
+      # the same older snapshot. Default `success()` condition, deliberately:
+      # this step is reached only when scripts/refresh_prices.py passed both
+      # its gates (promotion contract and regression) and the browser smoke
+      # above passed too. A rejected refresh fails before here and never
+      # advances the seed (#453).
       - name: Advance the verified seed
+        id: db_push
         continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: data/storage/mirror_market.db
-          key: mirror-market-db-verified-${{ github.run_id }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python scripts/db_snapshot.py push --run-id "${{ github.run_id }}" --built-at "$REFRESH_STARTED_AT"
+
+      - name: Flag a failed seed advance
+        if: ${{ steps.db_push.outcome == 'failure' }}
+        run: echo "::error title=DB snapshot not saved::This refresh's verified database is not in R2; the next run starts from the previous seed. See the Advance the verified seed step."
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

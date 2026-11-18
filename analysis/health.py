@@ -278,15 +278,16 @@ def _check_flat_prices() -> list[dict]:
 
 
 def _check_india_domestic() -> list[dict]:
-    """Check the India mandi bean series for freshness.
+    """Check the live India bean series for freshness.
 
-    Only the live mandi series is expected — the retired NCDEX rows stay
-    in the table under their own keys and would emit permanent false
+    Only the series Layer 16 fetches now are expected — the retired NCDEX
+    bhav-copy rows and the captcha-gated Agmarknet MP median (#449) stay in
+    the table under their own keys and would emit permanent false
     CRITICALs if listed here.
     """
-    from config import MANDI_STATES
+    from config import INDIA_DOMESTIC_SERIES
     return _check_table_freshness(
-        "india_domestic_prices", "commodity", "Date", list(MANDI_STATES.values())
+        "india_domestic_prices", "commodity", "Date", list(INDIA_DOMESTIC_SERIES)
     )
 
 
@@ -294,7 +295,7 @@ def _check_brazil_spot() -> list[dict]:
     """Check Brazil domestic soy prices for freshness (daily = >2 days stale).
 
     Expectations are the AgRural Paranaguá port bid plus the CEPEA indicators
-    (re-enabled 2026-07-30 via Notícias Agrícolas — see main.py Layer 17);
+    (read from cepea.org.br since 2026-11-16 — see main.py Layer 17);
     both layers write to brazil_spot_prices. The CONAB farmgate series
     (Layer 15b) also lives there but is weekly — the daily staleness
     threshold would flag it constantly, so it is stale-exempt.

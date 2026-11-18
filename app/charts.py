@@ -4,6 +4,7 @@ All functions return go.Figure objects, used by the static HTML generator
 (scripts/generate_html.py).
 """
 
+import textwrap
 from datetime import datetime
 
 import pandas as pd
@@ -109,6 +110,9 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
         vertical_spacing=0.03,
         row_heights=[0.6, 0.2, 0.2],
         subplot_titles=(leg_name, "RSI", "MACD"),
+        # Row 1's second axis is volume's own: contracts (~10⁵) on the USD/MT
+        # axis (~450) flattened the price to a line at zero.
+        specs=[[{"secondary_y": True}], [{}], [{}]],
     )
 
     if has_ohlc:
@@ -129,13 +133,6 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
             ),
             row=1, col=1,
         )
-        note = df.attrs.get("adjustment_note")
-        if note:
-            fig.add_annotation(
-                text=note, xref="paper", yref="paper", x=0, y=1.08,
-                showarrow=False, font=dict(size=10, color=COLORS["text_dim"]),
-                align="left",
-            )
 
     # Moving averages
     ma_colors = {"MA_20": COLORS["soy_oil"], "MA_50": COLORS["info"], "MA_200": COLORS["bearish"]}
@@ -161,8 +158,13 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
         )
 
     # Volume — colored by close-vs-open where OHLC exists, by day-over-day
-    # close direction on the close-only named series.
-    if "Volume" in df.columns:
+    # close direction on the close-only named series. Its own overlaid axis,
+    # ranged to 5× the peak so the bars sit in the bottom fifth of the price
+    # pane (the workstation chart's "volume tucked under" convention); no tick
+    # labels, because the only labelled axis on this pane is USD/MT.
+    volume = (pd.to_numeric(df["Volume"], errors="coerce")
+              if "Volume" in df.columns else pd.Series(dtype=float))
+    if volume.notna().any():
         if has_ohlc:
             vol_colors = [COLORS["bullish"] if c >= o else COLORS["bearish"]
                           for c, o in zip(df["Close"], df["Open"], strict=False)]
@@ -171,9 +173,13 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
             vol_colors = [COLORS["bullish"] if c >= p else COLORS["bearish"]
                           for c, p in zip(closes, closes.shift(1).fillna(closes), strict=False)]
         fig.add_trace(
-            go.Bar(x=x_dates, y=df["Volume"], name="Volume",
+            go.Bar(x=x_dates, y=volume, name="Volume",
                    marker_color=vol_colors, opacity=0.3),
-            row=1, col=1,
+            row=1, col=1, secondary_y=True,
+        )
+        fig.update_yaxes(
+            range=[0, float(volume.max()) * 5], showticklabels=False,
+            showgrid=False, zeroline=False, row=1, col=1, secondary_y=True,
         )
 
     # RSI
@@ -209,7 +215,10 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
             )
 
     base = {**_BASE_LAYOUT}
-    base["legend"] = dict(orientation="h", yanchor="bottom", y=1.02, bgcolor="rgba(0,0,0,0)", font=dict(size=11))
+    # Legend below the MACD pane: above the price pane it collided with the
+    # subplot title and the method note. Plotly grows the bottom margin to fit.
+    base["legend"] = dict(orientation="h", yanchor="top", y=-0.04, x=0, traceorder="normal",
+                          bgcolor="rgba(0,0,0,0)", font=dict(size=11))
     fig.update_layout(
         height=900,
         xaxis_rangeslider_visible=False,
@@ -217,6 +226,17 @@ def build_technical_chart(df: pd.DataFrame, leg_name: str) -> go.Figure:
         yaxis_title="USD/MT",
         **base,
     )
+    note = None if has_ohlc else df.attrs.get("adjustment_note")
+    if note:
+        # The method sentence as the figure title, wrapped, with automargin:
+        # Plotly reserves the height it needs. As a paper-coordinate
+        # annotation at y=1.08 it sat above a fixed 40px margin and clipped.
+        fig.update_layout(title=dict(
+            text="<br>".join(textwrap.wrap(note, 110)),
+            x=0, xanchor="left", xref="paper",
+            y=1, yanchor="bottom", yref="paper", pad=dict(b=28),
+            automargin=True, font=dict(size=10, color=COLORS["text_dim"]),
+        ))
     return fig
 
 

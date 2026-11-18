@@ -104,6 +104,7 @@ from app.tradingview import (
     tradingview_symbol,
     tradingview_url,
 )
+from pipeline.units import unit_key_label
 
 log = logging.getLogger(__name__)
 
@@ -586,6 +587,7 @@ def _contracts_section(
             "size_unit": spec_for(commodity).size_unit.value,
             "mt_per_contract": round(spec_for(commodity).mt_per_contract, 4),
             "native_unit": spec_for(commodity).native_unit.value,
+            "native_unit_label": unit_key_label(spec_for(commodity).native_unit.value),
             "tick_size": spec_for(commodity).tick_size,
             "tick_value_usd": spec_for(commodity).tick_value_usd,
             "legs": [

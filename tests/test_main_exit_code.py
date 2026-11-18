@@ -93,19 +93,23 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_conab_estimates": empty_df,
         "fetch_safex": FetchResult.empty(),
         "fetch_agrural": FetchResult.empty(),
-        "fetch_noticias_agricolas": FetchResult.empty(),
+        "fetch_cepea": FetchResult.empty(),
         "fetch_gulf_bids": FetchResult.empty(),
         # #127: these three were added to main.py after the fixture was written
         # and were NOT stubbed — the "no network" docstring lied, and the live
         # data.gov.in call (mandi) can hang the whole suite for 25+ minutes.
         "fetch_conab_farmgate": FetchResult.empty(),
-        "fetch_mandi_prices": FetchResult.empty(),
+        "fetch_india_domestic": FetchResult.empty(),
         "fetch_magyp_fob": FetchResult.empty(),
         "fetch_sagis_deliveries": FetchResult.empty(),
         "fetch_sagis_supply_demand": FetchResult.empty(),
         "fetch_cec_estimates": FetchResult.empty(),
         "fetch_sea_rates": FetchResult.empty(),
         "fetch_sopa_estimates": FetchResult.empty(),
+        "fetch_afex": FetchResult.empty(),
+        # Layer 37 is run_if-gated on MATIF_PRIVATE_FETCH and never fetches
+        # here; stubbed all the same so the guard below cannot name it.
+        "fetch_matif_trades": FetchResult.empty(),
         "fetch_all_contract_bars": empty_dict,
         "fetch_processor_cash": empty_dict,
     }

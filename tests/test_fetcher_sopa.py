@@ -83,6 +83,24 @@ def test_renamed_columns_fail_the_parse(page) -> None:
         parse_crop_table(renamed, 2025)
 
 
+def test_live_unit_labelled_three_cell_header_parses():
+    page = (FIXTURES / "sopa_2026_units.html").read_text(encoding="utf-8")
+    estimate = parse_crop_table(page, 2026)
+    assert estimate is not None and estimate.crop_year == 2026
+    assert len(estimate.rows) == 9
+    assert estimate.rows[-1].state == config.SOPA_ALL_INDIA
+    assert estimate.rows[-1].area_lakh_ha == 109.978
+    assert estimate.rows[-1].production_lakh_t == 107.930
+
+
+@pytest.mark.parametrize("wrong_unit", ["Ha", "Lakh quintals"])
+def test_unit_labelled_header_rejects_different_scale(wrong_unit):
+    page = (FIXTURES / "sopa_2026_units.html").read_text(encoding="utf-8")
+    page = page.replace("Sowing Area (Lakh Ha)", f"Sowing Area ({wrong_unit})")
+    with pytest.raises(ScraperShapeError, match="columns"):
+        parse_crop_table(page, 2026)
+
+
 def test_the_units_are_inferred_so_each_row_must_reproduce_its_own_arithmetic(page) -> None:
     """SOPA prints no units. lakh ha × kg/ha / 1000 = lakh t is the inference,
     and every row has to satisfy it (to the printed rounding) or the whole

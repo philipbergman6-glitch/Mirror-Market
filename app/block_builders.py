@@ -952,6 +952,28 @@ def _pct_change(current: float | None, prior: float | None) -> float | None:
     return (current - prior) / abs(prior) * 100.0
 
 
+def _usd_move(
+    source: Source,
+    key: str,
+    currency_pair: str | None,
+    ctx: SiteContext,
+    current: tuple[date, float],
+    prior: tuple[date, float],
+) -> float | None:
+    """The USD/MT move between two prints of one leg, or None when one side has no USD figure.
+
+    The one place a USD move is computed — the headline ledger and block 01's
+    cards both call it, so the % beside a USD price can never be a different
+    number from the ledger's. Each print converts at *its own* session's rate
+    under A1 (#298, ``SiteContext.fx_on``); a print with no rate inside the cap
+    has no USD figure, and the move is withheld rather than struck on the
+    other day's FX (invariant 7).
+    """
+    now_usd = source.to_usd_mt(current[1], key, ctx.fx_on(currency_pair, current[0]).rate)
+    was_usd = source.to_usd_mt(prior[1], key, ctx.fx_on(currency_pair, prior[0]).rate)
+    return _pct_change(now_usd, was_usd)
+
+
 def _age_days(today: date, when: date | None) -> int | None:
     return None if when is None else (today - when).days
 
@@ -1006,7 +1028,16 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
                 prior = None
             elif prior is not None and (band := _band_note(windows, when, prior[0])):
                 move_notes.append(f"{move}: {band}")
-            changes[f"chg_{back}_pct"] = _pct_change(value, prior[1] if prior else None)
+            # The card's % sits beside a USD/MT figure, so it is the USD move —
+            # the same number the headline ledger prints (`_usd_move`). The
+            # venue's own-unit move rides along for the home-print line, and
+            # is what the card falls back to, labelled, where no USD move can
+            # be had honestly (a print with no FX rate inside the cap).
+            changes[f"chg_{back}_pct"] = (
+                _usd_move(source, key, market.currency_pair, ctx, (when, value), (prior[0], prior[1]))
+                if prior is not None else None
+            )
+            changes[f"home_chg_{back}_pct"] = _pct_change(value, prior[1] if prior else None)
         window = _window_fields(windows, when)
         for window_row in window["window_rows"]:
             window_row["usd_mt"] = source.to_usd_mt(window_row["home_value"], key, fx.rate)
@@ -1303,13 +1334,17 @@ def headline_ledger(markets: dict[str, Market], ctx: SiteContext) -> tuple[str, 
       ``out_of_cadence`` rather than a value that would invite comparison
       against seven daily prints, and rather than a ``dark`` pill that would
       report an outage that is not happening.
-    * **Nigeria is dark**, with the registry's own reason: no price leg of any
-      kind is ingested.
+    * **Nigeria is a row without a ledger.** Since Layer 36 (AFEX, 2026-11-05)
+      it has a daily leg but no counterpart set — a one-leg ledger is a price
+      block, not a ledger — so the market declares a ``headline_leg`` and
+      prints here as a level and its move, which is all a headline row is.
     """
     rows: list[dict] = []
     for market in markets.values():
-        if market.ledger is not None:
-            leg = market.ledger.own
+        leg = (
+            market.ledger.own if market.ledger is not None else market.headline_leg
+        )
+        if leg is not None:
             row = _ledger_row(
                 leg, ctx, is_own=False, is_reference=False, own_prints=None, own_leg=leg
             )
@@ -1510,8 +1545,9 @@ def _ledger_row(
         prior_when, prior_value, _ = prints[-2]
         row["move_note"] = _band_note(windows, when, prior_when)
         row["home_chg_pct"] = _pct_change(value, prior_value)
-        prior_usd = source.to_usd_mt(prior_value, leg.key, ctx.fx_on(owner.currency_pair, prior_when).rate)
-        row["usd_chg_pct"] = _pct_change(row["usd_mt"], prior_usd)
+        row["usd_chg_pct"] = _usd_move(
+            source, leg.key, owner.currency_pair, ctx, (when, value), (prior_when, prior_value)
+        )
         # M3 #145: show both moves, and say so when the currency did the work.
         # A leg quoted in its own currency can be up at home and down in USD;
         # printing one number would attribute an FX move to the market.

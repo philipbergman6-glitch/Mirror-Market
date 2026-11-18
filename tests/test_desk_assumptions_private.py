@@ -162,7 +162,7 @@ def test_a_freight_entry_lands_in_the_private_tier(cli_root, capsys):
         "--origin", "us_gulf", "--destination", "cn_north",
         "--window", "2026-11-01:2026-11-30",
         "--basis", "Panamax 60kt USG-N.China, broker indication",
-        "--entered-by", "desk@example.com", "--expires", "2026-11-07",
+        "--entered-by", "desk@example.com", "--expires", "2026-11-07", "--entered-at", "2026-10-15",
     ])
     assert code == 0, capsys.readouterr().err
     written = sorted(p.relative_to(cli_root).as_posix() for p in cli_root.rglob("*.yml"))
@@ -197,7 +197,7 @@ def test_an_explicit_public_target_for_a_desk_component_is_refused(cli_root, cap
         "--component", "financing", "--value", "0.065", "--days", "45",
         "--destination", "cn_north",
         "--basis", "own cost of funds", "--entered-by", "desk@example.com",
-        "--expires", "2027-01-31", "--file", "china_import_policy.yml",
+        "--expires", "2027-01-31", "--entered-at", "2026-10-15", "--file", "china_import_policy.yml",
     ])
     assert code == 1
     assert "private" in capsys.readouterr().err
@@ -209,7 +209,7 @@ def test_a_policy_rate_still_lands_in_the_committed_file(cli_root, capsys):
         "--component", "import_duty", "--value", "0.28", "--unit", "fraction",
         "--origin", "us_gulf", "--destination", "cn_north",
         "--basis", "MFN 3% + retaliatory 25%", "--entered-by", "desk@example.com",
-        "--expires", "2026-12-31",
+        "--expires", "2026-12-31", "--entered-at", "2026-10-15",
     ])
     assert code == 0, capsys.readouterr().err
     assert (cli_root / "china_import_policy.yml").exists()

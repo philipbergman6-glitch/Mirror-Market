@@ -29,7 +29,7 @@ from typing import Any
 
 import config
 from pipeline import grading
-from pipeline.layer_runs import LayerRun
+from pipeline.layer_runs import STATUS_SKIPPED_UNCONFIGURED, LayerRun
 
 #: §3: a session is available when its last run graded one of these. Every
 #: other word — ``stale``, ``failed``, ``incomplete``, ``disabled``,
@@ -319,7 +319,24 @@ def dead_layers(
     grouped = _by_layer_session(rows)
     out = {}
     for layer in layers:
-        streak = _open_streak(layer, _verdicts(grouped.get(layer, {}), sessions), sessions)
-        if streak is not None and streak.sessions >= threshold:
-            out[layer] = streak
+        verdicts = _verdicts(grouped.get(layer, {}), sessions)
+        streak = _open_streak(layer, verdicts, sessions)
+        if streak is None or streak.sessions < threshold:
+            continue
+        # A session the run was never configured to ask about says nothing
+        # about the source: a streak made only of `skipped_unconfigured`
+        # (Layer 37 on CI, by design) is unavailable but not dead. One real
+        # verdict inside the streak and it counts in full.
+        # Sessions before the layer's first record say nothing either: the
+        # roster did not carry it yet, so its leading `no_run` run is "time
+        # before the record began" for that layer, not a streak of silence.
+        tail = [last for _first, last in verdicts[len(verdicts) - streak.sessions:]]
+        recorded = grouped.get(layer, {})
+        if recorded:
+            first_recorded = min(recorded)
+            tail_sessions = sessions[len(sessions) - streak.sessions:]
+            tail = [last for s, last in zip(tail_sessions, tail, strict=True) if s >= first_recorded]
+        if tail and all(last == STATUS_SKIPPED_UNCONFIGURED for last in tail):
+            continue
+        out[layer] = streak
     return out

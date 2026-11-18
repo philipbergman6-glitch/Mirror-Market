@@ -56,6 +56,9 @@ _QUOTE_KIND_MEANINGS: dict[str, str] = {
                          "a weekly leg that has not moved has not been asked yet.",
     "weekly_ask": "A processor's weekly asking price for product (AMS cash oil and meal). "
                   "An ask, not a trade.",
+    "exchange_reference": "An exchange's own daily reference price for a security (AFEX "
+                          "Nigeria), published every calendar day with no session, no "
+                          "settlement and no volume behind it. Indicative, never firm.",
 }
 
 _LEDGER_STATE_LABELS: dict[str, str] = {

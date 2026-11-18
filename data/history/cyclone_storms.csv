@@ -39,6 +39,10 @@ JTWC,io0226,2026-10-27T21:00:00Z,2026-10-27T18:00:00Z,2026-10-27T23:01:08Z,io,2,
 JTWC,io0226,2026-10-28T09:00:00Z,2026-10-28T06:00:00Z,2026-10-28T23:06:57Z,io,2,2026,ARNAB,,,16.4,81.80000000000001,55,36,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,io0426,2026-11-03T03:00:00Z,2026-11-03T00:00:00Z,2026-11-03T02:52:11Z,io,4,2026,MURASU,,,15.5,80.30000000000001,85,36,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,io0426,2026-11-03T09:00:00Z,2026-11-03T06:00:00Z,2026-11-04T00:05:38Z,io,4,2026,MURASU,,,15.8,80.19999999999999,65,24,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,io0526,2026-11-17T03:00:00Z,2026-11-17T00:00:00Z,2026-11-17T03:27:16Z,io,5,2026,AKVAN,,,11.6,87.19999999999999,40,96,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,io0526,2026-11-17T09:00:00Z,2026-11-17T06:00:00Z,2026-11-17T11:55:50Z,io,5,2026,AKVAN,,,12.0,87.30000000000001,40,96,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,io0526,2026-11-17T21:00:00Z,2026-11-17T18:00:00Z,2026-11-18T01:34:53Z,io,5,2026,AKVAN,,,13.1,87.30000000000001,45,72,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,io0526,2026-11-18T03:00:00Z,2026-11-18T00:00:00Z,2026-11-18T02:44:47Z,io,5,2026,AKVAN,,,13.0,86.89999999999998,45,60,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,sh0127,2026-10-16T21:00:00Z,2026-10-16T18:00:00Z,2026-10-16T23:13:19Z,sh,1,2027,ONE,,,-12.7,-163.4,40,96,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,sh0127,2026-10-18T09:00:00Z,2026-10-18T06:00:00Z,2026-10-18T12:03:58Z,sh,1,2027,WATI,,,-16.1,-162.4,65,48,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,sh0127,2026-10-19T09:00:00Z,2026-10-19T06:00:00Z,2026-10-19T18:15:57Z,sh,1,2027,WATI,,,-20.7,-156.8,45,12,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
@@ -47,6 +51,10 @@ JTWC,sh0227,2026-10-21T09:00:00Z,2026-10-21T06:00:00Z,2026-10-21T11:05:44Z,sh,2,
 JTWC,sh0227,2026-10-21T21:00:00Z,2026-10-21T18:00:00Z,2026-10-21T22:18:14Z,sh,2,2027,AGUEDA,,,-6.0,50.80000000000001,50,72,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,sh0227,2026-10-22T21:00:00Z,2026-10-22T18:00:00Z,2026-10-22T22:16:13Z,sh,2,2027,AGUEDA,,,-6.7,49.69999999999999,50,72,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,sh0227,2026-10-23T21:00:00Z,2026-10-23T18:00:00Z,2026-10-23T22:02:27Z,sh,2,2027,AGUEDA,,,-5.7,47.69999999999999,30,12,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,sh0427,2026-11-16T09:00:00Z,2026-11-16T06:00:00Z,2026-11-16T11:31:14Z,sh,4,2027,XAVIER,,,-8.5,-161.0,55,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,sh0427,2026-11-16T21:00:00Z,2026-11-16T18:00:00Z,2026-11-17T03:27:16Z,sh,4,2027,XAVIER,,,-8.9,-162.6,85,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,sh0427,2026-11-17T09:00:00Z,2026-11-17T06:00:00Z,2026-11-17T11:55:50Z,sh,4,2027,XAVIER,,,-9.1,-163.5,125,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,sh0427,2026-11-17T21:00:00Z,2026-11-17T18:00:00Z,2026-11-18T02:44:47Z,sh,4,2027,XAVIER,,,-9.6,-163.8,130,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,wp2626,2026-10-06T21:00:00Z,2026-10-06T18:00:00Z,2026-10-07T18:02:08Z,wp,26,2026,CHOI-WAN,,,36.3,149.5,75,24,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,wp2726,2026-10-07T15:00:00Z,2026-10-07T12:00:00Z,2026-10-07T18:02:08Z,wp,27,2026,KOGUMA,,,15.7,162.60000000000002,50,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,wp2726,2026-10-07T21:00:00Z,2026-10-07T18:00:00Z,2026-10-07T23:35:49Z,wp,27,2026,KOGUMA,,,16.1,161.60000000000002,55,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
@@ -83,11 +91,15 @@ JTWC,wp3026,2026-11-02T21:00:00Z,2026-11-02T18:00:00Z,2026-11-03T01:34:46Z,wp,30
 JTWC,wp3026,2026-11-03T03:00:00Z,2026-11-03T00:00:00Z,2026-11-03T02:52:11Z,wp,30,2026,IN-FA,,,23.1,139.3,70,72,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,wp3026,2026-11-03T21:00:00Z,2026-11-03T18:00:00Z,2026-11-04T00:05:38Z,wp,30,2026,IN-FA,,,23.8,138.7,85,60,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 JTWC,wp3026,2026-11-04T21:00:00Z,2026-11-04T18:00:00Z,2026-11-05T01:17:03Z,wp,30,2026,IN-FA,,,27.1,138.5,75,36,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,wp3026,2026-11-05T09:00:00Z,2026-11-05T06:00:00Z,2026-11-06T00:07:03Z,wp,30,2026,IN-FA,,,29.4,141.5,60,24,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,wp3126,2026-11-06T09:00:00Z,2026-11-06T06:00:00Z,2026-11-06T10:53:54Z,wp,31,2026,THIRTYONE,,,18.0,149.0,25,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
+JTWC,wp3126,2026-11-06T21:00:00Z,2026-11-06T18:00:00Z,2026-11-06T23:47:23Z,wp,31,2026,THIRTYONE,,,18.4,145.8,30,120,ok,"Joint Typhoon Warning Center (JTWC) — US military guidance, not a national warning"
 NHC,al092026,2026-10-07T21:00:00Z,2026-10-07T18:00:00Z,2026-10-07T23:35:47Z,al,9,2026,Isaias,TS,5,22.7,-92.9,55,96,ok,NOAA National Hurricane Center
 NHC,al092026,2026-10-09T21:00:00Z,2026-10-09T18:00:00Z,2026-10-09T23:07:54Z,al,9,2026,Isaias,HU,13,29.2,-87.0,100,48,ok,NOAA National Hurricane Center
 NHC,al102026,2026-10-21T21:00:00Z,2026-10-21T18:00:00Z,2026-10-21T22:18:13Z,al,10,2026,Josephine,STS,1,37.4,-69.5,55,96,ok,NOAA National Hurricane Center
 NHC,al102026,2026-10-22T21:00:00Z,2026-10-22T18:00:00Z,2026-10-22T22:16:13Z,al,10,2026,Josephine,PTC,5,40.0,-65.8,55,60,ok,NOAA National Hurricane Center
 NHC,cp032026,2026-10-26T21:00:00Z,2026-10-26T18:00:00Z,2026-10-26T23:07:49Z,cp,3,2026,Olana,TD,6,13.6,-176.6,30,48,ok,NOAA National Hurricane Center
+NHC,cp042026,2026-11-06T21:00:00Z,2026-11-06T18:00:00Z,2026-11-06T23:47:23Z,cp,4,2026,Pena,TS,1,11.3,-150.1,40,120,ok,NOAA National Hurricane Center
 NHC,ep182026,2026-10-07T21:00:00Z,2026-10-07T18:00:00Z,2026-10-07T23:35:47Z,ep,18,2026,Rachel,HU,43,21.2,-122.3,70,120,ok,NOAA National Hurricane Center
 NHC,ep182026,2026-10-09T21:00:00Z,2026-10-09T18:00:00Z,2026-10-09T23:07:54Z,ep,18,2026,Rachel,TS,51,23.3,-124.0,40,48,ok,NOAA National Hurricane Center
 NHC,ep202026,2026-10-07T21:00:00Z,2026-10-07T18:00:00Z,2026-10-07T23:35:47Z,ep,20,2026,Simon,TS,2,15.5,-101.6,35,120,ok,NOAA National Hurricane Center
