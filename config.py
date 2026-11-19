@@ -3325,8 +3325,9 @@ MARKETS: dict[str, dict[str, Any]] = {
         },
         "crush": None,
         "crush_absent_reason": (
-            "mandi is bean-only — no Indian oil or meal quote exists at daily "
-            "cadence (NCDEX suspended to >=2027-03-31)"
+            "no Indian oil or meal leg is ingested — Layer 16 carries beans "
+            "only; NCDEX's polled spot page also lists Indore soymeal and "
+            "refined soy oil, not yet wired as crush legs"
         ),
         # Unblocked by #206: the +66% is real, cross-checked against SOPA's own
         # Indore oil and meal quotes (not Agmarknet-derived). Struck on the
