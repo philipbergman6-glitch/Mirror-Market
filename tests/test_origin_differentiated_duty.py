@@ -227,4 +227,6 @@ def test_the_shipped_us_duty_expires_no_later_than_the_policy_it_records(shipped
     us = [a for a in shipped.assumptions if a.origin == "us_gulf"]
     for assumption in us:
         assert assumption.component is CostComponent.IMPORT_DUTY
-        assert assumption.expires_on <= date(2026, 11, 10), assumption.id
+        # 税委会公告2026年第6号: the 24% suspension runs "two months" from
+        # 2026-11-10, i.e. to 2027-01-10 at the latest.
+        assert assumption.expires_on <= date(2027, 1, 10), assumption.id

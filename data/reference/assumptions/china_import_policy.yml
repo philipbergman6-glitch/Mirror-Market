@@ -66,10 +66,13 @@
     announcement number. The soybean-specific March-2025 add-on was removed
     from the same date (No. 9 of 2025, per the same GAIN report). 13% is USDA FAS's "Total Applied Tariff with 301 Exclusion" — it
     ASSUMES the importer holds a Section 301 exclusion; without one the 2018
-    retaliatory tariff (27.5% on 1201.9011/9019) applies on top. Expires the
-    day before that one-year suspension ends: the 2027-01-10 extension announced
-    2026-09-28 had no Tariff Commission instrument on gss.mof.gov.cn as of
-    2026-10-18, so renew only once one is published.
+    retaliatory tariff (27.5% on 1201.9011/9019) applies on top. Renewed
+    2026-11-19 on 税委会公告2026年第6号 (2026-11-09, gss.mof.gov.cn): from
+    2026-11-10 13:01 the 24% stays suspended "在2个月内" and the 10% is
+    retained (保留10%的对美加征关税税率), amending 2025 No. 4 — so the rate
+    is unchanged. The instrument gives "two months", not a calendar date;
+    expires the day before 2027-01-10, the end the Ministry of Transport gave
+    the parallel port-fee suspension the same day.
   source: >-
     Customs Tariff Commission of the State Council measure of 2025-11-05, as
     stated on the MOF Customs Tariff Department policy-interpretation page
@@ -78,16 +81,18 @@
     GAIN CH2026-0113 (2026-09-04, "China's current 10 percent retaliatory
     tariff on U.S. soybeans"), GAIN CH2026-0032 Table 30 (2026-03-19,
     12019011 total 13.0%) and Reuters 2026-09-28 ("US soybeans, however,
-    still face an additional tariff of 10%"); checked 2026-10-18
+    still face an additional tariff of 10%"); checked 2026-10-18. Renewal:
+    Customs Tariff Commission 税委会公告2026年第6号 (2026-11-09), read on
+    gss.mof.gov.cn; re-checked 2026-11-19
   entered_by: "mirror-market B22 #485 (published policy rate, not a trader entry)"
   entered_at: 2026-10-18
-  expires_on: 2026-11-09
+  expires_on: 2027-01-09
   confidence: indicative
   caveat: >-
     US-origin rate: MFN 3% + 10% additional on US goods, assuming the importer
     holds a Section 301 exclusion — without one the 2018 retaliatory 27.5%
     also applies (40.5% total)
-  citation: "https://gss.mof.gov.cn/gzdt/zhengcejiedu/202511/t20251105_3975759.htm ; https://www.investing.com/news/commodities-news/china-says-to-cut-tariffs-on-us-farm-goods-but-soybeans-excluded-4919307"
+  citation: "https://gss.mof.gov.cn/gzdt/zhengcefabu/202611/t20261109_4004260.htm ; https://gss.mof.gov.cn/gzdt/zhengcejiedu/202511/t20251105_3975759.htm ; https://www.investing.com/news/commodities-news/china-says-to-cut-tariffs-on-us-farm-goods-but-soybeans-excluded-4919307"
 
 - id: import_vat.cn_north
   component: import_vat
