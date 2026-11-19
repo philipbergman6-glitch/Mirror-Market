@@ -34,7 +34,7 @@ from datetime import date
 from enum import Enum
 from typing import Any
 
-from analysis.futures.domain import SOY_COMPLEX, NamedContract, spec_for
+from analysis.futures.domain import SOY_COMPLEX, NamedContract, UnknownContract, parse_symbol, spec_for
 from analysis.futures.hedge import BasisConvention
 from analysis.futures.positions import Book, BookValuation, MarkedPosition
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
@@ -47,6 +47,8 @@ class ExposureView(str, Enum):
     FX = "fx"
     CONTRACT_MONTH = "contract_month"
     FIRST_NOTICE = "first_notice"
+    ORIGIN_UNPRICED = "origin_unpriced"
+    CONTRACT_COVERAGE = "contract_coverage"
     RESIDUAL = "residual"
 
 
@@ -188,6 +190,7 @@ def build_exposure(book: Book, valuation: BookValuation | None, *, as_of: date) 
     lines.extend(_fx_lines(book, physical_marks, fx_rates, warnings))
     lines.extend(_contract_month_lines(book, futures_marks, as_of=as_of))
     lines.extend(_first_notice_lines(book, futures_marks, as_of=as_of))
+    lines.extend(_board_detail_lines(book))
     lines.extend(_residual_lines(futures_mt, physical_mt))
 
     return ExposureReport(as_of=as_of, lines=tuple(lines), warnings=tuple(warnings))
@@ -415,6 +418,66 @@ def _contract_month_lines(
                 + (f", last trade in {days} business days" if days is not None
                    else ", expiry rule not encoded")
             ),
+        ))
+    return lines
+
+
+def _board_detail_lines(book: Book) -> list[ExposureLine]:
+    """Net board exposure per location and coverage against named references."""
+    by_origin: dict[tuple[str, str], float] = {}
+    by_contract: dict[str, float] = {}
+    unstated: set[tuple[str, str]] = set()
+    for position in book.physical:
+        if position.basis_convention not in _BOARD_EXPOSED:
+            continue
+        key = (position.commodity, position.location or "Location unspecified")
+        by_origin[key] = by_origin.get(key, 0.0) + position.quantity_mt
+        if not position.pricing_stated:
+            unstated.add(key)
+        if position.mark_contract and position.pricing_stated:
+            try:
+                reference = parse_symbol(position.mark_contract)
+            except UnknownContract:
+                continue
+            if reference.spec.name == position.commodity:
+                symbol = reference.symbol
+                by_contract[symbol] = by_contract.get(symbol, 0.0) + position.quantity_mt
+
+    futures: dict[str, float] = {}
+    for future in book.futures:
+        symbol = future.contract.symbol
+        futures[symbol] = futures.get(symbol, 0.0) + future.net_mt
+
+    lines = [
+        ExposureLine(
+            view=ExposureView.ORIGIN_UNPRICED,
+            key=f"{commodity} · {location}",
+            unit_move_label="USD per 1 USD/MT on the board",
+            quantity_mt=tonnes,
+            usd_per_unit_move=tonnes,
+            note="Net physical tonnes still exposed to the board",
+            warnings=("Includes positions without a stated pricing convention",)
+            if (commodity, location) in unstated else (),
+        )
+        for (commodity, location), tonnes in sorted(by_origin.items())
+    ]
+    for symbol, physical in sorted(by_contract.items()):
+        if abs(physical) < 1e-9:
+            continue
+        futures_mt = futures.get(symbol, 0.0)
+        residual = physical + futures_mt
+        coverage = -futures_mt / physical
+        lines.append(ExposureLine(
+            view=ExposureView.CONTRACT_COVERAGE,
+            key=symbol,
+            unit_move_label="USD per 1 USD/MT on this contract",
+            quantity_mt=residual,
+            usd_per_unit_move=residual,
+            note=(
+                f"{physical:+,.0f} MT physical marked to this reference, "
+                f"{futures_mt:+,.0f} MT futures, {coverage:.1%} net coverage"
+            ),
+            warnings=("Futures add to exposure on this reference",) if coverage < 0 else (),
         ))
     return lines
 

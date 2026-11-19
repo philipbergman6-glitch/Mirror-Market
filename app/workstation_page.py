@@ -98,6 +98,8 @@ from analysis.futures.providers import (
     open_provider,
 )
 from analysis.futures.ticket import build_ticket
+from analysis.origins.cargo import CARGO_WORKSPACE
+from analysis.origins.cargo_alerts import saved_cargo_alerts
 from app.tradingview import (
     THIRD_PARTY_STAMP,
     barchart_url,
@@ -268,8 +270,8 @@ def build_view(
     provider = open_provider(conn)
 
     curves, curve_histories = _curves(provider, as_of=as_of)
-    book = _load_book(positions_dir)
-    valuation = _value_book(book, provider, curves, as_of=as_of)
+    book = _load_book(positions_dir) if is_private else positions_mod.Book()
+    valuation = _value_book(book, provider, curves, as_of=as_of) if is_private else None
 
     # The hedge, its scenarios and its ticket are sized from the entered book
     # when there is one — which makes all three of them the book, restated in
@@ -320,14 +322,20 @@ def build_view(
         as_of=as_of,
         proposals=tuple(proposals),
         curves=tuple(curves.values()),
-        valuation=valuation if is_private else None,
+        valuation=valuation,
+        book=book if is_private else None,
     )
+
+    if is_private:
+        page_alerts = alerts_mod.sort_alerts(
+            page_alerts + saved_cargo_alerts(CARGO_WORKSPACE / "decisions", now=generated_at)
+        )
 
     report = (
         exposure_mod.build_exposure(book, valuation, as_of=as_of)
         if valuation is not None else None
     )
-    ladder = _ladder(options_dir)
+    ladder = _ladder(options_dir) if is_private else options_mod.ManualLadder()
 
     view = {
         "as_of": as_of.isoformat(),

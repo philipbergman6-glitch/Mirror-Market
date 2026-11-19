@@ -7,9 +7,11 @@ exercised only for construction, which boto3 does offline.
 from __future__ import annotations
 
 import gzip
+import io
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -331,3 +333,111 @@ def test_cli_round_trip_through_a_stubbed_store(
     assert "::notice title=DB snapshot saved::" in out
     assert "::notice title=DB seed restored::Started from run 7" in out
     assert _rows(target, "prices") == [("2026-11-13", 1001.5)]
+
+
+def test_push_includes_committed_wal_rows(tmp_path: Path) -> None:
+    db = _make_db(tmp_path / "source.db")
+    store = MemoryStore()
+    writer = sqlite3.connect(db)
+    try:
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("INSERT INTO prices VALUES ('2026-11-16', 1002.5)")
+        writer.commit()
+        push(db, store, run_id="1", built_at=BUILT_AT)
+        restored = tmp_path / "restored.db"
+        pull(restored, store, now=BUILT_AT)
+        assert ("2026-11-16", 1002.5) in _rows(restored, "prices")
+    finally:
+        writer.close()
+
+
+def test_push_refuses_private_matif_rows(tmp_path: Path) -> None:
+    db = _make_db(tmp_path / "source.db")
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE matif_futures (Close REAL)")
+        conn.execute("INSERT INTO matif_futures VALUES (500)")
+    store = MemoryStore()
+    with pytest.raises(SnapshotError, match="matif_futures"):
+        push(db, store, run_id="1", built_at=BUILT_AT)
+    assert store.puts == []
+
+
+
+def test_r2_get_reads_body_and_metadata_from_one_response(tmp_path: Path, monkeypatch) -> None:
+    boto3 = pytest.importorskip("boto3")
+    client = Mock()
+    body = io.BytesIO(b"snapshot")
+    client.get_object.return_value = {"Body": body, "Metadata": {"SHA256": "digest"}}
+    monkeypatch.setattr(boto3, "client", lambda *args, **kwargs: client)
+    config = config_from_env(FULL_ENV)
+    assert config is not None
+    output = tmp_path / "seed.db.gz"
+
+    assert db_snapshot.R2Store(config).get(LATEST_KEY, output) == {"sha256": "digest"}
+    assert output.read_bytes() == b"snapshot"
+    assert body.closed
+    client.get_object.assert_called_once_with(Bucket=config.bucket, Key=LATEST_KEY)
+
+
+def test_recover_preserves_authoritative_history(tmp_path: Path) -> None:
+    db = _make_db(tmp_path / "source.db")
+    store = MemoryStore()
+    archive, _ = push(db, store, run_id="1", built_at=BUILT_AT).keys
+    restored = tmp_path / "recovered.db"
+
+    result = pull(restored, store, key=archive, now=BUILT_AT, preserve_history=True)
+
+    assert result.cleared_tables == ()
+    assert _rows(restored, "data_freshness") == [("cbot", "success")]
+    assert ("2026-11-13", 1001.5) in _rows(restored, "prices")
+
+
+def test_r2_archive_is_create_only(tmp_path: Path, monkeypatch) -> None:
+    boto3 = pytest.importorskip("boto3")
+    from botocore.exceptions import ClientError
+
+    client = Mock()
+    client.put_object.side_effect = ClientError(
+        {"Error": {"Code": "PreconditionFailed"}}, "PutObject"
+    )
+    monkeypatch.setattr(boto3, "client", lambda *args, **kwargs: client)
+    config = config_from_env(FULL_ENV)
+    assert config is not None
+    path = tmp_path / "archive.gz"
+    path.write_bytes(b"snapshot")
+    key = daily_key(BUILT_AT, "1")
+
+    with pytest.raises(SnapshotError, match="archive already exists"):
+        db_snapshot.R2Store(config).put(key, path, {"sha256": "digest"})
+
+    assert client.put_object.call_args.kwargs["IfNoneMatch"] == "*"
+    client.upload_file.assert_not_called()
+
+
+def test_push_archives_public_manifest_before_advancing_seed(tmp_path: Path) -> None:
+    db = _make_db(tmp_path / "source.db")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('{"schema_version":1,"edition":{},"coverage":[]}')
+    store = MemoryStore()
+
+    archive, evidence, latest = push(
+        db, store, run_id="1-attempt-2", built_at=BUILT_AT, public_manifest=manifest
+    ).keys
+
+    assert evidence == archive.removesuffix(".db.gz") + ".manifest.json.gz"
+    assert store.puts == [archive, evidence, latest]
+    assert latest == LATEST_KEY
+    body, metadata = store.objects[evidence]
+    assert gzip.decompress(body) == manifest.read_bytes()
+    assert metadata[db_snapshot.META_RUN_ID] == "1-attempt-2"
+
+
+def test_verify_latest_archive_requires_matching_dated_object(tmp_path: Path) -> None:
+    db = _make_db(tmp_path / "source.db")
+    store = MemoryStore()
+    archive, _ = push(db, store, run_id="1", built_at=BUILT_AT).keys
+    assert db_snapshot.verify_latest_archive(store, now=BUILT_AT) == archive
+
+    del store.objects[archive]
+    with pytest.raises(SnapshotError, match="dated archive recovery failed"):
+        db_snapshot.verify_latest_archive(store, now=BUILT_AT)

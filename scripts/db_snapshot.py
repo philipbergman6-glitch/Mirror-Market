@@ -93,7 +93,7 @@ def _pull(db_path: Path, require_fresh: bool) -> int:
     return 0
 
 
-def _push(db_path: Path, run_id: str, built_at: str) -> int:
+def _push(db_path: Path, run_id: str, built_at: str, public_manifest: Path | None) -> int:
     cfg = db_snapshot.config_from_env()
     if cfg is None:
         _annotate(
@@ -106,7 +106,10 @@ def _push(db_path: Path, run_id: str, built_at: str) -> int:
         when = datetime.fromisoformat(built_at.replace("Z", "+00:00"))
     except ValueError as exc:
         raise db_snapshot.SnapshotError(f"--built-at is not ISO 8601: {built_at!r}") from exc
-    result = db_snapshot.push(db_path, db_snapshot.R2Store(cfg), run_id=run_id, built_at=when)
+    result = db_snapshot.push(
+        db_path, db_snapshot.R2Store(cfg), run_id=run_id, built_at=when,
+        public_manifest=public_manifest,
+    )
     _annotate(
         "notice",
         "DB snapshot saved",
@@ -125,7 +128,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="refuse (do not place) a seed older than config.SEED_SHORT_WINDOW_MAX_AGE_DAYS",
     )
+    sub.add_parser("verify", help="run a read-only recovery drill against the current seed and archive")
+    recover = sub.add_parser("recover", help="restore an intact dated archive to an unused database path")
+    recover.add_argument("--key", required=True)
     push = sub.add_parser("push", help="save this run's verified database")
+    push.add_argument("--public-manifest", type=Path, help="manifest from the verified public candidate")
     push.add_argument("--run-id", required=True)
     push.add_argument("--built-at", required=True, help="ISO 8601, e.g. $PIPELINE_STARTED_AT")
     args = parser.parse_args(argv)
@@ -134,9 +141,28 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "pull":
             return _pull(args.db, args.require_fresh)
-        return _push(args.db, args.run_id, args.built_at)
+        if args.command == "verify":
+            cfg = db_snapshot.config_from_env()
+            if cfg is None:
+                raise db_snapshot.SnapshotError("R2 credentials are required for a recovery drill")
+            archive_key = db_snapshot.verify_latest_archive(db_snapshot.R2Store(cfg))
+            _annotate("notice", "R2 recovery verified", archive_key)
+            return 0
+        if args.command == "recover":
+            if not args.key.startswith("daily/"):
+                raise db_snapshot.SnapshotError("recover requires a dated daily archive key")
+            cfg = db_snapshot.config_from_env()
+            if cfg is None:
+                raise db_snapshot.SnapshotError("R2 credentials are required for archive recovery")
+            result = db_snapshot.pull(
+                args.db, db_snapshot.R2Store(cfg), key=args.key, preserve_history=True
+            )
+            if result.state != "restored":
+                raise db_snapshot.SnapshotError(f"archive not found: {args.key}")
+            return 0
+        return _push(args.db, args.run_id, args.built_at, args.public_manifest)
     except Exception as exc:  # every failure is one loud line, then exit 1
-        title = "DB seed restore failed" if args.command == "pull" else "DB snapshot push failed"
+        title = "DB snapshot push failed" if args.command == "push" else "DB seed restore failed"
         _annotate("error", title, f"{type(exc).__name__}: {exc}")
         logger.exception(title)
         return 1

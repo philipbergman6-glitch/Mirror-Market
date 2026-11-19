@@ -441,3 +441,19 @@ def test_exact_publisher_dates_replace_the_wasde_window_and_include_external_nop
 def test_published_calendar_never_extrapolates_past_its_horizon():
     events = {e.source.key: e for e in build_calendar(None, as_of=date(2028, 1, 1))}
     assert "wasde" not in events and "nopa" not in events
+
+
+def test_held_contracts_alert_at_first_notice_without_a_quote_or_hedge():
+    contract = BEANS[0].contract
+    assert contract.first_notice is not None
+    book = Book(futures=(
+        FuturesPosition(contract, stated_contracts=3, account="house"),
+        FuturesPosition(contract, stated_contracts=-3, account="customer"),
+    ))
+
+    alerts = build_alerts(as_of=contract.first_notice, book=book)
+    notice = [alert for alert in alerts if alert.kind == "roll_window"]
+
+    assert len(notice) == 1
+    assert notice[0].severity == "alert"
+    assert notice[0].subject == contract.symbol

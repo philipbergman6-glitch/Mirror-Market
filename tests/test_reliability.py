@@ -6,7 +6,9 @@ computation never touches the filesystem, so no HISTORY_DIR is needed.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from dataclasses import replace
+from datetime import date, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -339,3 +341,41 @@ def test_dead_streak_says_when_it_opens_at_the_record_start() -> None:
     assert dead["safex"].opens_at_record_start is True
     assert dead["safex"].first_session == sessions[0]
     assert dead["dce"].opens_at_record_start is False
+
+
+
+def test_decision_cutoff_uses_one_promotion_and_keeps_all_sessions() -> None:
+    friday = date(2026, 10, 9)
+    friday, monday, tuesday, wednesday, thursday = _weekdays(friday, 5)
+    first = _row(friday, "gulf_bids", "success", run="friday-1")
+    second = _row(friday, "currencies", "success", run="friday-2")
+    monday_freight = replace(
+        _row(monday, "gulf_bids", "success", run="monday"),
+        rendered_at="2026-10-13T06:00:00Z",
+    )
+    monday_fx = replace(monday_freight, layer_name="currencies", status="no_publication")
+    tuesday_late = replace(
+        _row(tuesday, "gulf_bids", "success", run="tuesday"),
+        rendered_at="2026-10-14T06:00:01Z",
+    )
+    report = reliability.decision_cutoff_report(
+        [
+            first, second, monday_freight, monday_fx, tuesday_late,
+            _row(wednesday, "gulf_bids", "success", rendered=False),
+        ],
+        through=thursday,
+        cutoff_time=time(9),
+        cutoff_zone=ZoneInfo("Asia/Jerusalem"),
+        basket=("gulf_bids", "currencies"),
+        window=6,
+    )
+    assert [row["state"] for row in report["sessions"]] == [
+        "no_record", "basket_incomplete", "basket_ready", "late",
+        "no_promoted_edition", "no_promoted_edition",
+    ]
+    assert report["sessions"][1]["cutoff_at"] == "2026-10-12T09:00:00+03:00"
+    assert report["sessions"][2]["run_id"] == "monday"
+    assert report["sessions"][2]["layers"]["currencies"]["status"] == "no_publication"
+    assert report["sessions"][3]["first_late_rendered_at"] == "2026-10-14T06:00:01Z"
+    assert report["sessions_with_record_window"] == 5
+    assert report["readiness_pct"] == 20

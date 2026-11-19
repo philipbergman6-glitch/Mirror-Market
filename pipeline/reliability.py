@@ -24,8 +24,9 @@ from __future__ import annotations
 import statistics
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import config
 from pipeline import grading
@@ -54,6 +55,92 @@ def previous_session(session: date) -> date:
     while day.weekday() >= 5:
         day -= timedelta(days=1)
     return day
+
+
+def decision_cutoff_report(
+    rows: Sequence[LayerRun],
+    *,
+    through: date,
+    cutoff_time: time,
+    cutoff_zone: ZoneInfo,
+    basket: Sequence[str] = config.AVAILABILITY_BASKET,
+    window: int = config.RELIABILITY_WINDOW_SESSIONS,
+) -> dict[str, Any]:
+    """Check recorded promotion evidence against the next weekday desk cutoff.
+
+    Require the whole basket in one promoted run. The run record timestamps
+    edition generation, so an on-time result is evidence of generation and
+    eventual promotion. It cannot measure when the public URL became reachable.
+    """
+    if window < 1 or not basket or len(set(basket)) != len(basket):
+        raise ValueError("require a positive window and a unique, nonempty basket")
+    if cutoff_time.tzinfo is not None:
+        raise ValueError("cutoff time must be local to the supplied time zone")
+
+    sessions = [through if through.weekday() < 5 else previous_session(through)]
+    for _ in range(window - 1):
+        sessions.append(previous_session(sessions[-1]))
+    sessions.reverse()
+
+    grouped: dict[date, dict[tuple[str, str], dict[str, LayerRun]]] = {}
+    for row in rows:
+        if sessions[0] <= row.session_date <= sessions[-1] and row.rendered_at:
+            key = (row.rendered_at, row.run_id)
+            grouped.setdefault(row.session_date, {}).setdefault(key, {})[row.layer_name] = row
+    record_start = min((row.session_date for row in rows), default=None)
+
+    results = []
+    for session in sessions:
+        desk_day = session + timedelta(days=1)
+        while desk_day.weekday() >= 5:
+            desk_day += timedelta(days=1)
+        cutoff = datetime.combine(desk_day, cutoff_time, cutoff_zone)
+        promoted = sorted(
+            grouped.get(session, {}).items(),
+            key=lambda edition: datetime.fromisoformat(edition[0][0]),
+        )
+        by_cutoff = [edition for edition in promoted if datetime.fromisoformat(edition[0][0]) <= cutoff]
+        ready_by_cutoff = [
+            edition for edition in by_cutoff
+            if all(layer in edition[1] and edition[1][layer].status in AVAILABLE_STATUSES for layer in basket)
+        ]
+        evidence = ready_by_cutoff[-1] if ready_by_cutoff else by_cutoff[-1] if by_cutoff else None
+        if evidence is None:
+            if record_start is None or session < record_start:
+                state = "no_record"
+            else:
+                state = "late" if promoted else "no_promoted_edition"
+        else:
+            state = "basket_ready" if ready_by_cutoff else "basket_incomplete"
+        layers = evidence[1] if evidence is not None else {}
+        results.append({
+            "session_date": session.isoformat(),
+            "cutoff_at": cutoff.isoformat(),
+            "state": state,
+            "run_id": evidence[0][1] if evidence is not None else None,
+            "rendered_at": evidence[0][0] if evidence is not None else None,
+            "first_late_rendered_at": next(
+                (key[0] for key, _ in promoted if datetime.fromisoformat(key[0]) > cutoff), None,
+            ),
+            "layers": {
+                layer: {
+                    "status": layers[layer].status if layer in layers else None,
+                    "observed_at": layers[layer].observed_at if layer in layers else None,
+                }
+                for layer in basket
+            },
+        })
+    recorded = sum(result["state"] != "no_record" for result in results)
+    ready = sum(result["state"] == "basket_ready" for result in results)
+    return {
+        "evidence": "promoted edition generation time",
+        "cutoff_calendar": "next weekday after the recorded market session",
+        "basket": list(basket),
+        "sessions_with_record_window": recorded,
+        "sessions_ready_by_cutoff": ready,
+        "readiness_pct": _pct(ready, recorded),
+        "sessions": results,
+    }
 
 
 def _by_layer_session(rows: Iterable[LayerRun]) -> dict[str, dict[date, list[LayerRun]]]:

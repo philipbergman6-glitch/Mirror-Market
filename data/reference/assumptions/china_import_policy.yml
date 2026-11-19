@@ -110,3 +110,37 @@
   expires_on: 2027-04-18
   confidence: indicative
   citation: "https://fgk.chinatax.gov.cn/zcfgk/c100009/c5237365/content.html"
+
+- id: import_duty.us_gulf.cn_north.2026-11-extension
+  component: import_duty
+  value: 0.13
+  unit: fraction
+  origin: us_gulf
+  destination: cn_north
+  basis: >-
+    US-origin soybeans into China: MFN 3% plus the 10% additional tariff on
+    all US-origin goods that the Tariff Commission retained from 2025-11-10
+    13:01 (24% of the 34% suspended "in one year", 10% kept). That is SCTC
+    Announcement No. 10 of 2025 per USDA FAS GAIN CH2025-0209 — the MOF
+    policy-interpretation page cited states the measure but not the
+    announcement number. The soybean-specific March-2025 add-on was removed
+    from the same date (No. 9 of 2025, per the same GAIN report). 13% is USDA FAS's "Total Applied Tariff with 301 Exclusion" — it
+    ASSUMES the importer holds a Section 301 exclusion; without one the 2018
+    retaliatory tariff (27.5% on 1201.9011/9019) applies on top.
+    The Tariff Commission's 2026-11-09 announcement retained the 10%
+    additional tariff for two months from 2026-11-10 at 13:01 China time.
+    This date-only record expires before the partial day on 2027-01-10.
+  source: >-
+    Customs Tariff Commission announcement of 2026-11-09 for the extension.
+    USDA FAS GAIN CH2026-0032 Table 30 (2026-03-19) for the 13.0% total on
+    12019011 with a Section 301 exclusion, and GAIN CH2026-0113
+    (2026-09-04) for the 10% additional tariff on U.S. soybeans; checked 2026-11-19.
+  entered_by: "mirror-market B22 #485 (published policy rate, not a trader entry)"
+  entered_at: 2026-11-11
+  expires_on: 2027-01-09
+  confidence: indicative
+  caveat: >-
+    US-origin rate: MFN 3% + 10% additional on US goods, assuming the importer
+    holds a Section 301 exclusion — without one the 2018 retaliatory 27.5%
+    also applies (40.5% total)
+  citation: "https://gss.mof.gov.cn/gzdt/zhengcefabu/202611/t20261109_4004260.htm"

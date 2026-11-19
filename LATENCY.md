@@ -366,6 +366,35 @@ stored FX and board prices for the **2026-08-18** session and logged the
 
 ---
 
+## Desk cutoff report
+
+```bash
+python scripts/market_board.py --cutoff 08:00 --timezone Asia/Jerusalem --sessions 30
+```
+
+Add `--db /path/to/verified.db` to include the current market board from
+a SQLite snapshot. It reads CBOT beans, meal and oil by named contract,
+physical prices by their published terms and shipment windows, BRL and CNY
+FX, and the GTR Japan route benchmarks. U.S. Gulf basis requires the
+physical quote's named contract close on the same session. The benchmark
+freight rows carry their own cadence and age budget. Cargo freight comes
+from a quote for the buyer's route.
+
+The cutoff belongs to the next weekday after each recorded market session.
+Use `--through` to end the window on a historical market session and
+`--layers` to name a different public source basket. The default is the
+existing availability basket. The JSON includes the promoted run, render
+timestamp, individual source grades and observation stamps, plus sessions
+with no promotion or a late or incomplete basket. A ready session requires
+the full basket in one qualifying edition. Dates before the record starts
+are reported separately and excluded from the percentage.
+
+This measures generation time for editions that eventually passed promotion.
+Public delivery time requires an independent URL observation before the
+cutoff. The report uses the daily deployment record and a weekday calendar.
+Compare individual price identity, units and shipment terms separately when
+validating a source with the desk.
+
 ## 9. The product's latency
 
 Not the provider's. This is what a reader gets.

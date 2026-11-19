@@ -225,6 +225,38 @@ def test_the_shipped_us_duty_does_not_claim_a_number_its_cited_page_omits(shippe
 
 def test_the_shipped_us_duty_expires_no_later_than_the_policy_it_records(shipped):
     us = [a for a in shipped.assumptions if a.origin == "us_gulf"]
+    expiry_by_id = {
+        "import_duty.us_gulf.cn_north": date(2026, 11, 9),
+        "import_duty.us_gulf.cn_north.2026-11-extension": date(2027, 1, 9),
+    }
+    assert {assumption.id for assumption in us} == set(expiry_by_id)
     for assumption in us:
         assert assumption.component is CostComponent.IMPORT_DUTY
-        assert assumption.expires_on <= date(2026, 11, 10), assumption.id
+        assert assumption.expires_on == expiry_by_id[assumption.id]
+
+
+def test_the_us_duty_extension_preserves_history_and_withholds_partial_days(shipped):
+    for day, expected_id in (
+        (date(2026, 11, 9), "import_duty.us_gulf.cn_north"),
+        (date(2026, 11, 10), None),
+        (date(2026, 11, 11), "import_duty.us_gulf.cn_north.2026-11-extension"),
+        (date(2027, 1, 9), "import_duty.us_gulf.cn_north.2026-11-extension"),
+        (date(2027, 1, 10), None),
+    ):
+        found = shipped.lookup(
+            CostComponent.IMPORT_DUTY, origin="us_gulf", destination="cn_north",
+            window=SEP, on=day,
+        )
+        if expected_id is None:
+            assert isinstance(found, AssumptionMiss) and found.code == ORIGIN_DUTY_UNMODELLED
+        else:
+            assert isinstance(found, Assumption) and found.id == expected_id
+            assert found.value == pytest.approx(0.13) and "Section 301 exclusion" in found.caveat
+
+
+
+def test_renewed_scope_does_not_report_historical_expiry_as_a_current_blocker(shipped):
+    from analysis.origins.validation import validate_set
+
+    issues = validate_set(shipped, on=date(2026, 11, 19))
+    assert all(issue.code != "expired" for issue in issues)

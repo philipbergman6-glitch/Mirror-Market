@@ -375,8 +375,15 @@ def read_origin_quotes(conn, leg_id: str, *, today: date) -> tuple[OriginQuote, 
         extra.append(leg["window_column"])
     elif scheme == "magyp_months":
         extra.extend(leg["window_columns"])
+    contract_columns = source.get("contract_columns", ())
+    has_contract_range = len(contract_columns) == 2 and any(
+        col[1] == contract_columns[1]
+        for col in conn.execute(f"PRAGMA table_info({table})")  # registry table
+    )
     if leg.get("contract_column"):
         extra.append(leg["contract_column"])
+        if has_contract_range:
+            extra.append(contract_columns[1])
 
     columns = ", ".join([value_column, *extra]) if extra else value_column
     sql = (
@@ -408,8 +415,14 @@ def read_origin_quotes(conn, leg_id: str, *, today: date) -> tuple[OriginQuote, 
             window = parse_magyp_window(row[cursor], row[cursor + 1])
             cursor += 2
         contract = None
+        notes = _leg_notes(leg, scheme)
         if leg.get("contract_column"):
             contract = _contract_ref(leg, row[cursor], latest)
+            if has_contract_range and row[cursor + 1] is not None:
+                high_contract = _contract_ref(leg, row[cursor + 1], latest)
+                if high_contract != contract:
+                    contract = None
+                    notes += ("The bid range has no single named board contract.",)
 
         usd = to_usd_per_mt(
             native, unit=unit, key=key, fx=fx.usd_per_unit if fx else None
@@ -457,7 +470,7 @@ def read_origin_quotes(conn, leg_id: str, *, today: date) -> tuple[OriginQuote, 
                 board_contract=contract,
                 quotes_averaged=1,
                 max_age_days=max_age,
-                notes=_leg_notes(leg, scheme),
+                notes=notes,
             )
         )
     return tuple(quotes)
