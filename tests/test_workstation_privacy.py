@@ -296,3 +296,58 @@ def test_an_unknown_audience_is_refused_rather_than_defaulting_to_private(curve_
 
     with pytest.raises(ValueError, match="audience"):
         build_view(curve_db, today=TODAY, generated_at=GENERATED_AT, audience="desk", **desk)
+
+
+def test_public_workstation_does_not_open_private_positions_or_options(curve_db, desk, monkeypatch):
+    from app import workstation_page
+
+    def reject_private_read(*args, **kwargs):
+        pytest.fail("public workstation opened a private record reader")
+
+    monkeypatch.setattr(workstation_page, "_load_book", reject_private_read)
+    monkeypatch.setattr(workstation_page, "_ladder", reject_private_read)
+
+    assert_no_client_records(view(curve_db, desk, audience=AUDIENCE_PUBLIC))
+
+
+def test_saved_offer_expiry_and_rank_reversal_are_private(curve_db, desk, tmp_path, monkeypatch):
+    import json
+
+    from app import workstation_page
+
+    monkeypatch.setattr(workstation_page, "CARGO_WORKSPACE", tmp_path)
+    decisions = tmp_path / "decisions"
+    decisions.mkdir()
+    case = {
+        "destination": "cn_north",
+        "quantity_mt": 25000,
+        "loading_start": "2026-09-01",
+        "loading_end": "2026-09-30",
+        "offers": [
+            {"id": offer_id, "origin": origin, "grade": "soybeans", "incoterm": "FOB", "carrier": "vessel"}
+            for offer_id, origin in ((MARK, "us_gulf"), ("brazil", "br_paranagua"))
+        ],
+    }
+    result = {
+        "comparison_state": "complete",
+        "offers": [{"id": MARK, "expires_at": "2026-08-19T20:00:00+00:00"}],
+    }
+    for day, winner in ((18, MARK), (19, "brazil")):
+        (decisions / f"{day}.json").write_text(json.dumps({
+            "schema_version": 1,
+            "case_id": "private_case",
+            "case": case,
+            "result": {**result, "decision_at": f"2026-08-{day}T18:00:00+00:00", "winner": winner},
+        }), encoding="utf-8")
+
+    private_alerts = sections(view(curve_db, desk, audience=AUDIENCE_PRIVATE))["alerts"]["data"]["alerts"]
+    private_kinds = {alert["kind"] for alert in private_alerts}
+    assert {"cargo_offer_expiry", "cargo_rank_reversal"} <= private_kinds
+
+    def reject_cargo_read(*args, **kwargs):
+        pytest.fail("public workstation opened a private cargo reader")
+
+    monkeypatch.setattr(workstation_page, "saved_cargo_alerts", reject_cargo_read)
+    public = render(view(curve_db, desk, audience=AUDIENCE_PUBLIC))
+    assert "private_case" not in public
+    assert MARK not in public

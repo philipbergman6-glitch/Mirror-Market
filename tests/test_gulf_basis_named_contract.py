@@ -28,6 +28,7 @@ from app.block_builders import SiteContext
 from app.markets import _source, load_markets
 from pipeline import schema
 from pipeline.units import to_metric_tons
+from scripts.market_board import current_board
 
 TEMPLATES = block_builders.__file__.rsplit("/", 1)[0] + "/templates"
 
@@ -263,3 +264,27 @@ def test_a_contract_declaration_is_basis_only():
            "contract_board": "Soybeans", "contract_columns": ("a", "b")}
     with pytest.raises(ValueError, match="basis-only"):
         _source(raw, slug="cbot", block="price")
+
+
+
+def test_desk_market_board_requires_one_same_session_contract_per_gulf_window(conn):
+    def quotes():
+        return {
+            row["shipment_window"]["label"]: row
+            for row in current_board(conn, today=D0)["physical_origins"]["us_gulf"]["quotes"]
+        }
+
+    board = quotes()
+    prompt = board["Current (prompt)"]
+    assert prompt["basis"]["usd_per_mt"] == pytest.approx(_usd(GULF_CURRENT[D0] * 100 - ZSX26[D0]))
+    assert prompt["basis"]["reference_close"]["observation_date"] == D0.isoformat()
+    jan = board["Jan 2027"]
+    assert jan["basis"]["state"] == "unavailable"
+    assert "no same-session close for ZSF27" in jan["basis"]["reason"]
+
+    conn.execute("UPDATE gulf_bids SET futures_month_high = 1 WHERE report_date = ? AND delivery = 'Current'",
+                 (D0.isoformat(),))
+    mixed = quotes()["Current (prompt)"]
+    assert mixed["board_contract"] is None
+    assert mixed["basis"]["state"] == "unavailable"
+    assert mixed["price_usd_mt"] == prompt["price_usd_mt"]

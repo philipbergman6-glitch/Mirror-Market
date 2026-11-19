@@ -43,12 +43,14 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import json
 import logging
 import os
 import shutil
 import sqlite3
 import tempfile
 from collections.abc import Mapping
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -152,6 +154,24 @@ class R2Store:
         )
 
     def put(self, key: str, path: Path, metadata: dict[str, str]) -> None:
+        if key.startswith("daily/"):
+            from botocore.exceptions import ClientError
+
+            try:
+                with path.open("rb") as body:
+                    self._client.put_object(
+                        Bucket=self._bucket,
+                        Key=key,
+                        Body=body,
+                        Metadata=metadata,
+                        ContentType="application/gzip",
+                        IfNoneMatch="*",
+                    )
+            except ClientError as exc:
+                if exc.response.get("Error", {}).get("Code") in {"412", "PreconditionFailed"}:
+                    raise SnapshotError(f"archive already exists: {key}") from exc
+                raise
+            return
         self._client.upload_file(
             str(path),
             self._bucket,
@@ -163,14 +183,15 @@ class R2Store:
         from botocore.exceptions import ClientError
 
         try:
-            head = self._client.head_object(Bucket=self._bucket, Key=key)
+            response = self._client.get_object(Bucket=self._bucket, Key=key)
         except ClientError as exc:
             code = str(exc.response.get("Error", {}).get("Code", ""))
             if code in {"404", "NoSuchKey", "NotFound"}:
                 return None
             raise
-        self._client.download_file(self._bucket, key, str(path))
-        return {str(k).lower(): str(v) for k, v in head.get("Metadata", {}).items()}
+        with closing(response["Body"]) as body, path.open("wb") as dst:
+            shutil.copyfileobj(body, dst, _CHUNK)
+        return {str(k).lower(): str(v) for k, v in response.get("Metadata", {}).items()}
 
 
 def daily_key(built_at: datetime, run_id: str) -> str:
@@ -245,28 +266,77 @@ class PushResult:
     gz_bytes: int
 
 
-def push(db_path: Path, store: ObjectStore, *, run_id: str, built_at: datetime) -> PushResult:
+def push(
+    db_path: Path,
+    store: ObjectStore,
+    *,
+    run_id: str,
+    built_at: datetime,
+    public_manifest: Path | None = None,
+) -> PushResult:
     """Upload ``db_path`` as a dated archive, then as the latest verified seed."""
     if not run_id.strip():
         raise SnapshotError("run_id is required")
     dated = daily_key(built_at, run_id)
-    verify_sqlite(db_path)
+    manifest_body = None
+    if public_manifest is not None:
+        manifest_body = public_manifest.read_bytes()
+        try:
+            manifest = json.loads(manifest_body)
+        except ValueError as exc:
+            raise SnapshotError("public edition manifest is invalid JSON") from exc
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema_version") != 1
+            or not isinstance(manifest.get("edition"), dict)
+            or not isinstance(manifest.get("coverage"), list)
+        ):
+            raise SnapshotError("public edition manifest has an unexpected shape")
+    if not db_path.is_file():
+        raise SnapshotError(f"{db_path}: no database file")
     with tempfile.TemporaryDirectory() as tmp:
+        staged = Path(tmp) / "snapshot.db"
+        try:
+            with (
+                closing(sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)) as source,
+                closing(sqlite3.connect(staged)) as backup,
+            ):
+                source.backup(backup)
+                private_table = backup.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'matif_futures' COLLATE NOCASE"
+                ).fetchone()
+                if private_table and backup.execute("SELECT 1 FROM matif_futures LIMIT 1").fetchone():
+                    raise SnapshotError("refusing to upload a snapshot containing private matif_futures rows")
+        except sqlite3.DatabaseError as exc:
+            raise SnapshotError(f"{db_path}: cannot create SQLite snapshot ({exc})") from exc
+        verify_sqlite(staged)
         gz = Path(tmp) / "snapshot.db.gz"
-        with db_path.open("rb") as src, gzip.open(gz, "wb", compresslevel=6) as dst:
+        with staged.open("rb") as src, gzip.open(gz, "wb", compresslevel=6) as dst:
             shutil.copyfileobj(src, dst, _CHUNK)
         sha = _sha256(gz)
         metadata = {
             META_SHA256: sha,
             META_RUN_ID: run_id,
             META_BUILT_AT: built_at.astimezone(timezone.utc).isoformat(),
-            META_DB_BYTES: str(db_path.stat().st_size),
+            META_DB_BYTES: str(staged.stat().st_size),
         }
         store.put(dated, gz, metadata)
+        keys = [dated]
+        if manifest_body is not None:
+            manifest_key = dated.removesuffix(".db.gz") + ".manifest.json.gz"
+            manifest_gz = Path(tmp) / "manifest.json.gz"
+            manifest_gz.write_bytes(gzip.compress(manifest_body, mtime=0))
+            store.put(manifest_key, manifest_gz, {
+                META_SHA256: _sha256(manifest_gz),
+                META_RUN_ID: run_id,
+                META_BUILT_AT: metadata[META_BUILT_AT],
+            })
+            keys.append(manifest_key)
         store.put(LATEST_KEY, gz, metadata)
+        keys.append(LATEST_KEY)
         size = gz.stat().st_size
     logger.info("Snapshot pushed: %s and %s (%d bytes gz, sha256 %s)", dated, LATEST_KEY, size, sha)
-    return PushResult(keys=(dated, LATEST_KEY), sha256=sha, gz_bytes=size)
+    return PushResult(keys=tuple(keys), sha256=sha, gz_bytes=size)
 
 
 @dataclass(frozen=True)
@@ -346,8 +416,11 @@ def pull(
     key: str = LATEST_KEY,
     now: datetime | None = None,
     max_age_days: float | None = None,
+    preserve_history: bool = False,
 ) -> PullResult:
-    """Restore the seed at ``key`` to ``db_path``, history tables emptied.
+    """Restore the object at ``key`` to ``db_path``.
+
+    Clear history tables for pipeline seeding. Preserve them for archive recovery.
 
     Refuses to overwrite an existing database: on a fresh runner there is
     none, and anywhere else a silent replace would destroy local state.
@@ -381,7 +454,10 @@ def pull(
         except (OSError, EOFError) as exc:
             raise SnapshotError(f"{key}: cannot decompress ({exc})") from exc
         verify_sqlite(staged)
-        cleared = clear_history_tables(staged)
+        expected_size = metadata.get(META_DB_BYTES)
+        if expected_size is not None and expected_size != str(staged.stat().st_size):
+            raise SnapshotError(f"{key}: uncompressed database size does not match metadata")
+        cleared = [] if preserve_history else clear_history_tables(staged)
         os.replace(staged, db_path)
     logger.info(
         "Snapshot restored from %s (run %s, built %s); %d history tables left to the CSVs",
@@ -393,3 +469,31 @@ def pull(
     return PullResult(
         state="restored", metadata=metadata, cleared_tables=tuple(cleared), age_days=age
     )
+
+
+def verify_latest_archive(store: ObjectStore, *, now: datetime | None = None) -> str:
+    """Restore the current seed and its dated counterpart in disposable storage."""
+    with tempfile.TemporaryDirectory() as tmp:
+        directory = Path(tmp)
+        latest = pull(
+            directory / "latest.db",
+            store,
+            now=now,
+            preserve_history=True,
+            max_age_days=SEED_SHORT_WINDOW_MAX_AGE_DAYS,
+        )
+        if latest.state != "restored":
+            raise SnapshotError(f"latest seed recovery failed: {latest.state}")
+        run_id = latest.metadata.get(META_RUN_ID)
+        if not run_id:
+            raise SnapshotError("latest seed has no run ID")
+        built_at = datetime.fromisoformat(latest.metadata[META_BUILT_AT])
+        archive_key = daily_key(built_at, run_id)
+        archive = pull(
+            directory / "archive.db", store, key=archive_key, now=now, preserve_history=True
+        )
+        if archive.state != "restored":
+            raise SnapshotError(f"dated archive recovery failed: {archive_key}")
+        if archive.metadata.get(META_SHA256) != latest.metadata[META_SHA256]:
+            raise SnapshotError(f"dated archive does not match the latest seed: {archive_key}")
+        return archive_key

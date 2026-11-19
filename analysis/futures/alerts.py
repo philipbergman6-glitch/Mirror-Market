@@ -29,14 +29,15 @@ read them.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 from analysis.futures.curve import CurveAnalysis
-from analysis.futures.domain import Freshness
+from analysis.futures.domain import Freshness, NamedContract
 from analysis.futures.hedge import HedgeProposal
-from analysis.futures.positions import BookValuation
+from analysis.futures.positions import Book, BookValuation
 
 SEVERITIES = ("alert", "warning", "info")
 
@@ -84,9 +85,14 @@ def sort_alerts(alerts: tuple[Alert, ...]) -> tuple[Alert, ...]:
 
 def expiry_alerts(proposal: HedgeProposal, *, as_of: date) -> tuple[Alert, ...]:
     """Contracts in this hedge that stop trading soon, or have no encoded expiry."""
+    return _expiry_alerts((leg.contract for leg in proposal.legs), as_of=as_of)
+
+
+def _expiry_alerts(
+    contracts: Iterable[NamedContract], *, as_of: date, subject_label: str = "this hedge"
+) -> tuple[Alert, ...]:
     out: list[Alert] = []
-    for leg in proposal.legs:
-        contract = leg.contract
+    for contract in contracts:
         if contract.last_trade is None:
             out.append(Alert(
                 kind="approaching_expiry", severity="warning", subject=contract.symbol,
@@ -104,7 +110,7 @@ def expiry_alerts(proposal: HedgeProposal, *, as_of: date) -> tuple[Alert, ...]:
                 kind="approaching_expiry", severity="alert", subject=contract.symbol,
                 message=(
                     f"{contract.symbol} stopped trading on {contract.last_trade.isoformat()} — "
-                    "this hedge references an expired contract"
+                    f"{subject_label} references an expired contract"
                 ),
                 detail={"last_trade": contract.last_trade.isoformat(), "days_to_expiry": days},
             ))
@@ -129,26 +135,30 @@ def roll_alerts(proposal: HedgeProposal, *, as_of: date) -> tuple[Alert, ...]:
     past it commits to making delivery. The alert fires on the earlier date for
     exactly that reason.
     """
+    return _roll_alerts((leg.contract for leg in proposal.legs), as_of=as_of)
+
+
+def _roll_alerts(contracts: Iterable[NamedContract], *, as_of: date) -> tuple[Alert, ...]:
     out: list[Alert] = []
-    for leg in proposal.legs:
-        fnd = leg.contract.first_notice
+    for contract in contracts:
+        fnd = contract.first_notice
         if fnd is None:
             continue
         days = (fnd - as_of).days
-        if days < 0:
+        if days <= 0:
             out.append(Alert(
-                kind="roll_window", severity="alert", subject=leg.contract.symbol,
+                kind="roll_window", severity="alert", subject=contract.symbol,
                 message=(
-                    f"{leg.contract.symbol} first notice day was {fnd.isoformat()} — a position "
+                    f"{contract.symbol} first notice day is on or before today ({fnd.isoformat()}) — a position "
                     f"still open is exposed to delivery"
                 ),
                 detail={"first_notice": fnd.isoformat(), "days": days},
             ))
         elif days <= ROLL_WINDOW_DAYS:
             out.append(Alert(
-                kind="roll_window", severity="warning", subject=leg.contract.symbol,
+                kind="roll_window", severity="warning", subject=contract.symbol,
                 message=(
-                    f"{leg.contract.symbol} first notice day is {fnd.isoformat()} ({days} days) — "
+                    f"{contract.symbol} first notice day is {fnd.isoformat()} ({days} days) — "
                     "roll or close before then"
                 ),
                 detail={"first_notice": fnd.isoformat(), "days": days},
@@ -303,6 +313,7 @@ def build_alerts(
     proposals: tuple[HedgeProposal, ...] = (),
     curves: tuple[CurveAnalysis, ...] = (),
     valuation: BookValuation | None = None,
+    book: Book | None = None,
     basis_bounds: dict[str, tuple[float | None, float | None]] | None = None,
 ) -> tuple[Alert, ...]:
     """Every exposure alert this workstation can raise, most severe first."""
@@ -328,6 +339,15 @@ def build_alerts(
     if valuation is not None:
         alerts.extend(limit_alerts(valuation))
         alerts.extend(position_staleness_alerts(valuation))
+
+    if book is not None:
+        lots_by_account: dict[tuple[str, NamedContract], float] = {}
+        for position in book.futures:
+            account_contract = (position.account, position.contract)
+            lots_by_account[account_contract] = lots_by_account.get(account_contract, 0.0) + position.net_contracts
+        held_contracts = {contract for (_, contract), lots in lots_by_account.items() if abs(lots) > 1e-9}
+        alerts.extend(_expiry_alerts(held_contracts, as_of=as_of, subject_label="an open position"))
+        alerts.extend(_roll_alerts(held_contracts, as_of=as_of))
 
     # A commodity can raise the same staleness alert from two directions (its
     # curve, and a position marked against it). One line per fact.

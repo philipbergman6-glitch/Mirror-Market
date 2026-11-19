@@ -330,7 +330,14 @@ def validate_set(
 ) -> tuple[ValidationIssue, ...]:
     """Every fault in the set, errors first. Pure: no clock, no I/O."""
     issues: list[ValidationIssue] = list(structural_issues(assumptions))
+    live_scopes = {
+        (*_scope_key(assumption), assumption.window)
+        for assumption in assumptions.assumptions
+        if assumption.is_live(on)
+    }
     for assumption in assumptions.assumptions:
+        if assumption.expires_on < on and (*_scope_key(assumption), assumption.window) in live_scopes:
+            continue
         issues.extend(_lifetime_issues(assumption, on, expiry_horizon_days))
     return _sorted(issues)
 

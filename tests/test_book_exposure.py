@@ -216,6 +216,7 @@ def test_an_over_hedge_shows_a_negative_residual_rather_than_zero() -> None:
 def test_every_view_the_brief_asks_for_is_present_in_the_enum() -> None:
     assert {view.value for view in ExposureView} == {
         "flat_price", "basis", "crush", "fx", "contract_month", "first_notice", "residual",
+        "origin_unpriced", "contract_coverage",
     }
 
 
@@ -241,3 +242,24 @@ def test_metric_lookup_is_what_the_limits_module_reads() -> None:
     assert rep.metric("flat_price_mt", "Corn") is None
     with pytest.raises(KeyError):
         rep.metric("not_a_metric", "*")
+
+
+def test_named_contract_coverage_does_not_use_other_futures_months() -> None:
+    book = Book(
+        physical=(PhysicalPosition(
+            commodity="Soybeans", quantity=1000, unit=PhysicalUnit.METRIC_TON,
+            side=Side.LONG, basis_convention=BasisConvention.BASIS_OVER_FUTURES,
+            mark_contract="ZSX26.CBT", location="Paranagua",
+        ),),
+        futures=(
+            FuturesPosition(named_contract("Soybeans", 2026, 11), stated_contracts=-2),
+            FuturesPosition(named_contract("Soybeans", 2027, 1), stated_contracts=-5),
+        ),
+    )
+
+    rep = report(book)
+
+    assert line(rep, ExposureView.ORIGIN_UNPRICED, "Soybeans · Paranagua").quantity_mt == 1000
+    assert line(rep, ExposureView.CONTRACT_COVERAGE, "ZSX26").quantity_mt == pytest.approx(
+        1000 - 2 * MT_PER_ZS, abs=0.01,
+    )
