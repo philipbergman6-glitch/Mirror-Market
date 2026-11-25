@@ -28,7 +28,7 @@ KINDS = ("exact", "band", "recompute")
 TRANSPORTS = ("same document, independent parser", "independent document")
 DISPOSITIONS = ("explained", "unexplained")
 _LEDGER_EDITION = re.compile(r"^L-\d{4}-\d{2}-\d{2}-\d+$")
-_VERIFIER = re.compile(r"^(verify/[\w/]+\.py@[0-9a-f]{7,40}(\+dirty)?|human \([A-Z]{2,4}\))$")
+_VERIFIER = re.compile(r"^(verify/[\w/]+\.py@[0-9a-f]{7,40}(\+dirty|\+tree-unchecked)?|human \([A-Z]{2,4}\))$")
 
 
 class RecordError(ValueError):

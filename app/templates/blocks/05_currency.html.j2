@@ -5,7 +5,7 @@
 {#- AL1 #640: the two rate cards are basket numbers (stratum 6) on a
     basket-grade page. The verifier reads value, "X per Y" unit and the as-of
     date from the visible text; the attributes only find the card. -#}
-{% set loc %}{% if block.verify_stratum %} data-verify-figure="fx-rate" data-verify-series="{{ d.pair }}"{% endif %}{% endset %}
+{% set loc %}{% if block.verify_located %} data-verify-figure="fx-rate" data-verify-series="{{ d.pair }}"{% endif %}{% endset %}
 <div class="grid grid-3">
   <div class="mc"{{ loc }}>
     <div class="mc-label">{{ d.pair }}</div>

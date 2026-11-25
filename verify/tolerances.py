@@ -18,7 +18,7 @@ DEFAULT_PATH = Path(__file__).with_name("tolerances.json")
 
 # Basket v1 (spec #639): the file must carry a block for every stratum.
 BASKET_V1_STRATA = ("1", "1b", "2", "3", "3u", "4", "5", "6", "7", "8", "9", "10")
-KINDS = ("exact", "band", "recompute", "unverifiable")
+STRATUM_KINDS = ("exact", "band", "recompute", "unverifiable")
 
 
 class ToleranceFileError(ValueError):
@@ -49,11 +49,26 @@ class Tolerances:
             block.update(pairs[series])
         return block
 
-    def threshold_usd_mt(self, leg_label: str) -> float:
-        """The economic threshold for a leg: the oil threshold for an oil leg, else bean-scale."""
-        thresholds = self.data["economic_thresholds_usd_mt"]
-        is_oil = any(word in leg_label for word in self.data["oil_leg_label_contains"])
-        return float(thresholds["oil"] if is_oil else thresholds["bean_scale_and_derived"])
+    def threshold_usd_mt(self, block: dict[str, Any], leg_label: str) -> float:
+        """The block's economic threshold for one leg: its ``oil`` entry for an oil leg, else ``default``."""
+        threshold = block.get("threshold_usd_mt")
+        if isinstance(threshold, (int, float)):
+            return float(threshold)
+        if not isinstance(threshold, dict) or not isinstance(threshold.get("default"), (int, float)):
+            raise ToleranceFileError(f"threshold_usd_mt {threshold!r} names no numeric 'default'")
+        is_oil = any(word.casefold() in leg_label.casefold() for word in self.data["oil_leg_label_contains"])
+        if is_oil and isinstance(threshold.get("oil"), (int, float)):
+            return float(threshold["oil"])
+        return float(threshold["default"])
+
+    @staticmethod
+    def native_allowance(block: dict[str, Any], decimals: int) -> float:
+        """The native tolerance, plus half a unit in the last displayed place when the block says so."""
+        native = block.get("native_tolerance")
+        if not isinstance(native, dict) or not isinstance(native.get("value"), (int, float)):
+            raise ToleranceFileError(f"native_tolerance {native!r} names no numeric 'value'")
+        display = 0.5 * 10 ** -decimals if "display rounding" in str(native.get("plus", "")) else 0.0
+        return float(native["value"]) + display
 
 
 def load(path: Path = DEFAULT_PATH) -> Tolerances:
@@ -75,12 +90,10 @@ def load(path: Path = DEFAULT_PATH) -> Tolerances:
         for field in ("kind", "tier", "since"):
             if field not in block:
                 raise ToleranceFileError(f"{path}: stratum {key} has no {field!r}")
-        if block["kind"] not in KINDS:
-            raise ToleranceFileError(f"{path}: stratum {key} kind {block['kind']!r} is not one of {KINDS}")
-    thresholds = data.get("economic_thresholds_usd_mt", {})
-    for field in ("bean_scale_and_derived", "oil"):
-        if not isinstance(thresholds.get(field), (int, float)):
-            raise ToleranceFileError(f"{path}: economic_thresholds_usd_mt.{field} must be a number")
+        if block["kind"] not in STRATUM_KINDS:
+            raise ToleranceFileError(f"{path}: stratum {key} kind {block['kind']!r} is not one of {STRATUM_KINDS}")
+        if block["kind"] != "unverifiable" and block.get("threshold_usd_mt") is None:
+            raise ToleranceFileError(f"{path}: stratum {key} has no threshold_usd_mt")
     if not data.get("oil_leg_label_contains"):
         raise ToleranceFileError(f"{path}: 'oil_leg_label_contains' is empty")
     return Tolerances(version=version, sha256=hashlib.sha256(raw).hexdigest(), data=data)

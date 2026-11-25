@@ -120,7 +120,7 @@ def test_a_date_the_ecb_published_no_fix_for_is_a_metadata_fail(tmp_path):
     _code, rows = _run(tmp_path, _edition(tmp_path, "0.1500", "6.66", "2026-11-21"))
     for row in rows:
         assert row["result"] == "metadata fail" and row["material"] is True
-        assert "no USD/CNY reference rate for 2026-11-21" in row["explanation"]
+        assert "carries no reference date 2026-11-21" in row["explanation"]
         assert row["delta_native"] is None  # nothing to subtract: never a zero
 
 
@@ -174,7 +174,7 @@ def test_changing_the_tolerance_file_does_not_regrade_existing_records(tmp_path)
 
     data = json.loads(v1.read_text(encoding="utf-8"))
     data["version"] = 2
-    data["economic_thresholds_usd_mt"]["bean_scale_and_derived"] = 0.1
+    data["strata"]["6"]["threshold_usd_mt"]["default"] = 0.1
     v2 = tmp_path / "tol-v2.json"
     v2.write_text(json.dumps(data), encoding="utf-8")
     later = NOW.replace(hour=21)
@@ -211,8 +211,15 @@ def test_a_tolerance_file_missing_a_basket_stratum_is_refused(tmp_path):
 def test_tolerance_file_v1_carries_the_owner_numbers():
     tol = tolerances.load()
     assert tol.version == 1
-    assert tol.data["economic_thresholds_usd_mt"]["bean_scale_and_derived"] == 0.5
-    assert tol.data["economic_thresholds_usd_mt"]["oil"] == 1.5
+    # Owner #477 Q1: 0.5 USD/MT bean-scale and derived, 1.5 oil — in every block that grades.
+    for key in ("2", "6", "7", "8", "9"):
+        block = tol.stratum(key)["threshold_usd_mt"]
+        values = block.values() if isinstance(block, dict) else [block]
+        assert {v for v in values if isinstance(v, (int, float))} <= {0.5, 1.5}, key
+    fx = tol.for_series("6", "CNY/USD")
+    assert tol.threshold_usd_mt(fx, "DCE Soybean Oil") == 1.5
+    assert tol.threshold_usd_mt(fx, "DCE Soybean Meal") == 0.5
+    assert tol.native_allowance(fx, 4) == pytest.approx(0.00005)
     cbot = tol.stratum("1")
     assert cbot["kind"] == "exact" and cbot["native_tolerance"]["value"] == 0
     assert cbot["native_tolerance"]["unit"] == "ticks"
@@ -240,3 +247,26 @@ def test_live_ecb_document_parses_and_carries_cny(tmp_path):
 
     rates = ecb.parse(ecb.fetch())
     assert "CNY" in rates.by_date[rates.last] and "USD" in rates.by_date[rates.last]
+
+
+def test_the_grade_reads_the_tolerance_file_not_a_constant(tmp_path):
+    # Widening stratum 6's native tolerance by 0.001 USD per CNY (an edit
+    # nobody should make without evidence) turns the material 0.1510 into a pass:
+    # proof that the file, not the code, decides.
+    data = json.loads(tolerances.DEFAULT_PATH.read_text(encoding="utf-8"))
+    data["strata"]["6"]["native_tolerance"]["value"] = 0.001
+    wide = tmp_path / "tol.json"
+    wide.write_text(json.dumps(data), encoding="utf-8")
+    _code, rows = _run(tmp_path, _edition(tmp_path, "0.1510", "6.66", "2026-11-24"), "--tolerances", str(wide))
+    assert _by_unit(rows)["USD per CNY"]["result"] == "pass"
+
+
+def test_a_page_locating_the_rate_under_another_stratum_is_not_checked(tmp_path):
+    edition = _edition(tmp_path, "0.1500", "6.66", "2026-11-24")
+    page = edition / "markets" / "dalian.html"
+    page.write_text(page.read_text(encoding="utf-8").replace('data-verify-stratum="6"', 'data-verify-stratum="2"'),
+                    encoding="utf-8")
+    code, rows = _run(tmp_path, edition)
+    assert code == 1
+    assert {row["result"] for row in rows} == {"not checked"}
+    assert "under stratum 2" in rows[0]["explanation"]

@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from verify import ecb, page, record, tolerances
 from verify.grade import Impact, grade_exact, within
@@ -55,13 +56,15 @@ class _Context:
     page_sha256: str
     source_url: str
     tolerances: tolerances.Tolerances
+    block: dict[str, Any]  # the CNY/USD tolerance block, stratum 6 with its pair overrides
     verifier: str
     verified_at: str
     ledger_edition: str | None
 
 
 def verifier_identity() -> str:
-    """``verify/fx_cny.py@<commit>`` — ``+dirty`` when the verifier differs from that commit."""
+    """``verify/fx_cny.py@<commit>``: ``+dirty`` when the verifier differs from that commit,
+    ``+tree-unchecked`` when no git was available to say (CI's ``GITHUB_SHA`` alone)."""
     here = Path(__file__).resolve().parent
     try:
         sha = subprocess.run(
@@ -71,15 +74,18 @@ def verifier_identity() -> str:
             ["git", "-C", str(here), "status", "--porcelain", "--", str(here)],
             capture_output=True, text=True, check=True,
         ).stdout.strip()
+        suffix = "+dirty" if dirty else ""
     except (OSError, subprocess.CalledProcessError):
-        sha, dirty = os.environ.get("GITHUB_SHA", "").strip(), ""
+        sha, suffix = os.environ.get("GITHUB_SHA", "").strip(), "+tree-unchecked"
     if not sha:
         raise SetupError("cannot name the verifier's commit (no git, no GITHUB_SHA): a record must be re-checkable")
-    return f"{SCRIPT}@{sha}{'+dirty' if dirty else ''}"
+    return f"{SCRIPT}@{sha}{suffix}"
 
 
-def _base(ctx: _Context, reading: page.FxBlockReading | None, figure: page.Figure | None, **fields) -> record.Record:
-    defaults: dict = {
+def _base(
+    ctx: _Context, reading: page.FxBlockReading | None, figure: page.Figure | None, **fields: Any
+) -> record.Record:
+    defaults: dict[str, Any] = {
         "ledger_edition": ctx.ledger_edition,
         "site_edition": reading.site_edition if reading else None,
         "page": ctx.page,
@@ -92,8 +98,8 @@ def _base(ctx: _Context, reading: page.FxBlockReading | None, figure: page.Figur
         "contract_or_window": None,
         "fx_date": reading.observation_date if reading else None,
         "event_class": "ordinary",
-        "tier": "1",
-        "kind": "exact",
+        "tier": ctx.block["tier"],
+        "kind": ctx.block["kind"],
         "source_identity": SOURCE_IDENTITY,
         "source_url": ctx.source_url,
         "source_vintage": None,
@@ -121,9 +127,19 @@ def _base(ctx: _Context, reading: page.FxBlockReading | None, figure: page.Figur
     return record.Record(**defaults)
 
 
-def _not_checked(ctx, reading, figures, reason: str) -> list[record.Record]:
-    targets = figures or [None]
+def _not_checked(
+    ctx: _Context, reading: page.FxBlockReading | None, figures: list[page.Figure], reason: str
+) -> list[record.Record]:
+    targets: list[page.Figure | None] = list(figures) or [None]
     return [_base(ctx, reading, figure, result="not checked", explanation=reason) for figure in targets]
+
+
+def _is_usd_per_foreign(figure: page.Figure) -> bool:
+    return (figure.numerator, figure.denominator) == ("USD", FOREIGN)
+
+
+def _is_cny_usd(figure: page.Figure) -> bool:
+    return {figure.numerator, figure.denominator} == {"USD", FOREIGN}
 
 
 def _cross(rates: ecb.ReferenceRates, day: date, figure: page.Figure) -> tuple[float, str] | None:
@@ -131,16 +147,25 @@ def _cross(rates: ecb.ReferenceRates, day: date, figure: page.Figure) -> tuple[f
     if legs is None or "USD" not in legs or FOREIGN not in legs:
         return None
     usd, cny = legs["USD"], legs[FOREIGN]
-    if figure.unit == f"USD per {FOREIGN}":
+    if _is_usd_per_foreign(figure):
         return usd / cny, f"ECB USD {usd:g} ÷ {FOREIGN} {cny:g} per EUR ({day.isoformat()})"
     return cny / usd, f"ECB {FOREIGN} {cny:g} ÷ USD {usd:g} per EUR ({day.isoformat()})"
 
 
 def _usd_per_foreign(figure: page.Figure, value: float) -> float:
-    return value if figure.unit == f"USD per {FOREIGN}" else 1.0 / value
+    return value if _is_usd_per_foreign(figure) else 1.0 / value
 
 
-def _matching_days(rates, figure, around: date, tolerance: float) -> list[str]:
+def _no_fix_reason(rates: ecb.ReferenceRates, day: date) -> str:
+    """Why the document has no cross for ``day`` — only what the document itself shows."""
+    legs = rates.by_date.get(day)
+    if legs is None:
+        return f"the ECB document carries no reference date {day} (no fix was published that day)"
+    absent = [code for code in ("USD", FOREIGN) if code not in legs]
+    return f"the ECB document's {day} carries no {' or '.join(absent)} rate"
+
+
+def _matching_days(rates: ecb.ReferenceRates, figure: page.Figure, around: date, tolerance: float) -> list[str]:
     days = []
     for offset in range(-MATCH_WINDOW_DAYS, MATCH_WINDOW_DAYS + 1):
         day = around + timedelta(days=offset)
@@ -150,12 +175,16 @@ def _matching_days(rates, figure, around: date, tolerance: float) -> list[str]:
     return days
 
 
-def _grade_figure(ctx, reading: page.FxBlockReading, figure: page.Figure, rates, legs) -> record.Record:
+def _grade_figure(
+    ctx: _Context, reading: page.FxBlockReading, figure: page.Figure, rates: ecb.ReferenceRates,
+    legs: list[page.Leg],
+) -> record.Record:
     shown = date.fromisoformat(reading.observation_date)
-    half_step = 0.5 * 10 ** -figure.decimals
+    allowance = ctx.tolerances.native_allowance(ctx.block, figure.decimals)
+    native = ctx.block["native_tolerance"]
     tolerance_text = (
-        f"±{half_step:g} {figure.unit} (display rounding at {figure.decimals} dp; native 0: "
-        "the product strikes the same ECB cross)"
+        f"±{allowance:g} {figure.unit} (native {native['value']:g}, plus {native.get('plus', 'nothing')} "
+        f"at {figure.decimals} dp)"
     )
     graded: dict[str, object] = {"tolerance": tolerance_text}
 
@@ -169,23 +198,23 @@ def _grade_figure(ctx, reading: page.FxBlockReading, figure: page.Figure, rates,
 
     cross = _cross(rates, shown, figure)
     if cross is None:
-        elsewhere = _matching_days(rates, figure, shown, half_step)
+        elsewhere = _matching_days(rates, figure, shown, allowance)
         found = f"; the displayed value matches the ECB fix of {', '.join(elsewhere)}" if elsewhere else ""
         return _base(ctx, reading, figure, **graded, result="metadata fail", material=True,
                      disposition="unexplained",
-                     source_vintage=f"no reference date {shown} in the document; {ecb.VINTAGE_NOTE}",
-                     explanation=f"wrong FX date: the ECB published no USD/{FOREIGN} reference rate for {shown} "
-                                 f"(not a TARGET day){found}")
+                     source_vintage=f"no USD/{FOREIGN} cross for {shown} in the document; {ecb.VINTAGE_NOTE}",
+                     explanation=f"wrong FX date: the page dates its rate {shown}, but "
+                                 f"{_no_fix_reason(rates, shown)}{found}")
 
     source, legs_text = cross
     delta = figure.value - source
     shift = _usd_per_foreign(figure, figure.value) - _usd_per_foreign(figure, source)
     impacts = [
         Impact(leg=leg.label, delta_usd_mt=leg.home_value * shift,
-               threshold_usd_mt=ctx.tolerances.threshold_usd_mt(leg.label))
+               threshold_usd_mt=ctx.tolerances.threshold_usd_mt(ctx.block, leg.label))
         for leg in legs
     ]
-    grade = grade_exact(delta, half_step, impacts)
+    grade = grade_exact(delta, allowance, impacts)
     graded.update(
         source_value=round(source, 8),
         source_vintage=f"reference date {shown}; {ecb.VINTAGE_NOTE}",
@@ -198,7 +227,7 @@ def _grade_figure(ctx, reading: page.FxBlockReading, figure: page.Figure, rates,
     if grade.result == "pass":
         return _base(ctx, reading, figure, **graded, result="pass", material=False)
 
-    elsewhere = _matching_days(rates, figure, shown, half_step)
+    elsewhere = _matching_days(rates, figure, shown, allowance)
     if elsewhere:
         return _base(ctx, reading, figure, **graded, result="metadata fail", material=True,
                      disposition="unexplained",
@@ -207,7 +236,7 @@ def _grade_figure(ctx, reading: page.FxBlockReading, figure: page.Figure, rates,
     where = "above" if grade.material else "within"
     return _base(ctx, reading, figure, **graded, result="discrepancy", material=grade.material,
                  disposition="unexplained",
-                 explanation=f"outside display rounding; {where} the economic threshold on {grade.binding.leg}")
+                 explanation=f"outside the native tolerance; {where} the economic threshold on {grade.binding.leg}")
 
 
 def check(
@@ -226,15 +255,20 @@ def check(
         raise SetupError(f"{page_path} is not a file: point --edition at a built site")
     try:
         tol = tolerances.load(tolerances_path)
-        tol.for_series(STRATUM, SERIES)
+        block = tol.for_series(STRATUM, SERIES)
+        tol.native_allowance(block, 0)
+        tol.threshold_usd_mt(block, "")
     except (OSError, tolerances.ToleranceFileError) as exc:
         raise SetupError(f"tolerance file: {exc}") from exc
+    if block["kind"] != "exact":
+        raise SetupError(f"tolerance file grades {SERIES} as {block['kind']!r}; this check implements exact only")
     html = page_path.read_bytes()
     ctx = _Context(
         page=page_name,
         page_sha256=hashlib.sha256(html).hexdigest(),
         source_url=ecb_url,
         tolerances=tol,
+        block=block,
         verifier=verifier_identity(),
         verified_at=now.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         ledger_edition=ledger_edition,
@@ -245,7 +279,10 @@ def check(
     except (page.PageReadError, UnicodeDecodeError) as exc:
         return _not_checked(ctx, None, [], f"page could not be read: {exc}")
     figures = list(reading.figures)
-    bad_units = [f.unit for f in figures if f.unit not in (f"USD per {FOREIGN}", f"{FOREIGN} per USD")]
+    if reading.stratum != STRATUM:
+        return _not_checked(ctx, reading, figures,
+                            f"the page locates the {SERIES} rate under stratum {reading.stratum}, not {STRATUM}")
+    bad_units = [f.unit for f in figures if not _is_cny_usd(f)]
     if bad_units:
         return _not_checked(ctx, reading, figures, f"the {SERIES} block states units {bad_units}, not CNY/USD")
 

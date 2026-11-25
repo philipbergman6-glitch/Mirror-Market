@@ -82,6 +82,16 @@ def test_a_located_block_renders_its_locators(seeded, registry, slug, block_id):
         assert any(ch.isdigit() for ch in figure.get_text()), figure
 
 
+def test_the_located_set_is_the_switch(seeded, registry, monkeypatch):  # noqa: F811
+    # Out of the set, a basket-grade block keeps its section stratum but marks
+    # no number: the set, not the template, decides what the verifier reads.
+    monkeypatch.setattr(config, "VERIFY_LOCATED_BLOCKS", config.VERIFY_LOCATED_BLOCKS - {("dalian", "currency")})
+    (block,) = build_blocks(registry["dalian"], None, seeded, markets=registry, block_ids=("currency",))
+    soup = _render(block)
+    assert soup.select_one("section#block-currency").get("data-verify-stratum") == "6"
+    assert not soup.select("[data-verify-figure]")
+
+
 def test_a_block_outside_the_basket_carries_no_locator(seeded, registry):  # noqa: F811
     # Europe's EUR/USD is not a basket number: marking it would put an
     # unverified figure in the verifier's census.

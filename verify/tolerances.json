@@ -7,11 +7,7 @@
     "kind exact: same definition; tolerance = the publisher's rounding plus our display and conversion rounding. kind band: different definition, compared inside a stated explained band. kind recompute: Tier 3 arithmetic from the displayed legs.",
     "A record stamps the tolerance_version it was graded under. Past records are never re-graded. Each change is a 'Tolerance changes' ledger row; loosening needs measured evidence, not a failing sample."
   ],
-  "economic_thresholds_usd_mt": {
-    "bean_scale_and_derived": 0.5,
-    "oil": 1.5,
-    "note": "Owner, 2026-11-25 (#477 Q1). Pre-buyer numbers, open to revision in the A12 session (#406)."
-  },
+  "economic_thresholds_note": "Each stratum's threshold_usd_mt is the one a grade reads. Owner, 2026-11-25 (#477 Q1): 0.5 USD/MT for bean-scale and every derived number, 1.5 for oil legs. Pre-buyer numbers, open to revision in the A12 session (#406).",
   "oil_leg_label_contains": ["Oil"],
   "strata": {
     "1": {

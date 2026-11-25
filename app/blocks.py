@@ -75,6 +75,9 @@ class Block:
     # into `data-verify-*` locators — they locate a number for the verifier
     # and assert nothing about it.
     verify_stratum: int | None = None
+    # True when this block is in `config.VERIFY_LOCATED_BLOCKS`: each number
+    # in it is marked as well as its section.
+    verify_located: bool = False
 
     def __post_init__(self) -> None:
         if self.state not in STATES:
