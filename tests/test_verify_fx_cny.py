@@ -39,7 +39,7 @@ def _edition(tmp_path: Path, usd_per_cny: str, cny_per_usd: str, as_of: str) -> 
 def _run(tmp_path: Path, edition: Path, *extra: str, now: datetime = NOW) -> tuple[int, list[dict]]:
     out = tmp_path / "records"
     argv = ["--edition", str(edition), "--out", str(out), *extra]
-    if "--ecb-url" not in extra:
+    if "--ecb-url" not in extra and "--ecb-xml" not in extra:
         argv += ["--ecb-xml", str(ECB_XML)]
     code = fx_cny.main(argv, now=now)
     files = sorted(out.rglob("*.jsonl"))
@@ -270,3 +270,59 @@ def test_a_page_locating_the_rate_under_another_stratum_is_not_checked(tmp_path)
     assert code == 1
     assert {row["result"] for row in rows} == {"not checked"}
     assert "under stratum 2" in rows[0]["explanation"]
+
+
+# ---------------------------------------------------------------------------
+# Review of #663 (wave 6b): a wrong FX date is proved, never inferred from
+# display rounding; a stale document is not an unpublished fix
+# ---------------------------------------------------------------------------
+
+
+def test_a_two_dp_rounding_miss_on_a_date_the_block_confirms_is_a_discrepancy_not_a_wrong_date(tmp_path):
+    # 0.1500 matches the 2026-11-24 cross (0.1500486) at 4 dp, so the block's one
+    # "as of" date is right. 6.67 misses 6.66451 by 0.0055 — just past half a cent —
+    # and at 2 dp also lies within rounding of the 11-17/18/19 fixes. That is not
+    # evidence of another date: one caption dates both cards, and the other card
+    # proves it. Graded on economics: −0.47 USD/MT on DCE No.2, under 0.5.
+    code, rows = _run(tmp_path, _edition(tmp_path, "0.1500", "6.67", "2026-11-24"))
+    by_unit = _by_unit(rows)
+    assert by_unit["USD per CNY"]["result"] == "pass"
+    cny = by_unit["CNY per USD"]
+    assert cny["result"] == "discrepancy"
+    assert cny["material"] is False
+    assert cny["delta_usd_mt"] == pytest.approx(-0.4695, abs=1e-3)
+    assert "not a wrong FX date" in cny["explanation"]
+    assert code == 0
+
+
+def _ecb_ending(tmp_path: Path, last: str) -> Path:
+    """The fixture document with every reference date after ``last`` removed."""
+    lines = ECB_XML.read_text(encoding="utf-8").splitlines(keepends=True)
+    kept = [line for line in lines if not (m := re.match(r'<Cube time="(\d{4}-\d{2}-\d{2})">', line)) or m.group(1) <= last]
+    text = "".join(kept)
+    assert max(re.findall(r'<Cube time="(\d{4}-\d{2}-\d{2})">', text)) == last
+    path = tmp_path / f"ecb_ending_{last}.xml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_a_document_ending_before_a_fix_that_was_due_is_stale_not_unpublished(tmp_path):
+    # The ECB posts each TARGET day's fix around 16:00 CET. At 2026-11-25 20:00 UTC
+    # the 2026-11-24 fix is a day overdue, so a document ending 2026-11-20 is a
+    # stale copy (or a cached one), not a publisher that has not posted yet.
+    stale = _ecb_ending(tmp_path, "2026-11-20")
+    code, rows = _run(tmp_path, _edition(tmp_path, "0.1500", "6.66", "2026-11-24"), "--ecb-xml", str(stale))
+    assert {row["result"] for row in rows} == {"not checked"}
+    assert all("stale" in row["explanation"] for row in rows)
+    assert code == 1  # a stale source is loud, like a source that is down
+
+
+def test_a_fix_not_yet_due_is_still_not_yet_published(tmp_path):
+    # The same document, read before 2026-11-24's fix was due (11-24 12:00 UTC).
+    stale = _ecb_ending(tmp_path, "2026-11-20")
+    code, rows = _run(
+        tmp_path, _edition(tmp_path, "0.1500", "6.66", "2026-11-24"), "--ecb-xml", str(stale),
+        now=datetime(2026, 11, 24, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    assert {row["result"] for row in rows} == {"not yet published"}
+    assert code == 0

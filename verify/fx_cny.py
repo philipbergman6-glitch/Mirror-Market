@@ -9,7 +9,11 @@ economic threshold (0.5 USD/MT, oil 1.5).
 
 A displayed value that misses its own date's fix but matches another day's is a
 **metadata fail** (wrong FX date), material at any delta, and so is a date the
-ECB published no fix for.
+ECB published no fix for. The block has one "as of" date for all its figures,
+so a figure on it that matches that date's fix proves the date: another
+figure's miss is then a discrepancy, never a wrong date inferred from display
+rounding. A document that ends before a fix that was due is stale: not checked,
+never "not yet published".
 """
 
 from __future__ import annotations
@@ -60,6 +64,7 @@ class _Context:
     verifier: str
     verified_at: str
     ledger_edition: str | None
+    checked_at: datetime
 
 
 def verifier_identity() -> str:
@@ -175,9 +180,23 @@ def _matching_days(rates: ecb.ReferenceRates, figure: page.Figure, around: date,
     return days
 
 
+def _date_confirmed(
+    ctx: _Context, reading: page.FxBlockReading, rates: ecb.ReferenceRates,
+) -> bool:
+    """True when some figure on the block matches the fix of the block's own date."""
+    shown = date.fromisoformat(reading.observation_date)
+    for figure in reading.figures:
+        cross = _cross(rates, shown, figure)
+        if cross is not None and within(
+            figure.value - cross[0], ctx.tolerances.native_allowance(ctx.block, figure.decimals)
+        ):
+            return True
+    return False
+
+
 def _grade_figure(
     ctx: _Context, reading: page.FxBlockReading, figure: page.Figure, rates: ecb.ReferenceRates,
-    legs: list[page.Leg],
+    legs: list[page.Leg], *, date_confirmed: bool,
 ) -> record.Record:
     shown = date.fromisoformat(reading.observation_date)
     allowance = ctx.tolerances.native_allowance(ctx.block, figure.decimals)
@@ -188,6 +207,13 @@ def _grade_figure(
     )
     graded: dict[str, object] = {"tolerance": tolerance_text}
 
+    if shown > rates.last and ctx.checked_at >= ecb.due_by(shown):
+        due = ecb.due_by(shown).isoformat(timespec="minutes").replace("+00:00", "Z")
+        return _base(ctx, reading, figure, **graded, result="not checked",
+                     source_vintage=f"document ends at reference date {rates.last}; {ecb.VINTAGE_NOTE}",
+                     explanation=f"source stale: the ECB document ends at {rates.last}, but the fix for {shown} "
+                                 f"was due by {due}; a stale or cached copy, or {shown} had no fix, which a "
+                                 "document ending before it cannot show")
     if shown > rates.last:
         return _base(ctx, reading, figure, **graded, result="not yet published",
                      source_vintage=f"document ends at reference date {rates.last}; {ecb.VINTAGE_NOTE}",
@@ -227,7 +253,7 @@ def _grade_figure(
     if grade.result == "pass":
         return _base(ctx, reading, figure, **graded, result="pass", material=False)
 
-    elsewhere = _matching_days(rates, figure, shown, allowance)
+    elsewhere = [] if date_confirmed else _matching_days(rates, figure, shown, allowance)
     if elsewhere:
         return _base(ctx, reading, figure, **graded, result="metadata fail", material=True,
                      disposition="unexplained",
@@ -236,7 +262,9 @@ def _grade_figure(
     where = "above" if grade.material else "within"
     return _base(ctx, reading, figure, **graded, result="discrepancy", material=grade.material,
                  disposition="unexplained",
-                 explanation=f"outside the native tolerance; {where} the economic threshold on {grade.binding.leg}")
+                 explanation=f"outside the native tolerance; {where} the economic threshold on {grade.binding.leg}"
+                             + ("; another figure on the block matches the fix of its date, so this is not a "
+                                "wrong FX date" if date_confirmed else ""))
 
 
 def check(
@@ -272,6 +300,7 @@ def check(
         verifier=verifier_identity(),
         verified_at=now.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         ledger_edition=ledger_edition,
+        checked_at=now.astimezone(timezone.utc),
     )
 
     try:
@@ -298,7 +327,8 @@ def check(
         return _not_checked(ctx, reading, figures, f"source down: {exc}")
     except ecb.EcbDocumentError as exc:
         return _not_checked(ctx, reading, figures, f"source unreadable: {exc}")
-    return [_grade_figure(ctx, reading, figure, rates, legs) for figure in figures]
+    confirmed = _date_confirmed(ctx, reading, rates)
+    return [_grade_figure(ctx, reading, figure, rates, legs, date_confirmed=confirmed) for figure in figures]
 
 
 def main(argv: Sequence[str] | None = None, *, now: datetime | None = None) -> int:

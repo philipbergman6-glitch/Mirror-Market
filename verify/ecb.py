@@ -15,12 +15,26 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 HIST_90D_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml"
 IDENTITY = "ECB euro foreign exchange reference rates, eurofxref XML"
 # The XML stamps a reference date per day, never a publication time.
 VINTAGE_NOTE = "publication time unknown"
+# The ECB publishes each TARGET day's rates "usually at around 16:00 CET"
+# (ECB, Euro foreign exchange reference rates page). Two hours after that a
+# fix still absent from a document is overdue: the copy is stale, or the day
+# had no fix, which a document ending before it cannot show (review of #663).
+PUBLISHED_AROUND = time(16, 0)
+PUBLICATION_TZ = ZoneInfo("Europe/Berlin")
+OVERDUE_AFTER = timedelta(hours=2)
+
+
+def due_by(day: date) -> datetime:
+    """When ``day``'s fix is overdue, in UTC."""
+    local = datetime.combine(day, PUBLISHED_AROUND, tzinfo=PUBLICATION_TZ) + OVERDUE_AFTER
+    return local.astimezone(timezone.utc)
 
 _NS = {"gesmes": "http://www.gesmes.org/xml/2002-08-01", "e": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"}
 # A generic client name: the verifier sends nothing that identifies the project's people.
