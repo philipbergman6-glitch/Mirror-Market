@@ -2,10 +2,18 @@
 
 Dual-write is temporary; the read path is the part that is dangerous to change.
 This module is the one place that answers "does this dataset serve analytics
-from the trusted ledger, or from the v1 tables?", so a cutover is one
-environment variable and a rollback is unsetting it — not a revert, not a
-redeploy of different code, and not a decision made independently by three
-callers that can drift.
+from the trusted ledger, or from the v1 tables?", so a *rollback* is unsetting
+one environment variable — not a revert, not a redeploy of different code, and
+not a decision made independently by three callers that can drift.
+
+A *cutover* is not yet only the variable. It also needs a production
+dual-write into a durable ledger, and none exists: ``main.py`` does not import
+``trust``, ``data/v2/`` (the ``GitDirectoryTrustRepository`` root) does not
+exist, and the CI reconcilers write to a per-run temporary directory. An empty
+or missing ledger does not raise, so ``analysis.futures.providers.open_provider``
+does not fall back to v1 — switching the CBOT datasets on today serves empty
+curves ("no accepted trusted revisions for this commodity") to every caller
+(#655; whether that should fall back or raise is #239/#312's call).
 
 Three rules:
 
