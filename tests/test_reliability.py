@@ -115,10 +115,14 @@ def test_weekend_runs_add_runs_never_sessions() -> None:
     rows.append(_row(sessions[-1], "safex", "failed", run="sat", hour=23))
     block = reliability.reliability(rows, set(), through=sessions[-1], layers=("safex",), basket=())
     assert block["window"]["sessions"] == 5
-    assert _layer(block, "safex")["availability_pct"] == 80.0  # last run of Friday failed
+    # Friday's Saturday re-run failed, but Friday had a success: still available
+    # (any-success, owner 2026-11-25); the failed run is counted, not hidden.
+    safex = _layer(block, "safex")
+    assert safex["availability_pct"] == 100.0
+    assert safex["failed_runs"] == 1
 
 
-def test_last_run_decides_availability_and_first_run_shows_the_retry() -> None:
+def test_a_successful_retry_makes_the_session_available_and_first_run_shows_it() -> None:
     sessions = _weekdays(MON, 2)
     rows = [
         _row(sessions[0], "gulf_bids", "failed", hour=20),
@@ -379,3 +383,76 @@ def test_decision_cutoff_uses_one_promotion_and_keeps_all_sessions() -> None:
     assert report["sessions"][3]["first_late_rendered_at"] == "2026-10-14T06:00:01Z"
     assert report["sessions_with_record_window"] == 5
     assert report["readiness_pct"] == 20
+
+
+# ── any-success availability (owner decision 2026-11-25, #518) ─────────────
+
+
+def test_a_later_failed_rerun_no_longer_turns_an_available_session_into_a_miss() -> None:
+    # Run 44526078466: a midday push run failed after 2026-11-18's two
+    # successes, and last-run-wins called the session a miss (PR #615).
+    sessions = _weekdays(MON, 2)
+    rows = [
+        _row(sessions[0], "magyp_fob", "success", run="a", hour=10),
+        _row(sessions[0], "magyp_fob", "success", run="b", hour=12),
+        _row(sessions[0], "magyp_fob", "failed", run="push", hour=14),
+        _row(sessions[1], "magyp_fob", "success", run="c", hour=10),
+    ]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("magyp_fob",), basket=())
+    magyp = _layer(block, "magyp_fob")
+    assert magyp["availability_pct"] == 100.0
+    assert magyp["first_run_availability_pct"] == 100.0
+    assert magyp["longest_unavailable_streak"] == 0
+    assert magyp["open_at_end"] is False
+
+
+def test_failed_runs_stay_visible_per_layer_beside_the_forgiving_session_rule() -> None:
+    # Owner, 2026-11-25: any-success must not hide run-level failures. Every
+    # run that tried and did not deliver counts — the outage words plus a
+    # crashed run (`not_run`) — and the ones any-success forgave are named.
+    # `skipped_unconfigured` and `disabled` never asked the source: not failures.
+    sessions = _weekdays(MON, 3)
+    rows = [
+        _row(sessions[0], "safex", "success", run="a", hour=10),
+        _row(sessions[0], "safex", "stale", run="b", hour=14),      # forgiven
+        _row(sessions[1], "safex", "failed", run="c", hour=10),
+        _row(sessions[1], "safex", "not_run", run="d", hour=14),    # crashed run
+        _row(sessions[2], "safex", "skipped_unconfigured", run="e", hour=10),
+        _row(sessions[2], "safex", "disabled", run="f", hour=12),
+        _row(sessions[2], "safex", "usable_partial", run="g", hour=14),
+    ]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("safex",), basket=())
+    safex = _layer(block, "safex")
+    assert safex["availability_pct"] == 66.7
+    assert safex["failed_runs"] == 3
+    assert safex["failed_runs_on_available_sessions"] == 1
+    assert safex["failing_runs"] == 2  # T4's denominator: outage words only, unchanged
+
+
+def test_a_session_with_any_success_breaks_a_dead_streak() -> None:
+    # The relay reads the same session rule: a source that answered once on a
+    # session was not dead on it, whatever a later re-run graded.
+    sessions = _weekdays(MON, 3)
+    rows = [_row(s, "safex", "failed", run=f"{s}-a", hour=10) for s in sessions]
+    rows.append(_row(sessions[1], "safex", "success", run="mid", hour=12))
+    rows.append(_row(sessions[1], "safex", "failed", run="push", hour=14))
+    assert reliability.dead_layers(rows, layers=("safex",)) == {}
+
+
+def test_a_session_whose_every_run_failed_still_counts_toward_dead() -> None:
+    sessions = _weekdays(MON, 3)
+    rows = [_row(s, "safex", "failed", run=f"{s}-{h}", hour=h) for s in sessions for h in (10, 14)]
+    dead = reliability.dead_layers(rows, layers=("safex",))
+    assert dead["safex"].sessions == 3
+    assert dead["safex"].last_status == "failed"
+
+
+def test_a_real_failure_under_a_later_unconfigured_skip_still_counts_toward_dead() -> None:
+    # One real verdict inside the streak and it counts: a session is "only
+    # skipped" when every run on it was, not when its newest run was.
+    sessions = _weekdays(MON, 3)
+    rows = []
+    for s in sessions:
+        rows.append(_row(s, "safex", "failed", run=f"{s}-a", hour=10))
+        rows.append(_row(s, "safex", "skipped_unconfigured", run=f"{s}-b", hour=14))
+    assert set(reliability.dead_layers(rows, layers=("safex",))) == {"safex"}
