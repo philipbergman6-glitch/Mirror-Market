@@ -588,3 +588,35 @@ def test_renew_refuses_a_flag_it_would_silently_ignore(lapsed_freight, capsys, f
     assert exc.value.code == 2
     assert flag[0] in capsys.readouterr().err
     assert lapsed_freight.read_text(encoding="utf-8") == before
+
+
+# --- #618 Bugbot: an abbreviated add-only flag must be refused, not silently dropped ---
+#
+# argparse expands unambiguous prefixes by default, so `--orig` parsed as
+# `--origin` while the exact-token guard above never saw it: the renewal went
+# through without the scope change the desk typed. The parser is built with
+# allow_abbrev=False, so every prefix is an unrecognised argument (exit 2).
+
+@pytest.mark.parametrize("flag", [
+    ["--orig", "br_paranagua"], ["--conf", "provisional"], ["--cit", "x"],
+    ["--wind", "2027-01-01:2027-01-31"], ["--comp", "ocean_freight"],
+    ["--dest", "cn_north"], ["--orig=br_paranagua"],
+])
+def test_renew_refuses_an_abbreviated_add_only_flag(lapsed_freight, capsys, flag):
+    before = lapsed_freight.read_text(encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        _cli(["--renew", "test.freight.old", "--expires", "2026-12-02",
+              "--entered-by", "buyer@example.com", *flag])
+
+    assert exc.value.code == 2
+    assert flag[0].split("=")[0] in capsys.readouterr().err
+    assert lapsed_freight.read_text(encoding="utf-8") == before
+
+
+def test_an_abbreviated_flag_is_refused_outside_renew_too(cli_root, capsys):
+    with pytest.raises(SystemExit) as exc:
+        _cli(["--li"])
+
+    assert exc.value.code == 2
+    assert "--li" in capsys.readouterr().err

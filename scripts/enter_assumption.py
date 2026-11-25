@@ -653,7 +653,12 @@ RENEW_IGNORES = (
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    # allow_abbrev=False: argparse would otherwise expand `--orig` to `--origin`,
+    # past the exact-token RENEW_IGNORES guard below, and the flag would be
+    # dropped without a word (#618 Bugbot). A prefix is an unrecognised argument.
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False,
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--list", action="store_true", help="show every assumption and its state")
     mode.add_argument("--check", action="store_true", help="validate every file; exit 1 on error")
