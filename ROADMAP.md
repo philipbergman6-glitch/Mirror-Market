@@ -85,6 +85,37 @@ seam open for it, and nothing should be.
   `pricing.semantics.PROVEN_SETTLEMENT_SOURCES` is empty and invariant 3 keeps
   it that way.
 
+## Decision · 2026-11-25 (#239): trusted reader cutover
+
+**The reader cutover onto the trusted ledger (`trust/`) is not proceeding.** It
+is parked here with a named trigger. Record, evidence and the 2027-03-01
+checkpoint (default: excise) are in
+`docs/plans/trusted-path-decision-2026-11-25.md`. Until then the
+`reconcile-trusted` job is a drift detector only, and its alarm is an issue,
+never a red run.
+
+### Why parked, not built
+
+A cutover would show buyers the same delayed Yahoo number with better
+provenance. It would also need a production dual-write in `main.py` and a
+durable ledger: `data/v2/` committed by the deploy workflow, a second git
+persistence surface beside `data/history/` that invariant 6 and
+`history-guard` do not cover today. Revision history is already measurable
+from the committed `data/history/` snapshots (#622/#626). Whether a number is
+*right* is the accuracy verifier's job (#639 → V7), not parse parity's.
+
+### The trigger
+
+**A paying buyer needs an audit trail or revision history that git snapshots
+can't give, or Yahoo is replaced** (so a second ingestion path has to be
+proven).
+
+When it fires, the DT-16 cutover criterion still applies before any reader
+moves (#239 Q2). That criterion is a continuous reconciled stretch covering a
+roll week, an expiry and **at least one quarantine**. Switching
+`MIRROR_TRUSTED_READ_DATASETS` on before a production ledger exists fails the
+build by name (`TrustedLedgerEmptyError`, #656). It never serves empty curves.
+
 ## Prior benchmark research
 
 `research/2026-08-14-soy-trader-bloomberg-replacement-benchmark.md` costs the

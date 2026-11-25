@@ -63,10 +63,10 @@ from trust.fx_ingestion import (  # noqa: E402
     FX_PAIRS,
     FxArtifactReplay,
     FxRevisionFindings,
+    dataset_key_for,
     dual_write_fx,
     fetch_fx_artifact,
     legacy_currency_frame,
-    dataset_key_for,
     ticker_for,
     trusted_currency_frame,
 )

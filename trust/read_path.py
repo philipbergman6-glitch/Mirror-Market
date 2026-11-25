@@ -9,11 +9,12 @@ not a decision made independently by three callers that can drift.
 A *cutover* is not yet only the variable. It also needs a production
 dual-write into a durable ledger, and none exists: ``main.py`` does not import
 ``trust``, ``data/v2/`` (the ``GitDirectoryTrustRepository`` root) does not
-exist, and the CI reconcilers write to a per-run temporary directory. An empty
-or missing ledger does not raise, so ``analysis.futures.providers.open_provider``
-does not fall back to v1 — switching the CBOT datasets on today serves empty
-curves ("no accepted trusted revisions for this commodity") to every caller
-(#655; whether that should fall back or raise is #239/#312's call).
+exist, and the CI reconcilers write to a per-run temporary directory. So
+switching the CBOT datasets on today makes
+``analysis.futures.providers.open_provider`` raise ``TrustedLedgerEmptyError``,
+naming the absent ledger or the unserved datasets — never empty curves, and
+never a silent v1 fallback (#656, owner decision on #239). The reader cutover
+itself is not proceeding; ``ROADMAP.md`` holds its reopening trigger.
 
 Three rules:
 
