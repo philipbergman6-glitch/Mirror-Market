@@ -36,8 +36,10 @@ from config import FX_ECB_CROSS_PAIRS
 from trust.registry import PILOT_REGISTRY
 
 #: FX datasets whose v1 publisher of record is no longer the trusted
-#: contract's source (B25 #495) — refused until the registry follows.
-_V1_SOURCE_DIFFERS = frozenset(
+#: contract's source (B25 #495) — refused until the registry follows. The one
+#: list: the reconciliation alarm reads it too, reporting these datasets as
+#: "not compared: v1 source differs" instead of grading them (#239, G5).
+V1_SOURCE_DIFFERS = frozenset(
     f"fx-{pair.lower().replace('/', '-')}" for pair in FX_ECB_CROSS_PAIRS
 )
 
@@ -109,7 +111,7 @@ def load_trusted_read_switch(env: Mapping[str, str] | None = None) -> TrustedRea
             f"{TRUSTED_READ_ENV_VAR} names datasets that are not in the trust registry: "
             f"{', '.join(unknown)} (known: {', '.join(sorted(known))})"
         )
-    diverged = sorted(keys & _V1_SOURCE_DIFFERS)
+    diverged = sorted(keys & V1_SOURCE_DIFFERS)
     if diverged:
         raise TrustedReadSwitchError(
             f"{TRUSTED_READ_ENV_VAR} names {', '.join(diverged)}, whose trusted contract is still the "
@@ -131,6 +133,7 @@ __all__ = [
     "TRUSTED_READ_ENV_VAR",
     "TrustedReadSwitch",
     "TrustedReadSwitchError",
+    "V1_SOURCE_DIFFERS",
     "load_trusted_read_switch",
     "trusted_read_enabled",
 ]
