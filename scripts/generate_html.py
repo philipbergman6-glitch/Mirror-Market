@@ -429,37 +429,45 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
         # never folded into green (on_schedule) or red (late).
         "partial_count": len(partial),
         "partial_layers": partial,
-        "price_age": _price_age_label(now),
+        **_price_age_and_board_session(now),
         **health_summary,
     }
 
 
-def _price_age_label(now: datetime) -> str | None:
-    """How stale the oldest board or FX leg is, for the masthead.
+def _price_age_and_board_session(now: datetime) -> dict[str, str | None]:
+    """How stale the oldest board or FX leg is, and which CBOT session it is.
 
     "Generated 14:02 UTC" says when the page was built, and a reader
     reasonably reads that as when the numbers are from. On this site those
     are routinely a day apart — the settlement guard means a build landing
-    before 14:30 Chicago publishes the previous session's close, correctly
+    before 00:00 New York publishes the previous session's close, correctly
     and deliberately. Stating the generation time alone lets a correct
     behaviour read as a fresher product than it is.
 
-    The worst of the board and FX legs, not an average: an average would let
-    a current FX print cover for a board leg that has not moved in three
-    days, which is the one thing a reader must not miss.
+    ``price_age`` is the worst of the board and FX legs, not an average: an
+    average would let a current FX print cover for a board leg that has not
+    moved in three days, which is the one thing a reader must not miss.
+
+    ``board_session`` is the CBOT board's session date (owner decision on
+    #622): an age alone does not say *which* close a buyer is reading, and an
+    evening edition holds D-1 by design. Both come from one measurement, so
+    they cannot describe different databases.
     """
-    from latency.measure import measure, worst_observation_age
+    from latency.measure import board_session, measure, worst_observation_age
 
     try:
-        age = worst_observation_age(measure(generated_at=now), now)
+        measurements = measure(generated_at=now)
     except Exception:  # noqa: BLE001 — the masthead must never fail the build
         log.warning("could not measure price age for the masthead", exc_info=True)
-        return None
-    if age is None:
-        return None
+        return {"price_age": None, "board_session": None}
+    age = worst_observation_age(measurements, now)
+    session = board_session(measurements)
     from latency.domain import format_delta
 
-    return format_delta(age)
+    return {
+        "price_age": format_delta(age) if age is not None else None,
+        "board_session": session.strftime("%a %-d %b") if session is not None else None,
+    }
 
 
 def _build_public_trust_metadata(trust_state) -> dict | None:

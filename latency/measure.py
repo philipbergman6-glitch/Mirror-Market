@@ -169,3 +169,24 @@ def worst_observation_age(
         and (age := age_at(m, now)) is not None
     ]
     return max(ages) if ages else None
+
+
+def board_session(measurements: list[LayerMeasurement]) -> date | None:
+    """The CBOT board's session date on the page, or None if never observed.
+
+    The masthead states it beside the data age (owner decision on #622): an
+    age alone cannot tell a buyer *which* close they are reading, and on this
+    site an evening edition holds D-1 by design. The oldest of the board
+    legs, for the same reason the age is the worst leg: a curve one session
+    behind the front month must not hide behind it.
+    """
+    from latency.domain import CBOT_BOARD_LAYERS
+
+    sessions = [
+        session
+        for m in measurements
+        if m.layer in CBOT_BOARD_LAYERS
+        and m.stamps.observed_at is not None
+        and (session := m.spec.clock.session_of(m.stamps.observed_at)) is not None
+    ]
+    return min(sessions) if sessions else None

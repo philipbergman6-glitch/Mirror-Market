@@ -1,9 +1,12 @@
 """A breach GitHub's scheduler caused is reported, not failed — when the run opts in.
 
-Replays the 2026-10-09 run: the 20:07 UTC Refresh Prices cron started at
-00:16 UTC, six hours after the 18:15 UTC CBOT settlement, so the board
-objective had lapsed before a single byte was fetched. The deploy succeeded
-and the bar was the right one; the red said nothing a code change could fix.
+Modelled on the 2026-10-09 run: the 20:07 UTC Refresh Prices cron started at
+00:16 UTC, six hours after the 18:15 UTC CBOT settlement, so the then six-hour
+board objective had lapsed before a single byte was fetched. The deploy
+succeeded and the bar was the right one; the red said nothing a code change
+could fix. The objective is twelve hours since the owner's decision on #622,
+so the fixture's start is moved to 06:17 UTC, twelve hours and two minutes
+after the settlement — the same shape against today's target.
 Three things keep the excuse narrow: the bar must be the newest session as of
 the fetch start (a stale upstream is still a breach), our own pipeline leg must
 meet its target, and only a run that passes the flag gets it — the 08:00 DCE
@@ -21,7 +24,7 @@ UTC = timezone.utc
 PRICES = LAYER_LATENCY_BY_KEY["prices"]
 SETTLED_OCT_8 = datetime(2026, 10, 8, 18, 15, tzinfo=UTC)   # 13:15 CT
 SETTLED_OCT_7 = datetime(2026, 10, 7, 18, 15, tzinfo=UTC)
-LATE_START = datetime(2026, 10, 9, 0, 17, tzinfo=UTC)
+LATE_START = datetime(2026, 10, 9, 6, 17, tzinfo=UTC)  # 12h02m after OCT_8
 
 
 def test_a_fetch_that_began_past_the_objective_on_the_newest_bar_started_late():

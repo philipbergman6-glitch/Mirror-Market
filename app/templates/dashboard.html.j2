@@ -76,7 +76,7 @@ details .det-content { padding: 0 16px 16px; max-width: 100%; overflow-x: auto; 
        session's close on any build landing before 14:30 Chicago. Stating
        only "Generated" lets that correct behaviour read as a fresher product
        than it is, so the oldest board/FX observation is stated beside it. #}
-    {% if masthead.price_age %}<div>Board and FX priced from data <b>{{ masthead.price_age }}</b> old · <a href="manifest.json">latency detail</a></div>{% endif %}
+    {% if masthead.price_age or masthead.board_session %}<div>{% if masthead.price_age %}Board and FX priced from data <b>{{ masthead.price_age }}</b> old · {% endif %}{% if masthead.board_session %}<span class="mast-session" title="The CBOT session these board prices close. An evening edition holds the previous session by design: Yahoo finishes the bar only at midnight New York.">CBOT session <b>{{ masthead.board_session }}</b></span> · {% endif %}<a href="manifest.json">latency detail</a></div>{% endif %}
     <div>Soy complex + competing crops · all prices USD/MT</div>
 {% endblock %}
 

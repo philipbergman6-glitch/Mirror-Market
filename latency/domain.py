@@ -146,21 +146,31 @@ one fact. 25 minutes is that measured cost with room for a deploy retry —
 see LATENCY.md.
 """
 
+BOARD_ACQUISITION_TARGET = timedelta(hours=12)
+"""The board-price acquisition objective (owner decision on #622, 2026-11-25).
+
+Named so the refresh slot's fire time and this target are checked against
+each other by tests/test_refresh_slot.py rather than restated in prose.
+"""
+
 OBJECTIVES: dict[LatencyClass, LatencyObjective] = {
     LatencyClass.BOARD_PRICE: LatencyObjective(
         latency_class=LatencyClass.BOARD_PRICE,
-        acquisition_target=timedelta(hours=6),
+        acquisition_target=BOARD_ACQUISITION_TARGET,
         pipeline_target=_PIPELINE_TARGET,
         basis=(
-            "Set 2026-08-19 on a 14:30 CT guard cutoff (a ~1h15m floor after the "
-            "13:15 CT settlement) plus GitHub's +64 to +298 minute scheduler delay: "
-            "six hours was that envelope. B47 (#622) measured the cutoff wrong. "
-            "Yahoo's CBOT/CME bar is final only at 00:00 New York the next day, "
-            "so the floor for prices and forward_curve is 9h45m — above this "
-            "target, which CBOT therefore breaches on every run until the owner "
-            "re-sets the objective or the schedule (#622). DCE (15:00 CST close, "
-            "Sina final ~2h later) still fits it. The number is unchanged here "
-            "because the objective is an owner call; the floor is not."
+            "Re-set 2026-11-25 by the owner's decision on #622 (Option A). Yahoo's "
+            "CBOT/CME bar is final only at 00:00 New York the next day (B47), a "
+            "9h45m floor after the 13:15 CT settlement. The board is fetched by a "
+            "cron-job.org dispatch at 01:00 New York, Tue-Sat (the 'board' slot): "
+            "10h45m after the settlement, plus a ~5 minute start and fetch, so a "
+            "fetch lands ~10h50m after it. Twelve hours is that plus ~70 minutes for "
+            "a queued Pages deploy or a delayed dispatch. 01:00, not 00:15, because "
+            "the midnight finality was inferred from thin captures near the boundary; "
+            "scripts/measure_cbot_bar_finality.py measures it, and only a week of "
+            "evidence moves the slot (and this target) earlier. DCE shares the class: "
+            "its 10:30 UTC dispatch is ~3h30m after the 15:00 CST close, well inside "
+            "it; the DCE backstop's alarm no longer relies on a breach."
         ),
     ),
     LatencyClass.FX: LatencyObjective(
@@ -375,6 +385,12 @@ _YAHOO_FUTURES_BASIS = (
     "ever revised). The settlement guard keeps the bar until then, so 13:15 CT "
     "to New York midnight — 9h45m — is the provider's, not our schedule's."
 )
+
+CBOT_BOARD_LAYERS: tuple[str, ...] = ("prices", "forward_curve")
+"""The CBOT board: the layers the 'board' refresh slot fetches and gates on,
+and whose session date the masthead states (owner decision on #622).
+scripts/refresh_slot.py restates the tuple (its job runs before any install);
+tests/test_refresh_slot.py pins the two equal."""
 
 LAYER_LATENCIES: tuple[LayerLatency, ...] = (
     LayerLatency("prices", LatencyClass.BOARD_PRICE, _CBOT, _CBOT_PROVIDER_DELAY, _YAHOO_FUTURES_BASIS),

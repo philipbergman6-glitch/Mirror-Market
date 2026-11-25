@@ -206,24 +206,37 @@ def test_post_settlement_run_meets_every_objective():
     assert m.verdict is Verdict.MEETS
 
 
-def test_a_late_scheduler_landing_breaches_the_board_objective():
-    """The envelope's far end. GitHub's scheduler runs up to ~5h late.
+def test_a_late_landing_breaches_the_board_objective():
+    """The envelope's far end. The board objective is twelve hours (#622).
 
-    6h is chosen to cover the *observed* landing window, not to be
-    unfailable: a landing well outside it must still register as a miss, or
-    the objective is decoration.
+    Twelve hours covers the 01:00 New York board dispatch with slack, not
+    every landing: the 10:30 UTC backstop, ~16h after the settlement, must
+    still register as a miss, or the objective is decoration.
     """
     m = _prices_measurement(
         observed_at=datetime(2026, 8, 18, tzinfo=UTC),
-        fetch_started=datetime(2026, 8, 19, 1, 0, tzinfo=UTC),
-        fetch_completed=datetime(2026, 8, 19, 1, 2, tzinfo=UTC),
-        stored=datetime(2026, 8, 19, 1, 3, tzinfo=UTC),
-        published=datetime(2026, 8, 19, 1, 15, tzinfo=UTC),
+        fetch_started=datetime(2026, 8, 19, 10, 40, tzinfo=UTC),
+        fetch_completed=datetime(2026, 8, 19, 10, 42, tzinfo=UTC),
+        stored=datetime(2026, 8, 19, 10, 43, tzinfo=UTC),
+        published=datetime(2026, 8, 19, 10, 55, tzinfo=UTC),
     )
-    assert m.acquisition == timedelta(hours=6, minutes=47)
+    assert m.acquisition == timedelta(hours=16, minutes=27)
     assert m.acquisition_verdict is Verdict.BREACHES
     assert m.pipeline_verdict is Verdict.MEETS  # our own leg was fine
     assert m.verdict is Verdict.BREACHES
+
+
+def test_the_board_dispatch_landing_meets_the_board_objective():
+    """The board slot (01:00 New York, EDT here) fetches ~05:05 UTC: 10h50m."""
+    m = _prices_measurement(
+        observed_at=datetime(2026, 8, 18, tzinfo=UTC),
+        fetch_started=datetime(2026, 8, 19, 5, 4, tzinfo=UTC),
+        fetch_completed=datetime(2026, 8, 19, 5, 5, tzinfo=UTC),
+        stored=datetime(2026, 8, 19, 5, 6, tzinfo=UTC),
+        published=datetime(2026, 8, 19, 5, 20, tzinfo=UTC),
+    )
+    assert m.acquisition == timedelta(hours=10, minutes=50)
+    assert m.verdict is Verdict.MEETS
 
 
 def test_cadence_wait_separates_our_delay_from_the_providers():
@@ -262,13 +275,13 @@ def test_the_board_provider_floor_is_the_guards_own_close():
             day += timedelta(days=1)
 
 
-def test_no_cbot_landing_can_meet_the_six_hour_board_objective_after_b47():
-    """The floor (9h45m) is above the 6h target, so the earliest possible
-    fetch of a finished bar breaches. Recorded so the owner's open call on
-    #622 (re-set the objective or the schedule) cannot be forgotten: when
-    the target moves, this test is the one to rewrite."""
+def test_the_board_objective_sits_above_the_cbot_provider_floor():
+    """Before #622's decision the 6h target sat under the 9h45m floor, so no
+    landing could meet it. The owner re-set it to twelve hours; it must stay
+    above the floor or it is a guaranteed daily breach again."""
     spec = LAYER_LATENCY_BY_KEY["prices"]
-    assert spec.provider_delay > spec.objective.acquisition_target
+    assert spec.objective.acquisition_target == timedelta(hours=12)
+    assert spec.provider_delay < spec.objective.acquisition_target
 
 
 def test_cadence_wait_floors_at_zero_rather_than_going_negative():
