@@ -320,3 +320,31 @@ def test_the_backstop_landing_breaches_the_objective():
     for day in (date(2026, 7, 14), date(2026, 12, 15)):
         landing = datetime.combine(day + timedelta(days=1), time(10, 45), tzinfo=UTC)
         assert landing - _settlement(day) > BOARD_ACQUISITION_TARGET
+
+
+# ---------------------------------------------------------------------------
+# The owner-run wizards create the job the routing expects
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("wizard", ["setup_cbot_board_trigger.sh", "check_cbot_board_trigger.sh"])
+def test_the_wizard_schedules_the_fire_time_the_slot_expects(wizard):
+    import json
+    import re
+
+    text = (ROOT / "scripts" / wizard).read_text()
+
+    def var(name):
+        match = re.search(rf"^{name}=(.+?)(?:\s+#.*)?$", text, re.M)
+        assert match, f"{wizard} has no {name}"
+        return match.group(1).strip().strip("'\"")
+
+    assert var("JOB_TZ") == rs.BOARD_TIMEZONE
+    assert (int(var("FIRE_HOUR")), int(var("FIRE_MIN"))) == (
+        rs.BOARD_FIRE_LOCAL.hour, rs.BOARD_FIRE_LOCAL.minute)
+    # cron-job.org numbers weekdays 0 = Sunday; Python's weekday() 0 = Monday.
+    cron_job_days = {int(d) for d in var("FIRE_WDAYS").split(",")}
+    assert {(d - 1) % 7 for d in cron_job_days} == rs.BOARD_FIRE_WEEKDAYS
+    body = json.loads(var("DISPATCH_BODY"))
+    assert body == {"ref": "main", "inputs": {"slot": rs.BOARD_SLOT}}
+    assert var("WORKFLOW") == rs.WORKFLOW

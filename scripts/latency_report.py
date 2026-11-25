@@ -206,8 +206,30 @@ def main(argv: list[str] | None = None) -> int:
                         file=sys.stderr,
                     )
                 gated = [layer for layer in gated if layer not in late]
-            if gated:
-                print(f"BREACH in gated layer(s): {', '.join(gated)}", file=sys.stderr)
+            # A gated layer this run fetched but cannot show an age for — no
+            # observation, no fetch stamp, or no row at all — has not been
+            # shown to meet anything, and UNKNOWN never silently meets. The
+            # overall verdict cannot be used for this: on a published
+            # manifest the pipeline leg is always unknown (it is written
+            # before its own deploy), so it is the acquisition leg that must
+            # be measured. Without this a failed forward_curve fetch on the
+            # board slot passed the gate, and the board backstop read that
+            # run as delivered and stood down (#630 review).
+            seen = {row["layer"]: row for row in rows}
+            unmeasured = sorted(
+                layer for layer in gate_layers
+                if layer not in seen
+                or seen[layer].get("acquisition_verdict") in (None, Verdict.UNKNOWN.value)
+            )
+            if unmeasured:
+                print(
+                    f"UNMEASURED gated layer(s): {', '.join(unmeasured)} — no observation "
+                    "or fetch stamp to measure, so not shown to meet the objective",
+                    file=sys.stderr,
+                )
+            if gated or unmeasured:
+                if gated:
+                    print(f"BREACH in gated layer(s): {', '.join(gated)}", file=sys.stderr)
                 return 1
         return 0
 

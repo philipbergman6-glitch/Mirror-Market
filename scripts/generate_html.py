@@ -450,9 +450,12 @@ def _price_age_and_board_session(now: datetime) -> dict[str, str | None]:
 
     ``board_session`` is the CBOT board's session date (owner decision on
     #622): an age alone does not say *which* close a buyer is reading, and an
-    evening edition holds D-1 by design. Both come from one measurement, so
-    they cannot describe different databases.
+    evening edition holds D-1 by design. It is the oldest stored session of
+    the soy legs of prices and forward_curve, withheld when any is missing or
+    a board fetch failed this run (``latency.measure.board_session``). A
+    failure to read it withholds the session only; the age still renders.
     """
+    from latency.domain import CBOT_BOARD_COMMODITIES, format_delta
     from latency.measure import board_session, measure, worst_observation_age
 
     try:
@@ -461,8 +464,13 @@ def _price_age_and_board_session(now: datetime) -> dict[str, str | None]:
         log.warning("could not measure price age for the masthead", exc_info=True)
         return {"price_age": None, "board_session": None}
     age = worst_observation_age(measurements, now)
-    session = board_session(measurements)
-    from latency.domain import format_delta
+    session = None
+    try:
+        from pipeline.query import read_board_sessions
+
+        session = board_session(read_board_sessions(CBOT_BOARD_COMMODITIES), measurements)
+    except Exception:  # noqa: BLE001 — withheld, never guessed; the age still renders
+        log.warning("could not read the board session for the masthead", exc_info=True)
 
     return {
         "price_age": format_delta(age) if age is not None else None,

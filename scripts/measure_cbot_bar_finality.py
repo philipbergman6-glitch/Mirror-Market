@@ -176,6 +176,7 @@ def summarise(rows: Iterable[dict[str, str]]) -> list[str]:
         )
     lines: list[str] = []
     straddling = 0
+    nights: set[str] = set()
     post_boundary_changes: list[str] = []
     slot_misreads: list[str] = []
     for (ticker, label), samples in sorted(by_bar.items()):
@@ -185,6 +186,7 @@ def summarise(rows: Iterable[dict[str, str]]) -> list[str]:
         if not before or not after:
             continue
         straddling += 1
+        nights.add(label)
         final = samples[-1][1]
         final_by = samples[-1][0]
         for offset, close in reversed(samples):
@@ -209,15 +211,16 @@ def summarise(rows: Iterable[dict[str, str]]) -> list[str]:
     if not straddling:
         lines.append("VERDICT: no bar was sampled on both sides of its boundary yet.")
         return lines
+    # A night is one session label sampled across its boundary; the owner's
+    # bar is "every night of a week", so the count is part of the verdict.
+    span = f"{straddling} boundary bar(s) over {len(nights)} night(s)"
     if post_boundary_changes:
         lines.append(
-            f"VERDICT: {len(post_boundary_changes)} Close change(s) after +00:00 over {straddling} "
-            f"boundary bar(s): {', '.join(post_boundary_changes)}. Midnight is NOT proven final."
+            f"VERDICT: {len(post_boundary_changes)} Close change(s) after +00:00 over {span}: "
+            f"{', '.join(post_boundary_changes)}. Midnight is NOT proven final."
         )
     else:
-        lines.append(
-            f"VERDICT: no Close changed after +00:00 over {straddling} boundary bar(s)."
-        )
+        lines.append(f"VERDICT: no Close changed after +00:00 over {span}.")
     if slot_misreads:
         lines.append(f"A slot at +00:15 would have read a non-final Close for: {', '.join(slot_misreads)}.")
     else:
@@ -275,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         targets = [start]
 
+    taken = failed = 0
     for target in targets:
         delay = (target - datetime.now(timezone.utc)).total_seconds()
         if delay > 0:
@@ -286,8 +290,10 @@ def main(argv: list[str] | None = None) -> int:
             # Loud, and recorded nowhere as data: a missing sample is a gap the
             # summary shows by its absence, never a "stable" reading.
             print(f"SAMPLE FAILED at {datetime.now(timezone.utc).isoformat()}: {exc}", file=sys.stderr, flush=True)
+            failed += 1
             continue
         append(rows, args.output)
+        taken += 1
         for row in rows:
             if -60 <= float(row["offset_minutes"]) <= 120:
                 print(
@@ -295,8 +301,10 @@ def main(argv: list[str] | None = None) -> int:
                     f"({_offset(float(row['offset_minutes']))}) close={row['close']}",
                     flush=True,
                 )
-    print(f"appended to {args.output}")
-    return 0
+    print(f"{taken} sample(s) appended to {args.output}; {failed} failed")
+    # Every sample failing is a measurement that did not happen, not a quiet
+    # week: exit non-zero so it cannot read as one.
+    return 0 if taken else 1
 
 
 if __name__ == "__main__":

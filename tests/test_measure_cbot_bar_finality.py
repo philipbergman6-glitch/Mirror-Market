@@ -67,7 +67,7 @@ def test_a_bar_final_at_midnight_supports_the_earlier_slot():
             _row(60, "1001.5")]
     lines = summarise(rows)
     assert "final by +00:00" in lines[0]
-    assert lines[-2].startswith("VERDICT: no Close changed after +00:00 over 1")
+    assert lines[-2] == "VERDICT: no Close changed after +00:00 over 1 boundary bar(s) over 1 night(s)."
     assert "would have read the final Close on every" in lines[-1]
 
 
@@ -108,3 +108,21 @@ def test_a_start_after_midnight_samples_the_rest_of_that_night_first():
 def test_zero_nights_is_refused():
     with pytest.raises(ValueError):
         schedule([time(0, 0)], 0, datetime(2026, 11, 25, tzinfo=UTC))
+
+
+def test_a_run_where_every_sample_failed_exits_non_zero(tmp_path, monkeypatch, capsys):
+    import scripts.measure_cbot_bar_finality as m
+
+    def boom(ticker):
+        raise RuntimeError("yahoo down")
+
+    monkeypatch.setattr(m, "_default_download", boom)
+    assert m.main(["--output", str(tmp_path / "x.csv")]) == 1
+    assert "0 sample(s) appended" in capsys.readouterr().out
+    assert not (tmp_path / "x.csv").exists()
+
+
+def test_the_verdict_counts_nights_not_only_bars():
+    rows = [_row(-10, "1"), _row(5, "1"), _row(-10, "2", ticker="ZL=F"), _row(5, "2", ticker="ZL=F"),
+            _row(-10, "3", label="2026-11-25"), _row(5, "3", label="2026-11-25")]
+    assert "3 boundary bar(s) over 2 night(s)" in summarise(rows)[-2]

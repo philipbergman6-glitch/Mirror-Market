@@ -392,6 +392,11 @@ and whose session date the masthead states (owner decision on #622).
 scripts/refresh_slot.py restates the tuple (its job runs before any install);
 tests/test_refresh_slot.py pins the two equal."""
 
+CBOT_BOARD_COMMODITIES: tuple[str, ...] = ("Soybeans", "Soybean Oil", "Soybean Meal")
+"""Whose session the masthead's "CBOT session" names: the soy complex this
+product is for. Not the layer's observed_at, which is the newest bar of any
+of its ten tickers (cattle, sugar, palm…) and can be a session soy lacks."""
+
 LAYER_LATENCIES: tuple[LayerLatency, ...] = (
     LayerLatency("prices", LatencyClass.BOARD_PRICE, _CBOT, _CBOT_PROVIDER_DELAY, _YAHOO_FUTURES_BASIS),
     LayerLatency(

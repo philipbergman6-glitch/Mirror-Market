@@ -16,7 +16,7 @@ Slots, by trigger:
                                  backstop**: if the board was due today and no
                                  board dispatch delivered it, this run fetches
                                  the board too, and a separate step goes red
-                                 on it (the board trigger did not fire).
+                                 on it (no board run delivered today).
   workflow_dispatch layers=...   anything else: fetch and gate what was asked.
   schedule 0 8                   the DCE backstop: stands down if a dispatched
                                  dce run delivered today, else fetches dce and
@@ -229,7 +229,7 @@ def _dce_dispatch(now: datetime, delivered: Delivered) -> SlotPlan:
         layers=_csv((*DCE_LAYERS, *BOARD_LAYERS)), gate=dce,
         board_backstop=True, board_gate=board,
         notices=("warning::no dispatched board refresh delivered today — the board trigger "
-                 "did not fire; fetching the board late",),
+                 "did not fire or its run failed its gate; fetching the board late",),
     )
 
 

@@ -350,7 +350,7 @@ jobs:
           fi
           RC=0
           python scripts/latency_report.py \
-            --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
+            --manifest "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}manifest.json" \
             ${GATE:+--fail-on-breach-layers "$GATE"} $LATE_START || RC=$?
           if [[ "${{ needs.slot.outputs.backstop }}" == "true" ]]; then
             # The backstop only fetches when no dispatched dce run delivered
@@ -367,13 +367,16 @@ jobs:
       # fetched the board because no board dispatch delivered today. Its own
       # step, after the one above, so a dce run that delivered dce on time
       # still reads as delivered to the 08:00 DCE backstop. Red by itself:
-      # reaching it means the 01:00 New York trigger did not fire.
+      # reaching it means no board run delivered — the 01:00 New York
+      # trigger did not fire, or its run failed its own gate.
+      # !cancelled(): it must still run, and say why, when the dce gate above
+      # failed — the run is red either way, but the cause would be lost.
       - name: Gate the board backstop
-        if: ${{ needs.slot.outputs.board_backstop == 'true' }}
+        if: ${{ !cancelled() && needs.slot.outputs.board_backstop == 'true' }}
         run: |
           RC=0
           python scripts/latency_report.py \
-            --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
+            --manifest "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}manifest.json" \
             --fail-on-breach-layers "${{ needs.slot.outputs.board_gate }}" || RC=$?
-          echo "::error title=CBOT board trigger did not fire::No 'Refresh Prices (board)' dispatch had delivered since 00:00 New York when this run started ($(date -u +%H:%M) UTC; the trigger is due 01:00 America/New_York, Tue-Sat). The board was fetched here instead, late. Check the cron-job.org job: scripts/check_cbot_board_trigger.sh. Latency report exit: $RC."
+          echo "::error title=CBOT board not delivered on time::No 'Refresh Prices (board)' run had delivered since 00:00 New York when this run started ($(date -u +%H:%M) UTC; the trigger is due 01:00 America/New_York, Tue-Sat), so the board was fetched here instead, late. Either the trigger did not fire (no board run today: scripts/check_cbot_board_trigger.sh) or the board run failed its own gate (a red board run today: open it; after a CBOT holiday that is expected, no calendar yet). Latency report exit: $RC."
           exit 1

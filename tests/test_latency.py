@@ -501,10 +501,14 @@ def test_gate_fails_only_on_the_layers_it_was_scoped_to(tmp_path, capsys):
     from scripts.latency_report import main as report_main
 
     rows = [
-        {"layer": "prices", "class": "board_price", "verdict": "meets"},
-        {"layer": "currencies", "class": "fx", "verdict": "meets"},
-        {"layer": "cot", "class": "fundamentals", "verdict": "breaches"},
-        {"layer": "dce", "class": "board_price", "verdict": "breaches"},
+        {"layer": "prices", "class": "board_price", "verdict": "meets",
+         "acquisition_verdict": "meets"},
+        {"layer": "currencies", "class": "fx", "verdict": "meets",
+         "acquisition_verdict": "meets"},
+        {"layer": "cot", "class": "fundamentals", "verdict": "breaches",
+         "acquisition_verdict": "breaches"},
+        {"layer": "dce", "class": "board_price", "verdict": "breaches",
+         "acquisition_verdict": "breaches"},
     ]
     source = _gate_manifest(tmp_path, rows)
     assert report_main(["--manifest", source,

@@ -241,7 +241,10 @@ hours later would re-stamp an on-time number as a later one. The routing is
   hour past 01:00, if no `Refresh Prices (board)` run *delivered* since 00:00
   New York, it fetches `dce,prices,forward_curve`, gates dce as usual, and a
   separate final step, **Gate the board backstop**, prints the board report and
-  goes red with `CBOT board trigger did not fire`. "Delivered" means the run's
+  goes red with `CBOT board not delivered on time` — the trigger did not
+  fire, or its run failed its own gate (a board run after a CBOT holiday
+  does, until CBOT has a calendar: one red for the breach, one for the
+  backstop). "Delivered" means the run's
   own `Gate the published edition's latency` step succeeded — not the run's
   conclusion — so a dce run that was red only on the board half still counts
   as dce delivered, and the 08:00 backstop does not refetch dce late.
@@ -264,7 +267,13 @@ hours later would re-stamp an on-time number as a later one. The routing is
 **The latency gate.** Every refresh slot ends by reading the published
 edition's `manifest.json` through `scripts/latency_report.py
 --fail-on-breach-layers <the layers that slot fetched>` — a breach in a layer
-the run was responsible for is a red run, not a log line. The gate is scoped
+the run was responsible for is a red run, not a log line. So is a gated layer
+the run cannot show an age for (no observation, no fetch stamp, or no row in
+the manifest): `UNMEASURED` fails the gate, because `unknown` never silently
+meets. The test is the acquisition leg, not the overall verdict, which on a
+published manifest is always `unknown` — the manifest is written before its
+own deploy (review of #630: a failed curve fetch otherwise passed the board
+gate and the backstop read the run as delivered). The gate is scoped
 on purpose: an unscoped `--fail-on-breach` would be red every day on layers
 whose acquisition breaches structurally (COT carries a 3-day provider delay
 against a 24h target; the evening daily build re-stamps `dce` 13–17h after

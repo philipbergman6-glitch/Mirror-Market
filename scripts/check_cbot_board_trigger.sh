@@ -327,7 +327,13 @@ printf '  %s✓ API key works%s\n' "$GREEN" "$RESET"
 JOB_ID=$(printf '%s' "$jobs_json" | JOB_TITLE="$JOB_TITLE" python3 -c '
 import json, os, sys
 jobs = [j for j in json.load(sys.stdin).get("jobs", []) if j.get("title") == os.environ["JOB_TITLE"]]
-print(jobs[0]["jobId"] if jobs else "")')
+print(" ".join(str(j["jobId"]) for j in jobs))')
+if [[ "$JOB_ID" == *" "* ]]; then
+  warn "SEVERAL jobs are titled '$JOB_TITLE' (ids $JOB_ID): each fires its own dispatch."
+  say "Delete all but one in the console, then re-run this wizard."
+  open_url "https://console.cron-job.org/jobs"
+  exit 1
+fi
 if [[ -z "$JOB_ID" ]]; then
   warn "NO job titled '$JOB_TITLE' exists in this account."
   say "That is the diagnosis: the setup wizard's job stage was skipped or answered 'N'."

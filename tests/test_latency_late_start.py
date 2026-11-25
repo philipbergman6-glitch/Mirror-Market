@@ -122,3 +122,51 @@ def test_the_published_manifest_shape_with_an_unmeasured_pipeline_is_excused(tmp
     path = _manifest(tmp_path, [_row("prices", SETTLED_OCT_8, LATE_START, pipeline="unknown")])
     assert main(["--manifest", path, "--fail-on-breach-layers", "prices",
                  "--late-start-is-not-a-breach"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# An unmeasured gated layer fails (review of #630)
+# ---------------------------------------------------------------------------
+
+def _unmeasured_row(layer):
+    return {"layer": layer, "class": "board_price", "verdict": "unknown",
+            "acquisition_verdict": "unknown", "pipeline_verdict": "unknown",
+            "observed_at": None, "fetch_started_at": None}
+
+
+def _meeting_row(layer):
+    return {"layer": layer, "class": "board_price", "verdict": "unknown",
+            "acquisition_verdict": "meets", "pipeline_verdict": "unknown",
+            "observed_at": SETTLED_OCT_8.isoformat(), "fetch_started_at": LATE_START.isoformat()}
+
+
+def test_a_gated_layer_with_no_observation_fails_the_gate(tmp_path, capsys):
+    """A failed curve fetch leaves observed_at NULL: verdict unknown. It must
+    not pass, or the board backstop reads the run as delivered."""
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices"), _unmeasured_row("forward_curve")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices,forward_curve"]) == 1
+    assert "UNMEASURED gated layer(s): forward_curve" in capsys.readouterr().err
+
+
+def test_a_gated_layer_missing_from_the_manifest_fails_the_gate(tmp_path):
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices,forward_curve"]) == 1
+
+
+def test_an_unknown_pipeline_leg_alone_still_passes(tmp_path):
+    """The published manifest never knows its own deploy time; that is not unmeasured."""
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices"), _meeting_row("forward_curve")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices,forward_curve"]) == 0
+
+
+def test_an_unmeasured_ungated_layer_does_not_fail(tmp_path):
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices"), _unmeasured_row("cot")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices"]) == 0

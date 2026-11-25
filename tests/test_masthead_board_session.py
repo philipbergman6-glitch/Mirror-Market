@@ -34,43 +34,102 @@ def _rows(**observed: str) -> dict:
     }
 
 
-def test_the_board_session_is_the_cbot_bars_own_date():
-    ms = measure_from_rows(_rows(prices="2026-11-24", forward_curve="2026-11-24",
-                                 dce="2026-11-25"))
-    assert board_session(ms) == date(2026, 11, 24)
+SOY = ("Soybeans", "Soybean Oil", "Soybean Meal")
+
+
+def _stored(prices: str | None = "2026-11-24", curve: str | None = "2026-11-24", **override):
+    out = {"prices": dict.fromkeys(SOY, prices), "forward_curve": dict.fromkeys(SOY, curve)}
+    for key, value in override.items():
+        layer, _, commodity = key.partition("__")
+        out[layer][commodity.replace("_", " ")] = value
+    return out
+
+
+MEASURED = measure_from_rows(_rows(prices="2026-11-24", forward_curve="2026-11-24"))
+
+
+def test_the_board_session_is_the_soy_legs_stored_session():
+    assert board_session(_stored(), MEASURED) == date(2026, 11, 24)
+
+
+def test_the_commodities_are_the_soy_complex():
+    from latency.domain import CBOT_BOARD_COMMODITIES
+
+    assert CBOT_BOARD_COMMODITIES == SOY
 
 
 def test_a_curve_behind_the_front_month_names_the_older_session():
-    ms = measure_from_rows(_rows(prices="2026-11-24", forward_curve="2026-11-23"))
-    assert board_session(ms) == date(2026, 11, 23)
+    assert board_session(_stored(curve="2026-11-23"), MEASURED) == date(2026, 11, 23)
 
 
-def test_no_board_observation_states_no_session():
-    assert board_session(measure_from_rows(_rows(currencies="2026-11-24"))) is None
-    assert board_session(measure_from_rows({})) is None
+def test_one_soy_leg_behind_names_its_session_not_the_layer_max():
+    """The layer's observed_at is the max over all tickers (cattle, sugar…):
+    soybeans stuck at Fri 20 Nov must not read as Mon 23 Nov."""
+    stored = _stored(prices="2026-11-23", curve="2026-11-23", prices__Soybeans="2026-11-20")
+    assert board_session(stored, MEASURED) == date(2026, 11, 20)
+
+
+def test_a_missing_soy_leg_withholds_the_session():
+    assert board_session(_stored(forward_curve__Soybean_Meal=None), MEASURED) is None
+    assert board_session({}, MEASURED) is None
+
+
+def test_a_board_layer_unobserved_this_run_withholds_the_session():
+    """A failed curve fetch: observed_at NULL. Dropping the leg would name the
+    prices session while the page serves an older curve."""
+    measured = measure_from_rows(_rows(prices="2026-11-24"))  # curve: not-run
+    assert board_session(_stored(), measured) is None
+
+
+def test_read_board_sessions_reads_each_soy_leg_from_the_store(tmp_path, monkeypatch):
+    import sqlite3
+
+    import pipeline.query as query
+
+    db = tmp_path / "t.db"
+    conn = sqlite3.connect(db)
+    conn.executescript("""
+        CREATE TABLE prices (commodity TEXT, Date TEXT, Close REAL);
+        CREATE TABLE forward_curve (commodity TEXT, contract_month TEXT, observation_date TEXT,
+                                    fetched_date TEXT);
+        INSERT INTO prices VALUES ('Soybeans','2026-11-20',1),('Soybeans','2026-11-24',1),
+                                  ('Live Cattle','2026-11-25',1);
+        INSERT INTO forward_curve VALUES ('Soybeans','2027-01','2026-11-23','2026-11-24'),
+                                         ('Soybeans','2027-03','2026-11-23','2026-11-24'),
+                                         ('Soybeans','2027-01','2026-11-20','2026-11-21');
+    """)
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(query, "DB_PATH", str(db))
+    monkeypatch.setattr(query, "get_connection", lambda: sqlite3.connect(db))
+    got = query.read_board_sessions(SOY)
+    assert got["prices"] == {"Soybeans": "2026-11-24", "Soybean Oil": None, "Soybean Meal": None}
+    assert got["forward_curve"]["Soybeans"] == "2026-11-23"
 
 
 def test_the_session_is_read_through_the_clock_not_the_utc_date():
-    """13:15 CT on D is still D in UTC, but the inverse must go through the
-    clock (a close_day_offset clock would otherwise drift a day)."""
     spec = LAYER_LATENCY_BY_KEY["prices"]
     instant = spec.clock.instant(date(2026, 11, 24))
     assert instant is not None and spec.clock.session_of(instant) == date(2026, 11, 24)
 
 
-def test_the_masthead_carries_age_and_session_from_one_measurement(monkeypatch):
-    calls = []
-
-    def fake_measure(**kwargs):
-        calls.append(kwargs)
-        return measure_from_rows(_rows(prices="2026-11-24", forward_curve="2026-11-24",
-                                       currencies="2026-11-24"))
-
-    monkeypatch.setattr("latency.measure.measure", fake_measure)
+def test_the_masthead_carries_age_and_session(monkeypatch):
+    monkeypatch.setattr("latency.measure.measure", lambda **_: measure_from_rows(
+        _rows(prices="2026-11-24", forward_curve="2026-11-24", currencies="2026-11-24")))
+    monkeypatch.setattr("pipeline.query.read_board_sessions", lambda c: _stored())
     masthead = generate_html._build_masthead([], NOW, health={"issues": []})
     assert masthead["board_session"] == "Tue 24 Nov"
-    assert masthead["price_age"]  # stated beside it
-    assert len(calls) == 1
+    assert masthead["price_age"]
+
+
+def test_an_unreadable_store_withholds_only_the_session(monkeypatch):
+    def boom(_):
+        raise FileNotFoundError("db")
+
+    monkeypatch.setattr("latency.measure.measure", lambda **_: MEASURED)
+    monkeypatch.setattr("pipeline.query.read_board_sessions", boom)
+    masthead = generate_html._build_masthead([], NOW, health={"issues": []})
+    assert masthead["board_session"] is None and masthead["price_age"]
 
 
 def test_a_failed_measurement_drops_both_and_never_fails_the_build(monkeypatch):
