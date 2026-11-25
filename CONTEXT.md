@@ -35,7 +35,14 @@ A desk assumption or policy rate past its expiry. It blocks every landed total t
 _Avoid_: stale (reserved for data-layer freshness), expired-but-usable
 
 **Renewal**
-Re-signing a lapsed or lapsing input with a new expiry, possibly unchanged in value. A decision with a person's name on it, not an automatic extension.
+Re-signing a lapsed or lapsing input with a new expiry, possibly unchanged in value. A decision with a person's name on it, not an automatic extension. The outgoing row is *retired*, not deleted.
+
+**Retired entry**
+A desk assumption or policy rate that a renewal replaced: it stays in its file with `retired_on` and `superseded_by`, answers for the days before it was retired, and never again. History, not a lapsed input — there is nothing left to renew.
+_Avoid_: deleted, archived, expired (when meaning replaced)
+
+**Default lifetime**
+The expiry proposed for an entry made without one, per component (`config.ASSUMPTION_DEFAULT_LIFETIME_DAYS`): freight a week, elevation a month, port and carry costs a quarter, policy rates a year, a quality differential its shipment window. A proposal printed at entry, never a softening of the hard stop.
 
 **Drill route**
 A route costed end to end with the desk's own inputs standing in for a buyer's, labelled as such. It proves the chain, not the decision; only a buyer's confirmation makes it a decision.

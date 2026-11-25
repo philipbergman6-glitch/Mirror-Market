@@ -41,7 +41,7 @@ do not enter one. The blocked state is a correct answer.
 ## Fields
 
 Every field below is required except `origin`, `destination`, `window`, `days`,
-`citation` and `caveat`. A missing required field fails the load — a silently skipped
+`citation`, `caveat`, `retired_on` and `superseded_by`. A missing required field fails the load — a silently skipped
 assumption file is the same failure as an expired one with better manners.
 
 ```yaml
@@ -63,7 +63,24 @@ assumption file is the same failure as an expired one with better manners.
   confidence: indicative                          # indicative | administered | provisional
   citation: "optional URL or document reference"
   caveat: "optional; printed beside the rate on its waterfall rung"
+  retired_on: 2026-09-10                          # optional; written by --renew, never live from this day
+  superseded_by: ocean_freight.us_gulf.cn_north.2026-10.renewed-2026-09-10   # the row that re-signed it
 ```
+
+### Lifetimes and renewal (#410)
+
+`--expires` may be omitted: the CLI proposes the component's default lifetime
+from `config.ASSUMPTION_DEFAULT_LIFETIME_DAYS` — freight 7 days, elevation 30,
+port costs / inland / financing / working capital 90, duty and VAT 365, a
+quality adjustment the end of its shipment window — and prints the date. A
+component with no default still needs `--expires`. The hard stop is unchanged.
+
+`--renew <id> --expires <date> --entered-by <you> [--value <v>]` re-signs an
+entry: the new row is appended with today's `entered_at`, and the old row is
+**retired in place** (`retired_on`, `superseded_by`) rather than deleted — the
+file is the audit trail. A retired row is never live from `retired_on`, never
+counts as a lapse to renew, and never takes part in the overlap check after
+that day. `superseded_by` must name an entry in the set.
 
 ### Units are checked against the component
 
@@ -106,7 +123,8 @@ python scripts/enter_assumption.py \
 python scripts/enter_assumption.py --list          # what is live, and what lapses soon
 python scripts/enter_assumption.py --check         # validate every file, exit 1 on error
 python scripts/enter_assumption.py --onboarding    # per-route checklist + the command for each gap
-python scripts/enter_assumption.py --review        # the renewal queue, and what each lapse blocks
+python scripts/enter_assumption.py --review        # the renewal queue, what each lapse blocks, the renew command
+python scripts/enter_assumption.py --renew <id> --expires <date> --entered-by <you> [--value <v>]
 python scripts/enter_assumption.py --gaps          # what the page cannot rank yet (reads the DB)
 ```
 
@@ -116,12 +134,24 @@ python scripts/enter_assumption.py --gaps          # what the page cannot rank y
 its component, a freight with no `origin` (it would price every leg off one
 indication), a scope key that matches no route, two entries of the same scope
 whose windows and lifetimes overlap, a shipment window that ended before the
-entry was made, a desk component in a committed-tier file, or any file under
+entry was made, a `retired_on` before `entered_at` or a `superseded_by` naming
+no entry, a desk component in a committed-tier file, or any file under
 `private/` that git tracks. `load_assumptions()` raises on the same set, so an unusable file
 can never quietly cost a route.
 
 Expired and expiring entries are **reported, not refused**: the record is the
-audit trail, and a renewal is a decision with a person's name on it.
+audit trail, and a renewal is a decision with a person's name on it. So is a
+freight signed for longer than 14 days (`config.ASSUMPTION_LIFETIME_WARN_DAYS`):
+noted, never a failure.
+
+### What a lapsed input looks like
+
+It still withholds every landed total that needs it and names itself, on both
+editions. The **private edition only** also prints the dead value struck
+through, with its entry date, expiry date and owner, and the exact `--renew`
+command — in section 02 beside the blocked input and in section 09 as a list.
+It is never used in arithmetic, labelled or not (invariant 11), and the public
+edition's context does not hold it at all, not even for a committed policy rate.
 
 ## What is shipped here, and what is not
 
