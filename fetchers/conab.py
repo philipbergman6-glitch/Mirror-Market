@@ -43,13 +43,16 @@ logger = logging.getLogger(__name__)
 
 
 def request_failure_reason(exc: requests.RequestException, url: str) -> str:
-    """Name a failed CONAB request — shared by Layers 15 and 15b (#613)."""
+    """Name a failed CONAB request — shared by Layers 15 and 15b (#613).
+
+    Call once per failed run, on the last attempt's exception.
+    """
     return _tls.request_failure_reason(
         exc,
         url,
         publisher="CONAB's server",
-        default_vhost_name=CONAB_DEFAULT_VHOST_CERT_NAME,
         timeout=REQUEST_TIMEOUT,
+        default_vhost_name=CONAB_DEFAULT_VHOST_CERT_NAME,
     )
 
 _REQUIRED_COLUMNS: tuple[str, ...] = (
@@ -259,13 +262,15 @@ def fetch_conab_estimates() -> FetchResult:
             response. Layer 15 in ``main.py`` records the layer as failed
             rather than storing a poisoned national total.
     """
-    last_failure = "no attempt completed"
+    # The last attempt's failure; a transport error is classified once,
+    # after the loop, so a TLS mismatch costs one certificate re-read per run.
+    last_failure: requests.RequestException | str = "no attempt completed"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info("Fetching CONAB historical series (attempt %d) ...", attempt)
             resp = requests.get(CONAB_URL, headers=CONAB_HEADERS, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
-            last_failure = request_failure_reason(exc, CONAB_URL)
+            last_failure = exc
             logger.warning("CONAB attempt %d failed: %s", attempt, exc)
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
@@ -310,6 +315,8 @@ def fetch_conab_estimates() -> FetchResult:
         )
         return FetchResult.ok({"national": result})
 
+    if isinstance(last_failure, requests.RequestException):
+        last_failure = request_failure_reason(last_failure, CONAB_URL)
     return _give_up(f"all {MAX_RETRIES} attempts failed — {last_failure}")
 
 

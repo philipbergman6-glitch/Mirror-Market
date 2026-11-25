@@ -1072,7 +1072,10 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
             # no national frame means the download or the UF aggregation
             # broke — not "no estimate published" (#175). The fetcher's
             # reason is the line that says which (#613).
-            logger.error("[Layer 15] CONAB failed: %s — recording as failed", conab_result.error)
+            logger.error(
+                "[Layer 15] CONAB failed: %s — recording as failed",
+                conab_result.error or f"fetch status {conab_result.status!r}, no reason given",
+            )
             _mark_failed("conab")
     except Exception:
         logger.exception("[Layer 15] CONAB failed — see error above")

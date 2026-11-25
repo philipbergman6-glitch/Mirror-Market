@@ -3,19 +3,34 @@
 ``requests`` reports a TLS hostname mismatch as one long, nested exception
 string that never says *which* certificate was served. That is the one fact
 that tells a publisher's vhost misconfiguration apart from a DNS hijack, a
-captive portal or an intercepting proxy. ``request_failure_reason`` reads
-it:
+captive portal or an intercepting proxy. Python's ``ssl`` does not expose the
+peer certificate of a handshake that failed verification, and capturing it
+from the fetch connection would mean loosening the fetch's own verification.
+That is never acceptable, so the failing certificate itself is not available.
+``request_failure_reason`` therefore states only what it knows:
 
-* a hostname mismatch (OpenSSL verify code 62) triggers a second,
-  handshake-only connection that reads the served certificate's names, then
-  closes. That handshake still verifies the chain against the same trust store
-  ``requests`` used (``CERT_REQUIRED``). Only the hostname comparison is
-  skipped, because the names are what we want to read. No HTTP request is
-  sent and no byte of application data is read, so nothing from an
-  unverified peer can reach a table. The fetch itself stays a failure.
-* the served name is attributed to the publisher's default vhost only when it
-  *is* the name the caller says that vhost serves; any other name is "a
-  certificate for another host".
+* the **fact** of the failed attempt: a certificate not valid for the
+  requested host (OpenSSL verify code 62);
+* then, labelled as such, what a **re-read** saw. That is a separate,
+  handshake-only connection made once per failed run. It sends the same SNI,
+  verifies the chain against the trust store ``requests`` used
+  (``CERT_REQUIRED``) and skips only the hostname comparison, because the
+  names are what it reads. It sends no HTTP request and reads no application
+  data, so nothing from an unverified peer can reach a table, and the fetch
+  stays a failure. The fault is intermittent, so the re-read may differ from
+  the failing attempt:
+
+  * a re-read whose certificate *is* valid for the host says so, "the
+    mismatch is intermittent (the failing certificate was not captured)",
+    and attributes it to no one;
+  * the publisher's default vhost is named only when the re-read is served
+    exactly ``default_vhost_name``; any other name is "a certificate for
+    another host";
+  * when ``requests`` would reach the URL through a proxy (``HTTPS_PROXY``
+    / ``ALL_PROXY``, ``NO_PROXY`` honoured), a direct re-read would take a
+    different route and could describe a different server, so it is not
+    attempted.
+
 * every other failure (unknown CA, timeout, refused, …) keeps the raw
   exception text.
 """
@@ -94,37 +109,66 @@ def served_certificate_names(url: str, timeout: float) -> list[str]:
     return [value for rdn in subject for key, value in rdn if key == "commonName"]
 
 
+def _proxied(url: str) -> bool:
+    """Whether ``requests.get(url)`` would go through a proxy (env-aware)."""
+    proxies = requests.utils.get_environ_proxies(url)
+    return bool(proxies.get(urlsplit(url).scheme) or proxies.get("all"))
+
+
+def _valid_for(host: str, names: Sequence[str]) -> bool:
+    """RFC 6125-style: exact name, or a ``*.`` wildcard covering one left label."""
+    host = host.lower().rstrip(".")
+    for name in (n.lower().rstrip(".") for n in names):
+        if name == host:
+            return True
+        if name.startswith("*.") and "." in host and host.split(".", 1)[1] == name[2:]:
+            return True
+    return False
+
+
 def request_failure_reason(
     exc: requests.RequestException,
     url: str,
     *,
     publisher: str,
+    timeout: float,
     default_vhost_name: str | None = None,
-    timeout: float = 30,
 ) -> str:
     """One line naming why ``requests.get(url)`` failed.
 
-    ``default_vhost_name`` is the name the publisher's front end serves when
-    no vhost matches (the cert a no-SNI client gets). A mismatch is
-    attributed to that vhost only when that is the name actually served.
+    Call it once per failed run, on the last attempt's exception: a mismatch
+    costs one extra handshake, bounded by ``timeout``. ``default_vhost_name``
+    is the name the publisher's front end serves when no vhost matches (the
+    certificate a no-SNI client gets).
     """
     cert_error = _cert_verification_error(exc)
     if cert_error is None or cert_error.verify_code != X509_V_ERR_HOSTNAME_MISMATCH:
         return str(exc)
 
-    host = urlsplit(url).hostname
+    host = urlsplit(url).hostname or ""
+    failed = (
+        f"TLS hostname mismatch: {publisher} presented a certificate not valid "
+        f"for {host!r} (verification stays on)"
+    )
+    if _proxied(url):
+        return (
+            f"{failed}; the served certificate was not re-read, because requests "
+            "routes this URL via a proxy and a direct handshake would take another route"
+        )
     try:
         names: Sequence[str] = served_certificate_names(url, timeout)
     except (OSError, ssl.SSLError, ValueError) as probe_exc:
-        served = f"a certificate for another host (names unreadable: {probe_exc})"
-    else:
-        if default_vhost_name is not None and list(names) == [default_vhost_name]:
-            served = f"its default-vhost certificate ({default_vhost_name})"
-        else:
-            served = f"a certificate for another host ({', '.join(names) or 'no DNS name'})"
+        return f"{failed}; the served certificate could not be re-read ({probe_exc})"
+    if _valid_for(host, names):
+        return (
+            f"{failed}; a re-read handshake got a valid certificate, so the mismatch "
+            "is intermittent (the failing certificate was not captured)"
+        )
+    if default_vhost_name is not None and list(names) == [default_vhost_name]:
+        return f"{failed}; a re-read handshake was served its default-vhost certificate ({default_vhost_name})"
     return (
-        f"TLS hostname mismatch: {publisher} presented {served} when asked "
-        f"for {host!r}; verification stays on"
+        f"{failed}; a re-read handshake was served a certificate for another host "
+        f"({', '.join(names) or 'no DNS name'})"
     )
 
 
