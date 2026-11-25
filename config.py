@@ -4718,6 +4718,15 @@ AVAILABILITY_BASKET_BLOCKS: dict[tuple[str, str], int] = {
     ("dalian", "crush"): 7,
 }
 
+# Scheduled-workflow inactivity clock (#6). GitHub disables a public repo's
+# scheduled workflows after this many days with "no repository activity" — the
+# July 2026 outage. Its docs never say whether the deploy's daily
+# github-actions[bot] history commits count, so scripts/ci_inactivity_clock.py
+# counts only non-bot commits and warns from the second number on, while every
+# workflow is still alive to say so.
+GITHUB_SCHEDULE_INACTIVITY_DAYS = 60
+SCHEDULE_INACTIVITY_WARN_DAYS = 45
+
 # Source reliability record (B34 #520, requirements docs/plans/source-reliability-a19.md).
 # The window the figures in manifest.json are computed over, in weekday CBOT
 # sessions counted on layer_runs.session_date.
