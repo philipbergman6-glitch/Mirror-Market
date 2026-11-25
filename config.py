@@ -4726,6 +4726,11 @@ AVAILABILITY_BASKET_BLOCKS: dict[tuple[str, str], int] = {
 # workflow is still alive to say so.
 GITHUB_SCHEDULE_INACTIVITY_DAYS = 60
 SCHEDULE_INACTIVITY_WARN_DAYS = 45
+# The warning stays open this long before an all-active repo is read as
+# evidence that something held the clock off. GitHub's disable is a background
+# sweep, not a day-60 timer (July's landed ~day 61), so concluding at 60 would
+# close the alarm the day before the schedules die.
+SCHEDULE_INACTIVITY_CONCLUDE_DAYS = 75
 
 # Source reliability record (B34 #520, requirements docs/plans/source-reliability-a19.md).
 # The window the figures in manifest.json are computed over, in weekday CBOT

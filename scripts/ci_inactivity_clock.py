@@ -17,10 +17,13 @@ so this relay warns *before* the deadline, while every workflow still runs:
 - **warning** — the newest non-bot commit on ``main`` is at least
   ``config.SCHEDULE_INACTIVITY_WARN_DAYS`` old (or none in the lookback):
   warning annotation and the issue, naming the deadline.
-- **past_deadline_active** — ``config.GITHUB_SCHEDULE_INACTIVITY_DAYS`` have
-  passed without a non-bot commit and nothing is disabled: evidence that the
-  bot commits (or something else) count as activity. Notice annotation; the
-  issue is closed with that evidence.
+- **past_deadline_active** — ``config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS``
+  (a margin past GitHub's ``GITHUB_SCHEDULE_INACTIVITY_DAYS``, whose disable
+  is a background sweep, not a timer) have passed without a non-bot commit and
+  nothing is disabled: evidence that some activity — the bot commits, or the
+  relays' own issue traffic — holds the clock off. Notice annotation; the
+  issue is closed with that evidence. Between the deadline and the margin the
+  state stays **warning**.
 - **ok** — otherwise; an open issue is closed.
 
 It comments only on a state change (a marker in each body/comment). Like the
@@ -55,7 +58,7 @@ LABEL = "ci-inactivity-clock"
 TITLE = "CI: scheduled workflows near GitHub's 60-day inactivity disable"
 DISABLED_STATE = "disabled_inactivity"
 # Fetch a little past the deadline so "none in the lookback" means "past it".
-LOOKBACK_DAYS = config.GITHUB_SCHEDULE_INACTIVITY_DAYS + 7
+LOOKBACK_DAYS = config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS + 7
 _MARKER = re.compile(r"<!-- ci-inactivity-clock: (\w+) -->")
 
 
@@ -98,7 +101,7 @@ def assess(commits: list[dict], workflows: list[dict], now: datetime) -> Clock:
     days = (now - last).days if last is not None else None
     if disabled:
         state = "disabled"
-    elif days is None or days >= config.GITHUB_SCHEDULE_INACTIVITY_DAYS:
+    elif days is None or days >= config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS:
         state = "past_deadline_active"
     elif days >= config.SCHEDULE_INACTIVITY_WARN_DAYS:
         state = "warning"
@@ -128,7 +131,7 @@ def annotation(clock: Clock) -> str | None:
                 f"scheduled workflow from {clock.deadline:%Y-%m-%d} (#6)")
     if clock.state == "past_deadline_active":
         return (f"::notice title=Inactivity clock::{_since(clock)} and no workflow is disabled — "
-                "evidence that bot commits count as activity (#6)")
+                "evidence that some activity (bot commits or the relays' own issue traffic) holds the clock off (#6)")
     return None
 
 
@@ -151,13 +154,14 @@ def build_body(clock: Clock, run: str) -> str:
             "",
             "GitHub's docs don't say whether the deploy's daily github-actions[bot] history "
             "commits count as activity. Any human commit to `main` resets this clock for certain. "
-            "If the deadline passes with every workflow still active, this issue closes itself "
-            "with that evidence.",
+            f"If every workflow is still active {config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS} days after "
+            "the last human commit, this issue closes itself with that evidence.",
         ]
     elif clock.state == "past_deadline_active":
         lines = [
-            f"{_sentence(_since(clock))}, past GitHub's "
-            f"{config.GITHUB_SCHEDULE_INACTIVITY_DAYS}-day line, and no workflow reads "
+            f"{_sentence(_since(clock))}, at least "
+            f"{config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS - config.GITHUB_SCHEDULE_INACTIVITY_DAYS} days past "
+            f"GitHub's {config.GITHUB_SCHEDULE_INACTIVITY_DAYS}-day line, and no workflow reads "
             f"`{DISABLED_STATE}`: evidence that the bot's daily commits (or other activity) "
             "reset the clock — record it on #6.",
         ]

@@ -69,12 +69,35 @@ def test_manually_disabled_workflow_is_not_an_inactivity_alarm():
     assert clock_mod.assess([_commit(1)], workflows, NOW).state == "ok"
 
 
-@pytest.mark.parametrize("commits", [[_commit(config.GITHUB_SCHEDULE_INACTIVITY_DAYS + 1)], [_bot(0)], []])
+@pytest.mark.parametrize("days_ago", [config.GITHUB_SCHEDULE_INACTIVITY_DAYS,
+                                      config.GITHUB_SCHEDULE_INACTIVITY_DAYS + 1,
+                                      config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS - 1])
+def test_just_past_the_deadline_is_still_a_warning_not_evidence(days_ago):
+    # GitHub's sweep is a background job: July's disable landed on day ~61, not
+    # at day 60 sharp. Closing the warning on day 60 would record "harmless" a
+    # day before the schedules die (#616 review).
+    clock = clock_mod.assess([_commit(days_ago)], ACTIVE, NOW)
+
+    assert clock.state == "warning"
+    line = clock_mod.annotation(clock)
+    assert line is not None and line.startswith("::warning")
+
+
+def test_conclude_margin_is_past_the_deadline():
+    assert config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS > config.GITHUB_SCHEDULE_INACTIVITY_DAYS
+    assert clock_mod.LOOKBACK_DAYS > config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS
+
+
+@pytest.mark.parametrize("commits", [[_commit(config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS)], [_bot(0)], []])
 def test_past_the_deadline_with_everything_active_is_evidence(commits):
     clock = clock_mod.assess(commits, ACTIVE, NOW)
 
     assert clock.state == "past_deadline_active"
     assert "evidence" in clock_mod.build_body(clock, "RUN")
+    # The guard's own issue traffic is activity too, so the notice must not
+    # credit the bot commits alone.
+    line = clock_mod.annotation(clock)
+    assert line is not None and "bot commits count" not in line
 
 
 def test_empty_workflow_listing_refuses_to_read_as_healthy():
@@ -138,7 +161,7 @@ def test_relay_opens_once_then_comments_only_on_state_change(monkeypatch):
     assert ("issue", "comment") in changed.verbs()
 
 
-@pytest.mark.parametrize("days_ago", [1, config.GITHUB_SCHEDULE_INACTIVITY_DAYS + 1])
+@pytest.mark.parametrize("days_ago", [1, config.SCHEDULE_INACTIVITY_CONCLUDE_DAYS])
 def test_relay_closes_an_open_issue_when_reset_or_proven_harmless(monkeypatch, days_ago):
     clock = clock_mod.assess([_commit(days_ago)], ACTIVE, NOW)
     fake = _FakeGh(open_issue=7)
