@@ -1622,6 +1622,10 @@ CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHi
 # GitHub runner and a residential address; dark from 2026-10-20). Both
 # CONAB fetchers send this header.
 CONAB_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; MirrorMarket/1.0)"}
+# The certificate CONAB's Apache front end presents to a client that sends no
+# SNI (probed 2026-11-25) — its default vhost. A TLS hostname mismatch is
+# attributed to that vhost only when this is the name actually served (#613).
+CONAB_DEFAULT_VHOST_CERT_NAME = "www.conab.gov.br"
 
 # ---------------------------------------------------------------------------
 # Layer 15b — CONAB weekly producer (farmgate) prices

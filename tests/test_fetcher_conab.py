@@ -130,7 +130,7 @@ def test_report_date_is_publication_date_not_today(
     monkeypatch.setattr(conab, "datetime", _FrozenDatetime, raising=False)
 
     stub_get()
-    result = fetch_conab_estimates()
+    result = fetch_conab_estimates().data["national"]
 
     published = parsedate_to_datetime(_fixture_last_modified()).astimezone(
         timezone.utc
@@ -145,3 +145,30 @@ def test_missing_last_modified_hard_fails(stub_get) -> None:
     stub_get(headers={})
     with pytest.raises(ScraperShapeError, match="[Ll]ast-[Mm]odified"):
         fetch_conab_estimates()
+
+
+def test_http_403_on_every_attempt_ends_in_a_named_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The User-Agent trap coming back must end in an ERROR naming HTTP 403."""
+    calls: list[str] = []
+
+    class _Forbidden:
+        status_code = 403
+        text = ""
+        headers: dict[str, str] = {}
+
+    def _fake_get(url: str, **kwargs: object) -> _Forbidden:
+        calls.append(url)
+        return _Forbidden()
+
+    monkeypatch.setattr(conab.requests, "get", _fake_get)
+    monkeypatch.setattr(conab, "retry_sleep", lambda attempt: None)
+    with caplog.at_level("WARNING", logger="fetchers.conab"):
+        result = fetch_conab_estimates()
+
+    assert result.status == "failed"
+    assert len(calls) == conab.MAX_RETRIES
+    assert result.error is not None and "HTTP 403" in result.error
+    errors = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
+    assert errors and "HTTP 403" in errors[-1]
