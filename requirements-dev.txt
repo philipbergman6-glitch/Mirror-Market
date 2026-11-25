@@ -2,6 +2,7 @@
 pytest>=7.0
 pytest-cov>=4.0
 responses>=0.25
+cryptography>=42  # test CA + certs for the CONAB TLS replay (tests/test_fetcher_conab_tls.py)
 ruff>=0.5
 mypy>=1.10
 -r requirements-mcp.txt

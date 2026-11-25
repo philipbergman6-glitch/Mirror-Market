@@ -167,8 +167,11 @@ def test_expiry_is_a_warning_not_an_error_because_the_record_is_the_audit_trail(
 
 def test_an_entry_lapsing_inside_the_horizon_is_reported_before_it_blocks():
     soon = AssumptionSet(assumptions=(
+        # Signed 15 Aug: a 10-day lifetime, inside the 14-day freight ceiling, so
+        # the lapse is the only thing said (#410 added the lifetime note).
         _assumption("ocean_freight", 44.0, "usd_per_mt", origin="br_paranagua",
-                    destination="cn_north", expires_on=date(2026, 8, 25)),
+                    destination="cn_north", entered_at=date(2026, 8, 15),
+                    expires_on=date(2026, 8, 25)),
     ))
     codes = [item.code for item in validate_set(soon, on=TODAY, expiry_horizon_days=14)]
     assert codes == ["expiring"]

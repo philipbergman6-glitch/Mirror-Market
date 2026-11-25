@@ -1622,6 +1622,10 @@ CONAB_URL = "https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHi
 # GitHub runner and a residential address; dark from 2026-10-20). Both
 # CONAB fetchers send this header.
 CONAB_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; MirrorMarket/1.0)"}
+# The certificate CONAB's Apache front end presents to a client that sends no
+# SNI (probed 2026-11-25) — its default vhost. A TLS hostname mismatch is
+# attributed to that vhost only when this is the name actually served (#613).
+CONAB_DEFAULT_VHOST_CERT_NAME = "www.conab.gov.br"
 
 # ---------------------------------------------------------------------------
 # Layer 15b — CONAB weekly producer (farmgate) prices
@@ -2090,6 +2094,12 @@ MAGYP_SUNFLOWER_OIL_SIBLINGS = ("15121110911P", "15121110919G")
 # Walk back this many calendar days to find the latest published circular
 # (weekends + Argentine holidays publish nothing).
 MAGYP_FOB_LOOKBACK_DAYS = 7
+# The trusted reconciler (scripts/reconcile_magyp_fob.py) records and skips at
+# most this many transport-failed days on its lookback walk; the next one ends
+# the walk as fetch_failed. Each failed day costs up to MAX_RETRIES ×
+# REQUEST_TIMEOUT plus backoff (~97 s), and reconcile-trusted's 10-minute
+# budget also carries the CBOT and FX reconciliations (#527, #615 review).
+MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES = 1
 
 # ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)
@@ -3857,6 +3867,40 @@ ASSUMPTIONS_DIR = os.getenv("MIRROR_ASSUMPTIONS_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "reference", "assumptions"
 )
 
+# Default lifetime of an entered assumption, per component, in days from its
+# `entered_at` (#410). `scripts/enter_assumption.py` proposes `entered_at + N`
+# as `expires_on` when `--expires` is omitted, and prints what it chose; the
+# owner may always override. This is policy on top of the hard stop, never a
+# softening of it: past `expires_on` the row blocks exactly as before.
+#
+# The lifetimes follow how long each kind of number stays true. A broker's
+# freight indication is a week; an elevation spread a month; port tariffs,
+# haulage and the desk's own cost of funds a quarter; a published duty or VAT
+# rate a year. A component absent from both tables below has no default and
+# must be given `--expires` explicitly — absence never becomes an assumption.
+ASSUMPTION_DEFAULT_LIFETIME_DAYS: dict[str, int] = {
+    "ocean_freight": 7,
+    "elevation": 30,
+    "destination_port_costs": 90,
+    "origin_port_costs": 90,
+    "inland_transport": 90,
+    "financing": 90,
+    "working_capital": 90,
+    "import_duty": 365,
+    "import_vat": 365,
+}
+
+# Components whose default lifetime is the end of the shipment window they are
+# scoped to, not a count of days: a protein differential is negotiated for a
+# cargo, and the cargo's window is when it stops being that cargo's number. An
+# entry of one of these with no window has no default.
+ASSUMPTION_LIFETIME_ENDS_WITH_WINDOW: frozenset[str] = frozenset({"quality_adjustment"})
+
+# `enter_assumption.py --check` notes (never fails on) an entry whose lifetime
+# — `expires_on - entered_at` — exceeds this. A freight indication signed for a
+# month is a number nobody will re-quote before it is used.
+ASSUMPTION_LIFETIME_WARN_DAYS: dict[str, int] = {"ocean_freight": 14}
+
 # Hand-entered or imported positions for the Phase 3 workstation. See
 # analysis/futures/positions.py — this project ingests no account, broker
 # statement or clearing feed, so a position can only come from the user, and a
@@ -4717,6 +4761,20 @@ AVAILABILITY_BASKET_BLOCKS: dict[tuple[str, str], int] = {
     ("cbot", "crush"): 7,  # also stratum 9: the AMS 3511 cash legs ride in this block
     ("dalian", "crush"): 7,
 }
+
+# Scheduled-workflow inactivity clock (#6). GitHub disables a public repo's
+# scheduled workflows after this many days with "no repository activity" — the
+# July 2026 outage. Its docs never say whether the deploy's daily
+# github-actions[bot] history commits count, so scripts/ci_inactivity_clock.py
+# counts only non-bot commits and warns from the second number on, while every
+# workflow is still alive to say so.
+GITHUB_SCHEDULE_INACTIVITY_DAYS = 60
+SCHEDULE_INACTIVITY_WARN_DAYS = 45
+# The warning stays open this long before an all-active repo is read as
+# evidence that something held the clock off. GitHub's disable is a background
+# sweep, not a day-60 timer (July's landed ~day 61), so concluding at 60 would
+# close the alarm the day before the schedules die.
+SCHEDULE_INACTIVITY_CONCLUDE_DAYS = 75
 
 # Source reliability record (B34 #520, requirements docs/plans/source-reliability-a19.md).
 # The window the figures in manifest.json are computed over, in weekday CBOT

@@ -55,7 +55,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +111,27 @@ DESK_COMPONENTS: frozenset[CostComponent] = (
 # configured root rather than configured on its own, so an override cannot
 # point the private tier at a committed path.
 PRIVATE_SUBDIR = "private"
+
+
+def default_expiry(
+    component: CostComponent,
+    *,
+    entered_at: date,
+    window: ShipmentWindow | None,
+) -> date | None:
+    """The ``expires_on`` proposed for an entry made without one, or ``None`` (#410).
+
+    Read from ``config.ASSUMPTION_DEFAULT_LIFETIME_DAYS`` (``entered_at + N``)
+    and ``config.ASSUMPTION_LIFETIME_ENDS_WITH_WINDOW`` (the scoped window's
+    last day). ``None`` means there is no default and the owner must give the
+    date: a component outside both tables, or a window-bound one with no window.
+    """
+    import config
+
+    if component.value in config.ASSUMPTION_LIFETIME_ENDS_WITH_WINDOW:
+        return window.end if window is not None else None
+    days = config.ASSUMPTION_DEFAULT_LIFETIME_DAYS.get(component.value)
+    return entered_at + timedelta(days=days) if days is not None else None
 
 
 def private_assumptions_dir(root: str | os.PathLike[str] | None = None) -> Path:
@@ -195,6 +216,11 @@ class Assumption:
     # this is the clause without which the rendered number over-claims — e.g. a
     # duty that holds only if the importer has a tariff exclusion (B22 #485).
     caveat: str | None = None
+    # Renewal retires the outgoing row IN PLACE rather than deleting it (#410):
+    # the file is the audit trail. From `retired_on` the row is never live, and
+    # `superseded_by` names the entry that re-signed it.
+    retired_on: date | None = None
+    superseded_by: str | None = None
 
     def __post_init__(self) -> None:
         if self.unit not in UNITS:
@@ -208,6 +234,16 @@ class Assumption:
             )
         if self.expires_on < self.entered_at:
             raise AssumptionError(f"{self.id}: expires_on precedes entered_at")
+        if self.retired_on is not None and self.retired_on < self.entered_at:
+            raise AssumptionError(
+                f"{self.id}: retired_on {self.retired_on.isoformat()} precedes entered_at "
+                f"{self.entered_at.isoformat()} — an entry cannot be retired before it exists"
+            )
+        if self.superseded_by is not None and self.retired_on is None:
+            raise AssumptionError(
+                f"{self.id}: superseded_by without retired_on — a replaced entry must say "
+                "from which day it stopped answering"
+            )
         if self.component in RATE_TIME_COMPONENTS and not self.days:
             raise AssumptionError(
                 f"{self.id}: {self.component.value} is a rate over time and needs `days` "
@@ -236,8 +272,19 @@ class Assumption:
             score += 1
         return score
 
+    def is_retired(self, on: date) -> bool:
+        """Retired on or before ``on`` — never live again, whatever its expiry says."""
+        return self.retired_on is not None and self.retired_on <= on
+
+    @property
+    def last_usable_day(self) -> date:
+        """The last day this row can answer: its expiry, or the day before retirement."""
+        if self.retired_on is None:
+            return self.expires_on
+        return min(self.expires_on, self.retired_on - timedelta(days=1))
+
     def is_live(self, on: date) -> bool:
-        return self.entered_at <= on <= self.expires_on
+        return self.entered_at <= on <= self.expires_on and not self.is_retired(on)
 
     def applies_to(
         self,
@@ -280,6 +327,10 @@ class Assumption:
             # Only when present, so a set with no caveats keeps the set_id it
             # has always had and stored rankings do not read as re-entered.
             **({"caveat": self.caveat} if self.caveat else {}),
+            # Likewise only when present: retiring a row is a new set, an
+            # untouched file is the set it always was.
+            **({"retired_on": self.retired_on.isoformat()} if self.retired_on else {}),
+            **({"superseded_by": self.superseded_by} if self.superseded_by else {}),
         }
 
 
@@ -371,6 +422,13 @@ def parse_assumption(raw: dict, *, where: str) -> Assumption:
         days=int(raw["days"]) if raw.get("days") is not None else None,
         citation=raw.get("citation"),
         caveat=str(raw["caveat"]) if raw.get("caveat") not in (None, "") else None,
+        retired_on=(
+            _as_date(raw["retired_on"], "retired_on", where)
+            if raw.get("retired_on") not in (None, "") else None
+        ),
+        superseded_by=(
+            str(raw["superseded_by"]) if raw.get("superseded_by") not in (None, "") else None
+        ),
     )
 
 
@@ -457,7 +515,20 @@ class AssumptionSet:
         ]
         live = [assumption for assumption in finalists if assumption.is_live(on)]
         if not live:
-            lapsed = tuple(sorted(finalists, key=lambda a: a.expires_on, reverse=True))
+            # A retired row is history, not a lapse to renew: the lapse that
+            # names itself is the newest row still standing. All of them
+            # retired is a withdrawal — still a miss, never a wider fallback.
+            standing = [a for a in finalists if not a.is_retired(on)]
+            if not standing:
+                newest_retired = max(finalists, key=lambda a: a.retired_on or a.expires_on)
+                return AssumptionMiss(
+                    component,
+                    f"the {component.value} assumption for this route was retired on "
+                    f"{(newest_retired.retired_on or on).isoformat()} ({newest_retired.id}) "
+                    "and nothing replaces it — a less specific entry is deliberately not "
+                    "substituted",
+                )
+            lapsed = tuple(sorted(standing, key=lambda a: a.expires_on, reverse=True))
             newest = lapsed[0]
             wider = len(candidates) - len(finalists)
             return AssumptionMiss(
@@ -491,8 +562,6 @@ class AssumptionSet:
         return tuple(assumption for assumption in self.assumptions if assumption.is_live(on))
 
     def expiring_within(self, days: int, *, on: date) -> tuple[Assumption, ...]:
-        from datetime import timedelta
-
         horizon = on + timedelta(days=days)
         return tuple(
             assumption for assumption in self.live(on) if assumption.expires_on <= horizon
@@ -618,6 +687,7 @@ __all__ = [
     "AssumptionError",
     "AssumptionMiss",
     "AssumptionSet",
+    "default_expiry",
     "load_assumptions",
     "origin_differentiated_duty",
     "parse_assumption",
