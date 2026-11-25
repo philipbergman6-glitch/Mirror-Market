@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import io
 import logging
+import ssl
 from collections.abc import Mapping, Sequence
 from datetime import timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlsplit
 
 import pandas as pd
 import requests
@@ -32,6 +34,53 @@ from fetchers._backoff import retry_sleep
 from pipeline.results import ScraperShapeError
 
 logger = logging.getLogger(__name__)
+
+# OpenSSL's X509_V_ERR_HOSTNAME_MISMATCH — the verify_code on the
+# SSLCertVerificationError Python raises when the chain is trusted but the
+# certificate names another host.
+_X509_V_ERR_HOSTNAME_MISMATCH = 62
+
+
+def _cert_verification_error(exc: BaseException) -> ssl.SSLCertVerificationError | None:
+    """The ``ssl.SSLCertVerificationError`` behind a ``requests`` exception.
+
+    requests wraps urllib3's ``MaxRetryError``, whose ``.reason`` wraps
+    urllib3's ``SSLError``, whose first arg is the ssl error — walk ``args``,
+    ``reason``, ``__cause__`` and ``__context__`` until it turns up.
+    """
+    stack: list[object] = [exc]
+    seen: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if id(node) in seen or not isinstance(node, BaseException):
+            continue
+        seen.add(id(node))
+        if isinstance(node, ssl.SSLCertVerificationError):
+            return node
+        stack.extend(node.args)
+        stack.extend((getattr(node, "reason", None), node.__cause__, node.__context__))
+    return None
+
+
+def request_failure_reason(exc: requests.RequestException, url: str) -> str:
+    """Name a failed CONAB request, shared by Layers 15 and 15b (#613).
+
+    A TLS hostname mismatch is called out by name: CONAB's Apache front end
+    serves its default-vhost certificate (``CN=www.conab.gov.br``) for the
+    portal whenever the portal vhost is not answering, so the failure is the
+    publisher's, transient, and must never be "fixed" by relaxing
+    verification (LAYERS.md → Layer 15 TLS trap). Anything else keeps the
+    exception text.
+    """
+    cert_error = _cert_verification_error(exc)
+    if cert_error is not None and cert_error.verify_code == _X509_V_ERR_HOSTNAME_MISMATCH:
+        host = urlsplit(url).hostname
+        return (
+            f"TLS hostname mismatch: CONAB's server presented a certificate not "
+            f"valid for {host!r} (its default-vhost certificate; upstream "
+            f"misconfiguration, verification stays on — LAYERS.md Layer 15 TLS trap)"
+        )
+    return str(exc)
 
 _REQUIRED_COLUMNS: tuple[str, ...] = (
     "ano_agricola",
@@ -231,12 +280,14 @@ def fetch_conab_estimates() -> pd.DataFrame:
             response. Layer 15 in ``main.py`` records the layer as failed
             rather than storing a poisoned national total.
     """
+    last_failure = "no attempt completed"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info("Fetching CONAB historical series (attempt %d) ...", attempt)
             resp = requests.get(CONAB_URL, headers=CONAB_HEADERS, timeout=REQUEST_TIMEOUT)
 
             if resp.status_code != 200:
+                last_failure = f"HTTP {resp.status_code}"
                 logger.warning("HTTP %d for CONAB", resp.status_code)
                 if attempt < MAX_RETRIES:
                     retry_sleep(attempt)
@@ -282,15 +333,16 @@ def fetch_conab_estimates() -> pd.DataFrame:
             return result
 
         except requests.RequestException as exc:
+            last_failure = request_failure_reason(exc, CONAB_URL)
             logger.warning("CONAB attempt %d failed: %s", attempt, exc)
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
 
-    logger.error("All %d attempts failed for CONAB", MAX_RETRIES)
+    logger.error("All %d attempts failed for CONAB — %s", MAX_RETRIES, last_failure)
     return pd.DataFrame()
 
 
-__all__: Sequence[str] = ("fetch_conab_estimates",)
+__all__: Sequence[str] = ("fetch_conab_estimates", "request_failure_reason")
 
 
 # ── Quick self-test ─────────────────────────────────────────────────

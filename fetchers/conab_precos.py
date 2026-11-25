@@ -45,6 +45,7 @@ from config import (
     REQUEST_TIMEOUT,
 )
 from fetchers._backoff import retry_sleep
+from fetchers.conab import request_failure_reason
 from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
@@ -71,19 +72,27 @@ _REQUIRED_COLUMNS = (
 )
 
 
-def _download() -> str:
-    """Download the weekly-price file. Returns '' after exhausted retries."""
+def _download() -> tuple[str, str]:
+    """Download the weekly-price file.
+
+    Returns ``(text, "")`` on success, or ``("", reason)`` after exhausted
+    retries — the reason is the last attempt's, named by the shared CONAB
+    classifier so a TLS hostname mismatch says so (#613).
+    """
+    reason = "no attempt completed"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             resp = requests.get(CONAB_PRECOS_URL, headers=CONAB_HEADERS, timeout=REQUEST_TIMEOUT)
             if resp.status_code == 200 and resp.content:
-                return resp.content.decode("latin-1")
-            logger.warning("CONAB prices: HTTP %d (attempt %d)", resp.status_code, attempt)
+                return resp.content.decode("latin-1"), ""
+            reason = f"HTTP {resp.status_code}" if resp.status_code != 200 else "HTTP 200 with an empty body"
+            logger.warning("CONAB prices: %s (attempt %d)", reason, attempt)
         except requests.RequestException as exc:
+            reason = request_failure_reason(exc, CONAB_PRECOS_URL)
             logger.warning("CONAB prices attempt %d failed: %s", attempt, exc)
         if attempt < MAX_RETRIES:
             retry_sleep(attempt)
-    return ""
+    return "", reason
 
 
 def _validate_download(text: str) -> None:
@@ -244,9 +253,9 @@ def _parse_farmgate(text: str) -> pd.DataFrame:
 def fetch_conab_farmgate() -> FetchResult:
     """Fetch CONAB's weekly Paraná soybean farmgate price series."""
     logger.info("Fetching CONAB weekly farmgate prices ...")
-    text = _download()
+    text, reason = _download()
     if not text:
-        return FetchResult.failed("CONAB prices: download failed")
+        return FetchResult.failed(f"CONAB prices: download failed — {reason}")
 
     try:
         _validate_download(text)
