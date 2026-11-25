@@ -39,6 +39,7 @@ from dataclasses import dataclass
 
 from config import AFEX_PUBLISH_RAW, HISTORY_DIR, SEA_PUBLISH, SOPA_PUBLISH
 from pipeline.connection import get_connection, managed_connection
+from pipeline.public_view import assert_no_dated_private_rows
 
 logger = logging.getLogger(__name__)
 
@@ -413,9 +414,19 @@ def export_history() -> int:
     import_history() has seeded them in this process.
     """
     allow_shrink = os.getenv("MIRROR_HISTORY_ALLOW_SHRINK", "").strip() == "1"
-    os.makedirs(HISTORY_DIR, exist_ok=True)
     total = 0
     with managed_connection(get_connection()) as conn:
+        # Before any file is written: data/history/ is public by construction,
+        # and a private layer's dated freshness row there would publish when
+        # the desk last ran it (#567). Refused, never blanked — the row means
+        # the private switch reached this machine, which is the breach.
+        freshness = conn.execute("SELECT * FROM data_freshness")
+        columns = [d[0] for d in freshness.description]
+        assert_no_dated_private_rows(
+            (dict(zip(columns, row, strict=True)) for row in freshness.fetchall()),
+            where="history export",
+        )
+        os.makedirs(HISTORY_DIR, exist_ok=True)
         for table, pk_cols in HISTORY_TABLES.items():
             cursor = conn.execute(
                 f"SELECT * FROM {table} ORDER BY {', '.join(pk_cols)}"

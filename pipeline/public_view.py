@@ -19,11 +19,44 @@ drift between them again.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import config
 from pipeline.layer_runs import STATUS_SKIPPED_UNCONFIGURED
+
+# The data_freshness columns that date a run. save_freshness stamps
+# last_attempt on every write, so any row a private layer's run leaves
+# carries at least one of them.
+DATED_FRESHNESS_COLUMNS: tuple[str, ...] = (
+    "last_success", "last_attempt", "observed_at",
+    "fetch_started_at", "fetch_completed_at", "stored_at",
+)
+
+
+class PrivateLayerLeak(RuntimeError):
+    """A publishing surface holds a dated freshness row for a private layer.
+
+    A private layer runs only where its switch is set (``MATIF_PRIVATE_FETCH``:
+    the desk, never CI). Its dated row in a database the history export or the
+    MCP reads means the switch reached a publishing machine — a breach to
+    report, never a row to blank (owner decision on #567, 2026-11-25).
+    """
+
+
+def assert_no_dated_private_rows(rows: Iterable[Mapping[str, Any]], *, where: str) -> None:
+    """Refuse when any ``data_freshness`` row of a private layer carries a date."""
+    leaked = sorted(
+        str(row.get("layer_name")) for row in rows
+        if is_private(str(row.get("layer_name")))
+        and any(row.get(column) not in (None, "") for column in DATED_FRESHNESS_COLUMNS)
+    )
+    if leaked:
+        raise PrivateLayerLeak(
+            f"{where}: data_freshness holds a dated row for private layer(s) {leaked} "
+            f"(config.PRIVATE_LAYERS={config.PRIVATE_LAYERS}). A private layer runs only on the "
+            f"desk ({config.MATIF_FETCH_ENV}); its dates must not reach a public surface (#567)."
+        )
 
 
 def is_private(layer: str) -> bool:

@@ -73,7 +73,7 @@ The rule is now tested, not just stated. `config.AVAILABILITY_BASKET_BLOCKS` nam
 
 **Constraints on the build:**
 
-- **Privacy:** layer states are public (the Layer Freshness table already publishes them). Private layers (`sea_india`, `sopa_crop`) carry only `layer_name` + `status`, the same as the public freshness table does today. No client record touches this table (invariant 4).
+- **Privacy:** layer states are public (the Layer Freshness table already publishes them). Private layers (`config.PRIVATE_LAYERS`; `matif` since 2026-11-05 — `sea_india` and `sopa_crop`, named here when this plan was written, became public under A18 on 2026-10-21) carry only `layer_name` + `status`, and so does every other public surface: the manifest, the Layer Freshness table and the MCP tools read them through `pipeline.public_view`, and the history export and the MCP refuse a dated freshness row for one (#567). No client record touches this table (invariant 4).
 - **Not a snapshot table.** `HISTORY_TABLES` export is "PK-keyed snapshot". This needs an append path that refuses to rewrite an existing `(run_id, layer_name)` row.
 - **A missing run must not look like a quiet day.** A weekday session with no row at all is `no_run` in the computation, counted as unavailable for every basket layer. Absence never becomes an assumption (invariant 2).
 - **Size:** 39 rows × ~2 runs/day × ~260 sessions ≈ 20k rows/year. Fine for a committed CSV.

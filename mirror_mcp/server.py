@@ -28,7 +28,7 @@ from mirror_mcp import db
 from mirror_mcp.envelope import envelope, meta_for
 from mirror_mcp.question_log import QuestionLog
 from mirror_mcp.settings import Settings
-from pipeline.public_view import public_freshness
+from pipeline.public_view import assert_no_dated_private_rows, public_freshness
 from pipeline.units import native_label
 from pricing import policy, semantics
 
@@ -103,6 +103,11 @@ def build_server(settings: Settings, *, clock: Callable[[], datetime] | None = N
     """The server. ``clock`` is the one clock every age judgement uses (UTC now by default)."""
     conn = db.open_readonly(settings.db_path)
     db.assert_public_roster(conn)
+    # A private layer's dated freshness row means a desk database: refuse it
+    # rather than blank it (#567). The tools then never meet one.
+    assert_no_dated_private_rows(
+        (dict(row) for row in conn.execute("SELECT * FROM data_freshness")), where=f"mcp database {settings.db_path}",
+    )
     now_utc = clock or (lambda: datetime.now(timezone.utc))
     markets = load_markets()
     layer_keys = set(config.PRODUCTION_LAYER_KEYS)

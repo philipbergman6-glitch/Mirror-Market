@@ -174,9 +174,12 @@ PRODUCTION_LAYERS = (
      "MATIF rapeseed (ECO) last trade by contract month (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
-# Layers whose rendered output is the private desk edition only. A public
-# record of them (data/history/layer_runs.csv) carries the layer name and its
-# graded status and nothing else — the same as the public freshness table.
+# Layers whose rendered output is the private desk edition only. Their dates
+# are private too (owner decision on #567, 2026-11-25): every public surface
+# shows the layer name and its status and nothing else — the run record
+# (data/history/layer_runs.csv), the manifest, the Layer Freshness table and
+# the MCP tools, all through pipeline.public_view — and the history export
+# and the MCP refuse a dated freshness row for one (PrivateLayerLeak).
 # Empty since 2026-10-21: the owner opened SEA (32) and SOPA (33), the last
 # two, under the A18 stance (#468: every series public, licence risk accepted,
 # internal use, no sale). The mechanism stays for the next private source.
