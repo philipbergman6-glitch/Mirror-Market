@@ -207,3 +207,25 @@ def test_the_cbot_latency_floor_quoted_is_the_measured_one(doc: str) -> None:
         f"possible path from a CBOT settlement to a reader is {_cbot_floor_phrase()}" in text
     ), f"{doc} no longer states the {_cbot_floor_phrase()} CBOT floor"
     assert "1 h 15 m" not in text, f"{doc} still quotes the pre-B47 1 h 15 m floor"
+
+
+def test_the_public_key_quotes_the_measured_cbot_floor() -> None:
+    """The reader-facing copy of the floor is the "D−1" entry of the how-to-read
+    key (``app/wayfinding.py``), rendered on every page that shows the key.
+    The doc test above covered only CLAUDE.md and LATENCY.md, so the published
+    sentence kept the pre-B47 1 h 15 m (review of #627)."""
+    from app.wayfinding import how_to_read_vocabulary
+
+    entries = {
+        entry["key"]: entry["meaning"]
+        for group in how_to_read_vocabulary().values()
+        for entry in group["entries"]
+    }
+    assert _cbot_floor_phrase() in entries["d_minus_1"]
+    stale = [key for key, meaning in entries.items() if "1 h 15 m" in meaning or "14:30" in meaning]
+    assert not stale, f"how-to-read entries still describe the pre-B47 guard: {stale}"
+
+
+@pytest.mark.parametrize("doc", ("docs/plans/ops-requirements-a11.md",))
+def test_plans_do_not_quote_the_pre_b47_floor(doc: str) -> None:
+    assert "1 h 15 m" not in _read(doc), f"{doc} still quotes the pre-B47 1 h 15 m floor"

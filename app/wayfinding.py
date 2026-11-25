@@ -107,8 +107,24 @@ _TIER_MEANINGS: dict[str, str] = {
                "than silently absent.",
 }
 
+def _cbot_floor_phrase() -> str:
+    """The board's declared provider delay as the key prints it ("9 h 45 m").
+
+    Read from ``latency.domain`` — which ``tests/test_latency.py`` pins to the
+    settlement guard's own rule — so the published sentence cannot drift from
+    the rule again: B47 #622 corrected CLAUDE.md and LATENCY.md, and this key
+    kept the pre-B47 floor until review of #627 caught it.
+    """
+    from latency.domain import LAYER_LATENCY_BY_KEY
+
+    delay = LAYER_LATENCY_BY_KEY["prices"].provider_delay
+    hours, minutes = divmod(int(delay.total_seconds()) // 60, 60)
+    return f"{hours} h {minutes} m"
+
+
 # Data-age words, from LATENCY.md. Not derived from code — they describe the
-# masthead and the settlement guard, which have no label registry to read.
+# masthead and the settlement guard, which have no label registry to read —
+# except the CBOT floor, which is read from latency.domain.
 _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
     ("as_of", "as of <date>",
      "The session the number was observed on. Observation, not generation: a bar dated "
@@ -116,7 +132,7 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
     ("generated", "Generated <time>",
      "When this page was built. Routinely a day after the observation beside it — the "
      "settlement guard publishes the previous session's close on any build before the "
-     "venue close, and that is intended (invariant 11)."),
+     "bar is final (midnight New York time for CBOT), and that is intended (invariant 11)."),
     ("priced_from", "Board and FX priced from data <age> old",
      "The age of the oldest board or FX observation feeding the headline. Stated so "
      "'Generated' cannot read as fresher than the numbers are."),
@@ -129,8 +145,9 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
      "tallied amber on the masthead apart from on-schedule; the Keys column names the "
      "shortfall."),
     ("d_minus_1", "D−1",
-     "Yesterday's session. The fastest path from a CBOT close to this page is 1 h 15 m, "
-     "floored by the settlement guard; nothing here is intraday."),
+     f"Yesterday's session. The fastest path from a CBOT close to this page is "
+     f"{_cbot_floor_phrase()}: Yahoo finishes the bar only at midnight New York time, and "
+     "the settlement guard waits for it. Nothing here is intraday."),
     ("fx_tag", "FX chip",
      "The USD move includes a currency move. A blue chip, never a colour on the number: "
      "a weaker real is not a cheaper bean."),

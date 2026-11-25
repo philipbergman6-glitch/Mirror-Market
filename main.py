@@ -1308,13 +1308,18 @@ def run(
     # ── Correct curve legs stored before their bar was final (B47 #622) ──
     # Before the export, so the deploy workflow commits the corrected rows.
     # A failure leaves the stored legs as captured — the state before this
-    # step existed — so it is logged loudly and the run goes on.
+    # step existed — so the run goes on, but the outcome is a {state, reason}
+    # envelope in the run summary that scripts/ci_layer_alert.py relays: the
+    # log alone would bury it under the repair's own per-run WARNINGs.
+    curve_repair: dict[str, object]
     try:
         repaired = repair_forward_curve()
+        curve_repair = {"state": "ok", "reason": None, "repaired": repaired}
         if repaired:
             logger.info("forward_curve repair: %s", ", ".join(f"{c} {n}" for c, n in sorted(repaired.items())))
-    except Exception:
+    except Exception as exc:
         logger.exception("forward_curve repair failed — stored legs left as captured")
+        curve_repair = {"state": "failed", "reason": f"{type(exc).__name__}: {exc}", "repaired": {}}
 
     # ── Export snapshot-only history back to git-committed CSVs ──
     # Failure exits non-zero so the workflow's commit step never runs
@@ -1453,6 +1458,9 @@ def run(
         # Held / released revisions this run (A2 #299): the store's verdicts,
         # tallied by pipeline.quarantine for the CI alert and the briefing.
         "quarantine": quarantine_summary,
+        # The B47 (#622) forward_curve repair's outcome, relayed by the CI
+        # alerter when it failed.
+        "forward_curve_repair": curve_repair,
         "usable_partial_detail": usable_partial_detail,
         # What the record step files this run under (B38 #535): this run's
         # roster and per-key configured booleans, never the checkout's or the

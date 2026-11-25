@@ -44,7 +44,7 @@ name: Refresh Prices
 # B47 (#622) changed the board half of that reasoning. Yahoo's CBOT bar
 # labelled D is final only at 00:00 New York on D+1 (04:00 UTC EDT, 05:00
 # UTC EST), so neither evening slot can carry CBOT day D: both hold D-1 by
-# design, and the board deadline arithmetic below (00:15 UTC) describes a
+# design, and the board deadline arithmetic above (00:15 UTC) describes a
 # guard that kept the bar from 14:30 CT, which stored pre-final values. The
 # board is no longer gated on any slot; which slot should carry it is the
 # owner's open call on #622. The crons are unchanged.
@@ -54,7 +54,9 @@ name: Refresh Prices
 # carrying the NEXT trade date. Under the old guard — "has Chicago settled?
 # then keep everything" — the later landings would have stored that opening
 # bar as the day's close. The rule is now "drop every bar after the newest
-# finished session", which is what makes this slot safe at all.
+# finished session", which is what makes this slot safe at all — and since
+# B47 (#622) the newest finished futures session is the one Yahoo finished at
+# New York midnight, so this slot stores CBOT D-1, never D's live bar.
 #
 # ONE DISPATCH, THREE SLOTS
 #

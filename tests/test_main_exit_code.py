@@ -350,3 +350,43 @@ def test_failed_layer_writes_freshness_row(stub_fetchers, monkeypatch):
     prices_row = df[df["layer_name"] == "prices"]
     assert not prices_row.empty
     assert prices_row.iloc[0]["status"] == "failed"
+
+
+# Review of #627 (owner advisory item 1): the forward_curve repair (B47 #622)
+# runs on every deploy and logs ~16 "not repaired" WARNINGs each time, so a
+# failure that only reached the log would be lost among them (invariant 1).
+# Its outcome is a {state, reason} envelope in the run summary, which the CI
+# alerter relays.
+
+
+def test_run_records_the_curve_repair_outcome(stub_fetchers, monkeypatch, tmp_path):
+    import json
+
+    main = stub_fetchers
+    monkeypatch.setattr(main, "repair_forward_curve", mock.Mock(return_value={"Soybean Oil": 3}))
+
+    main.run()
+
+    status = json.loads((tmp_path / "pipeline_status.json").read_text())
+    assert status["forward_curve_repair"] == {
+        "state": "ok", "reason": None, "repaired": {"Soybean Oil": 3},
+    }
+
+
+def test_a_curve_repair_failure_reaches_the_run_summary(stub_fetchers, monkeypatch, tmp_path):
+    """The run goes on — the stored legs are left as captured, the state
+    before the repair existed — but the summary says it failed and why."""
+    import json
+
+    main = stub_fetchers
+    monkeypatch.setattr(
+        main, "repair_forward_curve", mock.Mock(side_effect=RuntimeError("database is locked")),
+    )
+
+    main.run()
+
+    status = json.loads((tmp_path / "pipeline_status.json").read_text())
+    repair = status["forward_curve_repair"]
+    assert repair["state"] == "failed"
+    assert "RuntimeError" in repair["reason"] and "database is locked" in repair["reason"]
+    assert repair["repaired"] == {}
