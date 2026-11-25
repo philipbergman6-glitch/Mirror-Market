@@ -32,6 +32,13 @@ record's first session bounds every window: before it there is no record,
 and no record is not an outage. A gap longer than T1 tolerates restarts the
 window after it — the cut never trims a gap away (#533).
 
+Where a layer's *streak* may start is one rule, ``streak_sessions``: never
+before the layer's own first row, so a layer that joined the roster
+mid-record has no streak from the weekdays before it (#633). ``dead_layers``
+and the manifest's streak figures (``open_streak``,
+``longest_unavailable_streak``, ``median_recovery_sessions``) both cut through
+it (#638); the manifest's availability percentages keep the whole window.
+
 Thresholds T1–T4 are echoed from ``config`` with whether this window meets
 them. They are reported, never gating: nothing here fails a run.
 """
@@ -227,6 +234,31 @@ def _last_disqualifying_gap(
     return (len(every), current) if current > tolerated else found
 
 
+def layer_first_sessions(rows: Iterable[LayerRun]) -> dict[str, date]:
+    """Each layer's first recorded session over ``rows`` — its own record start."""
+    out: dict[str, date] = {}
+    for row in rows:
+        if row.layer_name not in out or row.session_date < out[row.layer_name]:
+            out[row.layer_name] = row.session_date
+    return out
+
+
+def streak_sessions(sessions: Sequence[date], first_recorded: date | None) -> list[date]:
+    """The sessions a layer's streak may run over: the one rule (#633, #638).
+
+    Sessions before the layer's first row say nothing about it — the roster
+    did not carry it yet — so they neither count toward a streak nor date
+    one. A layer with no row at all keeps every session: its absence from the
+    whole record is the layer going silent, not a later start. Both
+    ``dead_layers`` (the alert) and ``reliability`` (the manifest's streak
+    figures) cut through here, so the two never disagree on where a layer's
+    streak can begin. ``first_recorded`` must come from the layer's whole
+    record, never a window of it: a window's first row for the layer is not
+    where its record began.
+    """
+    return [s for s in sessions if first_recorded is None or s >= first_recorded]
+
+
 def _pct(numerator: int, denominator: int) -> float | None:
     return round(100.0 * numerator / denominator, 1) if denominator else None
 
@@ -333,10 +365,16 @@ def reliability(
     no_run_gap = max(_streaks([s not in logged for s in sessions]), default=0)
 
     out_layers: list[dict[str, Any]] = []
+    first_recorded = layer_first_sessions(in_scope)
     for layer in layers:
         verdicts = _verdicts(grouped.get(layer, {}), sessions)
         down = [last not in AVAILABLE_STATUSES for _first, last in verdicts]
-        streaks = _streaks(down)
+        # Streak figures run over the sessions the one rule allows (#638): the
+        # window, from the layer's own first row when that is later. The
+        # availability percentages keep the whole window.
+        own = streak_sessions(sessions, first_recorded.get(layer))
+        skip = len(sessions) - len(own)
+        streaks = _streaks(down[skip:])
         closed = streaks[:-1] if down and down[-1] else streaks
         failing = [
             r for runs in grouped.get(layer, {}).values() for r in runs
@@ -349,7 +387,7 @@ def reliability(
         ]
         available_sessions = {s for s, (_first, status) in zip(sessions, verdicts, strict=True)
                               if status in AVAILABLE_STATUSES}
-        open_streak = _open_streak(layer, verdicts, sessions)
+        open_streak = _open_streak(layer, verdicts[skip:], own)
         out_layers.append({
             "layer": layer,
             "basket": layer in basket,
@@ -452,15 +490,12 @@ def dead_layers(
     sessions = weekday_sessions(min(r.session_date for r in rows), max(r.session_date for r in rows))
     ran = {r.session_date for r in rows}
     grouped = _by_layer_session(rows)
+    first_recorded = layer_first_sessions(rows)
     out = {}
     for layer in layers:
         recorded = grouped.get(layer, {})
-        # Sessions before the layer's first row say nothing about it: the
-        # roster did not carry it yet, so they neither count toward the
-        # threshold nor date the streak (#633 — matif's first row is
-        # 2026-11-05, not the record's 2026-10-16).
-        first_recorded = min(recorded) if recorded else None
-        own = [s for s in sessions if first_recorded is None or s >= first_recorded]
+        # #633: matif's first row is 2026-11-05, not the record's 2026-10-16.
+        own = streak_sessions(sessions, first_recorded.get(layer))
         verdicts = _verdicts(recorded, own)
         streak = _open_streak(layer, verdicts, own)
         if streak is None or streak.sessions < threshold:

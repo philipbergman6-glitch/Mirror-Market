@@ -366,6 +366,46 @@ def test_real_record_never_reports_matif_dead(monkeypatch: pytest.MonkeyPatch) -
     assert "matif" not in reliability.dead_layers(rows)
 
 
+def test_real_record_manifest_streaks_start_at_the_layers_first_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #638: after #634 the alert counted a layer's streak from its own first
+    # row while the manifest block counted it from the window's first session.
+    # matif and afex joined the roster on 2026-11-05, the record began 10-16.
+    # Committed record, read only, cut at fixed sessions so later appends
+    # cannot move the case.
+    from pipeline import history, layer_runs
+
+    monkeypatch.setattr(history, "HISTORY_DIR", config.HISTORY_DIR)
+    record = layer_runs.read_runs()
+    assert min(r.session_date for r in record) == date(2026, 10, 16)
+    for layer in ("matif", "afex"):
+        assert min(r.session_date for r in record if r.layer_name == layer) == date(2026, 11, 5)
+
+    def layers_at(through: date) -> dict[str, dict]:
+        rows = [r for r in record if r.session_date <= through]
+        block = reliability.reliability(rows, set(), through=through)
+        assert block["state"] == "ok"
+        return {entry["layer"]: entry for entry in block["layers"]}
+
+    # 2026-11-10: the window still runs from 10-16 (the 11-09 no-run gap is
+    # not yet longer than T1 tolerates). matif's streak is its own four
+    # sessions (11-05, 11-06, 11-09, 11-10), not the window's eighteen; afex
+    # succeeded on 11-05 and 11-06, so its only streak is the two no-run
+    # weekdays after — the fourteen pre-roster weekdays are not an outage
+    # it recovered from.
+    at = layers_at(date(2026, 11, 10))
+    assert at["matif"]["open_streak"] == 4
+    assert at["matif"]["longest_unavailable_streak"] == 4
+    assert at["afex"]["open_streak"] == 2
+    assert at["afex"]["longest_unavailable_streak"] == 2
+    assert at["afex"]["median_recovery_sessions"] is None
+
+    # 2026-11-24: the window restarted at 11-13 after the 11-09→11-12 gap, so
+    # the later of the two bounds holds — eight sessions, 11-13 → 11-24.
+    at = layers_at(date(2026, 11, 24))
+    assert at["matif"]["open_streak"] == 8
+    assert at["afex"]["longest_unavailable_streak"] == 0
+
+
 def test_skipped_only_streak_with_no_run_gap_is_not_dead() -> None:
     # A weekday on which nothing ran at all asked no source anything: inside a
     # streak of `skipped_unconfigured` it is no more evidence than the skip.
@@ -404,6 +444,33 @@ def test_dead_streak_never_starts_before_the_layers_first_row() -> None:
     # The layer's own record cannot see before its first row either.
     assert dead["safex"].opens_at_record_start is True
 
+
+
+def test_manifest_and_alert_agree_where_a_mid_record_layer_streak_starts() -> None:
+    # #638: one rule site. safex joins on the fifth session and fails from
+    # there; the manifest's open streak and the alert's streak are one figure.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(s, "safex", "failed") for s in sessions[4:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("safex",))
+    safex = block["layers"][0]
+    dead = reliability.dead_layers(rows, threshold=1, layers=("safex",))
+    assert safex["open_streak"] == dead["safex"].sessions == 4
+    assert safex["longest_unavailable_streak"] == 4
+    # Availability keeps the whole window: the pre-roster weekdays still count.
+    assert safex["availability_pct"] == 0.0
+
+
+def test_manifest_streak_start_comes_from_the_whole_record_not_the_window() -> None:
+    # safex has a row before the window, then none on the window's first
+    # session while the pipeline ran: that session is its streak, not a start
+    # the window invented.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(sessions[0], "safex", "success")]
+    rows += [_row(s, "safex", "failed") for s in sessions[5:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], window=4, layers=("safex",))
+    assert block["layers"][0]["open_streak"] == 4
 
 
 def test_decision_cutoff_uses_one_promotion_and_keeps_all_sessions() -> None:
