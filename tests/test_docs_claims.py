@@ -186,3 +186,24 @@ def test_readme_source_table_lists_every_production_layer() -> None:
         "missing_from_readme": sorted(roster_numbers - table_numbers),
         "not_in_roster": sorted(table_numbers - roster_numbers),
     }
+
+
+# B47 (#622): the mission table's "fastest CBOT-settlement-to-reader path" was
+# measured against a guard cutoff (14:30 CT) that Yahoo does not honour. The
+# floor is the declared provider delay for the board, which
+# tests/test_latency.py pins to the guard's own rule; the docs quote it.
+def _cbot_floor_phrase() -> str:
+    from latency.domain import LAYER_LATENCY_BY_KEY
+
+    delay = LAYER_LATENCY_BY_KEY["prices"].provider_delay
+    hours, minutes = divmod(int(delay.total_seconds()) // 60, 60)
+    return f"{hours} h {minutes} m"
+
+
+@pytest.mark.parametrize("doc", ("CLAUDE.md", "LATENCY.md"))
+def test_the_cbot_latency_floor_quoted_is_the_measured_one(doc: str) -> None:
+    text = _read(doc)
+    assert f"CBOT-settlement-to-reader path is **{_cbot_floor_phrase()}**" in text or (
+        f"possible path from a CBOT settlement to a reader is {_cbot_floor_phrase()}" in text
+    ), f"{doc} no longer states the {_cbot_floor_phrase()} CBOT floor"
+    assert "1 h 15 m" not in text, f"{doc} still quotes the pre-B47 1 h 15 m floor"

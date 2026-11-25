@@ -127,6 +127,7 @@ from pipeline.query import captured_contract_tickers, read_matif_instruments, re
 from pipeline.results import FetchResult
 from pipeline.store import (
     init_database,
+    repair_forward_curve,
     save_argentina_fob,
     save_brazil_estimates,
     save_brazil_exports,
@@ -143,7 +144,6 @@ from pipeline.store import (
     save_eia_data,
     save_epa_rfs,
     save_export_sales,
-    repair_forward_curve,
     save_forward_curve,
     save_fred_data,
     save_freshness,

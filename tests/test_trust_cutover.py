@@ -407,6 +407,10 @@ def test_trusted_rows_count_the_compared_curve_not_every_session_in_the_window(t
 
 
 def test_a_post_cutoff_run_of_the_same_window_rejects_nothing(tmp_path) -> None:
+    """After the bar is final — 00:00 New York on 08-14, not the 13:15 CT
+    settlement (B47 #622) — both paths take 08-13 and the ledger rejects
+    nothing. At AFTER_SETTLEMENT (15:00 CT) the 08-13 bar is still Yahoo's
+    live row and is rejected like the pre-cutoff case above."""
     import scripts.reconcile_cbot_benchmarks as script
 
     def download(ticker: str, period: str = "5d") -> pd.DataFrame:
@@ -417,7 +421,7 @@ def test_a_post_cutoff_run_of_the_same_window_rejects_nothing(tmp_path) -> None:
         today=AS_OF,
         repository_root=tmp_path,
         download=download,
-        now=AFTER_SETTLEMENT,
+        now=datetime(2026, 8, 14, 4, 30, tzinfo=timezone.utc),  # 00:30 EDT
     )
 
     assert run.status == script.STATUS_RECONCILED
