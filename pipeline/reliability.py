@@ -37,7 +37,13 @@ before the layer's own first row, so a layer that joined the roster
 mid-record has no streak from the weekdays before it (#633). ``dead_layers``
 and the manifest's streak figures (``open_streak``,
 ``longest_unavailable_streak``, ``median_recovery_sessions``) both cut through
-it (#638); the manifest's availability percentages keep the whole window.
+it (#638). So do the manifest's availability percentages (owner decision
+2026-11-25, #638): ``availability_pct`` and ``first_run_availability_pct``
+divide by the layer's own ``sessions``, the window from its first row; a
+layer with no row at all keeps the whole window and reads 0 %, not blank.
+Because a joining layer's own count starts small, T2 and T3 carry a session
+floor: not met, with the reason, while any basket layer has fewer than a full
+target window of its own sessions.
 
 Thresholds T1–T4 are echoed from ``config`` with whether this window meets
 them. They are reported, never gating: nothing here fails a run.
@@ -369,12 +375,13 @@ def reliability(
     for layer in layers:
         verdicts = _verdicts(grouped.get(layer, {}), sessions)
         down = [last not in AVAILABLE_STATUSES for _first, last in verdicts]
-        # Streak figures run over the sessions the one rule allows (#638): the
-        # window, from the layer's own first row when that is later. The
-        # availability percentages keep the whole window.
+        # Every per-layer figure runs over the sessions the one rule allows
+        # (#638): the window, from the layer's own first row when that is
+        # later. Its length is the layer's own denominator, ``sessions``.
         own = streak_sessions(sessions, first_recorded.get(layer))
         skip = len(sessions) - len(own)
-        streaks = _streaks(down[skip:])
+        own_down = down[skip:]
+        streaks = _streaks(own_down)
         closed = streaks[:-1] if down and down[-1] else streaks
         failing = [
             r for runs in grouped.get(layer, {}).values() for r in runs
@@ -391,10 +398,11 @@ def reliability(
         out_layers.append({
             "layer": layer,
             "basket": layer in basket,
+            "sessions": len(own),
             "logged_sessions": sum(1 for s in sessions if s in grouped.get(layer, {})),
-            "availability_pct": _pct(down.count(False), len(sessions)),
+            "availability_pct": _pct(own_down.count(False), len(own)),
             "first_run_availability_pct": _pct(
-                sum(1 for first, _last in verdicts if first in AVAILABLE_STATUSES), len(sessions),
+                sum(1 for first, _last in verdicts[skip:] if first in AVAILABLE_STATUSES), len(own),
             ),
             "longest_unavailable_streak": max(streaks, default=0),
             "median_recovery_sessions": float(statistics.median(closed)) if closed else None,
@@ -409,6 +417,14 @@ def reliability(
         })
 
     in_basket = [entry for entry in out_layers if entry["basket"]]
+    # The session floor (#638 owner decision 2026-11-25): T2 and T3 grade a
+    # basket layer on a full window of its own sessions or not at all. A layer
+    # that joined two sessions ago reads 2 of 2 = 100 % with no streak; graded
+    # on that it would pass. The floor is the target window, so a restarted
+    # (short) window holds both back too, however clean its sessions.
+    short = [e for e in in_basket if e["sessions"] < window]
+    named = ", ".join(f"{e['layer']} ({e['sessions']} of {window})" for e in short)
+    floor_reason = f"session floor: fewer than {window} own sessions for {named}" if short else None
     failing_total = sum(entry["failing_runs"] for entry in out_layers)
     surfaced_total = sum(
         1 for r in windowed
@@ -446,19 +462,23 @@ def reliability(
             },
             "T2_min_availability_pct": {
                 "value": config.RELIABILITY_T2_MIN_AVAILABILITY_PCT,
-                "met": all(
+                "floor_sessions": window,
+                "met": not short and all(
                     (e["availability_pct"] or 0.0) >= config.RELIABILITY_T2_MIN_AVAILABILITY_PCT
                     for e in in_basket
                 ),
+                "reason": floor_reason,
             },
             "T3_max_streak_sessions": {
                 "value": config.RELIABILITY_T3_MAX_STREAK_SESSIONS,
+                "floor_sessions": window,
                 # The alert clause of T3 is evidence on the ci-dead-source
                 # issue, not in this store; only the streak half is checked.
-                "met": all(
+                "met": not short and all(
                     e["longest_unavailable_streak"] <= config.RELIABILITY_T3_MAX_STREAK_SESSIONS
                     for e in in_basket
                 ),
+                "reason": floor_reason,
             },
             "T4_surfaced_within_one_run_pct": {
                 "value": config.RELIABILITY_T4_MIN_SURFACED_PCT,
