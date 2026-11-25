@@ -616,6 +616,19 @@ def _coherence(
     ), on_session
 
 
+class TrustedLedgerEmptyError(RuntimeError):
+    """The trusted-read switch is on, but the ledger has nothing to serve it.
+
+    Raised, never caught by :func:`open_provider`'s fallback (#656). A switch
+    naming every soy benchmark over an absent ``data/v2/``, or over a ledger
+    with no accepted revision for one of them, is a cutover that cannot be
+    served. Serving it would blank every ``open_provider`` caller at once with
+    no build signal saying why. Falling back would hide a failed cutover
+    behind yesterday's v1 number. So the build fails, naming the reason, and
+    the rollback is still unsetting the variable.
+    """
+
+
 def open_provider(conn: sqlite3.Connection, *, repository=None) -> QuoteProvider:
     """The provider for this deployment, honouring the trusted-read switch.
 
@@ -625,14 +638,16 @@ def open_provider(conn: sqlite3.Connection, *, repository=None) -> QuoteProvider
     — a curve mixing a trusted bean with a v1 oil would put two provenances
     inside one crush — and the rollback is unsetting that variable.
 
-    A switch that names the datasets but cannot open the ledger falls back to
-    v1 with a loud warning rather than failing the build: the v1 answer is the
-    one the site published yesterday, and a page that renders nothing is worse
-    than a page that renders the pre-cutover number and says so.
+    A switch over an **absent or empty** ledger raises
+    :class:`TrustedLedgerEmptyError` (#656, owner decision on #239): nothing
+    writes ``data/v2/`` in production, so that configuration is an operator
+    asking for a cutover that cannot be served. Any *other* failure to open
+    or read the ledger falls back to v1 with a loud log line rather than
+    failing the build.
     """
     fallback = SqliteQuoteProvider(conn=conn)
     try:
-        from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, load_trusted_read_switch
+        from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, TRUSTED_READ_ENV_VAR, load_trusted_read_switch
 
         if not load_trusted_read_switch().enabled_for_all(CBOT_BENCHMARK_DATASET_KEYS):
             return fallback
@@ -640,13 +655,33 @@ def open_provider(conn: sqlite3.Connection, *, repository=None) -> QuoteProvider
         from analysis.futures.trusted_provider import TrustedNamedContractProvider
         from trust.repository import GitDirectoryTrustRepository
 
-        store = repository if repository is not None else GitDirectoryTrustRepository(_project_root())
-        return TrustedNamedContractProvider(
+        switched = ", ".join(CBOT_BENCHMARK_DATASET_KEYS)
+        if repository is None:
+            store = GitDirectoryTrustRepository(_project_root())
+            ledger_root = _project_root() / "data" / "v2"
+            if not ledger_root.is_dir():
+                raise TrustedLedgerEmptyError(
+                    f"{TRUSTED_READ_ENV_VAR} names {switched}, but the trusted ledger {ledger_root} "
+                    "is absent: nothing writes it in production (#239). Unset the variable to read v1."
+                )
+        else:
+            store = repository
+        provider = TrustedNamedContractProvider(
             repository=store,
             fallback=fallback,
             max_age_days=fallback._max_age_days(),
         )
-    except Exception:  # noqa: BLE001 — any ledger problem must degrade, not fail the build
+        unserved = provider.unserved_dataset_keys()
+        if unserved:
+            raise TrustedLedgerEmptyError(
+                f"{TRUSTED_READ_ENV_VAR} names {switched}, but the trusted ledger holds no accepted "
+                f"revisions for {', '.join(unserved)}: the cutover would serve empty curves (#656). "
+                "Unset the variable to read v1."
+            )
+        return provider
+    except TrustedLedgerEmptyError:
+        raise
+    except Exception:  # noqa: BLE001 — any other ledger problem must degrade, not fail the build
         log.exception("trusted read path unavailable — falling back to the v1 forward_curve tables")
         return fallback
 
@@ -677,6 +712,7 @@ __all__ = [
     "ProviderError",
     "QuoteProvider",
     "SqliteQuoteProvider",
+    "TrustedLedgerEmptyError",
     "describe_provider",
     "known_commodities",
     "open_provider",
