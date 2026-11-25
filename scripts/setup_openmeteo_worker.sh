@@ -347,6 +347,12 @@ for attempt in 1 2 3 4 5 6; do
 done
 if (( ok )); then
   printf '  %s✓%s forwarded: HTTP 200, %s bytes\n' "$GREEN" "$RESET" "$(wc -c < "$BODY" | tr -d ' ')"
+  if grep -qi '^x-mirror-proxy-upstream: api.open-meteo.com' "$HDRS"; then
+    printf '  %s✓%s relayed from Open-Meteo (X-Mirror-Proxy-Upstream present)\n' "$GREEN" "$RESET"
+  else
+    warn "No X-Mirror-Proxy-Upstream header: this 200 did not come from our Worker. Is the URL right?"
+    SKIPPED+=("relay marker missing on the end-to-end 200")
+  fi
   grep -iE '^x-ratelimit-(cost|remaining|window)' "$HDRS" | tr -d '\r' | sed 's/^/    /' || true
   say ""
   say "Read X-RateLimit-Remaining above. The Worker's quota is new, so it should"

@@ -12,7 +12,7 @@ Open-Meteo's free API counts weighted calls per outgoing IP. GitHub runners shar
 
 | Request | Answer |
 |---|---|
-| `GET /v1/forecast?…` with the right `X-Proxy-Token` | Open-Meteo's own status, body and headers, `X-RateLimit-*` included, all unchanged |
+| `GET /v1/forecast?…` with the right `X-Proxy-Token` | Open-Meteo's own status, body (each entry's `latitude`/`longitude`/`location_id`, a 429's JSON `reason`) and headers (`Retry-After`, `X-RateLimit-*`), all unchanged, plus one added header: `X-Mirror-Proxy-Upstream: api.open-meteo.com` |
 | missing or wrong token | `401` with `X-Mirror-Proxy-Error: unauthorized` |
 | any other path (`/v1/archive`, `/v1/forecast/`, `/`, …) | `404` with `path_not_allowed` |
 | any method other than GET | `405` with `method_not_allowed` |
@@ -20,7 +20,12 @@ Open-Meteo's free API counts weighted calls per outgoing IP. GitHub runners shar
 
 - **Token.** Compared in constant time and never forwarded to Open-Meteo. The upstream request is built fresh and carries only `Accept`.
 - **No caching.** The upstream fetch uses `cache: "no-store"`. This needs `compatibility_date` ≥ 2024-11-11; `wrangler.jsonc` sets 2025-11-01. A stale forecast is worse than a refused one.
-- **Refusals.** The Worker's own refusals carry `X-Mirror-Proxy-Error`. `fetchers/weather.py` raises `OpenMeteoProxyError` on that header and never retries. A response without the header is Open-Meteo's, relayed unchanged: a quota 429 is `rate_limited`, and a 5xx is retried.
+- **Refusals.** The Worker's own refusals carry `X-Mirror-Proxy-Error`. `fetchers/weather.py` raises `OpenMeteoProxyError` on that header and never retries.
+- **Who answered.** Every relayed answer carries `X-Mirror-Proxy-Upstream`. Through the Worker, the fetcher reads a response *without* it as Cloudflare's, not Open-Meteo's:
+  - a 429 (e.g. Error 1027, the Workers Free daily cap) is `rate_limited` with a reason naming Cloudflare's limit and the page title, never Open-Meteo's quota;
+  - a 200 is not weather: `OpenMeteoProxyError`;
+  - a 5xx is retried like any transport failure.
+- **Relayed answers.** A quota 429 is `rate_limited` naming this Worker's quota, with `Retry-After`; a concurrency 429 and a 5xx are retried. A 403 "Your API key is over quota." (the paid customer API's monthly refusal, rate-limit doc L134) is `rate_limited` too, never retried — the seam for the later paid key.
 - **Allowlist.** It has one entry because forecast is the only Open-Meteo API we call (`config.OPENMETEO_FORECAST_PATH`). Adding an endpoint means adding it to `ALLOWED` in `src/worker.js` and to `tests/test_openmeteo_worker.py`.
 
 ## Configuration
@@ -37,7 +42,7 @@ Open-Meteo's free API counts weighted calls per outgoing IP. GitHub runners shar
 ## Tests
 
 ```bash
-node --test infra/openmeteo-worker/test/worker.test.mjs   # 19 cases, no network
+node --test --test-reporter=tap infra/openmeteo-worker/test/worker.test.mjs   # 23 cases, no network
 pytest tests/test_openmeteo_worker.py tests/test_weather_proxy.py
 ```
 
@@ -82,6 +87,7 @@ All retrieved 2026-11-25.
   - L15: "Usage is generally shared by requests from the same public IP address, so applications using the same outgoing connection can share a quota. Cloudflare Worker traffic may be grouped by Worker identity instead."
   - L148: "…or by Worker identity for identified Cloudflare Worker traffic."
   - L7–13: minute 600, hour 5,000, day 10,000. "All three limits apply together."
+  - L134: "If customer access is restricted for exceeding the monthly allowance, the response is HTTP `403 Forbidden` with the reason `Your API key is over quota.`"
 - **Code**, [`ApiKeyManager.swift` @ a358d6c L190–203](https://github.com/open-meteo/open-meteo/blob/a358d6c591f21f3adbdcfa10517f761d688b527d/Sources/App/Helper/Vapor/ApiKeyManager.swift#L190-L203): "Limit is IP based, except for CF Workers, where limits are applied per user." "For CloudFlare worker applications, use the `CF-Worker` header for rate limiting instead of IP address."
 - **Terms**, <https://open-meteo.com/en/terms>:
   - "Less than 10'000 API calls per day, 5'000 per hour and 600 per minute."

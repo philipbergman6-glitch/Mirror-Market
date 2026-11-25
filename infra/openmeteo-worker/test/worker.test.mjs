@@ -142,3 +142,51 @@ test("the Worker's own refusals say no-store and never echo the token", async ()
   assert.equal(resp.headers.get("Cache-Control"), "no-store");
   assert.ok(!(await resp.text()).includes(TOKEN));
 });
+
+// ── #658 review (2026-11-25): what must survive the relay ──────────────────
+
+test("every relayed answer carries the upstream marker, whatever its status", async () => {
+  for (const status of [200, 429, 503]) {
+    answer = () => new Response(status === 200 ? BATCH : DAILY_429, { status });
+    const resp = await call("/v1/forecast" + QUERY);
+    assert.equal(resp.status, status);
+    assert.equal(resp.headers.get("X-Mirror-Proxy-Upstream"), "api.open-meteo.com");
+  }
+});
+
+test("the Worker's own refusals never carry the upstream marker", async () => {
+  for (const resp of [
+    await call("/v1/forecast" + QUERY, { token: WRONG }),
+    await call("/v1/archive" + QUERY),
+    await call("/v1/forecast" + QUERY, { method: "POST" }),
+    await call("/v1/forecast" + QUERY, { env: {} }),
+  ]) {
+    assert.equal(resp.headers.get("X-Mirror-Proxy-Upstream"), null);
+    assert.notEqual(resp.headers.get("X-Mirror-Proxy-Error"), null);
+  }
+});
+
+test("each entry's latitude, longitude and location_id survive the relay", async () => {
+  const resp = await call("/v1/forecast" + QUERY);
+  const relayed = await resp.json();
+  const recorded = JSON.parse(BATCH);
+  assert.equal(relayed.length, recorded.length);
+  relayed.forEach((entry, i) => {
+    assert.equal(entry.latitude, recorded[i].latitude);
+    assert.equal(entry.longitude, recorded[i].longitude);
+    assert.equal(entry.location_id, recorded[i].location_id);
+  });
+});
+
+test("a quota 429 keeps its JSON reason, Retry-After and X-RateLimit-* headers", async () => {
+  answer = () => new Response(DAILY_429, {
+    status: 429,
+    headers: { "Retry-After": "33000", "X-RateLimit-Window": "86400", "X-RateLimit-Remaining": "0" },
+  });
+  const resp = await call("/v1/forecast" + QUERY);
+  assert.equal(resp.status, 429);
+  assert.equal((await resp.json()).reason, "Daily API request limit exceeded. Please try again tomorrow.");
+  assert.equal(resp.headers.get("Retry-After"), "33000");
+  assert.equal(resp.headers.get("X-RateLimit-Window"), "86400");
+  assert.equal(resp.headers.get("X-RateLimit-Remaining"), "0");
+});

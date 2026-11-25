@@ -35,18 +35,23 @@ def _node() -> str:
 
 
 def test_the_worker_contract_passes() -> None:
+    # The reporter is pinned: Node's default differs by version and TTY (CI's
+    # Node printed `spec`, "ℹ fail 0"; a desk's Node 22 printed TAP, "# fail 0"),
+    # and the summary line below is read from TAP.
     proc = subprocess.run(
-        [_node(), "--test", "test/worker.test.mjs"],
+        [_node(), "--test", "--test-reporter=tap", "test/worker.test.mjs"],
         cwd=WORKER, capture_output=True, text=True, timeout=120, check=False,
     )
     assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-2000:]
     assert "# fail 0" in proc.stdout
+    assert "# pass 0" not in proc.stdout, "the runner found no tests"
 
 
 def test_the_worker_and_the_fetcher_agree_on_header_names() -> None:
     source = (WORKER / "src" / "worker.js").read_text()
     assert f'const TOKEN_HEADER = "{weather.PROXY_TOKEN_HEADER}";' in source
     assert f'const ERROR_HEADER = "{weather.PROXY_ERROR_HEADER}";' in source
+    assert f'const UPSTREAM_HEADER = "{weather.PROXY_UPSTREAM_HEADER}";' in source
 
 
 def test_the_worker_allowlists_exactly_the_path_the_fetcher_calls() -> None:

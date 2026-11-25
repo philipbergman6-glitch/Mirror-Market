@@ -14,7 +14,9 @@
 //     unchanged, with every cache bypassed — a stale forecast is worse than
 //     a refused one.
 // Its own refusals carry X-Mirror-Proxy-Error, so the fetcher can tell a
-// misconfigured Worker from an Open-Meteo answer and hard-fail on it.
+// misconfigured Worker from an Open-Meteo answer and hard-fail on it; every
+// relayed answer carries X-Mirror-Proxy-Upstream, so it can tell Open-Meteo's
+// answer from a page Cloudflare served in the Worker's place.
 
 // Exact path → upstream origin. The forecast endpoint is the only Open-Meteo
 // API Layer 5 calls (fetchers/weather.py, config.OPENMETEO_FORECAST_URL).
@@ -24,6 +26,11 @@ const ALLOWED = Object.freeze({
 
 const TOKEN_HEADER = "X-Proxy-Token";
 const ERROR_HEADER = "X-Mirror-Proxy-Error";
+// Added to every answer relayed from Open-Meteo (the only header added). Its
+// absence tells the fetcher that Cloudflare, not Open-Meteo, answered — e.g.
+// Error 1027 when the Workers Free daily cap is spent — so that 429 is never
+// read as Open-Meteo's quota.
+const UPSTREAM_HEADER = "X-Mirror-Proxy-Upstream";
 
 function refuse(status, code) {
   return new Response(JSON.stringify({ error: true, reason: code }), {
@@ -79,11 +86,13 @@ export default {
       redirect: "manual",
     });
 
-    // Status, body and headers as Open-Meteo sent them.
+    // Status, body and headers as Open-Meteo sent them, plus the relay marker.
+    const headers = new Headers(upstream.headers);
+    headers.set(UPSTREAM_HEADER, new URL(origin).host);
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
-      headers: new Headers(upstream.headers),
+      headers,
     });
   },
 };

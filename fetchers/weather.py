@@ -17,6 +17,7 @@ Key concepts for learning:
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -49,6 +50,15 @@ logger = logging.getLogger(__name__)
 # with the second one so they can never be read as Open-Meteo's.
 PROXY_TOKEN_HEADER = "X-Proxy-Token"
 PROXY_ERROR_HEADER = "X-Mirror-Proxy-Error"
+# Stamped by the Worker on every answer it relays from Open-Meteo. Through the
+# Worker, a response without it came from Cloudflare (or whatever answered the
+# hostname), not from Open-Meteo — so its 429 is not Open-Meteo's quota and
+# its 200 is not weather (#658 review, 2026-11-25).
+PROXY_UPSTREAM_HEADER = "X-Mirror-Proxy-Upstream"
+# The paid customer API's monthly-allowance refusal: HTTP 403 with this reason
+# (open-meteo docs/api-rate-limiting.md @ aeab72e, L134: "Review your usage and
+# subscription rather than repeatedly retrying that error").
+_OVER_QUOTA_403 = "over quota"
 
 
 class OpenMeteoProxyError(RuntimeError):
@@ -200,6 +210,20 @@ def _fetch_batch(
                     f"and that {OPENMETEO_PROXY_TOKEN_ENV} matches the Worker's PROXY_TOKEN secret"
                 )
 
+            relayed = not route.via_worker or bool(resp.headers.get(PROXY_UPSTREAM_HEADER))
+            if not relayed and resp.status_code == 429:
+                raise UpstreamRateLimited("weather", _cloudflare_reason(resp))
+            if not relayed and resp.status_code == 200:
+                raise OpenMeteoProxyError(
+                    f"HTTP 200 not relayed by the Worker (no {PROXY_UPSTREAM_HEADER}): "
+                    f"{_page_title(resp)} — check {OPENMETEO_PROXY_URL_ENV} points at the Worker"
+                )
+
+            if resp.status_code == 403 and relayed:
+                upstream = _upstream_reason(resp)
+                if _OVER_QUOTA_403 in upstream.lower():
+                    raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream, route))
+
             if resp.status_code == 429:
                 upstream = _upstream_reason(resp)
                 if _is_concurrency_rejection(upstream):
@@ -342,16 +366,36 @@ def _is_concurrency_rejection(reason: str) -> bool:
     return "concurrent" in reason.lower()
 
 
+def _page_title(resp: requests.Response) -> str:
+    """A non-Open-Meteo page, named by its <title> (or first text), tags stripped."""
+    text = resp.text or ""
+    match = re.search(r"<title[^>]*>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+    raw = match.group(1) if match else re.sub(r"<[^>]+>", " ", text)
+    return " ".join(raw.split())[:200] or "(empty body)"
+
+
+def _cloudflare_reason(resp: requests.Response) -> str:
+    """A 429 Cloudflare served in the Worker's place — its limit, not Open-Meteo's."""
+    return (
+        f"Cloudflare HTTP 429: {_page_title(resp)} — answered by Cloudflare, not "
+        "relayed from Open-Meteo: the Worker's own Cloudflare limit (Workers Free "
+        "100,000 requests/day, reset 00:00 UTC), not the Open-Meteo quota"
+    )
+
+
 def _rate_limit_reason(resp: requests.Response, upstream: str, route: _Route) -> str:
-    """The `rate_limited` reason a reader sees: what, until when, and why it is shared."""
-    parts = [f"Open-Meteo HTTP 429: {upstream}"]
+    """The `rate_limited` reason a reader sees: what, until when, and whose quota."""
+    parts = [f"Open-Meteo HTTP {resp.status_code}: {upstream}"]
     retry_after = resp.headers.get("Retry-After")
     if retry_after:
         parts.append(f"Retry-After {retry_after} s")
     window = resp.headers.get("X-RateLimit-Window")
     if window:
         parts.append(f"window {window} s")
-    parts.append(route.quota)
+    if resp.status_code == 403:
+        parts.append("the paid API key's monthly allowance is used up; review usage and subscription")
+    else:
+        parts.append(route.quota)
     return " — ".join(parts)
 
 

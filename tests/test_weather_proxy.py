@@ -50,6 +50,26 @@ def _resp(status: int, payload, headers: dict | None = None) -> MagicMock:
     return resp
 
 
+def _relayed(status: int, payload, headers: dict | None = None) -> MagicMock:
+    """An Open-Meteo answer as the Worker relays it: unchanged, plus its marker."""
+    return _resp(status, payload, {**(headers or {}), weather.PROXY_UPSTREAM_HEADER: "api.open-meteo.com"})
+
+
+def _cloudflare_page(status: int, html: str) -> MagicMock:
+    """Cloudflare answering instead of the Worker (e.g. Error 1027): HTML, no marker."""
+    resp = MagicMock(status_code=status, headers={"Content-Type": "text/html"})
+    resp.json.side_effect = json.JSONDecodeError("Expecting value", html, 0)
+    resp.text = html
+    return resp
+
+
+OVER_QUOTA_403 = {"error": True, "reason": "Your API key is over quota."}
+CF_1027 = (
+    "<!DOCTYPE html><html><head><title>Worker exceeded resource limits | "
+    "workers.dev | Cloudflare</title></head><body>Error 1027</body></html>"
+)
+
+
 @pytest.fixture
 def no_sleep(monkeypatch):
     monkeypatch.setattr(weather.time, "sleep", lambda s: None)
@@ -83,7 +103,7 @@ def proxied(monkeypatch):
 
 def test_with_both_set_the_batch_goes_to_the_worker_with_the_token_header(http, no_sleep, proxied):
     calls, queue = http
-    queue.append(_resp(200, BATCH))
+    queue.append(_relayed(200, BATCH))
 
     results = weather.fetch_all_regions(now=NOW)
 
@@ -101,6 +121,7 @@ def test_the_worker_gets_exactly_the_params_open_meteo_would(http, no_sleep, mon
 
     monkeypatch.setenv("OPENMETEO_PROXY_URL", PROXY + "/")  # a trailing slash is the same Worker
     monkeypatch.setenv("OPENMETEO_PROXY_TOKEN", TOKEN)
+    queue[:] = [_relayed(200, BATCH)]
     weather.fetch_all_regions(now=NOW)
 
     assert calls[-1]["url"] == f"{PROXY}/v1/forecast"
@@ -144,7 +165,7 @@ def test_a_plain_http_proxy_url_hard_fails_rather_than_send_the_token_in_clear(h
 
 def test_the_log_names_the_worker_path_and_never_the_token(http, no_sleep, proxied, caplog):
     _calls, queue = http
-    queue.append(_resp(200, BATCH, {"X-RateLimit-Cost": "24.0", "X-RateLimit-Remaining": "9976"}))
+    queue.append(_relayed(200, BATCH, {"X-RateLimit-Cost": "24.0", "X-RateLimit-Remaining": "9976"}))
 
     with caplog.at_level(logging.DEBUG, logger="fetchers.weather"):
         weather.fetch_all_regions(now=NOW)
@@ -166,7 +187,7 @@ def test_the_log_names_the_direct_path_and_its_shared_quota(http, no_sleep, capl
 
 def test_no_failure_path_leaks_the_token(http, no_sleep, proxied, caplog):
     _calls, queue = http
-    queue.extend([_resp(502, {"error": True, "reason": "bad gateway"})] * 3)
+    queue.extend([_relayed(502, {"error": True, "reason": "bad gateway"})] * 3)
 
     with caplog.at_level(logging.DEBUG, logger="fetchers.weather"):
         results = weather.fetch_all_regions(now=NOW)
@@ -180,7 +201,7 @@ def test_no_failure_path_leaks_the_token(http, no_sleep, proxied, caplog):
 
 def test_a_quota_429_through_the_worker_names_the_workers_own_quota(http, no_sleep, proxied):
     calls, queue = http
-    queue.append(_resp(429, DAILY_429, {"Retry-After": "33000"}))
+    queue.append(_relayed(429, DAILY_429, {"Retry-After": "33000"}))
 
     with pytest.raises(UpstreamRateLimited) as info:
         weather.fetch_all_regions(now=NOW)
@@ -188,6 +209,7 @@ def test_a_quota_429_through_the_worker_names_the_workers_own_quota(http, no_sle
     assert len(calls) == 1
     reason = info.value.reason
     assert "Daily API request limit exceeded" in reason
+    assert "Retry-After 33000 s" in reason
     assert "Worker" in reason
     assert "shared per outgoing IP" not in reason
     assert TOKEN not in reason
@@ -221,9 +243,92 @@ def test_an_upstream_5xx_relayed_by_the_worker_is_still_transient(http, no_sleep
     # A 5xx without the Worker's own marker is Open-Meteo's, forwarded
     # unchanged: retried like any transport failure, then the second pass.
     calls, queue = http
-    queue.extend([_resp(503, {"error": True, "reason": "upstream"}), _resp(200, BATCH)])
+    queue.extend([_relayed(503, {"error": True, "reason": "upstream"}), _relayed(200, BATCH)])
 
     results = weather.fetch_all_regions(now=NOW)
 
     assert len(calls) == 2
     assert all(len(df) == 37 for df in results.values())
+
+
+# ── review of #658 (0818e5c): the Worker PR's list ──────────────────────────
+
+
+def test_the_direct_url_is_read_from_the_module_at_call_time(http, no_sleep, monkeypatch):
+    """The URL seam: a test, or the later paid customer host, patches one name."""
+    calls, queue = http
+    queue.append(_resp(200, BATCH))
+    monkeypatch.setattr(weather, "OPENMETEO_FORECAST_URL", "https://customer-api.open-meteo.com/v1/forecast")
+
+    weather.fetch_all_regions(now=NOW)
+
+    assert calls[0]["url"] == "https://customer-api.open-meteo.com/v1/forecast"
+
+
+def test_a_cloudflare_429_page_is_not_read_as_an_open_meteo_quota(http, no_sleep, proxied):
+    # Cloudflare answering for the Worker (its own limit, Error 1027) carries
+    # no relay marker and an HTML body. It is a rate limit — Cloudflare's —
+    # and the reason must say so, never quote Open-Meteo's quota.
+    calls, queue = http
+    queue.append(_cloudflare_page(429, CF_1027))
+
+    with pytest.raises(UpstreamRateLimited) as info:
+        weather.fetch_all_regions(now=NOW)
+
+    assert len(calls) == 1
+    reason = info.value.reason
+    assert reason.startswith("Cloudflare HTTP 429")
+    assert "Worker exceeded resource limits" in reason
+    assert "<" not in reason
+    assert "Open-Meteo HTTP 429" not in reason
+
+
+def test_an_unmarked_200_through_the_worker_hard_fails(http, no_sleep, proxied):
+    # A 200 the Worker did not relay is something else's page (a parked
+    # domain, a captive portal): never parsed as weather.
+    calls, queue = http
+    queue.append(_resp(200, BATCH))
+
+    with pytest.raises(weather.OpenMeteoProxyError, match="not relayed by the Worker"):
+        weather.fetch_all_regions(now=NOW)
+    assert len(calls) == 1
+
+
+def test_an_unmarked_cloudflare_5xx_is_transient(http, no_sleep, proxied):
+    calls, queue = http
+    queue.extend([_cloudflare_page(502, "<html><title>Bad gateway</title></html>"), _relayed(200, BATCH)])
+
+    results = weather.fetch_all_regions(now=NOW)
+
+    assert len(calls) == 2
+    assert all(len(df) == 37 for df in results.values())
+
+
+@pytest.mark.parametrize("via_worker", [False, True])
+def test_a_paid_key_over_quota_403_is_rate_limited_not_retried(http, no_sleep, monkeypatch, via_worker):
+    # open-meteo docs/api-rate-limiting.md @ aeab72e L134: "the response is
+    # HTTP `403 Forbidden` with the reason `Your API key is over quota.`
+    # Review your usage and subscription rather than repeatedly retrying".
+    calls, queue = http
+    if via_worker:
+        monkeypatch.setenv("OPENMETEO_PROXY_URL", PROXY)
+        monkeypatch.setenv("OPENMETEO_PROXY_TOKEN", TOKEN)
+        queue.append(_relayed(403, OVER_QUOTA_403))
+    else:
+        queue.append(_resp(403, OVER_QUOTA_403))
+
+    with pytest.raises(UpstreamRateLimited) as info:
+        weather.fetch_all_regions(now=NOW)
+
+    assert len(calls) == 1
+    assert "Open-Meteo HTTP 403: Your API key is over quota." in info.value.reason
+
+
+def test_any_other_403_is_not_a_quota(http, no_sleep):
+    calls, queue = http
+    queue.extend([_resp(403, {"error": True, "reason": "Forbidden"})] * 3)
+
+    results = weather.fetch_all_regions(now=NOW)
+
+    assert all(df.empty for df in results.values())
+    assert len(calls) == 6  # 3 attempts × 2 passes, as any non-quota refusal
