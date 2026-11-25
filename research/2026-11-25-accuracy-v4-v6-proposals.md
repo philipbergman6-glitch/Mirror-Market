@@ -133,7 +133,7 @@ Readings [I]:
   less often than that: most days it does not move at all, and when it does it moves about 1.65 USD/MT, which is
   about 4.5 ¢/bu.
 - **1 ¢/bu = 0.367 USD/MT** (36.7437 / 100). US basis and Brazil FOB premiums are quoted in whole cents per
-  bushel (AMS 3147 prints basis as `95.00` to `118.00` ¢/bu [O `gulf_bids` rows]). The smallest unit a buyer
+  bushel (AMS 3147 prints basis as `95.00` to `118.00` ¢/bu in its 2026-11-02 → 11-13 reports [O `gulf_bids` rows]). The smallest unit a buyer
   negotiates basis in is therefore about **0.37 USD/MT**.
 - Oil trades at about three times the price per tonne of beans (≈1,480 vs ≈463 USD/MT [O V1 rows 1–2]), and it
   moves about five times as much per day. A flat USD/MT threshold that suits beans is very tight for oil.
@@ -149,8 +149,8 @@ Readings [I]:
 Why A: it is one number a buyer can hold in their head ("half a dollar a tonne"), and it sits just above the
 negotiating unit of 1 ¢/bu (0.37). Any error that would move a basis negotiation by more than a cent therefore
 counts as material. B is equivalent in effect but cannot be stated in one line. C would let a 2 ¢/bu basis error
-pass as immaterial, and 2 ¢/bu is more than the whole typical non-zero Gulf basis move (1.65 USD/MT ≈ 4.5 ¢/bu,
-so C passes almost half a typical move).
+pass as immaterial, and 2 ¢/bu is almost half the typical non-zero Gulf basis move (1.65 USD/MT ≈ 4.5 ¢/bu),
+so C passes almost half a typical move.
 
 **Per-stratum proposal under option A**
 
@@ -175,7 +175,7 @@ so C passes almost half a typical move).
   "≤ 4 ticks" figure above is a hypothesis for the first full pass to confirm or widen, the same status V3's FX
   bands had.
 - **New evidence: our stored CBOT closes are revised after first capture.** Across the 30 days to 2026-11-25, the
-  committed `data/history/contract_bars.csv` changed `Close` on **347** already-stored soy-complex sessions [O,
+  committed `data/history/contract_bars.csv` changed `Close` **347** times on **284** distinct already-stored soy-complex contract-sessions (one session can be revised more than once) [O,
   §B `rev_cb.py`; git diffs of daily snapshot commits].
 
   | Product | revisions | median lag (session → commit) | max lag | median \|Δ\| USD/MT | p90 | max | share ≥ 0.5 USD/MT |
@@ -230,7 +230,7 @@ so C passes almost half a typical move).
 | 12 Landed | nothing displayed | — | — | — | — | **nothing to verify** |
 | 13 AMS 3511 oil | 0 | exact | yes | — | — | **pass** |
 
-Under option A, V1 would have read: 4 pass · 4 immaterial or explained · 4 material-explained (three metadata,
+Under option A, V1 would have read: 4 pass · 3 immaterial or explained · 4 material-explained (three metadata,
 one FX) · **1 material-unexplained (CNY, which B25 has since removed by construction)** · 1 unverifiable · 1
 nothing to verify. Under option C, row 8 (1.30 USD/MT) stays material and row 9 (0.84) becomes immaterial. Under
 B, the result is the same as A.
