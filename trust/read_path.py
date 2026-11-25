@@ -12,8 +12,8 @@ dual-write into a durable ledger, and none exists: ``main.py`` does not import
 exist, and the CI reconcilers write to a per-run temporary directory. So
 switching the CBOT datasets on today makes
 ``analysis.futures.providers.open_provider`` raise ``TrustedLedgerEmptyError``,
-naming the absent ledger or the unserved datasets — never empty curves, and
-never a silent v1 fallback (#656, owner decision on #239). The reader cutover
+naming the absent ledger or the unserved datasets, rather than serving empty
+curves or falling back to v1 silently (#656, owner decision on #239). The reader cutover
 itself is not proceeding; ``ROADMAP.md`` holds its reopening trigger.
 
 Three rules:

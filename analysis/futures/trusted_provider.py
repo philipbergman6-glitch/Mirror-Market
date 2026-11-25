@@ -9,7 +9,7 @@ What changes for a caller: nothing in the interface, and three things in the
 answers.
 
 - A leg whose revision was **quarantined** (an implausible move) or
-  **rejected** (an impossible candle, an unfinished session, a symbol that is
+  **rejected** (an incomplete candle, an unfinished session, a symbol that is
   not this product's contract) is absent. The curve is shorter and honest,
   rather than complete and carrying a number nobody vouched for.
 - A **corrected** leg returns the correction, not the value it replaced, and
