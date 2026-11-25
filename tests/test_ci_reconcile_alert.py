@@ -272,3 +272,30 @@ def test_the_workflow_wires_the_alarm_without_gating_or_reddening_the_publish() 
     for pilot, step_id in (("magyp", "reconcile_magyp"), ("cbot", "reconcile_cbot"), ("fx", "reconcile_fx")):
         assert f"{pilot}=${{{{ steps.{step_id}.outputs.code }}}}" in relay_step["run"]
     assert workflow["permissions"]["issues"] == "write"
+
+
+def test_an_errored_reconciler_is_not_called_recovered_by_an_unavailable_day(tmp_path, gh) -> None:
+    """Not re-checking is not recovering — for a crash as much as a divergence."""
+    calls, state = gh
+    state["open_issue"] = 7
+    state["body"] = relay.marker({"fx:errored"})
+    reports(tmp_path)
+    (tmp_path / "fx.json").unlink()
+
+    run(tmp_path, fx="2")
+
+    assert ("issue", "close") not in _commands(calls)
+    assert ("issue", "comment") not in _commands(calls)
+
+
+def test_a_reconciler_that_runs_again_clears_its_errored_key_but_keeps_divergences(tmp_path, gh) -> None:
+    calls, state = gh
+    state["open_issue"] = 7
+    state["body"] = relay.marker({"magyp:errored", "magyp:FOB"})
+    reports(tmp_path, magyp_status="no_circular")  # ran cleanly, nothing to compare
+
+    run(tmp_path)
+
+    body = _body(calls, ("issue", "comment"))
+    assert relay.parse_state(body) == {"magyp:FOB"}
+    assert "`magyp:errored` cleared" in body

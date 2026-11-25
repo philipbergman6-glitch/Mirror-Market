@@ -13,14 +13,16 @@ the workflow captured for its step:
   no-session/no-circular day (nothing to compare);
 - exit 2 → ``unavailable`` (upstream down or a payload that would not parse —
   not evidence about the trusted path, so it never opens the issue);
-- no exit code → ``not_run`` (an earlier step was cancelled);
+- no exit code → ``not_run`` (the step was skipped, e.g. after a failed
+  install, or timed out before recording its code);
 - anything else — exit 1 without a diverged report, exit 0 without a report, an
   unknown code → ``errored``. A crashed reconciler is a dead detector, and a
   detector that dies silently is the failure invariant 1 forbids, so it alarms.
 
 A pilot that graded nothing this run (no session, unavailable, not run,
 errored) **carries** its previous divergences: not re-checking a leg is not
-the same as it having recovered. The state is the set of alarm keys
+the same as it having recovered. An ``errored`` key clears only when the
+reconciler next writes a report; an unavailable or skipped run carries it. The state is the set of alarm keys
 (``cbot:Soybean Meal``, ``fx:ZAR/USD``, ``magyp:FOB``, ``<pilot>:errored``),
 written into each issue body or comment as a hidden marker; "before" is the
 newest marker on the open issue, so the relay needs no memory of its own.
@@ -206,12 +208,17 @@ def current_keys(results: list[PilotResult], before: set[str]) -> tuple[set[str]
     now: set[str] = set()
     carried: set[str] = set()
     for result in results:
+        errored_key = f"{result.pilot}:errored"
         if result.state == "errored":
-            now.add(f"{result.pilot}:errored")
+            now.add(errored_key)
         if result.graded:
             now |= set(result.diverged)
             continue
-        prior = {key for key in before if key.startswith(f"{result.pilot}:") and not key.endswith(":errored")}
+        prior = {key for key in before if key.startswith(f"{result.pilot}:")}
+        if result.state in {"nothing_to_compare", "errored"}:
+            # The reconciler ran and wrote a report (or crashed again, which
+            # re-adds the key above): its earlier crash is re-checked, not carried.
+            prior.discard(errored_key)
         now |= prior
         carried |= prior
     return now, carried
@@ -254,7 +261,10 @@ def build_body(results: list[PilotResult], now: set[str], before: set[str], carr
     if newly:
         lines += ["**Now diverged:**", *[describe(k) for k in newly], ""]
     if recovered:
-        lines += ["**Recovered:**", *[f"- `{k}` reconciles again" for k in recovered], ""]
+        lines += ["**Recovered:**", *[
+            f"- `{k}` cleared: the reconciler ran and wrote its report" if k.endswith(":errored")
+            else f"- `{k}` reconciles again" for k in recovered
+        ], ""]
     still = sorted(now & before)
     if still:
         lines += ["**Still diverged:**", *[describe(k) for k in still], ""]

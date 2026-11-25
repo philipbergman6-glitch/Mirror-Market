@@ -25,7 +25,7 @@ Text as decided:
 
 1. **Alarm by a rolling issue.** `scripts/ci_reconcile_alert.py` follows the `scripts/ci_dead_source.py` pattern and comments only on a state change. A red deploy run must keep meaning "the edition did not go out". The job and its steps stay `continue-on-error`. `ARCHITECTURE.md` → "Trusted path — status and alarm" covers the state model.
 2. **CNY is left out of the alarm** (G5). `scripts/reconcile_fx.py` runs it but reports it as "not compared: v1 source differs", from the same set that refuses its cutover: `trust.read_path.V1_SOURCE_DIFFERS`.
-3. **#656, raise.** With the switch on, an absent `data/v2/` or a ledger with no accepted revision for a soy leg makes `open_provider` raise `TrustedLedgerEmptyError` with a named reason. Before this it served empty curves silently.
+3. **#656, raise.** With the switch on, an absent `data/v2/` or a ledger with no accepted revision for a soy leg makes `open_provider` raise `TrustedLedgerEmptyError` with a named reason. Before this it served empty curves silently. Observed with the switch on: the workstation page tombstones with that reason and `generate_site` exits 1.
 4. **This record**, and a `ROADMAP.md` entry for the reader cutover with its trigger.
 
 ### Owner answers to the pack's questions
@@ -45,7 +45,7 @@ Move `trust/site_promotion.py` out of `trust/` before the checkpoint, once the o
 
 ## Evidence: every `reconcile-trusted` run, 2026-08-11 → 2026-11-25
 
-Recorded here because the evidence expires (G1). Reports are CI artifacts only (`data/reconciliation/` is gitignored), and GitHub deletes logs after 90 days, so everything before 2026-08-27 is already exit-code-only. This table is from the owner pack on #239. The pack classified each run from `gh run list --workflow deploy-dashboard.yml` (276 runs), the jobs API, the retained logs (124) and the `trusted-reconciliation` artifacts. The 276 per-run rows stayed outside the repo. An independent review re-tallied them to these counts.
+Recorded here because the evidence expires (G1). Reports are CI artifacts only (`data/reconciliation/` is gitignored), and GitHub deletes logs after 90 days, so everything before 2026-08-27 is already exit-code-only. This table is from the owner pack on #239. The pack classified each run from `gh run list --workflow deploy-dashboard.yml` (276 runs), the jobs API, the retained logs (124) and the `trusted-reconciliation` artifacts. The 276 per-run rows stayed outside the repo. The independent review the owner adopted re-counted that per-run file to these totals; it did not re-pull the runs from GitHub.
 
 | Pilot | First ran | Eligible runs | Step ran | Reconciled (log) | Exit 0, log expired | **Diverged** | Unavailable (exit 2) | Not run |
 |---|---|---|---|---|---|---|---|---|
@@ -55,6 +55,7 @@ Recorded here because the evidence expires (G1). Reports are CI artifacts only (
 
 - **"Exit 0, log expired"** covers runs from 08-11 to 08-26. Exit 0 rules out a divergence and an outage, but it cannot tell "reconciled" from "no session". All 17 failing steps have retained logs.
 - **"Not run"**: the test suite failed, so the job was skipped (`needs: check`): 27–28 runs. Job cancelled: 24–30. Superseded push cancelled: 10–13. Run cancelled before the job existed: 9–10.
+- **Distinct sessions** in the retained window (08-27 to 11-24): MAGyP 48 sessions, all clean. FX 47 sessions, 3 ever diverged. CBOT 49 run-dates, 2 ever diverged.
 - **Since #481** (2026-10-13 13:55 UTC to 2026-11-25): CBOT 72/72 reconciled, FX 72/72 reconciled (26 sessions), MAGyP 69 reconciled and 3 unavailable (27 sessions).
 - **All 12 divergences fall on 5 sessions between 08-28 and 10-13.** 4 of those 5 sessions have one cause: Yahoo candles with the close outside their own range (#447), cleared by #481.
 
