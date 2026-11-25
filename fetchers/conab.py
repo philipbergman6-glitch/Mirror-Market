@@ -37,6 +37,7 @@ from config import (
 from fetchers import _tls
 from fetchers._backoff import retry_sleep
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import metric_tons_to_kg
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +199,9 @@ def _aggregate_national(df: pd.DataFrame) -> pd.DataFrame:
         )
     )
 
-    # yield in kg/ha = (production[1000 t] / area[1000 ha]) * 1000
-    grouped["yield_kg_ha"] = (
-        grouped["production"].div(grouped["area"].replace(0, pd.NA)) * 1000.0
+    # yield: production[1000 t] / area[1000 ha] is t/ha, then t → kg
+    grouped["yield_kg_ha"] = metric_tons_to_kg(
+        grouped["production"].div(grouped["area"].replace(0, pd.NA))
     )
 
     # Drop years where production is zero (commodity not grown that year)

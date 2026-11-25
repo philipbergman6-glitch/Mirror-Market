@@ -60,6 +60,7 @@ from config import (
 from fetchers._backoff import retry_sleep
 from fetchers.mandi import _ist_today
 from pipeline.results import ScraperShapeError
+from pipeline.units import per_quintal_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ _TOKEN_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"')
 _SYMBOL_RE = re.compile(r"/products/([A-Z0-9]+)")
 _COLUMNS = ("symbol", "center", "price_date", "price_time", "spot_price")
 _PAGE_LENGTH = 200  # ~2 polls/day × 31 days; 1000+ silently returns nothing
-_QUINTAL_TO_MT = 10.0
 
 
 def _form(token: str, symbol: str, start: date, end: date) -> dict[str, object]:
@@ -156,7 +156,7 @@ def _parse(payload: dict, symbol: str, centre: str) -> pd.DataFrame:
         "Open": float("nan"),
         "High": float("nan"),
         "Low": float("nan"),
-        "Close": last["price"] * _QUINTAL_TO_MT,
+        "Close": per_quintal_to_per_metric_ton(last["price"]),
         "Volume": float("nan"),
         "arrivals_mt": float("nan"),
         "Unit": "INR/MT",

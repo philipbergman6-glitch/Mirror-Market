@@ -28,7 +28,8 @@ Paranaguá first, and a positional parse would file the port indicator under
 the Paraná key — a wrong number that looks right (~4% apart).
 
 Unit: CEPEA publishes R$ per 60 kg sack ("Reais por saca de 60 kg"); we
-store BRL/MT = sack × 1000 / 60. USD conversion happens downstream.
+store BRL/MT via ``pipeline.units.per_sack_to_per_metric_ton`` (sack × 1000 / 60).
+USD conversion happens downstream.
 
 Licence: the page footer reads "CEPEA (CC BY-NC 4.0)" — the same terms that
 governed the republication; publishing it is covered by the A18 stance.
@@ -49,6 +50,7 @@ from bs4 import BeautifulSoup, Tag
 from config import CEPEA_INDICATORS, CEPEA_SOYBEAN_URL, MAX_RETRIES, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import KG_PER_SACK, per_sack_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,10 @@ _HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
 }
 
-_SACK_KG = 60.0
+# Alias of the one sack constant (invariant 7, #665), kept because PR #663's
+# verifier tripwire reads ``cepea._SACK_KG``; drop it once that test reads
+# ``pipeline.units.KG_PER_SACK``. Not used for arithmetic here.
+_SACK_KG = KG_PER_SACK
 # Plausibility band, R$ per 60 kg sack. Soy has traded ~70–180 for a
 # decade; a silent switch to R$/MT (~2,500) or R$/kg (~2.6) lands far
 # outside it.
@@ -157,7 +162,7 @@ def _parse_table(table: Tag, label: str) -> pd.DataFrame:
             )
         out.append({
             "Date": day.isoformat(),
-            "price_brl_mt": round(sack * 1000.0 / _SACK_KG, 2),
+            "price_brl_mt": round(per_sack_to_per_metric_ton(sack), 2),
             "Unit": "BRL/MT",
         })
     if not out:

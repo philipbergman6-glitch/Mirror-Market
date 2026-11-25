@@ -75,11 +75,11 @@ from config import (
 )
 from fetchers._backoff import retry_sleep
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import per_kg_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
 
-# The feed publishes NGN/kg under the 'S' key. 1 MT = 1000 kg.
-_KG_PER_MT = 1000.0
+# The feed publishes NGN/kg under the 'S' key; pipeline.units converts to NGN/MT.
 
 # Sanity band for a Nigerian soybean price in NGN/MT. The observed 2021-2026
 # range is roughly 200,000-1,000,000 NGN/MT; anything outside this band means
@@ -240,7 +240,7 @@ def _parse_series(payload: list[dict], key: str, name: str) -> pd.DataFrame:
             continue
         rows.append({
             "Date": date,
-            "price_ngn_mt": price_kg * _KG_PER_MT,
+            "price_ngn_mt": per_kg_to_per_metric_ton(price_kg),
             "Unit": "NGN/MT",
         })
 
