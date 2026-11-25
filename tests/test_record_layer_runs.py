@@ -112,7 +112,9 @@ def test_record_writes_one_row_per_layer_from_this_runs_grades(
     assert rows["cepea"].status == "not_run"
     assert rows["dce"].run_id == "777"
     assert rows["dce"].workflow == "Update Dashboard/schedule"
-    assert rows["dce"].session_date == date(2026, 10, 19)
+    # Monday 20:00 UTC is before New York midnight: Monday's CBOT bar is not
+    # final, so the edition serves Friday's session (B47 #622).
+    assert rows["dce"].session_date == date(2026, 10, 16)
 
 
 def test_record_leaves_rendered_at_blank_when_nothing_was_promoted(
@@ -449,9 +451,10 @@ def test_manifest_reliability_closes_on_the_session_before_the_edition(history_d
     assert _reliability(datetime(2026, 10, 5, 21, tzinfo=timezone.utc))["state"] == "no_record"
 
     _seed(["success", "failed", "success"])  # sessions Mon 5 → Wed 7
-    # Built Wednesday evening: Wednesday is still being recorded, so the
-    # window ends Tuesday and Wednesday's success is not yet in it.
-    block = _reliability(datetime(2026, 10, 7, 21, tzinfo=timezone.utc))
+    # Built just after New York midnight ending Wednesday: Wednesday is the
+    # session being recorded, so the window ends Tuesday and Wednesday's
+    # success is not yet in it.
+    block = _reliability(datetime(2026, 10, 8, 5, tzinfo=timezone.utc))
     assert block["state"] == "ok"
     assert block["window"]["last_session"] == "2026-10-06"
     safex = next(e for e in block["layers"] if e["layer"] == "safex")
@@ -479,7 +482,8 @@ def test_manifest_window_follows_the_pipeline_start_stamp(
     from app.manifest import _reliability
 
     _seed(["success", "failed", "success"])  # Mon 5 → Wed 7
-    # Pipeline started Wednesday before the 14:30 CT cutoff (session Tue 6),
+    # Pipeline started Wednesday afternoon, before Wednesday's bar is final at
+    # New York midnight (session Tue 6),
     # site built after it: the record files the run under Tuesday, so the
     # window must close on Monday, not on Tuesday's unrecorded run.
     monkeypatch.setenv("PIPELINE_STARTED_AT", "2026-10-07T18:00:00Z")

@@ -143,6 +143,7 @@ from pipeline.store import (
     save_eia_data,
     save_epa_rfs,
     save_export_sales,
+    repair_forward_curve,
     save_forward_curve,
     save_fred_data,
     save_freshness,
@@ -1304,6 +1305,16 @@ def run(
     if not restricted:
         _run_custom_layers(results)
 
+    # ── Correct curve legs stored before their bar was final (B47 #622) ──
+    # Before the export, so the deploy workflow commits the corrected rows.
+    # A failure leaves the stored legs as captured — the state before this
+    # step existed — so it is logged loudly and the run goes on.
+    try:
+        repaired = repair_forward_curve()
+        if repaired:
+            logger.info("forward_curve repair: %s", ", ".join(f"{c} {n}" for c, n in sorted(repaired.items())))
+    except Exception:
+        logger.exception("forward_curve repair failed — stored legs left as captured")
 
     # ── Export snapshot-only history back to git-committed CSVs ──
     # Failure exits non-zero so the workflow's commit step never runs
