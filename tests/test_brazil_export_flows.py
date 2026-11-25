@@ -193,6 +193,34 @@ def test_stored_rows_behind_a_broken_ingest_are_withheld_not_blamed_on_the_calen
     assert "our comexstat ingest" in exports["reason"]
 
 
+@pytest.mark.parametrize("status", ["failed", "stale", "incomplete"])
+def test_a_broken_rerun_after_a_same_session_success_still_draws_the_stored_month(ctx, status):
+    """#632 (owner option B on #518): a usable run stored these rows on the
+    session the broken re-run served, and a re-run only upserts — so the
+    rows are that success's, not an outage's. The block renders; the re-run
+    stays visible as a status mark and in the manifest's ``failed_runs``."""
+    _seed(ctx.conn)
+    ctx.conn.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?,?,?,?,?)", ("comexstat", "2026-11-19 11:04:00", "2026-11-19 12:50:00", 0, status))
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "ok"
+    assert exports["data"]["month"] == str(LATEST)
+
+
+def test_a_session_with_nothing_usable_since_the_last_success_is_still_withheld(ctx):
+    # Last success served the 11-17 session; the 11-18 session only failed.
+    _seed(ctx.conn)
+    ctx.conn.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?,?,?,?,?)", ("comexstat", "2026-11-18 11:04:00", "2026-11-19 12:50:00", 0, "failed"))
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "empty"
+    assert "our comexstat ingest failed upstream; last good run 2026-11-18" in exports["reason"]
+
+
 def test_a_newest_month_past_the_age_budget_is_withheld(ctx):
     old = pd.Period(TODAY, freq="M") - 6
     _insert(ctx.conn, old, "12019000", "Soybeans", "China", 1_000_000_000, 400_000_000)

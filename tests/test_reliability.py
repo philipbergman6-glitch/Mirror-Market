@@ -456,3 +456,37 @@ def test_a_real_failure_under_a_later_unconfigured_skip_still_counts_toward_dead
         rows.append(_row(s, "safex", "failed", run=f"{s}-a", hour=10))
         rows.append(_row(s, "safex", "skipped_unconfigured", run=f"{s}-b", hour=14))
     assert set(reliability.dead_layers(rows, layers=("safex",))) == {"safex"}
+
+
+# ── the render-time mirror of the session rule (#632, owner option B on #518) ──
+# data_freshness keeps only the latest attempt and the last usable run; the two
+# readers that react to a failed latest run ask this one question of them.
+
+
+def test_a_failed_rerun_after_a_usable_run_on_the_same_session_is_recovered() -> None:
+    # magyp_fob, session 2026-11-18 (#518 wave-4 review): success 11:04 UTC on
+    # 11-19, push run 44526078466 failed 12:50 UTC — both before the 14:30
+    # Chicago cutoff, so both serve the 11-18 session.
+    assert reliability.recovered_in_session("2026-11-19 11:04:00", "2026-11-19 12:50:00") is True
+
+
+def test_a_usable_run_on_an_earlier_session_does_not_recover_this_one() -> None:
+    # 11:04 UTC on 11-18 serves the 11-17 session; the 12:50 UTC 11-19 failure
+    # serves 11-18, on which nothing usable was stored.
+    assert reliability.recovered_in_session("2026-11-18 11:04:00", "2026-11-19 12:50:00") is False
+
+
+def test_the_settlement_cutoff_separates_sessions() -> None:
+    # 20:29 UTC on 11-19 (14:29 CST) still serves 11-18; 20:31 serves 11-19.
+    assert reliability.recovered_in_session("2026-11-19 20:29:00", "2026-11-19 20:31:00") is False
+    assert reliability.recovered_in_session("2026-11-19 20:31:00", "2026-11-19 23:00:00") is True
+
+
+def test_never_succeeded_or_never_attempted_is_not_recovered() -> None:
+    assert reliability.recovered_in_session(None, "2026-11-19 12:50:00") is False
+    assert reliability.recovered_in_session("2026-11-19 11:04:00", None) is False
+
+
+def test_an_unreadable_stamp_is_a_crash_not_a_guess() -> None:
+    with pytest.raises(ValueError):
+        reliability.recovered_in_session("yesterday", "2026-11-19 12:50:00")

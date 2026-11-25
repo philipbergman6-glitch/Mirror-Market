@@ -3266,7 +3266,12 @@ def _customs_exports(market: Market, ctx: SiteContext) -> dict | None:
     # Our ingest is asked first, rows or no rows: stored rows can outlive the
     # run that wrote them, and drawing them under the "release calendar, not
     # an outage" note below would blame the publisher for our own failure.
-    ingest = _ingest_status(ctx.conn, layer) if ctx.conn is not None else None
+    # Unless a usable run stored them on the session the broken run served
+    # (#632): then they are that success's rows, and withholding them would
+    # describe our re-run, not the data.
+    ingest = (
+        _ingest_status(ctx.conn, layer, unless_recovered=True) if ctx.conn is not None else None
+    )
     if ingest:
         return {"state": STATE_EMPTY, "reason": ingest, "data": {}}
     if not monthly:
