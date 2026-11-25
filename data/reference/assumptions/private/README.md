@@ -18,6 +18,14 @@ the private edition, written to `data/workspace/origins.html`.
 `python scripts/enter_assumption.py --check` fails if a desk component is found
 in a committed file, or if anything under this directory is tracked by git.
 
+**Keeping an entry alive** (#410): `--expires` may be left off and the
+component's default lifetime is proposed and printed (freight 7 days, elevation
+30, port costs / financing 90). When one lapses, `--review` and the private
+edition print the exact command that re-signs it —
+`python scripts/enter_assumption.py --renew <id> --expires <date> --entered-by <you> [--value <v>]`
+— and the old row is retired in place in its file, never deleted. See
+`../README.md` → "Lifetimes and renewal".
+
 ## Why nothing is shipped here
 
 Nothing in this stack can source these for free, and a plausible default here
