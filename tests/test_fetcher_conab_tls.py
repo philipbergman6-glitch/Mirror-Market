@@ -7,19 +7,27 @@ The failure (deploy runs 2026-10-22 → 11-06 and 2026-11-17 → 11-25):
     'portaldeinformacoes.conab.gov.br'. (_ssl.c:1011)")
 
 CONAB's front end (Apache 2.4.71, AS267310) hosts several name-based vhosts on
-one IP. When the portal vhost is not answering, Apache hands out its *default*
-vhost certificate — ``CN=www.conab.gov.br`` (the cert it presents to a
-client that sends no SNI, probed 2026-11-25) — for every name. This module
-replays that through the real ``requests`` → ``urllib3`` → ``ssl`` stack: a
-loopback TLS server presents a CA-signed certificate valid only for
-``www.conab.gov.br`` while the fetcher asks for ``localhost``. The positive
-control (same server, a certificate valid for ``localhost``) proves the harness
-is red for the mismatch alone, not for some other handshake fault.
+one IP, and presents ``CN=www.conab.gov.br`` — its default vhost — to a client
+that sends no SNI (probed 2026-11-25). The working hypothesis is that the
+failing runs were handed that default certificate for the portal name; the
+deploy log does not record which certificate was served, which is why the
+classifier now reads it. This module replays the failure through the real
+``requests`` → ``urllib3`` → ``ssl`` stack: a loopback TLS server presents a
+CA-signed certificate for one name while the fetcher asks for ``localhost``.
+The positive control (a certificate valid for ``localhost``) proves the
+harness is red for the mismatch alone.
 
-What is pinned: the layer still fails (verification is never relaxed — no
-call passes ``verify=False``), and the failure is *named*, so the deploy log
-says "CONAB's server presented a certificate for another host" instead of
-"returned no data".
+What is pinned:
+
+* the layer still fails — verification is never relaxed, no call passes
+  ``verify=False``;
+* the failure is *named*, and names CONAB's default vhost only when the
+  served certificate is in fact ``www.conab.gov.br``; any other name is
+  "a certificate for another host" (a DNS hijack, captive portal or
+  intercepting proxy is not CONAB's fault);
+* a different verification failure (unknown CA) keeps its raw text;
+* the certificate-name probe completes a handshake only — no HTTP request
+  reaches the server.
 """
 
 from __future__ import annotations
@@ -107,8 +115,10 @@ def _make_leaf(
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     body: bytes = b""
+    hits: list[str]
 
-    def do_GET(self) -> None:  # noqa: N802 — http.server API
+    def do_GET(self) -> None:
+        self.hits.append(self.path)
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.send_header("Content-Length", str(len(self.body)))
@@ -116,20 +126,28 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(self.body)
 
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: object) -> None:
         pass
+
+
+class _Portal:
+    def __init__(self, base: str, hits: list[str]) -> None:
+        self.base = base
+        self.hits = hits
 
 
 @pytest.fixture()
 def conab_portal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Start a loopback CONAB portal presenting a certificate for ``cert_name``.
 
-    Returns ``serve(cert_name, body) -> base_url``. The test CA is trusted via
-    ``REQUESTS_CA_BUNDLE`` (what ``requests.get`` honours), so a certificate
-    for the right name verifies and one for the wrong name fails on the
-    hostname check alone.
+    Returns ``serve(cert_name, body, trusted=True) -> _Portal``. The test CA
+    is trusted via ``REQUESTS_CA_BUNDLE`` (what ``requests.get`` honours), so
+    a certificate for the right name verifies and one for the wrong name
+    fails on the hostname check alone. ``trusted=False`` signs with a second
+    CA nobody trusts (OpenSSL verify code 20).
     """
     ca_key, ca_cert = _make_ca()
+    rogue_key, rogue_cert = _make_ca()
     ca_path = tmp_path / "ca.pem"
     ca_path.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
     monkeypatch.setenv("REQUESTS_CA_BUNDLE", str(ca_path))
@@ -138,10 +156,12 @@ def conab_portal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     servers: list[http.server.HTTPServer] = []
 
-    def serve(cert_name: str, body: bytes) -> str:
-        key, cert = _make_leaf(ca_key, ca_cert, cert_name)
-        cert_path = tmp_path / f"{cert_name}.pem"
-        key_path = tmp_path / f"{cert_name}.key"
+    def serve(cert_name: str, body: bytes, trusted: bool = True) -> _Portal:
+        signer_key, signer_cert = (ca_key, ca_cert) if trusted else (rogue_key, rogue_cert)
+        key, cert = _make_leaf(signer_key, signer_cert, cert_name)
+        stem = f"{cert_name}-{'trusted' if trusted else 'rogue'}"
+        cert_path = tmp_path / f"{stem}.pem"
+        key_path = tmp_path / f"{stem}.key"
         cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
         key_path.write_bytes(
             key.private_bytes(
@@ -152,12 +172,13 @@ def conab_portal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         )
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(cert_path, key_path)
-        handler = type("H", (_Handler,), {"body": body})
+        hits: list[str] = []
+        handler = type("H", (_Handler,), {"body": body, "hits": hits})
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
         server.socket = ctx.wrap_socket(server.socket, server_side=True)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         servers.append(server)
-        return f"https://localhost:{server.server_address[1]}"
+        return _Portal(f"https://localhost:{server.server_address[1]}", hits)
 
     yield serve
     for server in servers:
@@ -167,7 +188,7 @@ def conab_portal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture()
 def get_calls(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[dict[str, object]]]:
-    """Record every ``requests.get`` kwargs set both fetchers send."""
+    """Record the kwargs of every ``requests.get`` both fetchers send."""
     calls: list[dict[str, object]] = []
     real_get = requests.get
 
@@ -193,33 +214,45 @@ def _assert_verification_never_relaxed(calls: list[dict[str, object]]) -> None:
     assert all(c.get("verify", True) is not False for c in calls), calls
 
 
+def _point_layer15(monkeypatch: pytest.MonkeyPatch, portal: _Portal) -> None:
+    monkeypatch.setattr(conab, "CONAB_URL", f"{portal.base}/downloads/arquivos/SerieHistoricaGraos.txt")
+
+
+def _point_layer15b(monkeypatch: pytest.MonkeyPatch, portal: _Portal) -> None:
+    monkeypatch.setattr(conab_precos, "CONAB_PRECOS_URL", f"{portal.base}/downloads/arquivos/PrecosSemanalUF.txt")
+
+
 # ── Layer 15 ───────────────────────────────────────────────────────────────
 
 def test_layer15_positive_control_correct_vhost_cert_fetches(
     conab_portal, get_calls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base = conab_portal("localhost", _serie_historica())
-    monkeypatch.setattr(conab, "CONAB_URL", f"{base}/downloads/arquivos/SerieHistoricaGraos.txt")
-    df = conab.fetch_conab_estimates()
-    assert not df.empty
+    portal = conab_portal("localhost", _serie_historica())
+    _point_layer15(monkeypatch, portal)
+    result = conab.fetch_conab_estimates()
+    assert result.status == "ok", result.error
+    assert not result.data["national"].empty
     _assert_verification_never_relaxed(get_calls)
 
 
 def test_layer15_default_vhost_cert_fails_named_and_verified(
     conab_portal, get_calls, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    base = conab_portal("www.conab.gov.br", _serie_historica())
-    monkeypatch.setattr(conab, "CONAB_URL", f"{base}/downloads/arquivos/SerieHistoricaGraos.txt")
+    portal = conab_portal("www.conab.gov.br", _serie_historica())
+    _point_layer15(monkeypatch, portal)
     with caplog.at_level("WARNING", logger="fetchers.conab"):
-        df = conab.fetch_conab_estimates()
+        result = conab.fetch_conab_estimates()
 
-    assert df.empty  # the layer still fails — no row from an unverified peer
+    assert result.status == "failed"  # no row from an unverified peer
     _assert_verification_never_relaxed(get_calls)
     assert len(get_calls) == conab.MAX_RETRIES
+    assert portal.hits == [], "a request reached the server despite the failed handshake"
+    assert result.error is not None
+    assert "TLS hostname mismatch" in result.error
+    assert "default-vhost certificate (www.conab.gov.br)" in result.error
+    assert "'localhost'" in result.error
     final = [r for r in caplog.records if r.levelname == "ERROR"]
-    assert final, "no ERROR line for the exhausted retries"
-    assert "TLS hostname mismatch" in final[-1].getMessage()
-    assert "localhost" in final[-1].getMessage()
+    assert final and result.error in final[-1].getMessage()
 
 
 # ── Layer 15b ──────────────────────────────────────────────────────────────
@@ -227,10 +260,8 @@ def test_layer15_default_vhost_cert_fails_named_and_verified(
 def test_layer15b_positive_control_correct_vhost_cert_fetches(
     conab_portal, get_calls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base = conab_portal("localhost", _precos())
-    monkeypatch.setattr(
-        conab_precos, "CONAB_PRECOS_URL", f"{base}/downloads/arquivos/PrecosSemanalUF.txt"
-    )
+    portal = conab_portal("localhost", _precos())
+    _point_layer15b(monkeypatch, portal)
     result = conab_precos.fetch_conab_farmgate()
     assert result.status == "ok", result.error
     _assert_verification_never_relaxed(get_calls)
@@ -239,15 +270,51 @@ def test_layer15b_positive_control_correct_vhost_cert_fetches(
 def test_layer15b_default_vhost_cert_fails_named_and_verified(
     conab_portal, get_calls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base = conab_portal("www.conab.gov.br", b"unused")
-    monkeypatch.setattr(
-        conab_precos, "CONAB_PRECOS_URL", f"{base}/downloads/arquivos/PrecosSemanalUF.txt"
-    )
+    portal = conab_portal("www.conab.gov.br", b"unused")
+    _point_layer15b(monkeypatch, portal)
     result = conab_precos.fetch_conab_farmgate()
 
     assert result.status == "failed"
     _assert_verification_never_relaxed(get_calls)
     assert len(get_calls) == conab_precos.MAX_RETRIES
+    assert portal.hits == []
     assert result.error is not None
     assert "TLS hostname mismatch" in result.error
-    assert "localhost" in result.error
+    assert "default-vhost certificate (www.conab.gov.br)" in result.error
+    assert "'localhost'" in result.error
+
+
+# ── negatives: the classifier must not blame CONAB for what it can't see ──
+
+def test_unrelated_host_cert_is_another_host_not_default_vhost(
+    conab_portal, get_calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A DNS hijack / captive portal / intercepting proxy is not CONAB's vhost."""
+    portal = conab_portal("evil.example", b"unused")
+    _point_layer15b(monkeypatch, portal)
+    result = conab_precos.fetch_conab_farmgate()
+
+    assert result.status == "failed"
+    _assert_verification_never_relaxed(get_calls)
+    assert portal.hits == []
+    assert result.error is not None
+    assert "TLS hostname mismatch" in result.error
+    assert "a certificate for another host (evil.example)" in result.error
+    assert "default-vhost" not in result.error
+
+
+def test_unknown_ca_keeps_raw_verification_text(
+    conab_portal, get_calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify code 20 (untrusted issuer) is not a hostname mismatch."""
+    portal = conab_portal("localhost", b"unused", trusted=False)
+    _point_layer15(monkeypatch, portal)
+    result = conab.fetch_conab_estimates()
+
+    assert result.status == "failed"
+    _assert_verification_never_relaxed(get_calls)
+    assert portal.hits == []
+    assert result.error is not None
+    assert "hostname mismatch" not in result.error.lower()
+    assert "CERTIFICATE_VERIFY_FAILED" in result.error
+    assert "unable to get local issuer certificate" in result.error

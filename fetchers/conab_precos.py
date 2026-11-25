@@ -35,6 +35,7 @@ import pandas as pd
 import requests
 
 from config import (
+    CONAB_DEFAULT_VHOST_CERT_NAME,
     CONAB_FARMGATE_LEVEL_PREFIX,
     CONAB_FARMGATE_PRODUCT,
     CONAB_FARMGATE_SERIES,
@@ -44,8 +45,8 @@ from config import (
     MAX_RETRIES,
     REQUEST_TIMEOUT,
 )
+from fetchers import _tls
 from fetchers._backoff import retry_sleep
-from fetchers.conab import request_failure_reason
 from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
@@ -76,8 +77,8 @@ def _download() -> tuple[str, str]:
     """Download the weekly-price file.
 
     Returns ``(text, "")`` on success, or ``("", reason)`` after exhausted
-    retries — the reason is the last attempt's, named by the shared CONAB
-    classifier so a TLS hostname mismatch says so (#613).
+    retries — the reason is the last attempt's, named by ``fetchers._tls`` so a
+    TLS hostname mismatch says which certificate was served (#613).
     """
     reason = "no attempt completed"
     for attempt in range(1, MAX_RETRIES + 1):
@@ -88,7 +89,13 @@ def _download() -> tuple[str, str]:
             reason = f"HTTP {resp.status_code}" if resp.status_code != 200 else "HTTP 200 with an empty body"
             logger.warning("CONAB prices: %s (attempt %d)", reason, attempt)
         except requests.RequestException as exc:
-            reason = request_failure_reason(exc, CONAB_PRECOS_URL)
+            reason = _tls.request_failure_reason(
+                exc,
+                CONAB_PRECOS_URL,
+                publisher="CONAB's server",
+                default_vhost_name=CONAB_DEFAULT_VHOST_CERT_NAME,
+                timeout=REQUEST_TIMEOUT,
+            )
             logger.warning("CONAB prices attempt %d failed: %s", attempt, exc)
         if attempt < MAX_RETRIES:
             retry_sleep(attempt)

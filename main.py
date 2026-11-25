@@ -1059,19 +1059,20 @@ def _run_custom_layers(results: dict[str, bool]) -> None:
     # Custom: single national DataFrame, not a dict of frames.
     try:
         logger.info("[Layer 15] Fetching CONAB Brazil estimates ...")
-        conab_df = fetch_conab_estimates()
+        conab_result = fetch_conab_estimates()
 
-        if not conab_df.empty:
-            conab_df = clean_conab(conab_df)
+        if conab_result.status == "ok":
+            conab_df = clean_conab(conab_result.data["national"])
             save_brazil_estimates(conab_df)
             # report_date is the file's publication date, so the universal
             # recency gate (A3 #300 §7) is what notices a survey that stops.
             results["conab"] = _finalize_layer("conab", {"national": conab_df}, empty_fails=True)
         else:
             # CONAB's file carries the whole survey history every fetch, so
-            # an empty national frame means the download or the UF
-            # aggregation broke — not "no estimate published" (#175).
-            logger.error("[Layer 15] CONAB returned no data — recording as failed")
+            # no national frame means the download or the UF aggregation
+            # broke — not "no estimate published" (#175). The fetcher's
+            # reason is the line that says which (#613).
+            logger.error("[Layer 15] CONAB failed: %s — recording as failed", conab_result.error)
             _mark_failed("conab")
     except Exception:
         logger.exception("[Layer 15] CONAB failed — see error above")
