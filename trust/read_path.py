@@ -12,7 +12,8 @@ dual-write into a durable ledger, and none exists: ``main.py`` does not import
 exist, and the CI reconcilers write to a per-run temporary directory. An empty
 or missing ledger does not raise, so ``analysis.futures.providers.open_provider``
 does not fall back to v1 — switching the CBOT datasets on today serves empty
-curves ("no accepted trusted revisions for this commodity") to every caller
+curves ("no accepted trusted revisions for this commodity") to every curve
+and quote read; close history, continuous series and FX still read v1
 (#655; whether that should fall back or raise is #239/#312's call).
 
 Three rules:
