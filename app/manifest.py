@@ -70,6 +70,7 @@ def _pipeline_status() -> dict[str, Any]:
 def _coverage() -> list[dict[str, Any]]:
     """Every production layer's freshness, as the regression gate reads it."""
     from config import PRODUCTION_LAYER_KEYS
+    from pipeline.public_view import public_freshness
     from pipeline.query import read_freshness
 
     try:
@@ -94,7 +95,9 @@ def _coverage() -> list[dict[str, Any]]:
 
     coverage = []
     for layer in PRODUCTION_LAYER_KEYS:
-        row = rows.get(layer)
+        # A private layer shows its status only, `skipped_unconfigured` when
+        # it has no row (#659) — never `not-run`, which would call it late.
+        row = public_freshness(layer, rows.get(layer))
         if row is None:
             coverage.append({"layer": layer, "status": "not-run", "observed_at": None,
                              "last_success": None, "rows_fetched": None})
