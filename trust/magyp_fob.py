@@ -297,11 +297,22 @@ def reconcile_magyp_fob(legacy: pd.DataFrame, trusted: pd.DataFrame) -> Reconcil
     )
 
 
+class MagypNonJsonReply(ScraperShapeError):
+    """The body is not JSON at all — an error or interstitial page, not a schema.
+
+    Kept distinct from a schema change (valid JSON, wrong shape): MAGyP has
+    answered HTTP 200 with an HTML page for one day while the same circular
+    served JSON on a retry minutes later (#527), so a caller walking back
+    over days may record this one and keep walking. A schema change is never
+    a single bad reply and still hard-fails wherever it appears.
+    """
+
+
 def posts_from_replay(replay: MagypArtifactReplay) -> list[dict[str, Any]]:
     try:
         payload = json.loads(replay.content.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ScraperShapeError(f"MAGyP FOB: raw artifact is not valid JSON: {exc}") from exc
+        raise MagypNonJsonReply(f"MAGyP FOB: raw artifact is not valid JSON: {exc}") from exc
     if isinstance(payload, list):
         # An unpublished date (holiday, or today's circular not out yet)
         # answers with an empty JSON *array*, not the empty object the v1
@@ -422,6 +433,7 @@ def _utc(value: datetime) -> datetime:
 __all__ = [
     "MagypArtifactReplay",
     "MagypDualWriteResult",
+    "MagypNonJsonReply",
     "MagypTrustedIngestion",
     "PARSER_VERSION",
     "ReconciliationReport",
