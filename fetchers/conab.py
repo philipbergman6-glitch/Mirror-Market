@@ -27,11 +27,33 @@ from email.utils import parsedate_to_datetime
 import pandas as pd
 import requests
 
-from config import CONAB_HEADERS, CONAB_URL, MAX_RETRIES, REQUEST_TIMEOUT
+from config import (
+    CONAB_DEFAULT_VHOST_CERT_NAME,
+    CONAB_HEADERS,
+    CONAB_URL,
+    MAX_RETRIES,
+    REQUEST_TIMEOUT,
+)
+from fetchers import _tls
 from fetchers._backoff import retry_sleep
-from pipeline.results import ScraperShapeError
+from pipeline.results import FetchResult, ScraperShapeError
 
 logger = logging.getLogger(__name__)
+
+
+
+def request_failure_reason(exc: requests.RequestException, url: str) -> str:
+    """Name a failed CONAB request — shared by Layers 15 and 15b (#613).
+
+    Call once per failed run, on the last attempt's exception.
+    """
+    return _tls.request_failure_reason(
+        exc,
+        url,
+        publisher="CONAB's server",
+        timeout=REQUEST_TIMEOUT,
+        default_vhost_name=CONAB_DEFAULT_VHOST_CERT_NAME,
+    )
 
 _REQUIRED_COLUMNS: tuple[str, ...] = (
     "ano_agricola",
@@ -213,16 +235,25 @@ def _melt_to_long(grouped: pd.DataFrame, report_date: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def fetch_conab_estimates() -> pd.DataFrame:
+def _give_up(reason: str) -> FetchResult:
+    logger.error("CONAB estimates: %s", reason)
+    return FetchResult.failed(reason)
+
+
+def fetch_conab_estimates() -> FetchResult:
     """Fetch CONAB historical series data for Brazilian crop estimates.
 
-    Returns a DataFrame with columns:
+    ``ok`` carries one frame under ``"national"`` with columns:
         source, commodity, crop_year, attribute, value, unit, report_date
 
     ``report_date`` is the file's publication date (HTTP ``Last-Modified``),
     not the run date — the series is a monthly survey.
 
-    Empty DataFrame if the download fails or the file schema is unrecognized.
+    ``failed`` carries the reason, logged at ERROR. The file holds the whole
+    survey history, so every no-rows outcome is a failure, never "nothing
+    published" (#175). Causes: the download (named by
+    ``request_failure_reason``, #613), a non-200 on every attempt, or an
+    unrecognised file.
 
     Raises:
         ScraperShapeError: the payload parsed but is not trustworthy — a
@@ -231,66 +262,65 @@ def fetch_conab_estimates() -> pd.DataFrame:
             response. Layer 15 in ``main.py`` records the layer as failed
             rather than storing a poisoned national total.
     """
+    # The last attempt's failure; a transport error is classified once,
+    # after the loop, so a TLS mismatch costs one certificate re-read per run.
+    last_failure: requests.RequestException | str = "no attempt completed"
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info("Fetching CONAB historical series (attempt %d) ...", attempt)
             resp = requests.get(CONAB_URL, headers=CONAB_HEADERS, timeout=REQUEST_TIMEOUT)
-
-            if resp.status_code != 200:
-                logger.warning("HTTP %d for CONAB", resp.status_code)
-                if attempt < MAX_RETRIES:
-                    retry_sleep(attempt)
-                    continue
-                return pd.DataFrame()
-
-            try:
-                df = _parse_csv(resp.text)
-            except (pd.errors.ParserError, ValueError, UnicodeDecodeError) as exc:
-                logger.warning("Could not parse CONAB data: %s", exc)
-                return pd.DataFrame()
-
-            if df.empty:
-                logger.info("CONAB data parsed but empty.")
-                return pd.DataFrame()
-
-            # Normalize column names
-            df.columns = [c.strip().lower() for c in df.columns]
-
-            missing = [c for c in _REQUIRED_COLUMNS if c not in df.columns]
-            if missing:
-                logger.error(
-                    "CONAB schema unrecognized — missing columns %s. Got: %s",
-                    missing, list(df.columns),
-                )
-                return pd.DataFrame()
-
-            grouped = _aggregate_national(df)
-            if grouped.empty:
-                logger.info(
-                    "CONAB data parsed but no target commodities found "
-                    "(looked for %s).", sorted(_COMMODITY_MAP),
-                )
-                return pd.DataFrame()
-
-            report_date = _report_date_from_headers(resp.headers)
-            result = _melt_to_long(grouped, report_date=report_date)
-            logger.info(
-                "Parsed %d CONAB estimate rows across %d (year, commodity) "
-                "pairs, published %s.",
-                len(result), len(grouped), report_date,
-            )
-            return result
-
         except requests.RequestException as exc:
+            last_failure = exc
             logger.warning("CONAB attempt %d failed: %s", attempt, exc)
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
+            continue
 
-    logger.error("All %d attempts failed for CONAB", MAX_RETRIES)
-    return pd.DataFrame()
+        if resp.status_code != 200:
+            last_failure = f"HTTP {resp.status_code}"
+            logger.warning("HTTP %d for CONAB (attempt %d)", resp.status_code, attempt)
+            if attempt < MAX_RETRIES:
+                retry_sleep(attempt)
+            continue
+
+        try:
+            df = _parse_csv(resp.text)
+        except (pd.errors.ParserError, ValueError, UnicodeDecodeError) as exc:
+            return _give_up(f"could not parse CONAB data: {exc}")
+
+        if df.empty:
+            return _give_up("CONAB data parsed but empty")
+
+        # Normalize column names
+        df.columns = [c.strip().lower() for c in df.columns]
+
+        missing = [c for c in _REQUIRED_COLUMNS if c not in df.columns]
+        if missing:
+            return _give_up(
+                f"CONAB schema unrecognized — missing columns {missing}; got {list(df.columns)}"
+            )
+
+        grouped = _aggregate_national(df)
+        if grouped.empty:
+            return _give_up(
+                f"CONAB data parsed but no target commodities found (looked for {sorted(_COMMODITY_MAP)})"
+            )
+
+        report_date = _report_date_from_headers(resp.headers)
+        result = _melt_to_long(grouped, report_date=report_date)
+        logger.info(
+            "Parsed %d CONAB estimate rows across %d (year, commodity) "
+            "pairs, published %s.",
+            len(result), len(grouped), report_date,
+        )
+        return FetchResult.ok({"national": result})
+
+    if isinstance(last_failure, requests.RequestException):
+        last_failure = request_failure_reason(last_failure, CONAB_URL)
+    return _give_up(f"all {MAX_RETRIES} attempts failed — {last_failure}")
 
 
-__all__: Sequence[str] = ("fetch_conab_estimates",)
+__all__: Sequence[str] = ("fetch_conab_estimates", "request_failure_reason")
 
 
 # ── Quick self-test ─────────────────────────────────────────────────
@@ -298,10 +328,11 @@ if __name__ == "__main__":
     from config import setup_logging
     setup_logging()
 
-    data = fetch_conab_estimates()
-    if data.empty:
-        logger.info("CONAB: no data returned")
+    fetched = fetch_conab_estimates()
+    if fetched.status != "ok":
+        logger.info("CONAB: %s", fetched.error)
     else:
+        data = fetched.data["national"]
         logger.info("CONAB: %d rows", len(data))
         latest_year = data["crop_year"].max()
         logger.info("Latest crop year: %s", latest_year)

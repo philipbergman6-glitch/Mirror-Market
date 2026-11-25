@@ -492,7 +492,9 @@ def _counterparties(ranking: OriginRanking, today: date) -> dict:
 def _inputs(ranking: OriginRanking, assumptions: AssumptionSet, today: date) -> dict:
     live = assumptions.live(today)
     lapsing = assumptions.expiring_within(30, on=today)
-    expired = [a for a in assumptions.assumptions if not a.is_live(today)]
+    expired = [
+        a for a in assumptions.assumptions if not a.is_live(today) and not a.is_retired(today)
+    ]
     used = {
         step["assumption_id"]
         for row in ranking.rows
@@ -695,6 +697,17 @@ def build_view(
         "default_window": views[default_index]["key"],
         "method_version": config.LANDED_COST_METHOD_VERSION,
         "assumption_set_id": assumptions.set_id,
+        # The lapsed-input display (#410): the dead value, its dates, its owner
+        # and the renewal command. PRIVATE EDITION ONLY, decided here rather
+        # than in the template, so a public context never holds it at all —
+        # not even for a committed policy rate.
+        "lapsed_inputs": (
+            {
+                item.assumption.id: item.to_dict()
+                for item in readiness_mod.lapsed_inputs(assumptions, today=today)
+            }
+            if audience == AUDIENCE_PRIVATE else {}
+        ),
         "rankings": rankings,
         "selector_note": (
             "This is a static page: every window below was costed when it was "
