@@ -17,6 +17,7 @@ Key concepts for learning:
 import json
 import logging
 import time
+from collections.abc import Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
@@ -32,6 +33,7 @@ from config import (
     WEATHER_SECOND_PASS_DELAY_S,
 )
 from fetchers._backoff import retry_sleep
+from pipeline.results import UpstreamRateLimited
 
 logger = logging.getLogger(__name__)
 
@@ -48,22 +50,8 @@ def fetch_region_weather(
     """
     Fetch recent history + forecast for a single growing region.
 
-    Open-Meteo's forecast endpoint can return both past data and
-    future forecasts in a single request — very convenient.
-
-    Parameters
-    ----------
-    region_name : str
-        Human-readable name (for logging).
-    lat, lon : float
-        WGS84 coordinates of the region center.
-    past_days : int
-        Days of recent history to include (max 92).
-    forecast_days : int
-        Days of forecast to include (max 16).
-    now : pd.Timestamp, optional
-        Timezone-aware wall clock (default: the current UTC instant). The
-        test seam for the day boundary.
+    A batch of one (see `_fetch_batch`): the production path asks for every
+    pin in one request, this is the single-pin view of the same parse.
 
     Returns
     -------
@@ -79,15 +67,44 @@ def fetch_region_weather(
     ValueError
         `now` is naive, or the response names no resolvable timezone — the
         day boundary cannot be placed without one.
+    UpstreamRateLimited
+        Open-Meteo refused the request for quota (HTTP 429) — never retried.
+    """
+    regions = {region_name: {"lat": lat, "lon": lon}}
+    return _fetch_batch(
+        regions, now, past_days=past_days, forecast_days=forecast_days,
+    )[region_name]
+
+
+def _fetch_batch(
+    regions: Mapping[str, Mapping[str, float]],
+    now: pd.Timestamp | None,
+    *,
+    past_days: int = 30,
+    forecast_days: int = 7,
+) -> dict[str, pd.DataFrame]:
+    """One Open-Meteo request for every pin in `regions` (#637).
+
+    Open-Meteo takes comma-separated coordinates and answers a list in
+    request order, each entry carrying its own `timezone` (`timezone=auto`
+    resolves per location) and, from the second entry on, a `location_id`.
+    The quota cost is unchanged — weight is summed per location, 1 call per
+    pin at 3 variables × 37 days — but a run is 1 HTTP request instead of
+    24, and a refused run 1 instead of 144.
+
+    Transport failures (timeout, 5xx, a concurrency 429) are retried with
+    backoff; after MAX_RETRIES every pin comes back empty for the caller's
+    second pass. A quota 429 raises `UpstreamRateLimited` at once.
     """
     if now is None:
         now = pd.Timestamp.now(tz="UTC")
     if now.tzinfo is None:
         raise ValueError("fetch_region_weather: `now` must be timezone-aware")
 
+    names = list(regions)
     params: dict[str, str | float | int] = {
-        "latitude":      lat,
-        "longitude":     lon,
+        "latitude":      ",".join(str(regions[n]["lat"]) for n in names),
+        "longitude":     ",".join(str(regions[n]["lon"]) for n in names),
         "daily":         WEATHER_DAILY_VARS,
         "past_days":     past_days,
         "forecast_days": forecast_days,
@@ -97,8 +114,8 @@ def fetch_region_weather(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info(
-                "Requesting weather for %s (attempt %d) ...",
-                region_name, attempt,
+                "Requesting weather for %d region(s) in one request (attempt %d) ...",
+                len(names), attempt,
             )
             resp = requests.get(
                 OPENMETEO_FORECAST_URL,
@@ -106,58 +123,158 @@ def fetch_region_weather(
                 timeout=REQUEST_TIMEOUT,
             )
 
+            if resp.status_code == 429:
+                upstream = _upstream_reason(resp)
+                if _is_concurrency_rejection(upstream):
+                    # Queue pressure on the shared IP, not a quota: uncharged,
+                    # and it clears as earlier requests finish.
+                    logger.warning("HTTP 429 (concurrency): %s", upstream)
+                    if attempt < MAX_RETRIES:
+                        retry_sleep(attempt)
+                        continue
+                    break
+                raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream))
+
             if resp.status_code != 200:
                 logger.warning("HTTP %d: %s", resp.status_code, resp.text[:200])
                 if attempt < MAX_RETRIES:
                     retry_sleep(attempt)
                     continue
-                return pd.DataFrame()
+                break
 
-            data = resp.json()
-            daily = data.get("daily", {})
-
-            if not daily or "time" not in daily:
-                logger.warning("No daily data in response for %s", region_name)
-                return pd.DataFrame()
-
-            df = pd.DataFrame({
-                "Date":          daily["time"],
-                "temp_max":      daily.get("temperature_2m_max"),
-                "temp_min":      daily.get("temperature_2m_min"),
-                "precipitation": daily.get("precipitation_sum"),
-            })
-
-            # `time` is the pin's local calendar (timezone=auto), so today is
-            # the pin's today, not the runner's. Today itself is a running
-            # total — unfinished max, partial precip sum — so it is flagged
-            # with the forecast rows: the elapsed side ends at D−1, and the
-            # 08:00 and 23:30 UTC slots no longer disagree about an
-            # "observed" day. Downstream z-scores and alerts exclude both.
-            pin_today = _pin_today(region_name, data.get("timezone"), now)
-            df["is_forecast"] = (
-                pd.to_datetime(df["Date"]) >= pin_today
-            ).astype(int)
-            df["basis"] = OPENMETEO_BASIS
-
-            logger.info(
-                "Got %d days of weather for %s (%.1f°, %.1f°)",
-                len(df), region_name, lat, lon,
-            )
-            return df
+            _log_quota(resp)
+            return _parse_batch(names, regions, resp.json(), now)
 
         except (requests.RequestException, json.JSONDecodeError) as exc:
             logger.warning(
-                "Attempt %d/%d failed for weather %s: %s",
-                attempt, MAX_RETRIES, region_name, exc,
+                "Attempt %d/%d failed for weather (%d regions): %s",
+                attempt, MAX_RETRIES, len(names), exc,
             )
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
 
     logger.error(
-        "All %d attempts failed for weather %s — returning empty DataFrame",
-        MAX_RETRIES, region_name,
+        "All %d attempts failed for weather (%s) — returning empty DataFrames",
+        MAX_RETRIES, ", ".join(names),
     )
-    return pd.DataFrame()
+    return {name: pd.DataFrame() for name in names}
+
+
+def _parse_batch(
+    names: list[str],
+    regions: Mapping[str, Mapping[str, float]],
+    payload: object,
+    now: pd.Timestamp,
+) -> dict[str, pd.DataFrame]:
+    """Map a (multi-)location response back onto the pins, by position.
+
+    One location answers an object, several a list. Hard-fails on a count
+    or `location_id` that does not match the request: a mis-mapped entry
+    would put one region's rain on another's card (invariant 11).
+    """
+    entries = payload if isinstance(payload, list) else [payload]
+    if len(entries) != len(names):
+        raise ValueError(
+            f"Open-Meteo answered {len(entries)} location(s) for {len(names)} "
+            "requested; the pins cannot be matched to the response"
+        )
+    out: dict[str, pd.DataFrame] = {}
+    for index, (name, entry) in enumerate(zip(names, entries, strict=True)):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Open-Meteo entry {index} for {name} is not an object")
+        location_id = entry.get("location_id")
+        if location_id is not None and location_id != index:
+            raise ValueError(
+                f"Open-Meteo entry {index} for {name} carries location_id "
+                f"{location_id!r}; the response is not in request order"
+            )
+        out[name] = _region_frame(name, regions[name], entry, now)
+    return out
+
+
+def _region_frame(
+    region_name: str,
+    coords: Mapping[str, float],
+    data: dict,
+    now: pd.Timestamp,
+) -> pd.DataFrame:
+    daily = data.get("daily", {})
+    if not daily or "time" not in daily:
+        logger.warning("No daily data in response for %s", region_name)
+        return pd.DataFrame()
+
+    df = pd.DataFrame({
+        "Date":          daily["time"],
+        "temp_max":      daily.get("temperature_2m_max"),
+        "temp_min":      daily.get("temperature_2m_min"),
+        "precipitation": daily.get("precipitation_sum"),
+    })
+
+    # `time` is the pin's local calendar (timezone=auto), so today is
+    # the pin's today, not the runner's. Today itself is a running
+    # total — unfinished max, partial precip sum — so it is flagged
+    # with the forecast rows: the elapsed side ends at D−1, and the
+    # 08:00 and 23:30 UTC slots no longer disagree about an
+    # "observed" day. Downstream z-scores and alerts exclude both.
+    pin_today = _pin_today(region_name, data.get("timezone"), now)
+    df["is_forecast"] = (
+        pd.to_datetime(df["Date"]) >= pin_today
+    ).astype(int)
+    df["basis"] = OPENMETEO_BASIS
+
+    logger.info(
+        "Got %d days of weather for %s (%.1f°, %.1f°)",
+        len(df), region_name, coords["lat"], coords["lon"],
+    )
+    return df
+
+
+def _upstream_reason(resp: requests.Response) -> str:
+    """Open-Meteo's own `reason` text, or the raw body when it sent none."""
+    try:
+        body = resp.json()
+    except (ValueError, json.JSONDecodeError):
+        body = None
+    if isinstance(body, dict) and isinstance(body.get("reason"), str):
+        return body["reason"]
+    return (resp.text or "").strip()[:200] or "(no reason given)"
+
+
+def _is_concurrency_rejection(reason: str) -> bool:
+    return "concurrent" in reason.lower()
+
+
+def _rate_limit_reason(resp: requests.Response, upstream: str) -> str:
+    """The `rate_limited` reason a reader sees: what, until when, and why it is shared."""
+    parts = [f"Open-Meteo HTTP 429: {upstream}"]
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
+        parts.append(f"Retry-After {retry_after} s")
+    window = resp.headers.get("X-RateLimit-Window")
+    if window:
+        parts.append(f"window {window} s")
+    parts.append(
+        "the free quota is shared per outgoing IP, and GitHub runners share IPs"
+    )
+    return " — ".join(parts)
+
+
+def _log_quota(resp: requests.Response) -> None:
+    """Record what the request cost and what the shared quota has left.
+
+    Open-Meteo reports both on every free-API answer (`X-RateLimit-Cost`,
+    `X-RateLimit-Remaining`, `X-RateLimit-Window`); logging them is how a
+    run says how close the shared IP was to the wall.
+    """
+    headers = resp.headers
+    cost = headers.get("X-RateLimit-Cost")
+    remaining = headers.get("X-RateLimit-Remaining")
+    if cost is None and remaining is None:
+        return
+    logger.info(
+        "Open-Meteo quota: this request cost %s call(s); %s remaining in the %s s window",
+        cost or "?", remaining or "?", headers.get("X-RateLimit-Window") or "?",
+    )
 
 
 def _pin_today(region_name: str, timezone: object, now: pd.Timestamp) -> pd.Timestamp:
@@ -177,27 +294,29 @@ def _pin_today(region_name: str, timezone: object, now: pd.Timestamp) -> pd.Time
     return now.tz_convert(tz).normalize().tz_localize(None)
 
 
-def fetch_all_regions() -> dict[str, pd.DataFrame]:
+def fetch_all_regions(*, now: pd.Timestamp | None = None) -> dict[str, pd.DataFrame]:
     """
     Fetch weather for every growing region in config.GROWING_REGIONS.
+
+    One batched request (#637), then — only for pins it left empty — one
+    more batched request after `WEATHER_SECOND_PASS_DELAY_S` (#577).
 
     Returns
     -------
     dict[str, pd.DataFrame]
         {region_name: DataFrame} — past 30 days + 7-day forecast.
+
+    Raises
+    ------
+    UpstreamRateLimited
+        A quota 429 on either pass; it carries the rows the first pass got.
     """
-    results = {}
-    for region_name, coords in GROWING_REGIONS.items():
-        df = fetch_region_weather(
-            region_name,
-            lat=coords["lat"],
-            lon=coords["lon"],
-        )
-        results[region_name] = df
+    results = _fetch_batch(GROWING_REGIONS, now)
 
     # Second pass (#577): transient upstream throttling, not the region,
     # explains a key lost to all retries — so retry it once the window has
-    # had time to clear. A key still empty after this stays empty.
+    # had time to clear. A key still empty after this stays empty. A quota
+    # refusal never gets here: retrying it answers the same 429.
     missing = [name for name, df in results.items() if df.empty]
     if missing:
         logger.warning(
@@ -205,11 +324,13 @@ def fetch_all_regions() -> dict[str, pd.DataFrame]:
             len(missing), ", ".join(missing), WEATHER_SECOND_PASS_DELAY_S,
         )
         time.sleep(WEATHER_SECOND_PASS_DELAY_S)
-        for region_name in missing:
-            coords = GROWING_REGIONS[region_name]
-            results[region_name] = fetch_region_weather(
-                region_name, lat=coords["lat"], lon=coords["lon"],
-            )
+        try:
+            results.update(_fetch_batch({n: GROWING_REGIONS[n] for n in missing}, now))
+        except UpstreamRateLimited as exc:
+            raise UpstreamRateLimited(
+                exc.layer, exc.reason,
+                data={n: df for n, df in results.items() if not df.empty},
+            ) from exc
     return results
 
 
