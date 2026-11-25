@@ -32,6 +32,7 @@ from config import (
     OPENMETEO_BASIS,
     OPENMETEO_FORECAST_PATH,
     OPENMETEO_FORECAST_URL,
+    OPENMETEO_GRID_MATCH_MAX_DEG,
     OPENMETEO_PROXY_TOKEN_ENV,
     OPENMETEO_PROXY_URL_ENV,
     REQUEST_TIMEOUT,
@@ -244,9 +245,12 @@ def _parse_batch(
 ) -> dict[str, pd.DataFrame]:
     """Map a (multi-)location response back onto the pins, by position.
 
-    One location answers an object, several a list. Hard-fails on a count
-    or `location_id` that does not match the request: a mis-mapped entry
-    would put one region's rain on another's card (invariant 11).
+    One location answers an object, several a list. Hard-fails on a count,
+    a `location_id`, or a returned grid cell that does not match the request:
+    a mis-mapped entry would put one region's rain on another's card
+    (invariant 11). The coordinate check is what holds when `location_id` is
+    absent — Open-Meteo documents it for CSV/XLSX only, and entry 0 never
+    carries one.
     """
     entries = payload if isinstance(payload, list) else [payload]
     if len(entries) != len(names):
@@ -264,8 +268,26 @@ def _parse_batch(
                 f"Open-Meteo entry {index} for {name} carries location_id "
                 f"{location_id!r}; the response is not in request order"
             )
+        _check_grid_cell(index, name, regions[name], entry)
         out[name] = _region_frame(name, regions[name], entry, now)
     return out
+
+
+def _check_grid_cell(index: int, name: str, pin: Mapping[str, float], entry: dict) -> None:
+    """The entry's grid cell must be the pin's: within the snap tolerance on both axes."""
+    lat, lon = entry.get("latitude"), entry.get("longitude")
+    if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        raise ValueError(
+            f"Open-Meteo entry {index} for {name} names no grid cell "
+            f"(latitude {lat!r}, longitude {lon!r}); it cannot be matched to the pin"
+        )
+    if (abs(lat - pin["lat"]) > OPENMETEO_GRID_MATCH_MAX_DEG
+            or abs(lon - pin["lon"]) > OPENMETEO_GRID_MATCH_MAX_DEG):
+        raise ValueError(
+            f"Open-Meteo entry {index} for {name} answers grid cell ({lat}, {lon}), "
+            f"more than {OPENMETEO_GRID_MATCH_MAX_DEG}° from the pin ({pin['lat']}, {pin['lon']}); "
+            "the response is not in request order"
+        )
 
 
 def _region_frame(

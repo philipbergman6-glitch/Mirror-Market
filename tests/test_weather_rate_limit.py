@@ -137,6 +137,41 @@ def test_a_batch_whose_location_ids_are_out_of_order_hard_fails(http, no_sleep):
         weather.fetch_all_regions(now=NOW)
 
 
+def test_a_reordered_batch_with_no_location_ids_hard_fails_on_coordinates(http, no_sleep):
+    # Review of #658: Open-Meteo documents `location_id` for CSV/XLSX only, and
+    # entry 0 never carries one. Without ids, order is checked by coordinates:
+    # each entry's grid cell must sit by the pin it is matched to.
+    swapped = [{k: v for k, v in entry.items() if k != "location_id"} for entry in BATCH]
+    swapped[0], swapped[1] = swapped[1], swapped[0]
+    _calls, queue = http
+    queue.append(_resp(200, swapped))
+    with pytest.raises(ValueError, match="grid cell"):
+        weather.fetch_all_regions(now=NOW)
+
+
+def test_an_entry_whose_grid_cell_is_far_from_its_pin_hard_fails(http, no_sleep):
+    moved = [dict(entry) for entry in BATCH]
+    moved[5]["latitude"] = moved[5]["latitude"] + 1.0
+    _calls, queue = http
+    queue.append(_resp(200, moved))
+    with pytest.raises(ValueError, match="grid cell"):
+        weather.fetch_all_regions(now=NOW)
+
+
+def test_the_grid_tolerance_tolerates_snapping_and_cannot_fit_two_pins():
+    # Recorded snap (pin → returned grid-cell centre) is at most ~0.05°; the
+    # tolerance must admit that, and be under half the closest pin spacing so
+    # no grid cell can match two pins.
+    tol = config.OPENMETEO_GRID_MATCH_MAX_DEG
+    pins = list(config.GROWING_REGIONS.values())
+    snap = max(max(abs(e["latitude"] - p["lat"]), abs(e["longitude"] - p["lon"])) for e, p in zip(BATCH, pins, strict=True))
+    spacing = min(
+        max(abs(a["lat"] - b["lat"]), abs(a["lon"] - b["lon"]))
+        for i, a in enumerate(pins) for b in pins[i + 1:]
+    )
+    assert snap < tol < spacing / 2
+
+
 def test_a_transient_miss_is_retried_as_one_batch_after_the_pause(http, no_sleep):
     """#577 still holds: a lost first pass gets one batched second pass."""
     import requests

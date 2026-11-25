@@ -468,6 +468,13 @@ OPENMETEO_FORECAST_PATH = "/v1/forecast"
 # lighting "1 data critical" on every masthead. Regions still empty after
 # the first pass get one more pass after this pause.
 WEATHER_SECOND_PASS_DELAY_S = 60
+# A batched Open-Meteo answer (#637) is matched to the pins by position; each
+# entry's returned coordinates must also sit within this many degrees (lat and
+# lon each) of its pin, or the batch hard-fails. Open-Meteo answers the centre
+# of the model grid cell, "a few kilometres away" (open-meteo.com/en/docs):
+# the recorded 2026-11-25 batch snaps at most 0.052°. The closest two pins are
+# 2.6° apart, so a cell can never match two pins (pinned by test).
+OPENMETEO_GRID_MATCH_MAX_DEG = 0.5
 # What a Layer 5 row is (B15 #455). Open-Meteo's forecast endpoint serves
 # weather-model output for its past days too — model analysis, not station
 # readings — so every row, elapsed or ahead, is an estimate. Same honesty as
