@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- AL1 #640 verifier fixture: the structure of a rendered markets/dalian.html
+     (blocks 01 and 05, locators as the product emits them), with SYNTHETIC
+     leg values. @USD_PER_CNY@, @CNY_PER_USD@ and @FX_AS_OF@ are filled per
+     test case. -->
+<meta name="mirror-market-generated-at" content="2026-11-24T19:24:28+00:00">
+<title>Dalian · Mirror Market</title>
+<script>var notANumber = "as of 1999-01-01 0.9999 USD per CNY";</script>
+</head>
+<body>
+<section class="block" data-verify-stratum="2" id="block-price">
+<div class="block-head"><span class="block-no">01</span><h2>Local price</h2><span class="kind">board · delayed close</span></div>
+<div class="grid grid-3">
+<div class="mc" data-verify-leg="DCE Soybean No.2">
+<div class="mc-label">DCE Soybean No.2 · headline</div>
+<div class="mc-delta muted">imported/GMO crush bean</div>
+<div class="mc-val">$570.0<small class="muted"> /MT</small></div>
+<div class="mc-delta muted">3,800.00 CNY/MT</div>
+<div class="caption">as of 2026-11-24</div>
+</div>
+<div class="mc" data-verify-leg="DCE Soybean Oil">
+<div class="mc-label">DCE Soybean Oil</div>
+<div class="mc-val">$1,290.0<small class="muted"> /MT</small></div>
+<div class="mc-delta muted">8,600.00 CNY/MT</div>
+<div class="caption">as of 2026-11-24</div>
+</div>
+<div class="mc" data-verify-leg="DCE Soybean Meal">
+<div class="mc-label">DCE Soybean Meal</div>
+<div class="mc-val">$450.0<small class="muted"> /MT</small></div>
+<div class="mc-delta muted">3,000.00 CNY/MT</div>
+<div class="caption">as of 2026-11-24</div>
+</div>
+</div>
+</section>
+<section class="block" data-verify-stratum="6" id="block-currency">
+<div class="block-head"><span class="block-no">05</span><h2>Currency</h2></div>
+<div class="grid grid-3">
+<div class="mc" data-verify-figure="fx-rate" data-verify-series="CNY/USD">
+<div class="mc-label">CNY/USD</div>
+<div class="mc-val">@USD_PER_CNY@</div>
+<div class="mc-delta muted">USD per CNY</div>
+<div class="caption">as of @FX_AS_OF@</div>
+</div>
+<div class="mc" data-verify-figure="fx-rate" data-verify-series="CNY/USD">
+<div class="mc-label">CNY per USD</div>
+<div class="mc-val">@CNY_PER_USD@</div>
+</div>
+<div class="mc">
+<div class="mc-label">Move</div>
+<div class="mc-val"><span class="up">+0.1%</span></div>
+</div>
+</div>
+</section>
+</body>
+</html>

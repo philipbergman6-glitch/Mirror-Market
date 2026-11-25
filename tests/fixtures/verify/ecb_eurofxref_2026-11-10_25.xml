@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trimmed copy of https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml, fetched 2026-11-25: reference dates 2026-11-10..2026-11-25, currencies USD/CNY/BRL/INR/ZAR only. Source: ECB. -->
+<gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref"><gesmes:subject>Reference rates</gesmes:subject><gesmes:Sender><gesmes:name>European Central Bank</gesmes:name></gesmes:Sender><Cube>
+<Cube time="2026-11-25"><Cube currency="USD" rate="1.0935"/><Cube currency="BRL" rate="6.4531"/><Cube currency="CNY" rate="7.2999"/><Cube currency="INR" rate="100.859"/><Cube currency="ZAR" rate="19.3514"/></Cube>
+<Cube time="2026-11-24"><Cube currency="USD" rate="1.0963"/><Cube currency="BRL" rate="6.4349"/><Cube currency="CNY" rate="7.3063"/><Cube currency="INR" rate="101.867"/><Cube currency="ZAR" rate="19.2333"/></Cube>
+<Cube time="2026-11-23"><Cube currency="USD" rate="1.0939"/><Cube currency="BRL" rate="6.5611"/><Cube currency="CNY" rate="7.2905"/><Cube currency="INR" rate="101.6395"/><Cube currency="ZAR" rate="19.1513"/></Cube>
+<Cube time="2026-11-20"><Cube currency="USD" rate="1.099"/><Cube currency="BRL" rate="6.5259"/><Cube currency="CNY" rate="7.3388"/><Cube currency="INR" rate="101.85"/><Cube currency="ZAR" rate="19.1987"/></Cube>
+<Cube time="2026-11-19"><Cube currency="USD" rate="1.0992"/><Cube currency="BRL" rate="6.4765"/><Cube currency="CNY" rate="7.328"/><Cube currency="INR" rate="102.55"/><Cube currency="ZAR" rate="18.9948"/></Cube>
+<Cube time="2026-11-18"><Cube currency="USD" rate="1.0968"/><Cube currency="BRL" rate="6.3818"/><Cube currency="CNY" rate="7.3126"/><Cube currency="INR" rate="102.4905"/><Cube currency="ZAR" rate="18.8897"/></Cube>
+<Cube time="2026-11-17"><Cube currency="USD" rate="1.0989"/><Cube currency="BRL" rate="6.3539"/><Cube currency="CNY" rate="7.3254"/><Cube currency="INR" rate="102.72"/><Cube currency="ZAR" rate="18.6073"/></Cube>
+<Cube time="2026-11-16"><Cube currency="USD" rate="1.1014"/><Cube currency="BRL" rate="6.2838"/><Cube currency="CNY" rate="7.3425"/><Cube currency="INR" rate="103.452"/><Cube currency="ZAR" rate="18.661"/></Cube>
+<Cube time="2026-11-13"><Cube currency="USD" rate="1.1052"/><Cube currency="BRL" rate="6.2595"/><Cube currency="CNY" rate="7.3738"/><Cube currency="INR" rate="104.1575"/><Cube currency="ZAR" rate="18.7481"/></Cube>
+<Cube time="2026-11-12"><Cube currency="USD" rate="1.1081"/><Cube currency="BRL" rate="6.2241"/><Cube currency="CNY" rate="7.3891"/><Cube currency="INR" rate="104.2118"/><Cube currency="ZAR" rate="18.5219"/></Cube>
+<Cube time="2026-11-11"><Cube currency="USD" rate="1.1127"/><Cube currency="BRL" rate="6.1827"/><Cube currency="CNY" rate="7.4225"/><Cube currency="INR" rate="104.254"/><Cube currency="ZAR" rate="18.4307"/></Cube>
+<Cube time="2026-11-10"><Cube currency="USD" rate="1.1214"/><Cube currency="BRL" rate="6.2257"/><Cube currency="CNY" rate="7.4801"/><Cube currency="INR" rate="105.3315"/><Cube currency="ZAR" rate="18.3861"/></Cube>
+</Cube></gesmes:Envelope>

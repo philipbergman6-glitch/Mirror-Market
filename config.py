@@ -4762,6 +4762,25 @@ AVAILABILITY_BASKET_BLOCKS: dict[tuple[str, str], int] = {
     ("dalian", "crush"): 7,
 }
 
+# The basket-grade blocks whose rendered numbers carry verifier locators
+# (AL1 #640, spec #639 "Locator seam"). Every basket-grade section names its
+# stratum; a block here also marks each number in it — the FX rate cards
+# (`data-verify-figure="fx-rate"`) and the price-leg cards
+# (`data-verify-leg`), whose home prints are the legs an FX rate moves. A
+# locator finds an element and asserts nothing: the verifier reads value,
+# unit and date from the visible text. Later strata tickets (#643–#650) grow
+# this set until it equals AVAILABILITY_BASKET_BLOCKS;
+# tests/test_verify_locators.py fails when a block here renders without them.
+VERIFY_LOCATED_BLOCKS: frozenset[tuple[str, str]] = frozenset({
+    ("brazil", "currency"),
+    ("dalian", "currency"),
+    ("india", "currency"),
+    ("south_africa", "currency"),
+    ("dalian", "price"),
+    ("brazil", "price"),
+    ("argentina", "price"),
+})
+
 # Scheduled-workflow inactivity clock (#6). GitHub disables a public repo's
 # scheduled workflows after this many days with "no repository activity" — the
 # July 2026 outage. Its docs never say whether the deploy's daily

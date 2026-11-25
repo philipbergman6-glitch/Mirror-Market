@@ -66,6 +66,7 @@ run 45554387714 (`manifest.json`, `index.html`, `briefing.html` read
 | Point weather alerts | `analysis/weather_alerts.py` under "Analyze"; #355 | `analysis/weather_alerts.py`, `fetchers/weather.py`, `pipeline/clean.py` | `tests/test_weather_agronomics.py`, `tests/test_weather_alert_parity.py` | deploy-dashboard.yml | B14–B17 (#454–#457) closed. 2026-10-19, run 39270866701: `weather` `usable_partial` for 4 consecutive runs (Argentina Buenos Aires sunflower, Nigeria Benue missing). 2026-11-25, run 45536043506 graded `weather` succeeded. Live headline the same day: "US Midwest (Iowa): Dry conditions — watch soil moisture (2026-11-23)" and "US Nebraska: Dry spell — 20 consecutive days <1mm"; the briefing prints "India Madhya Pradesh — Dry spell — 35 consecutive days <1mm". These are rules firing on production data, not checked against ground observation. The 30-day deficit rule is still dark: "not assessed: 8 of 45 observed days needed" | operationally verified |
 | Cyclone hazard flags | `docs/specs/cyclone-hazard-flags.md` (#374) | `fetchers/cyclones.py`, `analysis/hazards.py` | `tests/test_fetcher_cyclones.py`, `tests/test_hazards.py`, `tests/test_hazard_archive.py` | deploy-dashboard.yml (two layers) | Run 38361825223, the first full run after #452: both cyclone layers succeeded; live `markets/cbot.html` "Storms — the port leg · checked 07:31Z 13 Oct". One green run, no streak yet | operationally verified |
 | Source reliability record and dead-source relay | `docs/plans/source-reliability-a19.md`; A19 #518, B34 #520, B36 #533 (window restart), B37 #534 (basket covers every table a basket-grade block strikes on), B38 #535 (filed under the run's own evidence), #518 any-success session rule (owner, 2026-11-25); "Git-based history persistence" | `pipeline/layer_runs.py`, `pipeline/reliability.py`, `scripts/record_layer_runs.py`, `scripts/ci_dead_source.py`, `reliability` block in `app/manifest.py`; basket `config.AVAILABILITY_BASKET` + `AVAILABILITY_BASKET_BLOCKS`, reads derived by `block_reads` in `app/markets.py` | `tests/test_layer_runs.py`, `tests/test_reliability.py`, `tests/test_record_layer_runs.py`, `tests/test_availability_basket.py`, basket-grade builder reads in `tests/test_market_blocks.py` | deploy-dashboard.yml "Record layer runs" + "Relay dead sources" (main runs, retries included) | 2026-10-19: first records 2007832 (run 39250830567 attempt 2), f98a4ea (39256327033) and 85ba758 (39270866701). 85ba758 is the first filed under `run_evidence`: 39 rows, one per roster layer, and 0 `skipped_unconfigured` with every key configured. Live manifest, 2026-11-25: `reliability.state` `ok` over sessions 2026-11-13 → 2026-11-23 (7 of the 30-session target; `restarted_at` 2026-11-13, `restart_gap` 4), 7/7 sessions with an edition; T1 and T2 not met, T3 and T4 met; every basket layer 100% except `magyp_fob` 85.7%. 2026-11-25: session rule changed from last-run-wins to any-success with `failed_runs` per layer (#518), tested in `tests/test_reliability.py`, not yet in a deployed manifest; the live-manifest figures above were computed under last-run-wins. The relay first fired 2026-10-20 (run 39504764196 → #566, `india_domestic`); that streak opened at the record's first session, which the relay then printed as the outage's start, so a streak from the record start now reads as a floor (#566). Append-only, after B42 #555: record commit 9a06ef9 (run 45536043506, 2026-11-25) adds 41 lines to `layer_runs.csv` and deletes none | operationally verified |
+| Accuracy ledger (independent verification) | "Accuracy ledger and the verifier"; spec #639 (map #472 → V7 #480); owner decisions #477, #478, #479 (2026-11-25) | `verify/` (outside the product: own unit constants, `tolerances.json` v1 for all 12 basket v1 strata, record schema with licence-safe write); one check so far, stratum 6 CNY/USD vs the ECB cross (`verify/fx_cny.py`, AL1 #640); locators `data-verify-*` on `config.VERIFY_LOCATED_BLOCKS`. The ledger page (#641), the verify workflow (#642) and the other strata (#643–#653) are not built | `tests/test_verify_fx_cny.py` (one case per CNY grade: pass, immaterial and material discrepancy, metadata fail for a wrong FX date and a non-TARGET date, not yet published, not checked on source down and on a missing locator; no re-grade on a tolerance change; append-only files), `tests/test_verify_boundary.py` (AST: no repo or LLM-SDK import), `tests/test_verify_units_tripwire.py` (constants vs `pipeline/units.py` within 2 × 10⁻⁶), `tests/test_verify_record.py` (licence-safe write), `tests/test_verify_locators.py` (located blocks render their locators; the verifier reads the product's own markup) | — no workflow runs it; the verify workflow is AL3 #642 | — no record is committed; `verification/records/` holds only its README | tested |
 | Footprint weather | `docs/specs/footprint-weather.md` (#373) | — build slices #380–#386 all open; no footprint fetcher on `main` | — | — | — | specified |
 | Hosted MCP edition | #578 (map: #578 → #579 → #580 → #581) | `mirror_mcp/`, `Dockerfile`, `fly.toml` — read-only daily image, 11 envelope tools, question log | `tests/test_mirror_mcp.py`, `tests/test_mirror_mcp_api_proof.py`, `tests/test_mirror_mcp_image.py`; 2026-11-05 regressions cover production UTC stamps, native-unit series and source health, and draft-text log redaction | — **deferred 2026-11-06**: the one participant's client (Proton Lumo) cannot speak MCP; deploy PR #584 and docs PR #585 closed unmerged, reopen when a reachable client exists (#580) | — no hosted-client proof | tested |
 | Paste-in trial edition | #580 comment 2026-11-06: the trial question on #578 tested without a transport | `mirror_mcp/package.py`, `scripts/trial_package.py` — the same 11 tool envelopes written as one Markdown upload + raw JSON + participant note, private path only | `tests/test_trial_package.py` | deploy workflow step "Build the paste-in trial edition" → `trial-package` artifact (14-day retention), `continue-on-error` | — no participant has received a file yet | deployed |
@@ -555,6 +556,54 @@ The third pilot, and the one that decides what a physical price *is* in dollars:
 **Reconciliation.** `scripts/reconcile_fx.py` runs daily in `reconcile-trusted` beside the other two reports. It downloads each pair **once**, unguarded, through `fetchers.yfinance.download_bars` — the seam split out of `fetch_one` for exactly this: an adapter handed a frame v1's guard has already trimmed can never fire its own cutoff, and would pass while proving nothing. The v1 half then applies `drop_unsettled_session` with the run's own instant rather than calling `fetch_one`, because `fetch_one` reads the wall clock and a run straddling the FX close would otherwise judge the two paths at two different moments. Both are pinned to **one session** — the newest one v1 would publish. Exit 0 reconciled or no session, 1 diverged, 2 upstream unavailable. Quarantined revisions and dropped unfinished sessions are *reported, never graded*.
 
 Tests: `tests/test_trust_fx_ingestion.py` (capture, cutoff, orientation, quarantine, reconciliation), `tests/test_reconcile_fx.py` (the runner, including a pre-rollover run reconciling by both paths dropping the same bar). All network-free.
+
+## Accuracy ledger and the verifier (`verify/`, spec #639)
+
+Tests check our code; the verifier checks our **numbers**. It is a separate
+top-level package that imports nothing from the product and no LLM SDK
+(`tests/test_verify_boundary.py` walks its AST), so a defect in a fetcher,
+a conversion or a template cannot reappear in the check by construction.
+Reconciliation (`trust/`'s `reconcile_*`) runs one download through two of our
+own paths; it never counts as verification.
+
+- **Input is the rendered page**, not the DB: the built HTML of the checked
+  edition, hashed (`page_sha256`) and dated by its `mirror-market-generated-at`
+  stamp. The one product-side seam is the locator: a basket-grade section
+  carries `data-verify-stratum`, and each number in a block of
+  `config.VERIFY_LOCATED_BLOCKS` carries `data-verify-figure` /
+  `data-verify-series` (FX rate cards) or `data-verify-leg` (price legs).
+  Locators only find an element; value, unit and date are read from its
+  visible text (`verify/page.py`). `tests/test_verify_locators.py` fails when a
+  located block renders without them, and reads the product's real markup
+  through the verifier's reader.
+- **Own constants** (`verify/units.py`), derived from NIST HB44 App. C, USDA ERS
+  AH-697 and CEPEA's 60 kg saca, and pinned to `pipeline/units.py` by
+  `tests/test_verify_units_tripwire.py` (invariant 7 as amended, #479). The 60 kg
+  sack has no product constant in `pipeline/units.py`: the tripwire pins it to
+  `fetchers/cepea.py`'s `_SACK_KG`.
+- **Own tolerances** (`verify/tolerances.json`): one block per basket v1
+  stratum — kind (`exact` / `band` / `recompute` / `unverifiable`), tier,
+  native tolerance, economic threshold (0.5 USD/MT, oil 1.5), band, identity
+  checks, `since`. Every record stamps `tolerance_version` (`v<n> sha256:<12>`);
+  records are append-only files (`open(…, "x")`) and are never re-graded.
+- **Records** (`verify/record.py`): the spec's field list, plus `publisher` and
+  `withheld_reason`, one JSON line per checked number under
+  `verification/records/<date>/` — never `data/history/`. Committed records are
+  a publication surface: a value the verifying publisher's terms forbid
+  (`verify/licence.py`), or a licence-restricted displayed value, is dropped at
+  write time, and a write that would leak it through free text is refused.
+- **Grades**: inside the native tolerance is `pass`; outside it a `discrepancy`,
+  material when it also exceeds the economic threshold on the leg it moves; a
+  date, contract, window or FX-date mismatch is a `metadata fail`, material at
+  any delta. A source that is down writes `not checked` with its reason and the
+  CLI exits 1; a discrepancy is a graded result and exits 0.
+
+The first check, AL1 #640, is stratum 6 CNY/USD:
+`python -m verify fx-cny --edition docs` reads `markets/dalian.html`'s two
+rate cards (USD per CNY at 4 dp, CNY per USD at 2 dp) and grades each against
+the ECB's USD and CNY per EUR on the displayed date, from `eurofxref-hist-90d.xml`
+— a different document from the fetcher's SDMX request. The USD/MT effect of a
+delta is taken on every DCE leg on the page, from its visible CNY/MT print.
 
 ## Latency (`latency/`, LATENCY.md)
 

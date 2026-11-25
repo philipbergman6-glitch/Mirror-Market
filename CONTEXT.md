@@ -120,6 +120,34 @@ _Avoid_: error (until unexplained and material), drift (reserved for reconciliat
 A discrepancy that exceeds both the dataset's tick/rounding tolerance and the economic threshold in USD/MT, or is a metadata fail. A labelled D−1 against the publisher's D is not a discrepancy.
 _Avoid_: significant, large
 
+**Exact**
+A comparison between a displayed number and a source publishing the same definition (the publisher of record's own figure for the same date and contract or window). Its only allowance is rounding — the publisher's, and our display and conversion rounding. Any other difference is a discrepancy.
+_Avoid_: match, identical
+
+**Band**
+A comparison between a displayed number and a source publishing a *different* definition (a provider's London-day bar against a central bank's 14:10 CET fix), graded inside a stated explained band. Always recorded as "Tier 2 (definition differs: …)", so a close compared with a fixing never reads as like-for-like. Outside the band the discrepancy is unexplained until someone explains it.
+_Avoid_: tolerance (the band is an explanation, not a rounding allowance), approximate match
+
+**Recompute**
+A comparison that rebuilds a derived number (a crush, a basis, a landed row) from its displayed legs (Tier 3). Its allowance is the propagated rounding of those legs as displayed. A recomputed number is verified only when every leg is.
+_Avoid_: recalculation check, derived check
+
+**Pre-final capture**
+A displayed value read from the provider before the bar it belongs to was final — the venue's last trade, or the next session's overnight trading filed under the day — that the provider later replaced. The cause is ours, not the provider's: a pre-final capture is graded as such, never as a pass and never as a provider revision.
+_Avoid_: revision (on its own), provider correction, back-revision
+
+**Provider revision**
+A change the provider made to a bar that was already final when we captured it. Distinct from a pre-final capture; none has been observed for CBOT.
+_Avoid_: revision (on its own)
+
+**Verification record**
+One checked number, written once and never re-graded: what the reader saw (edition, page, value, unit, date, contract or window), what it was checked against (publisher, document, transport, vintage), the conversion, the difference, the grade under a named tolerance version, the disposition, and who or what checked it. It is the accuracy ledger's only input. A value the verifying publisher's terms forbid republishing is never written into it; its difference and grade always are.
+_Avoid_: check result, test result, log line
+
+**Ledger edition**
+One citable publication of the accuracy ledger (`L-YYYY-MM-DD-n`), summarising the verification records of its period and identified by their hash. Every past edition is kept; a correction is a new edition, never an overwrite.
+_Avoid_: report, run, pass (a pass is one verification sitting; an edition summarises them)
+
 **Shipment window** _(proposal for V4 #477 — not yet adopted by the ledger)_
 The loading/delivery period a physical quote is priced for — an AMS 3147 delivery slot ("Current", "Nov¹") or a MAGyP circular band ("2026-11..2027-04"). A venue that prints several windows in one session has published several prices. A displayed physical number names its window inline; one that does not fails the window check of **Verified** as a metadata fail.
 _Avoid_: shipment period (on its own), month, slot (except for AMS's own term)
