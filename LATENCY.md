@@ -405,7 +405,9 @@ existing availability basket. The JSON includes the promoted run, render
 timestamp, individual source grades and observation stamps, plus sessions
 with no promotion or a late or incomplete basket. A ready session requires
 the full basket in one qualifying edition. Dates before the record starts
-are reported separately and excluded from the percentage.
+are reported separately and excluded from the percentage. This report is
+per promoted edition, so the reliability record's session rule (available
+if any run succeeded, #518) does not apply to it.
 
 This measures generation time for editions that eventually passed promotion.
 Public delivery time requires an independent URL observation before the

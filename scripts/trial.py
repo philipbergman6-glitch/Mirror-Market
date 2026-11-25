@@ -237,7 +237,10 @@ def cmd_day(args: argparse.Namespace) -> int:
         for layer in critical:
             row = rows.get(layer)
             # The availability words the A11 record counts (pipeline.reliability),
-            # so the trial and the re-audit measure one thing (A19 #518 §1).
+            # so the trial and the re-audit share one vocabulary (A19 #518 §1).
+            # Read off data_freshness's current grade: a point-in-time snapshot,
+            # not the record's any-success session rule (#518), which needs
+            # the session's earlier runs this table no longer holds.
             if row is not None and str(row.get("status")) in AVAILABLE_STATUSES:
                 available += 1
             else:
