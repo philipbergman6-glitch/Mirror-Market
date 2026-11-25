@@ -114,7 +114,7 @@ When it fires, the DT-16 cutover criterion still applies before any reader
 moves (#239 Q2). That criterion is a continuous reconciled stretch covering a
 roll week, an expiry and **at least one quarantine**. Switching
 `MIRROR_TRUSTED_READ_DATASETS` on before a production ledger exists fails the
-build by name (`TrustedLedgerEmptyError`, #656). It never serves empty curves.
+build by name (`TrustedLedgerEmptyError`, #656) instead of serving empty curves.
 
 ## Prior benchmark research
 

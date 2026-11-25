@@ -37,7 +37,8 @@ Text as decided:
 ### Reversal
 
 - **Toward a real go:** the ROADMAP trigger fires.
-- **Toward kill now:** the alarm PR needed more than a workflow edit plus the #656 guard, or `trust/` breaks an unrelated PR's CI before March.
+- **Toward kill now:** "if the alarm PR needs more than a workflow edit plus the #656 guard, or if `trust/` breaks an unrelated PR's CI before March."
+- **Ruled not tripped** by the owner on 2026-11-25 ([comment](https://github.com/philipbergman6-glitch/Mirror-Market/issues/239#issuecomment-7172843234)): the ~330-line relay copies an existing pattern (`scripts/ci_dead_source.py`). The checkpoint, 2027-03-01 with default excise, is unchanged. The `trust/`-breaks-CI half of the clause stays live until March.
 
 ### Later, not urgent
 
