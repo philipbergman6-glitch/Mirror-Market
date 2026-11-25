@@ -120,6 +120,10 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
     ("priced_from", "Board and FX priced from data <age> old",
      "The age of the oldest board or FX observation feeding the headline. Stated so "
      "'Generated' cannot read as fresher than the numbers are."),
+    ("cbot_session", "CBOT session <date>",
+     "The CBOT session the board prices close, beside their age. Yahoo finishes a CBOT "
+     "bar only at midnight New York, so an evening edition shows the previous session by "
+     "design; the 01:00 New York board refresh brings the newest one (#622)."),
     ("stale", "Stale",
      "A layer past its publishing budget (`LAYER_MAX_DATA_AGE_DAYS`). Its last rows still "
      "render, dated; nothing is padded forward."),
@@ -129,8 +133,9 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
      "tallied amber on the masthead apart from on-schedule; the Keys column names the "
      "shortfall."),
     ("d_minus_1", "D−1",
-     "Yesterday's session. The fastest path from a CBOT close to this page is 1 h 15 m, "
-     "floored by the settlement guard; nothing here is intraday."),
+     "Yesterday's session. The fastest path from a CBOT close to this page is 9 h 45 m, "
+     "floored by when Yahoo finishes the bar (midnight New York) and enforced by the "
+     "settlement guard; nothing here is intraday."),
     ("fx_tag", "FX chip",
      "The USD move includes a currency move. A blue chip, never a colour on the number: "
      "a weaker real is not a cheaper bean."),
