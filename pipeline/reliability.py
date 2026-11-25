@@ -204,11 +204,15 @@ def recovered_in_session(last_success: str | None, last_attempt: str | None) -> 
     the latest attempt and ``last_success``, which only ``success`` and
     ``usable_partial`` advance (``grading.ADVANCES_LAST_SUCCESS``). When both
     stamps serve the same CBOT session (``layer_runs.session_date_for``, the
-    record's own session), that session already holds a usable run's rows —
-    saved first, upserted, so a later failed, stale or incomplete re-run took
-    nothing away. A reader then has no outage of ours to withhold or block
-    on; the failed run stays visible as a status mark and in the manifest's
-    ``failed_runs`` (invariant 1).
+    record's own session, so this follows whatever the settlement guard's
+    ``EXCHANGE_SESSION`` says — never a second clock), that session already
+    holds a usable run's rows. A later ``failed`` re-run stored nothing over
+    them, so a reader has no outage of ours to withhold or block on; the
+    failed run stays visible as a status mark and in the manifest's
+    ``failed_runs`` (invariant 1). Callers ask this only of ``failed``: a
+    ``stale`` or ``incomplete`` run saved rows of its own (Comex Stat's save
+    rewrites a product's window, #632 review), so its session is not
+    "recovered" by an earlier success.
 
     ``False`` when either stamp is missing: a layer that never succeeded, or
     a row with no attempt, has shown no recovery. ``no_publication`` is

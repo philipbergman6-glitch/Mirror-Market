@@ -465,8 +465,8 @@ def test_a_real_failure_under_a_later_unconfigured_skip_still_counts_toward_dead
 
 def test_a_failed_rerun_after_a_usable_run_on_the_same_session_is_recovered() -> None:
     # magyp_fob, session 2026-11-18 (#518 wave-4 review): success 11:04 UTC on
-    # 11-19, push run 44526078466 failed 12:50 UTC — both before the 14:30
-    # Chicago cutoff, so both serve the 11-18 session.
+    # 11-19, push run 44526078466 failed 12:50 UTC — both serve the 11-18
+    # session, under the 14:30 CT cutoff and under #627's New York midnight.
     assert reliability.recovered_in_session("2026-11-19 11:04:00", "2026-11-19 12:50:00") is True
 
 
@@ -476,10 +476,26 @@ def test_a_usable_run_on_an_earlier_session_does_not_recover_this_one() -> None:
     assert reliability.recovered_in_session("2026-11-18 11:04:00", "2026-11-19 12:50:00") is False
 
 
-def test_the_settlement_cutoff_separates_sessions() -> None:
-    # 20:29 UTC on 11-19 (14:29 CST) still serves 11-18; 20:31 serves 11-19.
-    assert reliability.recovered_in_session("2026-11-19 20:29:00", "2026-11-19 20:31:00") is False
-    assert reliability.recovered_in_session("2026-11-19 20:31:00", "2026-11-19 23:00:00") is True
+def test_the_settlement_guards_session_roll_separates_sessions() -> None:
+    # The rule has no clock of its own: it rolls exactly where the guard's
+    # EXCHANGE_SESSION does (14:30 CT before #627, New York midnight after), so
+    # the edge is found from the guard rather than hard-coded (#632 review).
+    from datetime import datetime, timedelta, timezone
+
+    from pipeline.layer_runs import session_date_for
+
+    start = datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc)
+    minutes = [start + timedelta(minutes=m) for m in range(24 * 60)]
+    rolls = [b for a, b in zip(minutes, minutes[1:], strict=False) if session_date_for(a) != session_date_for(b)]
+    assert len(rolls) == 1, rolls
+    edge = rolls[0]
+
+    def stamp(moment: datetime) -> str:
+        return moment.strftime("%Y-%m-%d %H:%M:%S")
+
+    before, after = edge - timedelta(minutes=1), edge + timedelta(minutes=1)
+    assert reliability.recovered_in_session(stamp(before), stamp(after)) is False
+    assert reliability.recovered_in_session(stamp(edge), stamp(edge + timedelta(hours=2))) is True
 
 
 def test_never_succeeded_or_never_attempted_is_not_recovered() -> None:

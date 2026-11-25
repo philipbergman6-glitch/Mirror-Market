@@ -1386,9 +1386,12 @@ def _ingest_status(conn, layer: str, *, unless_recovered: bool = False) -> str |
 
     ``unless_recovered`` is for a reader that withholds stored rows on the
     verdict alone, rows or no rows (block 07's customs exports): it returns
-    ``None`` when a usable run already stored rows on the session the adverse
-    run served (``pipeline.reliability.recovered_in_session``, #632 — owner
-    option B on #518). A reader that only asks after finding no or stale rows
+    ``None`` when the latest run ``failed`` and a usable run already stored
+    rows on the session it served (``pipeline.reliability.recovered_in_session``,
+    #632 — owner option B on #518). Only ``failed``: it stores nothing, while a
+    ``stale`` or ``incomplete`` run saved rows over the success's (and Comex
+    Stat's save rewrites a product's window rather than upserting), so those
+    keep withholding. A reader that only asks after finding no or stale rows
     (``_is_current``) keeps the plain verdict: the rows it judged are the
     evidence, whichever run wrote them.
     """
@@ -1403,7 +1406,7 @@ def _ingest_status(conn, layer: str, *, unless_recovered: bool = False) -> str |
         return None
     if not row or row[0] not in {"failed", "stale", "incomplete"}:
         return None
-    if unless_recovered and reliability.recovered_in_session(row[1], row[2]):
+    if unless_recovered and row[0] == "failed" and reliability.recovered_in_session(row[1], row[2]):
         return None
     state = {
         "failed": "failed upstream",
