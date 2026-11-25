@@ -313,10 +313,9 @@ SETTLEMENT_TIMEZONE = "America/Chicago"
 #                                    changed (worst stored error: ZLZ26
 #                                    2026-08-27, +31.97 USD/MT)
 #   ICE US cotton (CT), sugar (SB)   unfinished before NY midnight too, and
-#                                    NOT always final after it: 24 deferred-
-#                                    month values changed up to 54 h later
-#                                    (#626 — this rule is necessary there,
-#                                    not sufficient)
+#                                    NOT always final after it — necessary
+#                                    there, not sufficient; ICE has its own
+#                                    rule below (B48 #626)
 #   CME palm (CPO=F)                 front month only, no named-contract
 #                                    history to measure; the later cutoff is
 #                                    the safe direction (invariant 11)
@@ -326,6 +325,32 @@ SETTLEMENT_TIMEZONE = "America/Chicago"
 EXCHANGE_BAR_TIMEZONE = "America/New_York"
 EXCHANGE_BAR_CLOSE_LOCAL = (0, 0)  # (hour, minute) in EXCHANGE_BAR_TIMEZONE ...
 EXCHANGE_BAR_CLOSE_DAY_OFFSET = 1  # ... on the label date plus this many days
+
+# B48 (#626): ICE US softs. Yahoo's ICE bar labelled D is final at the same
+# New York midnight as above, but one *weekday* later — 00:00 New York
+# ending the next weekday after D (Fri -> Tue 00:00, Thu -> Sat 00:00).
+# Measured over the 90 committed snapshots of contract_bars.csv
+# (2026-08-23 -> 2026-11-25), a value counted as served only when that run
+# re-saved the row (fetched_date = the commit's UTC date):
+#   19 values in 3 sessions (Fri 08-21, Mon 10-05, Fri 10-16; deferred and
+#   front months, cotton and sugar) were served after NY midnight D+1 and
+#   revised later. Latest serve of a pre-final value: Tue 10-06 13:47 EDT
+#   for the Mon 10-05 bar (CTV27 78.30 -> 79.10 by 14:36 EDT) — 10 h before
+#   this rule's cutoff. 0 of 1,011 (contract, session) pairs served after
+#   the cutoff differs from today's stored value.
+#   The issue's other 5 "post-midnight" values were last served before NY
+#   midnight and carried because Yahoo left the bar out of the next frames;
+#   the B47 rule already drops them.
+# Weekdays, not ICE sessions: the guard owns no holiday calendar, and no
+# measured case crosses an ICE holiday, so a label whose next weekday is a
+# holiday (Wed 2026-11-25 -> Thanksgiving) is final at the end of that
+# holiday — unmeasured (#626).
+# Which tickers are ICE US: named contracts carry Yahoo's exchange suffix
+# below; the continuous Layer 1 ticker is the COMMODITY_TICKERS entry of
+# every FORWARD_CURVE_CONTRACTS commodity listed on that exchange
+# (fetchers._settlement.exchange_rule_for).
+ICE_US_YAHOO_EXCHANGE = "NYB"
+ICE_US_BAR_CLOSE_WEEKDAY_OFFSET = 1  # weekdays past the label, before the day offset above
 
 # B47 (#622): how far back, by fetched_date, a stored forward_curve leg is
 # corrected to its contract's final bar once contract_bars holds it
