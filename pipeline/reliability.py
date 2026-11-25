@@ -7,8 +7,25 @@ it from the edition, not a side script), and ``dead_layers`` is the streak
 ``docs/plans/source-reliability-a19.md`` §3–§4.
 
 The unit is the **session** (``layer_runs.session_date``, weekdays only),
-never the run. A session's verdict for a layer is its *last* run's status;
-the first run's is reported beside it to show how much the retry carries.
+never the run. A session is available for a layer if *any* of its runs
+graded available (owner decision 2026-11-25, #518; it was last-run-wins
+until then): a later failed re-run, e.g. a midday push run from a merge, no
+longer turns the session into a miss. Run-level failures stay visible as
+their own figure — ``failed_runs`` per layer, and how many of them fell on
+an available session — beside first-run availability, which shows how much
+the retry carries, and surfaced %, which is per failing run.
+
+Consumers, and which verdict each reads (#518):
+
+- ``reliability`` (manifest block; availability %, streaks, median recovery,
+  open-at-end, T2/T3): the session rule above.
+- ``dead_layers`` (``scripts/ci_dead_source.py``): the same session rule. A
+  session whose every run failed is still down and extends the streak; a
+  session with any success means the source answered, so it is not dead.
+- First-run %, ``failed_runs``, ``failing_runs`` and T4 surfaced %: run level,
+  unchanged by the rule.
+- ``decision_cutoff_report``: per promoted edition by design (the whole
+  basket in one run by the cutoff), so neither session rule applies.
 A weekday inside the record with no row for a layer is ``no_run`` and
 counts as unavailable — absence is never a quiet day (invariant 1). The
 record's first session bounds every window: before it there is no record,
@@ -30,7 +47,7 @@ from zoneinfo import ZoneInfo
 
 import config
 from pipeline import grading
-from pipeline.layer_runs import STATUS_SKIPPED_UNCONFIGURED, LayerRun
+from pipeline.layer_runs import STATUS_NOT_RUN, STATUS_SKIPPED_UNCONFIGURED, LayerRun
 
 #: §3: a session is available when its last run graded one of these. Every
 #: other word — ``stale``, ``failed``, ``incomplete``, ``disabled``,
@@ -39,6 +56,12 @@ AVAILABLE_STATUSES: frozenset[str] = frozenset({"success", "usable_partial", "no
 
 #: The computed word for a weekday with no row. Never stored.
 NO_RUN = "no_run"
+
+#: A run that asked the source and did not deliver: the outage words plus a
+#: run that crashed before grading (``not_run``). ``skipped_unconfigured`` and
+#: ``disabled`` never asked, so they are unavailable but not failed. Counted
+#: per layer as ``failed_runs`` so any-success availability hides nothing.
+FAILED_RUN_STATUSES: frozenset[str] = grading.OUTAGE_STATUSES | {STATUS_NOT_RUN}
 
 
 def weekday_sessions(first: date, last: date) -> list[date]:
@@ -153,12 +176,23 @@ def _by_layer_session(rows: Iterable[LayerRun]) -> dict[str, dict[date, list[Lay
     return out
 
 
+def _session_status(runs: Sequence[LayerRun]) -> str:
+    """The session's verdict word: available if *any* run was (owner, 2026-11-25).
+
+    The newest available run's word when one exists, so a later failed re-run
+    never turns the session into a miss; otherwise the newest run's word, so
+    a session whose every run failed still reads as the failure it was.
+    """
+    available = [r.status for r in runs if r.status in AVAILABLE_STATUSES]
+    return available[-1] if available else runs[-1].status
+
+
 def _verdicts(runs_by_session: dict[date, list[LayerRun]], sessions: Sequence[date]) -> list[tuple[str, str]]:
-    """``(first_status, last_status)`` per session, ``no_run`` where none."""
+    """``(first_status, session_status)`` per session, ``no_run`` where none."""
     out = []
     for session in sessions:
         runs = runs_by_session.get(session)
-        out.append((runs[0].status, runs[-1].status) if runs else (NO_RUN, NO_RUN))
+        out.append((runs[0].status, _session_status(runs)) if runs else (NO_RUN, NO_RUN))
     return out
 
 
@@ -307,6 +341,12 @@ def reliability(
             if r.status in grading.OUTAGE_STATUSES
         ]
         surfaced = sum(1 for r in failing if (r.run_id, layer) in alerts)
+        failed = [
+            (session, r) for session, runs in grouped.get(layer, {}).items() for r in runs
+            if r.status in FAILED_RUN_STATUSES
+        ]
+        available_sessions = {s for s, (_first, status) in zip(sessions, verdicts, strict=True)
+                              if status in AVAILABLE_STATUSES}
         open_streak = _open_streak(layer, verdicts, sessions)
         out_layers.append({
             "layer": layer,
@@ -321,6 +361,10 @@ def reliability(
             "open_at_end": bool(down and down[-1]),
             "open_streak": open_streak.sessions if open_streak else 0,
             "failing_runs": len(failing),
+            # Run level, beside the session rule (owner 2026-11-25): every
+            # failed run, and those a success on the same session outweighed.
+            "failed_runs": len(failed),
+            "failed_runs_on_available_sessions": sum(1 for s, _r in failed if s in available_sessions),
             "surfaced_within_one_run_pct": _pct(surfaced, len(failing)),
         })
 
@@ -417,13 +461,16 @@ def dead_layers(
         # Sessions before the layer's first record say nothing either: the
         # roster did not carry it yet, so its leading `no_run` run is "time
         # before the record began" for that layer, not a streak of silence.
-        tail = [last for _first, last in verdicts[len(verdicts) - streak.sessions:]]
+        # The session's every run is read, not just its verdict word: one
+        # failed run under a later skip is still a real verdict.
         recorded = grouped.get(layer, {})
-        if recorded:
-            first_recorded = min(recorded)
-            tail_sessions = sessions[len(sessions) - streak.sessions:]
-            tail = [last for s, last in zip(tail_sessions, tail, strict=True) if s >= first_recorded]
-        if tail and all(last == STATUS_SKIPPED_UNCONFIGURED for last in tail):
+        first_recorded = min(recorded) if recorded else None
+        tail = [
+            [r.status for r in recorded.get(s, [])] or [NO_RUN]
+            for s in sessions[len(sessions) - streak.sessions:]
+            if first_recorded is None or s >= first_recorded
+        ]
+        if tail and all(word == STATUS_SKIPPED_UNCONFIGURED for words in tail for word in words):
             continue
         out[layer] = streak
     return out

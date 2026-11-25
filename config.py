@@ -4778,9 +4778,12 @@ SCHEDULE_INACTIVITY_CONCLUDE_DAYS = 75
 
 # Source reliability record (B34 #520, requirements docs/plans/source-reliability-a19.md).
 # The window the figures in manifest.json are computed over, in weekday CBOT
-# sessions counted on layer_runs.session_date.
+# sessions counted on layer_runs.session_date. A session is available for a
+# layer if ANY of its runs graded available (owner decision 2026-11-25, #518;
+# last-run-wins before); failed runs are counted per layer beside it.
 RELIABILITY_WINDOW_SESSIONS = 30
-# §4: a layer unavailable on this many consecutive sessions is a dead source,
+# §4: a layer unavailable (same any-success session rule) on this many
+# consecutive sessions is a dead source,
 # relayed to the rolling `ci-dead-source` issue. Sessions, never runs: one
 # morning's seven retries would otherwise call a blip dead.
 DEAD_SOURCE_SESSIONS = 3
