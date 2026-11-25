@@ -229,6 +229,13 @@ jobs:
           # records as skipped and the CBOT cash-leg panel withholds with that
           # reason — degraded, never broken.
           MARS_API_KEY: ${{ secrets.MARS_API_KEY }}
+          # Layer 5 (weather) through our own Cloudflare Worker, so Open-Meteo
+          # counts our quota apart from every other tenant of this runner's IP
+          # (#637). Both or neither: unset, the layer goes direct on the
+          # shared quota and logs that it did; one without the other fails
+          # the layer. Set by scripts/setup_openmeteo_worker.sh.
+          OPENMETEO_PROXY_URL: ${{ secrets.OPENMETEO_PROXY_URL }}
+          OPENMETEO_PROXY_TOKEN: ${{ secrets.OPENMETEO_PROXY_TOKEN }}
           # Set only when the restore placed a seed inside
           # config.SEED_SHORT_WINDOW_MAX_AGE_DAYS; empty otherwise, and empty
           # keeps main.py on its full-history default.

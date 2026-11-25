@@ -27,6 +27,7 @@ from typing import Any
 import pandas as pd
 
 from config import (
+    API_KEY_CATALOG,
     DCE_NAMED_MONTH_KEYS,
     DEFAULT_HISTORY_PERIOD,
     FAST_REFRESH_HISTORY_PERIOD,
@@ -1314,7 +1315,11 @@ def run(
     # later, but scattered across a full run those read as ordinary noise;
     # the reason a run is degraded belongs at the top of it.
     for name, layers in missing_api_keys().items():
-        logger.warning("%s is not set — %s will run degraded or skip", name, layers)
+        if API_KEY_CATALOG[name].skips or API_KEY_CATALOG[name].degrades:
+            logger.warning("%s is not set — %s will run degraded or skip", name, layers)
+        else:
+            # A route, not a gate (#637): the layer runs in full, on its fallback.
+            logger.warning("%s is not set — %s runs on its fallback route", name, layers)
     _HARD_FAILURES.clear()
     _NO_PUBLICATION.clear()
     _STALE_LAST_KNOWN_GOOD.clear()

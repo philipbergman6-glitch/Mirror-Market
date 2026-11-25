@@ -447,6 +447,19 @@ COT_COMMODITIES = {
 # historical rows stop accruing; that is the intended cost.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# Our own quota (#637, owner decision 2026-11-25): Open-Meteo's free quota is
+# shared per outgoing IP, and a GitHub runner's IP is shared with strangers,
+# so Layer 5 can route through a free Cloudflare Worker (infra/openmeteo-
+# worker/), which Open-Meteo counts on its own. Both variables or neither:
+# one without the other hard-fails (fetchers/weather.py). Unset, the layer
+# goes direct on the shared quota — the pre-#637 path, logged as such.
+# Deployed by the owner with scripts/setup_openmeteo_worker.sh. The free API
+# is non-commercial; a paid customer key replaces the Worker before selling
+# (ROADMAP.md → "Open-Meteo customer key").
+OPENMETEO_PROXY_URL_ENV = "OPENMETEO_PROXY_URL"
+OPENMETEO_PROXY_TOKEN_ENV = "OPENMETEO_PROXY_TOKEN"
+# The Worker paths it forwards; anything else is refused at the Worker.
+OPENMETEO_FORECAST_PATH = "/v1/forecast"
 # Open-Meteo intermittently stops answering GitHub runners (shared Azure IPs)
 # for minutes at a time — every coordinate, read timeout with no response
 # (measured 2026-11-16: 8 consecutive 40 s timeouts, then 0.1 s replies).
@@ -1879,6 +1892,10 @@ class ApiKeySpec:
     unlocks: str
     skips: tuple[str, ...] = ()
     degrades: tuple[str, ...] = ()
+    # Layers that run either way but take a different route without it — no
+    # skip, no degraded part (the Open-Meteo Worker pair, #637: unset, Layer 5
+    # goes direct on the shared quota). `also` says what the fallback is.
+    routes: tuple[str, ...] = ()
     required_in_ci: bool = True
     # False for a switch CI must never be able to set: the deploy workflow does
     # not export it, so no secret can turn the layer on there (Layer 37).
@@ -1889,7 +1906,7 @@ class ApiKeySpec:
 
     @property
     def layers(self) -> tuple[str, ...]:
-        return self.skips + self.degrades
+        return self.skips + self.degrades + self.routes
 
 
 # A tuple built into the dict below, not a dict literal: `"NAME_API_KEY": …`
@@ -1946,6 +1963,27 @@ _API_KEY_SPECS: tuple[ApiKeySpec, ...] = (
         # use. The switch itself is `export MATIF_PRIVATE_FETCH=1` on the desk.
         signup="https://www.euronext.com/en/data/market-data/market-data-agreements",
         also="desk switch, not a key: export MATIF_PRIVATE_FETCH=1 on the desk machine (LAYERS.md → Layer 37)",
+    ),
+    # A pair, not a key: the Cloudflare Worker that gives Layer 5 its own
+    # Open-Meteo quota (#637). Both or neither — one alone hard-fails the
+    # layer (fetchers/weather.py). Optional: unset, the layer still runs,
+    # direct, on the runner IP's shared quota, which is the pre-#637 path.
+    # The signup is Cloudflare's; the wizard does the rest.
+    ApiKeySpec(
+        name=OPENMETEO_PROXY_URL_ENV,
+        unlocks="Open-Meteo Worker URL: Layer 5 weather on its own free quota, not the runner IP's shared one",
+        routes=("weather",),
+        required_in_ci=False,
+        signup="https://developers.cloudflare.com/workers/get-started/guide/",
+        also="unset, goes direct to api.open-meteo.com on the shared quota; scripts/setup_openmeteo_worker.sh",
+    ),
+    ApiKeySpec(
+        name=OPENMETEO_PROXY_TOKEN_ENV,
+        unlocks="Open-Meteo Worker shared secret: sent in a header so the Worker is not an open proxy",
+        routes=("weather",),
+        required_in_ci=False,
+        signup="https://developers.cloudflare.com/workers/get-started/guide/",
+        also="set with OPENMETEO_PROXY_URL or not at all; scripts/setup_openmeteo_worker.sh generates it",
     ),
 )
 API_KEY_CATALOG: dict[str, ApiKeySpec] = {spec.name: spec for spec in _API_KEY_SPECS}
