@@ -301,9 +301,11 @@ class MagypNonJsonReply(ScraperShapeError):
     """The body is not JSON at all — an error or interstitial page, not a schema.
 
     Kept distinct from a schema change (valid JSON, wrong shape): MAGyP has
-    answered HTTP 200 with an HTML page for one day while the same circular
-    served JSON on a retry minutes later (#527), so a caller walking back
-    over days may record this one and keep walking. A schema change is never
+    answered HTTP 200 with a non-JSON body for one day (#527: "Expecting
+    value: line 1 column 1" — an empty body or, likely, an HTML error page;
+    the bytes were not kept) while the same run's v1 layer, which retries a
+    non-JSON 200, read that day fine. So a caller walking back over days may
+    record this one and keep walking. A schema change is never
     a single bad reply and still hard-fails wherever it appears.
     """
 

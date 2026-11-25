@@ -346,6 +346,31 @@ def test_transport_failure_on_one_day_keeps_walking() -> None:
     assert "Connection reset" in run.failed_days[0].error
 
 
+def test_a_dead_host_stops_the_walk_inside_the_job_budget() -> None:
+    """A hung MAGyP must not walk every weekday at ~97 s each (#615 review).
+
+    reconcile-trusted has timeout-minutes: 10 and the CBOT/FX steps after it
+    are gated on !cancelled(), so a walk that times out the job would also
+    erase the DT-16 and pilot-3 evidence. One transport failure is skipped
+    (the 11-19 reset case above); the next one ends the walk as fetch_failed.
+    """
+    import requests
+
+    import config
+
+    calls: list[date] = []
+
+    def fetch(day: date):
+        calls.append(day)
+        raise requests.RequestException("Read timed out")
+
+    run = reconcile_once(today=date(2026, 11, 23), fetch_artifact=fetch, now=NOW)
+
+    assert run.status == STATUS_FETCH_FAILED
+    assert len(calls) == config.MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES + 1
+    assert [f.day for f in run.failed_days] == calls
+
+
 def test_schema_change_on_the_walk_still_hard_fails() -> None:
     """Valid JSON in the wrong shape is never one bad reply — it must not be skipped."""
     def fetch(day: date):

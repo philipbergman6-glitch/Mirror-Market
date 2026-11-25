@@ -2090,6 +2090,12 @@ MAGYP_SUNFLOWER_OIL_SIBLINGS = ("15121110911P", "15121110919G")
 # Walk back this many calendar days to find the latest published circular
 # (weekends + Argentine holidays publish nothing).
 MAGYP_FOB_LOOKBACK_DAYS = 7
+# The trusted reconciler (scripts/reconcile_magyp_fob.py) records and skips at
+# most this many transport-failed days on its lookback walk; the next one ends
+# the walk as fetch_failed. Each failed day costs up to MAX_RETRIES ×
+# REQUEST_TIMEOUT plus backoff (~97 s), and reconcile-trusted's 10-minute
+# budget also carries the CBOT and FX reconciliations (#527, #615 review).
+MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES = 1
 
 # ---------------------------------------------------------------------------
 # Layer 18 — SAFEX/JSE South Africa domestic soy prices (free, no API key)

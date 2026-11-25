@@ -43,7 +43,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config import MAGYP_FOB_LOOKBACK_DAYS  # noqa: E402
+from config import MAGYP_FOB_LOOKBACK_DAYS, MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES  # noqa: E402
 from fetchers.magyp_fob import _parse_posts  # noqa: E402
 from pipeline.results import ScraperShapeError  # noqa: E402
 from trust.magyp_fob import (  # noqa: E402
@@ -174,6 +174,7 @@ def resolve_published_circular(
     """
     fetch_artifact = fetch_artifact or fetch_magyp_fob_artifact
     failed: list[FailedDay] = []
+    transport_failures = 0
     for offset in range(lookback_days + 1):
         day = date.fromordinal(today.toordinal() - offset)
         if day.weekday() >= 5:  # Sat/Sun never publish
@@ -183,6 +184,11 @@ def resolve_published_circular(
         except requests.RequestException as exc:
             failed.append(FailedDay(day=day, error=str(exc), response_status=None, first_bytes=None))
             log.warning("MAGyP FOB: %s could not be fetched — %s", day, exc)
+            transport_failures += 1
+            if transport_failures > MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES:
+                log.error("MAGyP FOB: %d transport failures on the walk — host treated as down",
+                          transport_failures)
+                break
             continue
         try:
             posts = posts_from_replay(replay)
