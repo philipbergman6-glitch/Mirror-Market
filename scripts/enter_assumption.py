@@ -604,7 +604,9 @@ def review(args: argparse.Namespace) -> int:
                 f"({row['days_to_expiry']:+d}d) {row['entered_by']}\n"
                 f"         blocks: {blocked}"
             )
-            print(f"         renew:  {commands[row['id']]}")
+            command = commands[row["id"]]
+            print(f"         renew:  {command}" if command is not None else
+                  "         renew:  — its shipment window has ended; enter the next window as a new entry")
     print(f"\n{result['note']}")
     return 1 if result["expired"] else 0
 
@@ -641,6 +643,13 @@ def gaps(_: argparse.Namespace) -> int:
         if conn is not None:
             conn.close()
     return 0
+
+
+# Add-only flags: `renew` never reads them (it copies these from the old row).
+RENEW_IGNORES = (
+    "--component", "--unit", "--days", "--origin", "--destination", "--window",
+    "--source", "--confidence", "--citation", "--file",
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -704,6 +713,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.review:
         return review(args)
     if args.renew:
+        # --renew keeps the old row's scope, unit, source, confidence and
+        # citation; an add-only flag beside it would be dropped without a word,
+        # and the renewal would quietly not be the one asked for.
+        given = argv if argv is not None else sys.argv[1:]
+        ignored = [
+            flag for flag in RENEW_IGNORES
+            if any(token == flag or token.startswith(flag + "=") for token in given)
+        ]
+        if ignored:
+            parser.error(
+                f"--renew re-signs the entry as it stands and cannot change {', '.join(ignored)} — "
+                "enter a new assumption for a different scope"
+            )
         missing_for_renewal = [
             name for name, value in (
                 ("--expires", args.expires), ("--entered-by", args.entered_by),

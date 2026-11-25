@@ -458,7 +458,7 @@ def test_the_private_edition_shows_the_dead_value_its_dates_owner_and_renewal(la
     assert lapsed["entered_by"] == OWNER
     assert lapsed["renew_command"] == (
         "python scripts/enter_assumption.py --renew test.freight.lapsed "
-        f"--expires 2026-12-02 --entered-by {OWNER}"
+        "--expires 2026-12-02 --entered-by '<YOUR-NAME>'"
     )
 
     html = _render(view)
@@ -523,5 +523,68 @@ def test_the_review_queue_prints_the_renewal_command_for_a_lapsed_entry(
     out = capsys.readouterr().out
     assert (
         "python scripts/enter_assumption.py --renew test.freight.lapsed "
-        f"--expires 2026-12-02 --entered-by {OWNER}"
+        "--expires 2026-12-02 --entered-by '<YOUR-NAME>'"
     ) in out
+
+
+# --- #618 review: the renewal command must be pasteable and signed by whoever pastes it ---
+
+
+def _one(entry: dict):
+    from analysis.origins.assumptions import parse_assumption
+
+    return parse_assumption({k: v for k, v in entry.items() if v is not None}, where="<test>")
+
+
+def test_the_renewal_command_survives_a_shell_and_leaves_the_signer_blank():
+    import shlex
+
+    from analysis.origins.readiness import RENEWAL_SIGNER_PLACEHOLDER, renewal_command
+
+    # The committed policy rates carry this exact owner: '#' starts a bash
+    # comment and '(' is a zsh syntax error if pasted unquoted.
+    owner = "mirror-market B22 #485 (published policy rate, not a trader entry)"
+    item = _one(_entry(id="test.freight.it's", entered_by=owner,
+                       window={"start": "2026-12-01", "end": "2026-12-31"}))
+
+    command = renewal_command(item, today=TODAY)
+
+    assert command is not None
+    argv = shlex.split(command)
+    assert argv[argv.index("--renew") + 1] == "test.freight.it's"
+    assert argv[argv.index("--entered-by") + 1] == RENEWAL_SIGNER_PLACEHOLDER
+    assert owner not in command, "pasting must never re-sign under the previous owner"
+
+
+def test_a_sailed_window_is_history_not_a_renewal(cli_root):
+    from analysis.origins.readiness import lapsed_inputs, renewal_command
+
+    sailed = _entry(id="test.freight.october", entered_at="2026-09-20", expires_on="2026-09-27",
+                    window={"start": "2026-10-01", "end": "2026-10-31"})
+    _write_private(cli_root, [sailed])
+
+    found = load_assumptions(cli_root, audience=AUDIENCE_PRIVATE)
+    item = next(a for a in found.assumptions if a.id == "test.freight.october")
+
+    assert renewal_command(item, today=TODAY) is None, (
+        "--renew would be refused (window_already_sailed): printing it is a dead command"
+    )
+    assert [x.assumption.id for x in lapsed_inputs(found, today=TODAY)] == []
+
+
+@pytest.mark.parametrize("flag", [
+    ["--origin", "br_paranagua"], ["--confidence", "provisional"], ["--citation", "x"],
+    ["--window", "2027-01-01:2027-01-31"], ["--unit", "usd_per_mt"], ["--days", "30"],
+    ["--component", "ocean_freight"], ["--destination", "cn_north"], ["--source", "broker"],
+    ["--file", "x.yml"],
+])
+def test_renew_refuses_a_flag_it_would_silently_ignore(lapsed_freight, capsys, flag):
+    before = lapsed_freight.read_text(encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        _cli(["--renew", "test.freight.old", "--expires", "2026-12-02",
+              "--entered-by", "buyer@example.com", *flag])
+
+    assert exc.value.code == 2
+    assert flag[0] in capsys.readouterr().err
+    assert lapsed_freight.read_text(encoding="utf-8") == before

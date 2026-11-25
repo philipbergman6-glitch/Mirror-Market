@@ -36,6 +36,7 @@ that is the order the work has to be done in.
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -523,23 +524,35 @@ def expiry_review(
     }
 
 
-def renewal_command(assumption: Assumption, *, today: date) -> str:
+RENEWAL_SIGNER_PLACEHOLDER = "<YOUR-NAME>"
+
+
+def renewal_command(assumption: Assumption, *, today: date) -> str | None:
     """The exact command that re-signs this entry (#410), ready to paste.
 
     ``--expires`` is proposed from the component's default lifetime counted
     from today — the same proposal ``enter_assumption.py`` makes on a fresh
-    entry — or left as a placeholder where there is no default. The owner of
-    record is named, because that is who renews it. ``--value`` is left off:
-    the command re-signs the same number, and the caption beside it says how
-    to give a new one.
+    entry — or left as a placeholder where there is no default. ``--entered-by``
+    is always a placeholder: a renewal is a decision with the renewer's name on
+    it, and pre-filling the previous owner would let one paste re-sign an entry
+    in someone else's name (#618 review). ``--value`` is left off: the command
+    re-signs the same number, and the caption beside it says how to give a new
+    one. Every argument is shell-quoted, because owners and ids are free text.
+
+    ``None`` when the entry's shipment window has already ended: ``--renew``
+    would be refused (``window_already_sailed``), so there is no command to
+    give — the next window is a new entry, not a renewal.
     """
+    if assumption.window is not None and assumption.window.end < today:
+        return None
     proposed = default_expiry(
         assumption.component, entered_at=today, window=assumption.window
     )
     expires = proposed.isoformat() if proposed is not None and proposed >= today else "<YYYY-MM-DD>"
     return (
-        f"python scripts/enter_assumption.py --renew {assumption.id} "
-        f"--expires {expires} --entered-by {assumption.entered_by}"
+        f"python scripts/enter_assumption.py --renew {shlex.quote(assumption.id)} "
+        f"--expires {shlex.quote(expires)} "
+        f"--entered-by {shlex.quote(RENEWAL_SIGNER_PLACEHOLDER)}"
     )
 
 
@@ -575,8 +588,9 @@ def lapsed_inputs(assumptions: AssumptionSet, *, today: date) -> tuple[LapsedInp
     """Every lapsed entry still standing, most recently lapsed first.
 
     A retired row is excluded (it was re-signed), and so is a lapsed row whose
-    exact scope has a live successor already (a hand-shortened renewal chain):
-    neither blocks anything, so neither is work. This is display material for
+    exact scope has a live successor already (a hand-shortened renewal chain),
+    and one whose shipment window has already ended: none of them blocks
+    anything, so none is work. This is display material for
     the PRIVATE edition only — the caller decides the audience, and the value
     it carries is never an input to any arithmetic.
     """
@@ -584,19 +598,21 @@ def lapsed_inputs(assumptions: AssumptionSet, *, today: date) -> tuple[LapsedInp
         return (item.component, item.origin, item.destination, item.window)
 
     live_scopes = {scope(item) for item in assumptions.live(today)}
-    lapsed = [
-        item for item in assumptions.assumptions
-        if item.expires_on < today
-        and not item.is_retired(today)
-        and scope(item) not in live_scopes
-    ]
+    lapsed = []
+    for item in assumptions.assumptions:
+        if item.expires_on >= today or item.is_retired(today) or scope(item) in live_scopes:
+            continue
+        command = renewal_command(item, today=today)
+        if command is None:  # its shipment window has sailed: history, not work
+            continue
+        lapsed.append((item, command))
     return tuple(
         LapsedInput(
             assumption=item,
             days_lapsed=(today - item.expires_on).days,
-            renew_command=renewal_command(item, today=today),
+            renew_command=command,
         )
-        for item in sorted(lapsed, key=lambda item: item.expires_on, reverse=True)
+        for item, command in sorted(lapsed, key=lambda pair: pair[0].expires_on, reverse=True)
     )
 
 
