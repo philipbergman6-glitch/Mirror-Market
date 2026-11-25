@@ -178,8 +178,11 @@ PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
 # are private too (owner decision on #567, 2026-11-25): every public surface
 # shows the layer name and its status and nothing else — the run record
 # (data/history/layer_runs.csv), the manifest, the Layer Freshness table and
-# the MCP tools, all through pipeline.public_view — and the history export
-# and the MCP refuse a dated freshness row for one (PrivateLayerLeak).
+# the MCP tools, all through pipeline.public_view. A dated freshness row for
+# one raises PrivateLayerLeak: always at MCP startup (its image is built in
+# CI), and at the history export only inside GitHub Actions — the one place
+# that commits data/history/; a desk run with MATIF_PRIVATE_FETCH set
+# proceeds with one WARNING (owner decision on #567, option B).
 # Empty since 2026-10-21: the owner opened SEA (32) and SOPA (33), the last
 # two, under the A18 stance (#468: every series public, licence risk accepted,
 # internal use, no sale). The mechanism stays for the next private source.

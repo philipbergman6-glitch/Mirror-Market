@@ -10,6 +10,12 @@ Two halves:
   ``data_freshness`` row carrying a date for it in the history export or in
   the MCP's database means the switch reached a publishing machine, so both
   refuse (invariant 1) instead of blanking the row.
+
+  Where (owner decision on #567, option B): the history export refuses only
+  inside GitHub Actions (``GITHUB_ACTIONS=true``), the only place that commits
+  ``data/history/``; a desk run with the switch set proceeds and the export
+  logs one WARNING naming the layer. The MCP refuses everywhere, since its
+  image is built in CI.
 """
 
 from __future__ import annotations
@@ -100,10 +106,24 @@ def _dated_private_row(db: Path) -> None:
         )
 
 
-def test_history_export_refuses_a_dated_private_freshness_row(history_db, tmp_path):
+# Every environment that is not GitHub Actions: GitHub sets the variable to
+# the string "true" on every runner, and nothing else counts as CI.
+DESK_ENVIRONMENTS = [pytest.param(None, id="unset"), pytest.param("", id="empty"),
+                     pytest.param("false", id="false")]
+
+
+def _set_github_actions(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
+    if value is None:
+        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    else:
+        monkeypatch.setenv("GITHUB_ACTIONS", value)
+
+
+def test_history_export_refuses_a_dated_private_freshness_row_in_ci(history_db, tmp_path, monkeypatch):
     from pipeline.history import export_history
     from pipeline.public_view import PrivateLayerLeak
 
+    _set_github_actions(monkeypatch, "true")
     _dated_private_row(history_db)
     with pytest.raises(PrivateLayerLeak, match=PRIVATE):
         export_history()
@@ -111,10 +131,33 @@ def test_history_export_refuses_a_dated_private_freshness_row(history_db, tmp_pa
     assert not (tmp_path / "history").exists() or not any((tmp_path / "history").iterdir())
 
 
-def test_history_export_writes_the_freshness_table_when_no_private_row_exists(history_db, tmp_path):
+@pytest.mark.parametrize("github_actions", DESK_ENVIRONMENTS)
+def test_desk_history_export_proceeds_with_one_warning_naming_the_layer(
+    history_db, tmp_path, monkeypatch, caplog, github_actions,
+):
+    """A desk run with MATIF_PRIVATE_FETCH set is not a leak: the desk never commits data/history/."""
     from pipeline.history import export_history
 
-    export_history()
+    _set_github_actions(monkeypatch, github_actions)
+    _dated_private_row(history_db)
+    with caplog.at_level("WARNING"):
+        assert export_history() > 0
+    named = [r for r in caplog.records if r.levelname == "WARNING" and PRIVATE in r.getMessage()]
+    assert len(named) == 1, [r.getMessage() for r in caplog.records]
+    assert config.MATIF_FETCH_ENV in named[0].getMessage()
+    assert (tmp_path / "history" / "data_freshness.csv").exists()
+
+
+@pytest.mark.parametrize("github_actions", [*DESK_ENVIRONMENTS, pytest.param("true", id="ci")])
+def test_history_export_writes_the_freshness_table_when_no_private_row_exists(
+    history_db, tmp_path, monkeypatch, caplog, github_actions,
+):
+    from pipeline.history import export_history
+
+    _set_github_actions(monkeypatch, github_actions)
+    with caplog.at_level("WARNING"):
+        export_history()
+    assert not [r for r in caplog.records if PRIVATE in r.getMessage()]
     text = (tmp_path / "history" / "data_freshness.csv").read_text()
     assert "prices" in text and PRIVATE not in text
 
@@ -129,10 +172,13 @@ def _mcp_settings(db: Path, tmp_path: Path):
                     db_built_at="2026-11-25T21:00:00+00:00").validated()
 
 
-def test_mcp_refuses_a_database_with_a_dated_private_freshness_row(history_db, tmp_path):
+@pytest.mark.parametrize("github_actions", [*DESK_ENVIRONMENTS, pytest.param("true", id="ci")])
+def test_mcp_refuses_a_database_with_a_dated_private_freshness_row(history_db, tmp_path, monkeypatch, github_actions):
+    """Unconditional: the MCP image is built in CI, so no environment may start it on a desk DB."""
     from mirror_mcp.server import build_server
     from pipeline.public_view import PrivateLayerLeak
 
+    _set_github_actions(monkeypatch, github_actions)
     _dated_private_row(history_db)
     with pytest.raises(PrivateLayerLeak, match=PRIVATE):
         build_server(_mcp_settings(history_db, tmp_path))
