@@ -32,6 +32,11 @@ Guards (each raises ScraperShapeError — the source changed, not the market):
 * ``_aggregate``'s ₹/quintal band catches a silent unit switch.
 
 Completed IST days only (``MANDI_MIN_AGE_DAYS``): today fills APMC by APMC.
+And yesterday is not finished either (#621): an MSAMB day gains lots through
+all of D+1, so a day read before ``MSAMB_FILL_DAYS`` have passed is stored —
+save first, grade second — with ``filling = 1``, and the readers skip it. The
+next run's re-read of the ~8-day window clears the flag; a missed run cannot,
+so a partial row never turns into a complete one by the clock alone.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from bs4 import BeautifulSoup
 from config import (
     MANDI_MIN_AGE_DAYS,
     MAX_RETRIES,
+    MSAMB_FILL_DAYS,
     MSAMB_GRID_URL,
     MSAMB_PAGE_URL,
     MSAMB_QUINTAL_UNIT,
@@ -164,6 +170,8 @@ def fetch_msamb_soybean(today: date | None = None) -> pd.DataFrame:
     _assert_code_is_soybean(_get(MSAMB_PAGE_URL))
     fragment = _get(MSAMB_GRID_URL, {"commodityCode": MSAMB_SOYBEAN_CODE, "apmcCode": "null"})
     df = _aggregate(_completed(_parse_grid(fragment), today))
+    fill_edge = (today - timedelta(days=MSAMB_FILL_DAYS)).isoformat()
+    df["filling"] = (df["Date"] > fill_edge).astype(int)
     logger.info(
         "MSAMB: Maharashtra — %d completed day(s), latest %s ₹%.0f/MT across %d lots",
         len(df), df["Date"].iloc[-1], df["Close"].iloc[-1], int(df["Volume"].iloc[-1]),

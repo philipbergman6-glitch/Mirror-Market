@@ -411,6 +411,59 @@ def _seed_india_mandi(conn) -> None:
     conn.commit()
 
 
+def test_a_still_filling_mh_day_is_stored_but_the_reader_shows_the_last_complete_one(
+    seeded, registry
+):
+    """#621: MSAMB's newest day is read while APMC lots are still arriving
+    (11-24: 22 lots @ ₹77,025 at read, 37 @ ₹76,500 by D+1 afternoon). It stays
+    stored, but block 01 and the ledger leg show the last complete day, under
+    its own date. NULL — never learned — is not a reason to hide a row."""
+    _seed_india_mandi(seeded.conn)
+    seeded.conn.execute(
+        "INSERT INTO india_domestic_prices (Date, commodity, Close, unit, filling) VALUES (?,?,?,?,?)",
+        (_day(1), "Soybean (Mandi MH)", 66000.0, "INR/MT", 0),
+    )
+    seeded.conn.execute(
+        "UPDATE india_domestic_prices SET filling = 1 WHERE commodity = 'Soybean (Mandi MH)' AND Date = ?",
+        (_day(0),),
+    )
+    seeded.conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                        ("INR/USD", _day(1), 0.0105))
+    seeded.conn.commit()
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+
+    price = _block(build_blocks(registry["india"], None, ctx, markets=registry), "price")
+    legs = {leg["key"]: leg for leg in price.data["legs"]}
+    assert legs["Soybean (Mandi MH)"]["as_of"] == _day(1)
+    assert legs["Soybean (Mandi MH)"]["home_value"] == 66000.0
+    assert legs["Soybean (NCDEX Indore spot)"]["as_of"] == _day(0)  # NULL flag: shown
+
+    leg = next(leg for leg in registry["india"].ledger.legs if leg.key == "Soybean (Mandi MH)")
+    assert ctx.leg_prints(leg)[-1][:2] == (date.fromisoformat(_day(1)), 66000.0)
+    stored = seeded.conn.execute(
+        "SELECT COUNT(*) FROM india_domestic_prices WHERE commodity = 'Soybean (Mandi MH)'"
+    ).fetchone()[0]
+    assert stored == 2  # nothing dropped
+
+
+def test_every_registry_filling_column_is_a_column_of_its_table(registry):
+    """The unwindowed read swallows a SQL error as "no data", so a mistyped
+    `filling_column` would blank a price block silently. Pinned here instead."""
+    conn = sqlite3.connect(":memory:")
+    for ddl in schema.ALL_SCHEMAS:
+        conn.executescript(ddl)
+    declared = [
+        source
+        for market in registry.values()
+        for source in (market.price, market.basis)
+        if source is not None and source.filling_column is not None
+    ]
+    assert declared, "India's price leg declares one (#621)"
+    for source in declared:
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({source.table})")}
+        assert source.filling_column in cols, (source.table, source.filling_column)
+
+
 def test_indias_basis_carries_its_policy_spread_caveat(seeded, registry):
     """M19 #222: the number alone cannot show that no cargo can close it."""
     _seed_india_mandi(seeded.conn)
