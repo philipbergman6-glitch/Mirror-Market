@@ -383,7 +383,7 @@ def test_a_streak_from_the_record_start_is_stated_as_a_floor(history_dir: Path, 
     relay.main([])
     body = _body(calls, ("issue", "create"))
     assert "at least 3 consecutive sessions" in body
-    assert "the record begins 2026-10-05" in body
+    assert "its record begins 2026-10-05" in body
 
 
 def test_a_streak_after_an_available_session_is_stated_exactly(history_dir: Path, gh) -> None:

@@ -71,11 +71,12 @@ def run_url() -> str:
 def _line(streak: Streak) -> str:
     tag = " — **decision-impairing** (availability basket)" if streak.layer in config.AVAILABILITY_BASKET else ""
     if streak.opens_at_record_start:
-        # The record cannot see past its own first session, so the streak is a
-        # floor; printing that session as the start would date the outage (#566).
+        # The layer's record cannot see past its own first session, so the
+        # streak is a floor; printing that session as the start would date the
+        # outage (#566). It is the layer's first row, never earlier (#633).
         span = (
             f"at least {streak.sessions} consecutive sessions — every one on record "
-            f"(the record begins {streak.first_session.isoformat()}; through "
+            f"(its record begins {streak.first_session.isoformat()}; through "
             f"{streak.last_session.isoformat()})"
         )
     else:

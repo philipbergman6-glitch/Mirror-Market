@@ -201,10 +201,12 @@ def _pct(numerator: int, denominator: int) -> float | None:
 class Streak:
     """An open unavailable streak, counted in sessions.
 
-    ``opens_at_record_start`` marks a streak that runs from the record's first
-    session: the record cannot see what came before, so ``sessions`` is a
-    floor and ``first_session`` is where the record begins, not where the
-    outage did (#566 — dark since 2026-10-09, record from 2026-10-16).
+    ``opens_at_record_start`` marks a streak that runs from the first session
+    of the record it was counted over: the record cannot see what came
+    before, so ``sessions`` is a floor and ``first_session`` is where the
+    record begins, not where the outage did (#566 — dark since 2026-10-09,
+    record from 2026-10-16). For ``dead_layers`` that record is the layer's
+    own, from its first row (#633).
     """
 
     layer: str
@@ -394,36 +396,42 @@ def dead_layers(
 ) -> dict[str, Streak]:
     """Layers unavailable on the last ``threshold``+ consecutive sessions.
 
-    Counted from the record's first session through its newest, so a trailing
-    run of weekdays with no run at all extends a streak (``no_run``) while
-    the time before the record began never does.
+    Counted from the layer's own first recorded session (the record's first,
+    for a layer with no row at all) through the record's newest, so a
+    trailing run of weekdays with no row for it extends a streak (``no_run``)
+    while the time before the layer's record began never does (#633).
     """
     threshold = config.DEAD_SOURCE_SESSIONS if threshold is None else threshold
     layers = tuple(config.PRODUCTION_LAYER_KEYS if layers is None else layers)
     if not rows:
         return {}
     sessions = weekday_sessions(min(r.session_date for r in rows), max(r.session_date for r in rows))
+    ran = {r.session_date for r in rows}
     grouped = _by_layer_session(rows)
     out = {}
     for layer in layers:
-        verdicts = _verdicts(grouped.get(layer, {}), sessions)
-        streak = _open_streak(layer, verdicts, sessions)
+        recorded = grouped.get(layer, {})
+        # Sessions before the layer's first row say nothing about it: the
+        # roster did not carry it yet, so they neither count toward the
+        # threshold nor date the streak (#633 — matif's first row is
+        # 2026-11-05, not the record's 2026-10-16).
+        own = [s for s in sessions if s >= min(recorded)] if recorded else sessions
+        verdicts = _verdicts(recorded, own)
+        streak = _open_streak(layer, verdicts, own)
         if streak is None or streak.sessions < threshold:
             continue
         # A session the run was never configured to ask about says nothing
         # about the source: a streak made only of `skipped_unconfigured`
-        # (Layer 37 on CI, by design) is unavailable but not dead. One real
-        # verdict inside the streak and it counts in full.
-        # Sessions before the layer's first record say nothing either: the
-        # roster did not carry it yet, so its leading `no_run` run is "time
-        # before the record began" for that layer, not a streak of silence.
-        tail = [last for _first, last in verdicts[len(verdicts) - streak.sessions:]]
-        recorded = grouped.get(layer, {})
-        if recorded:
-            first_recorded = min(recorded)
-            tail_sessions = sessions[len(sessions) - streak.sessions:]
-            tail = [last for s, last in zip(tail_sessions, tail, strict=True) if s >= first_recorded]
-        if tail and all(last == STATUS_SKIPPED_UNCONFIGURED for last in tail):
+        # (Layer 37 on CI, by design) is unavailable but not dead. Nor does a
+        # weekday on which nothing ran at all — no layer has a row — so such a
+        # gap inside a skipped streak keeps the exemption (#633). A weekday the
+        # pipeline ran without a row for this layer is the layer going silent,
+        # a real verdict; one real verdict inside the streak and it counts in full.
+        tail = zip(own[-streak.sessions:], verdicts[-streak.sessions:], strict=True)
+        if all(
+            last == STATUS_SKIPPED_UNCONFIGURED or (last == NO_RUN and session not in ran)
+            for session, (_first, last) in tail
+        ):
             continue
         out[layer] = streak
     return out

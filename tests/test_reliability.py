@@ -343,6 +343,64 @@ def test_dead_streak_says_when_it_opens_at_the_record_start() -> None:
     assert dead["dce"].opens_at_record_start is False
 
 
+def test_real_record_never_reports_matif_dead(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #633: the 2026-11-24 relay comment on #566 printed matif "unavailable at
+    # least 28 consecutive sessions — the record begins 2026-10-16". Every
+    # matif row is `skipped_unconfigured` (Layer 37 private, by design) and its
+    # first row is 2026-11-05; the 11-09→11-12 weekdays with no run at all are
+    # what defeated the only-skipped exemption. Read from the committed record
+    # (read only), cut at the session that comment reported, so later appends
+    # cannot move the case.
+    from pipeline import history, layer_runs
+
+    monkeypatch.setattr(history, "HISTORY_DIR", config.HISTORY_DIR)
+    rows = [r for r in layer_runs.read_runs() if r.session_date <= date(2026, 11, 24)]
+    matif = [r for r in rows if r.layer_name == "matif"]
+    assert matif and {r.status for r in matif} == {"skipped_unconfigured"}
+    assert min(r.session_date for r in matif) == date(2026, 11, 5)
+
+    assert "matif" not in reliability.dead_layers(rows)
+
+
+def test_skipped_only_streak_with_no_run_gap_is_not_dead() -> None:
+    # A weekday on which nothing ran at all asked no source anything: inside a
+    # streak of `skipped_unconfigured` it is no more evidence than the skip.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions[:2] + sessions[6:]]
+    rows += [_row(s, "matif", "skipped_unconfigured") for s in sessions[:2] + sessions[6:]]
+    assert "matif" not in reliability.dead_layers(rows, layers=("matif", "dce"))
+
+
+def test_a_layer_missing_from_a_run_is_still_a_real_verdict() -> None:
+    # A session where the pipeline ran but wrote no row for the layer is the
+    # layer going silent, not "nothing asked": the exemption must not cover it.
+    sessions = _weekdays(MON, 5)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(sessions[0], "matif", "skipped_unconfigured"),
+             _row(sessions[4], "matif", "skipped_unconfigured")]
+    dead = reliability.dead_layers(rows, layers=("matif", "dce"))
+    assert set(dead) == {"matif"}
+    assert dead["matif"].sessions == 5
+
+
+def test_dead_streak_never_starts_before_the_layers_first_row() -> None:
+    # A layer that joined the roster mid-record: the weekdays before its first
+    # row are not its outage, so they neither count toward the threshold nor
+    # date the streak.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    assert reliability.dead_layers(
+        rows + [_row(s, "safex", "failed") for s in sessions[6:]], layers=("safex",),
+    ) == {}
+
+    rows += [_row(s, "safex", "failed") for s in sessions[4:]]
+    dead = reliability.dead_layers(rows, layers=("safex",))
+    assert dead["safex"].sessions == 4
+    assert dead["safex"].first_session == sessions[4]
+    # The layer's own record cannot see before its first row either.
+    assert dead["safex"].opens_at_record_start is True
+
+
 
 def test_decision_cutoff_uses_one_promotion_and_keeps_all_sessions() -> None:
     friday = date(2026, 10, 9)
