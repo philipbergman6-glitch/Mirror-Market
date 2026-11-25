@@ -98,6 +98,23 @@ Every entry carries all eight of these, and each one is refused if absent:
 confidence** — plus the route and shipment-window scope above. An entry with no
 owner, no reason and no expiry is indistinguishable from a guess.
 
+**`--expires` may be omitted** where the component has a default lifetime
+(#410, `config.ASSUMPTION_DEFAULT_LIFETIME_DAYS`): the CLI proposes
+`entered_at + N` days, prints the date it chose and how to override it, and the
+hard stop is unchanged — past that date the row blocks.
+
+| Component | Default lifetime |
+|---|---|
+| `ocean_freight` | 7 days |
+| `elevation` | 30 days |
+| `destination_port_costs`, `origin_port_costs`, `inland_transport`, `financing`, `working_capital` | 90 days |
+| `quality_adjustment` | the last day of its `--window` (no window → no default) |
+| `import_duty`, `import_vat` | 365 days |
+
+Any other component (`marine_insurance`, the crush-plant costs) has no default
+and still needs `--expires`. `--check` notes — without failing — an
+`ocean_freight` signed for longer than 14 days (`config.ASSUMPTION_LIFETIME_WARN_DAYS`).
+
 `--window` is optional and means "this entry applies to every shipment window".
 Use it for a genuinely period-independent number (a policy rate); do not use it
 for freight, which is priced per window.
@@ -133,16 +150,36 @@ a lapsed US Gulf → North China freight does not quietly become a global rate,
 because the resulting page would show a number for a route whose own assumption
 had lapsed.
 
-Renew before the lapse, not after:
+Renew before the lapse, not after. The queue prints, under each entry, the
+exact command that re-signs it:
 
 ```bash
 python scripts/enter_assumption.py --review --horizon 30
+
+python scripts/enter_assumption.py --renew <ID> --expires <YYYY-MM-DD> \
+  --entered-by you@example.com [--value <VALUE>]
 ```
 
-Entering a renewal while the outgoing entry is still live is an **ambiguous
-overlap**. Shorten the outgoing entry's `expires_on` to the day before the new
-one starts — the two then form a chain, and the history of what was believed
-when survives intact.
+`--renew` (#410) re-signs one entry. The new row keeps the old one's scope,
+unit, basis and confidence, and gets a new `entered_at` (today), the given
+`expires_on`, the owner from `--entered-by`, and — only if `--value` is given —
+a new number (`--basis` may be updated alongside it). The **old row is retired
+in place**: `retired_on` and `superseded_by` are added to it in its own file,
+nothing else in that file changes, and from `retired_on` it never answers
+again. The file is the audit trail; a ranking replayed for an earlier date
+still sees the row that was live then. The id gains a `.renewed-YYYY-MM-DD`
+suffix (replaced, not stacked, on the next renewal). Nothing is written unless
+the renewed set loads.
+
+The private edition (`data/workspace/origins.html`) shows each lapsed input
+struck through — its dead value, entry date, expiry date and owner — beside the
+same renewal command. The struck value is in no total, labelled or not; the
+public edition shows none of it.
+
+A hand-written renewal still works: entering a new row while the outgoing entry
+is live is an **ambiguous overlap** unless the outgoing entry's `expires_on` is
+shortened to the day before the new one starts (or it is given `retired_on:`
+that day).
 
 ---
 
