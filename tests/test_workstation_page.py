@@ -500,3 +500,33 @@ def test_a_malformed_options_document_fails_the_page_rather_than_rendering_empty
         build_view(conn, today=AS_OF, generated_at=GENERATED,
                    positions_dir=empty_positions, options_dir=str(ladder),
                    audience=AUDIENCE_PRIVATE)
+
+
+def test_a_mark_shows_its_own_session_not_the_build_date(conn, tmp_path):
+    """B48 (#626): an ICE bar lands one weekday after CBOT, so a cotton mark is
+    a session older than the page's ``marked`` build date. The mark says which."""
+    conn.execute(
+        "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+        "observation_date, volume, open_interest, fetched_date) "
+        "VALUES ('Cotton','2026-12-01','Dec 2026','CTZ26.NYB',66.50,'2026-08-17',900,NULL,'2026-08-18')"
+    )
+    conn.commit()
+    (tmp_path / "book.yml").write_text(yaml.safe_dump({
+        "physical": [{
+            "commodity": "Cotton", "quantity": 500, "unit": "mt", "side": "long",
+            "average_cost_usd_mt": 1400.0, "mark_contract": "CTZ26",
+            "current_basis_usd_mt": 0.0, "location": "Memphis",
+        }],
+    }), encoding="utf-8")
+    page = view(conn, str(tmp_path))
+    position = section(page, "book")["data"]["valuation"]["positions"][0]
+    assert position["mark_date"] == "2026-08-17"
+
+    from scripts.generate_site import _env
+
+    html = _env().get_template("workstation.html.j2").render(
+        workstation=page, root="", market_nav=[], current_page="workstation",
+        generated_at="2026-08-18 21:30",
+    )
+    text = " ".join(html.split())
+    assert "session 2026-08-17" in text
