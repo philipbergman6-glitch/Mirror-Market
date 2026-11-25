@@ -6,39 +6,20 @@ on:
     paths: [.github/workflows/zz-conab-tls-probe.yml]
 jobs:
   probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     runs-on: ubuntu-latest
     steps:
       - name: Probe
         run: |
           set +e
           H=portaldeinformacoes.conab.gov.br
-          echo "runner egress IP: $(curl -s https://api.ipify.org)"
-          echo "== resolv.conf"; cat /etc/resolv.conf | grep -v '^#'
-          echo "== getent"; getent ahosts $H
-          echo "== dig A/AAAA"; dig +short $H A; dig +short $H AAAA
-          for ip in $(getent ahosts $H | awk '{print $1}' | sort -u); do
-            for i in 1 2 3; do
-              echo "-- $ip try $i (SNI=$H)"
-              echo | timeout 20 openssl s_client -connect "[$ip]:443" -servername $H 2>&1 | grep -E "^depth|verify return|subject=|issuer=|Verification|Protocol|CONNECTED|errno" | head -12
-            done
-            echo "-- $ip no SNI"
-            echo | timeout 20 openssl s_client -connect "[$ip]:443" -noservername 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName 2>&1 | head -4
+          ip=$(curl -s --max-time 10 https://api.ipify.org)
+          for i in 1 2 3 4 5; do
+            s=$(echo | timeout 20 openssl s_client -connect $H:443 -servername $H 2>/dev/null | openssl x509 -noout -subject -serial 2>/dev/null | tr '\n' ' ')
+            echo "PROBE job=${{ matrix.n }} egress=$ip try=$i $(date -u +%TZ) $s"
+            sleep 2
           done
-          echo "== full chain as served"
-          echo | timeout 20 openssl s_client -connect $H:443 -servername $H -showcerts 2>/dev/null | openssl crl2pkcs7 -nocrl -certfile /dev/stdin | openssl pkcs7 -print_certs -noout
-          echo "== curl -v"
-          curl -sS -v -o /dev/null -A "Mozilla/5.0 (compatible; MirrorMarket/1.0)" -I https://$H/downloads/arquivos/PrecosSemanalUF.txt 2>&1 | grep -E "^\*|^< HTTP|subject|issuer" | head -40
-          echo "== python requests x5"
-          for i in 1 2 3 4 5; do python3 - <<'PY'
-          import requests
-          u="https://portaldeinformacoes.conab.gov.br/downloads/arquivos/SerieHistoricaGraos.txt"
-          try:
-              r=requests.head(u,headers={"User-Agent":"Mozilla/5.0 (compatible; MirrorMarket/1.0)"},timeout=30)
-              print("OK",r.status_code,r.headers.get("Last-Modified"))
-          except Exception as e:
-              print("RED",type(e).__name__,str(e)[-200:])
-          PY
-          done
-          echo "== www.conab.gov.br / conab.gov.br"
-          for h in www.conab.gov.br conab.gov.br; do echo | timeout 20 openssl s_client -connect $h:443 -servername $h 2>/dev/null | openssl x509 -noout -subject; done
           exit 0
