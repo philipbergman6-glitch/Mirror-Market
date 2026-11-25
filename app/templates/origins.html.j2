@@ -323,7 +323,18 @@
             <td class="caption" style="margin:0">{{ req.entered_by or '—' }}</td>
             <td class="num">{{ req.expires_on or '—' }}</td>
           </tr>
-          {% if req.is_blocking %}
+          {% set dead = v.lapsed_inputs.get(req.assumption_id) if req.status == 'expired' and v.is_private and req.assumption_id else none %}
+          {% if dead %}
+          {#- #410, private edition only: the lapsed value is shown dead — struck
+              through, with its dates and owner — and is never in any total. The
+              context holds it only when v.is_private; the check here is the second lock. -#}
+          <tr><td colspan="6" class="caption" style="padding-top:0">
+            Lapsed, not used: <s>{{ dead.value }} {{ dead.unit }}</s>{% if dead.days %} × {{ dead.days }}d{% endif %}
+            — entered {{ dead.entered_at }} by {{ dead.entered_by }}, expired {{ dead.expires_on }} ({{ dead.id }}).
+            Renew it (add <code>--value &lt;VALUE&gt;</code> if the number changed):
+            <code class="req-cmd">{{ dead.renew_command|e }}</code>
+          </td></tr>
+          {% elif req.is_blocking %}
           <tr><td colspan="6" class="caption" style="padding-top:0">
             {{ req.guidance }}
             <br>{#- escaped explicitly even though the environment autoescapes (#313):
@@ -778,6 +789,37 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
+  {% endif %}
+  {% if v.is_private and v.lapsed_inputs %}
+  {#- #410: the whole lapsed list, window-independent. Private edition only. -#}
+  <div class="subhdr" style="margin-top:14px">Lapsed inputs — shown dead, never used</div>
+  <div class="table-scroll">
+  <table class="dtable">
+    <thead><tr><th>Id</th><th>Input</th><th class="num">Dead value</th><th>Route</th><th class="num">Entered</th><th class="num">Expired</th><th>Owner</th></tr></thead>
+    <tbody>
+      {% for dead in v.lapsed_inputs.values() %}
+      <tr>
+        <td style="font-family:var(--mono);font-size:11px">{{ dead.id }}</td>
+        <td>{{ dead.label }}</td>
+        <td class="num"><s>{{ dead.value }} {{ dead.unit }}</s>{% if dead.days %} × {{ dead.days }}d{% endif %}</td>
+        <td>{{ dead.origin or '*' }} &rarr; {{ dead.destination or '*' }}</td>
+        <td class="num">{{ dead.entered_at }}</td>
+        <td class="num">{{ dead.expires_on }} ({{ dead.days_lapsed }}d ago)</td>
+        <td class="caption" style="margin:0">{{ dead.entered_by }}</td>
+      </tr>
+      <tr><td></td><td colspan="6" class="caption" style="padding-top:0">
+        <code class="req-cmd">{{ dead.renew_command|e }}</code>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="caption">
+    A struck value is the number that was signed for, kept so its owner can see
+    what lapsed. It is in no total, labelled or not. The command re-signs it
+    unchanged; add <code>--value &lt;VALUE&gt;</code> to re-sign a new number. The old
+    row is retired in place — the file is the audit trail.
   </div>
   {% endif %}
   <div class="caption">{{ s.data.note }}</div>

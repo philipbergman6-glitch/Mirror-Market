@@ -127,7 +127,9 @@ def _validity_overlaps(left: Assumption, right: Assumption) -> bool:
     intersect — so the fix a reader is told about is "shorten the outgoing
     entry's ``expires_on``", not "delete it".
     """
-    return left.entered_at <= right.expires_on and right.entered_at <= left.expires_on
+    return (
+        left.entered_at <= right.last_usable_day and right.entered_at <= left.last_usable_day
+    )
 
 
 def _windows_overlap(left: Assumption, right: Assumption) -> bool:
@@ -301,10 +303,60 @@ def _lifetime_issues(assumption: Assumption, on: date, horizon: int) -> list[Val
     return []
 
 
+def _lifetime_length_issues(assumption: Assumption) -> list[ValidationIssue]:
+    """A lifetime longer than the component's number stays true (#410).
+
+    A note, never an error: the owner may sign for any date, and the hard stop
+    still applies. But a freight indication signed for a month is a number that
+    will be used after nobody would quote it any more, and that is said aloud.
+    """
+    limit = config.ASSUMPTION_LIFETIME_WARN_DAYS.get(assumption.component.value)
+    lifetime = (assumption.expires_on - assumption.entered_at).days
+    if limit is None or lifetime <= limit:
+        return []
+    return [
+        ValidationIssue(
+            code="lifetime_too_long",
+            severity=Severity.WARNING,
+            message=(
+                f"{assumption.id}: {assumption.component.value} signed for a lifetime of "
+                f"{lifetime} days ({assumption.entered_at.isoformat()} → "
+                f"{assumption.expires_on.isoformat()}), longer than the {limit}-day "
+                "ceiling — an indication that old is no longer what anyone would quote"
+            ),
+            ids=(assumption.id,),
+            remedy=(
+                f"shorten expires_on, or re-quote and renew it within {limit} days "
+                f"(owner of record: {assumption.entered_by})"
+            ),
+        )
+    ]
+
+
 def _sorted(issues: list[ValidationIssue]) -> tuple[ValidationIssue, ...]:
     return tuple(
         sorted(issues, key=lambda issue: (issue.severity is Severity.WARNING, issue.code, issue.ids))
     )
+
+
+def _succession_issues(assumptions: tuple[Assumption, ...]) -> list[ValidationIssue]:
+    """A retired row naming a successor that is not in the set breaks the audit chain."""
+    ids = {assumption.id for assumption in assumptions}
+    return [
+        ValidationIssue(
+            code="dangling_successor",
+            severity=Severity.ERROR,
+            message=(
+                f"{assumption.id} is retired as superseded by {assumption.superseded_by!r}, "
+                "which is not in the set — the renewal it points at was deleted or never "
+                "written, so the record no longer says what replaced it"
+            ),
+            ids=(assumption.id,),
+            remedy=f"restore {assumption.superseded_by}, or remove superseded_by from {assumption.id}",
+        )
+        for assumption in assumptions
+        if assumption.superseded_by is not None and assumption.superseded_by not in ids
+    ]
 
 
 def structural_issues(assumptions: AssumptionSet) -> tuple[ValidationIssue, ...]:
@@ -319,6 +371,7 @@ def structural_issues(assumptions: AssumptionSet) -> tuple[ValidationIssue, ...]
         issues.extend(_scope_issues(assumption))
         issues.extend(_window_issues(assumption))
     issues.extend(_ambiguity_issues(assumptions.assumptions))
+    issues.extend(_succession_issues(assumptions.assumptions))
     return _sorted(issues)
 
 
@@ -336,6 +389,9 @@ def validate_set(
         if assumption.is_live(on)
     }
     for assumption in assumptions.assumptions:
+        if assumption.retired_on is not None:
+            continue  # history: neither a lapse to renew nor a lifetime to police
+        issues.extend(_lifetime_length_issues(assumption))
         if assumption.expires_on < on and (*_scope_key(assumption), assumption.window) in live_scopes:
             continue
         issues.extend(_lifetime_issues(assumption, on, expiry_horizon_days))

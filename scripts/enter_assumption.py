@@ -30,17 +30,29 @@ and over SSH.
 
     # the renewal queue: what lapses, when, and which routes go dark with it
     python scripts/enter_assumption.py --review --horizon 30
+
+    # re-sign a lapsed or lapsing entry (same number unless --value is given);
+    # the old row is retired in place, the file is the audit trail
+    python scripts/enter_assumption.py --renew ocean_freight.us_gulf.cn_north.2026-12 \
+      --expires 2026-12-09 --entered-by you@example.com [--value 55.0]
+
+    # --expires may be omitted when adding: the component's default lifetime
+    # (config.ASSUMPTION_DEFAULT_LIFETIME_DAYS) is proposed and printed
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+import yaml  # noqa: E402
 
 import config  # noqa: E402
 from analysis.futures.privacy import AUDIENCE_PRIVATE  # noqa: E402
@@ -50,6 +62,7 @@ from analysis.origins.assumptions import (  # noqa: E402
     REQUIRED_UNIT,
     AssumptionError,
     AssumptionSet,
+    default_expiry,
     load_assumptions,
     parse_assumption,
     private_assumptions_dir,
@@ -142,6 +155,19 @@ def _yaml_block(entry: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _default_note(component: CostComponent, entered_at: date, expires_on: date) -> str:
+    """The line printed when --expires was proposed rather than given (#410)."""
+    if component.value in config.ASSUMPTION_LIFETIME_ENDS_WITH_WINDOW:
+        rule = "the end of its shipment window"
+    else:
+        rule = f"{config.ASSUMPTION_DEFAULT_LIFETIME_DAYS[component.value]} days"
+    return (
+        f"expiry proposed from the {component.value} default lifetime ({rule}): "
+        f"{expires_on.isoformat()}. Pass --expires YYYY-MM-DD to choose another date; "
+        "past it the row blocks until renewed."
+    )
+
+
 def add(args: argparse.Namespace) -> int:
     component = CostComponent(args.component)
     window = _parse_window(args.window)
@@ -208,17 +234,184 @@ def add(args: argparse.Namespace) -> int:
 
     # A MIRROR_ASSUMPTIONS_DIR override can point outside the repo (the dev
     # loop does exactly that), so the path is only shortened when it is inside.
-    try:
-        shown = path.relative_to(PROJECT_ROOT)
-    except ValueError:
-        shown = path
-    print(f"WROTE {parsed.id} -> {shown}")
+    print(f"WROTE {parsed.id} -> {_shown(path)}")
     print(f"  {parsed.value} {parsed.unit}, expires {parsed.expires_on.isoformat()}")
+    if getattr(args, "expires_proposed", False):
+        print(f"  {_default_note(parsed.component, parsed.entered_at, parsed.expires_on)}")
     # Re-load the whole set: the single most useful thing this command can do
     # after writing is prove the file it just touched still parses.
     reloaded = _load()
     print(f"  set now holds {len(reloaded.assumptions)} assumption(s), id {reloaded.set_id}")
     return 0
+
+
+class CannotRetireInPlace(ValueError):
+    """The outgoing row could not be located safely in its file's text."""
+
+
+# A renewal's id is the root id plus the day it was signed. A renewal of a
+# renewal replaces the suffix rather than stacking another one.
+_RENEWED_SUFFIX = re.compile(r"\.renewed-\d{4}-\d{2}-\d{2}$")
+
+
+def renewal_id(old_id: str, entered_at: date) -> str:
+    return f"{_RENEWED_SUFFIX.sub('', old_id)}.renewed-{entered_at.isoformat()}"
+
+
+def _id_line(line: str) -> str | None:
+    """The id on a block-style ``- id: ...`` line, or ``None`` if it is not one."""
+    match = re.match(r"^-\s+id:\s*(.+?)\s*$", line)
+    if not match:
+        return None
+    try:
+        value = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return None
+    return str(value) if value is not None else None
+
+
+def retire_in_place(text: str, entry_id: str, *, retired_on: date, superseded_by: str) -> str:
+    """``text`` with ``retired_on`` and ``superseded_by`` added to one entry.
+
+    A text edit, not a re-dump: ``yaml.safe_dump`` would rewrite the file and
+    drop every comment in it. The edit is then proven by re-parsing — every
+    other entry must be unchanged and this one must differ by exactly the two
+    keys — and anything the edit cannot prove raises instead of guessing.
+    """
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if _id_line(line) == entry_id]
+    if len(starts) != 1:
+        raise CannotRetireInPlace(
+            f"{entry_id} is not written as one block-style `- id:` entry, so it cannot be "
+            "retired in place safely — add `retired_on:` and `superseded_by:` to it by hand"
+        )
+    start = starts[0]
+    end = next(
+        (index for index in range(start + 1, len(lines))
+         if lines[index] and not lines[index][0].isspace()),
+        len(lines),
+    )
+    last = max(index for index in range(start, end) if lines[index].strip())
+    indent = " " * (len(lines[start]) - len(lines[start].lstrip("- ")))
+    # JSON strings are valid YAML double-quoted scalars: no id can break the file.
+    added = [
+        f"{indent}retired_on: {retired_on.isoformat()}",
+        f"{indent}superseded_by: {json.dumps(superseded_by)}",
+    ]
+    edited = "\n".join(lines[: last + 1] + added + lines[last + 1:]) + "\n"
+
+    before, after = yaml.safe_load(text) or [], yaml.safe_load(edited) or []
+    expected = [
+        {**entry, "retired_on": retired_on, "superseded_by": superseded_by}
+        if isinstance(entry, dict) and str(entry.get("id")) == entry_id else entry
+        for entry in before
+    ]
+    if after != expected:
+        raise CannotRetireInPlace(
+            f"retiring {entry_id} in place would change more than its own two keys — add "
+            "`retired_on:` and `superseded_by:` to it by hand"
+        )
+    return edited
+
+
+def _file_holding(entry_id: str) -> Path:
+    """The assumption file whose list carries ``entry_id`` (both tiers)."""
+    roots = [Path(config.ASSUMPTIONS_DIR), private_assumptions_dir()]
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.y*ml")):
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+            if any(isinstance(e, dict) and str(e.get("id")) == entry_id for e in document):
+                return path
+    raise LookupError(entry_id)
+
+
+def renew(args: argparse.Namespace) -> int:
+    """Re-sign one entry (#410): retire the old row in place, append the new one.
+
+    The new row keeps the old one's scope, unit, basis and confidence; it gets a
+    new ``entered_at`` (today, or ``--entered-at``), the given ``expires_on``,
+    the owner from ``--entered-by`` and — only if ``--value`` is given — a new
+    number. Nothing is written unless the renewed set loads.
+    """
+    existing = _load()
+    old = next((item for item in existing.assumptions if item.id == args.renew), None)
+    if old is None:
+        print(
+            f"REJECTED: no assumption with id {args.renew!r} — `--list` shows every id",
+            file=sys.stderr,
+        )
+        return 1
+    if old.retired_on is not None:
+        print(
+            f"REJECTED: {old.id} was already retired on {old.retired_on.isoformat()}"
+            + (f" and is superseded by {old.superseded_by} — renew that one instead"
+               if old.superseded_by else ""),
+            file=sys.stderr,
+        )
+        return 1
+
+    entered_at = args.entered_at or _today()
+    entry = {
+        key: value for key, value in old.to_dict().items()
+        if value is not None and key not in ("retired_on", "superseded_by")
+    }
+    if entry.get("window"):
+        entry["window"] = {k: v for k, v in entry["window"].items() if v is not None}
+    entry.update({
+        "id": args.id or renewal_id(old.id, entered_at),
+        "value": args.value if args.value is not None else old.value,
+        "basis": args.basis or old.basis,
+        "entered_by": args.entered_by,
+        "entered_at": entered_at.isoformat(),
+        "expires_on": args.expires.isoformat(),
+    })
+    try:
+        parsed = parse_assumption(entry, where="<renewal>")
+    except AssumptionError as exc:
+        print(f"REJECTED: {exc}", file=sys.stderr)
+        return 1
+    if any(item.id == parsed.id for item in existing.assumptions):
+        print(
+            f"REJECTED: {parsed.id} already exists — it was renewed once today already; "
+            "pass --id to name this one",
+            file=sys.stderr,
+        )
+        return 1
+
+    path = _file_holding(old.id)
+    original = path.read_text(encoding="utf-8")
+    try:
+        edited = retire_in_place(
+            original, old.id, retired_on=entered_at, superseded_by=parsed.id
+        )
+    except CannotRetireInPlace as exc:
+        print(f"REJECTED: {exc} ({path})", file=sys.stderr)
+        return 1
+    path.write_text(edited.rstrip() + "\n" + _yaml_block(entry), encoding="utf-8")
+    try:
+        reloaded = _load()
+    except AssumptionError as exc:
+        path.write_text(original, encoding="utf-8")
+        print(f"REJECTED (file restored): the renewed set does not load — {exc}",
+              file=sys.stderr)
+        return 1
+
+    print(f"RENEWED {old.id} -> {parsed.id} ({_shown(path)})")
+    print(f"  retired {old.id} in place from {entered_at.isoformat()} "
+          f"(was {old.value} {old.unit}, expired {old.expires_on.isoformat()})")
+    print(f"  {parsed.value} {parsed.unit}, signed by {parsed.entered_by}, "
+          f"expires {parsed.expires_on.isoformat()}")
+    print(f"  set now holds {len(reloaded.assumptions)} assumption(s), id {reloaded.set_id}")
+    return 0
+
+
+def _shown(path: Path) -> Path:
+    try:
+        return path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        return path
 
 
 def listing(_: argparse.Namespace) -> int:
@@ -230,7 +423,9 @@ def listing(_: argparse.Namespace) -> int:
         return 0
     horizon = today + timedelta(days=EXPIRY_WARNING_DAYS)
     for assumption in sorted(assumptions.assumptions, key=lambda a: (a.component.value, a.id)):
-        if not assumption.is_live(today):
+        if assumption.is_retired(today):
+            state = "retired"
+        elif not assumption.is_live(today):
             state = "EXPIRED"
         elif assumption.expires_on <= horizon:
             state = "LAPSING"
@@ -381,12 +576,16 @@ def onboarding(args: argparse.Namespace) -> int:
 
 def review(args: argparse.Namespace) -> int:
     """The renewal queue. Exit 1 when something has already lapsed."""
-    from analysis.origins.readiness import expiry_review
+    from analysis.origins.readiness import expiry_review, renewal_command
 
     today = _today()
     horizon = args.horizon or 30
+    assumptions = _load()
+    commands = {
+        item.id: renewal_command(item, today=today) for item in assumptions.assumptions
+    }
     result = expiry_review(
-        _load(),
+        assumptions,
         today=today,
         horizon_days=horizon,
         window=_window_arg(args),
@@ -405,6 +604,7 @@ def review(args: argparse.Namespace) -> int:
                 f"({row['days_to_expiry']:+d}d) {row['entered_by']}\n"
                 f"         blocks: {blocked}"
             )
+            print(f"         renew:  {commands[row['id']]}")
     print(f"\n{result['note']}")
     return 1 if result["expired"] else 0
 
@@ -457,6 +657,11 @@ def main(argv: list[str] | None = None) -> int:
         "--review", action="store_true",
         help="the renewal queue: what lapses, when, and which routes it takes down",
     )
+    mode.add_argument(
+        "--renew", metavar="ID",
+        help="re-sign entry ID with --expires and --entered-by (and --value if it changed); "
+             "the old row is retired in place",
+    )
 
     parser.add_argument("--component", choices=[c.value for c in CostComponent])
     parser.add_argument("--value", type=float)
@@ -498,6 +703,18 @@ def main(argv: list[str] | None = None) -> int:
         return onboarding(args)
     if args.review:
         return review(args)
+    if args.renew:
+        missing_for_renewal = [
+            name for name, value in (
+                ("--expires", args.expires), ("--entered-by", args.entered_by),
+            ) if value is None
+        ]
+        if missing_for_renewal:
+            parser.error(
+                f"--renew needs {', '.join(missing_for_renewal)} — a renewal is a new "
+                "expiry with a person's name on it, not an automatic extension"
+            )
+        return renew(args)
 
     missing = [
         name for name, value in (
@@ -505,13 +722,32 @@ def main(argv: list[str] | None = None) -> int:
             ("--value", args.value),
             ("--basis", args.basis),
             ("--entered-by", args.entered_by),
-            ("--expires", args.expires),
         ) if value is None
     ]
+    # An omitted --expires is proposed from the component's default lifetime
+    # (#410) — and only where config has one. A component outside the table,
+    # or a window-bound one entered with no window, still needs the date given.
+    args.expires_proposed = False
+    if args.expires is None and args.component is not None:
+        proposed = default_expiry(
+            CostComponent(args.component),
+            entered_at=args.entered_at or _today(),
+            window=_parse_window(args.window),
+        )
+        if proposed is None:
+            missing.append("--expires")
+        else:
+            args.expires = proposed
+            args.expires_proposed = True
     if missing:
         parser.error(
             f"adding an assumption needs {', '.join(missing)} — an entry with no owner, "
             "reason or expiry is indistinguishable from a guess"
+            + (
+                f" ({args.component} has no default lifetime in "
+                "config.ASSUMPTION_DEFAULT_LIFETIME_DAYS, so its expiry must be given)"
+                if "--expires" in missing else ""
+            )
         )
     return add(args)
 

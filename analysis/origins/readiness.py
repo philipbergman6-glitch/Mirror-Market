@@ -47,6 +47,7 @@ from analysis.origins.assumptions import (
     Assumption,
     AssumptionMiss,
     AssumptionSet,
+    default_expiry,
     origin_differentiated_duty,
 )
 from analysis.origins.domain import CostComponent, ShipmentWindow
@@ -478,6 +479,8 @@ def expiry_review(
 
     rows: list[RenewalRow] = []
     for assumption in sorted(assumptions.assumptions, key=lambda item: item.expires_on):
+        if assumption.is_retired(today):
+            continue  # re-signed already: history, not work
         days_left = (assumption.expires_on - today).days
         if days_left < 0:
             state = STATUS_EXPIRED
@@ -518,6 +521,83 @@ def expiry_review(
             "answering for any more."
         ),
     }
+
+
+def renewal_command(assumption: Assumption, *, today: date) -> str:
+    """The exact command that re-signs this entry (#410), ready to paste.
+
+    ``--expires`` is proposed from the component's default lifetime counted
+    from today — the same proposal ``enter_assumption.py`` makes on a fresh
+    entry — or left as a placeholder where there is no default. The owner of
+    record is named, because that is who renews it. ``--value`` is left off:
+    the command re-signs the same number, and the caption beside it says how
+    to give a new one.
+    """
+    proposed = default_expiry(
+        assumption.component, entered_at=today, window=assumption.window
+    )
+    expires = proposed.isoformat() if proposed is not None and proposed >= today else "<YYYY-MM-DD>"
+    return (
+        f"python scripts/enter_assumption.py --renew {assumption.id} "
+        f"--expires {expires} --entered-by {assumption.entered_by}"
+    )
+
+
+@dataclass(frozen=True)
+class LapsedInput:
+    """An entered value past its expiry: shown dead, never used (#410)."""
+
+    assumption: Assumption
+    days_lapsed: int
+    renew_command: str
+
+    def to_dict(self) -> dict[str, Any]:
+        item = self.assumption
+        return {
+            "id": item.id,
+            "component": item.component.value,
+            "label": COMPONENT_LABELS[item.component],
+            "value": item.value,
+            "unit": item.unit,
+            "days": item.days,
+            "origin": item.origin,
+            "destination": item.destination,
+            "window": item.window.describe() if item.window else None,
+            "entered_by": item.entered_by,
+            "entered_at": item.entered_at.isoformat(),
+            "expires_on": item.expires_on.isoformat(),
+            "days_lapsed": self.days_lapsed,
+            "renew_command": self.renew_command,
+        }
+
+
+def lapsed_inputs(assumptions: AssumptionSet, *, today: date) -> tuple[LapsedInput, ...]:
+    """Every lapsed entry still standing, most recently lapsed first.
+
+    A retired row is excluded (it was re-signed), and so is a lapsed row whose
+    exact scope has a live successor already (a hand-shortened renewal chain):
+    neither blocks anything, so neither is work. This is display material for
+    the PRIVATE edition only — the caller decides the audience, and the value
+    it carries is never an input to any arithmetic.
+    """
+    def scope(item: Assumption) -> tuple[Any, ...]:
+        return (item.component, item.origin, item.destination, item.window)
+
+    live_scopes = {scope(item) for item in assumptions.live(today)}
+    lapsed = [
+        item for item in assumptions.assumptions
+        if item.expires_on < today
+        and not item.is_retired(today)
+        and scope(item) not in live_scopes
+    ]
+    return tuple(
+        LapsedInput(
+            assumption=item,
+            days_lapsed=(today - item.expires_on).days,
+            renew_command=renewal_command(item, today=today),
+        )
+        for item in sorted(lapsed, key=lambda item: item.expires_on, reverse=True)
+    )
 
 
 def _first_offered_window(today: date) -> ShipmentWindow:
@@ -571,10 +651,13 @@ __all__ = [
     "STATUS_MISSING",
     "STATUS_SATISFIED",
     "InputRequirement",
+    "LapsedInput",
     "RenewalRow",
     "RouteReadiness",
     "assess_route",
     "assess_routes",
     "expiry_review",
+    "lapsed_inputs",
+    "renewal_command",
     "required_components",
 ]

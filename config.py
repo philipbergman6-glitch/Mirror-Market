@@ -3857,6 +3857,40 @@ ASSUMPTIONS_DIR = os.getenv("MIRROR_ASSUMPTIONS_DIR") or os.path.join(
     os.path.dirname(__file__), "data", "reference", "assumptions"
 )
 
+# Default lifetime of an entered assumption, per component, in days from its
+# `entered_at` (#410). `scripts/enter_assumption.py` proposes `entered_at + N`
+# as `expires_on` when `--expires` is omitted, and prints what it chose; the
+# owner may always override. This is policy on top of the hard stop, never a
+# softening of it: past `expires_on` the row blocks exactly as before.
+#
+# The lifetimes follow how long each kind of number stays true. A broker's
+# freight indication is a week; an elevation spread a month; port tariffs,
+# haulage and the desk's own cost of funds a quarter; a published duty or VAT
+# rate a year. A component absent from both tables below has no default and
+# must be given `--expires` explicitly — absence never becomes an assumption.
+ASSUMPTION_DEFAULT_LIFETIME_DAYS: dict[str, int] = {
+    "ocean_freight": 7,
+    "elevation": 30,
+    "destination_port_costs": 90,
+    "origin_port_costs": 90,
+    "inland_transport": 90,
+    "financing": 90,
+    "working_capital": 90,
+    "import_duty": 365,
+    "import_vat": 365,
+}
+
+# Components whose default lifetime is the end of the shipment window they are
+# scoped to, not a count of days: a protein differential is negotiated for a
+# cargo, and the cargo's window is when it stops being that cargo's number. An
+# entry of one of these with no window has no default.
+ASSUMPTION_LIFETIME_ENDS_WITH_WINDOW: frozenset[str] = frozenset({"quality_adjustment"})
+
+# `enter_assumption.py --check` notes (never fails on) an entry whose lifetime
+# — `expires_on - entered_at` — exceeds this. A freight indication signed for a
+# month is a number nobody will re-quote before it is used.
+ASSUMPTION_LIFETIME_WARN_DAYS: dict[str, int] = {"ocean_freight": 14}
+
 # Hand-entered or imported positions for the Phase 3 workstation. See
 # analysis/futures/positions.py — this project ingests no account, broker
 # statement or clearing feed, so a position can only come from the user, and a
