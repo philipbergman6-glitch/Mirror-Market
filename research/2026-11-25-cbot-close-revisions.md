@@ -18,18 +18,23 @@ made after the bar was final, and none is a roll artefact.
 | Class | Count, all history (sessions 08-24 → 11-24) | Count, 30-day window (#619's 347) |
 |---|---|---|
 | (a1) **overnight leak**: captured 19:00 CT → NY midnight; the row labelled D held trade date D+1's live overnight price | **260** | **180** |
-| (a2) **last trade, not settlement**: captured 14:30 → 19:00 CT; the row held D's last trade, later replaced by the settlement | **595** | **167** |
+| (a2) **last trade, not the final close**: captured 14:30 → 19:00 CT; the row held D's last trade (sampled: 307 of 391, Friday sessions not established, below), later replaced by Yahoo's final daily close | **595** | **167** |
+| (a0) captured before the 14:30 CT guard cutoff | **0** | **0** |
 | (b) provider back-revision of a bar already final (captured after NY midnight, changed later) | **0** | **0** |
 | (c) roll / contract-identity artefact | **0**, by construction | **0** |
 | (d) other | **0** | **0** |
 | **Total** | **855** revisions over 776 (ticker, session) rows | **347** (reproduces #619 exactly) |
 
-[O] for every count (`classify.py`, appendix). The 30-day window is revisions whose replacing commit is on or after
-2026-10-26.
+[O] for every count (`classify.py` and `derive.py`, appendix). The classes are **capture-time windows**: the count in
+each is observed, the cause its name gives is [I], checked on samples since 2026-09-28 (Evidence). The 30-day window
+is revisions whose replacing commit is on or after 2026-10-26.
 
 The settlement guard (`fetchers/_settlement.py`, `EXCHANGE_SESSION`) calls bar D finished at **14:30 CT on D**
-(`config.SETTLEMENT_CUTOFF_LOCAL = (14, 30)`, `config.py:310`) [O]. Yahoo's bar D is final only at **00:00
-America/New_York on D+1** [O, below]. Every revision falls inside that gap.
+(`config.SETTLEMENT_CUTOFF_LOCAL = (14, 30)`, `config.py:310`) [O]. Yahoo's bar D behaves as final from **00:00
+America/New_York on D+1** [I: no value captured after it was ever replaced (O); the exact hour between the last
+revised and the first never-revised capture was not bounded]. Every revision falls inside that gap. "Final" below
+means Yahoo's daily close as it stands after NY midnight: a delayed close (`pricing/semantics.py`), shown to equal the
+settlement-implied board only for meal on 7 sessions (a2 evidence) [I for ZS and ZL].
 
 ## Method
 
@@ -41,9 +46,10 @@ America/New_York on D+1** [O, below]. Every revision falls inside that gap.
    and Soybean Meal, and each change in `Close` per (ticker, Date) was recorded with its commit time.
 3. **Run mapping.** Only `deploy-dashboard.yml` commits history: its "Commit history snapshots" step. `refresh-prices.yml`
    commits none, and 11b is excluded from it (`LAYERS.md` 11b) [O]. Each commit was matched to the one deploy run whose
-   `createdAt…updatedAt` contains it (`gh run list --workflow deploy-dashboard.yml`). Revision commits by event:
-   schedule 549, push 131, repository_dispatch (retry) 112, workflow_dispatch 63. First captures: schedule 837,
-   push 18 [O].
+   `createdAt…updatedAt` contains it (`gh run list --workflow deploy-dashboard.yml`). The 855 replaced values were
+   captured by 55 commits: schedule 758, repository_dispatch (retry) 79, push 18 values. Their replacements came
+   from schedule 549, push 131, repository_dispatch 112, workflow_dispatch 63. The first capture of each of the 776
+   revised rows: schedule 758, push 18 [O].
 4. **Windows.** Each capture time was placed against its own session date D: before 14:30 CT, 14:30–19:00 CT (the CBOT
    overnight session opens at 19:00 CT), 19:00 CT to 00:00 ET, and after 00:00 ET [O, `window()` in the appendix].
 5. **Ground truth, two independent checks.**
@@ -100,7 +106,7 @@ failed [O, `gh run list`].
   [O `deploy-dashboard.yml:5-7`], but since 2026-10-26 the median schedule delay is **304 min** (range 224–549), and
   7 of 22 scheduled runs started after 19:00 CT [O].
 
-### (a2) Last trade, then settlement
+### (a2) Last trade, then the final close
 
 - **307 of 391** captures since 09-28 taken between 14:30 and 19:00 CT equal the close of Yahoo's last 15-min
   day-session bar, which is the last trade [O]. The 84 that do not are **all Friday sessions** (10-09, 10-16, 10-23,
@@ -158,10 +164,13 @@ delisted (e.g. ZLV26/ZMV26 2026-10-12; ZSX26 11-03 and 11-06) will never be re-s
   `fetchers._settlement.session_is_settled(now)`, so `settlement.confirmed` (`trust/quality.py:577`) passes the same
   bars [O code, I effect].
 - **Fast refresh.** `Refresh Prices` runs fetch `prices` and `forward_curve` through the same guarded `fetch_one`.
-  Since 10-26, 31 of the 43 evening-band scheduled runs started between 19:00 and 24:00 CT, 26 of them on Mon–Thu
-  [O run times]. They commit no history, so the values they published are **not measured** [NV].
+  Since 10-26, 31 of the 44 evening-band scheduled runs (created 20:00–08:00 UTC: the 20:07 and 23:30 UTC crons,
+  late landings included) started between 19:00 and 24:00 CT, 26 of them on Mon–Thu [O run times, `derive.py`]. They commit no history, so the values they published are **not measured** [NV].
 
 ## What this means for the CBOT tolerance band (#477)
+
+**Proposals for the owner, not decisions.** Item 2 bears on #477 question 3, items 3–4 on the V4/V6 grading
+grilling (#479), item 5 on #622 and the canonical latency figure in `CLAUDE.md`. Each is the owner's call there.
 
 1. **The revision distribution is not a provider-noise band, so it must not set the CBOT tolerance.** #619 §1.5's
    ZL "median 1.54 USD/MT" mixes two of our own capture defects. The overnight leak is a different trade date: a
@@ -261,5 +270,87 @@ print("revisions:", len(rev), "over", rev.groupby(["ticker", "session"]).ngroups
 print(rev.groupby(["window", "commodity"]).size().unstack(fill_value=0))
 ```
 
-The error tables restrict to rows whose last value was captured in W3, so that "final" is known. The 30-day count
-filters on the replacing commit's time being ≥ 2026-10-26.
+`derive.py` produces every other figure that does not need a network read: the 30-day split, the capture/replacement
+events, the error tables (rows whose last value was captured in W3, so that "final" is known), the worst case, the
+11 editions and 6 later W2 captures, the 47 pre-final rows, the curve 671 of 1,037, and both run-timing figures.
+Run it from the repo root after `classify.py`, on the `captures.csv` that wrote:
+
+```python
+"""Every derived figure of the note from classify.py's captures.csv, the two run
+lists and the committed history CSVs. Read-only.
+usage: python derive.py captures.csv runs.json refresh.json
+       refresh.json = gh run list --workflow refresh-prices.yml --limit 300 --json createdAt,event
+"""
+import json, sys
+from zoneinfo import ZoneInfo
+import pandas as pd
+
+CT = ZoneInfo("America/Chicago")
+c = pd.read_csv(sys.argv[1], parse_dates=["time_utc"]).sort_values(["ticker", "session", "k"])
+g = c.groupby(["ticker", "session"])
+c["repl_t"], c["repl_ev"] = g.time_utc.shift(-1), g.event.shift(-1)
+rev = c[c.replaced_by.notna()]
+print("rows:", g.ngroups, "| revised values:", len(rev), "| by window:", rev.window.str[:2].value_counts().to_dict())
+w30 = rev[rev.repl_t >= pd.Timestamp("2026-10-26", tz="UTC")]
+print("30-day (replacing commit >= 10-26):", len(w30), w30.window.str[:2].value_counts().to_dict())
+print("replaced values by capturing event:", rev.event.value_counts().to_dict(),
+      "| distinct capturing commits:", rev.commit.nunique())
+print("replaced values by replacing event:", rev.repl_ev.value_counts().to_dict())
+print("first captures (k=0) of revised rows by event:",
+      c[(c.k == 0) & c.set_index(["ticker", "session"]).index.isin(rev.set_index(["ticker", "session"]).index)]
+      .event.value_counts().to_dict())
+print("non-integer tick deltas:", int((rev.err_vs_final_ticks % 1 != 0).sum()))
+
+last = g.tail(1)
+final_known = set(map(tuple, last[last.window.str.startswith("W3")][["ticker", "session"]].values))
+c["final_known"] = [(t, s) in final_known for t, s in zip(c.ticker, c.session)]
+for w in ("W2", "W1"):
+    print(f"error vs final, {w} (final captured after NY midnight):")
+    sub = c[c.replaced_by.notna() & c.window.str.startswith(w) & c.final_known]
+    for com, x in sub.groupby("commodity"):
+        t, u = x.err_vs_final_ticks.abs(), x.err_vs_final_usd.abs()
+        print(f"  {com}: n={len(x)} ticks p50={t.median()} p90={t.quantile(.9):.1f} max={t.max()} "
+              f"usd p50={u.median():.2f} p90={u.quantile(.9):.2f} max={u.max():.2f} share>=0.5={(u >= 0.5).mean():.0%}")
+w2 = c[c.replaced_by.notna() & c.window.str.startswith("W2")]
+print("worst W2:", w2.loc[w2.err_vs_final_usd.abs().idxmax(), ["ticker", "session", "commit", "err_vs_final_ticks", "err_vs_final_usd"]].to_dict())
+first_w2 = c[(c.k == 0) & c.window.str.startswith("W2")]
+print("editions first published in W2:", sorted(first_w2.session.unique()), first_w2.event.unique().tolist())
+later_w2 = c[(c.k > 0) & c.window.str.startswith("W2")].drop_duplicates("commit")
+print("later captures still in W2 (commits):", len(later_w2), later_w2[["commit", "session", "event"]].values.tolist())
+pending = last[~last.window.str.startswith("W3") & (last.session != "2026-11-24")]
+print("rows outside 11-24 whose last value is pre-NY-midnight:", len(pending))
+
+fc = pd.read_csv("data/history/forward_curve.csv")
+fc = fc[fc.commodity.isin(["Soybeans", "Soybean Oil", "Soybean Meal"]) & fc.observation_date.notna()]
+cb = pd.read_csv("data/history/contract_bars.csv", dtype={"Date": str})
+m = fc.merge(cb[["ticker", "Date", "Close"]], left_on=["ticker", "observation_date"], right_on=["ticker", "Date"])
+print("curve rows with observation_date and a bar:", len(m), "| differ from the bar:", int(((m.close - m.Close).abs() > 1e-6).sum()))
+print(m[(m.ticker == "ZLF27.CBT") & (m.fetched_date == "2026-11-25")][["close", "observation_date", "volume"]].to_dict("records"))
+
+def evening_ct(runs):
+    r = pd.DataFrame(runs)
+    r["c"] = pd.to_datetime(r.createdAt)
+    return r[(r.event == "schedule") & (r.c >= pd.Timestamp("2026-10-26", tz="UTC"))].copy()
+
+d = evening_ct(json.load(open(sys.argv[2])))
+d["delay"] = ((d.c - d.c.dt.normalize()).dt.total_seconds() / 60 - 19 * 60) % 1440   # cron 0 19 UTC
+ct = d.c.dt.tz_convert(CT)
+print("deploy schedule runs since 10-26:", len(d), "delay min median/range:", d.delay.median(), d.delay.min(), d.delay.max(),
+      "| started 19:00-06:00 CT:", int(((ct.dt.hour >= 19) | (ct.dt.hour < 6)).sum()))
+r = evening_ct(json.load(open(sys.argv[3])))
+r = r[(r.c.dt.hour >= 20) | (r.c.dt.hour < 8)]          # the 20:07 and 23:30 UTC crons, late-landing included
+rct = r.c.dt.tz_convert(CT)
+night = r[(rct.dt.hour >= 19)]
+print("refresh evening-band schedule runs:", len(r), "| started 19:00-24:00 CT:", len(night),
+      "| of them Mon-Thu (CT):", int(night.c.dt.tz_convert(CT).dt.dayofweek.isin([0, 1, 2, 3]).sum()))
+```
+
+Re-run 2026-11-25 by an independent review on `contract_bars.csv` at `cee32b6`: every figure above reproduced
+(the evening-band denominator is 44 under the definition in the script; an earlier ad-hoc count said 43).
+
+**Not reproducible from this appendix** [O, ad hoc, not scripted]: the Yahoo 15-minute comparisons (the 11-24
+ZLF27/ZMF27 bar closes, "243 of 243" inside the overnight range and "22" equal to the last trade, "307 of 391"
+and the Friday 84). Yahoo's 15-minute reach is 60 days, so the sessions they cover start to fall out of reach from
+2026-11-27. Also the USDA AMS 3511 table and its 7/7 match, and the guard log lines of runs 45536043506 and
+44058875066 (`gh run view --log`). Their denominators (243, 391) are the W2 and W1 captures since 09-28 on contracts
+Yahoo still lists, and those come from `captures.csv`.
