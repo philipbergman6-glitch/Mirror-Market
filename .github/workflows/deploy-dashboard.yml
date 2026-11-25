@@ -54,6 +54,7 @@ permissions:
   id-token: write
   # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue,
   # scripts/ci_dead_source.py the dead-source issue,
+  # scripts/ci_reconcile_alert.py the reconciliation-divergence issue (#239),
   # scripts/ci_briefing_blocks.py the briefing-blocks issue,
   # scripts/ci_inactivity_clock.py the inactivity-clock issue (#6)
   issues: write
@@ -89,10 +90,13 @@ jobs:
   check:
     uses: ./.github/workflows/ci.yml
 
-  # The trusted path's only production consumer, and the reason trust/ is
-  # merged rather than parked on a branch: it runs on every weekday build
-  # against live MAGyP, so drift between trust/ and the v1 pipeline surfaces
-  # the morning it appears instead of months later.
+  # The trusted path's only production consumer: a drift detector on
+  # probation (owner decision on #239, 2026-11-25; record in
+  # docs/plans/trusted-path-decision-2026-11-25.md). It runs on every weekday
+  # build against live MAGyP, CBOT and FX, so drift between trust/ and the v1
+  # pipeline surfaces the morning it appears instead of months later. The
+  # reader cutover is not proceeding (ROADMAP.md); at the 2027-03-01 checkpoint
+  # the default is excise.
   #
   # Deliberately its own job, not a step in build-deploy. `continue-on-error`
   # covers a step *failing*, not a step being *slow*: the runner can walk up
@@ -100,9 +104,16 @@ jobs:
   # each, which on a bad MAGyP day is minutes out of build-deploy's 30-minute
   # budget — spent before the dashboard is even generated. A separate job with
   # its own runner and its own timeout cannot delay or starve the publish at
-  # all. Purely observational: nothing reads its output, and job-level
-  # continue-on-error keeps a divergence from reddening the workflow. It stays
-  # this way until the pilots in #194 reconcile cleanly.
+  # all, and build-deploy does not depend on it.
+  #
+  # The alarm is the rolling `ci-reconcile-divergence` issue
+  # (scripts/ci_reconcile_alert.py), commented only on a state change — never
+  # a red run. A red Update Dashboard run must keep meaning "the edition did
+  # not go out", so every reconcile step and the job itself stay
+  # continue-on-error. Each step records its exit code (0 reconciled, 1
+  # diverged, 2 upstream unavailable) for the relay, which also reads the
+  # JSON reports. `needs: check` stays (#239 Q3): a commit that fails its
+  # tests deploys nothing either, and reconciling it would invite false alarms.
   reconcile-trusted:
     needs: check
     runs-on: ubuntu-latest
@@ -120,22 +131,42 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Reconcile MAGyP FOB (v1 vs trusted)
-        run: python scripts/reconcile_magyp_fob.py
+        id: reconcile_magyp
+        continue-on-error: true
+        run: |
+          set +e
+          python scripts/reconcile_magyp_fob.py
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
 
-      # DT-16. Runs whatever MAGyP did (`if: !cancelled()`): the two datasets
-      # are independent migrations, and skipping the benchmark report because
-      # an Argentine circular diverged would hide the evidence the CBOT
-      # read-path switch is waiting on.
+      # DT-16. Runs whatever MAGyP did (`if: !cancelled()`): the datasets are
+      # independent pilots, and skipping the benchmark report because an
+      # Argentine circular diverged would hide the evidence.
       - name: Reconcile CBOT named contracts (v1 vs trusted)
+        id: reconcile_cbot
         if: ${{ !cancelled() }}
-        run: python scripts/reconcile_cbot_benchmarks.py
+        continue-on-error: true
+        run: |
+          set +e
+          python scripts/reconcile_cbot_benchmarks.py
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
 
-      # Pilot 3 (#194). Same `if: !cancelled()` for the same reason: three
-      # independent migrations, and a Real that diverged is no reason to
-      # withhold the evidence the other two are collecting.
+      # Pilot 3 (#194). Same `if: !cancelled()` for the same reason. CNY is run
+      # but never graded: v1 reads the ECB cross, so the report lists it as
+      # "not compared: v1 source differs" (#239, G5).
       - name: Reconcile required FX pairs (v1 vs trusted)
+        id: reconcile_fx
         if: ${{ !cancelled() }}
-        run: python scripts/reconcile_fx.py
+        continue-on-error: true
+        run: |
+          set +e
+          python scripts/reconcile_fx.py
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
 
       - name: Upload reconciliation reports
         if: ${{ !cancelled() }}
@@ -144,6 +175,18 @@ jobs:
           name: trusted-reconciliation
           path: data/reconciliation/
           if-no-files-found: warn
+
+      # The alarm (#239). A relay like the dead-source one: never reddens a run.
+      - name: Relay reconciliation divergences
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/ci_reconcile_alert.py
+          --exit "magyp=${{ steps.reconcile_magyp.outputs.code }}"
+          --exit "cbot=${{ steps.reconcile_cbot.outputs.code }}"
+          --exit "fx=${{ steps.reconcile_fx.outputs.code }}"
 
   build-deploy:
     needs: check
