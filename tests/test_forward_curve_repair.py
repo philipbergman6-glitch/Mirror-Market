@@ -131,3 +131,58 @@ def test_the_repair_is_idempotent_and_logged(patched_db, caplog) -> None:
 def test_a_lookback_below_one_day_is_refused(patched_db) -> None:
     with pytest.raises(ValueError, match="lookback"):
         store.repair_forward_curve(today=TODAY, lookback_days=0)
+
+
+# Review of #627 (2026-11-25): the whole-snapshot rule held only for snapshots
+# whose every leg carried one observation date, because legs without one were
+# filtered out before the snapshot was judged.
+
+
+def test_a_snapshot_with_an_undated_leg_is_not_part_repaired(patched_db, caplog) -> None:
+    """One dated leg and one undated leg: repairing the dated one alone would
+    leave the curve half final, half as captured — the half-repair invariant 8
+    forbids. ``build_curve`` stops new snapshots of this shape; the repair must
+    refuse it anyway rather than rely on that."""
+    _seed(str(patched_db),
+          [_curve_row("2026-11-25", "ZLF27.CBT", 57.84),
+           _curve_row("2026-11-25", "ZLH27.CBT", 57.90, observed=None)],
+          [_bar_row("ZLF27.CBT", "2026-11-24", 58.32, "2026-11-26"),
+           _bar_row("ZLH27.CBT", "2026-11-24", 58.41, "2026-11-26")])
+    with caplog.at_level(logging.WARNING, logger="pipeline.store"):
+        assert store.repair_forward_curve(today=TODAY) == {}
+    assert _curve(str(patched_db)).close.tolist() == [57.84, 57.90]
+    assert "not repaired" in caplog.text
+
+
+def test_a_snapshot_spanning_two_observation_dates_is_not_repaired(patched_db, caplog) -> None:
+    """A snapshot is one session. Legs on two observation dates are not one
+    curve to correct, so none is touched and the reason is logged."""
+    _seed(str(patched_db),
+          [_curve_row("2026-11-25", "ZLF27.CBT", 57.84),
+           _curve_row("2026-11-25", "ZLH27.CBT", 57.90, observed="2026-11-23")],
+          [_bar_row("ZLF27.CBT", "2026-11-24", 58.32, "2026-11-26"),
+           _bar_row("ZLH27.CBT", "2026-11-23", 58.41, "2026-11-26")])
+    with caplog.at_level(logging.WARNING, logger="pipeline.store"):
+        assert store.repair_forward_curve(today=TODAY) == {}
+    assert _curve(str(patched_db)).close.tolist() == [57.84, 57.90]
+    assert "not repaired" in caplog.text
+
+
+def test_a_final_bar_without_volume_never_blanks_a_learned_volume(patched_db) -> None:
+    """Invariant 2: NULL is "never learned". A final bar whose volume Yahoo
+    did not serve corrects the close and keeps the leg's own volume."""
+    _seed(str(patched_db), [_curve_row("2026-11-25", "ZLF27.CBT", 57.84, volume=1000.0)],
+          [_bar_row("ZLF27.CBT", "2026-11-24", 58.32, "2026-11-26", volume=None)])
+    assert store.repair_forward_curve(today=TODAY) == {"Soybean Oil": 1}
+    out = _curve(str(patched_db))
+    assert out.close.tolist() == [58.32]
+    assert out.volume.tolist() == [1000.0]
+
+
+def test_a_final_bar_cannot_carry_a_null_close(patched_db) -> None:
+    """Owner advisory item 2 (review of #627): the repair copies ``cb.Close``
+    whenever it differs from the leg, and ``None != 57.84`` is true, so a NULL
+    close would blank a leg. It cannot reach the repair: ``contract_bars.Close``
+    is ``NOT NULL`` (``pipeline/schema.py``), so such a bar is never stored."""
+    with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
+        _seed(str(patched_db), [], [_bar_row("ZLF27.CBT", "2026-11-24", None, "2026-11-26")])  # type: ignore[arg-type]

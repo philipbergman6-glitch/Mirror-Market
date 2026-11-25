@@ -7,6 +7,9 @@ data/storage/pipeline_status.json and:
 - status file missing        -> the pipeline crashed before finishing: alert
 - hard_failures non-empty    -> alert (transport/parse outages, not quiet
                                 empties like a SAFEX holiday)
+- forward_curve_repair failed -> alert (B47 #622: the run stays green and the
+                                stored curve legs stay as captured, so this
+                                is the only place the failure is seen)
 - clean run                  -> close any open alert issue
 
 One rolling issue (label `ci-alert`) carries the whole outage: created on
@@ -113,6 +116,10 @@ def write_receipt(path: Path, status: dict) -> None:
     path.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
 
 
+def _curve_repair_failed(status: dict) -> bool:
+    return (status.get("forward_curve_repair") or {}).get("state") == "failed"
+
+
 def build_alert_body(status: dict | None) -> str:
     """Markdown body for the alert issue / follow-up comment."""
     if status is None:
@@ -135,6 +142,12 @@ def build_alert_body(status: dict | None) -> str:
             "",
         ]
     lines += quarantine.alert_lines(status.get("quarantine"))
+    if _curve_repair_failed(status):
+        lines += [
+            "",
+            "**forward_curve repair failed** (B47 #622) — stored curve legs were left as "
+            f"captured: {status['forward_curve_repair'].get('reason')}",
+        ]
     critical = status.get("critical_failures", [])
     if critical:
         lines += ["", f"**Critical layers failed:** {', '.join(critical)} — the deploy was blocked."]
@@ -238,7 +251,10 @@ def main(argv: list[str]) -> int:
 
     hard_failures = status.get("hard_failures", [])
     held = int((status.get("quarantine") or {}).get("held") or 0)
-    if hard_failures or held:
+    repair_failed = _curve_repair_failed(status)
+    if hard_failures or held or repair_failed:
+        if repair_failed:
+            logger.warning("forward_curve repair failed this run")
         if hard_failures:
             logger.warning("Hard failures this run: %s", ", ".join(hard_failures))
         if held:

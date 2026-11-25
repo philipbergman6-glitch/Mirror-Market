@@ -59,9 +59,11 @@ unknown the layer is marked `DAY` granular and its age is a stated lower bound
 | Transient throttling | `ZL=F` returned empty once and succeeded 2.8 s later on retry; `ZS=F` failed outright on a 15-year request and succeeded on a 7-day one. `MAX_RETRIES = 3` covers it |
 
 The working provider floor used to split `cadence_wait` out of `acquisition` is
-**30 minutes** for Yahoo — deliberately tighter than the 9h30m bound, because
-understating the provider's share attributes the remainder to us, which is the
-conservative direction for judging our own schedule.
+**30 minutes** for the Yahoo **FX** bar after London midnight — deliberately
+tight, because understating the provider's share attributes the remainder to
+us, which is the conservative direction for judging our own schedule. The
+board's provider delay is no longer a working figure: since B47 (#622) it is
+the measured 9h45m above, pinned to the guard's rule by `tests/test_latency.py`.
 
 ### Fetch cost (this machine, home broadband, 2026-08-19)
 
@@ -469,6 +471,31 @@ Public delivery time requires an independent URL observation before the
 cutoff. The report uses the daily deployment record and a weekday calendar.
 Compare individual price identity, units and shipment terms separately when
 validating a source with the desk.
+
+**Session filing moved one session back for evening runs (B47 #622).** A run
+is filed under `pipeline.layer_runs.session_date_for` — the CBOT session the
+edition serves, which is the settlement guard's own answer. Since B47 that
+answer changes at 00:00 New York, not 14:30 CT, so a run that starts before
+New York midnight (every scheduled evening build and refresh measured so far)
+is filed under the previous weekday session, and a retry that starts after it
+is filed under the next one — a scheduled run and its retry can now sit on two
+sessions. Three consequences, all read from `data/history/layer_runs.csv`:
+
+- **The merge boundary.** Rows written before B47 use the 14:30 CT filing.
+  The first evening after the merge files under the same session as the
+  evening before it, so that one session holds two days' runs. No marker
+  column separates the two meanings.
+- **This report is stricter for non-CBOT layers.** Same-day physical and FX
+  sources fetched on evening D are now filed under D−1, and their edition
+  renders after D−1's cutoff, so they count as late for D−1. That is true of
+  the CBOT leg the session is named for. It is not true of a same-day physical
+  leg. Replaying the 48 recorded runs under the new filing (20-session window,
+  08:00 Asia/Jerusalem) moves `basket_ready` from 13 to 1, with `late` going
+  from 1 to 13. This was measured in review of #627 and is not pinned by a
+  test.
+- **The meaning is the owner's call.** Should `session_date` mean "CBOT
+  session served" (today's definition) or "edition date"? That question is
+  open on #622 together with the schedule.
 
 ## 9. The product's latency
 

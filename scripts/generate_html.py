@@ -440,7 +440,7 @@ def _price_age_and_board_session(now: datetime) -> dict[str, str | None]:
     "Generated 14:02 UTC" says when the page was built, and a reader
     reasonably reads that as when the numbers are from. On this site those
     are routinely a day apart — the settlement guard means a build landing
-    before 00:00 New York publishes the previous session's close, correctly
+    before New York midnight publishes the previous CBOT session's close (B47 #622), correctly
     and deliberately. Stating the generation time alone lets a correct
     behaviour read as a fresher product than it is.
 

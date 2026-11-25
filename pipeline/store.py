@@ -1159,12 +1159,22 @@ def repair_forward_curve(
     is at least two days after its session, so it was read after 00:00 UTC on
     D+2, which is after New York midnight on D+1 in both seasons. A bar fetched
     the day after its label may predate that midnight and proves nothing.
+    "Provably final" is the guard's rule, and the rule is measured sufficient
+    for CBOT and CME only. For ICE cotton and sugar it is necessary but not
+    sufficient: deferred-month values changed up to 54 h after New York
+    midnight (#626). This repair can therefore copy an ICE value that later
+    changes. It converges anyway: ``contract_bars`` is re-fetched every daily
+    run and the lookback revisits the snapshot, so the next run copies the
+    later value.
 
     A snapshot (one commodity, one ``fetched_date``) is repaired whole or not
     at all (invariant 8). Repairing some legs and not others would leave an
     overnight move between them reading as curve structure. A leg without an
     ``observation_date`` never said which session it was, so it is never
-    matched to one.
+    matched to one — and a snapshot holding such a leg, or legs on two
+    observation dates, is not one session and is left whole. A final bar
+    without a volume corrects the close and keeps the leg's own volume
+    (NULL is "never learned", invariant 2).
 
     ``lookback_days`` bounds which snapshots are revisited, counting back
     from ``today`` (UTC) by ``fetched_date``. Returns repaired legs per
@@ -1180,13 +1190,13 @@ def repair_forward_curve(
             """
             SELECT fc.commodity, fc.fetched_date, fc.contract_month, fc.ticker,
                    fc.observation_date, fc.close, fc.volume,
-                   cb.Close, cb.Volume,
+                   cb.Close, COALESCE(cb.Volume, fc.volume),
                    cb.Date IS NOT NULL
                        AND julianday(cb.fetched_date) >= julianday(cb.Date) + 2 AS final
               FROM forward_curve fc
               LEFT JOIN contract_bars cb
                 ON cb.ticker = fc.ticker AND cb.Date = fc.observation_date
-             WHERE fc.fetched_date >= ? AND fc.observation_date IS NOT NULL
+             WHERE fc.fetched_date >= ?
              ORDER BY fc.commodity, fc.fetched_date, fc.contract_month
             """,
             (since,),
@@ -1202,6 +1212,20 @@ def repair_forward_curve(
                 if leg[9] and (leg[5] != leg[7] or leg[6] != leg[8])
             ]
             if not changed:
+                continue
+            # The whole-or-nothing rule is judged over every leg of the
+            # snapshot, dated or not: an undated leg (it never said which
+            # session it was) or a second observation date means the
+            # snapshot is not one session to correct (invariant 8).
+            observed = {leg[4] for leg in snapshot}
+            if len(observed) != 1 or None in observed:
+                logger.warning(
+                    "forward_curve/%s fetched %s: %d leg(s) differ from their final bar but "
+                    "the snapshot is not repaired — its legs carry observation dates %s, "
+                    "not one session",
+                    commodity, fetched, len(changed),
+                    ", ".join(sorted(str(d) for d in observed)),
+                )
                 continue
             unproven = [leg[3] for leg in snapshot if not leg[9]]
             if unproven:

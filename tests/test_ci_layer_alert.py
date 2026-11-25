@@ -212,3 +212,38 @@ def test_clean_run_writes_no_receipt(tmp_path, gh_calls):
     path = _status_file(tmp_path, {"hard_failures": [], "succeeded": ["prices"]})
     assert alerter.main(["prog", str(path)]) == 0
     assert not (tmp_path / "alert_receipt.json").exists()
+
+
+def test_a_failed_curve_repair_raises_an_alert_on_an_otherwise_green_run(tmp_path, gh_calls):
+    """Review of #627: a forward_curve repair failure (B47 #622) leaves the
+    run green and the stored legs as captured, so the alert is the only place
+    it is seen (invariant 1)."""
+    calls, _ = gh_calls
+    path = _status_file(tmp_path, {
+        "succeeded": ["prices"],
+        "hard_failures": [],
+        "critical_failures": [],
+        "forward_curve_repair": {
+            "state": "failed", "reason": "RuntimeError: database is locked", "repaired": {},
+        },
+    })
+
+    assert alerter.main(["prog", str(path)]) == 0
+
+    create = next(c for c in calls if c[:2] == ("issue", "create"))
+    body = create[create.index("--body") + 1]
+    assert "forward_curve repair failed" in body and "database is locked" in body
+
+
+def test_a_successful_curve_repair_does_not_alert(tmp_path, gh_calls):
+    calls, _ = gh_calls
+    path = _status_file(tmp_path, {
+        "succeeded": ["prices"],
+        "hard_failures": [],
+        "critical_failures": [],
+        "forward_curve_repair": {"state": "ok", "reason": None, "repaired": {"Soybeans": 2}},
+    })
+
+    assert alerter.main(["prog", str(path)]) == 0
+
+    assert ("issue", "create") not in _commands(calls)

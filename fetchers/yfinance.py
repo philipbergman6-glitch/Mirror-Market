@@ -138,9 +138,10 @@ def fetch_one(
         How far back to look — "1y", "2y", "5y", "max", etc.
     rule : SessionRule
         Which venue clock decides whether the newest bar has finished.
-        Defaults to exchange settlement; FX pairs must pass
+        Defaults to ``EXCHANGE_SESSION`` (the futures bar is final at 00:00
+        New York on D+1, B47 #622); FX pairs must pass
         ``fetchers._settlement.FX_SESSION`` — spot FX has no settlement and
-        judging it by the Chicago cutoff stores an open bar as a close.
+        judging it by the exchange clock stores an open bar as a close.
 
     Returns
     -------
