@@ -507,7 +507,8 @@ def test_india_csv_from_before_arrivals_still_imports(
 
     export_history()
     header = (history_env / "india_domestic_prices.csv").read_text().splitlines()[0]
-    assert header.split(",")[-1] == "arrivals_mt"
+    # ...and #621's `filling` after it: an old CSV imports NULL for both.
+    assert header.split(",")[-2:] == ["arrivals_mt", "filling"]
 
 
 # ---------------------------------------------------------------------------

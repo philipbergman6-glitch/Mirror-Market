@@ -22,7 +22,7 @@ error or empty result.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 import pandas as pd
 
@@ -36,6 +36,28 @@ class ScraperShapeError(ValueError):
     continue to catch it, but callers can distinguish a shape problem
     from a generic value error when needed.
     """
+
+
+class UpstreamRateLimited(RuntimeError):
+    """The upstream refused us for quota, not for anything wrong with the ask (#637).
+
+    Its own named state — ``rate_limited`` in the run summary and the CI
+    alert, with ``reason`` printed beside the layer — because "the API is
+    down", "we sent a bad request" and "somebody exhausted the quota we
+    share" call for three different fixes. Raised instead of retried: a
+    retry against an exhausted quota answers the same refusal, and every
+    retry that *starts processing* is charged. Never a ``last_success``
+    stamp — the freshness row is ``failed`` (invariant 1).
+
+    ``data`` carries the keys that did arrive before the refusal (an earlier
+    pass), so the pipeline can save first and grade second.
+    """
+
+    def __init__(self, layer: str, reason: str, data: dict[str, Any] | None = None) -> None:
+        super().__init__(f"{layer}: {reason}")
+        self.layer = layer
+        self.reason = reason
+        self.data: dict[str, Any] = dict(data or {})
 
 
 @dataclass(frozen=True)

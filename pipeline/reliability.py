@@ -26,11 +26,28 @@ Consumers, and which verdict each reads (#518):
   unchanged by the rule.
 - ``decision_cutoff_report``: per promoted edition by design (the whole
   basket in one run by the cutoff), so neither session rule applies.
+- The render-time readers that react to an outage-graded latest run — the
+  opportunity board's ``ingest_outage`` blocker and block 07's customs
+  exports — ask ``recovered_in_session`` of ``data_freshness`` (#632, owner
+  option B): the same rule, read from the one row that state keeps.
 A weekday inside the record with no row for a layer is ``no_run`` and
 counts as unavailable — absence is never a quiet day (invariant 1). The
 record's first session bounds every window: before it there is no record,
 and no record is not an outage. A gap longer than T1 tolerates restarts the
 window after it — the cut never trims a gap away (#533).
+
+Where a layer's *streak* may start is one rule, ``streak_sessions``: never
+before the layer's own first row, so a layer that joined the roster
+mid-record has no streak from the weekdays before it (#633). ``dead_layers``
+and the manifest's streak figures (``open_streak``,
+``longest_unavailable_streak``, ``median_recovery_sessions``) both cut through
+it (#638). So do the manifest's availability percentages (owner decision
+2026-11-25, #638): ``availability_pct`` and ``first_run_availability_pct``
+divide by the layer's own ``sessions``, the window from its first row; a
+layer with no row at all keeps the whole window and reads 0 %, not blank.
+Because a joining layer's own count starts small, T2 and T3 carry a session
+floor: not met, with the reason, while any basket layer has fewer than a full
+target window of its own sessions.
 
 Thresholds T1–T4 are echoed from ``config`` with whether this window meets
 them. They are reported, never gating: nothing here fails a run.
@@ -47,7 +64,12 @@ from zoneinfo import ZoneInfo
 
 import config
 from pipeline import grading
-from pipeline.layer_runs import STATUS_NOT_RUN, STATUS_SKIPPED_UNCONFIGURED, LayerRun
+from pipeline.layer_runs import (
+    STATUS_NOT_RUN,
+    STATUS_SKIPPED_UNCONFIGURED,
+    LayerRun,
+    session_date_for,
+)
 
 #: §3: a session is available when its last run graded one of these. Every
 #: other word — ``stale``, ``failed``, ``incomplete``, ``disabled``,
@@ -187,6 +209,37 @@ def _session_status(runs: Sequence[LayerRun]) -> str:
     return available[-1] if available else runs[-1].status
 
 
+def recovered_in_session(last_success: str | None, last_attempt: str | None) -> bool:
+    """Did a usable run store rows on the session the latest attempt served?
+
+    The render-time mirror of ``_session_status`` (#632, owner option B on
+    #518), read from the only state a renderer has: ``data_freshness`` keeps
+    the latest attempt and ``last_success``, which only ``success`` and
+    ``usable_partial`` advance (``grading.ADVANCES_LAST_SUCCESS``). When both
+    stamps serve the same CBOT session (``layer_runs.session_date_for``, the
+    record's own session, so this follows whatever the settlement guard's
+    ``EXCHANGE_SESSION`` says — never a second clock), that session already
+    holds a usable run's rows. A later ``failed`` re-run stored nothing over
+    them, so a reader has no outage of ours to withhold or block on; the
+    failed run stays visible as a status mark and in the manifest's
+    ``failed_runs`` (invariant 1). Callers ask this only of ``failed``: a
+    ``stale`` or ``incomplete`` run saved rows of its own (Comex Stat's save
+    rewrites a product's window, #632 review), so its session is not
+    "recovered" by an earlier success.
+
+    ``False`` when either stamp is missing: a layer that never succeeded, or
+    a row with no attempt, has shown no recovery. ``no_publication`` is
+    available to the record but stores nothing and does not advance
+    ``last_success``, so it never counts here — the withholding direction.
+    An unreadable stamp raises rather than guessing a session.
+    """
+    if not last_success or not last_attempt:
+        return False
+    success = datetime.fromisoformat(str(last_success).replace("Z", "+00:00"))
+    attempt = datetime.fromisoformat(str(last_attempt).replace("Z", "+00:00"))
+    return session_date_for(success) == session_date_for(attempt)
+
+
 def _verdicts(runs_by_session: dict[date, list[LayerRun]], sessions: Sequence[date]) -> list[tuple[str, str]]:
     """``(first_status, session_status)`` per session, ``no_run`` where none."""
     out = []
@@ -227,6 +280,31 @@ def _last_disqualifying_gap(
     return (len(every), current) if current > tolerated else found
 
 
+def layer_first_sessions(rows: Iterable[LayerRun]) -> dict[str, date]:
+    """Each layer's first recorded session over ``rows`` — its own record start."""
+    out: dict[str, date] = {}
+    for row in rows:
+        if row.layer_name not in out or row.session_date < out[row.layer_name]:
+            out[row.layer_name] = row.session_date
+    return out
+
+
+def streak_sessions(sessions: Sequence[date], first_recorded: date | None) -> list[date]:
+    """The sessions a layer's streak may run over: the one rule (#633, #638).
+
+    Sessions before the layer's first row say nothing about it — the roster
+    did not carry it yet — so they neither count toward a streak nor date
+    one. A layer with no row at all keeps every session: its absence from the
+    whole record is the layer going silent, not a later start. Both
+    ``dead_layers`` (the alert) and ``reliability`` (the manifest's streak
+    figures) cut through here, so the two never disagree on where a layer's
+    streak can begin. ``first_recorded`` must come from the layer's whole
+    record, never a window of it: a window's first row for the layer is not
+    where its record began.
+    """
+    return [s for s in sessions if first_recorded is None or s >= first_recorded]
+
+
 def _pct(numerator: int, denominator: int) -> float | None:
     return round(100.0 * numerator / denominator, 1) if denominator else None
 
@@ -235,10 +313,12 @@ def _pct(numerator: int, denominator: int) -> float | None:
 class Streak:
     """An open unavailable streak, counted in sessions.
 
-    ``opens_at_record_start`` marks a streak that runs from the record's first
-    session: the record cannot see what came before, so ``sessions`` is a
-    floor and ``first_session`` is where the record begins, not where the
-    outage did (#566 — dark since 2026-10-09, record from 2026-10-16).
+    ``opens_at_record_start`` marks a streak that runs from the first session
+    of the record it was counted over: the record cannot see what came
+    before, so ``sessions`` is a floor and ``first_session`` is where the
+    record begins, not where the outage did (#566 — dark since 2026-10-09,
+    record from 2026-10-16). For ``dead_layers`` that record is the layer's
+    own, from its first row (#633).
     """
 
     layer: str
@@ -331,10 +411,17 @@ def reliability(
     no_run_gap = max(_streaks([s not in logged for s in sessions]), default=0)
 
     out_layers: list[dict[str, Any]] = []
+    first_recorded = layer_first_sessions(in_scope)
     for layer in layers:
         verdicts = _verdicts(grouped.get(layer, {}), sessions)
         down = [last not in AVAILABLE_STATUSES for _first, last in verdicts]
-        streaks = _streaks(down)
+        # Every per-layer figure runs over the sessions the one rule allows
+        # (#638): the window, from the layer's own first row when that is
+        # later. Its length is the layer's own denominator, ``sessions``.
+        own = streak_sessions(sessions, first_recorded.get(layer))
+        skip = len(sessions) - len(own)
+        own_down = down[skip:]
+        streaks = _streaks(own_down)
         closed = streaks[:-1] if down and down[-1] else streaks
         failing = [
             r for runs in grouped.get(layer, {}).values() for r in runs
@@ -347,14 +434,15 @@ def reliability(
         ]
         available_sessions = {s for s, (_first, status) in zip(sessions, verdicts, strict=True)
                               if status in AVAILABLE_STATUSES}
-        open_streak = _open_streak(layer, verdicts, sessions)
+        open_streak = _open_streak(layer, verdicts[skip:], own)
         out_layers.append({
             "layer": layer,
             "basket": layer in basket,
+            "sessions": len(own),
             "logged_sessions": sum(1 for s in sessions if s in grouped.get(layer, {})),
-            "availability_pct": _pct(down.count(False), len(sessions)),
+            "availability_pct": _pct(own_down.count(False), len(own)),
             "first_run_availability_pct": _pct(
-                sum(1 for first, _last in verdicts if first in AVAILABLE_STATUSES), len(sessions),
+                sum(1 for first, _last in verdicts[skip:] if first in AVAILABLE_STATUSES), len(own),
             ),
             "longest_unavailable_streak": max(streaks, default=0),
             "median_recovery_sessions": float(statistics.median(closed)) if closed else None,
@@ -369,6 +457,14 @@ def reliability(
         })
 
     in_basket = [entry for entry in out_layers if entry["basket"]]
+    # The session floor (#638 owner decision 2026-11-25): T2 and T3 grade a
+    # basket layer on a full window of its own sessions or not at all. A layer
+    # that joined two sessions ago reads 2 of 2 = 100 % with no streak; graded
+    # on that it would pass. The floor is the target window, so a restarted
+    # (short) window holds both back too, however clean its sessions.
+    short = [e for e in in_basket if e["sessions"] < window]
+    named = ", ".join(f"{e['layer']} ({e['sessions']} of {window})" for e in short)
+    floor_reason = f"session floor: fewer than {window} own sessions for {named}" if short else None
     failing_total = sum(entry["failing_runs"] for entry in out_layers)
     surfaced_total = sum(
         1 for r in windowed
@@ -406,19 +502,23 @@ def reliability(
             },
             "T2_min_availability_pct": {
                 "value": config.RELIABILITY_T2_MIN_AVAILABILITY_PCT,
-                "met": all(
+                "floor_sessions": window,
+                "met": not short and all(
                     (e["availability_pct"] or 0.0) >= config.RELIABILITY_T2_MIN_AVAILABILITY_PCT
                     for e in in_basket
                 ),
+                "reason": floor_reason,
             },
             "T3_max_streak_sessions": {
                 "value": config.RELIABILITY_T3_MAX_STREAK_SESSIONS,
+                "floor_sessions": window,
                 # The alert clause of T3 is evidence on the ci-dead-source
                 # issue, not in this store; only the streak half is checked.
-                "met": all(
+                "met": not short and all(
                     e["longest_unavailable_streak"] <= config.RELIABILITY_T3_MAX_STREAK_SESSIONS
                     for e in in_basket
                 ),
+                "reason": floor_reason,
             },
             "T4_surfaced_within_one_run_pct": {
                 "value": config.RELIABILITY_T4_MIN_SURFACED_PCT,
@@ -438,39 +538,42 @@ def dead_layers(
 ) -> dict[str, Streak]:
     """Layers unavailable on the last ``threshold``+ consecutive sessions.
 
-    Counted from the record's first session through its newest, so a trailing
-    run of weekdays with no run at all extends a streak (``no_run``) while
-    the time before the record began never does.
+    Counted from the layer's own first recorded session (the record's first,
+    for a layer with no row at all) through the record's newest, so a
+    trailing run of weekdays with no row for it extends a streak (``no_run``)
+    while the time before the layer's record began never does (#633).
     """
     threshold = config.DEAD_SOURCE_SESSIONS if threshold is None else threshold
     layers = tuple(config.PRODUCTION_LAYER_KEYS if layers is None else layers)
     if not rows:
         return {}
     sessions = weekday_sessions(min(r.session_date for r in rows), max(r.session_date for r in rows))
+    ran = {r.session_date for r in rows}
     grouped = _by_layer_session(rows)
+    first_recorded = layer_first_sessions(rows)
     out = {}
     for layer in layers:
-        verdicts = _verdicts(grouped.get(layer, {}), sessions)
-        streak = _open_streak(layer, verdicts, sessions)
+        recorded = grouped.get(layer, {})
+        # #633: matif's first row is 2026-11-05, not the record's 2026-10-16.
+        own = streak_sessions(sessions, first_recorded.get(layer))
+        verdicts = _verdicts(recorded, own)
+        streak = _open_streak(layer, verdicts, own)
         if streak is None or streak.sessions < threshold:
             continue
         # A session the run was never configured to ask about says nothing
         # about the source: a streak made only of `skipped_unconfigured`
-        # (Layer 37 on CI, by design) is unavailable but not dead. One real
-        # verdict inside the streak and it counts in full.
-        # Sessions before the layer's first record say nothing either: the
-        # roster did not carry it yet, so its leading `no_run` run is "time
-        # before the record began" for that layer, not a streak of silence.
-        # The session's every run is read, not just its verdict word: one
-        # failed run under a later skip is still a real verdict.
-        recorded = grouped.get(layer, {})
-        first_recorded = min(recorded) if recorded else None
-        tail = [
-            [r.status for r in recorded.get(s, [])] or [NO_RUN]
-            for s in sessions[len(sessions) - streak.sessions:]
-            if first_recorded is None or s >= first_recorded
-        ]
-        if tail and all(word == STATUS_SKIPPED_UNCONFIGURED for words in tail for word in words):
+        # (Layer 37 on CI, by design) is unavailable but not dead. The
+        # session's every run is read, not just its verdict word (#518): one
+        # failed run under a later skip is still a real verdict. Nor does a
+        # weekday on which nothing ran at all — no layer has a row — so such a
+        # gap inside a skipped streak keeps the exemption (#633). A weekday the
+        # pipeline ran without a row for this layer is the layer going silent,
+        # a real verdict; one real verdict inside the streak and it counts in full.
+        if all(
+            all(r.status == STATUS_SKIPPED_UNCONFIGURED for r in recorded[s])
+            if s in recorded else s not in ran
+            for s in own[-streak.sessions:]
+        ):
             continue
         out[layer] = streak
     return out

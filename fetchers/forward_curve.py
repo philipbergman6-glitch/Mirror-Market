@@ -154,7 +154,8 @@ def _enforce_single_observation_date(df: pd.DataFrame, commodity: str) -> pd.Dat
     The rule is a single date, not a tolerance window — one day of drift is
     exactly the case that fakes the structure, so there is no N of stale
     days worth keeping. A dropped leg shortens the curve, which is honest;
-    ``analyze_curve`` needs two legs and simply returns nothing below that.
+    ``analysis.futures.curve`` needs two legs to strike a pair and reads
+    no structure below that.
     """
     curve_date = df["observation_date"].max()
     stale = df[df["observation_date"] != curve_date]

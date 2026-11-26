@@ -39,6 +39,7 @@ from dataclasses import dataclass
 
 from config import AFEX_PUBLISH_RAW, HISTORY_DIR, SEA_PUBLISH, SOPA_PUBLISH
 from pipeline.connection import get_connection, managed_connection
+from pipeline.public_view import check_history_export
 
 logger = logging.getLogger(__name__)
 
@@ -413,9 +414,18 @@ def export_history() -> int:
     import_history() has seeded them in this process.
     """
     allow_shrink = os.getenv("MIRROR_HISTORY_ALLOW_SHRINK", "").strip() == "1"
-    os.makedirs(HISTORY_DIR, exist_ok=True)
     total = 0
     with managed_connection(get_connection()) as conn:
+        # Before any file is written: data/history/ is public by construction,
+        # and a private layer's dated freshness row there would publish when
+        # the desk last ran it (#567). In GitHub Actions — the only committer
+        # of data/history/ — that is the breach: refused, never blanked. On a
+        # desk it is the private switch doing its job: one WARNING, proceed
+        # (owner decision on #567, option B).
+        freshness = conn.execute("SELECT * FROM data_freshness")
+        columns = [d[0] for d in freshness.description]
+        check_history_export(dict(zip(columns, row, strict=True)) for row in freshness.fetchall())
+        os.makedirs(HISTORY_DIR, exist_ok=True)
         for table, pk_cols in HISTORY_TABLES.items():
             cursor = conn.execute(
                 f"SELECT * FROM {table} ORDER BY {', '.join(pk_cols)}"

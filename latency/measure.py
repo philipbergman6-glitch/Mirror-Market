@@ -169,3 +169,39 @@ def worst_observation_age(
         and (age := age_at(m, now)) is not None
     ]
     return max(ages) if ages else None
+
+
+def board_session(
+    stored: Mapping[str, Mapping[str, Any]],
+    measurements: list[LayerMeasurement] | None = None,
+) -> date | None:
+    """The CBOT board's session date on the page, or None to withhold it.
+
+    The masthead states it beside the data age (owner decision on #622): an
+    age alone cannot tell a buyer *which* close they are reading, and on this
+    site an evening edition holds D-1 by design.
+
+    ``stored`` is ``pipeline.query.read_board_sessions(CBOT_BOARD_COMMODITIES)``:
+    the newest stored session per board layer and soy commodity. The answer
+    is the **oldest** of them, for the same reason the age is the worst leg —
+    a curve one session behind the front month must not hide behind it.
+    Withheld (None) when any soy leg of any board layer has no stored
+    session, or when a board layer's own measurement is unobserved this run
+    (a failed fetch): a date that silently drops a leg names a session the
+    page may not serve (review of #630). A wrong label is worse than none.
+    """
+    from latency.domain import CBOT_BOARD_COMMODITIES, CBOT_BOARD_LAYERS
+
+    if measurements is not None:
+        for m in measurements:
+            if m.layer in CBOT_BOARD_LAYERS and m.stamps.observed_at is None:
+                return None
+    sessions: list[date] = []
+    for layer in CBOT_BOARD_LAYERS:
+        by_commodity = stored.get(layer) or {}
+        for commodity in CBOT_BOARD_COMMODITIES:
+            raw = by_commodity.get(commodity)
+            if raw is None or raw != raw:  # never learned, or NaN
+                return None
+            sessions.append(date.fromisoformat(str(raw)[:10]))
+    return min(sessions)

@@ -80,6 +80,12 @@ def format(price_data: dict[str, pd.DataFrame]) -> tuple[str, list[dict], dict[s
         if isinstance(contract, str) and contract:
             parts.append(f"[{contract.split('.')[0]}]")
 
+        # The row's own session (B48 #626): bars land per venue — ICE US one
+        # weekday after CBOT — so the edition date above is not this row's.
+        session = df.index[-1]
+        if isinstance(session, pd.Timestamp):
+            parts.append(f"session {session:%Y-%m-%d}")
+
         body.append(f"  {commodity + ':':16s} {('  '.join(parts))}")
 
         signals = detect_all_signals(df, commodity)

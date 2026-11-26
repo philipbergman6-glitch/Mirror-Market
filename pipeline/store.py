@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -20,6 +20,7 @@ from config import (
     DB_PATH,
     EC_OILSEEDS_CADENCE,
     EC_OILSEEDS_QUOTE_KIND,
+    FORWARD_CURVE_REPAIR_LOOKBACK_DAYS,
     FX_ECB_CROSS_PAIRS,
     FX_SESSION_WEEKDAYS,
     GTR_OCEAN_ATTRIBUTION,
@@ -149,6 +150,24 @@ def _migrate_india_domestic_arrivals(conn) -> None:
             conn.execute("ALTER TABLE india_domestic_prices ADD COLUMN arrivals_mt REAL")
         except Exception as exc:
             logger.warning("Could not add arrivals_mt column to india_domestic_prices: %s", exc)
+
+
+def _migrate_india_domestic_filling(conn) -> None:
+    """Add the filling column to india_domestic_prices if absent. Idempotent.
+
+    #621: 1 = read while the publisher was still filling the day, 0 = read
+    after its fill window closed, NULL = never learned (rows stored before the
+    column, or a source with no measured fill window).
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(india_domestic_prices)").fetchall()}
+    except Exception:
+        return
+    if cols and "filling" not in cols:
+        try:
+            conn.execute("ALTER TABLE india_domestic_prices ADD COLUMN filling INTEGER")
+        except Exception as exc:
+            logger.warning("Could not add filling column to india_domestic_prices: %s", exc)
 
 
 def _migrate_gulf_bids_price_change(conn) -> None:
@@ -442,6 +461,7 @@ def init_database():
         _migrate_weather_is_forecast(conn)
         _migrate_weather_basis(conn)
         _migrate_india_domestic_arrivals(conn)
+        _migrate_india_domestic_filling(conn)
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
@@ -1140,6 +1160,131 @@ def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
             )
 
 
+def repair_forward_curve(
+    today: date | None = None, lookback_days: int = FORWARD_CURVE_REPAIR_LOOKBACK_DAYS
+) -> dict[str, int]:
+    """Correct stored curve legs that were captured before their bar was final.
+
+    B47 (#622). Yahoo's futures bar labelled D is final only at 00:00 New York
+    on D+1; until the guard learned that, a run in the evening stored D's last
+    trade or the live overnight print as D's close. ``forward_curve`` is keyed
+    by ``fetched_date``, so such a leg was written once and never re-read.
+    ``contract_bars`` (Layer 11b) re-fetches every listed contract in full each
+    daily run, so it holds the bar Yahoo finished. This copies that bar's close
+    and volume onto the leg of the same ticker and the same session — the
+    value the leg always claimed to be — and touches nothing else.
+
+    A bar is used only when it is **provably final**: the settlement guard's
+    rule for the ticker's venue (``fetchers._settlement.exchange_rule_for``)
+    had finished it by 00:00 UTC on its own ``fetched_date``, the earliest
+    instant that read can have been. For CBOT and CME that is "fetched at
+    least two days after the session" — 00:00 UTC on D+2 is after New York
+    midnight on D+1 in both seasons. For ICE US cotton and sugar it is later,
+    New York midnight ending the next weekday (B48 #626): a Friday ICE bar
+    fetched on the Sunday passes the CBOT test and was revised on the Monday.
+
+    A snapshot (one commodity, one ``fetched_date``) is repaired whole or not
+    at all (invariant 8). Repairing some legs and not others would leave an
+    overnight move between them reading as curve structure. A leg without an
+    ``observation_date`` never said which session it was, so it is never
+    matched to one — and a snapshot holding such a leg, or legs on two
+    observation dates, is not one session and is left whole. A final bar
+    without a volume corrects the close and keeps the leg's own volume
+    (NULL is "never learned", invariant 2).
+
+    ``lookback_days`` bounds which snapshots are revisited, counting back
+    from ``today`` (UTC) by ``fetched_date``. Returns repaired legs per
+    commodity; a leg that already equals its final bar is not counted.
+    Idempotent: a second call repairs nothing.
+    """
+    if lookback_days < 1:
+        raise ValueError(f"forward_curve repair lookback must be >= 1 day, got {lookback_days}")
+    today = today or datetime.now(timezone.utc).date()
+    since = (today - timedelta(days=lookback_days)).isoformat()
+    with managed_connection(get_connection()) as conn:
+        legs = conn.execute(
+            """
+            SELECT fc.commodity, fc.fetched_date, fc.contract_month, fc.ticker,
+                   fc.observation_date, fc.close, fc.volume,
+                   cb.Close, COALESCE(cb.Volume, fc.volume),
+                   cb.Date, cb.fetched_date
+              FROM forward_curve fc
+              LEFT JOIN contract_bars cb
+                ON cb.ticker = fc.ticker AND cb.Date = fc.observation_date
+             WHERE fc.fetched_date >= ?
+             ORDER BY fc.commodity, fc.fetched_date, fc.contract_month
+            """,
+            (since,),
+        ).fetchall()
+        snapshots: dict[tuple[str, str], list[tuple]] = {}
+        for leg in legs:
+            # leg[9] becomes "the bar is provably final" — the guard's own
+            # venue rule, never a second statement of it here.
+            final = leg[9] is not None and _bar_provably_final(leg[3], leg[9], leg[10])
+            snapshots.setdefault((leg[0], leg[1]), []).append((*leg[:9], final))
+
+        repaired: dict[str, int] = {}
+        for (commodity, fetched), snapshot in snapshots.items():
+            changed = [
+                leg for leg in snapshot
+                if leg[9] and (leg[5] != leg[7] or leg[6] != leg[8])
+            ]
+            if not changed:
+                continue
+            # The whole-or-nothing rule is judged over every leg of the
+            # snapshot, dated or not: an undated leg (it never said which
+            # session it was) or a second observation date means the
+            # snapshot is not one session to correct (invariant 8).
+            observed = {leg[4] for leg in snapshot}
+            if len(observed) != 1 or None in observed:
+                logger.warning(
+                    "forward_curve/%s fetched %s: %d leg(s) differ from their final bar but "
+                    "the snapshot is not repaired — its legs carry observation dates %s, "
+                    "not one session",
+                    commodity, fetched, len(changed),
+                    ", ".join(sorted(str(d) for d in observed)),
+                )
+                continue
+            unproven = [leg[3] for leg in snapshot if not leg[9]]
+            if unproven:
+                logger.warning(
+                    "forward_curve/%s fetched %s: %d leg(s) differ from their final bar but "
+                    "the snapshot is not repaired — %s ha%s no provably final bar for "
+                    "observation %s, and a part-repaired curve is not one session",
+                    commodity, fetched, len(changed), ", ".join(unproven),
+                    "s" if len(unproven) == 1 else "ve", snapshot[0][4],
+                )
+                continue
+            conn.executemany(
+                "UPDATE forward_curve SET close = ?, volume = ? "
+                "WHERE commodity = ? AND fetched_date = ? AND contract_month = ?",
+                [(leg[7], leg[8], commodity, fetched, leg[2]) for leg in changed],
+            )
+            repaired[commodity] = repaired.get(commodity, 0) + len(changed)
+            logger.warning(
+                "forward_curve/%s fetched %s: repaired %d leg(s) to the final bar of "
+                "observation %s (captured before Yahoo finished it, B47 #622): %s",
+                commodity, fetched, len(changed), snapshot[0][4],
+                ", ".join(f"{leg[3]} {leg[5]} -> {leg[7]}" for leg in changed),
+            )
+    return repaired
+
+
+def _bar_provably_final(ticker: str, session: str, fetched_date: str) -> bool:
+    """Was this ``contract_bars`` row read after its venue finished the bar?
+
+    ``fetched_date`` is a UTC date, so the earliest the read can have been is
+    00:00 UTC that day; the bar is provably final only if the settlement
+    guard's rule for the ticker's venue finished it by then. For CBOT/CME
+    that is "fetched at least two days after the session"; for ICE US it is
+    later (B48 #626).
+    """
+    from fetchers._settlement import exchange_rule_for
+
+    read_no_earlier_than = datetime.combine(date.fromisoformat(fetched_date), time(0), tzinfo=timezone.utc)
+    return exchange_rule_for(ticker).final_at(date.fromisoformat(session)) <= read_no_earlier_than
+
+
 def save_contract_bars(commodity: str, df: pd.DataFrame):
     """Write named-contract daily bars → 'contract_bars' (Layer 11b).
 
@@ -1429,7 +1574,9 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
 
     Serves the mandi (Agmarknet) series since 2026-08; the retired NCDEX
     rows share the table under their own commodity keys, never spliced.
-    ``arrivals_mt`` (the day's total tonnes) is NULL when the frame has none.
+    ``arrivals_mt`` (the day's total tonnes) is NULL when the frame has none,
+    and so is ``filling`` (#621: 1 = the publisher was still filling the day
+    when it was read) — never learned, not "complete".
     """
     if df.empty:
         return
@@ -1443,9 +1590,11 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
         df["unit"] = "INR/MT"
     if "arrivals_mt" not in df.columns:
         df["arrivals_mt"] = float("nan")
+    if "filling" not in df.columns:
+        df["filling"] = pd.NA
     _save("india_domestic_prices",
           df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit",
-              "arrivals_mt"]],
+              "arrivals_mt", "filling"]],
           ["Date", "commodity"], f"india_domestic/{commodity}")
 
 

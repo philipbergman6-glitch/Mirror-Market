@@ -11,7 +11,7 @@ records and what the surfaces read.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -183,9 +183,10 @@ def _prices_measurement(observed_at, fetch_started, fetch_completed, stored, pub
 def test_post_settlement_run_meets_every_objective():
     """Monday 18 Aug settles 18:15 UTC; a 22:30 UTC refresh publishes by 22:45.
 
-    This is the fast refresh's intended landing, and every leg of the chain
-    is asserted separately so a regression in one cannot be masked by slack
-    in another.
+    The arithmetic of a meeting chain, every leg asserted separately so a
+    regression in one cannot be masked by slack in another. Since B47 (#622)
+    no real CBOT fetch at 22:30 UTC holds 08-18 — the guard keeps the bar
+    until 04:00 UTC — so this pins the measurement, not a schedule.
     """
     m = _prices_measurement(
         observed_at=datetime(2026, 8, 18, tzinfo=UTC),
@@ -205,39 +206,82 @@ def test_post_settlement_run_meets_every_objective():
     assert m.verdict is Verdict.MEETS
 
 
-def test_a_late_scheduler_landing_breaches_the_board_objective():
-    """The envelope's far end. GitHub's scheduler runs up to ~5h late.
+def test_a_late_landing_breaches_the_board_objective():
+    """The envelope's far end. The board objective is twelve hours (#622).
 
-    6h is chosen to cover the *observed* landing window, not to be
-    unfailable: a landing well outside it must still register as a miss, or
-    the objective is decoration.
+    Twelve hours covers the 01:00 New York board dispatch with slack, not
+    every landing: the 10:30 UTC backstop, ~16h after the settlement, must
+    still register as a miss, or the objective is decoration.
     """
     m = _prices_measurement(
         observed_at=datetime(2026, 8, 18, tzinfo=UTC),
-        fetch_started=datetime(2026, 8, 19, 1, 0, tzinfo=UTC),
-        fetch_completed=datetime(2026, 8, 19, 1, 2, tzinfo=UTC),
-        stored=datetime(2026, 8, 19, 1, 3, tzinfo=UTC),
-        published=datetime(2026, 8, 19, 1, 15, tzinfo=UTC),
+        fetch_started=datetime(2026, 8, 19, 10, 40, tzinfo=UTC),
+        fetch_completed=datetime(2026, 8, 19, 10, 42, tzinfo=UTC),
+        stored=datetime(2026, 8, 19, 10, 43, tzinfo=UTC),
+        published=datetime(2026, 8, 19, 10, 55, tzinfo=UTC),
     )
-    assert m.acquisition == timedelta(hours=6, minutes=47)
+    assert m.acquisition == timedelta(hours=16, minutes=27)
     assert m.acquisition_verdict is Verdict.BREACHES
     assert m.pipeline_verdict is Verdict.MEETS  # our own leg was fine
     assert m.verdict is Verdict.BREACHES
 
 
-def test_cadence_wait_separates_our_delay_from_the_providers():
-    """Acquisition minus the declared provider floor is what our schedule cost."""
+def test_the_board_dispatch_landing_meets_the_board_objective():
+    """The board slot (01:00 New York, EDT here) fetches ~05:05 UTC: 10h50m."""
     m = _prices_measurement(
         observed_at=datetime(2026, 8, 18, tzinfo=UTC),
-        fetch_started=datetime(2026, 8, 18, 21, 15, tzinfo=UTC),
-        fetch_completed=datetime(2026, 8, 18, 21, 15, tzinfo=UTC),
-        stored=datetime(2026, 8, 18, 21, 16, tzinfo=UTC),
-        published=datetime(2026, 8, 18, 21, 25, tzinfo=UTC),
+        fetch_started=datetime(2026, 8, 19, 5, 4, tzinfo=UTC),
+        fetch_completed=datetime(2026, 8, 19, 5, 5, tzinfo=UTC),
+        stored=datetime(2026, 8, 19, 5, 6, tzinfo=UTC),
+        published=datetime(2026, 8, 19, 5, 20, tzinfo=UTC),
     )
-    assert m.acquisition == timedelta(hours=3)
-    # Declared provider floor for Yahoo is 30 minutes.
-    assert m.spec.provider_delay == timedelta(minutes=30)
-    assert m.cadence_wait == timedelta(hours=2, minutes=30)
+    assert m.acquisition == timedelta(hours=10, minutes=50)
+    assert m.verdict is Verdict.MEETS
+
+
+def test_cadence_wait_separates_our_delay_from_the_providers():
+    """Acquisition minus the declared provider floor is what our schedule cost.
+
+    08-18 settles 18:15 UTC and Yahoo finishes the bar at 00:00 EDT on 08-19
+    (04:00 UTC, B47 #622); a fetch at 04:15 UTC spent 15 minutes of ours.
+    """
+    m = _prices_measurement(
+        observed_at=datetime(2026, 8, 18, tzinfo=UTC),
+        fetch_started=datetime(2026, 8, 19, 4, 15, tzinfo=UTC),
+        fetch_completed=datetime(2026, 8, 19, 4, 15, tzinfo=UTC),
+        stored=datetime(2026, 8, 19, 4, 16, tzinfo=UTC),
+        published=datetime(2026, 8, 19, 4, 25, tzinfo=UTC),
+    )
+    assert m.acquisition == timedelta(hours=10)
+    assert m.spec.provider_delay == timedelta(hours=9, minutes=45)
+    assert m.cadence_wait == timedelta(minutes=15)
+
+
+def test_the_board_provider_floor_is_the_guards_own_close():
+    """The declared Yahoo delay for CBOT is not a second statement of the
+    guard's rule but the same instant, for every day of a year in both
+    seasons: settlement (13:15 CT) to the bar's finish (00:00 NY, D+1)."""
+    from fetchers._settlement import EXCHANGE_SESSION
+
+    for layer in ("prices", "forward_curve"):
+        spec = LAYER_LATENCY_BY_KEY[layer]
+        day = date(2026, 1, 1)
+        while day.year == 2026:
+            settled = spec.clock.instant(day)
+            assert settled is not None
+            finished = settled + spec.provider_delay
+            assert EXCHANGE_SESSION.last_settled_session(finished) == day, (layer, day)
+            assert EXCHANGE_SESSION.last_settled_session(finished - timedelta(minutes=1)) < day
+            day += timedelta(days=1)
+
+
+def test_the_board_objective_sits_above_the_cbot_provider_floor():
+    """Before #622's decision the 6h target sat under the 9h45m floor, so no
+    landing could meet it. The owner re-set it to twelve hours; it must stay
+    above the floor or it is a guaranteed daily breach again."""
+    spec = LAYER_LATENCY_BY_KEY["prices"]
+    assert spec.objective.acquisition_target == timedelta(hours=12)
+    assert spec.provider_delay < spec.objective.acquisition_target
 
 
 def test_cadence_wait_floors_at_zero_rather_than_going_negative():
@@ -457,10 +501,14 @@ def test_gate_fails_only_on_the_layers_it_was_scoped_to(tmp_path, capsys):
     from scripts.latency_report import main as report_main
 
     rows = [
-        {"layer": "prices", "class": "board_price", "verdict": "meets"},
-        {"layer": "currencies", "class": "fx", "verdict": "meets"},
-        {"layer": "cot", "class": "fundamentals", "verdict": "breaches"},
-        {"layer": "dce", "class": "board_price", "verdict": "breaches"},
+        {"layer": "prices", "class": "board_price", "verdict": "meets",
+         "acquisition_verdict": "meets"},
+        {"layer": "currencies", "class": "fx", "verdict": "meets",
+         "acquisition_verdict": "meets"},
+        {"layer": "cot", "class": "fundamentals", "verdict": "breaches",
+         "acquisition_verdict": "breaches"},
+        {"layer": "dce", "class": "board_price", "verdict": "breaches",
+         "acquisition_verdict": "breaches"},
     ]
     source = _gate_manifest(tmp_path, rows)
     assert report_main(["--manifest", source,

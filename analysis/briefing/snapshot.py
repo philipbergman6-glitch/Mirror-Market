@@ -21,7 +21,13 @@ as there having been none. v5 (#560) lets an ``argentina_fob`` product carry
 no spot: where every band printed on the session had ended (B41 #550) the
 product archives ``withheld: ALL_SAILED`` and the ``reason`` in place of the
 ``spot_*`` keys, as ``crush_spread`` archives ``{withheld, reason}``, and keeps
-its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. Design
+its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. v6
+(#671) reshapes ``forward_curve``: each commodity archives its one-session
+``legs`` (symbol, contract month, native price), its ``observation_date`` and
+``coherent`` — components only; the structure and the nearby pair are
+re-derived from them by ``analysis.futures.curve``. A v1–v5 block's
+``spread``/``spread_pct`` were last *fetched* month minus first and its
+``structure`` came from that sign — not comparable with anything v6 derives. Design
 rules carried by the schema:
 
 - raw numbers and components are stored, never display labels, regime
@@ -59,7 +65,7 @@ from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
 from analysis.crop_year import is_split_crop_year, psd_year_for_crop_year
-from analysis.forward_curve import analyze_curve, curve_slope
+from analysis.futures.stored_curves import read_stored_curves
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
 from analysis.origins.domain import ShipmentWindow
@@ -100,7 +106,6 @@ from pipeline.query import (
     read_economic,
     read_eia_data,
     read_export_sales,
-    read_forward_curve,
     read_gulf_bids,
     read_inspection_destinations,
     read_inspections,
@@ -117,7 +122,7 @@ from pipeline.units import to_metric_tons
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # The ``build_snapshot`` call in progress collects its failed blocks here;
 # outside one, ``_safe`` only logs.
@@ -857,24 +862,30 @@ def _dce_block(price_data: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]
 
 
 def _forward_curve_block() -> dict[str, dict[str, Any]]:
-    curve = read_forward_curve()
-    if curve.empty:
-        return {}
+    """Each stored curve's one-session legs (v6, #671).
+
+    Components only, per the schema rule above: the structure, the nearby pair
+    and the inverted pairs are all ``analysis.futures.curve`` arithmetic on
+    these legs, so a backtest re-derives them with the one vocabulary rather
+    than trusting an archived label.
+    """
     out: dict[str, dict[str, Any]] = {}
-    for commodity, subset in curve.groupby("commodity"):
-        if len(subset) < 2:
+    for commodity, analysis in read_stored_curves().items():
+        if len(analysis.legs) < 2:
             continue
-        result = analyze_curve(subset)
-        if not result:
-            continue
-        out[str(commodity)] = {
-            "structure": result.get("structure"),
-            "front_price": _num(result.get("front_price")),
-            "back_price": _num(result.get("back_price")),
-            "spread": _num(result.get("spread")),
-            "spread_pct": _num(result.get("spread_pct")),
-            "num_contracts": int(result["num_contracts"]) if result.get("num_contracts") else None,
-            "slope_per_month": _num(curve_slope(subset)),
+        out[commodity] = {
+            "observation_date": (
+                analysis.observation_date.isoformat() if analysis.observation_date else None
+            ),
+            "coherent": analysis.coherent,
+            "legs": [
+                {
+                    "symbol": leg.contract.symbol,
+                    "contract_month": leg.contract.contract_month_date.isoformat(),
+                    "price": _num(leg.quote.price),
+                }
+                for leg in analysis.legs
+            ],
         }
     return out
 

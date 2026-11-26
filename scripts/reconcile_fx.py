@@ -26,9 +26,12 @@ Usage:
     python scripts/reconcile_fx.py
     python scripts/reconcile_fx.py --pair BRL/USD --output report.json
 
+Pairs in ``trust.read_path.V1_SOURCE_DIFFERS`` (CNY, since v1 reads the ECB
+cross) are run and reported under ``not_compared`` but never graded (#239).
+
 Exit codes:
     0  reconciled, or no session published for any pair
-    1  the two paths disagree
+    1  the two paths disagree on a graded pair
     2  the provider could not be reached, or a payload could not be parsed
 """
 
@@ -52,7 +55,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import fetchers.yfinance as yfinance_fetcher  # noqa: E402
-from config import FX_ECB_CROSS_LABEL, FX_ECB_CROSS_PAIRS  # noqa: E402
+from config import FX_ECB_CROSS_LABEL  # noqa: E402
 from fetchers._settlement import FX_SESSION, drop_unsettled_session  # noqa: E402
 from trust.fx_ingestion import (  # noqa: E402
     DEFAULT_PERIOD,
@@ -60,12 +63,14 @@ from trust.fx_ingestion import (  # noqa: E402
     FX_PAIRS,
     FxArtifactReplay,
     FxRevisionFindings,
+    dataset_key_for,
     dual_write_fx,
     fetch_fx_artifact,
     legacy_currency_frame,
     ticker_for,
     trusted_currency_frame,
 )
+from trust.read_path import V1_SOURCE_DIFFERS  # noqa: E402
 from trust.reconciliation import ReconciliationReport  # noqa: E402
 from trust.repository import TemporaryDirectoryTrustRepository  # noqa: E402
 
@@ -77,6 +82,21 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "reconciliation" / "fx.json"
 STATUS_RECONCILED = "reconciled"
 STATUS_DIVERGED = "diverged"
 STATUS_NO_SESSION = "no_session"
+
+#: What the report says of a pair it ran but did not grade (#239, G5).
+NOT_COMPARED_V1_SOURCE_DIFFERS = "not compared: v1 source differs"
+
+
+def is_graded(pair: str) -> bool:
+    """False for a pair whose v1 publisher is no longer the trusted contract's.
+
+    Since B25 (#495) v1 converts at the ECB cross for these pairs while the
+    trusted contract still ingests Yahoo, so a "reconciled" would compare
+    Yahoo with Yahoo and claim a v1 parity that does not exist. The set is
+    ``trust.read_path.V1_SOURCE_DIFFERS`` — the rule that already refuses
+    their cutover — never a second list.
+    """
+    return dataset_key_for(pair) not in V1_SOURCE_DIFFERS
 
 EXIT_OK = 0
 EXIT_DIVERGED = 1
@@ -143,13 +163,26 @@ class ReconciliationRun:
 
     @property
     def reconciled(self) -> bool:
-        return all(item.report.reconciled for item in self.pairs)
+        """Every *graded* pair agrees; an ungraded pair cannot fail the run."""
+        return all(item.report.reconciled for item in self.pairs if is_graded(item.pair))
+
+    @property
+    def diverged_pairs(self) -> tuple[str, ...]:
+        return tuple(item.pair for item in self.pairs if is_graded(item.pair) and not item.report.reconciled)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status,
             "run_id": self.run_id,
             "session": self.session.isoformat() if self.session else None,
+            "diverged_pairs": list(self.diverged_pairs),
+            # Run, reported, never graded (#239, G5): the alarm skips these.
+            "not_compared": [
+                {"pair": item.pair, "dataset_key": dataset_key_for(item.pair),
+                 "reason": NOT_COMPARED_V1_SOURCE_DIFFERS}
+                for item in self.pairs
+                if not is_graded(item.pair)
+            ],
             "checked_at": self.checked_at.isoformat(),
             "dataset_keys": list(self.dataset_keys),
             # Reported, never graded: v1 has no quarantine state, so a held-back
@@ -172,7 +205,7 @@ class ReconciliationRun:
             "v1_source_differs": [
                 {"pair": item.pair, "v1_source": FX_ECB_CROSS_LABEL}
                 for item in self.pairs
-                if item.pair in FX_ECB_CROSS_PAIRS
+                if not is_graded(item.pair)
             ],
         }
 
@@ -243,7 +276,8 @@ def reconcile_once(
         )
         for replay in replays
     )
-    status = STATUS_RECONCILED if result.reconciled else STATUS_DIVERGED
+    graded_reconciled = all(item.report.reconciled for item in items if is_graded(item.pair))
+    status = STATUS_RECONCILED if graded_reconciled else STATUS_DIVERGED
     return ReconciliationRun(
         status=status,
         run_id=result.ingestion.run_id,
@@ -341,6 +375,12 @@ def _log_summary(run: ReconciliationRun) -> None:
             log.warning(
                 "FX %s: no rate for %s on either path — the pair did not print this session",
                 item.pair, run.session,
+            )
+            continue
+        if not is_graded(item.pair):
+            log.info(
+                "FX %s %s: %s (paths %s; not graded)", item.pair, run.session,
+                NOT_COMPARED_V1_SOURCE_DIFFERS, "agree" if report.reconciled else "disagree",
             )
             continue
         if report.reconciled:

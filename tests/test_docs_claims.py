@@ -186,3 +186,46 @@ def test_readme_source_table_lists_every_production_layer() -> None:
         "missing_from_readme": sorted(roster_numbers - table_numbers),
         "not_in_roster": sorted(table_numbers - roster_numbers),
     }
+
+
+# B47 (#622): the mission table's "fastest CBOT-settlement-to-reader path" was
+# measured against a guard cutoff (14:30 CT) that Yahoo does not honour. The
+# floor is the declared provider delay for the board, which
+# tests/test_latency.py pins to the guard's own rule; the docs quote it.
+def _cbot_floor_phrase() -> str:
+    from latency.domain import LAYER_LATENCY_BY_KEY
+
+    delay = LAYER_LATENCY_BY_KEY["prices"].provider_delay
+    hours, minutes = divmod(int(delay.total_seconds()) // 60, 60)
+    return f"{hours} h {minutes} m"
+
+
+@pytest.mark.parametrize("doc", ("CLAUDE.md", "LATENCY.md"))
+def test_the_cbot_latency_floor_quoted_is_the_measured_one(doc: str) -> None:
+    text = _read(doc)
+    assert f"CBOT-settlement-to-reader path is **{_cbot_floor_phrase()}**" in text or (
+        f"possible path from a CBOT settlement to a reader is {_cbot_floor_phrase()}" in text
+    ), f"{doc} no longer states the {_cbot_floor_phrase()} CBOT floor"
+    assert "1 h 15 m" not in text, f"{doc} still quotes the pre-B47 1 h 15 m floor"
+
+
+def test_the_public_key_quotes_the_measured_cbot_floor() -> None:
+    """The reader-facing copy of the floor is the "D−1" entry of the how-to-read
+    key (``app/wayfinding.py``), rendered on every page that shows the key.
+    The doc test above covered only CLAUDE.md and LATENCY.md, so the published
+    sentence kept the pre-B47 1 h 15 m (review of #627)."""
+    from app.wayfinding import how_to_read_vocabulary
+
+    entries = {
+        entry["key"]: entry["meaning"]
+        for group in how_to_read_vocabulary().values()
+        for entry in group["entries"]
+    }
+    assert _cbot_floor_phrase() in entries["d_minus_1"]
+    stale = [key for key, meaning in entries.items() if "1 h 15 m" in meaning or "14:30" in meaning]
+    assert not stale, f"how-to-read entries still describe the pre-B47 guard: {stale}"
+
+
+@pytest.mark.parametrize("doc", ("docs/plans/ops-requirements-a11.md",))
+def test_plans_do_not_quote_the_pre_b47_floor(doc: str) -> None:
+    assert "1 h 15 m" not in _read(doc), f"{doc} still quotes the pre-B47 1 h 15 m floor"

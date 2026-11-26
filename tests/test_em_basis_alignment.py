@@ -170,3 +170,76 @@ def test_usd_display_degrades_to_aligned_fx_when_cbot_missing(
     assert "cbot_bean_usd" not in dom
     # Mandi INR (07-31) × INR/USD of the same date — not the fresh 0.0115.
     assert dom["soybean_spot_usd"] == round(MANDI_INR_MT * 0.0120, 2)
+
+
+def test_india_card_shows_the_last_complete_mh_day_not_the_one_still_filling(
+    stalled_spot_em, monkeypatch
+):
+    """#621: the newest MH row was read while MSAMB was still filling it
+    (`filling = 1`). The card — and the briefing line built from it — shows
+    the last complete day under its own date; NULL (never learned) counts as
+    shown, as on every other reader."""
+    mh = pd.DataFrame({
+        "Date": ["2026-07-30", STALL_DATE, "2026-08-06"],
+        "Close": [41000.0, MANDI_INR_MT, 99000.0],
+        "filling": [None, 0, 1],
+    })
+    monkeypatch.setattr(
+        soy_analytics, "read_india_domestic",
+        lambda key=None: mh if key == soy_analytics.MANDI_SERIES_MH else _mandi_df(),
+    )
+    dom = soy_analytics.emerging_markets_analysis()["countries"]["India"]["india_domestic"]
+    assert dom["soybean_mandi_mh_inr"] == MANDI_INR_MT
+    assert dom["soybean_mandi_mh_date"] == STALL_DATE
+    assert dom["soybean_mandi_mh_usd"] == round(MANDI_INR_MT * 0.0120, 2)
+
+
+# #370: the MSAMB counts as stored, 2026-11-10 → 11-23 (LAYERS.md Layer 16).
+_MSAMB_LOTS = {
+    "2026-11-10": 40, "2026-11-11": 33, "2026-11-12": 108, "2026-11-13": 121,
+    "2026-11-14": 86, "2026-11-15": 17, "2026-11-16": 132, "2026-11-17": 142,
+    "2026-11-18": 131, "2026-11-19": 132, "2026-11-20": 137, "2026-11-21": 83,
+    "2026-11-22": 18, "2026-11-23": 118,
+}
+
+
+def _mh_frame(through: str, filling_day: str, filling_lots: float) -> pd.DataFrame:
+    days = [day for day in _MSAMB_LOTS if day <= through]
+    return pd.DataFrame({
+        "Date": [*days, filling_day],
+        "Close": [76000.0] * len(days) + [99000.0],
+        "Volume": [float(_MSAMB_LOTS[day]) for day in days] + [filling_lots],
+        "filling": [0] * len(days) + [1],
+    })
+
+
+def _india_dom(monkeypatch, mh: pd.DataFrame) -> dict:
+    monkeypatch.setattr(
+        soy_analytics, "read_india_domestic",
+        lambda key=None: mh if key == soy_analytics.MANDI_SERIES_MH else _mandi_df(),
+    )
+    return soy_analytics.emerging_markets_analysis()["countries"]["India"]["india_domestic"]
+
+
+def test_india_card_and_briefing_label_a_thin_complete_mh_day(stalled_spot_em, monkeypatch):
+    """#370: the Sunday 11-22 median (18 lots) is still the card's price, with
+    the label beside it — and the briefing line carries the same words."""
+    from analysis.briefing.sections.emerging_markets import _format_india_domestic
+
+    dom = _india_dom(monkeypatch, _mh_frame("2026-11-22", "2026-11-23", 5.0))
+    assert dom["soybean_mandi_mh_date"] == "2026-11-22"
+    assert dom["soybean_mandi_mh_thin"] == "thin day · 18 lots (typical weekday ~131)"
+    text = _format_india_domestic({"India": {"india_domestic": dom}})
+    mh_line = next(line for line in text.splitlines() if "MH mandi median" in line)
+    assert mh_line.endswith("· thin day · 18 lots (typical weekday ~131)")
+
+
+def test_india_card_never_labels_a_filling_day_or_a_normal_one(stalled_spot_em, monkeypatch):
+    """11-24 read at 22 lots is still filling: never shown, never labelled. The
+    card shows 11-23 (118 lots), which is above half the weekday median."""
+    from analysis.briefing.sections.emerging_markets import _format_india_domestic
+
+    dom = _india_dom(monkeypatch, _mh_frame("2026-11-23", "2026-11-24", 22.0))
+    assert dom["soybean_mandi_mh_date"] == "2026-11-23"
+    assert dom.get("soybean_mandi_mh_thin") is None
+    assert "thin day" not in _format_india_domestic({"India": {"india_domestic": dom}})

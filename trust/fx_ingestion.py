@@ -113,7 +113,8 @@ DEFAULT_PERIOD = "5d"
 DAILY_MOVE_QUARANTINE_THRESHOLD = Decimal("0.10")
 
 
-def _dataset_key(pair: str) -> str:
+def dataset_key_for(pair: str) -> str:
+    """The registry dataset key for one required pair (``BRL/USD`` → ``fx-brl-usd``)."""
     return f"fx-{pair.lower().replace('/', '-')}"
 
 
@@ -127,10 +128,10 @@ def _contracts_by_pair() -> Mapping[str, DatasetContract]:
     """
 
     by_key = {contract.dataset.key: contract for contract in FX_CONTRACTS}
-    missing = [pair for pair in REQUIRED_FX_PAIRS if _dataset_key(pair) not in by_key]
+    missing = [pair for pair in REQUIRED_FX_PAIRS if dataset_key_for(pair) not in by_key]
     if missing:
         raise RuntimeError(f"required FX pairs have no registry contract: {', '.join(missing)}")
-    return {pair: by_key[_dataset_key(pair)] for pair in REQUIRED_FX_PAIRS}
+    return {pair: by_key[dataset_key_for(pair)] for pair in REQUIRED_FX_PAIRS}
 
 
 #: Pair -> registry contract. Read off the registry rather than restated, so a
@@ -1066,6 +1067,7 @@ __all__ = [
     "DAILY_MOVE_QUARANTINE_THRESHOLD",
     "DEFAULT_PERIOD",
     "FX_DATASET_KEYS",
+    "dataset_key_for",
     "FX_PAIRS",
     "FxArtifactReplay",
     "FxDatasetIngestion",

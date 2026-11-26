@@ -99,10 +99,11 @@ def test_oil_vs_rapeseed_skipped_when_czce_empty(monkeypatch):
 def _stub_market_driver_reads(monkeypatch, rapeseed_df):
     empty = pd.DataFrame()
     for name in (
-        "read_cot", "read_weather", "read_export_sales", "read_forward_curve",
+        "read_cot", "read_weather", "read_export_sales",
         "read_eia_data", "read_brazil_estimates", "read_psd", "read_economic",
     ):
         monkeypatch.setattr(market_drivers, name, lambda *a, **k: empty)
+    monkeypatch.setattr(market_drivers, "read_stored_curves", lambda *a, **k: {})
     monkeypatch.setattr(
         market_drivers, "read_dce_futures", lambda commodity=None: rapeseed_df
     )

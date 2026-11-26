@@ -26,9 +26,13 @@ unfinished bar: it downloads through the unguarded
 (#331), so a pre-cutoff run records a ``settlement.confirmed`` reject for the
 open session and an accepted revision for the finished one before it.
 
-**A candle that has to be possible.** ``ohlc.relationship`` rejects a bar whose
-high is below its open/low/close or whose low is above them. A frame like that
-parses cleanly and is simply not a candle.
+**A candle that has to be complete; its range is auxiliary.** ``ohlc.complete``
+rejects a candle missing any of its four fields. ``ohlc.relationship`` records a
+WARNING, not a reject, on a *complete* candle whose high/low do not contain its
+open and close: Yahoo serves such candles routinely, so rejecting them would
+delete the series rather than guard it. The close is the observation and is
+guarded by the daily-move rule; the range is what the warning is about (#447,
+made a WARNING by #481; see ``trust.quality`` and ``LAYERS.md`` Layer 7).
 
 **An extreme move that quarantines rather than overwrites.** A day-over-day
 move beyond :data:`DAILY_MOVE_QUARANTINE_THRESHOLD` is appended as a
@@ -69,7 +73,7 @@ import pandas as pd
 
 from analysis.futures.domain import UnknownContract, parse_symbol, spec_for
 from config import SETTLEMENT_TIMEZONE
-from fetchers._settlement import session_is_settled
+from fetchers._settlement import session_is_finished
 from fetchers.forward_curve import _build_contract_tickers
 from trust.dataset_health import DatasetHealthInput, evaluate_dataset_health
 from trust.domain import (
@@ -420,15 +424,20 @@ def settlement_state_for(session_date: date, now: datetime) -> SettlementState:
 
     Time-based, like the v1 settlement guard and for the same reason: no field
     on a provider bar says "settled", and a heuristic on volume or range would
-    be the silent guess the guard exists to remove.
+    be the silent guess the guard exists to remove. Finished is the guard's
+    own answer (``fetchers._settlement.session_is_finished``): Yahoo's bar
+    labelled D is final only at 00:00 New York on D+1 (B47 #622). Until then
+    it is ``OPEN`` even after the 13:15 CT settlement — it holds the last
+    trade, then the overnight session's trades — and a bar labelled after
+    the venue's current date is ``PRE_OPEN``.
     """
 
+    if session_is_finished(session_date, now):
+        return SettlementState.SETTLED
     venue_today = _utc(now).astimezone(_venue_zone()).date()
     if session_date > venue_today:
         return SettlementState.PRE_OPEN
-    if session_date < venue_today:
-        return SettlementState.SETTLED
-    return SettlementState.SETTLED if session_is_settled(now) else SettlementState.OPEN
+    return SettlementState.OPEN
 
 
 # ---------------------------------------------------------------------------

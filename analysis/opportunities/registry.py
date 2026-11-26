@@ -301,7 +301,9 @@ def archive(
             "first_detected_on": opportunity.first_detected_on.isoformat(),
             "expires_on": opportunity.expires_on.isoformat(),
             "confidence": opportunity.confidence.value,
-            "composite_score": card.composite,
+            # What the page printed: NULL for a market signal, whose
+            # composite is withheld (#672). The reason is in score_json.
+            "composite_score": card.published_composite,
             "blocker_codes": ",".join(
                 sorted({blocker.code.value for blocker in opportunity.blockers})
             ),

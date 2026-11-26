@@ -105,6 +105,7 @@ def make_detection(
     # asserting nothing.
     without_window: bool = False,
     without_economics: bool = False,
+    lane_absent_reason: str = "",
 ) -> Detection:
     window = None if without_window else (window if window is not None else ShipmentWindow(
         date(2026, 9, 1), date(2026, 9, 30), label="Sep 2026"
@@ -137,6 +138,7 @@ def make_detection(
         blockers=blockers,
         missing=missing,
         why_now="a fixture reason",
+        lane_absent_reason=lane_absent_reason,
     )
 
 
@@ -180,8 +182,13 @@ def make_opportunity(
     workflow=None,
     status: OpportunityStatus = OpportunityStatus.DETECTED,
     volume: Volume | None = None,
+    signal_gap: str | None = None,
 ) -> Opportunity:
     signal = make_signal(evidence=evidence)
+    if signal_gap is None:
+        # A detected market signal must name its missing fact (#672); the
+        # fixture supplies one so tests about other things need not.
+        signal_gap = "no fixture lane: a fixture gap" if ladder is Ladder.MARKET_SIGNAL else ""
     identity = identity_key(
         rule_id=rule_id,
         product="beans",
@@ -223,6 +230,7 @@ def make_opportunity(
         blockers=blockers,
         suggested_next_action="ring the shortlist",
         workflow=workflow,
+        signal_gap=signal_gap,
     )
 
 
@@ -355,3 +363,82 @@ PLAYER_ENTRIES = [
         "citations": [{"url": "https://example.invalid/us", "accessed": "2026-08-01"}],
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Crush results, for the crush_margin detector (#405, #672)
+# ---------------------------------------------------------------------------
+def crush_result(slug: str, quote_kind: str, *, margin: float = 24.1):
+    """A gross-physical ``CrushResult`` whose three legs share one quote kind."""
+    from analysis.futures.crush import ContractBasis, CrushLevel
+    from analysis.origins.crush import CrushLeg, CrushResult
+    from analysis.origins.domain import Money, QuoteKind, SourceRef
+    from pricing.semantics import confidence_for_quote_kind
+
+    kind = QuoteKind(quote_kind)
+    legs = tuple(
+        CrushLeg(
+            name=name,
+            key=name,
+            price=Money(price),
+            native_price=price,
+            native_unit="usd_per_mt",
+            quote_kind=kind,
+            source=SourceRef(layer="magyp_fob", table="argentina_fob", key=name),
+        )
+        for name, price in (("bean", 400.0), ("oil", 900.0), ("meal", 350.0))
+    )
+    return CrushResult(
+        market=slug,
+        level=CrushLevel.GROSS_PHYSICAL,
+        label=CrushLevel.GROSS_PHYSICAL.label,
+        meaning=CrushLevel.GROSS_PHYSICAL.meaning,
+        legs=legs,
+        yields={"oil": 0.183, "meal": 0.78},
+        revenue=Money(437.7),
+        bean_cost=Money(400.0),
+        margin=Money(margin),
+        as_of=TODAY,
+        confidence=confidence_for_quote_kind(quote_kind),
+        contract_basis=(
+            ContractBasis.ADMINISTERED if quote_kind == "administered"
+            else ContractBasis.PHYSICAL
+        ),
+    )
+
+
+def stub_crush_stack(monkeypatch, results: dict):
+    """``crush_stack`` returns the fixture for its slug and a blocked stack otherwise."""
+    import analysis.origins.crush as crush_mod
+    from analysis.futures.crush import CrushLevel
+
+    def fake(conn, slug, assumptions, *, today):
+        if slug not in results:
+            blocked = crush_mod._blocked(slug, CrushLevel.GROSS_PHYSICAL, "stubbed out")
+            return blocked, blocked, blocked
+        return results[slug], results[slug], results[slug]
+
+    monkeypatch.setattr(crush_mod, "crush_stack", fake)
+
+
+def board_crush_result(slug: str, *, margin: float = 68.30):
+    """A board ``CrushResult`` on three named contracts, as the live CBOT one was."""
+    from dataclasses import replace
+
+    from analysis.futures.crush import ContractBasis, CrushLevel
+    from analysis.origins.domain import QuoteKind
+
+    gross = crush_result(slug, "board", margin=margin)
+    symbols = {"bean": "ZSF27", "oil": "ZLF27", "meal": "ZMF27"}
+    return replace(
+        gross,
+        level=CrushLevel.BOARD_REFERENCE,
+        label=CrushLevel.BOARD_REFERENCE.label,
+        meaning=CrushLevel.BOARD_REFERENCE.meaning,
+        legs=tuple(
+            replace(leg, quote_kind=QuoteKind("board"), contract_symbol=symbols[leg.name])
+            for leg in gross.legs
+        ),
+        contract_basis=ContractBasis.NAMED_CONTRACT,
+        period_label="Jan 2027",
+    )

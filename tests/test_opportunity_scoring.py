@@ -262,3 +262,97 @@ def test_ranking_is_deterministic():
     assert [o.opportunity_id for o, _ in rank(scored)] == [
         o.opportunity_id for o, _ in rank(list(reversed(scored)))
     ]
+
+
+# ---------------------------------------------------------------------------
+# A signal with no lane cannot outrank a lead with one (#672)
+# ---------------------------------------------------------------------------
+US_CRUSHER = {
+    "name": "Fixture US Crusher",
+    "country": "US",
+    "roles": ["crusher", "processor"],
+    "products": ["beans"],
+    "confidence": "observed",
+    "as_of": "2026-08-01",
+    "tier": 1,
+    "citations": [{"url": "https://example.invalid/us-crush", "accessed": "2026-08-01"}],
+}
+
+
+def test_a_board_crush_with_no_lane_cannot_outrank_a_lane_lead_with_a_lower_score(monkeypatch):
+    """The live row: a 68.30 USD/MT CBOT board crush scored 83.9 as a lead,
+    with the venue standing in for its destination. Through the real detector."""
+    from opportunity_fixtures import (
+        PLAYER_ENTRIES,
+        board_crush_result,
+        make_detection,
+        stub_crush_stack,
+    )
+
+    from analysis.opportunities import signals as signals_mod
+    from analysis.opportunities.domain import Ladder
+    from analysis.opportunities.rules import build_candidate
+
+    stub_crush_stack(monkeypatch, {"cbot": board_crush_result("cbot")})
+    [detection] = [
+        d for d in signals_mod.crush_margin_detections(None, today=TODAY, assumptions={})
+        if d.context["market"] == "cbot"
+    ]
+    entries = [*PLAYER_ENTRIES, US_CRUSHER]
+    crush = build_candidate(detection, today=TODAY, entries=entries)
+    lead = build_candidate(
+        make_detection(destination=None, without_window=True, economics=economics(1.0),
+                       blockers=(soft_blocker(),)),
+        today=TODAY, entries=entries,
+    )
+    crush_card, lead_card = score(crush, today=TODAY), score(lead, today=TODAY)
+
+    assert lead.ladder is Ladder.LEAD and lead.origin is not None
+    assert crush.ladder is Ladder.MARKET_SIGNAL
+    # The precondition that makes this a regression: on raw arithmetic the
+    # lane-less crush is the bigger number.
+    assert crush_card.composite > lead_card.composite
+    ordered = rank([(crush, crush_card), (lead, lead_card)])
+    assert [item.opportunity_id for item, _ in ordered] == [
+        lead.opportunity_id, crush.opportunity_id
+    ]
+    # The number itself is untouched — only its rank and its rung.
+    assert crush.economics is not None and crush.economics.per_mt.amount == 68.30
+    assert crush.why_now.startswith("CBOT's board crush")
+    assert any(
+        "(ZSF27, ZLF27, ZMF27)" in blocker.message for blocker in crush.blockers
+    ), "the board crush keeps naming its three contracts"
+    assert crush.signal_gap.startswith("no physical destination")
+
+
+def test_a_market_signal_withholds_its_composite_but_prints_its_components():
+    from analysis.opportunities.domain import Ladder
+
+    signal = make_opportunity(ladder=Ladder.MARKET_SIGNAL, signal_gap="no physical destination: x")
+    card = score(signal, today=TODAY).to_dict()
+    assert card["composite"] is None
+    assert "market signal" in card["withheld_reason"]
+    assert [c["key"] for c in card["components"]] == [
+        "economic", "evidence", "freshness", "counterparty", "feasibility"
+    ]
+    assert all(c["value"] is not None for c in card["components"])
+
+
+def test_a_lead_prints_its_composite():
+    from analysis.opportunities.domain import Ladder
+
+    lead = make_opportunity(ladder=Ladder.LEAD)
+    card = score(lead, today=TODAY)
+    assert card.to_dict()["composite"] == card.composite
+    assert card.to_dict()["withheld_reason"] is None
+
+
+def test_signal_gap_belongs_to_market_signals_only():
+    import pytest
+
+    from analysis.opportunities.domain import Ladder, OpportunityError
+
+    with pytest.raises(OpportunityError, match="signal_gap"):
+        make_opportunity(ladder=Ladder.MARKET_SIGNAL, signal_gap="")
+    with pytest.raises(OpportunityError, match="signal_gap"):
+        make_opportunity(ladder=Ladder.LEAD, signal_gap="no physical destination: x")

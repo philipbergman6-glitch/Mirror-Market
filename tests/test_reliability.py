@@ -211,6 +211,9 @@ def test_thresholds_are_reported_from_config_never_gating() -> None:
     assert t["T1_continuous"]["met"] is True
     assert t["T2_min_availability_pct"]["met"] is True  # 29/30 = 96.7
     assert t["T3_max_streak_sessions"]["met"] is True
+    # A full window of the layer's own: the floor holds nothing back.
+    assert t["T2_min_availability_pct"]["reason"] is None
+    assert t["T3_max_streak_sessions"]["reason"] is None
     assert t["T4_surfaced_within_one_run_pct"]["met"] is False  # one unsurfaced failure
 
 
@@ -347,6 +350,224 @@ def test_dead_streak_says_when_it_opens_at_the_record_start() -> None:
     assert dead["dce"].opens_at_record_start is False
 
 
+def test_real_record_never_reports_matif_dead(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #633: the 2026-11-24 relay comment on #566 printed matif "unavailable at
+    # least 28 consecutive sessions — the record begins 2026-10-16". Every
+    # matif row is `skipped_unconfigured` (Layer 37 private, by design) and its
+    # first row is 2026-11-05; the 11-09→11-12 weekdays with no run at all are
+    # what defeated the only-skipped exemption. Read from the committed record
+    # (read only), cut at the session that comment reported, so later appends
+    # cannot move the case.
+    from pipeline import history, layer_runs
+
+    monkeypatch.setattr(history, "HISTORY_DIR", config.HISTORY_DIR)
+    rows = [r for r in layer_runs.read_runs() if r.session_date <= date(2026, 11, 24)]
+    matif = [r for r in rows if r.layer_name == "matif"]
+    assert matif and {r.status for r in matif} == {"skipped_unconfigured"}
+    assert min(r.session_date for r in matif) == date(2026, 11, 5)
+
+    assert "matif" not in reliability.dead_layers(rows)
+
+
+def test_real_record_manifest_streaks_start_at_the_layers_first_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #638: after #634 the alert counted a layer's streak from its own first
+    # row while the manifest block counted it from the window's first session.
+    # matif and afex joined the roster on 2026-11-05, the record began 10-16.
+    # Committed record, read only, cut at fixed sessions so later appends
+    # cannot move the case.
+    from pipeline import history, layer_runs
+
+    monkeypatch.setattr(history, "HISTORY_DIR", config.HISTORY_DIR)
+    record = layer_runs.read_runs()
+    assert min(r.session_date for r in record) == date(2026, 10, 16)
+    for layer in ("matif", "afex"):
+        assert min(r.session_date for r in record if r.layer_name == layer) == date(2026, 11, 5)
+
+    def layers_at(through: date) -> dict[str, dict]:
+        rows = [r for r in record if r.session_date <= through]
+        block = reliability.reliability(rows, set(), through=through)
+        assert block["state"] == "ok"
+        return {entry["layer"]: entry for entry in block["layers"]}
+
+    # 2026-11-10: the window still runs from 10-16 (the 11-09 no-run gap is
+    # not yet longer than T1 tolerates). matif's streak is its own four
+    # sessions (11-05, 11-06, 11-09, 11-10), not the window's eighteen; afex
+    # succeeded on 11-05 and 11-06, so its only streak is the two no-run
+    # weekdays after — the fourteen pre-roster weekdays are not an outage
+    # it recovered from.
+    at = layers_at(date(2026, 11, 10))
+    assert at["matif"]["open_streak"] == 4
+    assert at["matif"]["longest_unavailable_streak"] == 4
+    assert at["afex"]["open_streak"] == 2
+    assert at["afex"]["longest_unavailable_streak"] == 2
+    assert at["afex"]["median_recovery_sessions"] is None
+
+    # 2026-11-24: the window restarted at 11-13 after the 11-09→11-12 gap, so
+    # the later of the two bounds holds — eight sessions, 11-13 → 11-24.
+    at = layers_at(date(2026, 11, 24))
+    assert at["matif"]["open_streak"] == 8
+    assert at["afex"]["longest_unavailable_streak"] == 0
+
+
+def test_real_record_availability_starts_at_the_layers_first_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #638 owner decision 2026-11-25: availability % runs from the layer's own
+    # first row too, over a per-layer ``sessions`` denominator. The owner pack
+    # on #638 read afex at the 11-10 cut as 11.1 % (2 of 18) before and 50.0 %
+    # (2 of 4) after. Committed record, read only, fixed cut.
+    from pipeline import history, layer_runs
+
+    monkeypatch.setattr(history, "HISTORY_DIR", config.HISTORY_DIR)
+    through = date(2026, 11, 10)
+    rows = [r for r in layer_runs.read_runs() if r.session_date <= through]
+    block = reliability.reliability(rows, set(), through=through)
+    assert block["window"]["sessions"] == 18
+    at = {entry["layer"]: entry for entry in block["layers"]}
+
+    assert at["afex"]["sessions"] == 4
+    assert at["afex"]["availability_pct"] == 50.0
+    assert at["matif"]["sessions"] == 4
+    assert at["matif"]["availability_pct"] == 0.0  # every row skipped_unconfigured
+    # A layer on the roster since the record began keeps the whole window.
+    assert at["prices"]["sessions"] == 18
+
+    # The floor on the live cut: the window restarted at 11-13, so every
+    # basket layer has 8 own sessions of 30 — T2 and T3 not met, said why.
+    through = date(2026, 11, 24)
+    rows = [r for r in layer_runs.read_runs() if r.session_date <= through]
+    t = reliability.reliability(rows, set(), through=through)["thresholds"]
+    for name in ("T2_min_availability_pct", "T3_max_streak_sessions"):
+        assert t[name]["met"] is False
+        assert all(f"{layer} (8 of 30)" in t[name]["reason"] for layer in config.AVAILABILITY_BASKET)
+
+
+def test_a_layer_with_no_row_at_all_keeps_the_whole_window() -> None:
+    # #638 decision 2: silence over the whole record is the layer going dark,
+    # not a later start — 0 % over every session, never a blank.
+    sessions = _weekdays(MON, 5)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce", "safex"))
+    safex = _layer(block, "safex")
+    assert safex["sessions"] == 5
+    assert safex["availability_pct"] == 0.0
+    assert safex["first_run_availability_pct"] == 0.0
+
+
+def test_first_run_availability_shares_the_layers_own_denominator() -> None:
+    # #638 decision 3. safex joins on the fifth of eight sessions; its first
+    # run there fails and a retry recovers it: 4 of 4 available, 3 of 4 on
+    # the first run — not 4 and 3 of the window's 8.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(sessions[4], "safex", "failed", hour=20), _row(sessions[4], "safex", "success", hour=22)]
+    rows += [_row(s, "safex", "success") for s in sessions[5:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("safex",))
+    safex = _layer(block, "safex")
+    assert safex["sessions"] == 4
+    assert safex["availability_pct"] == 100.0
+    assert safex["first_run_availability_pct"] == 75.0
+
+
+def test_t2_and_t3_are_not_met_while_a_basket_layer_has_fewer_than_a_window_of_its_own() -> None:
+    # #638 decision 1, the session floor: a basket layer that joined two
+    # sessions ago reads 2 of 2 = 100 % with no streak. Without the floor it
+    # would meet T2 and T3 on two sessions while T1 is met by the older record.
+    sessions = _weekdays(MON, config.RELIABILITY_WINDOW_SESSIONS)
+    rows = [_row(s, "forward_curve", "success") for s in sessions]
+    rows += [_row(s, "dce", "success") for s in sessions[-2:]]
+    block = reliability.reliability(
+        rows, set(), through=sessions[-1], layers=("forward_curve", "dce"), basket=("forward_curve", "dce"),
+    )
+    assert _layer(block, "dce")["sessions"] == 2
+    assert _layer(block, "dce")["availability_pct"] == 100.0
+    t = block["thresholds"]
+    assert t["T1_continuous"]["met"] is True
+    for name in ("T2_min_availability_pct", "T3_max_streak_sessions"):
+        assert t[name]["met"] is False
+        assert t[name]["floor_sessions"] == config.RELIABILITY_WINDOW_SESSIONS
+        assert "dce" in t[name]["reason"] and "2 of" in t[name]["reason"]
+        assert "forward_curve" not in t[name]["reason"]
+
+
+def test_t2_and_t3_floor_holds_on_a_short_window_too() -> None:
+    # The floor is the target window, not the window this cut happens to
+    # have: after a restart every layer's own count is short, so neither
+    # threshold can be met yet, however clean the sessions so far.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("dce",), basket=("dce",))
+    t = block["thresholds"]
+    assert t["T2_min_availability_pct"]["met"] is False
+    assert t["T3_max_streak_sessions"]["met"] is False
+    assert "8 of" in t["T2_min_availability_pct"]["reason"]
+
+
+def test_skipped_only_streak_with_no_run_gap_is_not_dead() -> None:
+    # A weekday on which nothing ran at all asked no source anything: inside a
+    # streak of `skipped_unconfigured` it is no more evidence than the skip.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions[:2] + sessions[6:]]
+    rows += [_row(s, "matif", "skipped_unconfigured") for s in sessions[:2] + sessions[6:]]
+    assert "matif" not in reliability.dead_layers(rows, layers=("matif", "dce"))
+
+
+def test_a_layer_missing_from_a_run_is_still_a_real_verdict() -> None:
+    # A session where the pipeline ran but wrote no row for the layer is the
+    # layer going silent, not "nothing asked": the exemption must not cover it.
+    sessions = _weekdays(MON, 5)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(sessions[0], "matif", "skipped_unconfigured"),
+             _row(sessions[4], "matif", "skipped_unconfigured")]
+    dead = reliability.dead_layers(rows, layers=("matif", "dce"))
+    assert set(dead) == {"matif"}
+    assert dead["matif"].sessions == 5
+
+
+def test_dead_streak_never_starts_before_the_layers_first_row() -> None:
+    # A layer that joined the roster mid-record: the weekdays before its first
+    # row are not its outage, so they neither count toward the threshold nor
+    # date the streak.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    assert reliability.dead_layers(
+        rows + [_row(s, "safex", "failed") for s in sessions[6:]], layers=("safex",),
+    ) == {}
+
+    rows += [_row(s, "safex", "failed") for s in sessions[4:]]
+    dead = reliability.dead_layers(rows, layers=("safex",))
+    assert dead["safex"].sessions == 4
+    assert dead["safex"].first_session == sessions[4]
+    # The layer's own record cannot see before its first row either.
+    assert dead["safex"].opens_at_record_start is True
+
+
+
+def test_manifest_and_alert_agree_where_a_mid_record_layer_streak_starts() -> None:
+    # #638: one rule site. safex joins on the fifth session and fails from
+    # there; the manifest's open streak and the alert's streak are one figure.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(s, "safex", "failed") for s in sessions[4:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], layers=("safex",))
+    safex = block["layers"][0]
+    dead = reliability.dead_layers(rows, threshold=1, layers=("safex",))
+    assert safex["open_streak"] == dead["safex"].sessions == 4
+    assert safex["longest_unavailable_streak"] == 4
+    # Availability runs over the same four sessions (#638 owner decision).
+    assert safex["sessions"] == 4
+    assert safex["availability_pct"] == 0.0
+
+
+def test_manifest_streak_start_comes_from_the_whole_record_not_the_window() -> None:
+    # safex has a row before the window, then none on the window's first
+    # session while the pipeline ran: that session is its streak, not a start
+    # the window invented.
+    sessions = _weekdays(MON, 8)
+    rows = [_row(s, "dce", "success") for s in sessions]
+    rows += [_row(sessions[0], "safex", "success")]
+    rows += [_row(s, "safex", "failed") for s in sessions[5:]]
+    block = reliability.reliability(rows, set(), through=sessions[-1], window=4, layers=("safex",))
+    assert block["layers"][0]["open_streak"] == 4
+
 
 def test_decision_cutoff_uses_one_promotion_and_keeps_all_sessions() -> None:
     friday = date(2026, 10, 9)
@@ -456,3 +677,53 @@ def test_a_real_failure_under_a_later_unconfigured_skip_still_counts_toward_dead
         rows.append(_row(s, "safex", "failed", run=f"{s}-a", hour=10))
         rows.append(_row(s, "safex", "skipped_unconfigured", run=f"{s}-b", hour=14))
     assert set(reliability.dead_layers(rows, layers=("safex",))) == {"safex"}
+
+
+# ── the render-time mirror of the session rule (#632, owner option B on #518) ──
+# data_freshness keeps only the latest attempt and the last usable run; the two
+# readers that react to a failed latest run ask this one question of them.
+
+
+def test_a_failed_rerun_after_a_usable_run_on_the_same_session_is_recovered() -> None:
+    # magyp_fob, session 2026-11-18 (#518 wave-4 review): success 11:04 UTC on
+    # 11-19, push run 44526078466 failed 12:50 UTC — both serve the 11-18
+    # session, under the 14:30 CT cutoff and under #627's New York midnight.
+    assert reliability.recovered_in_session("2026-11-19 11:04:00", "2026-11-19 12:50:00") is True
+
+
+def test_a_usable_run_on_an_earlier_session_does_not_recover_this_one() -> None:
+    # 11:04 UTC on 11-18 serves the 11-17 session; the 12:50 UTC 11-19 failure
+    # serves 11-18, on which nothing usable was stored.
+    assert reliability.recovered_in_session("2026-11-18 11:04:00", "2026-11-19 12:50:00") is False
+
+
+def test_the_settlement_guards_session_roll_separates_sessions() -> None:
+    # The rule has no clock of its own: it rolls exactly where the guard's
+    # EXCHANGE_SESSION does (14:30 CT before #627, New York midnight after), so
+    # the edge is found from the guard rather than hard-coded (#632 review).
+    from datetime import datetime, timedelta, timezone
+
+    from pipeline.layer_runs import session_date_for
+
+    start = datetime(2026, 11, 19, 12, 0, tzinfo=timezone.utc)
+    minutes = [start + timedelta(minutes=m) for m in range(24 * 60)]
+    rolls = [b for a, b in zip(minutes, minutes[1:], strict=False) if session_date_for(a) != session_date_for(b)]
+    assert len(rolls) == 1, rolls
+    edge = rolls[0]
+
+    def stamp(moment: datetime) -> str:
+        return moment.strftime("%Y-%m-%d %H:%M:%S")
+
+    before, after = edge - timedelta(minutes=1), edge + timedelta(minutes=1)
+    assert reliability.recovered_in_session(stamp(before), stamp(after)) is False
+    assert reliability.recovered_in_session(stamp(edge), stamp(edge + timedelta(hours=2))) is True
+
+
+def test_never_succeeded_or_never_attempted_is_not_recovered() -> None:
+    assert reliability.recovered_in_session(None, "2026-11-19 12:50:00") is False
+    assert reliability.recovered_in_session("2026-11-19 11:04:00", None) is False
+
+
+def test_an_unreadable_stamp_is_a_crash_not_a_guess() -> None:
+    with pytest.raises(ValueError):
+        reliability.recovered_in_session("yesterday", "2026-11-19 12:50:00")

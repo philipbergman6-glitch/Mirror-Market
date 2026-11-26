@@ -48,7 +48,8 @@ Redistribution:
 
 Unit conversion:
     AgRural publishes BRL per 60 kg bag → we store BRL/MT.
-    BRL/MT = (BRL per bag) / 60 × 1000
+    BRL/MT = (BRL per bag) × 1000 / 60, via
+    ``pipeline.units.per_sack_to_per_metric_ton`` (invariant 7, #665).
 
     The fetcher never touches USD. USD/MT conversion happens at the analysis
     layer using the BRL/USD rate from the currencies table.
@@ -75,6 +76,7 @@ from config import AGRURAL_URL, MAX_RETRIES, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
 from fetchers.cepea import _parse_brl_price
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import per_sack_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +297,7 @@ def _parse_agrural_table(html: str) -> pd.DataFrame:
             f"AgRural: located Paranaguá row but price cell unparseable: {price_raw!r}"
         )
 
-    price_brl_mt = round((price_per_bag / 60.0) * 1000.0, 2)
+    price_brl_mt = round(per_sack_to_per_metric_ton(price_per_bag), 2)
     df = pd.DataFrame([{
         "Date": indicator_date,
         "price_brl_mt": price_brl_mt,

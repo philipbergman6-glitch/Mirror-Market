@@ -4,6 +4,85 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — curve reading names its pair; legacy analyser retired (2026-11-26)
+
+**#671**, from the Codex audit 2026-11-26. On session 2026-11-25 the bean
+strip was in carry Jan→Jul (+8.25¢) with only Aug lower, and the briefing
+printed "Soybeans curve in backwardation, front–next −0.9%" — "nearby supply
+tight relative to deferred". `analysis/forward_curve.py` took last *fetched*
+month minus first, labelled it "front–next" and classified by that sign alone.
+It is deleted; the briefing drivers, section 14, the snapshot and the headline
+forward-curve block now read `analysis.futures.curve` (through the new
+`analysis/futures/stored_curves.py`) — the module the workstation already used.
+
+- **Every curve sentence names its pair**: `CalendarSpread.sentence()` →
+  `ZSF27 1243.25 / ZSH27 1244.25: Mar +1.00 cents/bu (+0.37 USD/MT) over Jan,
+  session 2026-11-25`. Cross-session legs print both prices and "spread not
+  struck" (invariant 8). Units come from `pipeline.units.unit_key_label`.
+- **Structure is pair-wise**: `contango`/`backwardation` only when every
+  consecutive pair agrees, else `nearby carry` / `nearby inversion` / `mixed`;
+  `mild contango`/`mild backwardation` are gone. `CurveAnalysis.reading` locates
+  each run by month; `is_inverted` now means the *nearby* pair is inverted.
+- **Workstation alert** names each inverted pair and the nearby pair; it tells
+  a stored position it is unpaid only when a supplied `carry_window`'s own pair
+  is inverted (no desk carry period exists today, so it never does), gross of
+  storage and financing.
+- **Steep-carry driver** now fires on the nearby pair's annualised carry
+  (`config.CURVE_STEEP_CARRY_ANNUALISED_PCT` = 5.0) for a strip in carry along
+  every pair, replacing the 5% first-vs-last test.
+- **Snapshot schema v6**: `forward_curve` archives the one-session legs only
+  (components, per the snapshot rule) — the reading is re-derived from them;
+  v1–v5 `spread`/`spread_pct`/`structure` are not comparable.
+- Headline block 06 cards are Structure / Front / Next / Nearby spread, with
+  the named-pair sentence and the located reading as captions.
+- The workstation header chip was a front-to-back slope (−0.60 USD/MT per
+  month on the 2026-11-25 strip, beside a nearby pair in carry); it is now the
+  nearby pair's carry per month, named. `CurveAnalysis.slope_per_month_usd_mt`
+  is removed.
+- `test_net_inverted_curve_is_backwardation_even_with_up_moves` is replaced,
+  not made to pass: it pinned the defect (a four-up, one-down strip as
+  backwardation). Its replacement regression is the real 2026-11-25 strip
+  (`tests/test_curve_named_pair_671.py`, `tests/test_futures_curve.py`).
+
+## Unreleased — opportunity board: a crush with no physical lane is a market signal, not a lead (2026-11-26)
+
+**#672**, from the Codex audit of 2026-11-26 (finding 4). A live 68.30 USD/MT
+CBOT **board** crush scored 83.9 as a *lead* with destination "CBOT":
+`crush_margin_detections` built `country_port(iso, market["name"])`, and for
+CBOT and Dalian the market's name is the pricing venue. Now:
+
+- The crush detector names a destination only for a physical, non-administered
+  margin — the crushers' country by its `psd_country` name. A board crush (three
+  futures contracts) and an administered one (three decreed values) carry
+  `destination=None` and a `lane_absent_reason`. The margin, its venue and its
+  contracts are unchanged.
+- One shared rule in `rules.ladder_for`: a detection naming neither a physical
+  origin nor a destination is a `market_signal`, whoever could be called. A
+  lane-less `Detection` without a reason raises.
+- Every detected market signal carries `Opportunity.signal_gap` — the single
+  missing fact that would make it a lead ("no physical destination: … name a
+  crusher or import port", "no buyer candidate for European Union: research
+  one …") — printed on the board card and the detail card; its next action
+  names it too.
+- A market signal's composite is **withheld** (not capped): the five
+  components still print, the board shows "composite withheld", rung-first
+  ranking keeps it below every lead, and the archive stores
+  `composite_score = NULL` with the reason in `score_json`.
+- A lane-less detection's identity is scoped by its signal's `subject`
+  (`identity_key(..., subject=...)`, appended only then): without it a CBOT
+  and a Dalian board crush both keyed `crush_margin|beans|-|-|-` and one was
+  collapsed away. Every lane's identity is byte-identical.
+- The board crush's why-now no longer says "a crusher earning that has room
+  to bid up for beans"; it says it is a paper margin on three contracts. The
+  FX detector names its origin by `psd_country`, never the market's `name`.
+- `OPPORTUNITY_METHOD_VERSION` 1.0.0 → 1.1.0. Board and administered crush
+  rows' identities change (destination key gone, subject added), so they
+  re-detect under new ids and the old ones list once as "stopped detecting".
+
+Out of scope: outcome tracking of leads → quotes/decisions (needs a trial
+buyer, A15/A12). Tests: new detector, rules, scoring/rank regression and page
+tests in the four `tests/test_opportunit*` files.
+
 ## Unreleased — Layer 37: MATIF rapeseed delayed trades, private desk edition only (2026-11-05)
 
 Owner decision 2026-11-05 ("ingest MATIF delayed settlements, private
