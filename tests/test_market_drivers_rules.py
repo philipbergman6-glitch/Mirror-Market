@@ -37,12 +37,13 @@ def quiet(monkeypatch):
     """Every DB read empty; tests opt individual reads back in."""
     empty = pd.DataFrame()
     for name in (
-        "read_cot", "read_weather", "read_export_sales", "read_forward_curve",
+        "read_cot", "read_weather", "read_export_sales",
         "read_eia_data", "read_brazil_estimates", "read_psd", "read_economic",
         "read_wasde",
     ):
         monkeypatch.setattr(market_drivers, name, lambda *a, **k: empty)
     monkeypatch.setattr(market_drivers, "read_dce_futures", lambda commodity=None: empty)
+    monkeypatch.setattr(market_drivers, "read_stored_curves", lambda *a, **k: {})
     return monkeypatch
 
 

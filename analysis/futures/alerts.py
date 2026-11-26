@@ -14,8 +14,8 @@ Seven kinds, each tied to something a hedger has to act on:
                          ratio, usually because the physical quantity moved.
 ``basis_breach``         the basis has moved past a level the trader set.
 ``limit_breach``         a configured position or loss limit is crossed.
-``curve_inversion``      the term structure inverted (or un-inverted) — the
-                         carry a storage position was earning has gone.
+``curve_inversion``      a consecutive pair of listed months is inverted —
+                         named by symbol, with the nearby pair beside it.
 ``data_stale``           the number a hedge is marked against is older than its
                          layer's own budget. Last in the list and first in
                          importance: every other alert here is computed from
@@ -34,7 +34,12 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from analysis.futures.curve import CurveAnalysis
+from analysis.futures.curve import (
+    GROSS_OF_CARRY_COSTS,
+    CalendarSpread,
+    CurveAnalysis,
+    build_spread,
+)
 from analysis.futures.domain import Freshness, NamedContract
 from analysis.futures.hedge import HedgeProposal
 from analysis.futures.positions import Book, BookValuation
@@ -237,8 +242,23 @@ def limit_alerts(valuation: BookValuation) -> tuple[Alert, ...]:
     )
 
 
-def curve_alerts(analysis: CurveAnalysis) -> tuple[Alert, ...]:
-    """Inversion, and the coherence failure that would make it a false reading."""
+def curve_alerts(
+    analysis: CurveAnalysis, *, carry_window: tuple[str, str] | None = None
+) -> tuple[Alert, ...]:
+    """Inversion by named pair, and the coherence failure that would fake one.
+
+    The alert names every inverted consecutive pair by symbol, price and
+    session, and states the nearby pair beside it — a strip in carry from Jan
+    to Jul with a lower Aug is an inversion *at Jul→Aug*, not a curve that has
+    stopped paying to store (#671).
+
+    ``carry_window`` is a desk's stored-position carry period as (near, far)
+    contract symbols. Only when the pair that window spans is itself inverted
+    does the alert tell a stored position it is not being paid to carry — and
+    then gross of storage and financing, because no desk cost of carry reaches
+    this module. With no window known, the alert says which pair is inverted
+    and stops there.
+    """
     out: list[Alert] = []
     if not analysis.coherent:
         out.append(Alert(
@@ -249,22 +269,54 @@ def curve_alerts(analysis: CurveAnalysis) -> tuple[Alert, ...]:
             ),
         ))
         return tuple(out)
-    if analysis.is_inverted:
-        front = analysis.front
-        out.append(Alert(
-            kind="curve_inversion", severity="warning", subject=analysis.commodity,
-            message=(
-                f"{analysis.commodity} is in {analysis.structure.value} — "
-                f"{analysis.structure.implication}. A stored position is no longer being paid to "
-                "carry"
-            ),
-            detail={
-                "structure": analysis.structure.value,
-                "front": front.contract.symbol if front else None,
-                "slope_usd_mt_per_month": analysis.slope_per_month_usd_mt,
-            },
-        ))
+    inversions = analysis.inversions
+    if not inversions:
+        return tuple(out)
+
+    parts = [
+        f"{analysis.commodity} inverted at {spread.months}: {spread.sentence()}"
+        for spread in inversions
+    ]
+    nearby = analysis.nearby
+    if nearby is not None and not nearby.is_inverted:
+        parts.append(f"nearby pair {nearby.sentence()}")
+    window = _carry_window_spread(analysis, carry_window) if carry_window else None
+    if window is not None and window.is_inverted:
+        parts.append(
+            f"a position stored over {window.months} is not being paid to carry — "
+            f"{window.sentence()}, {GROSS_OF_CARRY_COSTS}"
+        )
+    out.append(Alert(
+        kind="curve_inversion", severity="warning", subject=analysis.commodity,
+        message="; ".join(parts),
+        detail={
+            "structure": analysis.structure.value,
+            "inverted_pairs": [spread.symbols for spread in inversions],
+            "nearby": None if nearby is None else nearby.symbols,
+            "carry_window": None if window is None else window.symbols,
+        },
+    ))
     return tuple(out)
+
+
+def _carry_window_spread(
+    analysis: CurveAnalysis, window: tuple[str, str]
+) -> CalendarSpread | None:
+    """The spread a stored position's carry window spans, from the curve's own legs.
+
+    A window naming a month the curve does not hold hard-fails: silently
+    dropping the window would print the no-window wording for a desk that
+    entered one.
+    """
+    near_symbol, far_symbol = (symbol.upper() for symbol in window)
+    legs = {leg.contract.symbol: leg.quote for leg in analysis.legs}
+    missing = [symbol for symbol in (near_symbol, far_symbol) if symbol not in legs]
+    if missing:
+        raise ValueError(
+            f"carry window {near_symbol}→{far_symbol}: {', '.join(missing)} is not on the "
+            f"{analysis.commodity} curve ({', '.join(legs) or 'no legs'})"
+        )
+    return build_spread(legs[near_symbol], legs[far_symbol])
 
 
 def staleness_alerts(analysis: CurveAnalysis) -> tuple[Alert, ...]:

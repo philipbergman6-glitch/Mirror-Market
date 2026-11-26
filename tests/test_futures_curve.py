@@ -13,7 +13,6 @@ from analysis.futures.curve import (
     build_spread,
     hedge_month_candidates,
 )
-from analysis.futures.domain import spec_for
 from analysis.futures.providers import CurveObservation
 from tests.test_futures_hedge import AS_OF, quote, unencoded_quote
 
@@ -75,38 +74,17 @@ def test_a_product_without_an_encoded_expiry_gets_no_annualised_carry():
     assert spread.usd_per_mt_per_month is None
 
 
-def test_structure_is_decided_by_the_sign_not_by_a_move_count():
-    """One large inversion among several small rises is still backwardation."""
-    legs = [
-        quote("Soybeans", 2026, 9, 1300.00, observed=date(2026, 8, 11)),
-        quote("Soybeans", 2026, 11, 1150.00, observed=date(2026, 8, 11)),
-        quote("Soybeans", 2027, 1, 1155.00, observed=date(2026, 8, 11)),
-        quote("Soybeans", 2027, 3, 1160.00, observed=date(2026, 8, 11)),
-    ]
-    analysis = analyse_curve(observation("Soybeans", legs), as_of=AS_OF)
-    assert analysis.structure is CurveStructure.MILD_BACKWARDATION
-    assert analysis.is_inverted is True
-
-
 def test_a_monotone_rise_is_plain_contango():
     analysis = analyse_curve(observation("Soybeans", CONTANGO), as_of=AS_OF)
     assert analysis.structure is CurveStructure.CONTANGO
     assert analysis.is_inverted is False
-    assert "paying to carry" in analysis.structure.implication
+    assert "pays to carry" in analysis.structure.implication
 
 
 def test_a_single_leg_has_no_structure_and_no_spreads():
     analysis = analyse_curve(observation("Soybeans", CONTANGO[:1]), as_of=AS_OF)
     assert analysis.structure is CurveStructure.UNDETERMINED
     assert analysis.spreads == ()
-    assert analysis.slope_per_month_usd_mt is None
-
-
-def test_slope_is_usd_per_mt_per_calendar_month_front_to_back():
-    analysis = analyse_curve(observation("Soybeans", CONTANGO), as_of=AS_OF)
-    spec = spec_for("Soybeans")
-    expected = (spec.native_to_usd_per_mt(1183.00) - spec.native_to_usd_per_mt(1150.25)) / 4
-    assert analysis.slope_per_month_usd_mt == pytest.approx(expected, rel=1e-9)
 
 
 def test_front_spreads_are_the_front_against_every_deferred():
@@ -191,3 +169,140 @@ def test_a_spread_across_two_sessions_strikes_no_number():
     assert spread.near_price == 1150.25 and spread.far_price == 1167.75
     payload = spread.to_dict()
     assert payload["value"] is None and payload["usd_per_mt"] is None
+
+
+# ---------------------------------------------------------------------------
+# #671 — every curve reading names its pair, and structure is segment-aware
+# ---------------------------------------------------------------------------
+
+SESSION_2026_11_25 = date(2026, 11, 25)
+
+#: The stored CBOT soybean strip on session 2026-11-25 (cents/bu), as quoted in
+#: #671. Jan→Jul is carry (+8.25¢); only the Jul→Aug old/new-crop step is lower.
+STRIP_2026_11_25 = [
+    quote("Soybeans", 2027, 1, 1243.25, observed=SESSION_2026_11_25),
+    quote("Soybeans", 2027, 3, 1244.25, observed=SESSION_2026_11_25),
+    quote("Soybeans", 2027, 5, 1248.50, observed=SESSION_2026_11_25),
+    quote("Soybeans", 2027, 7, 1251.50, observed=SESSION_2026_11_25),
+    quote("Soybeans", 2027, 8, 1231.75, observed=SESSION_2026_11_25),
+]
+
+
+def test_carry_nearby_with_a_lower_deferred_month_is_not_backwardation():
+    """The real 2026-11-25 shape. The legacy analyser read it as "mild
+    backwardation — tight nearby supply" because it compared first against last
+    fetched month. The nearby pair is in carry; the inversion is at Jul→Aug."""
+    analysis = analyse_curve(observation("Soybeans", STRIP_2026_11_25), as_of=SESSION_2026_11_25)
+    assert analysis.structure is CurveStructure.NEARBY_CARRY
+    assert "backwardation" not in analysis.structure.value
+    assert "tight" not in analysis.structure.implication
+    assert analysis.is_inverted is False
+
+    nearby = analysis.nearby
+    assert nearby is not None
+    assert (nearby.near.symbol, nearby.far.symbol) == ("ZSF27", "ZSH27")
+    assert nearby.is_carry is True
+
+    assert [(s.near.symbol, s.far.symbol) for s in analysis.inversions] == [("ZSN27", "ZSQ27")]
+    assert "Jul 2027→Aug 2027" in analysis.reading
+    assert "inverted" in analysis.reading
+
+
+def test_the_nearby_pair_sentence_names_both_legs_units_and_session():
+    """Mar − Jan = +1.00 cents/bu; × 0.367437 USD/MT per cent/bu = +0.37 USD/MT."""
+    analysis = analyse_curve(observation("Soybeans", STRIP_2026_11_25), as_of=SESSION_2026_11_25)
+    assert analysis.nearby is not None
+    assert analysis.nearby.sentence() == (
+        "ZSF27 1243.25 / ZSH27 1244.25: Mar +1.00 cents/bu (+0.37 USD/MT) over Jan, "
+        "session 2026-11-25"
+    )
+
+
+def test_an_inverted_pair_reads_under_not_over():
+    """Aug - Jul = -19.75 cents/bu = -7.26 USD/MT."""
+    analysis = analyse_curve(observation("Soybeans", STRIP_2026_11_25), as_of=SESSION_2026_11_25)
+    assert analysis.inversions[0].sentence() == (
+        "ZSN27 1251.50 / ZSQ27 1231.75: Aug -19.75 cents/bu (-7.26 USD/MT) under Jul, "
+        "session 2026-11-25"
+    )
+
+
+def test_a_cross_session_pair_sentence_strikes_nothing():
+    """Invariant 8: two sessions' legs print both prices and refuse the spread."""
+    spread = build_spread(
+        quote("Soybeans", 2027, 1, 1243.25, observed=SESSION_2026_11_25),
+        quote("Soybeans", 2027, 3, 1240.00, observed=date(2026, 11, 24)),
+    )
+    sentence = spread.sentence()
+    assert sentence.startswith("ZSF27 1243.25 / ZSH27 1240.00: ")
+    assert "not struck" in sentence
+    assert "under" not in sentence and "over" not in sentence
+
+
+def test_an_inverted_nearby_pair_with_carry_beyond_is_a_nearby_inversion():
+    legs = [
+        quote("Soybeans", 2026, 11, 1300.00, observed=date(2026, 8, 11)),
+        quote("Soybeans", 2027, 1, 1150.00, observed=date(2026, 8, 11)),
+        quote("Soybeans", 2027, 3, 1155.00, observed=date(2026, 8, 11)),
+    ]
+    analysis = analyse_curve(observation("Soybeans", legs), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.NEARBY_INVERSION
+    assert analysis.is_inverted is True
+    assert "Nov 2026→Jan 2027" in analysis.reading
+
+
+def test_every_pair_lower_is_backwardation():
+    legs = [
+        quote("Soybeans", 2026, 11, 1300.00, observed=date(2026, 8, 11)),
+        quote("Soybeans", 2027, 1, 1250.00, observed=date(2026, 8, 11)),
+        quote("Soybeans", 2027, 3, 1200.00, observed=date(2026, 8, 11)),
+    ]
+    analysis = analyse_curve(observation("Soybeans", legs), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.BACKWARDATION
+    assert analysis.is_inverted is True
+
+
+def test_a_carry_reading_says_it_is_gross_of_storage_and_financing():
+    analysis = analyse_curve(observation("Soybeans", CONTANGO), as_of=AS_OF)
+    assert "gross of storage and financing" in analysis.structure.implication
+
+
+# Review of #674 (mirror-market-10): a flat pair is neither carry nor inversion,
+# so it can't let a strip read as contango or backwardation "along every pair".
+
+def _strip(*closes):
+    months = [(2026, 9), (2026, 11), (2027, 1), (2027, 3)]
+    return [quote("Soybeans", y, m, c, observed=date(2026, 8, 11))
+            for (y, m), c in zip(months, closes, strict=False)]
+
+
+def test_a_flat_nearby_pair_then_an_inversion_is_mixed_not_backwardation():
+    """Sep 1100 / Nov 1100 / Jan 1090: one pair flat, one inverted."""
+    analysis = analyse_curve(observation("Soybeans", _strip(1100.0, 1100.0, 1090.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.MIXED
+    assert analysis.is_inverted is False
+    assert "every listed month" not in analysis.structure.implication
+
+
+def test_carry_then_a_flat_pair_is_nearby_carry_not_contango():
+    """Sep 1100 / Nov 1130 / Jan 1130: one pair carry, one flat."""
+    analysis = analyse_curve(observation("Soybeans", _strip(1100.0, 1130.0, 1130.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.NEARBY_CARRY
+    assert "inversion" not in analysis.structure.implication
+    assert "every listed month" not in analysis.structure.implication
+
+
+def test_an_inversion_then_a_flat_pair_is_nearby_inversion_not_backwardation():
+    analysis = analyse_curve(observation("Soybeans", _strip(1130.0, 1100.0, 1100.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.NEARBY_INVERSION
+    assert "carry resumes" not in analysis.structure.implication
+
+
+def test_every_pair_flat_is_flat():
+    analysis = analyse_curve(observation("Soybeans", _strip(1100.0, 1100.0, 1100.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.FLAT
+
+
+def test_a_nearby_inversion_reading_is_gross_of_storage_and_financing():
+    """AC5 on #671: every storage conclusion is gross unless a desk carry is given."""
+    assert "gross of storage and financing" in CurveStructure.NEARBY_INVERSION.implication

@@ -30,7 +30,8 @@ from analysis.briefing.sections.export_sales import (
     MT_PER_MILLION_BUSHELS_SOY,
     soy_marketing_year,
 )
-from analysis.forward_curve import analyze_curve
+from analysis.futures.curve import GROSS_OF_CARRY_COSTS, CurveAnalysis, CurveStructure
+from analysis.futures.stored_curves import read_stored_curves
 from analysis.spreads import daily_close, strike_cross_venue_spread
 from analysis.weather_alerts import (
     RULE_HEAT,
@@ -44,6 +45,7 @@ from config import (
     COT_CROWDED_LOOKBACK_DAYS,
     COT_CROWDED_MIN_OBSERVATIONS,
     COT_CROWDED_PERCENTILE,
+    CURVE_STEEP_CARRY_ANNUALISED_PCT,
     RSI_OVERBOUGHT,
     RSI_OVERSOLD,
 )
@@ -54,7 +56,6 @@ from pipeline.query import (
     read_economic,
     read_eia_data,
     read_export_sales,
-    read_forward_curve,
     read_psd,
     read_wasde,
     read_weather,
@@ -460,39 +461,88 @@ def _livestock_drivers(enriched: dict[str, pd.DataFrame]) -> list[Driver]:
     return drivers
 
 
+#: The grains a curve driver is read for. Soy first; corn and wheat are the
+#: competing crops a soy buyer prices against.
+_CURVE_DRIVER_COMMODITIES = ("Soybeans", "Corn", "Wheat")
+
+
 def _curve_drivers() -> list[Driver]:
+    """One driver per grain whose curve has something to say, by named pair.
+
+    Every observation names its pair — two symbols, two prices, far − near in
+    native units and USD/MT, the session (#671). The headline pair is the
+    nearby one (front against the next listed month), never first against last
+    fetched month; a deferred inversion is located by month and is not read as
+    nearby tightness.
+    """
     drivers: list[Driver] = []
-    fc_data = read_forward_curve()
-    if fc_data.empty:
-        return drivers
-    for commodity in ["Soybeans", "Corn", "Wheat"]:
-        fc_subset = fc_data[fc_data["commodity"] == commodity]
-        if len(fc_subset) < 2:
+    for commodity, analysis in read_stored_curves(_CURVE_DRIVER_COMMODITIES).items():
+        nearby = analysis.nearby
+        if nearby is None or nearby.value is None:
             continue
-        result = analyze_curve(fc_subset)
-        if not result:
-            continue
-        stamp = ""
-        for col in ("observation_date", "fetched_date"):
-            if col in fc_subset.columns and fc_subset[col].notna().any():
-                stamp = f" (observed {fc_subset[col].dropna().astype(str).max()})"
-                break
-        if "backwardation" in result.get("structure", ""):
+        inversions = analysis.inversions
+        if not analysis.coherent:
+            if not inversions and not _steep_carry(analysis):
+                continue
             drivers.append(Driver(
-                f"{commodity} curve in backwardation, front–next {result['spread_pct']:+.1f}%{stamp}",
-                "refuted if the inversion narrows as nearby open interest rolls off; confirmed "
-                "by nearby basis firming alongside (sections 4–4b)",
-                interpretation="the market pays for prompt delivery — nearby supply tight "
-                "relative to deferred",
+                f"{commodity} nearby pair {nearby.sentence()}",
+                "confirmed if the pair holds its sign once every listed month prints on one "
+                "session; refuted if the missing month's return changes the nearby pair",
+                not_interpreted="not every listed month printed on one session, so the next "
+                f"listed month may be missing from this pair — {analysis.coherence_note}",
             ))
-        elif result.get("spread_pct", 0) > 5:
+            continue
+        if analysis.is_inverted:
+            observation = f"{commodity} nearby pair inverted — {nearby.sentence()}"
+            if analysis.structure is CurveStructure.NEARBY_INVERSION:  # the strip turns further out
+                observation += f"; {analysis.reading}"
             drivers.append(Driver(
-                f"{commodity} curve in steep contango, front–next {result['spread_pct']:+.1f}%{stamp}",
+                observation,
+                "refuted if the nearby pair returns to carry as the front month rolls; "
+                "confirmed by nearby basis firming alongside (sections 4–4b)",
+                interpretation="the board pays for prompt delivery over the next listed "
+                "month — nearby supply tight against that month, at this one pair",
+            ))
+        elif nearby.direction == "flat" and analysis.structure is not CurveStructure.FLAT:
+            drivers.append(Driver(
+                f"{commodity} nearby pair flat — {nearby.sentence()}; {analysis.reading}",
+                "refuted if the nearby pair opens a carry or an inversion as the front month "
+                "rolls; confirmed if it stays level through the next roll",
+                interpretation="no term premium over the next listed month either way; the "
+                "strip moves only further out — not a reading on nearby supply",
+            ))
+        elif nearby.is_carry and inversions:
+            located = "; ".join(
+                f"inverted at {spread.months} — {spread.sentence()}" for spread in inversions
+            )
+            drivers.append(Driver(
+                f"{commodity} nearby pair in carry — {nearby.sentence()}; {located}",
+                "refuted if the inversion moves into the nearby pair; confirmed if the "
+                "nearby pair holds carry through the next roll",
+                interpretation=f"the nearby months pay to carry ({GROSS_OF_CARRY_COSTS}); "
+                f"the step down sits at {', '.join(s.months for s in inversions)}, not in the "
+                "prompt months — not a reading on nearby supply",
+            ))
+        elif _steep_carry(analysis):
+            drivers.append(Driver(
+                f"{commodity} curve in carry along every listed pair — nearby "
+                f"{nearby.sentence()}, {nearby.annualised_pct:+.1f}% annualised",
                 "refuted if the carry collapses on a nearby bid; confirmed by stocks building "
                 "in the next WASDE / stocks-to-use (sections 9–10)",
-                interpretation="the market pays to store — adequate nearby supply, full carry",
+                interpretation=f"the market pays to store — adequate nearby supply, "
+                f"{GROSS_OF_CARRY_COSTS}",
             ))
     return drivers
+
+
+def _steep_carry(analysis: CurveAnalysis) -> bool:
+    nearby = analysis.nearby
+    return bool(
+        nearby is not None
+        and analysis.structure is CurveStructure.CONTANGO  # every pair carry, none flat
+        and nearby.annualised_pct is not None
+        and nearby.annualised_pct >= CURVE_STEEP_CARRY_ANNUALISED_PCT
+    )
 
 
 def _oil_spread_driver(
