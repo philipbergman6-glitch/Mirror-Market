@@ -96,6 +96,9 @@ async def test_freshness_reports_each_layer_against_its_budget(settings):
 
     assert rows["fred"]["status"] == LAYER_NOT_RUN == "not-run"
     assert rows["fred"]["last_success"] is None
+    # A private layer with no row is the run record's own word, not "not-run" (#659).
+    assert rows["matif"]["status"] == "skipped_unconfigured"
+    assert rows["matif"]["last_success"] is None and rows["matif"]["observed_at"] is None
     assert body["meta"]["db_built_at"] == "2026-11-05T00:00:00+00:00"
     assert body["meta"]["latest_session"] == "2026-11-04"
 
