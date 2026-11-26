@@ -297,17 +297,45 @@ SEASONAL_MIN_YEARS_PER_MONTH = 5
 # warning in pipeline/clean.py passes silently, so the guard is structural:
 # the current session's bar is dropped until the venue has settled.
 #
-# One cutoff covers every venue we pull through yfinance, expressed in
-# Chicago local time so US DST is handled by the zoneinfo database rather
-# than by a hand-maintained UTC offset:
-#   CBOT grains/oilseeds (ZS/ZL/ZM/ZC/ZW)   settle 13:15 CT
-#   CME livestock (LE/HE), CME palm (CPO)   settle 13:05 CT
-#   ICE US cotton (CT)                      settle 14:20 ET = 13:20 CT
-#   ICE US sugar (SB)                       settle 13:00 ET = 12:00 CT
-# 14:30 CT clears the latest of them with ~70 min of headroom for Yahoo to
-# publish the settled bar.
+# The venue timezone. CBOT settles 13:15 CT; the trusted CBOT path dates its
+# sessions in it and the cargo board reads "today" in it.
 SETTLEMENT_TIMEZONE = "America/Chicago"
-SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
+
+# B47 (#622): when Yahoo's *futures* bar labelled D is finished. Not at the
+# settlement: at 00:00 America/New_York on D+1. Until then the row labelled D
+# holds D's day-session last trade (14:30-19:00 CT) or, once the overnight
+# session opens at 19:00 CT, live trades of trade date D+1 folded into D —
+# Yahoo serves no D+1 row before New York midnight, so there is nothing
+# labelled D+1 to drop. Measured over the 89 committed snapshots of
+# data/history/contract_bars.csv, every venue we pull through yfinance:
+#   CBOT ZS/ZL/ZM/ZC/ZW, CME LE/HE   revised up to 29 min before NY midnight;
+#                                    0 values still served after it ever
+#                                    changed (worst stored error: ZLZ26
+#                                    2026-08-27, +31.97 USD/MT)
+#   ICE US cotton (CT), sugar (SB)   unfinished before NY midnight too, and
+#                                    NOT always final after it: 24 deferred-
+#                                    month values changed up to 54 h later
+#                                    (#626 — this rule is necessary there,
+#                                    not sufficient)
+#   CME palm (CPO=F)                 front month only, no named-contract
+#                                    history to measure; the later cutoff is
+#                                    the safe direction (invariant 11)
+# The old cutoff, 14:30 CT, was "after the latest settlement we pull"; Yahoo
+# does not honour settlement time, so it stored 855 soy values that a later
+# run changed. Expressed in New York local time so US DST is zoneinfo's job.
+EXCHANGE_BAR_TIMEZONE = "America/New_York"
+EXCHANGE_BAR_CLOSE_LOCAL = (0, 0)  # (hour, minute) in EXCHANGE_BAR_TIMEZONE ...
+EXCHANGE_BAR_CLOSE_DAY_OFFSET = 1  # ... on the label date plus this many days
+
+# B47 (#622): how far back, by fetched_date, a stored forward_curve leg is
+# corrected to its contract's final bar once contract_bars holds it
+# (pipeline.store.repair_forward_curve). Steady state needs two or three
+# days: a leg captured on D is final-checkable from D+2. The rest of the
+# window is for the snapshots stored before the guard was corrected — the
+# first observation-dated one is 2026-08-11 — so the first deploys after the
+# fix repair the committed history themselves (a PR never edits
+# data/history/). 120 days covers all of it until 2026-12-09.
+FORWARD_CURVE_REPAIR_LOOKBACK_DAYS = 120
 
 # Spot FX has no settlement, so the exchange cutoff above is the wrong
 # question for Layer 7 and answering it there stored a partial bar as an FX

@@ -6,7 +6,7 @@ This file is a requirements list, not a build. It changes no code or workflow. E
 
 ## The bar (decided 2026-10-13 by the owner on #306, not re-opened here)
 
-1. **The settlement guard stays.** It sets the ≈1 h 15 m floor (`LATENCY.md` §9). An unfinished bar is never published (invariant 11).
+1. **The settlement guard stays.** It sets the CBOT floor — 9 h 45 m since B47 #622 measured that Yahoo finishes the bar only at New York midnight (`LATENCY.md` §9). An unfinished bar is never published (invariant 11).
 2. **Same day, honestly stamped.** An edition that lands late because GitHub's cron drifted is not a breach, as long as every stamp on the page is truthful. There is no fixed HH:MM deadline.
 3. **Drift is reported on the page, never paged.**
 

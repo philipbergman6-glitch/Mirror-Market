@@ -152,17 +152,15 @@ OBJECTIVES: dict[LatencyClass, LatencyObjective] = {
         acquisition_target=timedelta(hours=6),
         pipeline_target=_PIPELINE_TARGET,
         basis=(
-            "CBOT grains settle 13:15 CT and the latest venue we pull (ICE cotton) at "
-            "13:20 CT; config.SETTLEMENT_CUTOFF_LOCAL waits until 14:30 CT before a bar "
-            "may be stored at all, which puts the floor at ~1h15m. The binding "
-            "constraint above that floor is not our code but GitHub's scheduler: the "
-            "workflow's own note records a +64 to +298 minute delay across 30 observed "
-            "runs, so a 19:00 UTC cron lands anywhere in 20:00-24:00 UTC and a "
-            "settlement-to-fetch interval of 1h45m to 5h45m is the honest envelope. "
-            "Six hours is that envelope. Four would have been the tightest the guard "
-            "permits and would have been missed on roughly a third of runs for reasons "
-            "no change here can fix — a target missed that often is a target readers "
-            "learn to ignore, which is the badge-blindness #176 removed."
+            "Set 2026-08-19 on a 14:30 CT guard cutoff (a ~1h15m floor after the "
+            "13:15 CT settlement) plus GitHub's +64 to +298 minute scheduler delay: "
+            "six hours was that envelope. B47 (#622) measured the cutoff wrong. "
+            "Yahoo's CBOT/CME bar is final only at 00:00 New York the next day, "
+            "so the floor for prices and forward_curve is 9h45m — above this "
+            "target, which CBOT therefore breaches on every run until the owner "
+            "re-sets the objective or the schedule (#622). DCE (15:00 CST close, "
+            "Sina final ~2h later) still fits it. The number is unchanged here "
+            "because the objective is an owner call; the floor is not."
         ),
     ),
     LatencyClass.FX: LatencyObjective(
@@ -341,25 +339,48 @@ _FX_CLOSE = ObservationClock(
     FX_SESSION_TIMEZONE, FX_SESSION_CLOSE_LOCAL, close_day_offset=FX_SESSION_CLOSE_DAY_OFFSET
 )
 
-# Measured on 2026-08-19 at 03:45 UTC: ZS=F carried a complete bar for the
-# 2026-08-18 session, which settled at 18:15 UTC, so the settled bar was
-# retrievable within 9h30m of settlement. That is an upper bound from a
-# single observation, not a service level — Yahoo publishes none — so it is
-# quoted as the bound it is. The 30 minutes below is the *working* figure
-# used to separate cadence wait from provider delay, and it is deliberately
-# tight: understating the provider's share attributes the remainder to us,
-# which is the direction that keeps us honest about our own schedule.
+# FX. Yahoo publishes no service level for the London-day bar; the guard
+# keeps it until London midnight (the clock above); whether Yahoo re-serves a
+# changed close after it is what scripts/measure_fx_bar_finalisation.py
+# measures (#502).
+# The 30 minutes below is the *working* figure used to separate cadence wait
+# from provider delay, and it is deliberately tight: understating the
+# provider's share attributes the remainder to us, which is the direction
+# that keeps us honest about our own schedule. (This basis once cited a
+# 2026-08-19 03:45 UTC probe that "found the 2026-08-18 CBOT session
+# complete". 03:45 UTC was 23:45 in New York, before Yahoo finishes the bar,
+# so that probe read a live bar — B47 #622.)
 _YAHOO_BASIS = (
-    "Yahoo publishes no service level for the settled daily bar. Live probe "
-    "2026-08-19 03:45 UTC found the 2026-08-18 CBOT session (settled 18:15 UTC) "
-    "already complete, bounding the delay at <=9h30m. 30 minutes is used as the "
-    "working floor: understating the provider's share attributes the rest to us, "
-    "which is the conservative direction for judging our own schedule."
+    "Yahoo publishes no service level for the FX London-day bar. The guard "
+    "keeps it until London midnight; 30 minutes after that is used as the "
+    "working floor: understating the provider's share attributes the rest to "
+    "us, which is the conservative direction for judging our own schedule."
+)
+
+# B47 (#622): Yahoo's futures bar labelled D is final only at 00:00 New York
+# on D+1 — the instant the settlement guard (config.EXCHANGE_BAR_*) keeps it
+# from. Measured, not a working figure: 855 soy values captured between the
+# settlement and that midnight were later changed, and none captured after
+# it. So the provider's share of a board price's age is the whole interval
+# from the 13:15 CT settlement to that midnight. That is 9h45m in both
+# seasons, because Chicago and New York change clocks on the same Sunday
+# morning, after the Saturday-labelled bar has closed. tests/test_latency.py
+# pins it against the guard's own rule for every day of a year.
+_CBOT_PROVIDER_DELAY = timedelta(hours=9, minutes=45)
+_YAHOO_FUTURES_BASIS = (
+    "Yahoo's CBOT/CME daily bar labelled D carries the day session's last trade "
+    "and then the overnight session's live trades until 00:00 America/New_York "
+    "on D+1, when it becomes the settlement (B47 #622, measured over every "
+    "committed contract_bars snapshot: no value read after that midnight was "
+    "ever revised). The settlement guard keeps the bar until then, so 13:15 CT "
+    "to New York midnight — 9h45m — is the provider's, not our schedule's."
 )
 
 LAYER_LATENCIES: tuple[LayerLatency, ...] = (
-    LayerLatency("prices", LatencyClass.BOARD_PRICE, _CBOT, timedelta(minutes=30), _YAHOO_BASIS),
-    LayerLatency("forward_curve", LatencyClass.BOARD_PRICE, _CBOT, timedelta(minutes=30), _YAHOO_BASIS),
+    LayerLatency("prices", LatencyClass.BOARD_PRICE, _CBOT, _CBOT_PROVIDER_DELAY, _YAHOO_FUTURES_BASIS),
+    LayerLatency(
+        "forward_curve", LatencyClass.BOARD_PRICE, _CBOT, _CBOT_PROVIDER_DELAY, _YAHOO_FUTURES_BASIS
+    ),
     LayerLatency(
         "dce", LatencyClass.BOARD_PRICE,
         ObservationClock("Asia/Shanghai", (15, 0), venue="dce"),

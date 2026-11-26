@@ -17,7 +17,7 @@ The soy complex (beans, oil, meal) priced across every venue that matters to a c
 | Not | Because |
 |---|---|
 | An **execution terminal** | Nothing here is orderable. No blotter, no ladder, no executable quote state. |
-| A **real-time market feed** [^tv] | Measured: the fastest possible CBOT-settlement-to-reader path is **1 h 15 m**, floored by the settlement guard (`LATENCY.md` §9). No part of this is intraday-authoritative. |
+| A **real-time market feed** [^tv] | Measured: the fastest possible CBOT-settlement-to-reader path is **9 h 45 m** — Yahoo finishes the bar only at 00:00 New York on D+1, and the settlement guard waits for it (B47 #622, `LATENCY.md` §9). No part of this is intraday-authoritative. |
 | A **CTRM** | No contract lifecycle: no L/Cs, GAFTA/FOSFA clause handling, washouts, arbitration, or hedge accounting. |
 | An **authoritative settlement service** | `PROVEN_SETTLEMENT_SOURCES` is empty by design — see invariant 3. Nothing rendered is a settlement. |
 | A **live counterparty market** | No firm bids/offers, no counterparty terms, no broker network. Desk-entered records are one desk's notes, not a market. |

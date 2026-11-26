@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -20,6 +20,7 @@ from config import (
     DB_PATH,
     EC_OILSEEDS_CADENCE,
     EC_OILSEEDS_QUOTE_KIND,
+    FORWARD_CURVE_REPAIR_LOOKBACK_DAYS,
     FX_ECB_CROSS_PAIRS,
     FX_SESSION_WEEKDAYS,
     GTR_OCEAN_ATTRIBUTION,
@@ -1138,6 +1139,117 @@ def _replace_curve_snapshot(commodity: str, fetched_date: str) -> None:
                 "this run's snapshot",
                 commodity, removed, fetched_date,
             )
+
+
+def repair_forward_curve(
+    today: date | None = None, lookback_days: int = FORWARD_CURVE_REPAIR_LOOKBACK_DAYS
+) -> dict[str, int]:
+    """Correct stored curve legs that were captured before their bar was final.
+
+    B47 (#622). Yahoo's futures bar labelled D is final only at 00:00 New York
+    on D+1; until the guard learned that, a run in the evening stored D's last
+    trade or the live overnight print as D's close. ``forward_curve`` is keyed
+    by ``fetched_date``, so such a leg was written once and never re-read.
+    ``contract_bars`` (Layer 11b) re-fetches every listed contract in full each
+    daily run, so it holds the bar Yahoo finished. This copies that bar's close
+    and volume onto the leg of the same ticker and the same session — the
+    value the leg always claimed to be — and touches nothing else.
+
+    A bar is used only when it is **provably final**: its own ``fetched_date``
+    is at least two days after its session, so it was read after 00:00 UTC on
+    D+2, which is after New York midnight on D+1 in both seasons. A bar fetched
+    the day after its label may predate that midnight and proves nothing.
+    "Provably final" is the guard's rule, and the rule is measured sufficient
+    for CBOT and CME only. For ICE cotton and sugar it is necessary but not
+    sufficient: deferred-month values changed up to 54 h after New York
+    midnight (#626). This repair can therefore copy an ICE value that later
+    changes. It converges anyway: ``contract_bars`` is re-fetched every daily
+    run and the lookback revisits the snapshot, so the next run copies the
+    later value.
+
+    A snapshot (one commodity, one ``fetched_date``) is repaired whole or not
+    at all (invariant 8). Repairing some legs and not others would leave an
+    overnight move between them reading as curve structure. A leg without an
+    ``observation_date`` never said which session it was, so it is never
+    matched to one — and a snapshot holding such a leg, or legs on two
+    observation dates, is not one session and is left whole. A final bar
+    without a volume corrects the close and keeps the leg's own volume
+    (NULL is "never learned", invariant 2).
+
+    ``lookback_days`` bounds which snapshots are revisited, counting back
+    from ``today`` (UTC) by ``fetched_date``. Returns repaired legs per
+    commodity; a leg that already equals its final bar is not counted.
+    Idempotent: a second call repairs nothing.
+    """
+    if lookback_days < 1:
+        raise ValueError(f"forward_curve repair lookback must be >= 1 day, got {lookback_days}")
+    today = today or datetime.now(timezone.utc).date()
+    since = (today - timedelta(days=lookback_days)).isoformat()
+    with managed_connection(get_connection()) as conn:
+        legs = conn.execute(
+            """
+            SELECT fc.commodity, fc.fetched_date, fc.contract_month, fc.ticker,
+                   fc.observation_date, fc.close, fc.volume,
+                   cb.Close, COALESCE(cb.Volume, fc.volume),
+                   cb.Date IS NOT NULL
+                       AND julianday(cb.fetched_date) >= julianday(cb.Date) + 2 AS final
+              FROM forward_curve fc
+              LEFT JOIN contract_bars cb
+                ON cb.ticker = fc.ticker AND cb.Date = fc.observation_date
+             WHERE fc.fetched_date >= ?
+             ORDER BY fc.commodity, fc.fetched_date, fc.contract_month
+            """,
+            (since,),
+        ).fetchall()
+        snapshots: dict[tuple[str, str], list[tuple]] = {}
+        for leg in legs:
+            snapshots.setdefault((leg[0], leg[1]), []).append(leg)
+
+        repaired: dict[str, int] = {}
+        for (commodity, fetched), snapshot in snapshots.items():
+            changed = [
+                leg for leg in snapshot
+                if leg[9] and (leg[5] != leg[7] or leg[6] != leg[8])
+            ]
+            if not changed:
+                continue
+            # The whole-or-nothing rule is judged over every leg of the
+            # snapshot, dated or not: an undated leg (it never said which
+            # session it was) or a second observation date means the
+            # snapshot is not one session to correct (invariant 8).
+            observed = {leg[4] for leg in snapshot}
+            if len(observed) != 1 or None in observed:
+                logger.warning(
+                    "forward_curve/%s fetched %s: %d leg(s) differ from their final bar but "
+                    "the snapshot is not repaired — its legs carry observation dates %s, "
+                    "not one session",
+                    commodity, fetched, len(changed),
+                    ", ".join(sorted(str(d) for d in observed)),
+                )
+                continue
+            unproven = [leg[3] for leg in snapshot if not leg[9]]
+            if unproven:
+                logger.warning(
+                    "forward_curve/%s fetched %s: %d leg(s) differ from their final bar but "
+                    "the snapshot is not repaired — %s ha%s no provably final bar for "
+                    "observation %s, and a part-repaired curve is not one session",
+                    commodity, fetched, len(changed), ", ".join(unproven),
+                    "s" if len(unproven) == 1 else "ve", snapshot[0][4],
+                )
+                continue
+            conn.executemany(
+                "UPDATE forward_curve SET close = ?, volume = ? "
+                "WHERE commodity = ? AND fetched_date = ? AND contract_month = ?",
+                [(leg[7], leg[8], commodity, fetched, leg[2]) for leg in changed],
+            )
+            repaired[commodity] = repaired.get(commodity, 0) + len(changed)
+            logger.warning(
+                "forward_curve/%s fetched %s: repaired %d leg(s) to the final bar of "
+                "observation %s (captured before Yahoo finished it, B47 #622): %s",
+                commodity, fetched, len(changed), snapshot[0][4],
+                ", ".join(f"{leg[3]} {leg[5]} -> {leg[7]}" for leg in changed),
+            )
+    return repaired
 
 
 def save_contract_bars(commodity: str, df: pd.DataFrame):

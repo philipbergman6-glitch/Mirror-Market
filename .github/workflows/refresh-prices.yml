@@ -41,12 +41,22 @@ name: Refresh Prices
 # off-the-hour minute is deliberate: GitHub names the start of every hour as
 # its highest-load, most-delayed moment.
 #
+# B47 (#622) changed the board half of that reasoning. Yahoo's CBOT bar
+# labelled D is final only at 00:00 New York on D+1 (04:00 UTC EDT, 05:00
+# UTC EST), so neither evening slot can carry CBOT day D: both hold D-1 by
+# design, and the board deadline arithmetic above (00:15 UTC) describes a
+# guard that kept the bar from 14:30 CT, which stored pre-final values. The
+# board is no longer gated on any slot; which slot should carry it is the
+# owner's open call on #622. The crons are unchanged.
+#
 # It also depends on the settlement-guard fix shipped alongside it. This run
 # lands at 17:34-21:28 Chicago, and the CME overnight session opens 19:00 CT
 # carrying the NEXT trade date. Under the old guard — "has Chicago settled?
 # then keep everything" — the later landings would have stored that opening
 # bar as the day's close. The rule is now "drop every bar after the newest
-# finished session", which is what makes this slot safe at all.
+# finished session", which is what makes this slot safe at all — and since
+# B47 (#622) the newest finished futures session is the one Yahoo finished at
+# New York midnight, so this slot stores CBOT D-1, never D's live bar.
 #
 # ONE DISPATCH, THREE SLOTS
 #
@@ -193,19 +203,17 @@ jobs:
             # in GMT every day and in BST on most, so it holds D-1 FX by
             # design, and gating it would report a 22-24h acquisition as a
             # scheduler-late start every day (B20 #482).
-            GATE="prices,forward_curve"
-            # The 20:07 slot is the one whose start delay alone decides the
-            # board verdict: +1h54 to +3h35 measured, against a fetch that has
-            # to land by 00:15 UTC. Runs that started after that deadline
-            # (4 of 15 reds, 2026-09-28 to 2026-10-09) were the scheduler, not
-            # the data — a late start on the newest bar is reported as LATE
-            # START, never silently; a stale bar or a pipeline breach still
-            # fails. The 08:00 backstop never opts in: its red is the alarm.
-            # Nor does a manual dispatch: a person starting it late is not
-            # the scheduler.
-            if [[ "${{ github.event.schedule }}" == "7 20 * * 1-5" ]]; then
-              LATE_START_OK=true
-            fi
+            #
+            # Nor, since B47 (#622), is the board. Yahoo's CBOT bar labelled
+            # D is final only at 00:00 New York on D+1 (04:00 UTC EDT, 05:00
+            # UTC EST), so this slot's 22:00-23:42 UTC landing holds D-1 CBOT
+            # by design — about 27 h against a 6 h objective whose floor is
+            # now 9h45m. That is the catch-up slot's case above: a red that
+            # cannot be green is a red nobody reads (#176). The report still
+            # prints for the board; only its exit code is ungated. Which
+            # slot proves board latency, against which objective, is the
+            # owner's open call on #622; until then no slot gates it.
+            GATE=""
           fi
           {
             echo "layers=$LAYERS"

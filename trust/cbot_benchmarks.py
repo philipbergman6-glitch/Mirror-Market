@@ -69,7 +69,7 @@ import pandas as pd
 
 from analysis.futures.domain import UnknownContract, parse_symbol, spec_for
 from config import SETTLEMENT_TIMEZONE
-from fetchers._settlement import session_is_settled
+from fetchers._settlement import session_is_finished
 from fetchers.forward_curve import _build_contract_tickers
 from trust.dataset_health import DatasetHealthInput, evaluate_dataset_health
 from trust.domain import (
@@ -420,15 +420,20 @@ def settlement_state_for(session_date: date, now: datetime) -> SettlementState:
 
     Time-based, like the v1 settlement guard and for the same reason: no field
     on a provider bar says "settled", and a heuristic on volume or range would
-    be the silent guess the guard exists to remove.
+    be the silent guess the guard exists to remove. Finished is the guard's
+    own answer (``fetchers._settlement.session_is_finished``): Yahoo's bar
+    labelled D is final only at 00:00 New York on D+1 (B47 #622). Until then
+    it is ``OPEN`` even after the 13:15 CT settlement — it holds the last
+    trade, then the overnight session's trades — and a bar labelled after
+    the venue's current date is ``PRE_OPEN``.
     """
 
+    if session_is_finished(session_date, now):
+        return SettlementState.SETTLED
     venue_today = _utc(now).astimezone(_venue_zone()).date()
     if session_date > venue_today:
         return SettlementState.PRE_OPEN
-    if session_date < venue_today:
-        return SettlementState.SETTLED
-    return SettlementState.SETTLED if session_is_settled(now) else SettlementState.OPEN
+    return SettlementState.OPEN
 
 
 # ---------------------------------------------------------------------------
