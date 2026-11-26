@@ -312,6 +312,8 @@ refused by gate 2, and the live site stays as it was.
 | `scripts/latency_report.py` | operator report from the live DB, or from a published manifest with `--manifest URL`; `--fail-on-breach` for CI |
 | `scripts/smoke_site.py --url` | prints `PUBLICATION LATENCY` — generation → publicly readable, the one interval no process can observe from inside itself. Reported, never failed on: a slow Pages deploy is an operational fact, not a reason to alert on a site that published correctly |
 
+**Masthead age:** CBOT-session age; ICE CT/SB rows are one weekday older (24 h; 72 h Tue) and carry their own dates (B48 #626; follow-up [#669](https://github.com/philipbergman6-glitch/Mirror-Market/issues/669)).
+
 ---
 
 ## 7. Operational cost
