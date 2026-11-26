@@ -122,6 +122,34 @@ class TrustedNamedContractProvider:
     def aggregate_open_interest(self, commodity: str, *, as_of: date) -> AggregateOpenInterest | None:
         return self.fallback.aggregate_open_interest(commodity, as_of=as_of)
 
+    # -- serviceability ----------------------------------------------------
+    def unserved_dataset_keys(self) -> tuple[str, ...]:
+        """Benchmark dataset keys with no accepted current revision, in roster order.
+
+        Empty means every soy leg has at least one revision this provider can
+        serve. ``open_provider`` refuses a cutover while this is non-empty
+        (#656): a leg with nothing accepted would be a blank curve, not a
+        shorter one.
+        """
+        from trust.cbot_benchmarks import BENCHMARK_COMMODITIES, contract_for
+        from trust.domain import EligibilityScope
+
+        repository = self.repository
+        contracts = [contract_for(commodity) for commodity in BENCHMARK_COMMODITIES]
+        pending = {contract.dataset.dataset_id for contract in contracts}
+        for revision in repository.all_observation_revisions():  # type: ignore[attr-defined]
+            identity = revision.identity
+            if identity.dataset_id not in pending:
+                continue
+            head = repository.current_accepted_revision(  # type: ignore[attr-defined]
+                identity, scope=EligibilityScope.INTERNAL
+            )
+            if head is not None:
+                pending.discard(identity.dataset_id)
+                if not pending:
+                    break
+        return tuple(contract.dataset.key for contract in contracts if contract.dataset.dataset_id in pending)
+
     # -- internals ---------------------------------------------------------
     def _sessions(self, commodity: str, *, as_of: date) -> dict[date, list[Mapping[str, object]]]:
         """Accepted current revisions for ``commodity``, grouped by session.

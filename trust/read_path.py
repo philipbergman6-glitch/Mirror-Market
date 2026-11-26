@@ -9,12 +9,12 @@ not a decision made independently by three callers that can drift.
 A *cutover* is not yet only the variable. It also needs a production
 dual-write into a durable ledger, and none exists: ``main.py`` does not import
 ``trust``, ``data/v2/`` (the ``GitDirectoryTrustRepository`` root) does not
-exist, and the CI reconcilers write to a per-run temporary directory. An empty
-or missing ledger does not raise, so ``analysis.futures.providers.open_provider``
-does not fall back to v1 — switching the CBOT datasets on today serves empty
-curves ("no accepted trusted revisions for this commodity") to every curve
-and quote read; close history, continuous series and FX still read v1
-(#655; whether that should fall back or raise is #239/#312's call).
+exist, and the CI reconcilers write to a per-run temporary directory. So
+switching the CBOT datasets on today makes
+``analysis.futures.providers.open_provider`` raise ``TrustedLedgerEmptyError``,
+naming the absent ledger or the unserved datasets, rather than serving empty
+curves or falling back to v1 silently (#656, owner decision on #239). The reader cutover
+itself is not proceeding; ``ROADMAP.md`` holds its reopening trigger.
 
 Three rules:
 
@@ -26,7 +26,11 @@ Three rules:
   ``all``.
 - **An unknown name is an error, not a no-op.** A typo in the variable would
   otherwise read as "still on v1" — the switch silently doing nothing while the
-  operator believes the cutover happened. Unknown names raise.
+  operator believes the cutover happened. Unknown names raise
+  ``TrustedReadSwitchError``, and ``open_provider`` lets it propagate, so a
+  typo fails the build by name rather than falling back to v1 (owner ruling on
+  #664, 2026-11-26). A key in ``V1_SOURCE_DIFFERS`` raises the same error and
+  takes the same path.
 
 The variable takes a comma-separated list of registry dataset *keys*::
 
@@ -45,8 +49,10 @@ from config import FX_ECB_CROSS_PAIRS
 from trust.registry import PILOT_REGISTRY
 
 #: FX datasets whose v1 publisher of record is no longer the trusted
-#: contract's source (B25 #495) — refused until the registry follows.
-_V1_SOURCE_DIFFERS = frozenset(
+#: contract's source (B25 #495) — refused until the registry follows. The one
+#: list: the reconciliation alarm reads it too, reporting these datasets as
+#: "not compared: v1 source differs" instead of grading them (#239, G5).
+V1_SOURCE_DIFFERS = frozenset(
     f"fx-{pair.lower().replace('/', '-')}" for pair in FX_ECB_CROSS_PAIRS
 )
 
@@ -118,7 +124,7 @@ def load_trusted_read_switch(env: Mapping[str, str] | None = None) -> TrustedRea
             f"{TRUSTED_READ_ENV_VAR} names datasets that are not in the trust registry: "
             f"{', '.join(unknown)} (known: {', '.join(sorted(known))})"
         )
-    diverged = sorted(keys & _V1_SOURCE_DIFFERS)
+    diverged = sorted(keys & V1_SOURCE_DIFFERS)
     if diverged:
         raise TrustedReadSwitchError(
             f"{TRUSTED_READ_ENV_VAR} names {', '.join(diverged)}, whose trusted contract is still the "
@@ -140,6 +146,7 @@ __all__ = [
     "TRUSTED_READ_ENV_VAR",
     "TrustedReadSwitch",
     "TrustedReadSwitchError",
+    "V1_SOURCE_DIFFERS",
     "load_trusted_read_switch",
     "trusted_read_enabled",
 ]
