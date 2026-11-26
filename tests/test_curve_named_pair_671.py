@@ -141,3 +141,39 @@ def test_the_legacy_analyser_is_gone():
     import importlib.util
 
     assert importlib.util.find_spec("analysis.forward_curve") is None
+
+
+FLAT_NEARBY = (
+    ("2027-01-01", "Jan 2027", "ZSF27.CBT", 1244.00),
+    ("2027-03-01", "Mar 2027", "ZSH27.CBT", 1244.00),
+    ("2027-05-01", "May 2027", "ZSK27.CBT", 1248.50),
+    ("2027-07-01", "Jul 2027", "ZSN27.CBT", 1240.00),
+)
+
+
+@pytest.fixture
+def flat_nearby_db(patched_db: Path) -> Path:
+    conn = sqlite3.connect(str(patched_db))
+    conn.executemany(
+        "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+        "observation_date, fetched_date) VALUES ('Soybeans', ?, ?, ?, ?, ?, ?)",
+        [(month, label, ticker, close, SESSION.isoformat(), AS_OF.isoformat())
+         for month, label, ticker, close in FLAT_NEARBY],
+    )
+    conn.commit()
+    conn.close()
+    return patched_db
+
+
+def test_a_flat_nearby_pair_is_never_called_carry_by_the_briefing(flat_nearby_db):
+    """Review of #674: "not inverted" is not "carry". Jan = Mar, then carry to
+    May and an inversion at May→Jul: the workstation reads it as mixed, and the
+    briefing driver must not say the nearby pair is in carry (#671 AC6)."""
+    from analysis.briefing.sections.market_drivers import _curve_drivers
+    from analysis.futures.curve import CurveStructure
+
+    assert _workstation_curve(flat_nearby_db).structure is CurveStructure.MIXED
+    text = "\n".join(line for d in _curve_drivers() for line in d.lines(1))
+    assert "nearby pair in carry" not in text
+    assert "nearby pair flat" in text
+    assert "May 2027→Jul 2027" in text

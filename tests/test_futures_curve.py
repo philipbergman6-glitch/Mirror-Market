@@ -265,3 +265,44 @@ def test_every_pair_lower_is_backwardation():
 def test_a_carry_reading_says_it_is_gross_of_storage_and_financing():
     analysis = analyse_curve(observation("Soybeans", CONTANGO), as_of=AS_OF)
     assert "gross of storage and financing" in analysis.structure.implication
+
+
+# Review of #674 (mirror-market-10): a flat pair is neither carry nor inversion,
+# so it can't let a strip read as contango or backwardation "along every pair".
+
+def _strip(*closes):
+    months = [(2026, 9), (2026, 11), (2027, 1), (2027, 3)]
+    return [quote("Soybeans", y, m, c, observed=date(2026, 8, 11))
+            for (y, m), c in zip(months, closes, strict=False)]
+
+
+def test_a_flat_nearby_pair_then_an_inversion_is_mixed_not_backwardation():
+    """Sep 1100 / Nov 1100 / Jan 1090: one pair flat, one inverted."""
+    analysis = analyse_curve(observation("Soybeans", _strip(1100.0, 1100.0, 1090.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.MIXED
+    assert analysis.is_inverted is False
+    assert "every listed month" not in analysis.structure.implication
+
+
+def test_carry_then_a_flat_pair_is_nearby_carry_not_contango():
+    """Sep 1100 / Nov 1130 / Jan 1130: one pair carry, one flat."""
+    analysis = analyse_curve(observation("Soybeans", _strip(1100.0, 1130.0, 1130.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.NEARBY_CARRY
+    assert "inversion" not in analysis.structure.implication
+    assert "every listed month" not in analysis.structure.implication
+
+
+def test_an_inversion_then_a_flat_pair_is_nearby_inversion_not_backwardation():
+    analysis = analyse_curve(observation("Soybeans", _strip(1130.0, 1100.0, 1100.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.NEARBY_INVERSION
+    assert "carry resumes" not in analysis.structure.implication
+
+
+def test_every_pair_flat_is_flat():
+    analysis = analyse_curve(observation("Soybeans", _strip(1100.0, 1100.0, 1100.0)), as_of=AS_OF)
+    assert analysis.structure is CurveStructure.FLAT
+
+
+def test_a_nearby_inversion_reading_is_gross_of_storage_and_financing():
+    """AC5 on #671: every storage conclusion is gross unless a desk carry is given."""
+    assert "gross of storage and financing" in CurveStructure.NEARBY_INVERSION.implication

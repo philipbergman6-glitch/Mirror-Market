@@ -30,7 +30,7 @@ from analysis.briefing.sections.export_sales import (
     MT_PER_MILLION_BUSHELS_SOY,
     soy_marketing_year,
 )
-from analysis.futures.curve import GROSS_OF_CARRY_COSTS, CurveAnalysis
+from analysis.futures.curve import GROSS_OF_CARRY_COSTS, CurveAnalysis, CurveStructure
 from analysis.futures.stored_curves import read_stored_curves
 from analysis.spreads import daily_close, strike_cross_venue_spread
 from analysis.weather_alerts import (
@@ -494,7 +494,7 @@ def _curve_drivers() -> list[Driver]:
             continue
         if analysis.is_inverted:
             observation = f"{commodity} nearby pair inverted — {nearby.sentence()}"
-            if ";" in analysis.reading:   # the strip turns further out
+            if analysis.structure is CurveStructure.NEARBY_INVERSION:  # the strip turns further out
                 observation += f"; {analysis.reading}"
             drivers.append(Driver(
                 observation,
@@ -503,7 +503,15 @@ def _curve_drivers() -> list[Driver]:
                 interpretation="the board pays for prompt delivery over the next listed "
                 "month — nearby supply tight against that month, at this one pair",
             ))
-        elif inversions:
+        elif nearby.direction == "flat" and analysis.structure is not CurveStructure.FLAT:
+            drivers.append(Driver(
+                f"{commodity} nearby pair flat — {nearby.sentence()}; {analysis.reading}",
+                "refuted if the nearby pair opens a carry or an inversion as the front month "
+                "rolls; confirmed if it stays level through the next roll",
+                interpretation="no term premium over the next listed month either way; the "
+                "strip moves only further out — not a reading on nearby supply",
+            ))
+        elif nearby.is_carry and inversions:
             located = "; ".join(
                 f"inverted at {spread.months} — {spread.sentence()}" for spread in inversions
             )
@@ -531,7 +539,7 @@ def _steep_carry(analysis: CurveAnalysis) -> bool:
     nearby = analysis.nearby
     return bool(
         nearby is not None
-        and not analysis.inversions
+        and analysis.structure is CurveStructure.CONTANGO  # every pair carry, none flat
         and nearby.annualised_pct is not None
         and nearby.annualised_pct >= CURVE_STEEP_CARRY_ANNUALISED_PCT
     )

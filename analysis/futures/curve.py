@@ -90,10 +90,10 @@ class CurveStructure(str, Enum):
 
     CONTANGO = "contango"                   # every consecutive pair in carry
     BACKWARDATION = "backwardation"         # every consecutive pair inverted
-    NEARBY_CARRY = "nearby carry"           # nearby pair in carry; an inversion further out
-    NEARBY_INVERSION = "nearby inversion"   # nearby pair inverted; carry further out
-    MIXED = "mixed"                         # nearby pair flat; carry and inversion further out
-    FLAT = "flat"
+    NEARBY_CARRY = "nearby carry"           # nearby pair in carry; the strip changes further out
+    NEARBY_INVERSION = "nearby inversion"   # nearby pair inverted; the strip changes further out
+    MIXED = "mixed"                         # nearby pair flat; the strip moves further out
+    FLAT = "flat"                           # every consecutive pair flat
     UNDETERMINED = "undetermined"
 
     @property
@@ -110,16 +110,20 @@ class CurveStructure(str, Enum):
             )
         if self is CurveStructure.NEARBY_CARRY:
             return (
-                f"the nearby pair pays to carry ({GROSS_OF_CARRY_COSTS}); the inversion sits "
+                f"the nearby pair pays to carry ({GROSS_OF_CARRY_COSTS}); the strip changes "
                 "further out, at the named months — not a reading on nearby supply"
             )
         if self is CurveStructure.NEARBY_INVERSION:
             return (
                 "the nearby pair is inverted — the board pays for prompt delivery over the next "
-                "listed month; carry resumes further out, at the named months"
+                f"listed month and nothing to carry over it ({GROSS_OF_CARRY_COSTS}); the strip "
+                "changes further out, at the named months"
             )
         if self is CurveStructure.MIXED:
-            return "the nearby pair is flat; carry and inversion sit further out, at the named months"
+            return (
+                "the nearby pair is flat — no term premium over the next listed month; the strip "
+                "moves further out, at the named months"
+            )
         if self is CurveStructure.FLAT:
             return "no term premium either way"
         return "not enough same-session legs to read a structure"
@@ -486,17 +490,21 @@ def _structure(spreads: tuple[CalendarSpread, ...]) -> CurveStructure:
     Neither a move count nor the first-against-last sign: the first labelled a
     13%-inverted curve "contango" because the inversion came in one step, and
     the second labelled a curve in carry from Jan to Jul "backwardation" because
-    Aug sat lower (#671). A strip going one way along every pair is contango or
-    backwardation; one that changes direction is named by its nearby pair, and
+    Aug sat lower (#671). A strip going one way along *every* pair is contango,
+    backwardation or flat; any other strip, a flat pair included, is named by
+    its nearby pair, and
     the months where it turns are :attr:`CurveAnalysis.reading`.
     """
     directions = [spread.direction for spread in spreads]
     if not directions or None in directions:
         return CurveStructure.UNDETERMINED
-    if "inverted" not in directions:
-        return CurveStructure.CONTANGO if "carry" in directions else CurveStructure.FLAT
-    if "carry" not in directions:
-        return CurveStructure.BACKWARDATION
+    # "Along every pair" means every pair: a flat pair is neither carry nor
+    # inversion, so it cannot let a strip read as either (review of #674).
+    if len(set(directions)) == 1:
+        return {
+            "carry": CurveStructure.CONTANGO,
+            "inverted": CurveStructure.BACKWARDATION,
+        }.get(directions[0] or "", CurveStructure.FLAT)
     return {
         "carry": CurveStructure.NEARBY_CARRY,
         "inverted": CurveStructure.NEARBY_INVERSION,
