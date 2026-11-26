@@ -70,6 +70,10 @@
         {#- B30 #504 / B39 #540: which loading month and band this print is for,
             where the venue prints several. -#}
         {%- if row.window %}<div class="caption">{{ row.loading }}</div>{% endif %}
+        {{- f.thin_day(row.thin_day) }}
+        {#- #621: why the newest stored day is not the one shown — the ledger
+            leg only, never its partial count or price. -#}
+        {%- if row.filling_note %}<div class="caption">{{ row.filling_note }}</div>{% endif %}
         {%- if d.has_drilldown and row.band and row.band.since_label %}
         {#- Variant C's band: "high in its own range" is often the whole
             question, so it is stated in the collapsed row rather than behind a

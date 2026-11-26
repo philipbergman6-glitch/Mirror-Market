@@ -42,6 +42,7 @@ from analysis.origins.crush import CONTRACT_BASIS_BY_DESCRIPTOR
 from analysis.origins.domain import ShipmentWindow
 from analysis.origins.sources import parse_ams_slot, parse_magyp_window
 from analysis.spreads import CRUSH_MEAL_YIELD_MT, CRUSH_OIL_YIELD_MT
+from analysis.thin_day import ThinDayRule, rule_from_spec
 from pipeline import reliability
 from pipeline.connection import get_connection, managed_connection
 from pipeline.units import native_label, to_metric_tons
@@ -244,6 +245,17 @@ class Source:
     # day under its own date; the row stays stored. NULL proves nothing and
     # the row stays, as with a trade-proof column (`_proof_clause`).
     filling_column: str | None = None
+    # #621 owner decision: why a filling day is not shown, in the publisher's
+    # terms ("MSAMB fills through D+1"). Required with `filling_column`; the
+    # ledger leg alone renders it.
+    filling_reason: str | None = None
+    # #370: the keys whose print is a median over a count of lots, and the
+    # rule that labels a day with few of them. A tuple of (key, rule) pairs —
+    # Source is a cache key and must stay hashable.
+    thin_day: tuple[tuple[str, ThinDayRule], ...] = ()
+
+    def thin_day_rule(self, key: str) -> ThinDayRule | None:
+        return dict(self.thin_day).get(key)
 
     def parse_window(self, raw: tuple, session: date) -> ShipmentWindow | None:
         """One stored row's shipment window, or None where it is unreadable."""
@@ -705,7 +717,42 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         contract_board=contract_board,
         contract_columns=contract_columns,
         filling_column=raw.get("filling_column"),
+        filling_reason=_filling_reason(raw, slug=slug, block=block),
+        thin_day=_thin_day(raw, keys, slug=slug, block=block),
     )
+
+
+def _filling_reason(raw: dict, *, slug: str, block: str) -> str | None:
+    """#621: a source that hides filling days must say why, or the ledger leg
+    would show an older day with no reason — a gap that reads as an outage."""
+    column, reason = raw.get("filling_column"), raw.get("filling_reason")
+    if column is None and reason is not None:
+        raise ValueError(f"market {slug!r} {block} declares a filling_reason with no filling_column")
+    if column is not None and not (reason or "").strip():
+        raise ValueError(
+            f"market {slug!r} {block} declares filling_column {column!r} and no filling_reason "
+            "— the ledger leg must be able to say why its newest stored day is not shown (#621)"
+        )
+    return reason
+
+
+def _thin_day(raw: dict, keys: tuple[str, ...], *, slug: str, block: str) -> tuple[tuple[str, ThinDayRule], ...]:
+    """#370: one thin-day rule over the keys it names, each a key of this source."""
+    spec = raw.get("thin_day")
+    if spec is None:
+        return ()
+    rule_keys = tuple(spec.get("keys") or ())
+    unknown = set(rule_keys) - set(keys)
+    if not rule_keys or unknown:
+        raise ValueError(
+            f"market {slug!r} {block} thin_day must name keys of this source, got "
+            f"{list(rule_keys)!r} (unknown: {sorted(unknown)})"
+        )
+    try:
+        rule = rule_from_spec(spec)
+    except ValueError as exc:
+        raise ValueError(f"market {slug!r} {block} {exc}") from exc
+    return tuple((key, rule) for key in rule_keys)
 
 
 def _window_declaration(

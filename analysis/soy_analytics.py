@@ -29,6 +29,7 @@ from typing import Any
 
 import pandas as pd
 
+import config
 from analysis import weather_alerts
 from analysis.crop_year import psd_year_for_crop_year, psd_year_label
 from analysis.forward_curve import analyze_curve, calendar_spread
@@ -45,6 +46,7 @@ from analysis.spreads import (
     strike_cross_venue_spread,
 )
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
+from analysis.thin_day import rule_from_spec, thin_day
 from config import (
     CEC_ATTRIBUTION,
     CEC_PSD_COUNTERPARTS,
@@ -207,6 +209,27 @@ def _complete_days(rows: pd.DataFrame) -> pd.DataFrame:
     if "filling" not in rows.columns:
         return rows
     return rows[rows["filling"].ne(1)]
+
+
+def _mh_thin_day(complete: pd.DataFrame) -> str | None:
+    """#370: the newest complete MH day's thin-day label, or None.
+
+    The rule is the India price descriptor's own (``config.MARKETS``), parsed
+    by the same ``analysis.thin_day.rule_from_spec`` the market registry uses.
+    """
+    spec = (config.MARKETS["india"]["price"].get("thin_day") or {})
+    if MANDI_SERIES_MH not in (spec.get("keys") or ()):
+        return None
+    rule = rule_from_spec(spec)
+    if rule.count_column not in complete.columns:
+        return None  # a frame without counts has learned none — no claim
+    days = pd.to_datetime(complete["Date"]).dt.date
+    counts = [
+        (day, None if pd.isna(n) else float(n))
+        for day, n in zip(days, complete[rule.count_column], strict=True)
+    ]
+    label = thin_day(counts, days.iloc[-1], rule)
+    return label.text if label is not None else None
 
 
 _ARRIVALS_WINDOW_DAYS = 7
@@ -1904,6 +1927,12 @@ def emerging_markets_analysis() -> dict:
                         india_domestic_entry["soybean_mandi_mh_usd"] = round(
                             aligned[0], 2
                         )
+                    # #370: the shown day, labelled when few lots stand behind
+                    # its median. Same rule and baseline as block 01 and the
+                    # ledger leg, over the same complete days.
+                    thin = _mh_thin_day(mh_rows)
+                    if thin is not None:
+                        india_domestic_entry["soybean_mandi_mh_thin"] = thin
                     pace = _mandi_arrivals_pace(mh_df.sort_values("Date"), every_day=True)
                     if pace is not None:
                         india_domestic_entry.update(pace)

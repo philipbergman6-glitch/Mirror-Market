@@ -1859,6 +1859,18 @@ MSAMB_QUINTAL_UNIT = "क्विंटल"
 # (by 3–29%, one as late as 17:30 IST: 11-16, 128 → 132), and every read on
 # D+2 or later matched it. No hour inside D+1 was ever shown complete.
 MSAMB_FILL_DAYS = 2
+# #370 (owner decision 2026-11-25, option 2 — label only, never drop or patch):
+# an MH day is labelled `thin day · N lots (typical weekday ~M)` when its lot
+# count is under MSAMB_THIN_DAY_RATIO × the median count of the trailing
+# MSAMB_THIN_DAY_WINDOW weekdays (Mon–Fri) before it, read only from the
+# MSAMB count break on (LAYERS.md Layer 16, #371: no threshold may span a
+# break). Under MSAMB_THIN_DAY_MIN_DAYS baseline weekdays there is no label.
+# Calibration (11-10 → 11-23): weekdays 108–142, Saturdays 83–86 (not thin),
+# Sundays 17–18 (thin). Review on #370 after six weeks (owner).
+MSAMB_COUNT_BREAK = _date(2026, 11, 10)
+MSAMB_THIN_DAY_RATIO = 0.5
+MSAMB_THIN_DAY_WINDOW = 20      # four weeks of weekdays
+MSAMB_THIN_DAY_MIN_DAYS = 5     # one week of weekdays
 NCDEX_SPOT_PAGE_URL = "https://www.ncdex.com/markets/spotprices"
 NCDEX_SPOT_DATA_URL = "https://www.ncdex.com/spotprices/get_data"
 NCDEX_SPOT_SERIES = "Soybean (NCDEX Indore spot)"
@@ -3441,6 +3453,19 @@ MARKETS: dict[str, dict[str, Any]] = {
             # shows the last complete day (`MSAMB_FILL_DAYS`). NCDEX rows carry
             # NULL (one poll, no fill window) and are unaffected.
             "filling_column": "filling",
+            # #621 owner decision: the ledger leg names why its shown day is
+            # not the newest stored one, in these words; block 01 never does.
+            "filling_reason": "MSAMB fills through D+1",
+            # #370: a median over few lots is labelled, never hidden.
+            "thin_day": {
+                "keys": [MANDI_SERIES_MH],
+                "count_column": "Volume",
+                "count_noun": "lots",
+                "since": MSAMB_COUNT_BREAK,
+                "ratio": MSAMB_THIN_DAY_RATIO,
+                "window": MSAMB_THIN_DAY_WINDOW,
+                "min_days": MSAMB_THIN_DAY_MIN_DAYS,
+            },
         },
         "crush": None,
         "crush_absent_reason": (

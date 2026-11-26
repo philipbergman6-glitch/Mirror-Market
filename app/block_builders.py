@@ -43,6 +43,8 @@ from analysis.futures.domain import NamedContract, named_contract
 from analysis.hazards import LegHazard, PlaceHazard
 from analysis.origins.domain import LoadingMonth, ShipmentWindow
 from analysis.origins.sources import nearest_open_window, nearest_window_key
+from analysis.thin_day import ThinDayRule
+from analysis.thin_day import thin_day as _thin_day_label
 from app.blocks import (
     BLOCK_IDS,
     GENERATION_ERROR,
@@ -483,6 +485,32 @@ class SiteContext:
         """
         return self._prints(leg.source, leg.trade_proof_column).series.get(leg.key) or []
 
+    # -- day completeness (#621) and thin days (#370) -------------------------
+    def thin_day(self, source: Source, key: str, when: date) -> str | None:
+        """The thin-day label for ``key``'s print on ``when``, or None.
+
+        Read over the same complete days every other reader shows (filling
+        rows excluded by ``_complete_clause``), so a day still filling is
+        neither labelled nor part of the baseline. A label, never a filter.
+        """
+        rule = source.thin_day_rule(key)
+        if rule is None:
+            return None
+        counts = self.cached(
+            ("thin_day_counts", source, key),
+            lambda: _read_counts(self.conn, source, key, rule),
+        )
+        label = _thin_day_label(counts, when, rule)
+        return label.text if label is not None else None
+
+    def newest_filling(self, source: Source, key: str) -> date | None:
+        """The newest stored day of ``key`` still flagged filling, or None."""
+        if source.filling_column is None:
+            return None
+        return self.cached(
+            ("newest_filling", source), lambda: _read_newest_filling(self.conn, source, self.today)
+        ).get(key)
+
     # -- cyclone hazards (S2 #374 slice 4, #390) --------------------------------
     @property
     def generated_at(self) -> datetime:
@@ -903,10 +931,8 @@ def _read_series(
         f"ORDER BY {source.date_column}"
     )
     out: dict[str, list[tuple[date, float, int]]] = {key: [] for key in source.keys}
-    try:
-        rows = conn.execute(sql, (*source.keys, cutoff)).fetchall()
-    except Exception as exc:  # noqa: BLE001 — a missing table is data, not a crash
-        log.debug("block read: %s unavailable (%s)", source.table, exc)
+    rows = _execute_or_missing(conn, sql, (*source.keys, cutoff), source.table)
+    if rows is None:
         return out
     for key, raw_date, value, count in rows:
         parsed = _parse_date(raw_date)
@@ -914,6 +940,62 @@ def _read_series(
             continue
         out.setdefault(str(key), []).append((parsed, float(value), int(count or 1)))
     return out
+
+
+def _read_counts(conn, source: Source, key: str, rule: ThinDayRule) -> list[tuple[date, float | None]]:
+    """``(date, count)`` for ``key``'s complete days since the rule's count break."""
+    if conn is None:
+        return []
+    sql = (
+        f"SELECT {source.date_column}, {rule.count_column} "  # noqa: S608 — identifiers come from the registry
+        f"FROM {source.table} "
+        f"WHERE {source.key_column} = ? AND {source.date_column} >= ? "
+        f"AND {source.value_column} IS NOT NULL "
+        f"{_complete_clause(source)}"
+        f"ORDER BY {source.date_column}"
+    )
+    rows = _execute_or_missing(conn, sql, (key, rule.since.isoformat()), source.table)
+    out: list[tuple[date, float | None]] = []
+    for raw_date, count in rows or ():
+        day = _parse_date(raw_date)
+        if day is not None:
+            out.append((day, None if count is None else float(count)))
+    return out
+
+
+def _read_newest_filling(conn, source: Source, today: date) -> dict[str, date]:
+    """``{key: newest day flagged filling}`` inside the source's lookback."""
+    if conn is None or source.filling_column is None:
+        return {}
+    cutoff = (today - _days(LOOKBACK_DAYS_BY_CADENCE.get(source.cadence, 400))).isoformat()
+    placeholders = ",".join("?" for _ in source.keys)
+    sql = (
+        f"SELECT {source.key_column}, MAX({source.date_column}) "  # noqa: S608 — identifiers come from the registry
+        f"FROM {source.table} "
+        f"WHERE {source.key_column} IN ({placeholders}) AND {source.date_column} >= ? "
+        f"AND {source.filling_column} = 1 "
+        f"GROUP BY {source.key_column}"
+    )
+    out: dict[str, date] = {}
+    for key, raw_date in _execute_or_missing(conn, sql, (*source.keys, cutoff), source.table) or ():
+        day = _parse_date(raw_date)
+        if day is not None:
+            out[str(key)] = day
+    return out
+
+
+def _execute_or_missing(conn, sql: str, params: tuple, table: str) -> list | None:
+    """Rows, or None where the table does not exist yet (a fresh clone, a
+    docs-only job). Any other SQL error — a column the registry names that the
+    DB lacks, an un-migrated database above all — raises: a quiet "no data"
+    there is a blank page with no reason (#624 review)."""
+    try:
+        return conn.execute(sql, params).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc):
+            raise
+        log.debug("block read: %s unavailable (%s)", table, exc)
+        return None
 
 
 def _read_fx(conn, pair: str, today: date) -> list[tuple[date, float]]:
@@ -1075,6 +1157,9 @@ def price_block(market: Market, ctx: SiteContext, **_) -> tuple[str, str, dict]:
             **window,
             "move_notes": move_notes,
             "withheld_note": withheld_note,
+            # #370: a median over few lots says so beside the price. Never a
+            # filling note here — that belongs to the ledger leg alone (#621).
+            "thin_day": ctx.thin_day(source, key, when),
             # A1 #298: which day's rate the USD figure was struck at, or why
             # there is none. Rendered wherever it differs from `as_of`.
             **_fx_fields(source, fx),
@@ -1520,15 +1605,22 @@ def _ledger_row(
         # M21 #250 — both None on the headline, by the flag above.
         "drill": None,
         "band": None,
+        # #370: "thin day · 18 lots (typical weekday ~131)" on a complete day
+        # with few lots behind its median. #621: why the newest stored day is
+        # not the one shown — never its partial count or price.
+        "thin_day": None,
+        "filling_note": None,
         # S2 #374 §7.2 — set for every row whether or not it has prints, so
         # every ledger that lists the leg inherits its port flag with no
         # per-page code. None when the leg has no exposed place.
         "hazard": _hazard_view(ctx.leg_hazard(leg), _hazard_anchor(leg)),
     }
+    row["filling_note"] = _filling_note(source, ctx.newest_filling(source, leg.key), prints)
     if not prints:
         return row
 
     when, value, quotes = prints[-1]
+    row["thin_day"] = ctx.thin_day(source, leg.key, when)
     fx = ctx.fx_on(owner.currency_pair, when)
     windows = ctx.leg_windows(leg)
     window = _window_fields(windows, when)
@@ -1581,6 +1673,19 @@ def _ledger_row(
         row["drill"] = _leg_drilldown(leg, ctx, prints)
         row["band"] = _range_band(leg, ctx, prints, row["usd_mt"])
     return row
+
+
+def _filling_note(source: Source, filling: date | None, prints) -> str | None:
+    """#621 owner decision: ``last complete 11-23 · 11-24 stored, still filling
+    (MSAMB fills through D+1)`` — the ledger leg only, and only while the
+    filling day is newer than the print shown."""
+    if filling is None:
+        return None
+    last = prints[-1][0] if prints else None
+    if last is not None and filling <= last:
+        return None
+    shown = f"last complete {last:%m-%d}" if last else "no complete day inside the budget"
+    return f"{shown} · {filling:%m-%d} stored, still filling ({source.filling_reason})"
 
 
 def _short_date(when: date | None) -> str | None:
