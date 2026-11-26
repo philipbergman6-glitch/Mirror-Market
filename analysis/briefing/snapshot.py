@@ -23,11 +23,11 @@ product archives ``withheld: ALL_SAILED`` and the ``reason`` in place of the
 ``spot_*`` keys, as ``crush_spread`` archives ``{withheld, reason}``, and keeps
 its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. v6
 (#671) reshapes ``forward_curve``: each commodity archives its one-session
-``legs`` (symbol, contract month, native price), the ``nearby`` pair (front
-against the next listed month, far − near in native units and USD/MT), the
-``inverted_pairs`` by symbol and the pair-wise ``structure``. A v1–v5 block's
+``legs`` (symbol, contract month, native price), its ``observation_date`` and
+``coherent`` — components only; the structure and the nearby pair are
+re-derived from them by ``analysis.futures.curve``. A v1–v5 block's
 ``spread``/``spread_pct`` were last *fetched* month minus first and its
-``structure`` came from that sign — they are not comparable with v6's. Design
+``structure`` came from that sign — not comparable with anything v6 derives. Design
 rules carried by the schema:
 
 - raw numbers and components are stored, never display labels, regime
@@ -861,19 +861,23 @@ def _dce_block(price_data: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]
     return out
 
 
-def _forward_curve_block(as_of: date | None = None) -> dict[str, dict[str, Any]]:
-    """Each stored curve's one-session legs and its named-pair reading (v6, #671)."""
+def _forward_curve_block() -> dict[str, dict[str, Any]]:
+    """Each stored curve's one-session legs (v6, #671).
+
+    Components only, per the schema rule above: the structure, the nearby pair
+    and the inverted pairs are all ``analysis.futures.curve`` arithmetic on
+    these legs, so a backtest re-derives them with the one vocabulary rather
+    than trusting an archived label.
+    """
     out: dict[str, dict[str, Any]] = {}
-    for commodity, analysis in read_stored_curves(as_of=as_of).items():
+    for commodity, analysis in read_stored_curves().items():
         if len(analysis.legs) < 2:
             continue
-        nearby = analysis.nearby
         out[commodity] = {
             "observation_date": (
                 analysis.observation_date.isoformat() if analysis.observation_date else None
             ),
             "coherent": analysis.coherent,
-            "structure": analysis.structure.value,
             "legs": [
                 {
                     "symbol": leg.contract.symbol,
@@ -882,13 +886,6 @@ def _forward_curve_block(as_of: date | None = None) -> dict[str, dict[str, Any]]
                 }
                 for leg in analysis.legs
             ],
-            "nearby": None if nearby is None else {
-                "near": nearby.near.symbol,
-                "far": nearby.far.symbol,
-                "value": _num(nearby.value),
-                "usd_per_mt": _num(nearby.usd_per_mt),
-            },
-            "inverted_pairs": [spread.symbols for spread in analysis.inversions],
         }
     return out
 

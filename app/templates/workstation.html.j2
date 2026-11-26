@@ -283,8 +283,8 @@ tr.tv-panel > td { padding: 0; }
     <div class="contract-head">
       <h3>{{ c.display }}</h3>
       <span class="ptype">{{ c.structure }}</span>
-      {% if c.slope_usd_mt_per_month is not none %}
-      <span class="ptype">{{ '{:+.2f}'.format(c.slope_usd_mt_per_month) }} USD/MT per month</span>
+      {% if c.nearby_usd_mt_per_month is not none %}
+      <span class="ptype">{{ c.nearby_symbols }} {{ '{:+.2f}'.format(c.nearby_usd_mt_per_month) }} USD/MT per month</span>
       {% endif %}
     </div>
     {% if c.nearby %}<div class="spec-line">Nearby pair: {{ c.nearby }}</div>{% endif %}

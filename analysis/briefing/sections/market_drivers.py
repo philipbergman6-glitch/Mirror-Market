@@ -22,7 +22,6 @@ net long beside a high RSI is not crowded until it is a historical extreme).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from math import isfinite
 
 import pandas as pd
@@ -467,7 +466,7 @@ def _livestock_drivers(enriched: dict[str, pd.DataFrame]) -> list[Driver]:
 _CURVE_DRIVER_COMMODITIES = ("Soybeans", "Corn", "Wheat")
 
 
-def _curve_drivers(as_of: date | None = None) -> list[Driver]:
+def _curve_drivers() -> list[Driver]:
     """One driver per grain whose curve has something to say, by named pair.
 
     Every observation names its pair — two symbols, two prices, far − near in
@@ -477,7 +476,7 @@ def _curve_drivers(as_of: date | None = None) -> list[Driver]:
     nearby tightness.
     """
     drivers: list[Driver] = []
-    for commodity, analysis in read_stored_curves(_CURVE_DRIVER_COMMODITIES, as_of=as_of).items():
+    for commodity, analysis in read_stored_curves(_CURVE_DRIVER_COMMODITIES).items():
         nearby = analysis.nearby
         if nearby is None or nearby.value is None:
             continue
@@ -487,7 +486,8 @@ def _curve_drivers(as_of: date | None = None) -> list[Driver]:
                 continue
             drivers.append(Driver(
                 f"{commodity} nearby pair {nearby.sentence()}",
-                "re-read once every listed month prints on one session",
+                "confirmed if the pair holds its sign once every listed month prints on one "
+                "session; refuted if the missing month's return changes the nearby pair",
                 not_interpreted="not every listed month printed on one session, so the next "
                 f"listed month may be missing from this pair — {analysis.coherence_note}",
             ))

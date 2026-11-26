@@ -13,7 +13,6 @@ from analysis.futures.curve import (
     build_spread,
     hedge_month_candidates,
 )
-from analysis.futures.domain import spec_for
 from analysis.futures.providers import CurveObservation
 from tests.test_futures_hedge import AS_OF, quote, unencoded_quote
 
@@ -86,14 +85,6 @@ def test_a_single_leg_has_no_structure_and_no_spreads():
     analysis = analyse_curve(observation("Soybeans", CONTANGO[:1]), as_of=AS_OF)
     assert analysis.structure is CurveStructure.UNDETERMINED
     assert analysis.spreads == ()
-    assert analysis.slope_per_month_usd_mt is None
-
-
-def test_slope_is_usd_per_mt_per_calendar_month_front_to_back():
-    analysis = analyse_curve(observation("Soybeans", CONTANGO), as_of=AS_OF)
-    spec = spec_for("Soybeans")
-    expected = (spec.native_to_usd_per_mt(1183.00) - spec.native_to_usd_per_mt(1150.25)) / 4
-    assert analysis.slope_per_month_usd_mt == pytest.approx(expected, rel=1e-9)
 
 
 def test_front_spreads_are_the_front_against_every_deferred():
@@ -228,10 +219,10 @@ def test_the_nearby_pair_sentence_names_both_legs_units_and_session():
 
 
 def test_an_inverted_pair_reads_under_not_over():
-    """Aug − Jul = −19.75 cents/bu = −7.26 USD/MT."""
+    """Aug - Jul = -19.75 cents/bu = -7.26 USD/MT."""
     analysis = analyse_curve(observation("Soybeans", STRIP_2026_11_25), as_of=SESSION_2026_11_25)
     assert analysis.inversions[0].sentence() == (
-        "ZSN27 1251.50 / ZSQ27 1231.75: Aug −19.75 cents/bu (−7.26 USD/MT) under Jul, "
+        "ZSN27 1251.50 / ZSQ27 1231.75: Aug -19.75 cents/bu (-7.26 USD/MT) under Jul, "
         "session 2026-11-25"
     )
 

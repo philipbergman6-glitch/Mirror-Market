@@ -59,7 +59,7 @@ def _workstation_curve(db: Path):
 def test_briefing_driver_names_the_nearby_pair_in_carry_and_locates_the_inversion(strip_db):
     from analysis.briefing.sections.market_drivers import _curve_drivers
 
-    drivers = _curve_drivers(as_of=AS_OF)
+    drivers = _curve_drivers()
     assert len(drivers) == 1
     text = "\n".join(drivers[0].lines(1))
     assert NEARBY in text
@@ -81,16 +81,19 @@ def test_briefing_forward_curve_section_reads_the_same_pair(strip_db):
     assert "backwardation" not in line
 
 
-def test_snapshot_archives_the_nearby_pair_and_the_located_inversion(strip_db):
+def test_snapshot_archives_the_one_session_legs_the_reading_is_derived_from(strip_db):
+    """Components only (the snapshot schema rule): the nearby pair and the
+    located inversion are re-derived from the archived legs."""
     from analysis.briefing.snapshot import _forward_curve_block
 
-    block = _forward_curve_block(as_of=AS_OF)["Soybeans"]
-    assert block["structure"] == "nearby carry"
+    block = _forward_curve_block()["Soybeans"]
     assert block["observation_date"] == "2026-11-25"
-    assert block["nearby"]["near"] == "ZSF27" and block["nearby"]["far"] == "ZSH27"
-    assert block["nearby"]["value"] == pytest.approx(1.0)
-    assert block["inverted_pairs"] == ["ZSN27-ZSQ27"]
-    assert [leg["symbol"] for leg in block["legs"]] == ["ZSF27", "ZSH27", "ZSK27", "ZSN27", "ZSQ27"]
+    assert block["coherent"] is True
+    assert [(leg["symbol"], leg["price"]) for leg in block["legs"]] == [
+        ("ZSF27", 1243.25), ("ZSH27", 1244.25), ("ZSK27", 1248.50),
+        ("ZSN27", 1251.50), ("ZSQ27", 1231.75),
+    ]
+    assert not {"structure", "spread", "spread_pct", "front_price"} & set(block)
 
 
 def test_briefing_and_workstation_agree_on_jan_mar(strip_db):
@@ -105,8 +108,20 @@ def test_briefing_and_workstation_agree_on_jan_mar(strip_db):
     alert = next(a for a in curve_alerts(workstation) if a.kind == "curve_inversion")
     assert NEARBY in alert.message and INVERSION in alert.message
 
-    briefing = "\n".join(_curve_drivers(as_of=AS_OF)[0].lines(1))
+    briefing = "\n".join(_curve_drivers()[0].lines(1))
     assert NEARBY in briefing
+
+
+def test_the_workstation_page_card_prints_the_same_pair(strip_db):
+    """The rendered workstation row, not just the analysis under it."""
+    from app.workstation_page import _curve_section
+
+    workstation = _workstation_curve(strip_db)
+    row = _curve_section({"Soybeans": workstation}, {})["data"]["commodities"][0]
+    assert row["nearby"] == NEARBY
+    assert "inverted Jul 2027→Aug 2027 (ZSN27→ZSQ27)" in row["reading"]
+    assert row["nearby_symbols"] == "ZSF27-ZSH27"
+    assert row["nearby_usd_mt_per_month"] > 0          # carry, not the old −0.60 slope
 
 
 def test_headline_forward_curve_block_reads_the_named_pair(strip_db):

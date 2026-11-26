@@ -412,6 +412,7 @@ def forward_curves_section(data: dict | None) -> dict:
     the strip is in carry and where it is inverted, by month.
     """
     from app.charts import build_forward_curve_chart
+    from pipeline.units import to_metric_tons
 
     if not data:
         return _empty("the forward-curve analyst returned nothing — check the forward_curve layer")
@@ -425,23 +426,22 @@ def forward_curves_section(data: dict | None) -> dict:
         nearby = analysis.nearby
         if nearby is None:
             continue
-        spec = analysis.legs[0].contract.spec
         unit = leg.get("unit", "USD/MT")
         # The chart draws exactly the legs the reading was struck on — the
         # one-session set — so an off-session leg the provider dropped cannot
         # reappear on the line beside a reading that excluded it.
         curve = pd.DataFrame({
-            "label": [cl.contract.label for cl in analysis.legs],
-            "close": [spec.native_to_usd_per_mt(cl.quote.price) for cl in analysis.legs],
+            "label": [curve_leg.contract.label for curve_leg in analysis.legs],
+            "close": [to_metric_tons(curve_leg.quote.price, name) for curve_leg in analysis.legs],
         })
         legs.append({
             "name": name,
             "as_of": leg.get("as_of"),
             "structure": analysis.structure.value.capitalize(),
             "front_symbol": nearby.near.symbol,
-            "front_mt": spec.native_to_usd_per_mt(nearby.near_price),
+            "front_mt": to_metric_tons(nearby.near_price, name),
             "next_symbol": nearby.far.symbol,
-            "next_mt": spec.native_to_usd_per_mt(nearby.far_price),
+            "next_mt": to_metric_tons(nearby.far_price, name),
             "nearby_mt": nearby.usd_per_mt,
             "nearby": nearby.sentence(),
             "reading": analysis.reading,

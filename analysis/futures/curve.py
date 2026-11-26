@@ -106,7 +106,7 @@ class CurveStructure(str, Enum):
         if self is CurveStructure.BACKWARDATION:
             return (
                 "every listed month is under the one before it — the board pays for prompt "
-                "delivery along the whole strip and pays nothing to store"
+                f"delivery along the whole strip and pays nothing to carry, {GROSS_OF_CARRY_COSTS}"
             )
         if self is CurveStructure.NEARBY_CARRY:
             return (
@@ -153,17 +153,29 @@ class CalendarSpread:
     usd_per_mt_per_month: float | None
 
     @property
+    def direction(self) -> str | None:
+        """``carry`` (far over near), ``inverted`` (far under) or ``flat``.
+
+        None when no spread was struck: a refused number has no direction. The
+        one place a pair's sign becomes a word, so the sentence, the reading
+        and the structure cannot disagree about a pair.
+        """
+        if self.value is None:
+            return None
+        return "carry" if self.value > 0 else "inverted" if self.value < 0 else "flat"
+
+    @property
     def is_carry(self) -> bool | None:
         """True when the far month is above the near — the market pays to store.
 
         None when no spread was struck: a refused number has no sign.
         """
-        return None if self.value is None else self.value > 0
+        return None if self.direction is None else self.direction == "carry"
 
     @property
     def is_inverted(self) -> bool | None:
         """True when the far month is under the near. None when nothing was struck."""
-        return None if self.value is None else self.value < 0
+        return None if self.direction is None else self.direction == "inverted"
 
     @property
     def label(self) -> str:
@@ -191,11 +203,8 @@ class CalendarSpread:
             return f"{legs}: spread not struck — the two legs are not one session"
         far_month = MONTH_ABBR[self.far.month]
         near_month = MONTH_ABBR[self.near.month]
-        if self.value > 0:
-            relation = "over"
-        elif self.value < 0:
-            relation = "under"
-        else:
+        relation = {"carry": "over", "inverted": "under"}.get(self.direction or "")
+        if relation is None:
             return (
                 f"{legs}: {far_month} level with {near_month}, "
                 f"session {self.observation_date.isoformat()}"
@@ -307,7 +316,6 @@ class CurveAnalysis:
     coherence_note: str
     spreads: tuple[CalendarSpread, ...]          # consecutive pairs
     front_spreads: tuple[CalendarSpread, ...]    # front against every deferred
-    slope_per_month_usd_mt: float | None
     front_price_usd_mt: float | None
     back_price_usd_mt: float | None
     volume_available: bool
@@ -353,9 +361,9 @@ class CurveAnalysis:
         """
         runs: list[tuple[str, CalendarSpread, CalendarSpread]] = []
         for spread in self.spreads:
-            if spread.value is None:
+            kind = spread.direction
+            if kind is None:
                 return ""
-            kind = "carry" if spread.value > 0 else "inverted" if spread.value < 0 else "flat"
             if runs and runs[-1][0] == kind:
                 runs[-1] = (kind, runs[-1][1], spread)
             else:
@@ -388,9 +396,6 @@ class CurveAnalysis:
             "coherence_note": self.coherence_note,
             "spreads": [s.to_dict() for s in self.spreads],
             "front_spreads": [s.to_dict() for s in self.front_spreads],
-            "slope_per_month_usd_mt": (
-                None if self.slope_per_month_usd_mt is None else round(self.slope_per_month_usd_mt, 3)
-            ),
             "front_price_usd_mt": (
                 None if self.front_price_usd_mt is None else round(self.front_price_usd_mt, 2)
             ),
@@ -423,9 +428,8 @@ OPEN_INTEREST_AGGREGATE_NOTE = (
 
 
 def _signed(value: float) -> str:
-    """``+1.00`` / ``−19.75`` — a typographic minus, two places."""
-    text = f"{value:+.2f}"
-    return text.replace("-", "\u2212", 1)
+    """``+1.00`` / ``-19.75`` — two places, the same sign the site's cards print."""
+    return f"{value:+.2f}"
 
 
 def _calendar_months(near: NamedContract, far: NamedContract) -> int:
@@ -486,33 +490,17 @@ def _structure(spreads: tuple[CalendarSpread, ...]) -> CurveStructure:
     backwardation; one that changes direction is named by its nearby pair, and
     the months where it turns are :attr:`CurveAnalysis.reading`.
     """
-    if not spreads or any(spread.value is None for spread in spreads):
+    directions = [spread.direction for spread in spreads]
+    if not directions or None in directions:
         return CurveStructure.UNDETERMINED
-    values = [spread.value for spread in spreads if spread.value is not None]
-    carry = any(value > 0 for value in values)
-    inverted = any(value < 0 for value in values)
-    if not carry and not inverted:
-        return CurveStructure.FLAT
-    if not inverted:
-        return CurveStructure.CONTANGO
-    if not carry:
+    if "inverted" not in directions:
+        return CurveStructure.CONTANGO if "carry" in directions else CurveStructure.FLAT
+    if "carry" not in directions:
         return CurveStructure.BACKWARDATION
-    if values[0] > 0:
-        return CurveStructure.NEARBY_CARRY
-    if values[0] < 0:
-        return CurveStructure.NEARBY_INVERSION
-    return CurveStructure.MIXED
-
-
-def _slope_usd_mt_per_month(legs: tuple[CurveLeg, ...]) -> float | None:
-    if len(legs) < 2:
-        return None
-    spec = legs[0].contract.spec
-    months = _calendar_months(legs[0].contract, legs[-1].contract)
-    if months == 0:
-        return None
-    move = spec.native_to_usd_per_mt(legs[-1].quote.price) - spec.native_to_usd_per_mt(legs[0].quote.price)
-    return move / months
+    return {
+        "carry": CurveStructure.NEARBY_CARRY,
+        "inverted": CurveStructure.NEARBY_INVERSION,
+    }.get(directions[0] or "", CurveStructure.MIXED)
 
 
 def analyse_curve(
@@ -553,7 +541,6 @@ def analyse_curve(
         coherence_note=observation.coherence_note,
         spreads=spreads,
         front_spreads=front_spreads,
-        slope_per_month_usd_mt=_slope_usd_mt_per_month(legs),
         front_price_usd_mt=spec.native_to_usd_per_mt(legs[0].quote.price) if spec else None,
         back_price_usd_mt=spec.native_to_usd_per_mt(legs[-1].quote.price) if spec else None,
         volume_available=any(leg.volume is not None for leg in legs),

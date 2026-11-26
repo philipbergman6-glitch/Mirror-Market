@@ -30,10 +30,15 @@ forward-curve block now read `analysis.futures.curve` (through the new
 - **Steep-carry driver** now fires on the nearby pair's annualised carry
   (`config.CURVE_STEEP_CARRY_ANNUALISED_PCT` = 5.0) for a strip in carry along
   every pair, replacing the 5% first-vs-last test.
-- **Snapshot schema v6**: `forward_curve` archives legs, the nearby pair and
-  `inverted_pairs`; v1–v5 `spread`/`spread_pct` are not comparable.
+- **Snapshot schema v6**: `forward_curve` archives the one-session legs only
+  (components, per the snapshot rule) — the reading is re-derived from them;
+  v1–v5 `spread`/`spread_pct`/`structure` are not comparable.
 - Headline block 06 cards are Structure / Front / Next / Nearby spread, with
   the named-pair sentence and the located reading as captions.
+- The workstation header chip was a front-to-back slope (−0.60 USD/MT per
+  month on the 2026-11-25 strip, beside a nearby pair in carry); it is now the
+  nearby pair's carry per month, named. `CurveAnalysis.slope_per_month_usd_mt`
+  is removed.
 - `test_net_inverted_curve_is_backwardation_even_with_up_moves` is replaced,
   not made to pass: it pinned the defect (a four-up, one-down strip as
   backwardation). Its replacement regression is the real 2026-11-25 strip

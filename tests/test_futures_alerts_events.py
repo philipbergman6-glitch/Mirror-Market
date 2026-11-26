@@ -237,10 +237,10 @@ def test_a_carry_window_inside_the_carry_segment_is_not_told_it_is_unpaid():
 
 
 def test_a_carry_window_spanning_the_inversion_is_told_so_by_pair():
-    """Jan→Aug: 1231.75 − 1243.25 = −11.50 cents/bu across the window."""
+    """Jan→Aug: 1231.75 - 1243.25 = -11.50 cents/bu across the window."""
     alerts = curve_alerts(strip_2026_11_25(), carry_window=("ZSF27", "ZSQ27"))
     message = next(a.message for a in alerts if a.kind == "curve_inversion")
-    assert "ZSF27 1243.25 / ZSQ27 1231.75: Aug −11.50 cents/bu" in message
+    assert "ZSF27 1243.25 / ZSQ27 1231.75: Aug -11.50 cents/bu" in message
     assert "not being paid to carry" in message
     assert "gross of storage and financing" in message
 

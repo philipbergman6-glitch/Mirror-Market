@@ -666,9 +666,13 @@ def _curve_section(
             "reading": analysis.reading,
             "coherent": analysis.coherent,
             "coherence_note": analysis.coherence_note,
-            "slope_usd_mt_per_month": (
-                None if analysis.slope_per_month_usd_mt is None
-                else round(analysis.slope_per_month_usd_mt, 2)
+            # The header chip is the nearby pair's carry per month, named —
+            # never a front-to-back slope, whose number moved with the strip's
+            # length and read negative beside a nearby pair in carry (#671).
+            "nearby_symbols": None if analysis.nearby is None else analysis.nearby.symbols,
+            "nearby_usd_mt_per_month": (
+                None if analysis.nearby is None or analysis.nearby.usd_per_mt_per_month is None
+                else round(analysis.nearby.usd_per_mt_per_month, 2)
             ),
             "spreads": [spread.to_dict() for spread in analysis.spreads],
             "histories": [history.to_dict() for history in analysis.histories],
