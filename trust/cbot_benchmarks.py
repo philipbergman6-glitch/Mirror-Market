@@ -26,9 +26,13 @@ unfinished bar: it downloads through the unguarded
 (#331), so a pre-cutoff run records a ``settlement.confirmed`` reject for the
 open session and an accepted revision for the finished one before it.
 
-**A candle that has to be possible.** ``ohlc.relationship`` rejects a bar whose
-high is below its open/low/close or whose low is above them. A frame like that
-parses cleanly and is simply not a candle.
+**A candle that has to be complete; its range is auxiliary.** ``ohlc.complete``
+rejects a candle missing any of its four fields. ``ohlc.relationship`` records a
+WARNING, not a reject, on a *complete* candle whose high/low do not contain its
+open and close: Yahoo serves such candles routinely, so rejecting them would
+delete the series rather than guard it. The close is the observation and is
+guarded by the daily-move rule; the range is what the warning is about (#447,
+made a WARNING by #481; see ``trust.quality`` and ``LAYERS.md`` Layer 7).
 
 **An extreme move that quarantines rather than overwrites.** A day-over-day
 move beyond :data:`DAILY_MOVE_QUARANTINE_THRESHOLD` is appended as a
