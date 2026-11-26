@@ -36,6 +36,7 @@ that is the order the work has to be done in.
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -47,6 +48,7 @@ from analysis.origins.assumptions import (
     Assumption,
     AssumptionMiss,
     AssumptionSet,
+    default_expiry,
     origin_differentiated_duty,
 )
 from analysis.origins.domain import CostComponent, ShipmentWindow
@@ -478,6 +480,8 @@ def expiry_review(
 
     rows: list[RenewalRow] = []
     for assumption in sorted(assumptions.assumptions, key=lambda item: item.expires_on):
+        if assumption.is_retired(today):
+            continue  # re-signed already: history, not work
         days_left = (assumption.expires_on - today).days
         if days_left < 0:
             state = STATUS_EXPIRED
@@ -518,6 +522,98 @@ def expiry_review(
             "answering for any more."
         ),
     }
+
+
+RENEWAL_SIGNER_PLACEHOLDER = "<YOUR-NAME>"
+
+
+def renewal_command(assumption: Assumption, *, today: date) -> str | None:
+    """The exact command that re-signs this entry (#410), ready to paste.
+
+    ``--expires`` is proposed from the component's default lifetime counted
+    from today — the same proposal ``enter_assumption.py`` makes on a fresh
+    entry — or left as a placeholder where there is no default. ``--entered-by``
+    is always a placeholder: a renewal is a decision with the renewer's name on
+    it, and pre-filling the previous owner would let one paste re-sign an entry
+    in someone else's name (#618 review). ``--value`` is left off: the command
+    re-signs the same number, and the caption beside it says how to give a new
+    one. Every argument is shell-quoted, because owners and ids are free text.
+
+    ``None`` when the entry's shipment window has already ended: ``--renew``
+    would be refused (``window_already_sailed``), so there is no command to
+    give — the next window is a new entry, not a renewal.
+    """
+    if assumption.window is not None and assumption.window.end < today:
+        return None
+    proposed = default_expiry(
+        assumption.component, entered_at=today, window=assumption.window
+    )
+    expires = proposed.isoformat() if proposed is not None and proposed >= today else "<YYYY-MM-DD>"
+    return (
+        f"python scripts/enter_assumption.py --renew {shlex.quote(assumption.id)} "
+        f"--expires {shlex.quote(expires)} "
+        f"--entered-by {shlex.quote(RENEWAL_SIGNER_PLACEHOLDER)}"
+    )
+
+
+@dataclass(frozen=True)
+class LapsedInput:
+    """An entered value past its expiry: shown dead, never used (#410)."""
+
+    assumption: Assumption
+    days_lapsed: int
+    renew_command: str
+
+    def to_dict(self) -> dict[str, Any]:
+        item = self.assumption
+        return {
+            "id": item.id,
+            "component": item.component.value,
+            "label": COMPONENT_LABELS[item.component],
+            "value": item.value,
+            "unit": item.unit,
+            "days": item.days,
+            "origin": item.origin,
+            "destination": item.destination,
+            "window": item.window.describe() if item.window else None,
+            "entered_by": item.entered_by,
+            "entered_at": item.entered_at.isoformat(),
+            "expires_on": item.expires_on.isoformat(),
+            "days_lapsed": self.days_lapsed,
+            "renew_command": self.renew_command,
+        }
+
+
+def lapsed_inputs(assumptions: AssumptionSet, *, today: date) -> tuple[LapsedInput, ...]:
+    """Every lapsed entry still standing, most recently lapsed first.
+
+    A retired row is excluded (it was re-signed), and so is a lapsed row whose
+    exact scope has a live successor already (a hand-shortened renewal chain),
+    and one whose shipment window has already ended: none of them blocks
+    anything, so none is work. This is display material for
+    the PRIVATE edition only — the caller decides the audience, and the value
+    it carries is never an input to any arithmetic.
+    """
+    def scope(item: Assumption) -> tuple[Any, ...]:
+        return (item.component, item.origin, item.destination, item.window)
+
+    live_scopes = {scope(item) for item in assumptions.live(today)}
+    lapsed = []
+    for item in assumptions.assumptions:
+        if item.expires_on >= today or item.is_retired(today) or scope(item) in live_scopes:
+            continue
+        command = renewal_command(item, today=today)
+        if command is None:  # its shipment window has sailed: history, not work
+            continue
+        lapsed.append((item, command))
+    return tuple(
+        LapsedInput(
+            assumption=item,
+            days_lapsed=(today - item.expires_on).days,
+            renew_command=command,
+        )
+        for item, command in sorted(lapsed, key=lambda pair: pair[0].expires_on, reverse=True)
+    )
 
 
 def _first_offered_window(today: date) -> ShipmentWindow:
@@ -571,10 +667,13 @@ __all__ = [
     "STATUS_MISSING",
     "STATUS_SATISFIED",
     "InputRequirement",
+    "LapsedInput",
     "RenewalRow",
     "RouteReadiness",
     "assess_route",
     "assess_routes",
     "expiry_review",
+    "lapsed_inputs",
+    "renewal_command",
     "required_components",
 ]

@@ -46,6 +46,7 @@ from config import (  # noqa: E402
     PRODUCTION_LAYERS,
     freshness_limit_days,
 )
+from pipeline.public_view import is_private, public_freshness  # noqa: E402
 from scripts.validate_players import validate_players  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -241,7 +242,16 @@ def _build_freshness_items() -> list[dict]:
         else {}
     )
     for layer, number, source, cadence, scope in PRODUCTION_LAYERS:
-        row = rows.get(layer)
+        # One rule for what the public may see (#659): a private layer is its
+        # status and nothing else, `skipped_unconfigured` when it has no row.
+        row = public_freshness(layer, rows.get(layer))
+        if is_private(layer):
+            assert row is not None
+            items.append({"name": layer, "number": number, "source": source,
+                          "cadence": cadence, "scope": scope, "status": row["status"],
+                          "age": PRIVATE_LAYER_LABEL, "coverage": None, "private": True,
+                          **_latency_fields(layer, None, now)})
+            continue
         if row is None:
             items.append({
                 "name": layer,
@@ -338,6 +348,21 @@ _HEALTH_CRITICAL_NOTE = "data health critical"
 _ON_SCHEDULE_STATUSES = ("fresh", "stale", "no-publication")
 _PARTIAL_STATUS = "partial"
 
+# The Layer Freshness table's age cell for a private layer (DESIGN.md
+# decision log, 2026-11-25): its dates are withheld, and the layer is not
+# late — CI is not configured to ask for it (#659).
+PRIVATE_LAYER_LABEL = "private · desk only"
+
+
+def _counted(item: dict) -> bool:
+    """Whether a freshness item is held against the masthead tally.
+
+    A disabled layer is switched off on purpose and a private layer is the
+    desk's, not the public edition's (#659): neither is on schedule or late,
+    so both leave the numerator and the denominator.
+    """
+    return item["status"] != "disabled" and not item.get("private")
+
 
 def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
     """Demote, in place, every layer a health critical is attributed to.
@@ -381,7 +406,7 @@ def _apply_health_criticals(freshness_items: list[dict], health: dict | None) ->
     # `stale` does get demoted — it counts as on-schedule (#179), so leaving
     # it would let a health-critical layer stay inside the masthead count.
     for item in freshness_items:
-        if item["name"] not in degraded or item["status"] == "disabled":
+        if item["name"] not in degraded or not _counted(item):
             continue
         if item["status"] in _ON_SCHEDULE_STATUSES:
             item["status"] = "degraded"
@@ -407,13 +432,13 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
     the sub-day distinction survives, in the Layer Freshness table where
     `fresh` and `stale` are still separate badges.
 
-    Disabled layers are excluded from both numerator and denominator so
-    "N/M layers on schedule" only describes layers that are supposed to
-    run. Health criticals demote their writing layers first — see
+    Disabled and private layers are excluded from both numerator and
+    denominator (`_counted`) so "N/M layers on schedule" only describes
+    layers the public edition is supposed to run. Health criticals demote their writing layers first — see
     `_apply_health_criticals`.
     """
     health_summary = _apply_health_criticals(freshness_items, health)
-    active = [i for i in freshness_items if i["status"] != "disabled"]
+    active = [i for i in freshness_items if _counted(i)]
     on_schedule = [i for i in active if i["status"] in _ON_SCHEDULE_STATUSES]
     partial = [i for i in active if i["status"] == _PARTIAL_STATUS]
     late = [
@@ -429,13 +454,13 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
         # never folded into green (on_schedule) or red (late).
         "partial_count": len(partial),
         "partial_layers": partial,
-        "price_age": _price_age_label(now),
+        **_price_age_and_board_session(now),
         **health_summary,
     }
 
 
-def _price_age_label(now: datetime) -> str | None:
-    """How stale the oldest board or FX leg is, for the masthead.
+def _price_age_and_board_session(now: datetime) -> dict[str, str | None]:
+    """How stale the oldest board or FX leg is, and which CBOT session it is.
 
     "Generated 14:02 UTC" says when the page was built, and a reader
     reasonably reads that as when the numbers are from. On this site those
@@ -444,25 +469,40 @@ def _price_age_label(now: datetime) -> str | None:
     and deliberately. Stating the generation time alone lets a correct
     behaviour read as a fresher product than it is.
 
-    The worst of the board and FX legs, not an average: an average would let
-    a current FX print cover for a board leg that has not moved in three
-    days, which is the one thing a reader must not miss.
-
+    ``price_age`` is the worst of the board and FX legs, not an average: an
+    average would let a current FX print cover for a board leg that has not
+    moved in three days, which is the one thing a reader must not miss. It is a
     CBOT-session age; ICE CT/SB rows are one weekday older (24 h; 72 h Tue)
     and carry their own dates (B48 #626; follow-up #669).
+
+    ``board_session`` is the CBOT board's session date (owner decision on
+    #622): an age alone does not say *which* close a buyer is reading, and an
+    evening edition holds D-1 by design. It is the oldest stored session of
+    the soy legs of prices and forward_curve, withheld when any is missing or
+    a board fetch failed this run (``latency.measure.board_session``). A
+    failure to read it withholds the session only; the age still renders.
     """
-    from latency.measure import measure, worst_observation_age
+    from latency.domain import CBOT_BOARD_COMMODITIES, format_delta
+    from latency.measure import board_session, measure, worst_observation_age
 
     try:
-        age = worst_observation_age(measure(generated_at=now), now)
+        measurements = measure(generated_at=now)
     except Exception:  # noqa: BLE001 — the masthead must never fail the build
         log.warning("could not measure price age for the masthead", exc_info=True)
-        return None
-    if age is None:
-        return None
-    from latency.domain import format_delta
+        return {"price_age": None, "board_session": None}
+    age = worst_observation_age(measurements, now)
+    session = None
+    try:
+        from pipeline.query import read_board_sessions
 
-    return format_delta(age)
+        session = board_session(read_board_sessions(CBOT_BOARD_COMMODITIES), measurements)
+    except Exception:  # noqa: BLE001 — withheld, never guessed; the age still renders
+        log.warning("could not read the board session for the masthead", exc_info=True)
+
+    return {
+        "price_age": format_delta(age) if age is not None else None,
+        "board_session": session.strftime("%a %-d %b") if session is not None else None,
+    }
 
 
 def _build_public_trust_metadata(trust_state) -> dict | None:

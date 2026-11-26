@@ -61,8 +61,11 @@ permissions:
   id-token: write
   # issues: scripts/ci_layer_alert.py opens/closes the layer-outage issue,
   # scripts/ci_dead_source.py the dead-source issue,
-  # scripts/ci_briefing_blocks.py the briefing-blocks issue
+  # scripts/ci_briefing_blocks.py the briefing-blocks issue,
+  # scripts/ci_inactivity_clock.py the inactivity-clock issue (#6)
   issues: write
+  # read: scripts/ci_inactivity_clock.py lists the workflows' states (#6)
+  actions: read
 
 # One group, so two runs can never call deploy-pages at the same time.
 #
@@ -178,6 +181,19 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # #6: GitHub disables a public repo's schedules after 60 days without
+      # "repository activity", and its docs don't say whether this workflow's
+      # own bot commits count. A staleness check on a schedule dies with the
+      # schedule, so this warns from day 45 while everything still runs, and
+      # errors if any workflow already reads disabled_inactivity. Placed this
+      # early so a later failure cannot skip it. A relay: never reddens a run.
+      - name: Watch the scheduled-workflow inactivity clock
+        if: ${{ github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_inactivity_clock.py
 
       # The durable seed (pipeline/db_snapshot.py): the database of the last
       # edition that passed the promotion contract, kept in Cloudflare R2 so
