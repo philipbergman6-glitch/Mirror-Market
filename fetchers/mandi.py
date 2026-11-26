@@ -138,10 +138,10 @@ from config import (
 )
 from fetchers._backoff import retry_sleep
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import per_quintal_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
 
-_QUINTAL_TO_MT = 10.0  # INR/quintal (100 kg) → INR/MT
 _IST = ZoneInfo("Asia/Kolkata")
 
 _HEADERS = {
@@ -429,7 +429,7 @@ def _aggregate(records: list[dict]) -> pd.DataFrame:
         "Open": float("nan"),
         "High": float("nan"),
         "Low": float("nan"),
-        "Close": agg["close"] * _QUINTAL_TO_MT,
+        "Close": per_quintal_to_per_metric_ton(agg["close"]),
         "Volume": agg["volume"].astype(float),
         "arrivals_mt": agg["arrivals"].astype(float),
         "Unit": "INR/MT",

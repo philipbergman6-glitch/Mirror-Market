@@ -63,6 +63,7 @@ from config import (
 from fetchers._backoff import retry_sleep
 from fetchers.mandi import _aggregate, _ist_today
 from pipeline.results import ScraperShapeError
+from pipeline.units import quintals_to_metric_tons
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,6 @@ _HEADERS = {
 _SOYBEAN_LABEL = "सोयाबिन"
 _DATE_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 _LOT_CELLS = 7
-_QUINTALS_PER_MT = 10.0
 
 
 def _get(url: str, params: dict[str, str] | None = None) -> str:
@@ -138,7 +138,7 @@ def _parse_grid(fragment: str) -> list[dict]:
         records.append({
             "arrival_date": day,
             "modal_price": _number(cells[6], "modal price", cells),
-            "arrivals": arrivals_qtl / _QUINTALS_PER_MT if arrivals_qtl >= 0 else None,
+            "arrivals": quintals_to_metric_tons(arrivals_qtl) if arrivals_qtl >= 0 else None,
         })
     if other_units:
         logger.info("MSAMB: %s lot(s) in a non-quintal unit dropped, not pooled", other_units)
