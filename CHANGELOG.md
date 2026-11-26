@@ -4,6 +4,38 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — opportunity board: a crush with no physical lane is a market signal, not a lead (2026-11-26)
+
+**#672**, from the Codex audit of 2026-11-26 (finding 4). A live 68.30 USD/MT
+CBOT **board** crush scored 83.9 as a *lead* with destination "CBOT":
+`crush_margin_detections` built `country_port(iso, market["name"])`, and for
+CBOT and Dalian the market's name is the pricing venue. Now:
+
+- The crush detector names a destination only for a physical, non-administered
+  margin — the crushers' country by its `psd_country` name. A board crush (three
+  futures contracts) and an administered one (three decreed values) carry
+  `destination=None` and a `lane_absent_reason`. The margin, its venue and its
+  contracts are unchanged.
+- One shared rule in `rules.ladder_for`: a detection naming neither a physical
+  origin nor a destination is a `market_signal`, whoever could be called. A
+  lane-less `Detection` without a reason raises.
+- Every detected market signal carries `Opportunity.signal_gap` — the single
+  missing fact that would make it a lead ("no physical destination: … name a
+  crusher or import port", "no buyer candidate for European Union: research
+  one …") — printed on the board card and the detail card; its next action
+  names it too.
+- A market signal's composite is **withheld** (not capped): the five
+  components still print, the board shows "composite withheld", rung-first
+  ranking keeps it below every lead, and the archive stores
+  `composite_score = NULL` with the reason in `score_json`.
+- `OPPORTUNITY_METHOD_VERSION` 1.0.0 → 1.1.0. The board-crush row's identity
+  changes (its destination key is gone), so it re-detects under a new id and
+  the old one lists once as "stopped detecting".
+
+Out of scope: outcome tracking of leads → quotes/decisions (needs a trial
+buyer, A15/A12). Tests: new detector, rules, scoring/rank regression and page
+tests in the four `tests/test_opportunit*` files.
+
 ## Unreleased — Layer 37: MATIF rapeseed delayed trades, private desk edition only (2026-11-05)
 
 Owner decision 2026-11-05 ("ingest MATIF delayed settlements, private

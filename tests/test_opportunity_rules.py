@@ -289,3 +289,76 @@ def test_known_identities_keep_their_original_id_and_birthday():
     assert later.first_detected_on == date(2026, 1, 1)
     assert later.detected_on == TODAY
     assert later.identity == fresh.identity
+
+
+# ---------------------------------------------------------------------------
+# No lane at all: a market signal, by one shared rule (#672)
+# ---------------------------------------------------------------------------
+NO_LANE = "no physical destination: name a crusher or import port that earns it"
+
+GLOBAL_HOUSE = {
+    "name": "Fixture Global House",
+    "country": "GLOBAL",
+    "roles": ["originator", "exporter"],
+    "products": ["beans"],
+    "confidence": "observed",
+    "as_of": "2026-08-01",
+    "tier": 1,
+    "citations": [{"url": "https://example.invalid/global", "accessed": "2026-08-01"}],
+}
+
+
+def test_a_detection_with_no_lane_is_a_market_signal_even_with_a_counterparty():
+    """A globally-scoped seller is on every lane's sell side — including no lane.
+    Having somebody to call is not a lane; the rung must not be a lead."""
+    detection = make_detection(
+        origin=None, destination=None, without_window=True, lane_absent_reason=NO_LANE
+    )
+    opportunity = build_candidate(
+        detection, today=TODAY, entries=[*PLAYER_ENTRIES, GLOBAL_HOUSE]
+    )
+    assert opportunity.sellers, "fixture must carry a counterparty on the wanted side"
+    assert opportunity.ladder is Ladder.MARKET_SIGNAL
+    assert opportunity.signal_gap == NO_LANE
+    assert NO_LANE in opportunity.suggested_next_action
+
+
+def test_a_lane_less_rule_is_not_special_cased_by_rule_id():
+    """The rule is on the lane, not on which detector fired (invariant 5's spirit)."""
+    for rule_id in ("crush_margin", "currency_shift", "landed_advantage"):
+        opportunity = build_candidate(
+            make_detection(
+                rule_id=rule_id, origin=None, destination=None, without_window=True,
+                lane_absent_reason=NO_LANE,
+            ),
+            today=TODAY, entries=[*PLAYER_ENTRIES, GLOBAL_HOUSE],
+        )
+        assert opportunity.ladder is Ladder.MARKET_SIGNAL, rule_id
+
+
+def test_a_no_counterparty_signal_names_the_missing_party():
+    opportunity = build_candidate(
+        make_detection(
+            origin=country_port("ZZ", "Nowhere", role="origin"),
+            destination=country_port("YY", "Elsewhere"),
+        ),
+        today=TODAY, entries=PLAYER_ENTRIES,
+    )
+    assert opportunity.ladder is Ladder.MARKET_SIGNAL
+    assert opportunity.signal_gap.startswith("no seller candidate for Nowhere")
+    assert "data/reference/players/" in opportunity.signal_gap
+
+
+def test_a_lead_carries_no_signal_gap():
+    opportunity = build_candidate(
+        make_detection(destination=None, without_window=True), today=TODAY, entries=PLAYER_ENTRIES
+    )
+    assert opportunity.ladder is Ladder.LEAD
+    assert opportunity.signal_gap == ""
+
+
+def test_a_lane_less_detection_must_say_what_is_missing():
+    import pytest
+
+    with pytest.raises(ValueError, match="lane_absent_reason"):
+        make_detection(origin=None, destination=None)

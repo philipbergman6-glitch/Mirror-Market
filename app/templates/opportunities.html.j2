@@ -60,7 +60,8 @@
 .opp-why { font-size: 13px; color: var(--text-muted); margin-top: 6px; overflow-wrap: anywhere; }
 .opp-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; align-items: baseline; }
 .opp-next { margin-top: 10px; padding-top: 9px; border-top: 1px dotted var(--rule); font-size: 13px; }
-.opp-next .lbl { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-right: 8px; }
+.opp-gap { margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.opp-gap .lbl, .opp-next .lbl { font-family: var(--display); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-right: 8px; }
 
 /* ---- pills, in the ledger's grammar: the state carries the colour ---- */
 .rung { font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; white-space: nowrap; }
@@ -193,12 +194,18 @@
         <div class="opp-id">{{ r.opportunity_id }} · first seen {{ r.first_detected_on }} · expires {{ r.expires_on }}</div>
       </div>
       <div class="score">
+        {% if r.score.composite is not none %}
         <div class="score-total">{{ '%.1f'|format(r.score.composite) }}</div>
         <div class="score-cap">composite</div>
+        {% else %}
+        <div class="score-total muted" title="{{ r.score.withheld_reason }}">—</div>
+        <div class="score-cap">composite withheld</div>
+        {% endif %}
       </div>
     </div>
 
     <div class="opp-why">{{ r.why_now }}</div>
+    {% if r.signal_gap %}<div class="opp-gap"><span class="lbl">missing</span>{{ r.signal_gap }}</div>{% endif %}
 
     <div class="opp-meta">
       <span class="rung rung-pill-{{ r.ladder }}">{{ r.ladder_label }}</span>
@@ -233,6 +240,10 @@
   <div class="card" id="detail-{{ r.opportunity_id }}">
     <h3>{{ r.opportunity_id }} — {{ r.rule_label }}</h3>
     <div class="caption">{% if r.lane %}{{ r.lane }} · {% endif %}{{ r.ladder_label }} · {{ r.ladder_meaning }}</div>
+    {% if r.signal_gap %}
+    <div class="sub">What would make it a lead</div>
+    <div class="miss">{{ r.signal_gap }}</div>
+    {% endif %}
 
     <div class="sub">Why now</div>
     <div style="font-size:13px">{{ r.why_now }}</div>

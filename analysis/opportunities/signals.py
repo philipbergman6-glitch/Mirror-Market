@@ -198,6 +198,24 @@ class Detection:
     missing: tuple[str, ...] = ()
     why_now: str = ""
     context: dict[str, Any] | None = None
+    #: Why this measurement names no physical place, in the words of the fact
+    #: that would change that (#672). Required exactly when both ends are
+    #: ``None``: it is what the board prints on the market-signal card, and an
+    #: empty one would be a signal that cannot say what would make it a lead.
+    lane_absent_reason: str = ""
+
+    def __post_init__(self) -> None:
+        has_place = self.origin is not None or self.destination is not None
+        if not has_place and not self.lane_absent_reason.strip():
+            raise ValueError(
+                f"{self.signal.signal_id}: no origin and no destination, and no "
+                "lane_absent_reason — a signal with no lane must name the missing fact"
+            )
+        if has_place and self.lane_absent_reason.strip():
+            raise ValueError(
+                f"{self.signal.signal_id}: lane_absent_reason set on a detection that "
+                "names a physical place"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -832,12 +850,15 @@ def _crush_why_now(
     floor: float,
     *,
     administered: bool,
+    board: bool = False,
 ) -> str:
     """The first sentence a trader reads. Level-conditional on purpose.
 
-    Only traded or assessed legs support the inference that a crusher earning
-    the margin can bid up for beans. Administered legs support the weaker claim
-    only: the decreed values are this far apart.
+    Only physical legs a plant buys and sells at support the inference that a
+    crusher earning the margin can bid up for beans. Administered legs support
+    the weaker claim only: the decreed values are this far apart. Board legs
+    support a paper margin — what a hedge locks — and say nothing about what
+    any plant earns (#672), which is what the board-crush blocker already says.
     """
     opener = (
         f"{market_name}'s {label.lower()} is {margin:,.2f} USD/MT on "
@@ -851,7 +872,41 @@ def _crush_why_now(
             "margin anybody earned. It says where the decree puts product values "
             "against beans; it does not say what a crusher can pay."
         )
+    if board:
+        return (
+            f"{opener} It is a paper margin on three futures contracts — roughly what a "
+            "hedge locks — and it does not show that any plant earns it."
+        )
     return f"{opener} A crusher earning that has room to bid up for beans."
+
+
+def _crush_destination(
+    market: dict[str, Any], iso: str, *, is_board: bool, is_administered: bool
+) -> tuple[Port | None, str]:
+    """Where the crushers who earn this margin sit — or why no such place is shown.
+
+    A market's ``name`` is not a place: for CBOT and Dalian it is the pricing
+    venue, and ``country_port(iso, "CBOT")`` put an exchange on the card as the
+    delivery destination of an 83.9-scored row (#672). Only a margin struck on
+    cash legs a plant actually buys and sells at says that crushers in a
+    country earn it, so only that level names the country — by its PSD name,
+    the registry's country field — as the buyer's location. A board margin is
+    three futures contracts and an administered one is three decreed values; no
+    plant buys or sells at either, so they name no place and say what would.
+    """
+    if is_board:
+        return None, (
+            "no physical destination: a board crush is three futures contracts at a "
+            "pricing venue, not a plant's buy and sell — name a crusher or import port "
+            "that earns it to make this a lead"
+        )
+    if is_administered:
+        return None, (
+            "no physical destination: every leg is a decreed reference value and no "
+            "plant buys or sells at a decree — name a crusher or import port that earns "
+            "this margin to make it a lead"
+        )
+    return country_port(iso, str(market["psd_country"])), ""
 
 
 def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Detection]:
@@ -974,13 +1029,17 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
                     "last-trading-day calendar is encoded."
                 ),
             ))
+        destination, lane_absent_reason = _crush_destination(
+            market, iso, is_board=is_board, is_administered=is_administered
+        )
         out.append(Detection(
             signal=signal,
             rule_id="crush_margin",
             product=BEANS,
             role_wanted=PartyRole.BUYER,
             origin=None,
-            destination=country_port(iso, market.get("name", slug)),
+            destination=destination,
+            lane_absent_reason=lane_absent_reason,
             dislocation=Dislocation(
                 kind="margin",
                 label=label,
@@ -1005,6 +1064,7 @@ def crush_margin_detections(conn, *, today: date, assumptions=None) -> list[Dete
                 chosen.as_of,
                 float(settings["min_margin_usd_mt"]),
                 administered=is_administered,
+                board=is_board,
             ),
             context={
                 "level": chosen.level.value,

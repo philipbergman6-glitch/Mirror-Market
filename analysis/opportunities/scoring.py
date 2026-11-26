@@ -43,6 +43,7 @@ from analysis.origins.players import VERIFICATION_STALE_DAYS
 
 __all__ = [
     "CONFIDENCE_SCORE",
+    "SIGNAL_COMPOSITE_WITHHELD",
     "SOFT_BLOCKER_PENALTY",
     "counterparty_score",
     "economic_score",
@@ -223,8 +224,23 @@ def feasibility_score(opportunity: Opportunity) -> tuple[float, str]:
     )
 
 
+#: Printed instead of a market signal's composite (#672). One sentence, one
+#: place: the page, the archive and the board's rank note all read this.
+SIGNAL_COMPOSITE_WITHHELD = (
+    "composite withheld: a market signal names no lane or no counterparty, so a total "
+    "beside the leads' would rank it against trades it cannot be — the components are "
+    "printed, and signals sort below every lead"
+)
+
+
 def score(opportunity: Opportunity, *, today: date) -> ScoreCard:
-    """The five components and their declared weights."""
+    """The five components and their declared weights.
+
+    A market signal's composite is withheld rather than capped. A cap is a
+    second number to explain and still reads as a rank; the rung already
+    orders it below every lead (:func:`rank`), so the only honest total to
+    print for it is none.
+    """
     economic, economic_note = economic_score(opportunity)
     evidence, evidence_note = evidence_score(opportunity)
     freshness, freshness_note = freshness_score(opportunity, today=today)
@@ -244,6 +260,9 @@ def score(opportunity: Opportunity, *, today: date) -> ScoreCard:
             ("counterparty", counterparty_note),
             ("feasibility", feasibility_note),
         ),
+        withheld_reason=(
+            SIGNAL_COMPOSITE_WITHHELD if opportunity.ladder is Ladder.MARKET_SIGNAL else ""
+        ),
     )
 
 
@@ -256,7 +275,10 @@ def rank(
     carry a huge economic component — India's mandi bean is 284 USD/MT over CBOT
     — and sorting on the composite alone puts a trade nobody can do at the top
     of a board headed "what to work today". The rung is the answer to "can this
-    be worked at all"; the composite ranks within that answer.
+    be worked at all"; the composite ranks within that answer. The same key is
+    what keeps a market signal — a board crush naming no place — below every
+    lead whatever its raw composite (#672); among signals the withheld
+    composite still orders them, and its components are printed.
 
     Rungs above ``ACTIONABLE`` are clamped to it for ordering. A proposed trade
     and a completed one are private, and a won deal floating permanently at the

@@ -9,10 +9,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from opportunity_fixtures import (
+    board_crush_result,
+    crush_result,
     seed_currency,
     seed_export_sales,
     seed_freshness,
     seed_weekly_flow,
+    stub_crush_stack,
 )
 
 import config
@@ -227,59 +230,6 @@ def test_an_empty_database_produces_no_detections_and_no_errors(tmp_db):
 # ---------------------------------------------------------------------------
 # Crush margin: the prose carries the legs' price level (#405)
 # ---------------------------------------------------------------------------
-def _crush_result(slug: str, quote_kind: str, *, margin: float = 24.1):
-    """A gross-physical ``CrushResult`` whose three legs share one quote kind."""
-    from analysis.futures.crush import ContractBasis, CrushLevel
-    from analysis.origins.crush import CrushLeg, CrushResult
-    from analysis.origins.domain import Money, QuoteKind, SourceRef
-    from pricing.semantics import confidence_for_quote_kind
-
-    kind = QuoteKind(quote_kind)
-    legs = tuple(
-        CrushLeg(
-            name=name,
-            key=name,
-            price=Money(price),
-            native_price=price,
-            native_unit="usd_per_mt",
-            quote_kind=kind,
-            source=SourceRef(layer="magyp_fob", table="argentina_fob", key=name),
-        )
-        for name, price in (("bean", 400.0), ("oil", 900.0), ("meal", 350.0))
-    )
-    return CrushResult(
-        market=slug,
-        level=CrushLevel.GROSS_PHYSICAL,
-        label=CrushLevel.GROSS_PHYSICAL.label,
-        meaning=CrushLevel.GROSS_PHYSICAL.meaning,
-        legs=legs,
-        yields={"oil": 0.183, "meal": 0.78},
-        revenue=Money(437.7),
-        bean_cost=Money(400.0),
-        margin=Money(margin),
-        as_of=TODAY,
-        confidence=confidence_for_quote_kind(quote_kind),
-        contract_basis=(
-            ContractBasis.ADMINISTERED if quote_kind == "administered"
-            else ContractBasis.PHYSICAL
-        ),
-    )
-
-
-def _stub_crush_stack(monkeypatch, results: dict):
-    """``crush_stack`` returns the fixture for its slug and a blocked stack otherwise."""
-    import analysis.origins.crush as crush_mod
-    from analysis.futures.crush import CrushLevel
-
-    def fake(conn, slug, assumptions, *, today):
-        if slug not in results:
-            blocked = crush_mod._blocked(slug, CrushLevel.GROSS_PHYSICAL, "stubbed out")
-            return blocked, blocked, blocked
-        return results[slug], results[slug], results[slug]
-
-    monkeypatch.setattr(crush_mod, "crush_stack", fake)
-
-
 def _only(detections, slug):
     found = [d for d in detections if d.context["market"] == slug]
     assert len(found) == 1, [d.signal.headline for d in detections]
@@ -287,7 +237,7 @@ def _only(detections, slug):
 
 
 def test_administered_legs_are_not_called_a_gross_physical_crush(monkeypatch):
-    _stub_crush_stack(monkeypatch, {"argentina": _crush_result("argentina", "administered")})
+    stub_crush_stack(monkeypatch, {"argentina": crush_result("argentina", "administered")})
 
     det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "argentina")
 
@@ -302,7 +252,7 @@ def test_administered_legs_are_not_called_a_gross_physical_crush(monkeypatch):
 
 
 def test_traded_legs_keep_the_gross_physical_wording(monkeypatch):
-    _stub_crush_stack(monkeypatch, {"cbot": _crush_result("cbot", "physical")})
+    stub_crush_stack(monkeypatch, {"cbot": crush_result("cbot", "physical")})
 
     det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "cbot")
 
@@ -312,3 +262,72 @@ def test_traded_legs_keep_the_gross_physical_wording(monkeypatch):
     assert "administered" not in det.why_now.lower()
     assert det.signal.detail == det.economics.note
     assert "Cash bean against cash oil and meal" in det.signal.detail
+
+
+# ---------------------------------------------------------------------------
+# A pricing venue is not a delivery destination (#672)
+# ---------------------------------------------------------------------------
+def test_a_board_crush_names_no_destination_and_says_why(monkeypatch):
+    """The live 83.9 row: destination "CBOT" — the venue had become the berth."""
+    stub_crush_stack(monkeypatch, {"cbot": board_crush_result("cbot")})
+
+    det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "cbot")
+
+    assert det.origin is None
+    assert det.destination is None
+    assert det.lane_absent_reason.startswith("no physical destination")
+    assert "crusher" in det.lane_absent_reason
+    # The number itself, its venue and its contracts are untouched.
+    assert det.economics.per_mt.amount == 68.30
+    assert det.signal.subject == "US"
+    assert det.signal.headline.startswith("CBOT board crush")
+    assert det.context["contracts"] == ["ZSF27", "ZLF27", "ZMF27"]
+
+
+def test_no_crush_names_a_pricing_venue_as_its_destination(monkeypatch):
+    """Every crush market, every level: a destination is a country, never a venue."""
+    venues = {str(market["name"]) for market in config.MARKETS.values()} - {
+        str(market["psd_country"]) for market in config.MARKETS.values()
+    }
+    assert {"CBOT", "Dalian"} <= venues
+    for kind in ("physical", "administered", "board"):
+        results = {
+            slug: (board_crush_result(slug) if kind == "board" else crush_result(slug, kind))
+            for slug in config.PHYSICAL_CRUSH
+        }
+        stub_crush_stack(monkeypatch, results)
+        for det in signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}):
+            if det.destination is not None:
+                assert det.destination.name not in venues, (kind, det.destination)
+
+
+def test_a_physical_crush_names_the_crushers_country_not_the_venue(monkeypatch):
+    stub_crush_stack(monkeypatch, {"dalian": crush_result("dalian", "physical")})
+
+    det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "dalian")
+
+    assert det.destination is not None
+    assert det.destination.name == "China"
+    assert det.destination.country_iso == "CN"
+    assert det.lane_absent_reason == ""
+
+
+def test_an_administered_crush_names_no_destination(monkeypatch):
+    """No plant buys or sells at a decree, so no crusher is shown to earn it."""
+    stub_crush_stack(monkeypatch, {"argentina": crush_result("argentina", "administered")})
+
+    det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "argentina")
+
+    assert det.destination is None
+    assert det.lane_absent_reason.startswith("no physical destination")
+
+
+def test_a_board_crush_does_not_claim_a_crusher_earns_it(monkeypatch):
+    """The lead sentence must agree with the blocker: a paper margin, not room to bid."""
+    stub_crush_stack(monkeypatch, {"cbot": board_crush_result("cbot")})
+
+    det = _only(signals_mod.crush_margin_detections(None, today=TODAY, assumptions={}), "cbot")
+
+    assert "room to bid" not in det.why_now
+    assert "paper margin" in det.why_now
+    assert det.why_now.startswith("CBOT's board crush")
