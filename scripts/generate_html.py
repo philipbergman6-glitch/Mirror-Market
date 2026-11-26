@@ -979,6 +979,7 @@ def generate(
         supply_analysis,
         technicals_analysis,
     )
+    from app.decision_readiness import build_decision_readiness
 
     # Call all analysts
     log.info("Calling analysts...")
@@ -1036,6 +1037,10 @@ def generate(
         "freshness_items": freshness_items,
         "production_layers": PRODUCTION_LAYERS,
         "command_center": _build_command_center(cc_data),
+        # #673: three decision-readiness answers beside the layer count, which
+        # stays for diagnosis. Read off the same command center the page prints,
+        # and off the public tier only (invariant 4).
+        "decision_readiness": build_decision_readiness(cc_data, now=now),
         "technicals": _build_technicals(tech_data),
         "supply": _build_supply(supply_data),
         "demand": _build_demand(demand_data),

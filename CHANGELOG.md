@@ -4,6 +4,38 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — three decision-readiness indicators beside the masthead layer count (2026-11-26)
+
+**#673**, from the 2026-11-26 Codex audit. "37/41 layers on schedule" is a
+pipeline-health number; it stays, for diagnosis. Beside it the headline and
+briefing mastheads now read `Decision read · Origins … · Three-leg close …
+(session) · Arrival …`, each ready / degraded / not ready, with every non-ok
+reason printed on a `.stale-note` line under the masthead. New
+`app/decision_readiness.py`, one `{state, reason, data}` builder per
+indicator (a non-ok envelope without a reason raises):
+
+- **Origins** — the public-tier FOB board for the default destination and
+  window (`analysis.origins.comparison`; `_fob_eligible` is now the public
+  `fob_eligible`). Not ready under two origins; degraded when two or more
+  are comparable but another quoting origin is left out. Each excluded origin
+  is named with its observation date and every gate it failed, and a stale
+  quote says whether its layer's run failed or succeeded.
+- **Three-leg close** — the command center's same-session crush date against
+  each leg's newest close (invariant 8): which session, and which leg is
+  behind.
+- **Arrival** — board, curve and FX by their latency *acquisition* verdict
+  (the overall verdict is `unknown` at build time); ocean freight by how long
+  a freight number stays true (`ASSUMPTION_DEFAULT_LIFETIME_DAYS`), because
+  its 24 h fundamentals objective breaches structurally for a monthly
+  assessment. A freight run that succeeded on a 2026-10-01 benchmark is amber
+  "too old for the decision", a failed one red.
+
+No new class or colour (amber `.mast-partial`, red `.mast-critical`), but the
+masthead line and the second warning line are a DESIGN.md change, recorded as
+a *proposed* row — the PR is a draft until the owner approves it. The
+How-to-read key gains a "Decision read" entry. `tests/test_decision_readiness.py`
+(30 tests).
+
 ## Unreleased — Layer 37: MATIF rapeseed delayed trades, private desk edition only (2026-11-05)
 
 Owner decision 2026-11-05 ("ingest MATIF delayed settlements, private
