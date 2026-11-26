@@ -59,10 +59,22 @@ class TestHistoryIsProtected:
         with pytest.raises(_guards.HistoryWriteBlocked):
             os.remove(REAL_CSV)
 
-    def test_export_history_against_the_real_dir_raises(self, patched_db: Path):
-        """The exact #84 leak: an unpatched HISTORY_DIR at export time."""
+    def test_export_history_against_the_real_dir_raises(
+        self, patched_db: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The exact #84 leak: an unpatched HISTORY_DIR at export time.
+
+        Only HISTORY_DIR is left unpatched. The DB is the temp one: the
+        export reads data_freshness before its first write (#567), and
+        ``patched_db`` does not reach ``pipeline.history`` — without this the
+        test read the desk's real DB, and on a runner with none it died on
+        "no such table" before the guard was ever exercised.
+        """
+        import sqlite3
+
         from pipeline import history
 
+        monkeypatch.setattr("pipeline.history.get_connection", lambda: sqlite3.connect(str(patched_db)))
         with pytest.raises(_guards.HistoryWriteBlocked):
             history.export_history()
 
