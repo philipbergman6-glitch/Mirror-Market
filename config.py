@@ -4596,7 +4596,9 @@ CRUSH_CASH_LEGS: dict[str, dict[str, Any]] = {
 # Bumped whenever a rule's arithmetic, a score component's formula, or the
 # component weights change. Stored on every detection, so an archived
 # opportunity can be read against the method that produced it.
-OPPORTUNITY_METHOD_VERSION = "1.0.0"
+# 1.1.0 (#672): a detection naming no physical place is a market signal
+# whoever could be called, and a market signal's composite is withheld.
+OPPORTUNITY_METHOD_VERSION = "1.1.0"
 
 # Where the local, private trader workflow lives: status, owner, notes, contact
 # dates, outcomes. This directory is NEVER read by the public page builder and

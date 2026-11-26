@@ -102,8 +102,10 @@ class OpportunityError(ValueError):
 class Ladder(str, Enum):
     """What kind of thing this is. Ordered; higher rungs need more.
 
-    ``MARKET_SIGNAL``  an observation about the market. No lane, no counterparty,
-                       nothing to act on. Most of what the pipeline produces.
+    ``MARKET_SIGNAL``  an observation about the market. It names no physical
+                       place, or nobody to call — nothing to act on yet, and
+                       ``Opportunity.signal_gap`` says which. Most of what the
+                       pipeline produces.
     ``LEAD``           a signal attached to a lane (origin → destination) with
                        named candidate counterparties — but blocked, unpriced or
                        resting on evidence too old or too thin to act on.
@@ -139,8 +141,9 @@ _LADDER_RANK = {
 
 _LADDER_MEANING = {
     Ladder.MARKET_SIGNAL: (
-        "An observation about the market. It names no lane and no counterparty; "
-        "it is the input to a lead, not a thing to do."
+        "An observation about the market. It names no physical origin or "
+        "destination, or nobody to call; it is the input to a lead, not a thing to "
+        "do, and it prints no composite score."
     ),
     Ladder.LEAD: (
         "A signal on a named lane with candidate counterparties, held back by at "
@@ -643,6 +646,11 @@ class ScoreCard:
     feasibility: float
     weights: tuple[tuple[str, float], ...]
     notes: tuple[tuple[str, str], ...] = ()
+    #: Why the composite is not printed. Set on a market signal (#672): its
+    #: components are true and still shown, but a total beside the leads'
+    #: totals reads as a rank against them, and a signal with no lane is not
+    #: commercially comparable to a lead with one.
+    withheld_reason: str = ""
 
     _COMPONENTS = ("economic", "evidence", "freshness", "counterparty", "feasibility")
 
@@ -659,13 +667,20 @@ class ScoreCard:
 
     @property
     def composite(self) -> float:
+        """The weighted sum. A sort key — within one rung — even when withheld."""
         lookup = dict(self.weights)
         return round(sum(getattr(self, name) * lookup[name] for name in self._COMPONENTS), 1)
+
+    @property
+    def published_composite(self) -> float | None:
+        """What a page or the archive may print: ``None`` when withheld."""
+        return None if self.withheld_reason else self.composite
 
     def to_dict(self) -> dict[str, Any]:
         note_lookup = dict(self.notes)
         return {
-            "composite": self.composite,
+            "composite": self.published_composite,
+            "withheld_reason": self.withheld_reason or None,
             "components": [
                 {
                     "key": name,
@@ -783,8 +798,15 @@ def identity_key(
     origin_key: str | None,
     destination_key: str | None,
     window_start: date | None,
+    subject: str | None = None,
 ) -> str:
     """What makes two detections the same opportunity.
+
+    ``subject`` scopes a detection that names no physical place (#672): with no
+    origin, destination or window, a CBOT and a Dalian board crush would share
+    ``crush_margin|beans|-|-|-`` and one would be collapsed away. It is
+    appended only when given, so every lane's identity — and so its id — is
+    unchanged.
 
     Deliberately excludes the numbers. The same lane, product, window and rule
     on two consecutive days is *one* opportunity that moved, not two — and an
@@ -799,6 +821,8 @@ def identity_key(
         (destination_key or "-").strip().lower(),
         window_start.isoformat() if window_start else "-",
     ]
+    if subject is not None:
+        parts.append(f"subject:{subject.strip().lower()}")
     return "|".join(parts)
 
 
@@ -867,6 +891,12 @@ class Opportunity:
     missing_information: tuple[str, ...] = ()
     suggested_next_action: str = ""
     related_ids: tuple[str, ...] = ()
+    #: The single missing fact that would turn this market signal into a lead
+    #: (#672) — "no physical destination: name a crusher or import port", "no
+    #: buyer candidate for China: research one". Required on a detected market
+    #: signal, empty on every other rung: a signal that cannot say what would
+    #: make it a lead is a signal a reader cannot do anything with.
+    signal_gap: str = ""
 
     #: The private half. ``None`` on every detector-produced opportunity; filled
     #: only by ``workflow.attach``. See :data:`PRIVATE_FIELD_NAMES`.
@@ -927,6 +957,18 @@ class Opportunity:
                 f"{self.opportunity_id}: workflow record belongs to "
                 f"{self.workflow.opportunity_id}"
             )
+        if self.workflow is None and self.status is OpportunityStatus.DETECTED:
+            is_signal = self.ladder is Ladder.MARKET_SIGNAL
+            if is_signal and not self.signal_gap.strip():
+                raise OpportunityError(
+                    f"{self.opportunity_id}: a market signal must name the missing fact "
+                    "that would make it a lead (signal_gap)"
+                )
+            if not is_signal and self.signal_gap.strip():
+                raise OpportunityError(
+                    f"{self.opportunity_id}: signal_gap set on a {self.ladder.value} — only "
+                    "a market signal is missing the fact that would make it a lead"
+                )
         if self.economics is not None:
             has_total = self.economics.total_low_usd is not None
             if has_total and self.volume is None:
@@ -1042,6 +1084,7 @@ class Opportunity:
             "missing_information": list(self.missing_information),
             "suggested_next_action": self.suggested_next_action,
             "related_ids": list(self.related_ids),
+            "signal_gap": self.signal_gap or None,
         }
         if audience == AUDIENCE_PRIVATE:
             payload["workflow"] = self.workflow.to_dict() if self.workflow else None

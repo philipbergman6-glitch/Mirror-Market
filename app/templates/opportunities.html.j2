@@ -193,12 +193,18 @@
         <div class="opp-id">{{ r.opportunity_id }} · first seen {{ r.first_detected_on }} · expires {{ r.expires_on }}</div>
       </div>
       <div class="score">
+        {% if r.score.composite is not none %}
         <div class="score-total">{{ '%.1f'|format(r.score.composite) }}</div>
         <div class="score-cap">composite</div>
+        {% else %}
+        <div class="score-total">n/a</div>
+        <div class="score-cap">composite withheld</div>
+        {% endif %}
       </div>
     </div>
 
     <div class="opp-why">{{ r.why_now }}</div>
+    {% if r.signal_gap %}<div class="miss" style="margin-top:8px">{{ r.signal_gap }}</div>{% endif %}
 
     <div class="opp-meta">
       <span class="rung rung-pill-{{ r.ladder }}">{{ r.ladder_label }}</span>
@@ -220,6 +226,7 @@
       <span class="why">{{ c.note }}</span>
       {% endfor %}
     </div>
+    {% if r.score.withheld_reason %}<div class="caption">{{ r.score.withheld_reason }}</div>{% endif %}
 
     <div class="opp-next"><span class="lbl">next</span>{{ r.suggested_next_action }}
       <a href="#detail-{{ r.opportunity_id }}" style="color:var(--green);text-decoration:none;margin-left:8px">detail &rarr;</a>
@@ -233,6 +240,10 @@
   <div class="card" id="detail-{{ r.opportunity_id }}">
     <h3>{{ r.opportunity_id }} — {{ r.rule_label }}</h3>
     <div class="caption">{% if r.lane %}{{ r.lane }} · {% endif %}{{ r.ladder_label }} · {{ r.ladder_meaning }}</div>
+    {% if r.signal_gap %}
+    <div class="sub">What would make it a lead</div>
+    <div class="miss">{{ r.signal_gap }}</div>
+    {% endif %}
 
     <div class="sub">Why now</div>
     <div style="font-size:13px">{{ r.why_now }}</div>

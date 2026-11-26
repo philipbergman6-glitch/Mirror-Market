@@ -7,8 +7,10 @@ importantly, decides which rung of the ladder the result has earned.
 The rung is not a label applied at the end. It falls out of three tests, in
 this order, and each one has a failure mode worth naming:
 
-1. **Is there a lane and a counterparty?** Without both it is a market signal,
-   not a lead. A screen that promotes "China's stocks are tight" to an
+1. **Is there a place and a counterparty?** A detection naming neither a
+   physical origin nor a destination is a market signal whoever could be
+   called (#672) — a pricing venue is not a destination — and so is one with
+   nobody on the side it needs. Neither is a lead. A screen that promotes "China's stocks are tight" to an
    opportunity has told the reader nothing they can pick up a phone about.
 2. **Can the spread plausibly be closed?** This is requirement 2 and it is the
    whole point of :func:`assess_blockers`. Policy, freight, quality, timing and
@@ -45,7 +47,6 @@ from analysis.opportunities.domain import (
     Opportunity,
     OpportunityStatus,
     PartyRole,
-    identity_key,
     opportunity_id,
     worst_confidence,
 )
@@ -62,6 +63,7 @@ __all__ = [
     "counterparties_for",
     "ladder_for",
     "next_action_for",
+    "signal_gap_for",
 ]
 
 
@@ -368,13 +370,19 @@ def assess_blockers(detection: Detection, *, conn=None, today: date, has_counter
 # Ladder and next action
 # ---------------------------------------------------------------------------
 def ladder_for(detection: Detection, blockers: Blockers, *, has_counterparty: bool) -> Ladder:
-    """Which rung this has earned. The three tests, in order, and no others.
+    """Which rung this has earned. The tests, in order, and no others.
 
-    ``ACTIONABLE`` requires all of: a lane with both ends named, at least one
-    counterparty, priced economics, and no hard blocker. Anything less is a
-    ``LEAD`` if there is somebody to call and a ``MARKET_SIGNAL`` if there is
-    not — which is most of what a pipeline produces, and saying so is the point.
+    A detection that names no physical place at all is a ``MARKET_SIGNAL``
+    whoever could be called: a globally-scoped trading house sits on the sell
+    side of every lane, including none, and "somebody to call" is not a lane
+    (#672). ``ACTIONABLE`` requires all of: a lane with both ends named, at
+    least one counterparty, priced economics, and no hard blocker. Anything
+    less is a ``LEAD`` if there is somebody to call and a ``MARKET_SIGNAL`` if
+    there is not — which is most of what a pipeline produces, and saying so is
+    the point.
     """
+    if not detection.has_physical_place:
+        return Ladder.MARKET_SIGNAL
     if not has_counterparty:
         return Ladder.MARKET_SIGNAL
     if detection.origin is None or detection.destination is None:
@@ -384,6 +392,30 @@ def ladder_for(detection: Detection, blockers: Blockers, *, has_counterparty: bo
     if detection.economics is None:
         return Ladder.LEAD
     return Ladder.ACTIONABLE
+
+
+def signal_gap_for(detection: Detection, ladder: Ladder) -> str:
+    """The single missing fact that would turn a market signal into a lead.
+
+    Empty for every other rung. The lane comes first because it is structural:
+    a counterparty researched for a signal that names no place would still
+    leave it a signal. The detector states its own lane gap
+    (``Detection.lane_absent_reason``), because only it knows *why* its
+    measurement names no place.
+    """
+    if ladder is not Ladder.MARKET_SIGNAL:
+        return ""
+    if not detection.has_physical_place:
+        return detection.lane_absent_reason
+    wants_buyer = detection.role_wanted is PartyRole.BUYER
+    side = "buyer" if wants_buyer else "seller"
+    wanted_end = detection.destination if wants_buyer else detection.origin
+    place = wanted_end or detection.destination or detection.origin
+    where = place.name if place is not None else ""
+    return (
+        f"no {side} candidate for {where}: research one into data/reference/players/ — "
+        "this engine will not invent a counterparty"
+    )
 
 
 def next_action_for(
@@ -399,6 +431,10 @@ def next_action_for(
     candidate's next action is to clear the blocker — naming the *first* one,
     because a list of six things to do is a list nobody starts.
     """
+    if not detection.has_physical_place:
+        # Ahead of the hard blockers: clearing any of them would leave a
+        # signal that names no place still a signal.
+        return f"Not a lead until it names a place — {detection.lane_absent_reason}."
     hard = [blocker for blocker in blockers if blocker.is_hard]
     if hard:
         return f"Clear the blocker first: {hard[0].remedy}"
@@ -511,13 +547,7 @@ def build_candidate(
         detection, conn=conn, today=today, has_counterparty=has_counterparty
     )
     ladder = ladder_for(detection, blockers, has_counterparty=has_counterparty)
-    identity = identity_key(
-        rule_id=detection.rule_id,
-        product=detection.product,
-        origin_key=detection.origin.key if detection.origin else None,
-        destination_key=detection.destination.key if detection.destination else None,
-        window_start=detection.window.start if detection.window else None,
-    )
+    identity = detection.identity()
     first_seen = first_detected_on or today
     economics = detection.economics
     if economics is not None:
@@ -554,6 +584,7 @@ def build_candidate(
         blockers=blockers,
         missing_information=_missing_information(detection, blockers, sellers, buyers),
         suggested_next_action=next_action_for(detection, ladder, blockers, sellers, buyers),
+        signal_gap=signal_gap_for(detection, ladder),
     )
 
 
@@ -577,13 +608,7 @@ def build_candidates(
         try:
             known_id, first_seen = (None, None)
             if lookup is not None:
-                identity = identity_key(
-                    rule_id=detection.rule_id,
-                    product=detection.product,
-                    origin_key=detection.origin.key if detection.origin else None,
-                    destination_key=detection.destination.key if detection.destination else None,
-                    window_start=detection.window.start if detection.window else None,
-                )
+                identity = detection.identity()
                 known_id, first_seen = lookup(identity)
             out.append(build_candidate(
                 detection,

@@ -320,3 +320,102 @@ def test_known_identities_keep_their_original_id_and_birthday():
     assert later.first_detected_on == date(2026, 1, 1)
     assert later.detected_on == TODAY
     assert later.identity == fresh.identity
+
+
+# ---------------------------------------------------------------------------
+# No lane at all: a market signal, by one shared rule (#672)
+# ---------------------------------------------------------------------------
+NO_LANE = "no physical destination: name a crusher or import port that earns it"
+
+GLOBAL_HOUSE = {
+    "name": "Fixture Global House",
+    "country": "GLOBAL",
+    "roles": ["originator", "exporter"],
+    "products": ["beans"],
+    "confidence": "observed",
+    "as_of": "2026-08-01",
+    "tier": 1,
+    "citations": [{"url": "https://example.invalid/global", "accessed": "2026-08-01"}],
+}
+
+
+def test_a_detection_with_no_lane_is_a_market_signal_even_with_a_counterparty():
+    """A globally-scoped seller is on every lane's sell side — including no lane.
+    Having somebody to call is not a lane; the rung must not be a lead."""
+    detection = make_detection(
+        origin=None, destination=None, without_window=True, lane_absent_reason=NO_LANE
+    )
+    opportunity = build_candidate(
+        detection, today=TODAY, entries=[*PLAYER_ENTRIES, GLOBAL_HOUSE]
+    )
+    assert opportunity.sellers, "fixture must carry a counterparty on the wanted side"
+    assert opportunity.ladder is Ladder.MARKET_SIGNAL
+    assert opportunity.signal_gap == NO_LANE
+    assert NO_LANE in opportunity.suggested_next_action
+
+
+def test_a_lane_less_rule_is_not_special_cased_by_rule_id():
+    """The rule is on the lane, not on which detector fired (invariant 5's spirit)."""
+    for rule_id in ("crush_margin", "currency_shift", "landed_advantage"):
+        opportunity = build_candidate(
+            make_detection(
+                rule_id=rule_id, origin=None, destination=None, without_window=True,
+                lane_absent_reason=NO_LANE,
+            ),
+            today=TODAY, entries=[*PLAYER_ENTRIES, GLOBAL_HOUSE],
+        )
+        assert opportunity.ladder is Ladder.MARKET_SIGNAL, rule_id
+
+
+def test_a_no_counterparty_signal_names_the_missing_party():
+    opportunity = build_candidate(
+        make_detection(
+            origin=country_port("ZZ", "Nowhere", role="origin"),
+            destination=country_port("YY", "Elsewhere"),
+        ),
+        today=TODAY, entries=PLAYER_ENTRIES,
+    )
+    assert opportunity.ladder is Ladder.MARKET_SIGNAL
+    assert opportunity.signal_gap.startswith("no seller candidate for Nowhere")
+    assert "data/reference/players/" in opportunity.signal_gap
+
+
+def test_a_lead_carries_no_signal_gap():
+    opportunity = build_candidate(
+        make_detection(destination=None, without_window=True), today=TODAY, entries=PLAYER_ENTRIES
+    )
+    assert opportunity.ladder is Ladder.LEAD
+    assert opportunity.signal_gap == ""
+
+
+def test_a_lane_less_detection_must_say_what_is_missing():
+    import pytest
+
+    with pytest.raises(ValueError, match="lane_absent_reason"):
+        make_detection(origin=None, destination=None)
+
+
+def test_two_lane_less_crushes_in_different_markets_are_two_opportunities(monkeypatch):
+    """With no lane, rule+product+window alone would key CBOT's and Dalian's board
+    crush identically, and collapse_exact_duplicates would drop one of them."""
+    from opportunity_fixtures import board_crush_result, stub_crush_stack
+
+    from analysis.opportunities import registry as registry_mod
+    from analysis.opportunities import signals as signals_mod
+
+    stub_crush_stack(monkeypatch, {
+        "cbot": board_crush_result("cbot"),
+        "dalian": board_crush_result("dalian"),
+    })
+    detections = signals_mod.crush_margin_detections(None, today=TODAY, assumptions={})
+    assert {d.context["market"] for d in detections} == {"cbot", "dalian"}
+    candidates = build_candidates(detections, today=TODAY, entries=PLAYER_ENTRIES)
+    kept = registry_mod.collapse_exact_duplicates(candidates)
+    assert len(kept) == 2
+    assert len({item.identity for item in kept}) == 2
+
+
+def test_a_lane_keeps_its_identity_unchanged():
+    """Scoping a lane-less identity must not re-mint every existing lane's id."""
+    opportunity = build_candidate(make_detection(), today=TODAY, entries=PLAYER_ENTRIES)
+    assert opportunity.identity == "landed_advantage|beans|country:us|country:cn|2026-09-01"

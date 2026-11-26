@@ -194,8 +194,11 @@ def _board(rows: list[dict], *, audience: str) -> dict:
             "the options are derived from the board rather than declared."
         ),
         "rank_note": (
-            "Ranked by the weighted composite of five components, every one of which is "
-            "printed beside it. The composite is a sort key; the components are the answer."
+            "Ranked by rung first, then by the weighted composite of five components, every "
+            "one of which is printed beside it. The composite is a sort key; the components "
+            "are the answer. A market signal — no lane, or nobody to call — sorts below every "
+            "lead and prints no composite; its card names the one fact that would make it a "
+            "lead."
         ),
     }
 

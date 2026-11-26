@@ -326,3 +326,53 @@ def test_the_promotion_contract_carries_the_public_page_only():
 def test_an_unknown_audience_is_refused(board_db):
     with pytest.raises(ValueError, match="unknown audience"):
         build_view(board_db, today=TODAY, audience="partner", archive=False)
+
+
+# ---------------------------------------------------------------------------
+# Market signals vs leads (#672)
+# ---------------------------------------------------------------------------
+def test_a_board_crush_renders_as_a_signal_below_every_lead_with_its_missing_fact(
+    board_db, monkeypatch
+):
+    from opportunity_fixtures import board_crush_result, stub_crush_stack
+
+    stub_crush_stack(monkeypatch, {"cbot": board_crush_result("cbot")})
+    view = build_view(board_db, today=TODAY, archive=False)
+    board = next(s for s in view["sections"] if s["id"] == "board")
+    rows = board["data"]["rows"]
+    crush = [row for row in rows if row["rule_id"] == "crush_margin"]
+    assert len(crush) == 1, [row["rule_id"] for row in rows]
+    crush_row = crush[0]
+
+    assert crush_row["ladder"] == Ladder.MARKET_SIGNAL.value
+    assert crush_row["destination"] is None and crush_row["origin"] is None
+    assert crush_row["signal_gap"].startswith("no physical destination")
+    assert crush_row["score"]["composite"] is None
+    assert crush_row["economics"]["per_mt"] == 68.30
+    # Rung order: no signal sits above any lead or actionable row.
+    rungs = [row["ladder"] for row in rows]
+    first_signal = rungs.index(Ladder.MARKET_SIGNAL.value)
+    assert Ladder.LEAD.value not in rungs[first_signal:]
+    assert Ladder.ACTIONABLE.value not in rungs[first_signal:]
+
+    html = render(view)
+    from markupsafe import escape
+
+    assert html.count(str(escape(crush_row["signal_gap"]))) >= 2, "board card and detail card"
+    assert "composite withheld" in html
+    # The venue never prints as a place this cargo goes.
+    assert ">CBOT</span></div>" not in html
+    # The number keeps its venue and contracts.
+    assert "ZSF27" in html
+
+
+def test_every_market_signal_row_names_its_missing_fact(board_db, monkeypatch):
+    from opportunity_fixtures import board_crush_result, stub_crush_stack
+
+    stub_crush_stack(monkeypatch, {"cbot": board_crush_result("cbot")})
+    view = build_view(board_db, today=TODAY, archive=False)
+    rows = next(s for s in view["sections"] if s["id"] == "board")["data"]["rows"]
+    signals = [row for row in rows if row["ladder"] == Ladder.MARKET_SIGNAL.value]
+    assert signals
+    assert all(row["signal_gap"] for row in signals)
+    assert all(row["signal_gap"] is None for row in rows if row not in signals)
