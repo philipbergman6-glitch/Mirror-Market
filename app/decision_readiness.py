@@ -45,14 +45,16 @@ import config
 from analysis.origins.comparison import fob_board, fob_board_refusal, fob_eligible
 from analysis.origins.domain import Comparability, Freshness, LandedCost, OriginRanking
 from analysis.origins.landed_cost import bridge_components, window_verdict
+from app.sections import section
 from latency.domain import (
     Granularity,
     LatencyClass,
     LayerMeasurement,
     Verdict,
     format_delta,
+    newest_session_at,
 )
-from pipeline.grading import OUTAGE_STATUSES, STATUS_USABLE_PARTIAL
+from pipeline.grading import ADVANCES_LAST_SUCCESS, OUTAGE_STATUSES, STATUS_USABLE_PARTIAL
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +71,11 @@ _SEVERITY = {STATE_NOT_READY: 0, STATE_DEGRADED: 1, STATE_OK: 2}
 
 
 def indicator(name: str, state: str, reason: str = "", /, **data: Any) -> dict:
-    """The envelope. A non-ok indicator must say why, like every section."""
+    """The headline envelope (``app.sections.section``), restricted to three states.
+
+    A non-ok indicator must say why — the reason should name the input
+    responsible and its observation date where one exists.
+    """
     if state not in STATES:
         raise ValueError(f"readiness indicator {name!r} has state {state!r}, not one of {STATES}")
     if state != STATE_OK and not reason.strip():
@@ -77,11 +83,7 @@ def indicator(name: str, state: str, reason: str = "", /, **data: Any) -> dict:
             f"readiness indicator {name!r} is {state!r} with no reason — a non-ok "
             "indicator must name the input responsible and its observation date"
         )
-    return {
-        "state": state,
-        "reason": reason,
-        "data": {"name": name, "label": STATE_LABELS[state], **data},
-    }
+    return section(state, reason, name=name, label=STATE_LABELS[state], **data)
 
 
 def _worst(states: Iterable[str]) -> str:
@@ -125,6 +127,8 @@ GRADE_STATES: dict[str, str] = {
     "too_old_for_decision": STATE_DEGRADED,  # ran successfully; older than its decision life
     "failed": STATE_NOT_READY,         # run status in OUTAGE_STATUSES
     "not_run": STATE_NOT_READY,        # no data_freshness row at all
+    "disabled": STATE_NOT_READY,       # run status disabled: switched off on purpose
+    "missed": STATE_NOT_READY,         # a newer session is past its objective; none arrived
 }
 
 _OUTAGE_WORDS = {
@@ -132,6 +136,19 @@ _OUTAGE_WORDS = {
     "stale": "is past its source-age budget",
     "incomplete": "came back below its key floor",
 }
+
+
+def _run_outcome(status: str | None) -> str:
+    """The run's own word for how it went — never upgraded to "succeeded".
+
+    ``no_publication`` is a source with nothing new to say, not a success;
+    only the two statuses that advance ``last_success`` read as one.
+    """
+    if status is None:
+        return "no run status recorded"
+    if status in ADVANCES_LAST_SUCCESS:
+        return "its run succeeded"
+    return f"its run reported {status}"
 
 
 def _observed_on(measurement: LayerMeasurement) -> date | None:
@@ -166,7 +183,9 @@ def _grade_input(measurement: LayerMeasurement, label: str, now: datetime) -> di
         }
 
     if status == "not-run":
-        return graded("not_run", f"{label} has no recorded run")
+        return graded("not_run", f"{label} has no recorded run — no observation recorded")
+    if status == "disabled":
+        return graded("disabled", f"{label} is disabled — newest {observed}")
     if status in OUTAGE_STATUSES:
         held = f"newest held {observed}" if observed_on else observed
         return graded("failed", f"{label} {_OUTAGE_WORDS[status]} — {held}")
@@ -182,10 +201,27 @@ def _grade_input(measurement: LayerMeasurement, label: str, now: datetime) -> di
         if age_days > life:
             return graded(
                 "too_old_for_decision",
-                f"{label} {observed}, {age_days} d old — its run succeeded, but a {label} "
-                f"number holds about {life} d",
+                f"{label} {observed}, {age_days} d old — {_run_outcome(status)}, but past "
+                f"the {life} d a freight number holds for a decision",
             )
         return graded("within_decision_life")
+
+    # The run that fetched this bar may have been on time, and still nothing
+    # newer has arrived since. Judged by the same clock and the same
+    # acquisition objective: the newest session that has closed by now, and
+    # whether its objective has lapsed. An undeclared holiday reads as a
+    # missed session here — newest_session_at's conservative direction.
+    newest = newest_session_at(measurement.spec.clock, now)
+    if observed_on is not None and newest is not None and observed_on < newest:
+        close = measurement.spec.clock.instant(newest)
+        objective = measurement.spec.objective.acquisition_target
+        if close is not None and now - close > objective:
+            return graded(
+                "missed",
+                f"{label} still holds the {observed_on.isoformat()} session — the "
+                f"{newest.isoformat()} session closed {format_delta(now - close)} ago, past "
+                f"its {format_delta(objective)} acquisition objective",
+            )
 
     verdict = measurement.acquisition_verdict
     if verdict is Verdict.MEETS:
@@ -197,7 +233,7 @@ def _grade_input(measurement: LayerMeasurement, label: str, now: datetime) -> di
         return graded(
             "late",
             f"{label} {observed} landed {format_delta(measurement.acquisition)} after "
-            f"its close (objective {target})",
+            f"its close (acquisition objective {target})",
         )
     return graded("unmeasured", f"{label} arrival unmeasured ({observed}, no fetch stamp)")
 
@@ -208,7 +244,10 @@ def critical_arrival(measurements: Iterable[LayerMeasurement], *, now: datetime)
     Board and FX are graded by their latency *acquisition* verdict — the
     observation-to-fetch leg of the run that fetched them. The overall verdict
     would be ``unknown`` at every build, because the publication stamp does
-    not exist until after the deploy. Freight is graded by its decision life
+    not exist until after the deploy. A bar fetched on time still counts as
+    *missed* (red) once a newer session's objective has lapsed with nothing
+    fetched — the run that brought it is not the edition being read. Freight is
+    graded by its decision life
     (see ``DECISION_LIFE_DAYS``). A failed run is told apart from a
     successful one whose number is too old: the first is red, the second
     amber, and the reason says which.
@@ -287,6 +326,14 @@ def three_leg_close(command_center: Mapping[str, Any] | None) -> dict:
         )
 
     crush = command_center.get("crush") or {}
+    if crush.get("error"):
+        return indicator(
+            name, STATE_NOT_READY,
+            f"the shared-session crush could not be computed this render ({crush['error']}) "
+            "— see the build log; legs "
+            + ", ".join(f"{leg} {leg_dates[leg]}" for leg in THREE_LEGS),
+            session=None, session_label=None, legs=leg_dates,
+        )
     if not crush.get("available") or not crush.get("as_of"):
         printed = ", ".join(f"{leg} {leg_dates[leg]}" for leg in THREE_LEGS)
         return indicator(
@@ -356,7 +403,7 @@ def _exclusion(row: LandedCost, ranking: OriginRanking, run_statuses: Mapping[st
         if status in OUTAGE_STATUSES:
             why.append(f"{layer} {_OUTAGE_WORDS[status]}, the quote is {quote.age_days(today)} d old")
         else:
-            ran = " — its run succeeded" if status is not None else ""
+            ran = f" — {_run_outcome(status)}" if status is not None else ""
             why.append(
                 f"{quote.age_days(today)} d old, past its {quote.max_age_days} d budget{ran}"
             )

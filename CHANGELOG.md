@@ -24,8 +24,11 @@ indicator (a non-ok envelope without a reason raises):
   each leg's newest close (invariant 8): which session, and which leg is
   behind.
 - **Arrival** — board, curve and FX by their latency *acquisition* verdict
-  (the overall verdict is `unknown` at build time); ocean freight by how long
-  a freight number stays true (`ASSUMPTION_DEFAULT_LIFETIME_DAYS`), because
+  (the overall verdict is `unknown` at build time), and red ("missed") once a
+  newer session's acquisition objective has lapsed with nothing fetched
+  (`latency.domain.newest_session_at`, promoted from private); ocean freight by how long
+  a freight number stays true (`ASSUMPTION_DEFAULT_LIFETIME_DAYS`, an owner
+  question on the PR), because
   its 24 h fundamentals objective breaches structurally for a monthly
   assessment. A freight run that succeeded on a 2026-10-01 benchmark is amber
   "too old for the decision", a failed one red.
@@ -33,8 +36,9 @@ indicator (a non-ok envelope without a reason raises):
 No new class or colour (amber `.mast-partial`, red `.mast-critical`), but the
 masthead line and the second warning line are a DESIGN.md change, recorded as
 a *proposed* row — the PR is a draft until the owner approves it. The
-How-to-read key gains a "Decision read" entry. `tests/test_decision_readiness.py`
-(30 tests).
+How-to-read key gains a "Decision read" entry. A command-center crush that
+raised now carries `error` instead of reading as "no shared session".
+`tests/test_decision_readiness.py` (35 tests).
 
 ## Unreleased — Layer 37: MATIF rapeseed delayed trades, private desk edition only (2026-11-05)
 

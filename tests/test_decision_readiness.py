@@ -69,7 +69,7 @@ def test_freight_that_succeeded_but_is_too_old_for_the_decision_is_not_a_failure
     assert "ocean freight" in result["reason"]
     assert "2026-10-01" in result["reason"]
     assert "failed" not in result["reason"]
-    assert "its run succeeded" in result["reason"]
+    assert "56 d old — its run succeeded, but past the 7 d a freight number holds" in result["reason"]
     freight = next(i for i in result["data"]["inputs"] if i["layer"] == "gtr_ocean_freight")
     assert freight["run_status"] == "success"
     assert freight["observed_on"] == "2026-10-01"
@@ -105,7 +105,7 @@ def test_a_board_fetched_past_its_objective_is_late_and_names_the_session() -> N
 
     assert result["state"] == "degraded"
     assert result["reason"].startswith(
-        "CBOT board observed 2026-11-25 landed 14h 17m after its close (objective 6h 0m)"
+        "CBOT board observed 2026-11-25 landed 14h 17m after its close (acquisition objective 6h 0m)"
     )
 
 
@@ -355,8 +355,8 @@ def _readiness() -> dict:
     close = dr.indicator("Three-leg close", "ok", session="2026-11-25", session_label="Wed 25 Nov")
     arrival = dr.indicator(
         "Arrival", "degraded",
-        "ocean freight observed 2026-10-01, 56 d old — its run succeeded, but a freight "
-        "number holds about 7 d",
+        "ocean freight observed 2026-10-01, 56 d old — its run succeeded, but past the 7 d "
+        "a freight number holds for a decision",
     )
     return {"indicators": [origins, close, arrival], "attention": [origins, arrival]}
 
@@ -379,9 +379,10 @@ def _render(template: str, readiness: dict | None) -> str:
 def test_the_masthead_states_each_indicator_beside_the_layer_count(template: str) -> None:
     html = _render(template, _readiness())
 
+    # Directly above the layer count, which stays for diagnosis.
+    line = html.index("Decision read ·")
     layer_count = html.index("37/41 layers on schedule")
-    line = html.index("Decision read")
-    assert line > layer_count
+    assert line < html.index("</div>", line) < layer_count
     assert 'class="mast-critical"' in html[line:html.index("</div>", line)]
     assert 'class="mast-partial"' in html[line:html.index("</div>", line)]
     assert "Three-leg close <b>ready</b> (Wed 25 Nov)" in html
@@ -469,3 +470,64 @@ def test_freight_short_of_its_routes_is_usable_partial_before_its_age_is_judged(
 
     assert result["state"] == "degraded"
     assert result["reason"] == "ocean freight usable partial this run, observed 2026-11-20"
+
+
+def test_a_quiet_freight_publication_is_not_called_a_successful_run() -> None:
+    result = _arrival(_arrival_rows(
+        gtr_ocean_freight=_row("2026-10-01", "2026-11-25T21:42:00+00:00", status="no_publication"),
+    ))
+
+    assert result["state"] == "degraded"
+    assert "its run reported no_publication" in result["reason"]
+    assert "succeeded" not in result["reason"]
+
+
+def test_a_disabled_board_is_not_ready_not_unmeasured() -> None:
+    result = _arrival(_arrival_rows(prices=_row("2026-11-20", "2026-11-21T21:40:00+00:00", "disabled")))
+
+    assert result["state"] == "not_ready"
+    assert result["reason"] == "CBOT board is disabled — newest observed 2026-11-20"
+
+
+def test_a_crush_that_raised_is_not_reported_as_legs_that_never_met() -> None:
+    cc = _cc("2026-11-25", "2026-11-25", "2026-11-25", None)
+    cc["crush"] = {"available": False, "error": "ValueError"}
+    result = dr.three_leg_close(cc)
+
+    assert result["state"] == "not_ready"
+    assert "could not be computed this render (ValueError)" in result["reason"]
+    assert "no session on which" not in result["reason"]
+
+
+def test_every_arrival_input_is_declared_in_the_latency_roster() -> None:
+    """A renamed latency layer must fail here, not turn the masthead red."""
+    from latency.domain import LAYER_LATENCY_BY_KEY
+
+    for layer, _label in dr.ARRIVAL_INPUTS:
+        assert layer in LAYER_LATENCY_BY_KEY
+
+
+def test_a_board_still_holding_an_old_session_after_a_newer_one_is_overdue_is_not_ready() -> None:
+    """The run that fetched it may have been on time; nothing has arrived since.
+
+    At 05:16 UTC on 26 Nov the 25 Nov CBOT session (19:15 UTC) is past its 6 h
+    acquisition objective, so a board still on 16 Nov has missed it.
+    """
+    result = _arrival(_arrival_rows(prices=_row("2026-11-16", "2026-11-16T21:40:00+00:00")))
+
+    assert result["state"] == "not_ready"
+    assert result["reason"].startswith(
+        "CBOT board still holds the 2026-11-16 session — the 2026-11-25 session closed "
+        "10h 1m ago, past its 6h 0m acquisition objective"
+    )
+    board = next(i for i in result["data"]["inputs"] if i["layer"] == "prices")
+    assert board["grade"] == "missed"
+
+
+def test_fx_one_session_behind_before_the_newer_one_is_due_is_still_on_time() -> None:
+    # FX 25 Nov closes 00:00 UTC 26 Nov; at 05:16 it is not yet 6 h past.
+    result = _arrival(_arrival_rows())
+
+    fx = next(i for i in result["data"]["inputs"] if i["layer"] == "currencies")
+    assert fx["observed_on"] == "2026-11-24"
+    assert fx["grade"] == "on_time"

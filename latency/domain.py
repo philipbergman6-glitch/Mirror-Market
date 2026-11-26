@@ -704,7 +704,7 @@ class LayerMeasurement:
         return Verdict.MEETS
 
 
-def _newest_session_at(clock: ObservationClock, at: datetime) -> date | None:
+def newest_session_at(clock: ObservationClock, at: datetime) -> date | None:
     """The newest session whose close is at or before ``at``.
 
     The venue calendar where one is declared; otherwise every weekday is
@@ -741,7 +741,7 @@ def started_after_objective(
     clock = spec.clock
     if clock.granularity is not Granularity.SESSION_CLOSE:
         return False
-    newest = _newest_session_at(clock, fetch_started_at)
+    newest = newest_session_at(clock, fetch_started_at)
     if newest is None or clock.session_of(observed_at) != newest:
         return False
     return fetch_started_at - observed_at > spec.objective.acquisition_target
