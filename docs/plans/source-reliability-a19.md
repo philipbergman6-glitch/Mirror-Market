@@ -92,8 +92,9 @@ The computation is one function over `layer_runs.csv` (A9 §4's rule: computed o
 | Figure | Definition |
 |---|---|
 | Logged sessions | Sessions in the window with at least one row for the layer |
-| Availability % | Sessions whose **last** run graded `success`, `usable_partial` or `no_publication` ÷ 30. `stale`, `failed`, `incomplete`, `skipped_unconfigured`, `not_run` and `no_run` count as unavailable |
+| Availability % | Sessions on which **any** run graded `success`, `usable_partial` or `no_publication` ÷ 30. `stale`, `failed`, `incomplete`, `disabled`, `skipped_unconfigured`, `not_run` and `no_run` count as unavailable. Until 2026-11-25 this was the session's **last** run (see "Rule change, 2026-11-25" below) |
 | First-run availability % | The same, on each session's **first** run. Shows how much the retry is carrying |
+| Failed runs | Runs that asked the source and did not deliver (`failed`, `stale`, `incomplete`, `not_run`), and how many of them fell on a session that is still available. Keeps run-level failures visible under the any-success rule |
 | Longest unavailable streak | Consecutive sessions unavailable |
 | Median recovery | Median length, in sessions, of the closed unavailable streaks |
 | Open at window end | Whether the layer is unavailable on the last session |
@@ -111,6 +112,15 @@ Non-basket layers get the same figures, reported, never gating. Edition level: s
 | T4 | **Surfaced within one run = 100 %**, all 39 layers | Invariant 1. One unsurfaced failure is a silent failure |
 
 No paging SLO. Nothing here wakes anyone or reddens a run (A9 bar).
+
+### Rule change, 2026-11-25: a session is available if any run succeeded
+
+**Owner decision on [#518](https://github.com/philipbergman6-glitch/Mirror-Market/issues/518), 2026-11-25** (raised in PR #615). Until then a session's verdict was its **last** run's word, so a later failed re-run erased earlier successes: push run 44526078466 (a merge, 12:50 UTC on 2026-11-19) failed `magyp_fob` after two successful runs for session 2026-11-18, and the session counted as a miss (`magyp_fob` 85.7 % over the 7-session window). Now a session is available if **any** of its runs graded available.
+
+- Run-level failures stay visible as their own figure: `failed_runs` per layer (`failed`, `stale`, `incomplete`, `not_run`) and `failed_runs_on_available_sessions`, beside first-run % and surfaced %.
+- The dead-source relay (§4) reads the same session rule. A session whose every run failed still extends a streak; one with any success breaks it, because the source answered. A session counts as "only skipped" (never dead, Layer 37 on CI) only when every run on it was `skipped_unconfigured`, not just its newest.
+- The desk cutoff report (`decision_cutoff_report`) asks a different question, whether the whole basket was in one promoted edition by the cutoff, and is per edition, so it is unchanged.
+- **What would reverse this:** evidence that a failed re-run changes what is rendered, i.e. a number withheld, not just a status mark. Then last-run-wins returns. Not yet measured: the forgiven re-runs did promote editions (44526078466's `rendered_at` is 2026-11-19 12:55 UTC), but `layer_runs` cannot say whether those editions withheld the number.
 
 ### Preliminary record (git replay, not the A11 evidence)
 

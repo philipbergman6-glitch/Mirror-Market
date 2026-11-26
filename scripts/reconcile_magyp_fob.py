@@ -17,6 +17,12 @@ Exit codes:
     0  reconciled, or no circular published in the lookback window
     1  the two paths disagree
     2  the circular could not be fetched or parsed
+
+A day on the lookback walk whose reply could not be read (a non-JSON body,
+or transport exhaustion) is recorded in the report's ``failed_days`` and the
+walk continues (#527). If no day in the window resolves and any day failed,
+the run is ``fetch_failed`` (exit 2), never ``no_circular``: an unread day
+is not evidence that nothing was published.
 """
 
 from __future__ import annotations
@@ -37,11 +43,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config import MAGYP_FOB_LOOKBACK_DAYS  # noqa: E402
+from config import MAGYP_FOB_LOOKBACK_DAYS, MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES  # noqa: E402
 from fetchers.magyp_fob import _parse_posts  # noqa: E402
 from pipeline.results import ScraperShapeError  # noqa: E402
 from trust.magyp_fob import (  # noqa: E402
     MagypArtifactReplay,
+    MagypNonJsonReply,
     ReconciliationReport,
     dual_write_magyp_fob_replay,
     fetch_magyp_fob_artifact,
@@ -57,6 +64,11 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "reconciliation" / "magyp_fob.json"
 STATUS_RECONCILED = "reconciled"
 STATUS_DIVERGED = "diverged"
 STATUS_NO_CIRCULAR = "no_circular"
+STATUS_FETCH_FAILED = "fetch_failed"
+
+#: How much of an unreadable body the report keeps — enough to tell an
+#: error page from a maintenance banner, never a stored copy of the page.
+FIRST_BYTES = 64
 
 EXIT_OK = 0
 EXIT_DIVERGED = 1
@@ -73,6 +85,32 @@ class ResolvedCircular:
 
 
 @dataclass(frozen=True)
+class FailedDay:
+    """One day on the walk whose reply could not be read, and what it said."""
+
+    day: date
+    error: str
+    response_status: int | None
+    first_bytes: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "day": self.day.isoformat(),
+            "error": self.error,
+            "response_status": self.response_status,
+            "first_bytes": self.first_bytes,
+        }
+
+
+@dataclass(frozen=True)
+class Lookback:
+    """Where the walk landed, and every day it could not read on the way."""
+
+    circular: ResolvedCircular | None
+    failed_days: tuple[FailedDay, ...] = ()
+
+
+@dataclass(frozen=True)
 class ReconciliationRun:
     """What both paths made of one circular, and where they disagreed."""
 
@@ -83,11 +121,14 @@ class ReconciliationRun:
     trusted_rows: int
     report: ReconciliationReport | None
     checked_at: datetime
+    failed_days: tuple[FailedDay, ...] = ()
 
     @property
     def exit_code(self) -> int:
         if self.status == STATUS_DIVERGED:
             return EXIT_DIVERGED
+        if self.status == STATUS_FETCH_FAILED:
+            return EXIT_UNAVAILABLE
         return EXIT_OK
 
     def to_dict(self) -> dict[str, Any]:
@@ -98,6 +139,7 @@ class ReconciliationRun:
             "legacy_rows": self.legacy_rows,
             "trusted_rows": self.trusted_rows,
             "checked_at": self.checked_at.isoformat(),
+            "failed_days": [failed.to_dict() for failed in self.failed_days],
         }
         if self.report is not None:
             payload["reconciliation"] = {
@@ -115,7 +157,7 @@ def resolve_published_circular(
     today: date,
     lookback_days: int = MAGYP_FOB_LOOKBACK_DAYS,
     fetch_artifact=None,
-) -> ResolvedCircular | None:
+) -> Lookback:
     """Walk back to the most recent published circular, fetching it once.
 
     Both paths must see the *same* circular. The v1 fetcher resolves its own
@@ -124,19 +166,49 @@ def resolve_published_circular(
     independently a divergence could mean "different circular" rather than
     "different parse", which would make the report worthless. So the day is
     resolved once here and the fetched bytes are handed to both parsers.
+
+    A day whose reply cannot be read is recorded and skipped (#527): one
+    HTML page for a past day says nothing about whether the trusted parser
+    agrees with v1 on the circulars that did arrive. A schema change — valid
+    JSON in the wrong shape — still raises: that is never one bad reply.
     """
     fetch_artifact = fetch_artifact or fetch_magyp_fob_artifact
+    failed: list[FailedDay] = []
+    transport_failures = 0
     for offset in range(lookback_days + 1):
         day = date.fromordinal(today.toordinal() - offset)
         if day.weekday() >= 5:  # Sat/Sun never publish
             continue
-        replay = fetch_artifact(day)
-        posts = posts_from_replay(replay)
+        try:
+            replay = fetch_artifact(day)
+        except requests.RequestException as exc:
+            failed.append(FailedDay(day=day, error=str(exc), response_status=None, first_bytes=None))
+            log.warning("MAGyP FOB: %s could not be fetched — %s", day, exc)
+            transport_failures += 1
+            if transport_failures > MAGYP_RECONCILE_MAX_TRANSPORT_FAILURES:
+                log.error("MAGyP FOB: %d transport failures on the walk — host treated as down",
+                          transport_failures)
+                break
+            continue
+        try:
+            posts = posts_from_replay(replay)
+        except MagypNonJsonReply as exc:
+            failed.append(FailedDay(
+                day=day,
+                error=str(exc),
+                response_status=replay.artifact.response_status,
+                first_bytes=replay.content[:FIRST_BYTES].decode("utf-8", errors="replace"),
+            ))
+            log.warning(
+                "MAGyP FOB: %s answered HTTP %s with a non-JSON body %r",
+                day, replay.artifact.response_status, failed[-1].first_bytes,
+            )
+            continue
         if not posts:
             log.info("MAGyP FOB: no circular for %s (holiday?)", day)
             continue
-        return ResolvedCircular(day=day, replay=replay, posts=posts)
-    return None
+        return Lookback(ResolvedCircular(day=day, replay=replay, posts=posts), tuple(failed))
+    return Lookback(None, tuple(failed))
 
 
 def reconcile_once(
@@ -154,13 +226,35 @@ def reconcile_once(
     # and lets a test reach MAGyP for real.
     fetch_artifact = fetch_artifact or fetch_magyp_fob_artifact
 
+    failed_days: tuple[FailedDay, ...] = ()
     if day is not None:
+        # An explicit day is the operator asking about that one circular, so
+        # an unreadable reply still raises to main() and exits unavailable.
         replay = fetch_artifact(day)
         posts = posts_from_replay(replay)
         circular = ResolvedCircular(day=day, replay=replay, posts=posts) if posts else None
     else:
-        circular = resolve_published_circular(
+        lookback = resolve_published_circular(
             today=today or date.today(), fetch_artifact=fetch_artifact
+        )
+        circular, failed_days = lookback.circular, lookback.failed_days
+
+    if circular is None and failed_days:
+        # Not a holiday: at least one day could not be read, so "nothing was
+        # published" is unknown, and saying it would be a silent pass.
+        log.error(
+            "MAGyP FOB: no readable circular in the lookback window; %d day(s) failed",
+            len(failed_days),
+        )
+        return ReconciliationRun(
+            status=STATUS_FETCH_FAILED,
+            resolved_day=None,
+            content_hash=None,
+            legacy_rows=0,
+            trusted_rows=0,
+            report=None,
+            checked_at=checked_at,
+            failed_days=failed_days,
         )
 
     if circular is None:
@@ -197,6 +291,7 @@ def reconcile_once(
         trusted_rows=trusted_rows,
         report=report,
         checked_at=checked_at,
+        failed_days=failed_days,
     )
 
 
@@ -229,7 +324,12 @@ def write_report(run: ReconciliationRun, output: str | Path) -> Path:
 
 
 def _log_summary(run: ReconciliationRun) -> None:
-    if run.status == STATUS_NO_CIRCULAR:
+    for failed in run.failed_days:
+        log.warning(
+            "MAGyP FOB: skipped unreadable %s (HTTP %s): %s",
+            failed.day, failed.response_status, failed.error,
+        )
+    if run.status in (STATUS_NO_CIRCULAR, STATUS_FETCH_FAILED):
         return
     report = run.report
     assert report is not None  # every other status carries one

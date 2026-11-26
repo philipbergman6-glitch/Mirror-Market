@@ -90,7 +90,7 @@ def stub_fetchers(monkeypatch, tmp_path):
         "fetch_epa_rfs": empty_dict,
         "fetch_crush_data": empty_df,
         "fetch_export_inspections": FetchResult.empty(),
-        "fetch_conab_estimates": empty_df,
+        "fetch_conab_estimates": FetchResult.empty(),
         "fetch_safex": FetchResult.empty(),
         "fetch_agrural": FetchResult.empty(),
         "fetch_cepea": FetchResult.empty(),
@@ -390,3 +390,14 @@ def test_a_curve_repair_failure_reaches_the_run_summary(stub_fetchers, monkeypat
     assert repair["state"] == "failed"
     assert "RuntimeError" in repair["reason"] and "database is locked" in repair["reason"]
     assert repair["repaired"] == {}
+
+
+def test_layer15_failure_line_carries_the_fetcher_reason(stub_fetchers, monkeypatch, caplog):
+    """#613: Layer 15's own failure line names why, not just "no data"."""
+    main = stub_fetchers
+    reason = "TLS hostname mismatch: stub reason"
+    monkeypatch.setattr(main, "fetch_conab_estimates", mock.Mock(return_value=FetchResult.failed(reason)))
+    with caplog.at_level("ERROR", logger="__main__"), caplog.at_level("ERROR", logger="main"):
+        main.run()
+    lines = [r.getMessage() for r in caplog.records if "[Layer 15]" in r.getMessage()]
+    assert any(reason in line and "recording as failed" in line for line in lines), lines

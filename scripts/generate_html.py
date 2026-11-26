@@ -46,6 +46,7 @@ from config import (  # noqa: E402
     PRODUCTION_LAYERS,
     freshness_limit_days,
 )
+from pipeline.public_view import is_private, public_freshness  # noqa: E402
 from scripts.validate_players import validate_players  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -241,7 +242,16 @@ def _build_freshness_items() -> list[dict]:
         else {}
     )
     for layer, number, source, cadence, scope in PRODUCTION_LAYERS:
-        row = rows.get(layer)
+        # One rule for what the public may see (#659): a private layer is its
+        # status and nothing else, `skipped_unconfigured` when it has no row.
+        row = public_freshness(layer, rows.get(layer))
+        if is_private(layer):
+            assert row is not None
+            items.append({"name": layer, "number": number, "source": source,
+                          "cadence": cadence, "scope": scope, "status": row["status"],
+                          "age": PRIVATE_LAYER_LABEL, "coverage": None, "private": True,
+                          **_latency_fields(layer, None, now)})
+            continue
         if row is None:
             items.append({
                 "name": layer,
@@ -338,6 +348,21 @@ _HEALTH_CRITICAL_NOTE = "data health critical"
 _ON_SCHEDULE_STATUSES = ("fresh", "stale", "no-publication")
 _PARTIAL_STATUS = "partial"
 
+# The Layer Freshness table's age cell for a private layer (DESIGN.md
+# decision log, 2026-11-25): its dates are withheld, and the layer is not
+# late — CI is not configured to ask for it (#659).
+PRIVATE_LAYER_LABEL = "private · desk only"
+
+
+def _counted(item: dict) -> bool:
+    """Whether a freshness item is held against the masthead tally.
+
+    A disabled layer is switched off on purpose and a private layer is the
+    desk's, not the public edition's (#659): neither is on schedule or late,
+    so both leave the numerator and the denominator.
+    """
+    return item["status"] != "disabled" and not item.get("private")
+
 
 def _apply_health_criticals(freshness_items: list[dict], health: dict | None) -> dict:
     """Demote, in place, every layer a health critical is attributed to.
@@ -381,7 +406,7 @@ def _apply_health_criticals(freshness_items: list[dict], health: dict | None) ->
     # `stale` does get demoted — it counts as on-schedule (#179), so leaving
     # it would let a health-critical layer stay inside the masthead count.
     for item in freshness_items:
-        if item["name"] not in degraded or item["status"] == "disabled":
+        if item["name"] not in degraded or not _counted(item):
             continue
         if item["status"] in _ON_SCHEDULE_STATUSES:
             item["status"] = "degraded"
@@ -407,13 +432,13 @@ def _build_masthead(freshness_items: list[dict], now: datetime,
     the sub-day distinction survives, in the Layer Freshness table where
     `fresh` and `stale` are still separate badges.
 
-    Disabled layers are excluded from both numerator and denominator so
-    "N/M layers on schedule" only describes layers that are supposed to
-    run. Health criticals demote their writing layers first — see
+    Disabled and private layers are excluded from both numerator and
+    denominator (`_counted`) so "N/M layers on schedule" only describes
+    layers the public edition is supposed to run. Health criticals demote their writing layers first — see
     `_apply_health_criticals`.
     """
     health_summary = _apply_health_criticals(freshness_items, health)
-    active = [i for i in freshness_items if i["status"] != "disabled"]
+    active = [i for i in freshness_items if _counted(i)]
     on_schedule = [i for i in active if i["status"] in _ON_SCHEDULE_STATUSES]
     partial = [i for i in active if i["status"] == _PARTIAL_STATUS]
     late = [

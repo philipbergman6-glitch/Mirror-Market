@@ -313,6 +313,24 @@ index until it carries the candidate's own generation stamp (bounded, 240 s
 default) before grading. On timeout it grades whatever is served — the wait
 removes a false red, never a real one.
 
+**An unfinished viewport probe is its own failure (#617).** Headless Chrome
+exits 0 when a page fails to load or is served an error page. So from
+2026-11-20 the smoke reported probes that never ran the page's reporting script
+as `viewport overflow … (missing)` / `(pending)`, though the same pages measured
+`ok` on re-run. Only a measured `overflow:<px>` now says "viewport overflow".
+A failed load, a page with no marker, or a marker still `pending` at the
+1500 ms virtual-time budget says "viewport probe incomplete" and names the
+cause. An `ok` measured on an older edition than the candidate is "measured
+another edition". All of them still fail the run: a probe that did not
+measure is never a pass, and the budget is unchanged.
+
+**Both deploying workflows retry the Pages deploy.** `deploy-pages` lists the
+run's artifacts ~0.5 s after the upload finalizes, and the listing can lag
+("No artifacts named github-pages"): four Refresh Prices runs (11-17, 3× 11-24)
+went red on that alone. Refresh Prices now waits 30 s / 60 s and retries, as the
+daily build already did. It also names its artifact per run attempt, so a manual
+re-run no longer meets the first attempt's artifact ("Multiple artifacts").
+
 The forward curve is 43 of the 53 seconds. It stays in because a hedger reads
 the curve as a board price, and 53 s is still an order of magnitude under the
 daily build.
@@ -473,7 +491,9 @@ existing availability basket. The JSON includes the promoted run, render
 timestamp, individual source grades and observation stamps, plus sessions
 with no promotion or a late or incomplete basket. A ready session requires
 the full basket in one qualifying edition. Dates before the record starts
-are reported separately and excluded from the percentage.
+are reported separately and excluded from the percentage. This report is
+per promoted edition, so the reliability record's session rule (available
+if any run succeeded, #518) does not apply to it.
 
 This measures generation time for editions that eventually passed promotion.
 Public delivery time requires an independent URL observation before the
