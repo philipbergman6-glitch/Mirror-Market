@@ -196,7 +196,7 @@ def _date_confirmed(
 
 def _grade_figure(
     ctx: _Context, reading: page.FxBlockReading, figure: page.Figure, rates: ecb.ReferenceRates,
-    legs: list[page.Leg], *, date_confirmed: bool,
+    legs: list[tuple[page.Leg, str]], *, date_confirmed: bool,
 ) -> record.Record:
     shown = date.fromisoformat(reading.observation_date)
     allowance = ctx.tolerances.native_allowance(ctx.block, figure.decimals)
@@ -237,8 +237,8 @@ def _grade_figure(
     shift = _usd_per_foreign(figure, figure.value) - _usd_per_foreign(figure, source)
     impacts = [
         Impact(leg=leg.label, delta_usd_mt=leg.home_value * shift,
-               threshold_usd_mt=ctx.tolerances.threshold_usd_mt(ctx.block, leg.label))
-        for leg in legs
+               threshold_usd_mt=ctx.tolerances.threshold_usd_mt(ctx.block, product))
+        for leg, product in legs
     ]
     grade = grade_exact(delta, allowance, impacts)
     graded.update(
@@ -285,7 +285,8 @@ def check(
         tol = tolerances.load(tolerances_path)
         block = tol.for_series(STRATUM, SERIES)
         tol.native_allowance(block, 0)
-        tol.threshold_usd_mt(block, "")
+        for product in tolerances.PRODUCTS:  # the rate moves a leg of any product
+            tol.threshold_usd_mt(block, product)
     except (OSError, tolerances.ToleranceFileError) as exc:
         raise SetupError(f"tolerance file: {exc}") from exc
     if block["kind"] != "exact":
@@ -315,11 +316,15 @@ def check(
     if bad_units:
         return _not_checked(ctx, reading, figures, f"the {SERIES} block states units {bad_units}, not CNY/USD")
 
-    legs = [leg for leg in reading.legs if leg.home_unit == f"{FOREIGN}/MT"]
-    if not legs:
+    home_legs = [leg for leg in reading.legs if leg.home_unit == f"{FOREIGN}/MT"]
+    if not home_legs:
         return _not_checked(ctx, reading, figures,
                             f"no leg on the page shows a {FOREIGN}/MT print, so the USD/MT effect of a delta "
                             "cannot be computed")
+    try:
+        legs = [(leg, tol.product_of(leg.label)) for leg in home_legs]
+    except tolerances.UnknownProductError as exc:
+        return _not_checked(ctx, reading, figures, f"no economic threshold applies: {exc}")
     try:
         document = ecb_document if ecb_document is not None else ecb.fetch(ecb_url)
         rates = ecb.parse(document)

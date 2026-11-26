@@ -160,6 +160,19 @@ def test_hidden_and_script_text_is_never_read_as_the_displayed_number(tmp_path):
     assert {row["observation_date"] for row in rows} == {"2026-11-24"}
 
 
+def test_a_located_leg_whose_label_names_no_product_is_not_checked(tmp_path):
+    # Owner 2026-11-26 (#663): a threshold is per product, so a leg the verifier
+    # cannot classify is refused, never graded on the default.
+    edition = _edition(tmp_path, "0.1500", "6.66", "2026-11-24")
+    page_path = edition / "markets" / "dalian.html"
+    page_path.write_text(page_path.read_text(encoding="utf-8").replace("DCE Soybean Meal", "DCE Corn"),
+                         encoding="utf-8")
+    code, rows = _run(tmp_path, edition)
+    assert code == 1
+    assert {row["result"] for row in rows} == {"not checked"}
+    assert all("DCE Corn" in row["explanation"] for row in rows)
+
+
 # ---------------------------------------------------------------------------
 # Records are append-only and never re-graded
 # ---------------------------------------------------------------------------
@@ -212,13 +225,13 @@ def test_tolerance_file_v1_carries_the_owner_numbers():
     tol = tolerances.load()
     assert tol.version == 1
     # Owner #477 Q1: 0.5 USD/MT bean-scale and derived, 1.5 oil — in every block that grades.
-    for key in ("2", "6", "7", "8", "9"):
+    for key in ("1", "1b", "2", "3", "4", "5", "6", "7", "8", "9", "10"):
         block = tol.stratum(key)["threshold_usd_mt"]
         values = block.values() if isinstance(block, dict) else [block]
         assert {v for v in values if isinstance(v, (int, float))} <= {0.5, 1.5}, key
     fx = tol.for_series("6", "CNY/USD")
-    assert tol.threshold_usd_mt(fx, "DCE Soybean Oil") == 1.5
-    assert tol.threshold_usd_mt(fx, "DCE Soybean Meal") == 0.5
+    assert tol.threshold_usd_mt(fx, tol.product_of("DCE Soybean Oil")) == 1.5
+    assert tol.threshold_usd_mt(fx, tol.product_of("DCE Soybean Meal")) == 0.5
     assert tol.native_allowance(fx, 4) == pytest.approx(0.00005)
     cbot = tol.stratum("1")
     assert cbot["kind"] == "exact" and cbot["native_tolerance"]["value"] == 0

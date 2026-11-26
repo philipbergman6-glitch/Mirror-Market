@@ -7,8 +7,9 @@
     "kind exact: same definition; tolerance = the publisher's rounding plus our display and conversion rounding. kind band: different definition, compared inside a stated explained band. kind recompute: Tier 3 arithmetic from the displayed legs.",
     "A record stamps the tolerance_version it was graded under. Past records are never re-graded. Each change is a 'Tolerance changes' ledger row; loosening needs measured evidence, not a failing sample."
   ],
-  "economic_thresholds_note": "Each stratum's threshold_usd_mt is the one a grade reads. Owner, 2026-11-25 (#477 Q1): 0.5 USD/MT for bean-scale and every derived number, 1.5 for oil legs. Pre-buyer numbers, open to revision in the A12 session (#406).",
-  "oil_leg_label_contains": ["Oil"],
+  "economic_thresholds_note": "Each stratum's threshold_usd_mt is the one a grade reads: a number for every leg, or a table keyed by product (bean, meal, oil) with an optional default. A product the table neither names nor defaults is refused. Owner, 2026-11-25 (#477 Q1): 0.5 USD/MT for bean-scale and every derived number, 1.5 for oil legs. Pre-buyer numbers, open to revision in the A12 session (#406).",
+  "leg_products_note": "A leg's product is read from its displayed label: it must contain the words of exactly one product. A label naming none, or two, is refused (owner 2026-11-26, #663).",
+  "leg_products": {"bean": ["Soybeans", "Soybean No."], "meal": ["Meal"], "oil": ["Oil"]},
   "strata": {
     "1": {
       "name": "CBOT ZS/ZL/ZM named-contract closes",
@@ -17,7 +18,7 @@
       "verifier": "human, weekly",
       "verifying_publisher": "cme_bulletin",
       "native_tolerance": {"value": 0, "unit": "ticks", "plus": "display and conversion rounding"},
-      "threshold_usd_mt": {"ZS": 0.5, "ZM": 0.5, "ZL": 1.5},
+      "threshold_usd_mt": {"bean": 0.5, "meal": 0.5, "oil": 1.5},
       "band": null,
       "identity_checks": ["contract month", "session date"],
       "since": "2026-11-25",
@@ -82,11 +83,11 @@
       "verifier": "script",
       "verifying_publisher": "magyp",
       "native_tolerance": {"value": 0, "unit": "USD/MT", "plus": "none: whole dollars"},
-      "threshold_usd_mt": 0.5,
+      "threshold_usd_mt": {"default": 0.5, "oil": 1.5},
       "band": null,
       "identity_checks": ["window/band", "product position code", "date"],
-      "since": "2026-11-25",
-      "notes": "Whole dollars, so any non-zero delta is material. Republication lag is an availability fact (retry), not a band."
+      "since": "2026-11-26",
+      "notes": "Whole dollars, so any non-zero delta is a discrepancy; it is material above 0.5 USD/MT on beans and meal, 1.5 on the soybean-oil and sunflower-oil legs (owner 2026-11-26 on #663, #477 Q1; set before any stratum-4 record existed). Republication lag is an availability fact (retry), not a band."
     },
     "5": {
       "name": "US Gulf basis + local leg (AMS 3147)",
