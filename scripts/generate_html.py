@@ -471,7 +471,9 @@ def _price_age_and_board_session(now: datetime) -> dict[str, str | None]:
 
     ``price_age`` is the worst of the board and FX legs, not an average: an
     average would let a current FX print cover for a board leg that has not
-    moved in three days, which is the one thing a reader must not miss.
+    moved in three days, which is the one thing a reader must not miss. It is a
+    CBOT-session age; ICE CT/SB rows are one weekday older (24 h; 72 h Tue)
+    and carry their own dates (B48 #626; follow-up #669).
 
     ``board_session`` is the CBOT board's session date (owner decision on
     #622): an age alone does not say *which* close a buyer is reading, and an

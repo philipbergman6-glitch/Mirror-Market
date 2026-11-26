@@ -30,10 +30,10 @@ from config import (
 )
 from fetchers._backoff import retry_sleep
 from fetchers._settlement import (
-    EXCHANGE_SESSION,
     FX_SESSION,
     SessionRule,
     drop_unsettled_session,
+    exchange_rule_for,
 )
 from fetchers.ecb_fx import EcbShapeError, download_ecb_cross
 
@@ -118,7 +118,7 @@ def download_bars(
 def fetch_one(
     ticker: str,
     period: str = DEFAULT_HISTORY_PERIOD,
-    rule: SessionRule = EXCHANGE_SESSION,
+    rule: SessionRule | None = None,
     max_retries: int = MAX_RETRIES,
 ) -> pd.DataFrame:
     """
@@ -136,10 +136,12 @@ def fetch_one(
         Yahoo Finance ticker symbol, e.g. "ZS=F"
     period : str
         How far back to look — "1y", "2y", "5y", "max", etc.
-    rule : SessionRule
+    rule : SessionRule, optional
         Which venue clock decides whether the newest bar has finished.
-        Defaults to ``EXCHANGE_SESSION`` (the futures bar is final at 00:00
-        New York on D+1, B47 #622); FX pairs must pass
+        Defaults to the ticker's own futures venue rule
+        (``fetchers._settlement.exchange_rule_for``): 00:00 New York on D+1
+        (B47 #622), or for ICE US softs 00:00 New York ending the next
+        weekday (B48 #626). FX pairs must pass
         ``fetchers._settlement.FX_SESSION`` — spot FX has no settlement and
         judging it by the exchange clock stores an open bar as a close.
 
@@ -150,7 +152,9 @@ def fetch_one(
         Index: Date
     """
     return drop_unsettled_session(
-        download_bars(ticker, period=period, max_retries=max_retries), label=ticker, rule=rule
+        download_bars(ticker, period=period, max_retries=max_retries),
+        label=ticker,
+        rule=rule or exchange_rule_for(ticker),
     )
 
 

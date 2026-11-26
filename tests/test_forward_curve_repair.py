@@ -186,3 +186,21 @@ def test_a_final_bar_cannot_carry_a_null_close(patched_db) -> None:
     is ``NOT NULL`` (``pipeline/schema.py``), so such a bar is never stored."""
     with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
         _seed(str(patched_db), [], [_bar_row("ZLF27.CBT", "2026-11-24", None, "2026-11-26")])  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "fetched,repaired",
+    [
+        ("2026-08-23", {}),  # Sun, D+2: case E1 of #626 — Yahoo still served the pre-final 88.28
+        ("2026-08-24", {}),  # Mon: still before 00:00 New York ending the next weekday
+        ("2026-08-25", {}),  # Tue UTC date starts 20:00 EDT Mon — the cutoff is Tue 04:00 UTC
+        ("2026-08-26", {"Cotton": 1}),  # Wed: every fetch that day is past the ICE cutoff
+    ],
+)
+def test_an_ice_bar_is_provably_final_only_under_the_ice_rule(patched_db, fetched, repaired) -> None:
+    """B48 (#626): the repair's proof is the guard's own venue rule. A Fri ICE
+    bar fetched on the Sunday passes "fetched >= D+2" but was revised Monday."""
+    _seed(str(patched_db),
+          [_curve_row("2026-08-21", "CTZ26.NYB", 88.10, observed="2026-08-21", commodity="Cotton")],
+          [_bar_row("CTZ26.NYB", "2026-08-21", 88.35, fetched, commodity="Cotton")])
+    assert store.repair_forward_curve(today=date(2026, 8, 30)) == repaired
