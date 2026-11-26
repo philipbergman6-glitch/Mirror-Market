@@ -16,8 +16,12 @@ Key concepts for learning:
 
 import json
 import logging
+import os
+import re
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
@@ -27,8 +31,11 @@ from config import (
     GROWING_REGIONS,
     MAX_RETRIES,
     OPENMETEO_BASIS,
+    OPENMETEO_FORECAST_PATH,
     OPENMETEO_FORECAST_URL,
     OPENMETEO_GRID_MATCH_MAX_DEG,
+    OPENMETEO_PROXY_TOKEN_ENV,
+    OPENMETEO_PROXY_URL_ENV,
     REQUEST_TIMEOUT,
     WEATHER_DAILY_VARS,
     WEATHER_SECOND_PASS_DELAY_S,
@@ -37,6 +44,85 @@ from fetchers._backoff import retry_sleep
 from pipeline.results import UpstreamRateLimited
 
 logger = logging.getLogger(__name__)
+
+# The Worker contract (infra/openmeteo-worker/src/worker.js): the shared
+# secret travels in this header, and the Worker marks its *own* refusals
+# with the second one so they can never be read as Open-Meteo's.
+PROXY_TOKEN_HEADER = "X-Proxy-Token"
+PROXY_ERROR_HEADER = "X-Mirror-Proxy-Error"
+# Stamped by the Worker on every answer it relays from Open-Meteo. Through the
+# Worker, a response without it came from Cloudflare (or whatever answered the
+# hostname), not from Open-Meteo — so its 429 is not Open-Meteo's quota and
+# its 200 is not weather (#658 review, 2026-11-25).
+PROXY_UPSTREAM_HEADER = "X-Mirror-Proxy-Upstream"
+# The paid customer API's monthly-allowance refusal: HTTP 403 with this reason
+# (open-meteo docs/api-rate-limiting.md @ aeab72e, L134: "Review your usage and
+# subscription rather than repeatedly retrying that error").
+_OVER_QUOTA_403 = "over quota"
+# What a token may be: visible ASCII, no space (the wizard's is 64 hex). Any
+# other byte makes ``requests`` raise ``InvalidHeader``, whose message quotes
+# the value — a transient-looking error that would log the token (#667 review).
+_TOKEN_RE = re.compile(r"[!-~]+")
+
+
+class OpenMeteoProxyError(RuntimeError):
+    """The Worker route is misconfigured — half-set, not https, or refused by the Worker.
+
+    A configuration error, not weather: raised, never retried, and never
+    answered by quietly going direct, which would put the layer back on the
+    shared quota while the config claims otherwise (invariant 1). The
+    message never carries the token.
+    """
+
+
+@dataclass(frozen=True)
+class _Route:
+    """Where the one batched request goes, and what its quota is."""
+
+    url: str
+    label: str
+    quota: str
+    via_worker: bool
+    headers: dict[str, str] = field(default_factory=dict, repr=False)
+
+
+def _route() -> _Route:
+    """Read the proxy configuration now (not at import), both or neither (#637)."""
+    base = (os.getenv(OPENMETEO_PROXY_URL_ENV) or "").strip()
+    token = (os.getenv(OPENMETEO_PROXY_TOKEN_ENV) or "").strip()
+    if not base and not token:
+        return _Route(
+            url=OPENMETEO_FORECAST_URL,
+            label="direct to api.open-meteo.com (free quota shared with every tenant of this IP)",
+            quota="the free quota is shared per outgoing IP, and GitHub runners share IPs",
+            via_worker=False,
+        )
+    if not (base and token):
+        missing = OPENMETEO_PROXY_TOKEN_ENV if base else OPENMETEO_PROXY_URL_ENV
+        raise OpenMeteoProxyError(
+            f"Open-Meteo Worker route needs both {OPENMETEO_PROXY_URL_ENV} and "
+            f"{OPENMETEO_PROXY_TOKEN_ENV}; {missing} is unset. Set both, or unset "
+            "both to go direct on the shared quota."
+        )
+    if not _TOKEN_RE.fullmatch(token):
+        raise OpenMeteoProxyError(
+            f"{OPENMETEO_PROXY_TOKEN_ENV} holds a space, control or non-ASCII "
+            "character, so it cannot travel in a header; re-run "
+            "scripts/setup_openmeteo_worker.sh to generate one (value not shown)"
+        )
+    parts = urlsplit(base)
+    if parts.scheme != "https" or not parts.hostname:
+        raise OpenMeteoProxyError(
+            f"{OPENMETEO_PROXY_URL_ENV} must be an https:// URL (got scheme "
+            f"{parts.scheme or '(none)'!r}); the token is never sent in clear"
+        )
+    return _Route(
+        url=base.rstrip("/") + OPENMETEO_FORECAST_PATH,
+        label=f"via Worker {parts.hostname} (this Worker's own Open-Meteo quota)",
+        quota=f"the quota is Worker {parts.hostname}'s own, not the runner IP's",
+        via_worker=True,
+        headers={PROXY_TOKEN_HEADER: token},
+    )
 
 
 def fetch_region_weather(
@@ -102,6 +188,7 @@ def _fetch_batch(
     if now.tzinfo is None:
         raise ValueError("fetch_region_weather: `now` must be timezone-aware")
 
+    route = _route()
     names = list(regions)
     params: dict[str, str | float | int] = {
         "latitude":      ",".join(str(regions[n]["lat"]) for n in names),
@@ -115,14 +202,47 @@ def _fetch_batch(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info(
-                "Requesting weather for %d region(s) in one request (attempt %d) ...",
-                len(names), attempt,
+                "Requesting weather for %d region(s) in one request (attempt %d), %s ...",
+                len(names), attempt, route.label,
             )
             resp = requests.get(
-                OPENMETEO_FORECAST_URL,
+                route.url,
                 params=params,
                 timeout=REQUEST_TIMEOUT,
+                headers=route.headers,
+                # requests keeps a custom header across a redirect (it strips
+                # only Authorization), so the token route never follows one.
+                allow_redirects=not route.via_worker,
             )
+
+            if route.via_worker and 300 <= resp.status_code < 400:
+                raise OpenMeteoProxyError(
+                    f"the Open-Meteo Worker route answered HTTP {resp.status_code} "
+                    f"(a redirect); not followed, so the token goes nowhere but "
+                    f"{OPENMETEO_PROXY_URL_ENV} — check it is the Worker's own URL"
+                )
+
+            proxy_error = resp.headers.get(PROXY_ERROR_HEADER) if route.via_worker else None
+            if proxy_error:
+                raise OpenMeteoProxyError(
+                    f"the Open-Meteo Worker refused the request itself: HTTP "
+                    f"{resp.status_code} {proxy_error} — check {OPENMETEO_PROXY_URL_ENV} "
+                    f"and that {OPENMETEO_PROXY_TOKEN_ENV} matches the Worker's PROXY_TOKEN secret"
+                )
+
+            relayed = not route.via_worker or bool(resp.headers.get(PROXY_UPSTREAM_HEADER))
+            if not relayed and resp.status_code == 429:
+                raise UpstreamRateLimited("weather", _cloudflare_reason(resp))
+            if not relayed and resp.status_code == 200:
+                raise OpenMeteoProxyError(
+                    f"HTTP 200 not relayed by the Worker (no {PROXY_UPSTREAM_HEADER}): "
+                    f"{_page_title(resp)} — check {OPENMETEO_PROXY_URL_ENV} points at the Worker"
+                )
+
+            if resp.status_code == 403 and relayed:
+                upstream = _upstream_reason(resp)
+                if _OVER_QUOTA_403 in upstream.lower():
+                    raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream, route))
 
             if resp.status_code == 429:
                 upstream = _upstream_reason(resp)
@@ -134,7 +254,7 @@ def _fetch_batch(
                         retry_sleep(attempt)
                         continue
                     break
-                raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream))
+                raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream, route))
 
             if resp.status_code != 200:
                 logger.warning("HTTP %d: %s", resp.status_code, resp.text[:200])
@@ -266,18 +386,36 @@ def _is_concurrency_rejection(reason: str) -> bool:
     return "concurrent" in reason.lower()
 
 
-def _rate_limit_reason(resp: requests.Response, upstream: str) -> str:
-    """The `rate_limited` reason a reader sees: what, until when, and why it is shared."""
-    parts = [f"Open-Meteo HTTP 429: {upstream}"]
+def _page_title(resp: requests.Response) -> str:
+    """A non-Open-Meteo page, named by its <title> (or first text), tags stripped."""
+    text = resp.text or ""
+    match = re.search(r"<title[^>]*>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+    raw = match.group(1) if match else re.sub(r"<[^>]+>", " ", text)
+    return " ".join(raw.split())[:200] or "(empty body)"
+
+
+def _cloudflare_reason(resp: requests.Response) -> str:
+    """A 429 Cloudflare served in the Worker's place — its limit, not Open-Meteo's."""
+    return (
+        f"Cloudflare HTTP 429: {_page_title(resp)} — answered by Cloudflare, not "
+        "relayed from Open-Meteo: the Worker's own Cloudflare limit (Workers Free "
+        "100,000 requests/day, reset 00:00 UTC), not the Open-Meteo quota"
+    )
+
+
+def _rate_limit_reason(resp: requests.Response, upstream: str, route: _Route) -> str:
+    """The `rate_limited` reason a reader sees: what, until when, and whose quota."""
+    parts = [f"Open-Meteo HTTP {resp.status_code}: {upstream}"]
     retry_after = resp.headers.get("Retry-After")
     if retry_after:
         parts.append(f"Retry-After {retry_after} s")
     window = resp.headers.get("X-RateLimit-Window")
     if window:
         parts.append(f"window {window} s")
-    parts.append(
-        "the free quota is shared per outgoing IP, and GitHub runners share IPs"
-    )
+    if resp.status_code == 403:
+        parts.append("the paid API key's monthly allowance is used up; review usage and subscription")
+    else:
+        parts.append(route.quota)
     return " — ".join(parts)
 
 

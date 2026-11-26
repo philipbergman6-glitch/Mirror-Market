@@ -268,6 +268,13 @@ jobs:
       # generation, 3 promotion contract, 4 regression.
       - name: Fast refresh and gate the candidate
         id: refresh
+        env:
+          # No scheduled slot fetches weather; a dispatch with `layers:
+          # weather` does, and must take the daily build's route — our own
+          # Open-Meteo Worker quota, not the runner IP's shared one (#637).
+          # Both or neither; unset goes direct. scripts/setup_openmeteo_worker.sh.
+          OPENMETEO_PROXY_URL: ${{ secrets.OPENMETEO_PROXY_URL }}
+          OPENMETEO_PROXY_TOKEN: ${{ secrets.OPENMETEO_PROXY_TOKEN }}
         run: |
           EXTRA=()
           if [[ -n "${{ needs.slot.outputs.layers }}" ]]; then

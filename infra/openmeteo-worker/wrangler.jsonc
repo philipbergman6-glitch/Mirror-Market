@@ -1,0 +1,11 @@
+// Deployed by scripts/setup_openmeteo_worker.sh (#637) — by the owner, never
+// by an agent. The one secret, PROXY_TOKEN, is set with
+// `wrangler secret put PROXY_TOKEN` and never lives in this file.
+{
+  "name": "mirror-market-openmeteo",
+  "main": "src/worker.js",
+  // >= 2024-11-11 is required for fetch(..., { cache: "no-store" }).
+  "compatibility_date": "2025-11-01",
+  // Served at https://mirror-market-openmeteo.<account-subdomain>.workers.dev.
+  "workers_dev": true
+}

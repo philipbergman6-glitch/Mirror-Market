@@ -60,7 +60,7 @@ def http(monkeypatch):
     calls: list[dict] = []
     queue: list = []
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None, allow_redirects=True):
         calls.append({"url": url, "params": params})
         item = queue.pop(0) if len(queue) > 1 else queue[0]
         if isinstance(item, Exception):

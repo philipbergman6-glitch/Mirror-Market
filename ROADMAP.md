@@ -85,6 +85,34 @@ seam open for it, and nothing should be.
   `pricing.semantics.PROVEN_SETTLEMENT_SOURCES` is empty and invariant 3 keeps
   it that way.
 
+## Pre-sale replacements
+
+Things that are free today only because nothing is sold. Each one is swapped out
+when the trigger above fires, *before* the first paid edition. None is
+speculative work to start now. Licensing gates publishing for money, not
+building (invariant 9; A18).
+
+### Open-Meteo customer key (Layer 5 weather)
+
+Since #637 (owner decision 2026-11-25), Layer 5 goes through our own free
+Cloudflare Worker (`infra/openmeteo-worker/`). Open-Meteo counts that Worker's
+quota separately from the GitHub runner IP's shared one. The Worker fixes the
+quota. It does not fix the licence: Open-Meteo's free API is **non-commercial
+only**, and its terms name "Commercial products or promotional activities" as
+commercial use (<https://open-meteo.com/en/terms>, read 2026-11-25).
+
+Before selling, take these three steps:
+
+1. Buy an Open-Meteo API subscription. As listed 2026-11-25 the cheapest is
+   API Standard: €29/month for 1M calls/month. We use about 24 weighted calls
+   per run.
+2. Point the fetcher at `customer-api.open-meteo.com`, with the same syntax
+   plus an `apikey`.
+3. Retire the Worker, along with the `OPENMETEO_PROXY_*` secrets.
+
+The earlier licence ticket is #366, which was closed under the A18 build-first
+stance.
+
 ## Prior benchmark research
 
 `research/2026-08-14-soy-trader-bloomberg-replacement-benchmark.md` costs the
