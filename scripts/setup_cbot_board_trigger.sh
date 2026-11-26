@@ -279,8 +279,17 @@ PY
 # main_has_board_slot — true once the PR adding the `slot` input is on main.
 # Before that GitHub answers every dispatch with 422 (unexpected input).
 main_has_board_slot() {
-  gh api "repos/$REPO/contents/.github/workflows/$WORKFLOW?ref=main" --jq .content 2>/dev/null \
-    | base64 --decode 2>/dev/null | grep -qE '^      slot:$'
+  # Decode into a variable first, then match. Piped straight into `grep -q`
+  # under `set -o pipefail`, grep exits on the first match, base64 dies of
+  # SIGPIPE (exit 141) mid-write, and the check reads "no slot input" on a
+  # main that has it — observed on macOS 2026-11-26.
+  local workflow
+  workflow=$(gh api "repos/$REPO/contents/.github/workflows/$WORKFLOW?ref=main" --jq .content \
+    | base64 --decode) || {
+    warn "could not read main's $WORKFLOW from GitHub (gh api / base64 failed above)"
+    return 1
+  }
+  grep -qE '^      slot:$' <<<"$workflow"
 }
 
 # in_on_time_window — a test dispatch now should end green: Tue–Sat New York,
