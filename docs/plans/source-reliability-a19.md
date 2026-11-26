@@ -91,9 +91,10 @@ The computation is one function over `layer_runs.csv` (A9 §4's rule: computed o
 
 | Figure | Definition |
 |---|---|
+| Sessions | The layer's own denominator: the window's sessions from the layer's first row in the whole record (all of them for a layer with no row at all). Since 2026-11-25 (#638, below) |
 | Logged sessions | Sessions in the window with at least one row for the layer |
-| Availability % | Sessions on which **any** run graded `success`, `usable_partial` or `no_publication` ÷ 30. `stale`, `failed`, `incomplete`, `disabled`, `skipped_unconfigured`, `not_run` and `no_run` count as unavailable. Until 2026-11-25 this was the session's **last** run (see "Rule change, 2026-11-25" below) |
-| First-run availability % | The same, on each session's **first** run. Shows how much the retry is carrying |
+| Availability % | Sessions on which **any** run graded `success`, `usable_partial` or `no_publication` ÷ the layer's own sessions (÷ 30 until 2026-11-25, see "Rule change, 2026-11-25: availability from the layer's first row"). `stale`, `failed`, `incomplete`, `disabled`, `skipped_unconfigured`, `not_run` and `no_run` count as unavailable. Until 2026-11-25 this was the session's **last** run (see "Rule change, 2026-11-25" below) |
+| First-run availability % | The same, on each session's **first** run, over the same denominator. Shows how much the retry is carrying |
 | Failed runs | Runs that asked the source and did not deliver (`failed`, `stale`, `incomplete`, `not_run`), and how many of them fell on a session that is still available. Keeps run-level failures visible under the any-success rule |
 | Longest unavailable streak | Consecutive sessions unavailable |
 | Median recovery | Median length, in sessions, of the closed unavailable streaks |
@@ -107,8 +108,8 @@ Non-basket layers get the same figures, reported, never gating. Edition level: s
 | # | Threshold | Why this number |
 |---|---|---|
 | T1 | The record is **continuous**: 30 consecutive weekday sessions logged by the store, with **no gap of more than 2 sessions without a run**, else the window restarts at the first logged session after the gap and T1 waits for 30 weekday sessions from there. Shorter gaps stay in the window as `no_run` and count against T2 | A record with holes is not a record. The 2026-09-08→09-18 deploy outage would have reset it |
-| T2 | Every basket layer **≥ 90 %** available (≤ 3 of 30 sessions down) | One bad session a fortnight on a decision leg, retries included. Today's replay sits at 93–100 % for the basket, so this is a floor to hold, not a stretch |
-| T3 | Every basket layer's **longest streak ≤ 5 sessions**, and every streak of ≥ 3 sessions raised a dead-source alert (§4) | Five sessions is one desk week. Past that a buyer has priced a week of cargoes without the leg. The alert clause tests that the dead-source rule fires, not just exists |
+| T2 | Every basket layer **≥ 90 %** available (≤ 3 of 30 sessions down), over **30 sessions of its own** (session floor, #638) | One bad session a fortnight on a decision leg, retries included. Today's replay sits at 93–100 % for the basket, so this is a floor to hold, not a stretch |
+| T3 | Every basket layer's **longest streak ≤ 5 sessions**, over **30 sessions of its own** (session floor, #638), and every streak of ≥ 3 sessions raised a dead-source alert (§4) | Five sessions is one desk week. Past that a buyer has priced a week of cargoes without the leg. The alert clause tests that the dead-source rule fires, not just exists |
 | T4 | **Surfaced within one run = 100 %**, all 39 layers | Invariant 1. One unsurfaced failure is a silent failure |
 
 No paging SLO. Nothing here wakes anyone or reddens a run (A9 bar).
@@ -121,6 +122,16 @@ No paging SLO. Nothing here wakes anyone or reddens a run (A9 bar).
 - The dead-source relay (§4) reads the same session rule. A session whose every run failed still extends a streak; one with any success breaks it, because the source answered. A session counts as "only skipped" (never dead, Layer 37 on CI) only when every run on it was `skipped_unconfigured`, not just its newest.
 - The desk cutoff report (`decision_cutoff_report`) asks a different question, whether the whole basket was in one promoted edition by the cutoff, and is per edition, so it is unchanged.
 - **What would reverse this:** evidence that a failed re-run changes what is rendered, i.e. a number withheld, not just a status mark. Then last-run-wins returns. Not yet measured: the forgiven re-runs did promote editions (44526078466's `rendered_at` is 2026-11-19 12:55 UTC), but `layer_runs` cannot say whether those editions withheld the number.
+
+### Rule change, 2026-11-25: availability from the layer's first row, with a session floor
+
+**Owner decision on [#638](https://github.com/philipbergman6-glitch/Mirror-Market/issues/638), 2026-11-25** (adopting an independent advisory review). #649 had already started a layer's *streaks* at its own first row (`pipeline.reliability.streak_sessions`); availability % still divided by the whole window, so a layer that joined mid-window carried the weekdays before the roster had it as `no_run` misses. At the 2026-11-10 cut afex read 11.1 % (2 of 18), 14 of its 16 misses from before it existed.
+
+- Availability % and first-run availability % now divide by the layer's own `sessions`: the window from the layer's first row in the whole record (never a window's first row for it). afex at 11-10: 50.0 % (2 of 4). This is §1's "the window restarts for any layer that joined", applied to the percentages.
+- A layer with **no row at all** keeps the whole window, so it reads 0 %, never blank: silence over the whole record is the layer going dark, not a later start (the same rule `streak_sessions` applies to streaks).
+- **Session floor.** T2 and T3 are `met: false` while any basket layer has fewer than `RELIABILITY_WINDOW_SESSIONS` (30) sessions of its own, and say so (`reason` names each short layer, `floor_sessions` the target). Without it a basket layer that joined two sessions ago reads 2 of 2 = 100 % with no streak and would pass both. The floor is the target window, not the cut's length, so a restarted window holds T2 and T3 back too.
+- **This is the third rule change this week that can only raise a figure** (any-success, streak start, now availability start). Each is right on its own merits; the floor is what stops this one reading as flattering, and it lowers a verdict today: on the 2026-11-24 cut (window restarted at 11-13, 8 of 30 sessions) T2 and T3 went from met to not met. Replayed over every session cut 2026-10-16→11-24: no basket figure changes; afex's availability and first-run % change on the 11-05→11-10 cuts only; T2 and/or T3 change from met to not met on every cut that has figures (the two `restarting` cuts, 11-11 and 11-12, have none), because no window in the record has yet reached 30 sessions.
+- **What would reverse this:** a buyer or auditor who wants one fixed window for every layer. Then the whole-window figure returns as primary, with the own-record figure beside it.
 
 ### Preliminary record (git replay, not the A11 evidence)
 
