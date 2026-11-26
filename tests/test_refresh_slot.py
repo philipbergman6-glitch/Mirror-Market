@@ -348,3 +348,19 @@ def test_the_wizard_schedules_the_fire_time_the_slot_expects(wizard):
     body = json.loads(var("DISPATCH_BODY"))
     assert body == {"ref": "main", "inputs": {"slot": rs.BOARD_SLOT}}
     assert var("WORKFLOW") == rs.WORKFLOW
+
+
+@pytest.mark.parametrize("wizard", ["setup_cbot_board_trigger.sh", "check_cbot_board_trigger.sh"])
+def test_the_preflight_never_pipes_a_stream_into_grep_q(wizard):
+    """Under ``set -o pipefail``, ``base64 --decode | grep -q`` fails with
+    SIGPIPE (141) when grep exits on its first match before base64 has
+    finished writing. The preflight then reported "main has no 'slot' input"
+    on a main that had it (owner's Mac, 2026-11-26). Decode first, then match."""
+    import re
+
+    text = (ROOT / "scripts" / wizard).read_text()
+    assert "set -euo pipefail" in text
+    body = re.search(r"^main_has_board_slot\(\) \{\n(.*?)^\}", text, re.M | re.S)
+    assert body, f"{wizard} has no main_has_board_slot"
+    assert not re.search(r"\|\s*grep -q", body.group(1)), body.group(1)
+    assert "<<<" in body.group(1)
