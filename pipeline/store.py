@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -1155,17 +1155,14 @@ def repair_forward_curve(
     and volume onto the leg of the same ticker and the same session — the
     value the leg always claimed to be — and touches nothing else.
 
-    A bar is used only when it is **provably final**: its own ``fetched_date``
-    is at least two days after its session, so it was read after 00:00 UTC on
-    D+2, which is after New York midnight on D+1 in both seasons. A bar fetched
-    the day after its label may predate that midnight and proves nothing.
-    "Provably final" is the guard's rule, and the rule is measured sufficient
-    for CBOT and CME only. For ICE cotton and sugar it is necessary but not
-    sufficient: deferred-month values changed up to 54 h after New York
-    midnight (#626). This repair can therefore copy an ICE value that later
-    changes. It converges anyway: ``contract_bars`` is re-fetched every daily
-    run and the lookback revisits the snapshot, so the next run copies the
-    later value.
+    A bar is used only when it is **provably final**: the settlement guard's
+    rule for the ticker's venue (``fetchers._settlement.exchange_rule_for``)
+    had finished it by 00:00 UTC on its own ``fetched_date``, the earliest
+    instant that read can have been. For CBOT and CME that is "fetched at
+    least two days after the session" — 00:00 UTC on D+2 is after New York
+    midnight on D+1 in both seasons. For ICE US cotton and sugar it is later,
+    New York midnight ending the next weekday (B48 #626): a Friday ICE bar
+    fetched on the Sunday passes the CBOT test and was revised on the Monday.
 
     A snapshot (one commodity, one ``fetched_date``) is repaired whole or not
     at all (invariant 8). Repairing some legs and not others would leave an
@@ -1191,8 +1188,7 @@ def repair_forward_curve(
             SELECT fc.commodity, fc.fetched_date, fc.contract_month, fc.ticker,
                    fc.observation_date, fc.close, fc.volume,
                    cb.Close, COALESCE(cb.Volume, fc.volume),
-                   cb.Date IS NOT NULL
-                       AND julianday(cb.fetched_date) >= julianday(cb.Date) + 2 AS final
+                   cb.Date, cb.fetched_date
               FROM forward_curve fc
               LEFT JOIN contract_bars cb
                 ON cb.ticker = fc.ticker AND cb.Date = fc.observation_date
@@ -1203,7 +1199,10 @@ def repair_forward_curve(
         ).fetchall()
         snapshots: dict[tuple[str, str], list[tuple]] = {}
         for leg in legs:
-            snapshots.setdefault((leg[0], leg[1]), []).append(leg)
+            # leg[9] becomes "the bar is provably final" — the guard's own
+            # venue rule, never a second statement of it here.
+            final = leg[9] is not None and _bar_provably_final(leg[3], leg[9], leg[10])
+            snapshots.setdefault((leg[0], leg[1]), []).append((*leg[:9], final))
 
         repaired: dict[str, int] = {}
         for (commodity, fetched), snapshot in snapshots.items():
@@ -1250,6 +1249,21 @@ def repair_forward_curve(
                 ", ".join(f"{leg[3]} {leg[5]} -> {leg[7]}" for leg in changed),
             )
     return repaired
+
+
+def _bar_provably_final(ticker: str, session: str, fetched_date: str) -> bool:
+    """Was this ``contract_bars`` row read after its venue finished the bar?
+
+    ``fetched_date`` is a UTC date, so the earliest the read can have been is
+    00:00 UTC that day; the bar is provably final only if the settlement
+    guard's rule for the ticker's venue finished it by then. For CBOT/CME
+    that is "fetched at least two days after the session"; for ICE US it is
+    later (B48 #626).
+    """
+    from fetchers._settlement import exchange_rule_for
+
+    read_no_earlier_than = datetime.combine(date.fromisoformat(fetched_date), time(0), tzinfo=timezone.utc)
+    return exchange_rule_for(ticker).final_at(date.fromisoformat(session)) <= read_no_earlier_than
 
 
 def save_contract_bars(commodity: str, df: pd.DataFrame):
