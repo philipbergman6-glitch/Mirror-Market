@@ -59,6 +59,10 @@ PROXY_UPSTREAM_HEADER = "X-Mirror-Proxy-Upstream"
 # (open-meteo docs/api-rate-limiting.md @ aeab72e, L134: "Review your usage and
 # subscription rather than repeatedly retrying that error").
 _OVER_QUOTA_403 = "over quota"
+# What a token may be: visible ASCII, no space (the wizard's is 64 hex). Any
+# other byte makes ``requests`` raise ``InvalidHeader``, whose message quotes
+# the value — a transient-looking error that would log the token (#667 review).
+_TOKEN_RE = re.compile(r"[!-~]+")
 
 
 class OpenMeteoProxyError(RuntimeError):
@@ -99,6 +103,12 @@ def _route() -> _Route:
             f"Open-Meteo Worker route needs both {OPENMETEO_PROXY_URL_ENV} and "
             f"{OPENMETEO_PROXY_TOKEN_ENV}; {missing} is unset. Set both, or unset "
             "both to go direct on the shared quota."
+        )
+    if not _TOKEN_RE.fullmatch(token):
+        raise OpenMeteoProxyError(
+            f"{OPENMETEO_PROXY_TOKEN_ENV} holds a space, control or non-ASCII "
+            "character, so it cannot travel in a header; re-run "
+            "scripts/setup_openmeteo_worker.sh to generate one (value not shown)"
         )
     parts = urlsplit(base)
     if parts.scheme != "https" or not parts.hostname:
@@ -200,7 +210,17 @@ def _fetch_batch(
                 params=params,
                 timeout=REQUEST_TIMEOUT,
                 headers=route.headers,
+                # requests keeps a custom header across a redirect (it strips
+                # only Authorization), so the token route never follows one.
+                allow_redirects=not route.via_worker,
             )
+
+            if route.via_worker and 300 <= resp.status_code < 400:
+                raise OpenMeteoProxyError(
+                    f"the Open-Meteo Worker route answered HTTP {resp.status_code} "
+                    f"(a redirect); not followed, so the token goes nowhere but "
+                    f"{OPENMETEO_PROXY_URL_ENV} — check it is the Worker's own URL"
+                )
 
             proxy_error = resp.headers.get(PROXY_ERROR_HEADER) if route.via_worker else None
             if proxy_error:

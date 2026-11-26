@@ -81,8 +81,11 @@ def http(monkeypatch):
     calls: list[dict] = []
     queue: list = []
 
-    def fake_get(url, params=None, timeout=None, headers=None):
-        calls.append({"url": url, "params": params, "headers": dict(headers or {})})
+    def fake_get(url, params=None, timeout=None, headers=None, allow_redirects=True):
+        calls.append({
+            "url": url, "params": params, "headers": dict(headers or {}),
+            "allow_redirects": allow_redirects,
+        })
         item = queue.pop(0) if len(queue) > 1 else queue[0]
         if isinstance(item, Exception):
             raise item
@@ -332,3 +335,64 @@ def test_any_other_403_is_not_a_quota(http, no_sleep):
 
     assert all(df.empty for df in results.values())
     assert len(calls) == 6  # 3 attempts × 2 passes, as any non-quota refusal
+
+
+# ── the token never leaves for anywhere but the Worker (#667 review) ─────────
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [f"{TOKEN}\r\nX-Evil: 1", f"tok en-{TOKEN}", f"tok\t{TOKEN}", f"tok\u00e9{TOKEN}"],
+    ids=["crlf", "space", "tab", "non-ascii"],
+)
+def test_a_token_that_cannot_be_a_header_value_hard_fails_before_any_request(
+    http, no_sleep, monkeypatch, caplog, bad,
+):
+    """A CR/LF, space, tab or non-ASCII byte in the token makes ``requests`` raise
+    ``InvalidHeader`` — a ``RequestException`` whose message quotes the value.
+    Caught as transient, it would print the token on every retry and end the
+    run as empty frames. It must be a config error, before any request, that
+    never repeats the value."""
+    calls, queue = http
+    queue.append(_relayed(200, BATCH))
+    monkeypatch.setenv("OPENMETEO_PROXY_URL", PROXY)
+    monkeypatch.setenv("OPENMETEO_PROXY_TOKEN", bad)
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="fetchers.weather"),
+        pytest.raises(weather.OpenMeteoProxyError) as info,
+    ):
+        weather.fetch_all_regions(now=NOW)
+
+    assert calls == []
+    assert "OPENMETEO_PROXY_TOKEN" in str(info.value)
+    assert TOKEN not in str(info.value)
+    assert TOKEN not in caplog.text
+
+
+def test_the_worker_route_never_follows_a_redirect(http, no_sleep, proxied, caplog):
+    """``requests`` keeps a custom header across a redirect (it strips only
+    ``Authorization``), so following a relayed 3xx would hand the token to
+    whatever ``Location`` names — even an ``http://`` one."""
+    calls, queue = http
+    queue.append(_relayed(302, {}, {"Location": "http://attacker.example/steal"}))
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="fetchers.weather"),
+        pytest.raises(weather.OpenMeteoProxyError) as info,
+    ):
+        weather.fetch_all_regions(now=NOW)
+
+    assert len(calls) == 1, "a redirect is a config error, not retried"
+    assert calls[0]["allow_redirects"] is False
+    assert "302" in str(info.value)
+    assert TOKEN not in str(info.value)
+    assert TOKEN not in caplog.text
+
+
+def test_the_direct_route_keeps_following_redirects(http, no_sleep):
+    """No token rides the direct request, so its behaviour is unchanged."""
+    calls, queue = http
+    queue.append(_resp(200, BATCH))
+    weather.fetch_all_regions(now=NOW)
+    assert calls[0]["allow_redirects"] is True
