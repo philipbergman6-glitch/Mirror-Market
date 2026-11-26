@@ -362,3 +362,29 @@ def test_a_lane_less_detection_must_say_what_is_missing():
 
     with pytest.raises(ValueError, match="lane_absent_reason"):
         make_detection(origin=None, destination=None)
+
+
+def test_two_lane_less_crushes_in_different_markets_are_two_opportunities(monkeypatch):
+    """With no lane, rule+product+window alone would key CBOT's and Dalian's board
+    crush identically, and collapse_exact_duplicates would drop one of them."""
+    from opportunity_fixtures import board_crush_result, stub_crush_stack
+
+    from analysis.opportunities import registry as registry_mod
+    from analysis.opportunities import signals as signals_mod
+
+    stub_crush_stack(monkeypatch, {
+        "cbot": board_crush_result("cbot"),
+        "dalian": board_crush_result("dalian"),
+    })
+    detections = signals_mod.crush_margin_detections(None, today=TODAY, assumptions={})
+    assert {d.context["market"] for d in detections} == {"cbot", "dalian"}
+    candidates = build_candidates(detections, today=TODAY, entries=PLAYER_ENTRIES)
+    kept = registry_mod.collapse_exact_duplicates(candidates)
+    assert len(kept) == 2
+    assert len({item.identity for item in kept}) == 2
+
+
+def test_a_lane_keeps_its_identity_unchanged():
+    """Scoping a lane-less identity must not re-mint every existing lane's id."""
+    opportunity = build_candidate(make_detection(), today=TODAY, entries=PLAYER_ENTRIES)
+    assert opportunity.identity == "landed_advantage|beans|country:us|country:cn|2026-09-01"

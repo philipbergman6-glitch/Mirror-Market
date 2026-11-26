@@ -798,8 +798,15 @@ def identity_key(
     origin_key: str | None,
     destination_key: str | None,
     window_start: date | None,
+    subject: str | None = None,
 ) -> str:
     """What makes two detections the same opportunity.
+
+    ``subject`` scopes a detection that names no physical place (#672): with no
+    origin, destination or window, a CBOT and a Dalian board crush would share
+    ``crush_margin|beans|-|-|-`` and one would be collapsed away. It is
+    appended only when given, so every lane's identity — and so its id — is
+    unchanged.
 
     Deliberately excludes the numbers. The same lane, product, window and rule
     on two consecutive days is *one* opportunity that moved, not two — and an
@@ -814,6 +821,8 @@ def identity_key(
         (destination_key or "-").strip().lower(),
         window_start.isoformat() if window_start else "-",
     ]
+    if subject is not None:
+        parts.append(f"subject:{subject.strip().lower()}")
     return "|".join(parts)
 
 
@@ -948,16 +957,18 @@ class Opportunity:
                 f"{self.opportunity_id}: workflow record belongs to "
                 f"{self.workflow.opportunity_id}"
             )
-        if (
-            self.workflow is None
-            and self.status is OpportunityStatus.DETECTED
-            and self.ladder is Ladder.MARKET_SIGNAL
-            and not self.signal_gap.strip()
-        ):
-            raise OpportunityError(
-                f"{self.opportunity_id}: a market signal must name the missing fact that "
-                "would make it a lead (signal_gap)"
-            )
+        if self.workflow is None and self.status is OpportunityStatus.DETECTED:
+            is_signal = self.ladder is Ladder.MARKET_SIGNAL
+            if is_signal and not self.signal_gap.strip():
+                raise OpportunityError(
+                    f"{self.opportunity_id}: a market signal must name the missing fact "
+                    "that would make it a lead (signal_gap)"
+                )
+            if not is_signal and self.signal_gap.strip():
+                raise OpportunityError(
+                    f"{self.opportunity_id}: signal_gap set on a {self.ladder.value} — only "
+                    "a market signal is missing the fact that would make it a lead"
+                )
         if self.economics is not None:
             has_total = self.economics.total_low_usd is not None
             if has_total and self.volume is None:

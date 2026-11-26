@@ -48,9 +48,11 @@ from analysis.opportunities.domain import (
     Economics,
     Evidence,
     MarketSignal,
+    OpportunityError,
     PartyRole,
     SignalKind,
     Volume,
+    identity_key,
 )
 from analysis.origins.domain import Grade, Incoterm, Money, Port, ShipmentWindow, SourceRef
 from pricing.semantics import PriceType, confidence_for_quote_kind, price_type_for_quote_kind
@@ -205,17 +207,44 @@ class Detection:
     lane_absent_reason: str = ""
 
     def __post_init__(self) -> None:
-        has_place = self.origin is not None or self.destination is not None
-        if not has_place and not self.lane_absent_reason.strip():
-            raise ValueError(
-                f"{self.signal.signal_id}: no origin and no destination, and no "
-                "lane_absent_reason — a signal with no lane must name the missing fact"
-            )
-        if has_place and self.lane_absent_reason.strip():
-            raise ValueError(
+        if not self.has_physical_place:
+            if not self.lane_absent_reason.strip():
+                raise OpportunityError(
+                    f"{self.signal.signal_id}: no origin and no destination, and no "
+                    "lane_absent_reason — a signal with no lane must name the missing fact"
+                )
+            if not (self.signal.subject or "").strip():
+                raise OpportunityError(
+                    f"{self.signal.signal_id}: names no place and no subject, so nothing "
+                    "tells it apart from the same rule firing in another market"
+                )
+        elif self.lane_absent_reason.strip():
+            raise OpportunityError(
                 f"{self.signal.signal_id}: lane_absent_reason set on a detection that "
                 "names a physical place"
             )
+
+    @property
+    def has_physical_place(self) -> bool:
+        """Whether this names at least one physical end — an origin or a destination.
+
+        The one rule (#672) that separates a market signal from a lead before
+        anybody is looked up. It reads the lane, never ``rule_id``: a board
+        crush, an FX move and any future detector are judged by what they
+        name, not by which of them fired.
+        """
+        return self.origin is not None or self.destination is not None
+
+    def identity(self) -> str:
+        """This detection's :func:`identity_key`, scoped by subject when it names no place."""
+        return identity_key(
+            rule_id=self.rule_id,
+            product=self.product,
+            origin_key=self.origin.key if self.origin else None,
+            destination_key=self.destination.key if self.destination else None,
+            window_start=self.window.start if self.window else None,
+            subject=None if self.has_physical_place else self.signal.subject,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -850,7 +879,7 @@ def _crush_why_now(
     floor: float,
     *,
     administered: bool,
-    board: bool = False,
+    board: bool,
 ) -> str:
     """The first sentence a trader reads. Level-conditional on purpose.
 
@@ -1182,7 +1211,9 @@ def currency_detections(conn, *, today: date) -> list[Detection]:
             rule_id="currency_shift",
             product=BEANS,
             role_wanted=PartyRole.SELLER if weaker else PartyRole.BUYER,
-            origin=country_port(iso, market.get("name", slug), role="origin"),
+            # The country by its PSD name, never the market's ``name`` — for
+            # CBOT and Dalian that is a pricing venue, not a place (#672).
+            origin=country_port(iso, str(market["psd_country"]), role="origin"),
             destination=None,
             dislocation=Dislocation(
                 kind="fx",

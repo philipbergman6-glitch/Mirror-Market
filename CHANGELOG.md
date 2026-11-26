@@ -28,9 +28,16 @@ CBOT and Dalian the market's name is the pricing venue. Now:
   components still print, the board shows "composite withheld", rung-first
   ranking keeps it below every lead, and the archive stores
   `composite_score = NULL` with the reason in `score_json`.
-- `OPPORTUNITY_METHOD_VERSION` 1.0.0 → 1.1.0. The board-crush row's identity
-  changes (its destination key is gone), so it re-detects under a new id and
-  the old one lists once as "stopped detecting".
+- A lane-less detection's identity is scoped by its signal's `subject`
+  (`identity_key(..., subject=...)`, appended only then): without it a CBOT
+  and a Dalian board crush both keyed `crush_margin|beans|-|-|-` and one was
+  collapsed away. Every lane's identity is byte-identical.
+- The board crush's why-now no longer says "a crusher earning that has room
+  to bid up for beans"; it says it is a paper margin on three contracts. The
+  FX detector names its origin by `psd_country`, never the market's `name`.
+- `OPPORTUNITY_METHOD_VERSION` 1.0.0 → 1.1.0. Board and administered crush
+  rows' identities change (destination key gone, subject added), so they
+  re-detect under new ids and the old ones list once as "stopped detecting".
 
 Out of scope: outcome tracking of leads → quotes/decisions (needs a trial
 buyer, A15/A12). Tests: new detector, rules, scoring/rank regression and page

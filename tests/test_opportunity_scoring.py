@@ -318,6 +318,10 @@ def test_a_board_crush_with_no_lane_cannot_outrank_a_lane_lead_with_a_lower_scor
     ]
     # The number itself is untouched — only its rank and its rung.
     assert crush.economics is not None and crush.economics.per_mt.amount == 68.30
+    assert crush.why_now.startswith("CBOT's board crush")
+    assert any(
+        "(ZSF27, ZLF27, ZMF27)" in blocker.message for blocker in crush.blockers
+    ), "the board crush keeps naming its three contracts"
     assert crush.signal_gap.startswith("no physical destination")
 
 
@@ -341,3 +345,14 @@ def test_a_lead_prints_its_composite():
     card = score(lead, today=TODAY)
     assert card.to_dict()["composite"] == card.composite
     assert card.to_dict()["withheld_reason"] is None
+
+
+def test_signal_gap_belongs_to_market_signals_only():
+    import pytest
+
+    from analysis.opportunities.domain import Ladder, OpportunityError
+
+    with pytest.raises(OpportunityError, match="signal_gap"):
+        make_opportunity(ladder=Ladder.MARKET_SIGNAL, signal_gap="")
+    with pytest.raises(OpportunityError, match="signal_gap"):
+        make_opportunity(ladder=Ladder.LEAD, signal_gap="no physical destination: x")

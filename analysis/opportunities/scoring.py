@@ -224,8 +224,9 @@ def feasibility_score(opportunity: Opportunity) -> tuple[float, str]:
     )
 
 
-#: Printed instead of a market signal's composite (#672). One sentence, one
-#: place: the page, the archive and the board's rank note all read this.
+#: Why a market signal's composite is withheld (#672). Carried on its
+#: ScoreCard, so the board card prints it and the archive's ``score_json``
+#: records it beside a NULL ``composite_score``.
 SIGNAL_COMPOSITE_WITHHELD = (
     "composite withheld: a market signal names no lane or no counterparty, so a total "
     "beside the leads' would rank it against trades it cannot be — the components are "
