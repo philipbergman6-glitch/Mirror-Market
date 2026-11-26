@@ -18,9 +18,19 @@ Conversion factors:
     Wheat:        1 MT = 36.7437 bushels
     Sugar/Cotton/Cattle/Hogs: 1 MT = 2204.62 lbs
     Palm Oil:     already USD/MT (CME calendar swap — identity)
+
+Physical-market units (currency-free, per-mass):
+    Brazil sack (saca):  60 kg      India quintal:  100 kg
+    kg → MT:             × 1000
 """
 
+from typing import TypeVar
+
 import pandas as pd
+
+#: A scalar or a column: the mass conversions below are plain arithmetic, so a
+#: fetcher can pass one quote or a whole Series through the same function.
+_Num = TypeVar("_Num", float, pd.Series)
 
 # ---------------------------------------------------------------------------
 # Conversion factors: native exchange unit → USD/MT
@@ -115,6 +125,51 @@ def kg_to_metric_tons(kg: float) -> float:
 def kg_to_million_metric_tons(kg: float) -> float:
     """Net kilograms → million metric tons, the scale monthly trade flows read in."""
     return kg_to_metric_tons(kg) / 1_000_000.0
+
+
+def metric_tons_to_kg(value: _Num) -> _Num:
+    """Metric tons → kilograms; also t/ha → kg/ha (CONAB yield, Layer 15)."""
+    return value * KG_PER_METRIC_TON
+
+
+# Physical-market price units (#665). Each is a price *per* a mass unit, so the
+# conversion to per-metric-ton is currency-free: the row keeps its own currency.
+
+# Brazil quotes soy per 60 kg saca: CEPEA "Reais por saca de 60 kg" (Layer 17,
+# and its Notícias Agrícolas republication), AgRural R$/sc (Layer 19).
+KG_PER_SACK = 60.0
+
+
+def per_sack_to_per_metric_ton(value: _Num) -> _Num:
+    """Price per 60 kg sack → price per metric ton (R$/sc → R$/t).
+
+    Written ``value × 1000 / 60`` — the CEPEA rows' historical form. AgRural's
+    old ``(value / 60) × 1000`` differs in the last bit on about a third of
+    inputs, but never after the 2-dp storage round on a centavo-priced quote
+    (``tests/test_unit_sites.py`` checks every one to R$9,999.99).
+    """
+    return value * KG_PER_METRIC_TON / KG_PER_SACK
+
+
+# India quotes per quintal of 100 kg: Agmarknet modal prices, MSAMB lots (price
+# and arrivals), NCDEX spot (Layer 16).
+KG_PER_QUINTAL = 100.0
+QUINTALS_PER_METRIC_TON = KG_PER_METRIC_TON / KG_PER_QUINTAL  # exactly 10.0
+
+
+def per_quintal_to_per_metric_ton(value: _Num) -> _Num:
+    """Price per quintal → price per metric ton (₹/qtl → ₹/MT)."""
+    return value * QUINTALS_PER_METRIC_TON
+
+
+def quintals_to_metric_tons(value: _Num) -> _Num:
+    """A quantity in quintals → metric tons (MSAMB arrivals)."""
+    return value / QUINTALS_PER_METRIC_TON
+
+
+def per_kg_to_per_metric_ton(value: _Num) -> _Num:
+    """Price per kilogram → price per metric ton (AFEX NGN/kg, CONAB R$/kg)."""
+    return value * KG_PER_METRIC_TON
 
 
 # SOPA prints its crop in lakh tonnes (Layer 33): one lakh is 100,000, so a

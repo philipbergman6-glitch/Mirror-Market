@@ -28,12 +28,13 @@ from mirror_mcp import db
 from mirror_mcp.envelope import envelope, meta_for
 from mirror_mcp.question_log import QuestionLog
 from mirror_mcp.settings import Settings
+from pipeline.public_view import assert_no_dated_private_rows, public_freshness
 from pipeline.units import native_label
 from pricing import policy, semantics
 
 HEALTH_PATH = "/health"
 SERVER_NAME = "mirror-market"
-# The manifest's own word for a rostered layer with no freshness row
+# The manifest's own word for a rostered public layer with no freshness row
 # (app/manifest.py `_coverage`): never learned, which is not a zero.
 LAYER_NOT_RUN = "not-run"
 
@@ -67,11 +68,17 @@ def _result(body: dict[str, Any]) -> ToolResult:
     return ToolResult(content=_text(body), structured_content=body)
 
 
-def _layer_record(key: str, row: sqlite3.Row | None, now: datetime) -> dict[str, Any]:
+def _public_row(key: str, row: sqlite3.Row | None) -> dict[str, Any] | None:
+    """The part of a layer's freshness row the public may see (``pipeline.public_view``, #659)."""
+    return public_freshness(key, dict(row) if row is not None else None)
+
+
+def _layer_record(key: str, raw: sqlite3.Row | None, now: datetime) -> dict[str, Any]:
     """One rostered layer's freshness, graded against its own budget; ``None`` where nothing was learned."""
     roster = {k: (n, src, cad, scope) for k, n, src, cad, scope in config.PRODUCTION_LAYERS}
     number, source, cadence, scope = roster[key]
-    last = row["last_success"] if row else None
+    row = _public_row(key, raw)
+    last = row.get("last_success") if row else None
     # save_freshness writes UTC without an offset; imported editions may
     # also carry offsets. Preserve the original stamp in the response.
     stamp = datetime.fromisoformat(last) if last else None
@@ -85,8 +92,8 @@ def _layer_record(key: str, row: sqlite3.Row | None, now: datetime) -> dict[str,
         "last_success": last, "age_days": age, "budget_days": budget,
         "age_basis": "time since last successful fetch, not observation age",
         "over_budget": (age > budget) if age is not None else None,
-        "rows_fetched": row["rows_fetched"] if row else None,
-        **{name: row[name] if row else None for name in (
+        "rows_fetched": row.get("rows_fetched") if row else None,
+        **{name: row.get(name) if row else None for name in (
             "last_attempt", "observed_at", "fetch_started_at", "fetch_completed_at", "stored_at",
         )},
     }
@@ -96,6 +103,11 @@ def build_server(settings: Settings, *, clock: Callable[[], datetime] | None = N
     """The server. ``clock`` is the one clock every age judgement uses (UTC now by default)."""
     conn = db.open_readonly(settings.db_path)
     db.assert_public_roster(conn)
+    # A private layer's dated freshness row means a desk database: refuse it
+    # rather than blank it (#567). The tools then never meet one.
+    assert_no_dated_private_rows(
+        (dict(row) for row in conn.execute("SELECT * FROM data_freshness")), where=f"mcp database {settings.db_path}",
+    )
     now_utc = clock or (lambda: datetime.now(timezone.utc))
     markets = load_markets()
     layer_keys = set(config.PRODUCTION_LAYER_KEYS)
@@ -265,7 +277,7 @@ def build_server(settings: Settings, *, clock: Callable[[], datetime] | None = N
              **{k: v for k, v in meta_for(m.price.quote_kind).items() if k in ("price_type", "confidence")}}
             for slug, m in sorted(markets.items()) if m.price is not None and m.price.layer == layer
         ]
-        data = {**record, "freshness": dict(row) if row else None, "markets_quoting_it": quoting,
+        data = {**record, "freshness": _public_row(layer, row), "markets_quoting_it": quoting,
                 "private": layer in config.PRIVATE_LAYERS}
         return _result(envelope(STATE_OK, data=data, meta=base_meta(**meta_for(None), layer=layer)))
 

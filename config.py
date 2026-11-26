@@ -174,9 +174,15 @@ PRODUCTION_LAYERS = (
      "MATIF rapeseed (ECO) last trade by contract month (private)"),
 )
 PRODUCTION_LAYER_KEYS = tuple(layer[0] for layer in PRODUCTION_LAYERS)
-# Layers whose rendered output is the private desk edition only. A public
-# record of them (data/history/layer_runs.csv) carries the layer name and its
-# graded status and nothing else — the same as the public freshness table.
+# Layers whose rendered output is the private desk edition only. Their dates
+# are private too (owner decision on #567, 2026-11-25): every public surface
+# shows the layer name and its status and nothing else — the run record
+# (data/history/layer_runs.csv), the manifest, the Layer Freshness table and
+# the MCP tools, all through pipeline.public_view. A dated freshness row for
+# one raises PrivateLayerLeak: always at MCP startup (its image is built in
+# CI), and at the history export only inside GitHub Actions — the one place
+# that commits data/history/; a desk run with MATIF_PRIVATE_FETCH set
+# proceeds with one WARNING (owner decision on #567, option B).
 # Empty since 2026-10-21: the owner opened SEA (32) and SOPA (33), the last
 # two, under the A18 stance (#468: every series public, licence risk accepted,
 # internal use, no sale). The mechanism stays for the next private source.
@@ -297,17 +303,70 @@ SEASONAL_MIN_YEARS_PER_MONTH = 5
 # warning in pipeline/clean.py passes silently, so the guard is structural:
 # the current session's bar is dropped until the venue has settled.
 #
-# One cutoff covers every venue we pull through yfinance, expressed in
-# Chicago local time so US DST is handled by the zoneinfo database rather
-# than by a hand-maintained UTC offset:
-#   CBOT grains/oilseeds (ZS/ZL/ZM/ZC/ZW)   settle 13:15 CT
-#   CME livestock (LE/HE), CME palm (CPO)   settle 13:05 CT
-#   ICE US cotton (CT)                      settle 14:20 ET = 13:20 CT
-#   ICE US sugar (SB)                       settle 13:00 ET = 12:00 CT
-# 14:30 CT clears the latest of them with ~70 min of headroom for Yahoo to
-# publish the settled bar.
+# The venue timezone. CBOT settles 13:15 CT; the trusted CBOT path dates its
+# sessions in it and the cargo board reads "today" in it.
 SETTLEMENT_TIMEZONE = "America/Chicago"
-SETTLEMENT_CUTOFF_LOCAL = (14, 30)  # (hour, minute) in SETTLEMENT_TIMEZONE
+
+# B47 (#622): when Yahoo's *futures* bar labelled D is finished. Not at the
+# settlement: at 00:00 America/New_York on D+1. Until then the row labelled D
+# holds D's day-session last trade (14:30-19:00 CT) or, once the overnight
+# session opens at 19:00 CT, live trades of trade date D+1 folded into D —
+# Yahoo serves no D+1 row before New York midnight, so there is nothing
+# labelled D+1 to drop. Measured over the 89 committed snapshots of
+# data/history/contract_bars.csv, every venue we pull through yfinance:
+#   CBOT ZS/ZL/ZM/ZC/ZW, CME LE/HE   revised up to 29 min before NY midnight;
+#                                    0 values still served after it ever
+#                                    changed (worst stored error: ZLZ26
+#                                    2026-08-27, +31.97 USD/MT)
+#   ICE US cotton (CT), sugar (SB)   unfinished before NY midnight too, and
+#                                    NOT always final after it — necessary
+#                                    there, not sufficient; ICE has its own
+#                                    rule below (B48 #626)
+#   CME palm (CPO=F)                 front month only, no named-contract
+#                                    history to measure; the later cutoff is
+#                                    the safe direction (invariant 11)
+# The old cutoff, 14:30 CT, was "after the latest settlement we pull"; Yahoo
+# does not honour settlement time, so it stored 855 soy values that a later
+# run changed. Expressed in New York local time so US DST is zoneinfo's job.
+EXCHANGE_BAR_TIMEZONE = "America/New_York"
+EXCHANGE_BAR_CLOSE_LOCAL = (0, 0)  # (hour, minute) in EXCHANGE_BAR_TIMEZONE ...
+EXCHANGE_BAR_CLOSE_DAY_OFFSET = 1  # ... on the label date plus this many days
+
+# B48 (#626): ICE US softs. Yahoo's ICE bar labelled D is final at the same
+# New York midnight as above, but one *weekday* later — 00:00 New York
+# ending the next weekday after D (Fri -> Tue 00:00, Thu -> Sat 00:00).
+# Measured over the 90 committed snapshots of contract_bars.csv
+# (2026-08-23 -> 2026-11-25), a value counted as served only when that run
+# re-saved the row (fetched_date = the commit's UTC date):
+#   19 values in 3 sessions (Fri 08-21, Mon 10-05, Fri 10-16; deferred and
+#   front months, cotton and sugar) were served after NY midnight D+1 and
+#   revised later. Latest serve of a pre-final value: Tue 10-06 13:47 EDT
+#   for the Mon 10-05 bar (CTV27 78.30 -> 79.10 by 14:36 EDT) — 10 h before
+#   this rule's cutoff. 0 of 1,011 (contract, session) pairs served after
+#   the cutoff differs from today's stored value.
+#   The issue's other 5 "post-midnight" values were last served before NY
+#   midnight and carried because Yahoo left the bar out of the next frames;
+#   the B47 rule already drops them.
+# Weekdays, not ICE sessions: the guard owns no holiday calendar, and no
+# measured case crosses an ICE holiday, so a label whose next weekday is a
+# holiday (Wed 2026-11-25 -> Thanksgiving) is final at the end of that
+# holiday — unmeasured (#626).
+# Which tickers are ICE US: named contracts carry Yahoo's exchange suffix
+# below; the continuous Layer 1 ticker is the COMMODITY_TICKERS entry of
+# every FORWARD_CURVE_CONTRACTS commodity listed on that exchange
+# (fetchers._settlement.exchange_rule_for).
+ICE_US_YAHOO_EXCHANGE = "NYB"
+ICE_US_BAR_CLOSE_WEEKDAY_OFFSET = 1  # weekdays past the label, before the day offset above
+
+# B47 (#622): how far back, by fetched_date, a stored forward_curve leg is
+# corrected to its contract's final bar once contract_bars holds it
+# (pipeline.store.repair_forward_curve). Steady state needs two or three
+# days: a leg captured on D is final-checkable from D+2. The rest of the
+# window is for the snapshots stored before the guard was corrected — the
+# first observation-dated one is 2026-08-11 — so the first deploys after the
+# fix repair the committed history themselves (a PR never edits
+# data/history/). 120 days covers all of it until 2026-12-09.
+FORWARD_CURVE_REPAIR_LOOKBACK_DAYS = 120
 
 # Spot FX has no settlement, so the exchange cutoff above is the wrong
 # question for Layer 7 and answering it there stored a partial bar as an FX
@@ -447,6 +506,19 @@ COT_COMMODITIES = {
 # historical rows stop accruing; that is the intended cost.
 # ---------------------------------------------------------------------------
 OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# Our own quota (#637, owner decision 2026-11-25): Open-Meteo's free quota is
+# shared per outgoing IP, and a GitHub runner's IP is shared with strangers,
+# so Layer 5 can route through a free Cloudflare Worker (infra/openmeteo-
+# worker/), which Open-Meteo counts on its own. Both variables or neither:
+# one without the other hard-fails (fetchers/weather.py). Unset, the layer
+# goes direct on the shared quota — the pre-#637 path, logged as such.
+# Deployed by the owner with scripts/setup_openmeteo_worker.sh. The free API
+# is non-commercial; a paid customer key replaces the Worker before selling
+# (ROADMAP.md → "Open-Meteo customer key").
+OPENMETEO_PROXY_URL_ENV = "OPENMETEO_PROXY_URL"
+OPENMETEO_PROXY_TOKEN_ENV = "OPENMETEO_PROXY_TOKEN"
+# The Worker paths it forwards; anything else is refused at the Worker.
+OPENMETEO_FORECAST_PATH = "/v1/forecast"
 # Open-Meteo intermittently stops answering GitHub runners (shared Azure IPs)
 # for minutes at a time — every coordinate, read timeout with no response
 # (measured 2026-11-16: 8 consecutive 40 s timeouts, then 0.1 s replies).
@@ -455,6 +527,13 @@ OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 # lighting "1 data critical" on every masthead. Regions still empty after
 # the first pass get one more pass after this pause.
 WEATHER_SECOND_PASS_DELAY_S = 60
+# A batched Open-Meteo answer (#637) is matched to the pins by position; each
+# entry's returned coordinates must also sit within this many degrees (lat and
+# lon each) of its pin, or the batch hard-fails. Open-Meteo answers the centre
+# of the model grid cell, "a few kilometres away" (open-meteo.com/en/docs):
+# the recorded 2026-11-25 batch snaps at most 0.052°. The closest two pins are
+# 2.6° apart, so a cell can never match two pins (pinned by test).
+OPENMETEO_GRID_MATCH_MAX_DEG = 0.5
 # What a Layer 5 row is (B15 #455). Open-Meteo's forecast endpoint serves
 # weather-model output for its past days too — model analysis, not station
 # readings — so every row, elapsed or ahead, is an estimate. Same honesty as
@@ -1779,6 +1858,25 @@ MSAMB_SOYBEAN_CODE = "04017"     # सोयाबिन in the page's commodity
 # The quantity unit a row must carry to be read: rows in नग (pieces) price a
 # different unit and are excluded, never pooled.
 MSAMB_QUINTAL_UNIT = "क्विंटल"
+# #621: an MSAMB day keeps gaining APMC lots through the whole of the next IST
+# day, so a day read fewer than this many IST days after it is stored but
+# flagged `filling` and never rendered as the latest day. Measured from the
+# 2026-11 history snapshots: 10 of 11 D+1 reads were short of the final count
+# (by 3–29%, one as late as 17:30 IST: 11-16, 128 → 132), and every read on
+# D+2 or later matched it. No hour inside D+1 was ever shown complete.
+MSAMB_FILL_DAYS = 2
+# #370 (owner decision 2026-11-25, option 2 — label only, never drop or patch):
+# an MH day is labelled `thin day · N lots (typical weekday ~M)` when its lot
+# count is under MSAMB_THIN_DAY_RATIO × the median count of the trailing
+# MSAMB_THIN_DAY_WINDOW weekdays (Mon–Fri) before it, read only from the
+# MSAMB count break on (LAYERS.md Layer 16, #371: no threshold may span a
+# break). Under MSAMB_THIN_DAY_MIN_DAYS baseline weekdays there is no label.
+# Calibration (11-10 → 11-23): weekdays 108–142, Saturdays 83–86 (not thin),
+# Sundays 17–18 (thin). Review on #370 after six weeks (owner).
+MSAMB_COUNT_BREAK = _date(2026, 11, 10)
+MSAMB_THIN_DAY_RATIO = 0.5
+MSAMB_THIN_DAY_WINDOW = 20      # four weeks of weekdays
+MSAMB_THIN_DAY_MIN_DAYS = 5     # one week of weekdays
 NCDEX_SPOT_PAGE_URL = "https://www.ncdex.com/markets/spotprices"
 NCDEX_SPOT_DATA_URL = "https://www.ncdex.com/spotprices/get_data"
 NCDEX_SPOT_SERIES = "Soybean (NCDEX Indore spot)"
@@ -1879,6 +1977,10 @@ class ApiKeySpec:
     unlocks: str
     skips: tuple[str, ...] = ()
     degrades: tuple[str, ...] = ()
+    # Layers that run either way but take a different route without it — no
+    # skip, no degraded part (the Open-Meteo Worker pair, #637: unset, Layer 5
+    # goes direct on the shared quota). `also` says what the fallback is.
+    routes: tuple[str, ...] = ()
     required_in_ci: bool = True
     # False for a switch CI must never be able to set: the deploy workflow does
     # not export it, so no secret can turn the layer on there (Layer 37).
@@ -1889,7 +1991,7 @@ class ApiKeySpec:
 
     @property
     def layers(self) -> tuple[str, ...]:
-        return self.skips + self.degrades
+        return self.skips + self.degrades + self.routes
 
 
 # A tuple built into the dict below, not a dict literal: `"NAME_API_KEY": …`
@@ -1946,6 +2048,27 @@ _API_KEY_SPECS: tuple[ApiKeySpec, ...] = (
         # use. The switch itself is `export MATIF_PRIVATE_FETCH=1` on the desk.
         signup="https://www.euronext.com/en/data/market-data/market-data-agreements",
         also="desk switch, not a key: export MATIF_PRIVATE_FETCH=1 on the desk machine (LAYERS.md → Layer 37)",
+    ),
+    # A pair, not a key: the Cloudflare Worker that gives Layer 5 its own
+    # Open-Meteo quota (#637). Both or neither — one alone hard-fails the
+    # layer (fetchers/weather.py). Optional: unset, the layer still runs,
+    # direct, on the runner IP's shared quota, which is the pre-#637 path.
+    # The signup is Cloudflare's; the wizard does the rest.
+    ApiKeySpec(
+        name=OPENMETEO_PROXY_URL_ENV,
+        unlocks="Open-Meteo Worker URL: Layer 5 weather on its own free quota, not the runner IP's shared one",
+        routes=("weather",),
+        required_in_ci=False,
+        signup="https://developers.cloudflare.com/workers/get-started/guide/",
+        also="unset, goes direct to api.open-meteo.com on the shared quota; scripts/setup_openmeteo_worker.sh",
+    ),
+    ApiKeySpec(
+        name=OPENMETEO_PROXY_TOKEN_ENV,
+        unlocks="Open-Meteo Worker shared secret: sent in a header so the Worker is not an open proxy",
+        routes=("weather",),
+        required_in_ci=False,
+        signup="https://developers.cloudflare.com/workers/get-started/guide/",
+        also="set with OPENMETEO_PROXY_URL or not at all; scripts/setup_openmeteo_worker.sh generates it",
     ),
 )
 API_KEY_CATALOG: dict[str, ApiKeySpec] = {spec.name: spec for spec in _API_KEY_SPECS}
@@ -3332,6 +3455,23 @@ MARKETS: dict[str, dict[str, Any]] = {
             "quote_kind": "physical",
             "value_column": "Close",
             "unit": "home_per_mt",
+            # #621: MSAMB's newest day is read while still filling; the MH leg
+            # shows the last complete day (`MSAMB_FILL_DAYS`). NCDEX rows carry
+            # NULL (one poll, no fill window) and are unaffected.
+            "filling_column": "filling",
+            # #621 owner decision: the ledger leg names why its shown day is
+            # not the newest stored one, in these words; block 01 never does.
+            "filling_reason": "MSAMB fills through D+1",
+            # #370: a median over few lots is labelled, never hidden.
+            "thin_day": {
+                "keys": [MANDI_SERIES_MH],
+                "count_column": "Volume",
+                "count_noun": "lots",
+                "since": MSAMB_COUNT_BREAK,
+                "ratio": MSAMB_THIN_DAY_RATIO,
+                "window": MSAMB_THIN_DAY_WINDOW,
+                "min_days": MSAMB_THIN_DAY_MIN_DAYS,
+            },
         },
         "crush": None,
         "crush_absent_reason": (

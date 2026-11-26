@@ -1,0 +1,5364 @@
+{
+ "afex": [
+  {
+   "Date": "2026-08-01T00:00:00",
+   "Unit": "NGN/MT",
+   "index": 0,
+   "price_ngn_mt": "681250.0"
+  },
+  {
+   "Date": "2026-08-02T00:00:00",
+   "Unit": "NGN/MT",
+   "index": 1,
+   "price_ngn_mt": "690000.0"
+  },
+  {
+   "Date": "2026-08-03T00:00:00",
+   "Unit": "NGN/MT",
+   "index": 2,
+   "price_ngn_mt": "525210.0"
+  },
+  {
+   "Date": "2026-08-04T00:00:00",
+   "Unit": "NGN/MT",
+   "index": 3,
+   "price_ngn_mt": "333330.0"
+  },
+  {
+   "Date": "2026-08-05T00:00:00",
+   "Unit": "NGN/MT",
+   "index": 4,
+   "price_ngn_mt": "712070.0"
+  },
+  {
+   "Date": "2026-08-06T00:00:00",
+   "Unit": "NGN/MT",
+   "index": 5,
+   "price_ngn_mt": "1234567.0"
+  }
+ ],
+ "agrural": [
+  {
+   "Date": "2026-05-08",
+   "Unit": "BRL/MT",
+   "index": 0,
+   "price_brl_mt": "2158.33"
+  }
+ ],
+ "cepea": {
+  "Soybean (CEPEA)": [
+   {
+    "Date": "2026-10-23",
+    "Unit": "BRL/MT",
+    "index": 0,
+    "price_brl_mt": "2444.83"
+   },
+   {
+    "Date": "2026-10-26",
+    "Unit": "BRL/MT",
+    "index": 1,
+    "price_brl_mt": "2486.33"
+   },
+   {
+    "Date": "2026-10-27",
+    "Unit": "BRL/MT",
+    "index": 2,
+    "price_brl_mt": "2523.0"
+   },
+   {
+    "Date": "2026-10-28",
+    "Unit": "BRL/MT",
+    "index": 3,
+    "price_brl_mt": "2531.5"
+   },
+   {
+    "Date": "2026-10-29",
+    "Unit": "BRL/MT",
+    "index": 4,
+    "price_brl_mt": "2541.17"
+   },
+   {
+    "Date": "2026-10-30",
+    "Unit": "BRL/MT",
+    "index": 5,
+    "price_brl_mt": "2537.0"
+   },
+   {
+    "Date": "2026-11-03",
+    "Unit": "BRL/MT",
+    "index": 6,
+    "price_brl_mt": "2540.83"
+   },
+   {
+    "Date": "2026-11-04",
+    "Unit": "BRL/MT",
+    "index": 7,
+    "price_brl_mt": "2536.83"
+   },
+   {
+    "Date": "2026-11-05",
+    "Unit": "BRL/MT",
+    "index": 8,
+    "price_brl_mt": "2540.83"
+   },
+   {
+    "Date": "2026-11-06",
+    "Unit": "BRL/MT",
+    "index": 9,
+    "price_brl_mt": "2535.0"
+   },
+   {
+    "Date": "2026-11-09",
+    "Unit": "BRL/MT",
+    "index": 10,
+    "price_brl_mt": "2535.83"
+   },
+   {
+    "Date": "2026-11-10",
+    "Unit": "BRL/MT",
+    "index": 11,
+    "price_brl_mt": "2545.0"
+   },
+   {
+    "Date": "2026-11-11",
+    "Unit": "BRL/MT",
+    "index": 12,
+    "price_brl_mt": "2559.83"
+   },
+   {
+    "Date": "2026-11-12",
+    "Unit": "BRL/MT",
+    "index": 13,
+    "price_brl_mt": "2567.67"
+   },
+   {
+    "Date": "2026-11-13",
+    "Unit": "BRL/MT",
+    "index": 14,
+    "price_brl_mt": "2624.17"
+   }
+  ],
+  "Soybean (ESALQ/B3 Paranaguá)": [
+   {
+    "Date": "2026-10-23",
+    "Unit": "BRL/MT",
+    "index": 0,
+    "price_brl_mt": "2540.17"
+   },
+   {
+    "Date": "2026-10-26",
+    "Unit": "BRL/MT",
+    "index": 1,
+    "price_brl_mt": "2592.5"
+   },
+   {
+    "Date": "2026-10-27",
+    "Unit": "BRL/MT",
+    "index": 2,
+    "price_brl_mt": "2623.5"
+   },
+   {
+    "Date": "2026-10-28",
+    "Unit": "BRL/MT",
+    "index": 3,
+    "price_brl_mt": "2623.67"
+   },
+   {
+    "Date": "2026-10-29",
+    "Unit": "BRL/MT",
+    "index": 4,
+    "price_brl_mt": "2638.0"
+   },
+   {
+    "Date": "2026-10-30",
+    "Unit": "BRL/MT",
+    "index": 5,
+    "price_brl_mt": "2648.0"
+   },
+   {
+    "Date": "2026-11-03",
+    "Unit": "BRL/MT",
+    "index": 6,
+    "price_brl_mt": "2654.67"
+   },
+   {
+    "Date": "2026-11-04",
+    "Unit": "BRL/MT",
+    "index": 7,
+    "price_brl_mt": "2636.17"
+   },
+   {
+    "Date": "2026-11-05",
+    "Unit": "BRL/MT",
+    "index": 8,
+    "price_brl_mt": "2642.17"
+   },
+   {
+    "Date": "2026-11-06",
+    "Unit": "BRL/MT",
+    "index": 9,
+    "price_brl_mt": "2642.0"
+   },
+   {
+    "Date": "2026-11-09",
+    "Unit": "BRL/MT",
+    "index": 10,
+    "price_brl_mt": "2643.67"
+   },
+   {
+    "Date": "2026-11-10",
+    "Unit": "BRL/MT",
+    "index": 11,
+    "price_brl_mt": "2664.5"
+   },
+   {
+    "Date": "2026-11-11",
+    "Unit": "BRL/MT",
+    "index": 12,
+    "price_brl_mt": "2673.5"
+   },
+   {
+    "Date": "2026-11-12",
+    "Unit": "BRL/MT",
+    "index": 13,
+    "price_brl_mt": "2705.17"
+   },
+   {
+    "Date": "2026-11-13",
+    "Unit": "BRL/MT",
+    "index": 14,
+    "price_brl_mt": "2741.5"
+   }
+  ],
+  "errors": []
+ },
+ "conab_precos": [
+  {
+   "Date": "2025-08-08",
+   "Unit": "BRL/MT",
+   "index": 0,
+   "price_brl_mt": "1960.0"
+  },
+  {
+   "Date": "2025-08-15",
+   "Unit": "BRL/MT",
+   "index": 1,
+   "price_brl_mt": "1980.0"
+  },
+  {
+   "Date": "2025-08-22",
+   "Unit": "BRL/MT",
+   "index": 2,
+   "price_brl_mt": "2010.0"
+  },
+  {
+   "Date": "2025-08-29",
+   "Unit": "BRL/MT",
+   "index": 3,
+   "price_brl_mt": "1990.0"
+  },
+  {
+   "Date": "2025-09-05",
+   "Unit": "BRL/MT",
+   "index": 4,
+   "price_brl_mt": "2000.0"
+  },
+  {
+   "Date": "2025-09-12",
+   "Unit": "BRL/MT",
+   "index": 5,
+   "price_brl_mt": "2020.0"
+  },
+  {
+   "Date": "2025-09-19",
+   "Unit": "BRL/MT",
+   "index": 6,
+   "price_brl_mt": "2010.0"
+  },
+  {
+   "Date": "2025-09-26",
+   "Unit": "BRL/MT",
+   "index": 7,
+   "price_brl_mt": "1940.0"
+  },
+  {
+   "Date": "2025-10-03",
+   "Unit": "BRL/MT",
+   "index": 8,
+   "price_brl_mt": "1950.0"
+  },
+  {
+   "Date": "2025-10-10",
+   "Unit": "BRL/MT",
+   "index": 9,
+   "price_brl_mt": "1990.0"
+  },
+  {
+   "Date": "2025-10-17",
+   "Unit": "BRL/MT",
+   "index": 10,
+   "price_brl_mt": "2020.0"
+  },
+  {
+   "Date": "2025-10-24",
+   "Unit": "BRL/MT",
+   "index": 11,
+   "price_brl_mt": "2020.0"
+  },
+  {
+   "Date": "2025-10-31",
+   "Unit": "BRL/MT",
+   "index": 12,
+   "price_brl_mt": "2030.0"
+  },
+  {
+   "Date": "2025-11-07",
+   "Unit": "BRL/MT",
+   "index": 13,
+   "price_brl_mt": "2040.0"
+  },
+  {
+   "Date": "2025-11-14",
+   "Unit": "BRL/MT",
+   "index": 14,
+   "price_brl_mt": "2030.0"
+  },
+  {
+   "Date": "2025-11-21",
+   "Unit": "BRL/MT",
+   "index": 15,
+   "price_brl_mt": "2050.0"
+  },
+  {
+   "Date": "2025-11-28",
+   "Unit": "BRL/MT",
+   "index": 16,
+   "price_brl_mt": "2040.0"
+  },
+  {
+   "Date": "2025-12-05",
+   "Unit": "BRL/MT",
+   "index": 17,
+   "price_brl_mt": "2030.0"
+  },
+  {
+   "Date": "2025-12-12",
+   "Unit": "BRL/MT",
+   "index": 18,
+   "price_brl_mt": "2020.0"
+  },
+  {
+   "Date": "2025-12-19",
+   "Unit": "BRL/MT",
+   "index": 19,
+   "price_brl_mt": "1970.0"
+  },
+  {
+   "Date": "2025-12-26",
+   "Unit": "BRL/MT",
+   "index": 20,
+   "price_brl_mt": "1960.0"
+  },
+  {
+   "Date": "2026-01-02",
+   "Unit": "BRL/MT",
+   "index": 21,
+   "price_brl_mt": "1950.0"
+  },
+  {
+   "Date": "2026-01-09",
+   "Unit": "BRL/MT",
+   "index": 22,
+   "price_brl_mt": "1940.0"
+  },
+  {
+   "Date": "2026-01-16",
+   "Unit": "BRL/MT",
+   "index": 23,
+   "price_brl_mt": "1940.0"
+  },
+  {
+   "Date": "2026-01-23",
+   "Unit": "BRL/MT",
+   "index": 24,
+   "price_brl_mt": "1940.0"
+  },
+  {
+   "Date": "2026-01-30",
+   "Unit": "BRL/MT",
+   "index": 25,
+   "price_brl_mt": "1890.0"
+  },
+  {
+   "Date": "2026-02-06",
+   "Unit": "BRL/MT",
+   "index": 26,
+   "price_brl_mt": "1890.0"
+  },
+  {
+   "Date": "2026-02-13",
+   "Unit": "BRL/MT",
+   "index": 27,
+   "price_brl_mt": "1900.0"
+  },
+  {
+   "Date": "2026-02-20",
+   "Unit": "BRL/MT",
+   "index": 28,
+   "price_brl_mt": "1910.0"
+  },
+  {
+   "Date": "2026-02-27",
+   "Unit": "BRL/MT",
+   "index": 29,
+   "price_brl_mt": "1900.0"
+  },
+  {
+   "Date": "2026-03-06",
+   "Unit": "BRL/MT",
+   "index": 30,
+   "price_brl_mt": "1930.0"
+  },
+  {
+   "Date": "2026-03-13",
+   "Unit": "BRL/MT",
+   "index": 31,
+   "price_brl_mt": "1940.0"
+  },
+  {
+   "Date": "2026-03-20",
+   "Unit": "BRL/MT",
+   "index": 32,
+   "price_brl_mt": "1920.0"
+  },
+  {
+   "Date": "2026-03-27",
+   "Unit": "BRL/MT",
+   "index": 33,
+   "price_brl_mt": "1940.0"
+  },
+  {
+   "Date": "2026-04-03",
+   "Unit": "BRL/MT",
+   "index": 34,
+   "price_brl_mt": "1920.0"
+  },
+  {
+   "Date": "2026-04-10",
+   "Unit": "BRL/MT",
+   "index": 35,
+   "price_brl_mt": "1890.0"
+  },
+  {
+   "Date": "2026-04-17",
+   "Unit": "BRL/MT",
+   "index": 36,
+   "price_brl_mt": "1860.0"
+  },
+  {
+   "Date": "2026-04-24",
+   "Unit": "BRL/MT",
+   "index": 37,
+   "price_brl_mt": "1850.0"
+  },
+  {
+   "Date": "2026-05-01",
+   "Unit": "BRL/MT",
+   "index": 38,
+   "price_brl_mt": "1860.0"
+  },
+  {
+   "Date": "2026-05-08",
+   "Unit": "BRL/MT",
+   "index": 39,
+   "price_brl_mt": "1850.0"
+  },
+  {
+   "Date": "2026-05-15",
+   "Unit": "BRL/MT",
+   "index": 40,
+   "price_brl_mt": "1860.0"
+  },
+  {
+   "Date": "2026-05-22",
+   "Unit": "BRL/MT",
+   "index": 41,
+   "price_brl_mt": "1880.0"
+  },
+  {
+   "Date": "2026-05-29",
+   "Unit": "BRL/MT",
+   "index": 42,
+   "price_brl_mt": "1880.0"
+  },
+  {
+   "Date": "2026-06-05",
+   "Unit": "BRL/MT",
+   "index": 43,
+   "price_brl_mt": "1890.0"
+  },
+  {
+   "Date": "2026-06-12",
+   "Unit": "BRL/MT",
+   "index": 44,
+   "price_brl_mt": "1880.0"
+  },
+  {
+   "Date": "2026-06-19",
+   "Unit": "BRL/MT",
+   "index": 45,
+   "price_brl_mt": "1860.0"
+  },
+  {
+   "Date": "2026-06-26",
+   "Unit": "BRL/MT",
+   "index": 46,
+   "price_brl_mt": "1890.0"
+  },
+  {
+   "Date": "2026-07-03",
+   "Unit": "BRL/MT",
+   "index": 47,
+   "price_brl_mt": "1910.0"
+  },
+  {
+   "Date": "2026-07-10",
+   "Unit": "BRL/MT",
+   "index": 48,
+   "price_brl_mt": "1960.0"
+  },
+  {
+   "Date": "2026-07-17",
+   "Unit": "BRL/MT",
+   "index": 49,
+   "price_brl_mt": "1980.0"
+  },
+  {
+   "Date": "2026-07-24",
+   "Unit": "BRL/MT",
+   "index": 50,
+   "price_brl_mt": "2050.0"
+  },
+  {
+   "Date": "2026-07-31",
+   "Unit": "BRL/MT",
+   "index": 51,
+   "price_brl_mt": "2060.0"
+  },
+  {
+   "Date": "2026-08-07",
+   "Unit": "BRL/MT",
+   "index": 52,
+   "price_brl_mt": "2070.0"
+  }
+ ],
+ "conab_yield": [
+  {
+   "ano_agricola": "1976/77",
+   "area": "4095.9",
+   "index": 0,
+   "production": "586.9",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "143.28963109450913"
+  },
+  {
+   "ano_agricola": "1976/77",
+   "area": "11797.3",
+   "index": 1,
+   "production": "19255.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1632.2124553923356"
+  },
+  {
+   "ano_agricola": "1976/77",
+   "area": "6949.0",
+   "index": 2,
+   "production": "12145.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1747.7334868326377"
+  },
+  {
+   "ano_agricola": "1977",
+   "area": "3153.3",
+   "index": 3,
+   "production": "2066.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "655.1866298798085"
+  },
+  {
+   "ano_agricola": "1977/78",
+   "area": "3925.8",
+   "index": 4,
+   "production": "486.4",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "123.89831371949666"
+  },
+  {
+   "ano_agricola": "1977/78",
+   "area": "10985.1",
+   "index": 5,
+   "production": "14017.1",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1276.0102320415835"
+  },
+  {
+   "ano_agricola": "1977/78",
+   "area": "7780.0",
+   "index": 6,
+   "production": "9726.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1250.1285347043702"
+  },
+  {
+   "ano_agricola": "1978",
+   "area": "2811.2",
+   "index": 7,
+   "production": "2680.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "953.3295389869095"
+  },
+  {
+   "ano_agricola": "1978/79",
+   "area": "3623.6",
+   "index": 8,
+   "production": "543.6",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "150.0165581189977"
+  },
+  {
+   "ano_agricola": "1978/79",
+   "area": "11304.8",
+   "index": 9,
+   "production": "16513.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1460.7777227372444"
+  },
+  {
+   "ano_agricola": "1978/79",
+   "area": "8151.0",
+   "index": 10,
+   "production": "10200.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1251.3801987486197"
+  },
+  {
+   "ano_agricola": "1979",
+   "area": "3897.6",
+   "index": 11,
+   "production": "2861.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "734.0414614121511"
+  },
+  {
+   "ano_agricola": "1979/80",
+   "area": "4070.9",
+   "index": 12,
+   "production": "577.4",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "141.83595765064237"
+  },
+  {
+   "ano_agricola": "1979/80",
+   "area": "11669.9",
+   "index": 13,
+   "production": "19435.3",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1665.4212975261141"
+  },
+  {
+   "ano_agricola": "1979/80",
+   "area": "8755.9",
+   "index": 14,
+   "production": "14887.400000000001",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1700.2706746308204"
+  },
+  {
+   "ano_agricola": "1980",
+   "area": "3105.2",
+   "index": 15,
+   "production": "2729.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "878.8483833569497"
+  },
+  {
+   "ano_agricola": "1980/81",
+   "area": "4136.7",
+   "index": 16,
+   "production": "594.4",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "143.68941426741122"
+  },
+  {
+   "ano_agricola": "1980/81",
+   "area": "12147.1",
+   "index": 17,
+   "production": "21283.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1752.1713001457138"
+  },
+  {
+   "ano_agricola": "1980/81",
+   "area": "8693.4",
+   "index": 18,
+   "production": "15484.8",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1781.2133342535717"
+  },
+  {
+   "ano_agricola": "1981",
+   "area": "2114.1",
+   "index": 19,
+   "production": "2217.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1048.673194267064"
+  },
+  {
+   "ano_agricola": "1981/82",
+   "area": "3826.6",
+   "index": 20,
+   "production": "680.5",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "177.8341086081639"
+  },
+  {
+   "ano_agricola": "1981/82",
+   "area": "12771.1",
+   "index": 21,
+   "production": "21604.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1691.6945290538795"
+  },
+  {
+   "ano_agricola": "1981/82",
+   "area": "8393.2",
+   "index": 22,
+   "production": "12890.9",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1535.8742791783823"
+  },
+  {
+   "ano_agricola": "1982",
+   "area": "2878.6",
+   "index": 23,
+   "production": "1876.1000000000001",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "651.7404293753909"
+  },
+  {
+   "ano_agricola": "1982/83",
+   "area": "3624.7",
+   "index": 24,
+   "production": "586.3",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "161.75131735040142"
+  },
+  {
+   "ano_agricola": "1982/83",
+   "area": "11658.2",
+   "index": 25,
+   "production": "19015.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1631.040812475339"
+  },
+  {
+   "ano_agricola": "1982/83",
+   "area": "8412.0",
+   "index": 26,
+   "production": "14532.9",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1727.639087018545"
+  },
+  {
+   "ano_agricola": "1983",
+   "area": "1932.1000000000001",
+   "index": 27,
+   "production": "2191.3999999999996",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1134.2063040215307"
+  },
+  {
+   "ano_agricola": "1983/84",
+   "area": "3107.3",
+   "index": 28,
+   "production": "674.5",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "217.06948154346213"
+  },
+  {
+   "ano_agricola": "1983/84",
+   "area": "12205.6",
+   "index": 29,
+   "production": "21178.2",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1735.1215835354262"
+  },
+  {
+   "ano_agricola": "1983/84",
+   "area": "9162.9",
+   "index": 30,
+   "production": "15340.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1674.1970336902073"
+  },
+  {
+   "ano_agricola": "1984",
+   "area": "2013.0",
+   "index": 31,
+   "production": "2029.3",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1008.0973671137605"
+  },
+  {
+   "ano_agricola": "1984/85",
+   "area": "3707.0",
+   "index": 32,
+   "production": "964.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "260.26436471540325"
+  },
+  {
+   "ano_agricola": "1984/85",
+   "area": "11940.2",
+   "index": 33,
+   "production": "21174.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1773.3957555149827"
+  },
+  {
+   "ano_agricola": "1984/85",
+   "area": "10074.0",
+   "index": 34,
+   "production": "18211.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1807.772483621203"
+  },
+  {
+   "ano_agricola": "1985",
+   "area": "2614.4",
+   "index": 35,
+   "production": "4324.3",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1654.031517747858"
+  },
+  {
+   "ano_agricola": "1985/86",
+   "area": "3325.3",
+   "index": 36,
+   "production": "793.4000000000001",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "238.59501398370074"
+  },
+  {
+   "ano_agricola": "1985/86",
+   "area": "13083.5",
+   "index": 37,
+   "production": "20264.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1548.8821798448428"
+  },
+  {
+   "ano_agricola": "1985/86",
+   "area": "9644.4",
+   "index": 38,
+   "production": "13207.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1369.4475550578575"
+  },
+  {
+   "ano_agricola": "1986",
+   "area": "3908.8",
+   "index": 39,
+   "production": "5632.7",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1441.0304952926729"
+  },
+  {
+   "ano_agricola": "1986/87",
+   "area": "2161.0",
+   "index": 40,
+   "production": "633.4",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "293.10504396112907"
+  },
+  {
+   "ano_agricola": "1986/87",
+   "area": "14610.4",
+   "index": 41,
+   "production": "26759.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1831.5035864863385"
+  },
+  {
+   "ano_agricola": "1986/87",
+   "area": "9221.7",
+   "index": 42,
+   "production": "17071.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1851.2313347864276"
+  },
+  {
+   "ano_agricola": "1987",
+   "area": "3429.6",
+   "index": 43,
+   "production": "6126.8",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1786.4473991135994"
+  },
+  {
+   "ano_agricola": "1987/88",
+   "area": "2576.1",
+   "index": 44,
+   "production": "863.6",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "335.2354334070883"
+  },
+  {
+   "ano_agricola": "1987/88",
+   "area": "13411.1",
+   "index": 45,
+   "production": "25224.3",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1880.8524282124508"
+  },
+  {
+   "ano_agricola": "1987/88",
+   "area": "10706.6",
+   "index": 46,
+   "production": "18127.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1693.0678273214653"
+  },
+  {
+   "ano_agricola": "1988",
+   "area": "3490.3",
+   "index": 47,
+   "production": "5846.5",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1675.0709108099588"
+  },
+  {
+   "ano_agricola": "1988/89",
+   "area": "2229.6",
+   "index": 48,
+   "production": "709.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "317.9942590599211"
+  },
+  {
+   "ano_agricola": "1988/89",
+   "area": "12974.2",
+   "index": 49,
+   "production": "26267.5",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2024.5949653928562"
+  },
+  {
+   "ano_agricola": "1988/89",
+   "area": "12252.8",
+   "index": 50,
+   "production": "23929.2",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1952.9576913032124"
+  },
+  {
+   "ano_agricola": "1989",
+   "area": "3306.6",
+   "index": 51,
+   "production": "5478.4",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1656.8075969273573"
+  },
+  {
+   "ano_agricola": "1989/90",
+   "area": "1963.8",
+   "index": 52,
+   "production": "665.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "339.0365617680008"
+  },
+  {
+   "ano_agricola": "1989/90",
+   "area": "12092.7",
+   "index": 53,
+   "production": "22257.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1840.5980467554803"
+  },
+  {
+   "ano_agricola": "1989/90",
+   "area": "11551.4",
+   "index": 54,
+   "production": "20101.3",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1740.1613657219038"
+  },
+  {
+   "ano_agricola": "1990",
+   "area": "3283.3",
+   "index": 55,
+   "production": "3304.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1006.3046325343403"
+  },
+  {
+   "ano_agricola": "1990/91",
+   "area": "1938.8",
+   "index": 56,
+   "production": "716.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "369.7132246750567"
+  },
+  {
+   "ano_agricola": "1990/91",
+   "area": "13451.4",
+   "index": 57,
+   "production": "24096.1",
+   "produto_norm": "milho",
+   "yield_kg_ha": "1791.3451387959617"
+  },
+  {
+   "ano_agricola": "1990/91",
+   "area": "9742.5",
+   "index": 58,
+   "production": "15394.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "1580.1385681293302"
+  },
+  {
+   "ano_agricola": "1991",
+   "area": "2145.8999999999996",
+   "index": 59,
+   "production": "3077.8",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1434.2700032620348"
+  },
+  {
+   "ano_agricola": "1991/92",
+   "area": "1976.3",
+   "index": 60,
+   "production": "668.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "338.0053635581642"
+  },
+  {
+   "ano_agricola": "1991/92",
+   "area": "14027.1",
+   "index": 61,
+   "production": "30771.199999999997",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2193.696487513456"
+  },
+  {
+   "ano_agricola": "1991/92",
+   "area": "9582.2",
+   "index": 62,
+   "production": "19418.6",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2026.5283546575938"
+  },
+  {
+   "ano_agricola": "1992",
+   "area": "1997.8999999999999",
+   "index": 63,
+   "production": "2739.2000000000003",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1371.03959157115"
+  },
+  {
+   "ano_agricola": "1992/93",
+   "area": "1277.1",
+   "index": 64,
+   "production": "420.3",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "329.1050035236082"
+  },
+  {
+   "ano_agricola": "1992/93",
+   "area": "12436.3",
+   "index": 65,
+   "production": "29207.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2348.584386031215"
+  },
+  {
+   "ano_agricola": "1992/93",
+   "area": "10717.0",
+   "index": 66,
+   "production": "23042.100000000002",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2150.051320332183"
+  },
+  {
+   "ano_agricola": "1993",
+   "area": "1641.8999999999999",
+   "index": 67,
+   "production": "2051.8",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1249.649795968086"
+  },
+  {
+   "ano_agricola": "1993/94",
+   "area": "1237.8",
+   "index": 68,
+   "production": "483.9",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "390.93553078041685"
+  },
+  {
+   "ano_agricola": "1993/94",
+   "area": "14151.699999999999",
+   "index": 69,
+   "production": "33173.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2344.149466141877"
+  },
+  {
+   "ano_agricola": "1993/94",
+   "area": "11501.7",
+   "index": 70,
+   "production": "25059.2",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2178.738795134632"
+  },
+  {
+   "ano_agricola": "1994",
+   "area": "1446.0",
+   "index": 71,
+   "production": "2137.8",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1478.4232365145228"
+  },
+  {
+   "ano_agricola": "1994/95",
+   "area": "1228.5",
+   "index": 72,
+   "production": "537.1",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "437.19983719983725"
+  },
+  {
+   "ano_agricola": "1994/95",
+   "area": "14282.199999999999",
+   "index": 73,
+   "production": "37441.9",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2621.577908165409"
+  },
+  {
+   "ano_agricola": "1994/95",
+   "area": "11678.7",
+   "index": 74,
+   "production": "25934.100000000002",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2220.632433404403"
+  },
+  {
+   "ano_agricola": "1995",
+   "area": "1033.8",
+   "index": 75,
+   "production": "1524.3",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1474.4631456761463"
+  },
+  {
+   "ano_agricola": "1995/96",
+   "area": "952.5",
+   "index": 76,
+   "production": "410.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "430.4461942257218"
+  },
+  {
+   "ano_agricola": "1995/96",
+   "area": "13756.7",
+   "index": 77,
+   "production": "32404.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2355.5576555423904"
+  },
+  {
+   "ano_agricola": "1995/96",
+   "area": "10663.2",
+   "index": 78,
+   "production": "23189.7",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2174.7411658789106"
+  },
+  {
+   "ano_agricola": "1996",
+   "area": "1832.8999999999999",
+   "index": 79,
+   "production": "3197.5",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1744.5032462218344"
+  },
+  {
+   "ano_agricola": "1996/97",
+   "area": "657.5",
+   "index": 80,
+   "production": "305.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "465.09505703422053"
+  },
+  {
+   "ano_agricola": "1996/97",
+   "area": "13798.8",
+   "index": 81,
+   "production": "35715.6",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2588.3120271327944"
+  },
+  {
+   "ano_agricola": "1996/97",
+   "area": "11381.3",
+   "index": 82,
+   "production": "26160.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2298.5072004076865"
+  },
+  {
+   "ano_agricola": "1997",
+   "area": "1500.9",
+   "index": 83,
+   "production": "2406.9",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1603.637817309614"
+  },
+  {
+   "ano_agricola": "1997/98",
+   "area": "879.9",
+   "index": 84,
+   "production": "411.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "467.0985339243096"
+  },
+  {
+   "ano_agricola": "1997/98",
+   "area": "11391.1",
+   "index": 85,
+   "production": "30187.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2650.121586150591"
+  },
+  {
+   "ano_agricola": "1997/98",
+   "area": "13157.9",
+   "index": 86,
+   "production": "31369.9",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2384.111446355422"
+  },
+  {
+   "ano_agricola": "1998",
+   "area": "1373.2",
+   "index": 87,
+   "production": "2187.7",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1593.140110690358"
+  },
+  {
+   "ano_agricola": "1998/99",
+   "area": "693.9",
+   "index": 88,
+   "production": "520.1",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "749.5316328001154"
+  },
+  {
+   "ano_agricola": "1998/99",
+   "area": "12513.0",
+   "index": 89,
+   "production": "32393.4",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2588.77966914409"
+  },
+  {
+   "ano_agricola": "1998/99",
+   "area": "12995.2",
+   "index": 90,
+   "production": "30765.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2367.4125831076085"
+  },
+  {
+   "ano_agricola": "1999",
+   "area": "1251.8",
+   "index": 91,
+   "production": "2402.8",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1919.4759546253397"
+  },
+  {
+   "ano_agricola": "1999/00",
+   "area": "823.1",
+   "index": 92,
+   "production": "700.3",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "850.8079212732353"
+  },
+  {
+   "ano_agricola": "1999/00",
+   "area": "12757.9",
+   "index": 93,
+   "production": "31640.5",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2480.0711715878006"
+  },
+  {
+   "ano_agricola": "1999/00",
+   "area": "13622.9",
+   "index": 94,
+   "production": "32344.6",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2374.2815406411264"
+  },
+  {
+   "ano_agricola": "2000",
+   "area": "1468.1",
+   "index": 95,
+   "production": "1658.4",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1129.623322661944"
+  },
+  {
+   "ano_agricola": "2000/01",
+   "area": "866.9",
+   "index": 96,
+   "production": "938.8000000000001",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1082.9392086745877"
+  },
+  {
+   "ano_agricola": "2000/01",
+   "area": "12972.5",
+   "index": 97,
+   "production": "42289.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3259.9498940065523"
+  },
+  {
+   "ano_agricola": "2000/01",
+   "area": "13969.8",
+   "index": 98,
+   "production": "38431.799999999996",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2751.063007344414"
+  },
+  {
+   "ano_agricola": "2001",
+   "area": "1710.2",
+   "index": 99,
+   "production": "3194.2",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1867.7347678634076"
+  },
+  {
+   "ano_agricola": "2001/02",
+   "area": "746.1",
+   "index": 100,
+   "production": "766.2",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1026.940088459992"
+  },
+  {
+   "ano_agricola": "2001/02",
+   "area": "12297.800000000001",
+   "index": 101,
+   "production": "35266.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2867.7324399486088"
+  },
+  {
+   "ano_agricola": "2001/02",
+   "area": "16386.2",
+   "index": 102,
+   "production": "41916.9",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2558.0610513724964"
+  },
+  {
+   "ano_agricola": "2002",
+   "area": "2051.6",
+   "index": 103,
+   "production": "2913.9",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1420.3061025541042"
+  },
+  {
+   "ano_agricola": "2002/03",
+   "area": "733.1",
+   "index": 104,
+   "production": "847.5",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1156.0496521620516"
+  },
+  {
+   "ano_agricola": "2002/03",
+   "area": "13226.2",
+   "index": 105,
+   "production": "47410.9",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3584.6199210657633"
+  },
+  {
+   "ano_agricola": "2002/03",
+   "area": "18474.8",
+   "index": 106,
+   "production": "52017.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2815.592049710958"
+  },
+  {
+   "ano_agricola": "2003",
+   "area": "2727.2999999999997",
+   "index": 107,
+   "production": "6073.5",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2226.927730722693"
+  },
+  {
+   "ano_agricola": "2003/04",
+   "area": "1096.4",
+   "index": 108,
+   "production": "1309.3999999999999",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1194.2721634439984"
+  },
+  {
+   "ano_agricola": "2003/04",
+   "area": "12783.0",
+   "index": 109,
+   "production": "42128.5",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3295.6661190643827"
+  },
+  {
+   "ano_agricola": "2003/04",
+   "area": "21375.8",
+   "index": 110,
+   "production": "49792.7",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2329.39585886844"
+  },
+  {
+   "ano_agricola": "2004",
+   "area": "2756.2999999999997",
+   "index": 111,
+   "production": "5845.900000000001",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2120.9229764539423"
+  },
+  {
+   "ano_agricola": "2004/05",
+   "area": "1175.2",
+   "index": 112,
+   "production": "1298.6",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1105.00340367597"
+  },
+  {
+   "ano_agricola": "2004/05",
+   "area": "12208.2",
+   "index": 113,
+   "production": "35006.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "2867.474320538654"
+  },
+  {
+   "ano_agricola": "2004/05",
+   "area": "23301.1",
+   "index": 114,
+   "production": "52304.7",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2244.7309354493996"
+  },
+  {
+   "ano_agricola": "2005",
+   "area": "2361.7999999999997",
+   "index": 115,
+   "production": "4873.1",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2063.299178592599"
+  },
+  {
+   "ano_agricola": "2005/06",
+   "area": "853.3",
+   "index": 116,
+   "production": "1037.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1216.2193835696705"
+  },
+  {
+   "ano_agricola": "2005/06",
+   "area": "12963.9",
+   "index": 117,
+   "production": "42514.9",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3279.48379731408"
+  },
+  {
+   "ano_agricola": "2005/06",
+   "area": "22749.4",
+   "index": 118,
+   "production": "55027.100000000006",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2418.8374198879974"
+  },
+  {
+   "ano_agricola": "2006",
+   "area": "1757.5",
+   "index": 119,
+   "production": "2233.7",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "1270.9530583214791"
+  },
+  {
+   "ano_agricola": "2006/07",
+   "area": "1095.2",
+   "index": 120,
+   "production": "1524.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1391.5266617969319"
+  },
+  {
+   "ano_agricola": "2006/07",
+   "area": "14054.9",
+   "index": 121,
+   "production": "51369.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3654.931731993824"
+  },
+  {
+   "ano_agricola": "2006/07",
+   "area": "20686.8",
+   "index": 122,
+   "production": "58391.8",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2822.659860394068"
+  },
+  {
+   "ano_agricola": "2007",
+   "area": "1851.8",
+   "index": 123,
+   "production": "4097.1",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2212.495949886597"
+  },
+  {
+   "ano_agricola": "2007/08",
+   "area": "1077.4",
+   "index": 124,
+   "production": "1602.1999999999998",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1487.098570633005"
+  },
+  {
+   "ano_agricola": "2007/08",
+   "area": "14765.7",
+   "index": 125,
+   "production": "58652.2",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3972.1923105575756"
+  },
+  {
+   "ano_agricola": "2007/08",
+   "area": "21313.1",
+   "index": 126,
+   "production": "60017.700000000004",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2816.0004879628023"
+  },
+  {
+   "ano_agricola": "2008",
+   "area": "2396.2",
+   "index": 127,
+   "production": "5884.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2455.5546281612556"
+  },
+  {
+   "ano_agricola": "2008/09",
+   "area": "843.1999999999999",
+   "index": 128,
+   "production": "1213.7",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1439.3975332068314"
+  },
+  {
+   "ano_agricola": "2008/09",
+   "area": "14171.8",
+   "index": 129,
+   "production": "51003.9",
+   "produto_norm": "milho",
+   "yield_kg_ha": "3598.9711963194513"
+  },
+  {
+   "ano_agricola": "2008/09",
+   "area": "21743.1",
+   "index": 130,
+   "production": "57165.5",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2629.1329203287482"
+  },
+  {
+   "ano_agricola": "2009",
+   "area": "2428.0",
+   "index": 131,
+   "production": "5026.2",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2070.0988467874795"
+  },
+  {
+   "ano_agricola": "2009/10",
+   "area": "835.7",
+   "index": 132,
+   "production": "1194.1",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1428.8620318296037"
+  },
+  {
+   "ano_agricola": "2009/10",
+   "area": "12993.9",
+   "index": 133,
+   "production": "56018.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "4311.0998237634585"
+  },
+  {
+   "ano_agricola": "2009/10",
+   "area": "23467.9",
+   "index": 134,
+   "production": "68688.2",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2926.9001487137743"
+  },
+  {
+   "ano_agricola": "2010",
+   "area": "2149.8",
+   "index": 135,
+   "production": "5881.6",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2735.8824076658293"
+  },
+  {
+   "ano_agricola": "2010/11",
+   "area": "1399.6",
+   "index": 136,
+   "production": "1959.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1400.257216347528"
+  },
+  {
+   "ano_agricola": "2010/11",
+   "area": "13806.1",
+   "index": 137,
+   "production": "57407.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "4158.089540130812"
+  },
+  {
+   "ano_agricola": "2010/11",
+   "area": "24181.0",
+   "index": 138,
+   "production": "75324.3",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3115.0200570696"
+  },
+  {
+   "ano_agricola": "2011",
+   "area": "2166.2",
+   "index": 139,
+   "production": "5788.599999999999",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2672.2370972209396"
+  },
+  {
+   "ano_agricola": "2011/12",
+   "area": "1393.4",
+   "index": 140,
+   "production": "1877.3",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1347.2800344481125"
+  },
+  {
+   "ano_agricola": "2011/12",
+   "area": "15178.1",
+   "index": 141,
+   "production": "72979.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "4808.2302791522"
+  },
+  {
+   "ano_agricola": "2011/12",
+   "area": "25042.2",
+   "index": 142,
+   "production": "66383.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2650.8453730103583"
+  },
+  {
+   "ano_agricola": "2012",
+   "area": "1895.3999999999999",
+   "index": 143,
+   "production": "4379.5",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2310.5940698533295"
+  },
+  {
+   "ano_agricola": "2012/13",
+   "area": "894.3",
+   "index": 144,
+   "production": "1310.3",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1465.1682880465169"
+  },
+  {
+   "ano_agricola": "2012/13",
+   "area": "15829.3",
+   "index": 145,
+   "production": "81505.59999999999",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5149.0337538615095"
+  },
+  {
+   "ano_agricola": "2012/13",
+   "area": "27736.100000000002",
+   "index": 146,
+   "production": "81499.4",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2938.3871560889957"
+  },
+  {
+   "ano_agricola": "2013",
+   "area": "2209.7999999999997",
+   "index": 147,
+   "production": "5527.9",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2501.538600778351"
+  },
+  {
+   "ano_agricola": "2013/14",
+   "area": "1121.6",
+   "index": 148,
+   "production": "1734.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1546.0057061340945"
+  },
+  {
+   "ano_agricola": "2013/14",
+   "area": "15828.9",
+   "index": 149,
+   "production": "80051.7",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5057.312889714383"
+  },
+  {
+   "ano_agricola": "2013/14",
+   "area": "30173.1",
+   "index": 150,
+   "production": "86172.7",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2855.9445333757553"
+  },
+  {
+   "ano_agricola": "2014",
+   "area": "2758.0",
+   "index": 151,
+   "production": "5971.1",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2165.010877447426"
+  },
+  {
+   "ano_agricola": "2014/15",
+   "area": "976.2",
+   "index": 152,
+   "production": "1562.8000000000002",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1600.901454619955"
+  },
+  {
+   "ano_agricola": "2014/15",
+   "area": "15692.9",
+   "index": 153,
+   "production": "84672.5",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5395.59291144403"
+  },
+  {
+   "ano_agricola": "2014/15",
+   "area": "32092.9",
+   "index": 154,
+   "production": "97093.9",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3025.4012569758415"
+  },
+  {
+   "ano_agricola": "2015",
+   "area": "2448.8",
+   "index": 155,
+   "production": "5534.9",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2260.249918327344"
+  },
+  {
+   "ano_agricola": "2015/16",
+   "area": "955.1999999999998",
+   "index": 156,
+   "production": "1289.2",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1349.664991624791"
+  },
+  {
+   "ano_agricola": "2015/16",
+   "area": "15754.7",
+   "index": 157,
+   "production": "69141.3",
+   "produto_norm": "milho",
+   "yield_kg_ha": "4388.614191320685"
+  },
+  {
+   "ano_agricola": "2015/16",
+   "area": "33228.4",
+   "index": 158,
+   "production": "95697.6",
+   "produto_norm": "soja",
+   "yield_kg_ha": "2879.9942218102588"
+  },
+  {
+   "ano_agricola": "2016",
+   "area": "2143.0",
+   "index": 159,
+   "production": "6284.7",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2932.6644890340644"
+  },
+  {
+   "ano_agricola": "2016/17",
+   "area": "939.4999999999999",
+   "index": 160,
+   "production": "1529.7",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1628.2064928153275"
+  },
+  {
+   "ano_agricola": "2016/17",
+   "area": "17591.7",
+   "index": 161,
+   "production": "97842.9",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5561.8786132096375"
+  },
+  {
+   "ano_agricola": "2016/17",
+   "area": "33909.4",
+   "index": 162,
+   "production": "115026.4",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3392.1685432357986"
+  },
+  {
+   "ano_agricola": "2017",
+   "area": "1916.0",
+   "index": 163,
+   "production": "4263.5",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2225.2087682672236"
+  },
+  {
+   "ano_agricola": "2017/18",
+   "area": "1175.8999999999999",
+   "index": 164,
+   "production": "2006.1000000000001",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1706.0124160217708"
+  },
+  {
+   "ano_agricola": "2017/18",
+   "area": "16616.4",
+   "index": 165,
+   "production": "80709.6",
+   "produto_norm": "milho",
+   "yield_kg_ha": "4857.225391781613"
+  },
+  {
+   "ano_agricola": "2017/18",
+   "area": "35149.200000000004",
+   "index": 166,
+   "production": "123258.90000000001",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3506.734150421631"
+  },
+  {
+   "ano_agricola": "2018",
+   "area": "2042.4",
+   "index": 167,
+   "production": "5427.6",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2657.4618096357226"
+  },
+  {
+   "ano_agricola": "2018/19",
+   "area": "1618.1999999999998",
+   "index": 168,
+   "production": "2778.8",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1717.2166604869612"
+  },
+  {
+   "ano_agricola": "2018/19",
+   "area": "17493.0",
+   "index": 169,
+   "production": "100043.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5719.03046933059"
+  },
+  {
+   "ano_agricola": "2018/19",
+   "area": "35876.0",
+   "index": 170,
+   "production": "119718.1",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3336.996878135801"
+  },
+  {
+   "ano_agricola": "2019",
+   "area": "2039.0",
+   "index": 171,
+   "production": "5154.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2527.709661598823"
+  },
+  {
+   "ano_agricola": "2019/20",
+   "area": "1665.6000000000001",
+   "index": 172,
+   "production": "3001.6",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1802.113352545629"
+  },
+  {
+   "ano_agricola": "2019/20",
+   "area": "18527.0",
+   "index": 173,
+   "production": "102501.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5532.520105791547"
+  },
+  {
+   "ano_agricola": "2019/20",
+   "area": "36948.0",
+   "index": 174,
+   "production": "124845.0",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3378.9379668723614"
+  },
+  {
+   "ano_agricola": "2020",
+   "area": "2328.0",
+   "index": 175,
+   "production": "6814.0",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2926.975945017182"
+  },
+  {
+   "ano_agricola": "2020/21",
+   "area": "1370.6",
+   "index": 176,
+   "production": "2359.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1721.144024514811"
+  },
+  {
+   "ano_agricola": "2020/21",
+   "area": "19867.0",
+   "index": 177,
+   "production": "87020.0",
+   "produto_norm": "milho",
+   "yield_kg_ha": "4380.127850203856"
+  },
+  {
+   "ano_agricola": "2020/21",
+   "area": "39531.2",
+   "index": 178,
+   "production": "139385.3",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3525.956712672522"
+  },
+  {
+   "ano_agricola": "2021",
+   "area": "3029.9",
+   "index": 179,
+   "production": "9365.9",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "3091.158124030496"
+  },
+  {
+   "ano_agricola": "2021/22",
+   "area": "1600.3999999999999",
+   "index": 180,
+   "production": "2550.1",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1593.4141464633842"
+  },
+  {
+   "ano_agricola": "2021/22",
+   "area": "21581.9",
+   "index": 181,
+   "production": "113272.3",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5248.48599984246"
+  },
+  {
+   "ano_agricola": "2021/22",
+   "area": "41793.8",
+   "index": 182,
+   "production": "130828.7",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3130.3375141767438"
+  },
+  {
+   "ano_agricola": "2022",
+   "area": "3450.5",
+   "index": 183,
+   "production": "10817.5",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "3135.052890885379"
+  },
+  {
+   "ano_agricola": "2022/23",
+   "area": "1663.6999999999998",
+   "index": 184,
+   "production": "3150.1",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1893.4303059445815"
+  },
+  {
+   "ano_agricola": "2022/23",
+   "area": "22267.4",
+   "index": 185,
+   "production": "131866.1",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5921.935205726758"
+  },
+  {
+   "ano_agricola": "2022/23",
+   "area": "44514.7",
+   "index": 186,
+   "production": "159154.3",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3575.320062810712"
+  },
+  {
+   "ano_agricola": "2023",
+   "area": "3068.8",
+   "index": 187,
+   "production": "8807.3",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2869.9491657977055"
+  },
+  {
+   "ano_agricola": "2023/24",
+   "area": "1944.1999999999998",
+   "index": 188,
+   "production": "3654.0",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1879.4362719884787"
+  },
+  {
+   "ano_agricola": "2023/24",
+   "area": "21058.5",
+   "index": 189,
+   "production": "115723.2",
+   "produto_norm": "milho",
+   "yield_kg_ha": "5495.320179499965"
+  },
+  {
+   "ano_agricola": "2023/24",
+   "area": "46095.9",
+   "index": 190,
+   "production": "151283.4",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3281.927459925937"
+  },
+  {
+   "ano_agricola": "2024",
+   "area": "2449.0",
+   "index": 191,
+   "production": "7536.1",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "3077.215189873418"
+  },
+  {
+   "ano_agricola": "2024/25",
+   "area": "2086.1",
+   "index": 192,
+   "production": "4061.1000000000004",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1946.7427256603235"
+  },
+  {
+   "ano_agricola": "2024/25",
+   "area": "21857.5",
+   "index": 193,
+   "production": "139695.8",
+   "produto_norm": "milho",
+   "yield_kg_ha": "6391.2066796294175"
+  },
+  {
+   "ano_agricola": "2024/25",
+   "area": "47350.6",
+   "index": 194,
+   "production": "171472.3",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3621.3332038031194"
+  },
+  {
+   "ano_agricola": "2025",
+   "area": "2117.0",
+   "index": 195,
+   "production": "6296.8",
+   "produto_norm": "trigo",
+   "yield_kg_ha": "2974.3977326405293"
+  },
+  {
+   "ano_agricola": "2025/26",
+   "area": "2020.2",
+   "index": 196,
+   "production": "3978.4",
+   "produto_norm": "algodao em pluma",
+   "yield_kg_ha": "1969.3099693099693"
+  },
+  {
+   "ano_agricola": "2025/26",
+   "area": "22582.0",
+   "index": 197,
+   "production": "140463.1",
+   "produto_norm": "milho",
+   "yield_kg_ha": "6220.135506155345"
+  },
+  {
+   "ano_agricola": "2025/26",
+   "area": "48563.3",
+   "index": 198,
+   "production": "180252.69999999998",
+   "produto_norm": "soja",
+   "yield_kg_ha": "3711.7061649434854"
+  }
+ ],
+ "msamb_via_mandi_aggregate": {
+  "aggregate": [
+   {
+    "Close": "69500.0",
+    "Date": "2026-11-10",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "40.0",
+    "arrivals_mt": "4136.1",
+    "index": 0
+   },
+   {
+    "Close": "69000.0",
+    "Date": "2026-11-11",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "33.0",
+    "arrivals_mt": "997.3999999999999",
+    "index": 1
+   },
+   {
+    "Close": "70000.0",
+    "Date": "2026-11-12",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "108.0",
+    "arrivals_mt": "4581.2",
+    "index": 2
+   },
+   {
+    "Close": "70500.0",
+    "Date": "2026-11-13",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "121.0",
+    "arrivals_mt": "7356.599999999999",
+    "index": 3
+   },
+   {
+    "Close": "71000.0",
+    "Date": "2026-11-14",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "86.0",
+    "arrivals_mt": "4873.500000000001",
+    "index": 4
+   },
+   {
+    "Close": "71000.0",
+    "Date": "2026-11-15",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "17.0",
+    "arrivals_mt": "908.9999999999999",
+    "index": 5
+   },
+   {
+    "Close": "72500.0",
+    "Date": "2026-11-16",
+    "High": "nan",
+    "Low": "nan",
+    "Open": "nan",
+    "Unit": "INR/MT",
+    "Volume": "126.0",
+    "arrivals_mt": "9335.800000000001",
+    "index": 6
+   }
+  ],
+  "records": [
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "8.4",
+    "modal_price": "7108.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "125.0",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "5.1",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "9.2",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "3.8",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "55.0",
+    "modal_price": "7375.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "7.6",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "530.0",
+    "modal_price": "7599.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "750.0",
+    "modal_price": "7470.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "15.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "38.4",
+    "modal_price": "7325.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "568.8",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "25.5",
+    "modal_price": "7445.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "100.9",
+    "modal_price": "7277.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "64.0",
+    "modal_price": "7700.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "156.0",
+    "modal_price": "7450.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "2.1",
+    "modal_price": "7492.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "847.4",
+    "modal_price": "7600.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "4.2",
+    "modal_price": "7550.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "275.1",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "85.9",
+    "modal_price": "7365.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "7360.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "14.0",
+    "modal_price": "7439.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "20.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "0.8",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "5.1",
+    "modal_price": "7212.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "29.3",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "97.1",
+    "modal_price": "7410.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "27.0",
+    "modal_price": "7615.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "32.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "13.0",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "3.6",
+    "modal_price": "7496.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "5.9",
+    "modal_price": "7152.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "6.2",
+    "modal_price": "7450.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "7567.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "16.8",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "0.9",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "74.7",
+    "modal_price": "7583.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "2.5",
+    "modal_price": "7230.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "6.0",
+    "modal_price": "7600.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "48.3",
+    "modal_price": "7326.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "21.3",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "36.1",
+    "modal_price": "7452.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "37.5",
+    "modal_price": "7375.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "57.5",
+    "modal_price": "7550.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "19.9",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "7.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "14.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "100.0",
+    "modal_price": "7351.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "6.0",
+    "modal_price": "4900.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "11.9",
+    "modal_price": "7575.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "27.5",
+    "modal_price": "7550.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "11.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "14.5",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "8.9",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "17/11/2026",
+    "arrivals": "87.5",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.1",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.2",
+    "modal_price": "7411.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.8",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.9",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "54.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "184.4",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "11.7",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "7025.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "2.5",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "8.1",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "67.0",
+    "modal_price": "7280.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "42.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "20.0",
+    "modal_price": "7121.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "8.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "750.0",
+    "modal_price": "7340.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "27.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "65.0",
+    "modal_price": "7480.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "240.0",
+    "modal_price": "7075.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "5.3",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "0.8",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "55.5",
+    "modal_price": "7395.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "10.2",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "7360.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "70.0",
+    "modal_price": "7850.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "39.8",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "587.5",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7175.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "0.8",
+    "modal_price": "6650.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "5.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "81.0",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "8.3",
+    "modal_price": "7405.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.3",
+    "modal_price": "7245.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "143.0",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.8",
+    "modal_price": "7275.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "6.6",
+    "modal_price": "7550.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "46.5",
+    "modal_price": "7571.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "946.0",
+    "modal_price": "7580.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "7480.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1565.0",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "497.8",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "201.1",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "69.4",
+    "modal_price": "6827.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "47.3",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.5",
+    "modal_price": "7170.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "65.0",
+    "modal_price": "7600.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "40.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "454.2",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "6.3",
+    "modal_price": "7337.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "60.0",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "94.6",
+    "modal_price": "7450.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "46.0",
+    "modal_price": "7275.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "8.1",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "41.0",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "49.1",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "65.0",
+    "modal_price": "7230.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "477.9",
+    "modal_price": "6825.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "79.5",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "17.0",
+    "modal_price": "7475.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "17.3",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "17.2",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.4",
+    "modal_price": "7327.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "7001.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "8.5",
+    "modal_price": "7231.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.9",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "27.0",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "7375.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "110.0",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "16.5",
+    "modal_price": "7450.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "18.3",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.4",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.0",
+    "modal_price": "7175.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "4.1",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.1",
+    "modal_price": "6550.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "0.6",
+    "modal_price": "7025.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "0.2",
+    "modal_price": "7234.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "1.4",
+    "modal_price": "7500.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "18.1",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "93.2",
+    "modal_price": "7481.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "6.7",
+    "modal_price": "7324.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "39.4",
+    "modal_price": "7465.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "5.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.3",
+    "modal_price": "7170.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "7.0",
+    "modal_price": "7450.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "16.0",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "43.3",
+    "modal_price": "7775.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "41.1",
+    "modal_price": "7208.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.1",
+    "modal_price": "7351.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "20.6",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "82.2",
+    "modal_price": "7470.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "15.3",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "25.5",
+    "modal_price": "7351.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "35.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "99.1",
+    "modal_price": "7125.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "271.7",
+    "modal_price": "7125.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "45.0",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "72.2",
+    "modal_price": "7375.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "11.0",
+    "modal_price": "7105.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "7385.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "12.9",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "70.7",
+    "modal_price": "7260.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "3.1",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "40.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "56.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "100.0",
+    "modal_price": "7301.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "23.5",
+    "modal_price": "7355.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "11.5",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "6850.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "26.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "18.8",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "26.9",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "9.2",
+    "modal_price": "7325.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "89.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "20.7",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "84.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "11.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "16/11/2026",
+    "arrivals": "12.9",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "7.4",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "420.0",
+    "modal_price": "7440.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "0.3",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "32.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "4.3",
+    "modal_price": "7450.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "12.6",
+    "modal_price": "5600.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "6650.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "1.9",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "38.5",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "102.1",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "40.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "82.5",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "136.5",
+    "modal_price": "6850.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "13.5",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "15/11/2026",
+    "arrivals": "13.5",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "47.0",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "34.9",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "52.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "5.4",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "11.7",
+    "modal_price": "6870.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "111.3",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "3.1",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "9.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "400.0",
+    "modal_price": "7315.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "45.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "10.1",
+    "modal_price": "7110.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.5",
+    "modal_price": "7155.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "4.0",
+    "modal_price": "7351.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "6930.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "18.5",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.5",
+    "modal_price": "6920.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "10.7",
+    "modal_price": "7005.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "328.9",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "7057.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "9.5",
+    "modal_price": "7199.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.7",
+    "modal_price": "6600.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "23.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.9",
+    "modal_price": "7251.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "44.7",
+    "modal_price": "7380.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "5.0",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "31.3",
+    "modal_price": "7132.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "676.4",
+    "modal_price": "7380.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "414.6",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "206.7",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "48.9",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "4.1",
+    "modal_price": "6941.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "77.5",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "25.0",
+    "modal_price": "6400.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "322.4",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "7154.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "210.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "6600.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "7001.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "241.5",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "108.2",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "18.1",
+    "modal_price": "7055.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "62.5",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "45.0",
+    "modal_price": "7255.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "332.6",
+    "modal_price": "7038.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "52.5",
+    "modal_price": "7005.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "8.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "9.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.7",
+    "modal_price": "7263.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "3.6",
+    "modal_price": "6295.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.7",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.7",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "150.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "100.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.4",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "3.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.2",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "11.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "40.6",
+    "modal_price": "7216.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.5",
+    "modal_price": "6880.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "2.1",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "7.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "8.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "44.7",
+    "modal_price": "7060.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "0.9",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "17.7",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "1.4",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "22.5",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "45.0",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "8.1",
+    "modal_price": "6865.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "27.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "34.0",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "21.0",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "70.0",
+    "modal_price": "7221.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "7.6",
+    "modal_price": "7075.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "4.8",
+    "modal_price": "7125.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "24.6",
+    "modal_price": "7125.0"
+   },
+   {
+    "arrival_date": "14/11/2026",
+    "arrivals": "13.7",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "17.4",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "8.1",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "94.0",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "98.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.2",
+    "modal_price": "6926.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "39.0",
+    "modal_price": "7045.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "129.3",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.7",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "4.8",
+    "modal_price": "7225.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "0.1",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "12.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "5.7",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "430.0",
+    "modal_price": "7312.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "500.0",
+    "modal_price": "7090.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "75.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.8",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "19.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "43.5",
+    "modal_price": "7311.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.3",
+    "modal_price": "6951.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "150.0",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "12.6",
+    "modal_price": "7075.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "7140.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "5.1",
+    "modal_price": "7271.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "34.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "18.4",
+    "modal_price": "7217.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "4.2",
+    "modal_price": "6905.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "20.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.7",
+    "modal_price": "7151.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "70.0",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "26.3",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "356.8",
+    "modal_price": "7075.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "18.4",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "6801.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "4.7",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "35.0",
+    "modal_price": "6875.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "9.8",
+    "modal_price": "7133.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "4.2",
+    "modal_price": "5600.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "66.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "8.7",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "5.7",
+    "modal_price": "7350.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "23.3",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "5.2",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "25.5",
+    "modal_price": "7390.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "24.7",
+    "modal_price": "7136.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1686.4",
+    "modal_price": "7380.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "452.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "169.6",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "46.0",
+    "modal_price": "7092.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "52.6",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "20.0",
+    "modal_price": "6970.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "110.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "362.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "8.0",
+    "modal_price": "7158.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "150.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "6921.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "141.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "27.4",
+    "modal_price": "7225.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "21.0",
+    "modal_price": "6828.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "53.0",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "42.5",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "5600.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "331.6",
+    "modal_price": "6967.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "44.6",
+    "modal_price": "7045.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "26.5",
+    "modal_price": "7185.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "19.7",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "4.5",
+    "modal_price": "7180.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "7.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "6.6",
+    "modal_price": "7191.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.1",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.7",
+    "modal_price": "7175.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "18.3",
+    "modal_price": "7225.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "250.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "2.8",
+    "modal_price": "6712.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.2",
+    "modal_price": "7140.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "80.0",
+    "modal_price": "7162.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "0.7",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.6",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.7",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "0.1",
+    "modal_price": "7015.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "38.0",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.8",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "11.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "80.0",
+    "modal_price": "7276.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "20.4",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "34.8",
+    "modal_price": "7215.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.9",
+    "modal_price": "6720.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "3.6",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "8.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "10.7",
+    "modal_price": "6850.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "13.1",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "0.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "27.7",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "36.7",
+    "modal_price": "6956.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "1.6",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "14.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "33.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "52.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "51.1",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "5.6",
+    "modal_price": "7010.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "14.0",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "35.0",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "39.0",
+    "modal_price": "7151.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "14.2",
+    "modal_price": "7205.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "4.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "25.5",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "12.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "8.3",
+    "modal_price": "7145.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "50.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "6075.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "6.8",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "13/11/2026",
+    "arrivals": "13.6",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "7158.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "210.0",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "12.3",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "8.2",
+    "modal_price": "6776.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "66.5",
+    "modal_price": "6945.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "328.8",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.9",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "1.4",
+    "modal_price": "6975.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "7.0",
+    "modal_price": "6821.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "360.0",
+    "modal_price": "7245.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "31.1",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "6925.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.7",
+    "modal_price": "7285.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.2",
+    "modal_price": "6850.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "15.8",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "16.3",
+    "modal_price": "6676.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "5.3",
+    "modal_price": "6825.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "20.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "6860.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "53.6",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "52.0",
+    "modal_price": "7060.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "175.9",
+    "modal_price": "6980.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "19.1",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7025.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "20.0",
+    "modal_price": "6887.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.9",
+    "modal_price": "6911.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.2",
+    "modal_price": "6750.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "36.0",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.1",
+    "modal_price": "7400.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "4.4",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "18.5",
+    "modal_price": "7201.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "360.9",
+    "modal_price": "7340.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "538.3",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "110.6",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "52.5",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "65.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "32.0",
+    "modal_price": "7175.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "151.1",
+    "modal_price": "6000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.0",
+    "modal_price": "7094.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "300.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "15.0",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "7041.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "112.1",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "38.5",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "23.6",
+    "modal_price": "7180.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.8",
+    "modal_price": "7028.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "22.9",
+    "modal_price": "7205.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "167.4",
+    "modal_price": "6712.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "20.9",
+    "modal_price": "7005.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "7.0",
+    "modal_price": "7240.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "11.4",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "11.8",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.3",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.3",
+    "modal_price": "6941.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "17.3",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "25.0",
+    "modal_price": "7040.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "7061.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "70.0",
+    "modal_price": "7055.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.6",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "4.2",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.4",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.3",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "7145.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "2.4",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "0.1",
+    "modal_price": "6924.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "66.0",
+    "modal_price": "7250.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "11.1",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.0",
+    "modal_price": "7152.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "117.0",
+    "modal_price": "7256.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "36.1",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "42.7",
+    "modal_price": "7215.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "5.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "2.4",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "12.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "13.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "8.6",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "43.2",
+    "modal_price": "7300.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "30.9",
+    "modal_price": "6980.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "4.9",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "13.6",
+    "modal_price": "7235.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "10.3",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "40.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "10.5",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "25.6",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "26.0",
+    "modal_price": "7001.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "6.5",
+    "modal_price": "6895.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "52.2",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "17.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "56.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "4.5",
+    "modal_price": "7235.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "3.0",
+    "modal_price": "6775.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "16.7",
+    "modal_price": "6850.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "8.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "12.0",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "8.7",
+    "modal_price": "7065.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "31.9",
+    "modal_price": "7025.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "64.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "10.0",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "45.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "12/11/2026",
+    "arrivals": "8.5",
+    "modal_price": "6775.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "94.6",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "11.4",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "0.5",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "2.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "410.0",
+    "modal_price": "7125.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "6.6",
+    "modal_price": "6925.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "1.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "6.8",
+    "modal_price": "7181.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "0.9",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "2.2",
+    "modal_price": "5800.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "0.6",
+    "modal_price": "6650.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "5.8",
+    "modal_price": "7180.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "16.2",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "53.4",
+    "modal_price": "7100.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "13.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "19.8",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "60.3",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "4.3",
+    "modal_price": "6880.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "1.0",
+    "modal_price": "6875.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "2.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "17.6",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "0.9",
+    "modal_price": "6620.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "2.2",
+    "modal_price": "6999.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "10.5",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "4.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "23.5",
+    "modal_price": "7151.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "41.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "29.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "49.0",
+    "modal_price": "6700.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "1.1",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "34.5",
+    "modal_price": "6510.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "54.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "11/11/2026",
+    "arrivals": "16.3",
+    "modal_price": "6775.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "37.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "84.6",
+    "modal_price": "7001.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "24.8",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "4.0",
+    "modal_price": "6758.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "725.0",
+    "modal_price": "7016.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "11.0",
+    "modal_price": "6900.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "6.2",
+    "modal_price": "6841.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "1.7",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "32.5",
+    "modal_price": "7051.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "6600.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "4.4",
+    "modal_price": "5800.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "0.6",
+    "modal_price": "6650.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "5.1",
+    "modal_price": "7150.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "26.2",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "221.8",
+    "modal_price": "7200.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "948.5",
+    "modal_price": "7050.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "7080.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "420.9",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "50.2",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "6000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "30.0",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "31.1",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "0.8",
+    "modal_price": "6650.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "0.4",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "3.5",
+    "modal_price": "6500.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "3.2",
+    "modal_price": "5750.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "167.0",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "223.0",
+    "modal_price": "6989.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "251.9",
+    "modal_price": "7037.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "270.9",
+    "modal_price": "6991.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "1.5",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "15.5",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "5.0",
+    "modal_price": "7002.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "347.0",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "53.1",
+    "modal_price": "7000.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "30.6",
+    "modal_price": "6800.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "56.2",
+    "modal_price": "6950.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "28.0",
+    "modal_price": "6953.0"
+   },
+   {
+    "arrival_date": "10/11/2026",
+    "arrivals": "7.1",
+    "modal_price": "6780.0"
+   }
+  ]
+ },
+ "ncdex_spot": [
+  {
+   "Close": "72239.0",
+   "Date": "2026-11-02",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 0
+  },
+  {
+   "Close": "71532.5",
+   "Date": "2026-11-03",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 1
+  },
+  {
+   "Close": "70706.5",
+   "Date": "2026-11-04",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 2
+  },
+  {
+   "Close": "70716.5",
+   "Date": "2026-11-05",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 3
+  },
+  {
+   "Close": "70324.0",
+   "Date": "2026-11-06",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 4
+  },
+  {
+   "Close": "72576.0",
+   "Date": "2026-11-11",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 5
+  },
+  {
+   "Close": "73435.0",
+   "Date": "2026-11-12",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 6
+  },
+  {
+   "Close": "73781.5",
+   "Date": "2026-11-13",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 7
+  },
+  {
+   "Close": "75340.0",
+   "Date": "2026-11-16",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 8
+  },
+  {
+   "Close": "76549.0",
+   "Date": "2026-11-17",
+   "High": "nan",
+   "Low": "nan",
+   "Open": "nan",
+   "Unit": "INR/MT",
+   "Volume": "nan",
+   "arrivals_mt": "nan",
+   "index": 9
+  }
+ ],
+ "noticias_agricolas": {
+  "noticias_agricolas_parana.html": [
+   {
+    "Date": "2026-07-24",
+    "Unit": "BRL/MT",
+    "index": 0,
+    "price_brl_mt": "2337.67"
+   },
+   {
+    "Date": "2026-07-27",
+    "Unit": "BRL/MT",
+    "index": 1,
+    "price_brl_mt": "2343.0"
+   },
+   {
+    "Date": "2026-07-28",
+    "Unit": "BRL/MT",
+    "index": 2,
+    "price_brl_mt": "2333.67"
+   },
+   {
+    "Date": "2026-07-29",
+    "Unit": "BRL/MT",
+    "index": 3,
+    "price_brl_mt": "2316.67"
+   },
+   {
+    "Date": "2026-07-30",
+    "Unit": "BRL/MT",
+    "index": 4,
+    "price_brl_mt": "2297.0"
+   },
+   {
+    "Date": "2026-07-31",
+    "Unit": "BRL/MT",
+    "index": 5,
+    "price_brl_mt": "2287.83"
+   },
+   {
+    "Date": "2026-08-03",
+    "Unit": "BRL/MT",
+    "index": 6,
+    "price_brl_mt": "2277.67"
+   },
+   {
+    "Date": "2026-08-04",
+    "Unit": "BRL/MT",
+    "index": 7,
+    "price_brl_mt": "2267.17"
+   },
+   {
+    "Date": "2026-08-05",
+    "Unit": "BRL/MT",
+    "index": 8,
+    "price_brl_mt": "2278.83"
+   },
+   {
+    "Date": "2026-08-06",
+    "Unit": "BRL/MT",
+    "index": 9,
+    "price_brl_mt": "2291.67"
+   }
+  ]
+ },
+ "sopa": "CropEstimate(crop_year=2025, rows=(StateRow(state='Maharashtra', area_lakh_ha=44.683, yield_kg_ha=1169.0, production_lakh_t=52.229), StateRow(state='Madhya Pradesh', area_lakh_ha=48.64, yield_kg_ha=889.0, production_lakh_t=43.247), StateRow(state='Rajasthan', area_lakh_ha=9.068, yield_kg_ha=705.0, production_lakh_t=6.394), StateRow(state='Karnataka', area_lakh_ha=4.22, yield_kg_ha=865.0, production_lakh_t=3.65), StateRow(state='Gujarat', area_lakh_ha=2.775, yield_kg_ha=875.0, production_lakh_t=2.428), StateRow(state='Telangana', area_lakh_ha=1.448, yield_kg_ha=865.0, production_lakh_t=1.253), StateRow(state='Rest Of India', area_lakh_ha=1.036, yield_kg_ha=850.0, production_lakh_t=0.881), StateRow(state='Chhattisgarh', area_lakh_ha=0.27, yield_kg_ha=685.0, production_lakh_t=0.185), StateRow(state='All India', area_lakh_ha=112.14, yield_kg_ha=983.0, production_lakh_t=110.267)))"
+}

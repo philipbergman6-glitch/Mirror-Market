@@ -17,18 +17,40 @@ range would be the same class of silent guess the guard exists to remove.
 A dropped bar is a visible gap plus a WARNING; a stored partial is a wrong
 number that looks right.
 
-Two rules, one shape
---------------------
+Three rules, one shape
+----------------------
 A ``SessionRule`` answers exactly one question: **which session date is the
 newest one that has finished?** Every row labelled after that answer is an
-unfinished bar and is dropped. Both rules here are the same function over a
-different (timezone, close-time, close-day) triple:
+unfinished bar and is dropped. All three rules here are the same function
+over a different (timezone, close-time, close-day, close-weekday) setting:
 
 ``EXCHANGE_SESSION``
-    CME/CBOT/ICE futures. ``config.SETTLEMENT_CUTOFF_LOCAL`` in
-    ``config.SETTLEMENT_TIMEZONE`` — one cutoff clearing the latest venue
-    settlement we pull, expressed in venue-local time so US DST is handled
-    by zoneinfo rather than a hardcoded offset.
+    CME/CBOT futures. **Not the settlement time**: Yahoo's futures bar
+    labelled D is finished at 00:00 ``America/New_York`` on D+1
+    (``config.EXCHANGE_BAR_*``, B47 #622). Until then the row labelled D is
+    live. From D's settlement to 19:00 CT it holds the day session's *last
+    trade*. From 19:00 CT, when the overnight session opens trade date D+1,
+    it holds those overnight trades, **folded into the row labelled D**:
+    Yahoo serves no D+1 row before New York midnight, so there is no
+    later-labelled row for the guard to drop. At New York midnight the D+1
+    row appears and the D row becomes the settlement. Measured over every
+    committed snapshot of ``data/history/contract_bars.csv``: no CBOT or CME
+    value still served after New York midnight was ever changed, and 855 soy
+    values captured before it were (worst +31.97 USD/MT, ZLZ26 2026-08-27).
+    ICE US softs are unfinished before New York midnight too but not always
+    final after it, so they have their own rule.
+
+``ICE_US_SESSION``
+    ICE US cotton and sugar. The same New York midnight, one **weekday**
+    later: the bar labelled D is final at 00:00 ``America/New_York`` ending
+    the next weekday after D (B48 #626). The New York-midnight rule is
+    necessary here, not sufficient: 19 values Yahoo served after New York
+    midnight on D+1 — Fridays revised by the Monday, a Monday bar revised at
+    13:47-14:36 New York on the Tuesday — were later changed. None served
+    after this cutoff ever was (``config.ICE_US_BAR_CLOSE_WEEKDAY_OFFSET``
+    has the measurement). Weekdays, not ICE sessions: across an ICE holiday
+    the rule is unmeasured. ``exchange_rule_for`` is where a ticker is
+    matched to it.
 
 ``FX_SESSION``
     Spot FX. There is no settlement at all, and Yahoo's daily FX bar is a
@@ -51,10 +73,13 @@ physical origin, not merely a wrong FX cell.
 
 The old rule also failed on the futures side for the same underlying
 reason. It dropped rows *equal to* the Chicago local date, so once the
-overnight session opened (19:00 CT, carrying the **next** trade date) the
-bar it produced was labelled D+1, compared unequal to D, and survived.
-Asking for the newest finished session instead of the current local date
-closes both holes with one comparison.
+overnight session produced a bar labelled D+1 it compared unequal to D, and
+survived. Asking for the newest finished session instead of the current
+local date closed that hole with one comparison — but the exchange rule's
+first clock, 14:30 Chicago ("after the latest settlement we pull"), assumed
+the D+1 row exists from 19:00 CT. Before New York midnight it does not, so
+that rule kept the last trade and then the live overnight print as D's
+close for up to 8.5 hours every session (B47 #622, above).
 
 The FX rule's first calendar was itself wrong (B20 #482). It assumed a
 17:00 New York session; the bar is a London day, so from 17:00 New York to
@@ -74,12 +99,17 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from config import (
+    COMMODITY_TICKERS,
+    EXCHANGE_BAR_CLOSE_DAY_OFFSET,
+    EXCHANGE_BAR_CLOSE_LOCAL,
+    EXCHANGE_BAR_TIMEZONE,
+    FORWARD_CURVE_CONTRACTS,
     FX_SESSION_CLOSE_DAY_OFFSET,
     FX_SESSION_CLOSE_LOCAL,
     FX_SESSION_TIMEZONE,
     FX_SESSION_WEEKDAYS,
-    SETTLEMENT_CUTOFF_LOCAL,
-    SETTLEMENT_TIMEZONE,
+    ICE_US_BAR_CLOSE_WEEKDAY_OFFSET,
+    ICE_US_YAHOO_EXCHANGE,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,6 +126,10 @@ class SessionRule:
     closes: 0 for an exchange session that settles on its own trade date,
     1 for a bar that runs to the local midnight ending its label date.
 
+    ``close_weekday_offset`` moves the label forward by that many weekdays
+    (Monday-Friday) *before* ``close_day_offset`` applies: 1 with a day
+    offset of 1 is "the midnight ending the next weekday" (ICE, B48 #626).
+
     ``session_weekdays`` is the set of label weekdays (Monday = 0) a real
     bar can carry, or ``None`` for no such rule. A row labelled any other
     weekday is not a session at all, finished or not — for FX it is Yahoo's
@@ -107,12 +141,18 @@ class SessionRule:
     close_local: tuple[int, int]
     close_day_offset: int = 0
     session_weekdays: frozenset[int] | None = None
+    close_weekday_offset: int = 0
 
     def __post_init__(self) -> None:
         if self.close_day_offset < 0:
             raise ValueError(
                 f"{self.name}: close_day_offset must be >= 0, got {self.close_day_offset} "
                 "— a bar cannot close before the day it is labelled with"
+            )
+        if self.close_weekday_offset < 0:
+            raise ValueError(
+                f"{self.name}: close_weekday_offset must be >= 0, got "
+                f"{self.close_weekday_offset} — a bar cannot close before the day it is labelled with"
             )
         if self.session_weekdays is not None and (
             not self.session_weekdays or not self.session_weekdays <= frozenset(range(7))
@@ -129,33 +169,58 @@ class SessionRule:
     def local_now(self, now: datetime) -> datetime:
         return now.astimezone(ZoneInfo(self.timezone))
 
+    def final_at(self, label: date) -> datetime:
+        """The instant the bar labelled ``label`` stops being unfinished.
+
+        ``close_local`` on ``label`` moved ``close_weekday_offset`` weekdays
+        forward, then ``close_day_offset`` calendar days.
+        """
+        day = label
+        for _ in range(self.close_weekday_offset):
+            day += timedelta(days=1)
+            while day.weekday() >= 5:
+                day += timedelta(days=1)
+        day += timedelta(days=self.close_day_offset)
+        return datetime.combine(day, self.close_time, tzinfo=ZoneInfo(self.timezone))
+
     def last_settled_session(self, now: datetime) -> date:
         """The newest session date whose bar has finished at ``now``.
 
-        The bar labelled D closes at ``close_local`` on D plus
-        ``close_day_offset`` days. Once today's close has passed, the newest
-        finished bar is the one whose close fell today; before that, the one
-        whose close fell yesterday. Calendar, not business, day: a weekend or holiday simply has
-        no row to drop, so walking back over them would buy nothing and
-        would need a holiday calendar the guard has no business owning.
+        The newest label whose :meth:`final_at` is at or before ``now``,
+        found by walking back from the local date — ``final_at`` never
+        decreases with the label, so the first label found is the newest.
+        Calendar labels, not business days: a weekend or holiday label simply
+        has no row to drop, so skipping them would buy nothing and would
+        need a holiday calendar the guard has no business owning.
         """
-        local = self.local_now(now)
-        closed_today = local.date() - timedelta(days=self.close_day_offset)
-        if local.time() >= self.close_time:
-            return closed_today
-        return closed_today - timedelta(days=1)
+        label = self.local_now(now).date()
+        while self.final_at(label) > now:
+            label -= timedelta(days=1)
+        return label
 
     def is_session_day(self, label: date) -> bool:
         """Can a real bar carry this label date at all?"""
         return self.session_weekdays is None or label.weekday() in self.session_weekdays
 
 
-# CME/CBOT/ICE futures. See config.SETTLEMENT_CUTOFF_LOCAL for the per-venue
-# settlement times this one cutoff clears.
+# CME/CBOT futures. Not the settlement — the New York midnight after it,
+# when Yahoo's bar labelled D stops carrying live trades (B47 #622; see
+# config.EXCHANGE_BAR_TIMEZONE for the per-venue evidence).
 EXCHANGE_SESSION = SessionRule(
-    name="exchange settlement",
-    timezone=SETTLEMENT_TIMEZONE,
-    close_local=SETTLEMENT_CUTOFF_LOCAL,
+    name="exchange bar final",
+    timezone=EXCHANGE_BAR_TIMEZONE,
+    close_local=EXCHANGE_BAR_CLOSE_LOCAL,
+    close_day_offset=EXCHANGE_BAR_CLOSE_DAY_OFFSET,
+)
+
+# ICE US softs. The same New York midnight, one weekday later (B48 #626; see
+# config.ICE_US_BAR_CLOSE_WEEKDAY_OFFSET for the measurement).
+ICE_US_SESSION = SessionRule(
+    name="ICE US bar final",
+    timezone=EXCHANGE_BAR_TIMEZONE,
+    close_local=EXCHANGE_BAR_CLOSE_LOCAL,
+    close_day_offset=EXCHANGE_BAR_CLOSE_DAY_OFFSET,
+    close_weekday_offset=ICE_US_BAR_CLOSE_WEEKDAY_OFFSET,
 )
 
 # Spot FX. Not a settlement — the London midnight that ends the London
@@ -170,6 +235,27 @@ FX_SESSION = SessionRule(
 )
 
 
+def _ice_us_continuous_tickers() -> frozenset[str]:
+    return frozenset(
+        COMMODITY_TICKERS[commodity]
+        for commodity, spec in FORWARD_CURVE_CONTRACTS.items()
+        if spec["exchange"] == ICE_US_YAHOO_EXCHANGE and commodity in COMMODITY_TICKERS
+    )
+
+
+def exchange_rule_for(ticker: str) -> SessionRule:
+    """The futures rule for a Yahoo ``ticker``: ICE US or the default.
+
+    ICE US named contracts carry Yahoo's ``.NYB`` suffix; the continuous
+    ticker (``CT=F``) is matched through the commodity's registry entry, so
+    the venue lives in ``config.FORWARD_CURVE_CONTRACTS`` and nowhere here.
+    Spot FX is not a futures venue — its callers pass ``FX_SESSION``.
+    """
+    if ticker.endswith(f".{ICE_US_YAHOO_EXCHANGE}") or ticker in _ice_us_continuous_tickers():
+        return ICE_US_SESSION
+    return EXCHANGE_SESSION
+
+
 def _as_aware(now: datetime | None) -> datetime:
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -177,21 +263,20 @@ def _as_aware(now: datetime | None) -> datetime:
     return now
 
 
-def session_is_settled(now: datetime | None = None) -> bool:
-    """Has the current *exchange* session settled at ``now``?
+def session_is_finished(session: date, now: datetime | None = None) -> bool:
+    """Is the *exchange* bar labelled ``session`` finished at ``now``?
 
-    Kept because it is the question the daily schedule is reasoned about in
-    (``.github/workflows/deploy-dashboard.yml``) and because the fast
-    refresh path asks it to decide whether a board price can move at all.
-    It is deliberately exchange-only: FX has no settlement, so there is no
-    honest boolean of this shape for it.
+    The one question the trusted CBOT path (``trust/cbot_benchmarks.py``)
+    asks of a bar, answered by the same rule ``drop_unsettled_session``
+    applies on the v1 path, so the two cannot disagree. It replaced
+    ``session_is_settled(now)`` — "has today's session settled?" — which
+    compared the clock with the 14:30 CT settlement cutoff and so passed the
+    pre-final bars B47 (#622) measured.
 
     ``now`` defaults to the wall clock and may be naive (treated as UTC) or
-    aware. The comparison is made in ``SETTLEMENT_TIMEZONE`` so US DST is
-    handled by zoneinfo rather than a hardcoded UTC offset.
+    aware.
     """
-    now = _as_aware(now)
-    return EXCHANGE_SESSION.local_now(now).time() >= EXCHANGE_SESSION.close_time
+    return session <= EXCHANGE_SESSION.last_settled_session(_as_aware(now))
 
 
 def drop_unsettled_session(
@@ -243,8 +328,8 @@ def drop_unsettled_session(
     if unsettled.any():
         logger.warning(
             "%sDropping %d unsettled bar(s) dated after %s — the newest finished "
-            "session under the %s rule (%02d:%02d %s, label day +%d). Those sessions "
-            "will appear on a later run.",
+            "session under the %s rule (%02d:%02d %s, label +%d weekday(s) +%d day(s)). "
+            "Those sessions will appear on a later run.",
             prefix,
             int(unsettled.sum()),
             cutoff.date(),
@@ -252,6 +337,7 @@ def drop_unsettled_session(
             rule.close_time.hour,
             rule.close_time.minute,
             rule.timezone,
+            rule.close_weekday_offset,
             rule.close_day_offset,
         )
     stray = off_day & ~unsettled

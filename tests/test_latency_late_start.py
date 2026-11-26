@@ -1,9 +1,12 @@
 """A breach GitHub's scheduler caused is reported, not failed — when the run opts in.
 
-Replays the 2026-10-09 run: the 20:07 UTC Refresh Prices cron started at
-00:16 UTC, six hours after the 18:15 UTC CBOT settlement, so the board
-objective had lapsed before a single byte was fetched. The deploy succeeded
-and the bar was the right one; the red said nothing a code change could fix.
+Modelled on the 2026-10-09 run: the 20:07 UTC Refresh Prices cron started at
+00:16 UTC, six hours after the 18:15 UTC CBOT settlement, so the then six-hour
+board objective had lapsed before a single byte was fetched. The deploy
+succeeded and the bar was the right one; the red said nothing a code change
+could fix. The objective is twelve hours since the owner's decision on #622,
+so the fixture's start is moved to 06:17 UTC, twelve hours and two minutes
+after the settlement — the same shape against today's target.
 Three things keep the excuse narrow: the bar must be the newest session as of
 the fetch start (a stale upstream is still a breach), our own pipeline leg must
 meet its target, and only a run that passes the flag gets it — the 08:00 DCE
@@ -21,7 +24,7 @@ UTC = timezone.utc
 PRICES = LAYER_LATENCY_BY_KEY["prices"]
 SETTLED_OCT_8 = datetime(2026, 10, 8, 18, 15, tzinfo=UTC)   # 13:15 CT
 SETTLED_OCT_7 = datetime(2026, 10, 7, 18, 15, tzinfo=UTC)
-LATE_START = datetime(2026, 10, 9, 0, 17, tzinfo=UTC)
+LATE_START = datetime(2026, 10, 9, 6, 17, tzinfo=UTC)  # 12h02m after OCT_8
 
 
 def test_a_fetch_that_began_past_the_objective_on_the_newest_bar_started_late():
@@ -119,3 +122,51 @@ def test_the_published_manifest_shape_with_an_unmeasured_pipeline_is_excused(tmp
     path = _manifest(tmp_path, [_row("prices", SETTLED_OCT_8, LATE_START, pipeline="unknown")])
     assert main(["--manifest", path, "--fail-on-breach-layers", "prices",
                  "--late-start-is-not-a-breach"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# An unmeasured gated layer fails (review of #630)
+# ---------------------------------------------------------------------------
+
+def _unmeasured_row(layer):
+    return {"layer": layer, "class": "board_price", "verdict": "unknown",
+            "acquisition_verdict": "unknown", "pipeline_verdict": "unknown",
+            "observed_at": None, "fetch_started_at": None}
+
+
+def _meeting_row(layer):
+    return {"layer": layer, "class": "board_price", "verdict": "unknown",
+            "acquisition_verdict": "meets", "pipeline_verdict": "unknown",
+            "observed_at": SETTLED_OCT_8.isoformat(), "fetch_started_at": LATE_START.isoformat()}
+
+
+def test_a_gated_layer_with_no_observation_fails_the_gate(tmp_path, capsys):
+    """A failed curve fetch leaves observed_at NULL: verdict unknown. It must
+    not pass, or the board backstop reads the run as delivered."""
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices"), _unmeasured_row("forward_curve")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices,forward_curve"]) == 1
+    assert "UNMEASURED gated layer(s): forward_curve" in capsys.readouterr().err
+
+
+def test_a_gated_layer_missing_from_the_manifest_fails_the_gate(tmp_path):
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices,forward_curve"]) == 1
+
+
+def test_an_unknown_pipeline_leg_alone_still_passes(tmp_path):
+    """The published manifest never knows its own deploy time; that is not unmeasured."""
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices"), _meeting_row("forward_curve")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices,forward_curve"]) == 0
+
+
+def test_an_unmeasured_ungated_layer_does_not_fail(tmp_path):
+    from scripts.latency_report import main
+
+    path = _manifest(tmp_path, [_meeting_row("prices"), _unmeasured_row("cot")])
+    assert main(["--manifest", path, "--fail-on-breach-layers", "prices"]) == 0

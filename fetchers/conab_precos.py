@@ -47,10 +47,9 @@ from config import (
 from fetchers._backoff import retry_sleep
 from fetchers.conab import request_failure_reason
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import per_kg_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
-
-_KG_TO_MT = 1000.0  # R$/kg → BRL/MT
 
 # Download sanity gate. Live file 2026-08-11: 13,608,731 bytes, 89,699 data
 # rows, median valor_produto_kg 5.53 R$/kg (p25 1.83, p75 27.99 across all
@@ -239,7 +238,7 @@ def _parse_farmgate(text: str) -> pd.DataFrame:
             continue
         rows.append({
             "Date": week_end,
-            "price_brl_mt": round(float(price_kg) * _KG_TO_MT, 2),
+            "price_brl_mt": round(per_kg_to_per_metric_ton(float(price_kg)), 2),
             "Unit": "BRL/MT",
         })
 

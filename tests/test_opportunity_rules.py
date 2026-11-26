@@ -213,6 +213,37 @@ def test_our_own_ingest_failure_is_stated_as_ours(tmp_db):
     assert opportunity.ladder is Ladder.LEAD
 
 
+def test_a_failed_rerun_after_a_same_session_success_is_not_our_outage(tmp_db):
+    """#632 (owner option B on #518): the usable rows a success stored on this
+    session are still there, so a later failed re-run blocks nothing. The
+    failure stays a status mark and a manifest ``failed_runs`` count."""
+    tmp_db.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, status) "
+        "VALUES (?, ?, ?, ?)",
+        ("gulf_bids", "2026-11-19 11:04:00", "2026-11-19 12:50:00", "failed"),
+    )
+    tmp_db.commit()
+    opportunity = build_candidate(
+        make_detection(), today=TODAY, conn=tmp_db, entries=PLAYER_ENTRIES
+    )
+    assert BlockerCode.INGEST_OUTAGE.value not in codes(opportunity.blockers)
+
+
+def test_a_session_with_nothing_usable_since_the_last_success_still_blocks(tmp_db):
+    # Last success served the 11-17 session; every run on 11-18 failed.
+    tmp_db.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, status) "
+        "VALUES (?, ?, ?, ?)",
+        ("gulf_bids", "2026-11-18 11:04:00", "2026-11-19 12:50:00", "failed"),
+    )
+    tmp_db.commit()
+    opportunity = build_candidate(
+        make_detection(), today=TODAY, conn=tmp_db, entries=PLAYER_ENTRIES
+    )
+    outage = next(b for b in opportunity.blockers if b.code is BlockerCode.INGEST_OUTAGE)
+    assert "last good run 2026-11-18" in outage.message
+
+
 def test_a_healthy_layer_raises_no_outage_blocker(tmp_db):
     tmp_db.execute(
         "INSERT INTO data_freshness (layer_name, last_success, status) VALUES (?, ?, ?)",

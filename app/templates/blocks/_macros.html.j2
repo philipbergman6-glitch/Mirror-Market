@@ -18,4 +18,8 @@
 
 {#- A print's own date, plus how stale it is. M4 #146: dates only, never a
     time of day, because the stack stores none. -#}
+{#- #370: "thin day · 18 lots (typical weekday ~131)" — the neutral badge
+    (DESIGN.md signal-row token) carries the first words, the counts follow as
+    caption text. Neutral, never warning: the day was complete, only small. -#}
+{% macro thin_day(text) %}{% if text %}{% set head, tail = text.split(' · ', 1) %}<div class="caption thin-day"><span class="badge badge-info">{{ head }}</span> · {{ tail }}</div>{% endif %}{% endmacro %}
 {% macro asof(when, age_days=None) %}<div class="caption">as of {{ when }}{% if age_days is not none and age_days > 1 %} · {{ age_days }}d ago{% endif %}</div>{% endmacro %}

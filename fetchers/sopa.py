@@ -66,6 +66,7 @@ from config import (
 )
 from fetchers._backoff import retry_sleep
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import kg_to_metric_tons
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +131,10 @@ def _number(text: str, where: str) -> float:
 
 def _check_arithmetic(row: StateRow) -> None:
     """lakh ha × kg/ha / 1000 = lakh t, to the printed rounding."""
-    implied = row.area_lakh_ha * row.yield_kg_ha / 1000
+    implied = kg_to_metric_tons(row.area_lakh_ha * row.yield_kg_ha)  # lakh kg → lakh t
     tolerance = (
-        row.area_lakh_ha * _YIELD_ROUNDING / 1000
-        + _PRINTED_ROUNDING * row.yield_kg_ha / 1000
+        kg_to_metric_tons(row.area_lakh_ha * _YIELD_ROUNDING)
+        + kg_to_metric_tons(_PRINTED_ROUNDING * row.yield_kg_ha)
         + _PRINTED_ROUNDING
         + _NOISE
     )

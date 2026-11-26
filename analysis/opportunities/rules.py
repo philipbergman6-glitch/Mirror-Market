@@ -52,6 +52,7 @@ from analysis.opportunities.domain import (
 )
 from analysis.opportunities.signals import Detection
 from analysis.origins import players as players_mod
+from pipeline import reliability
 
 log = logging.getLogger(__name__)
 
@@ -206,6 +207,12 @@ def _ingest_blockers(conn, detection: Detection) -> list[Blocker]:
     surface as "no recent number". ``data_freshness`` knows which it was, so a
     candidate weakened by our own ingest failure says so in those words rather
     than implying something about the market.
+
+    Only an outage that left this session with nothing usable (#632, owner
+    option B on #518): a failed re-run after a success on the same session
+    leaves that success's rows in place, so blocking the candidate would
+    describe our run, not the evidence. ``pipeline.reliability.
+    recovered_in_session`` is the one rule.
     """
     if conn is None:
         return []
@@ -214,12 +221,15 @@ def _ingest_blockers(conn, detection: Detection) -> list[Blocker]:
     for layer in layers:
         try:
             row = conn.execute(
-                "SELECT status, last_success FROM data_freshness WHERE layer_name = ?",
+                "SELECT status, last_success, last_attempt FROM data_freshness "
+                "WHERE layer_name = ?",
                 (layer,),
             ).fetchone()
         except Exception:  # noqa: BLE001 — a missing table is data, not a crash
             continue
         if not row or row[0] != "failed":
+            continue
+        if reliability.recovered_in_session(row[1], row[2]):
             continue
         out.append(Blocker(
             code=BlockerCode.INGEST_OUTAGE,
