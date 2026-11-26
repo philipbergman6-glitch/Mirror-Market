@@ -4,6 +4,46 @@ Format: human-readable summaries grouped by "run" — a discrete refactor or
 feature push. Each run notes the why, the user-visible behaviour change (if
 any), and the test/coverage impact.
 
+## Unreleased — curve reading names its pair; legacy analyser retired (2026-11-26)
+
+**#671**, from the Codex audit 2026-11-26. On session 2026-11-25 the bean
+strip was in carry Jan→Jul (+8.25¢) with only Aug lower, and the briefing
+printed "Soybeans curve in backwardation, front–next −0.9%" — "nearby supply
+tight relative to deferred". `analysis/forward_curve.py` took last *fetched*
+month minus first, labelled it "front–next" and classified by that sign alone.
+It is deleted; the briefing drivers, section 14, the snapshot and the headline
+forward-curve block now read `analysis.futures.curve` (through the new
+`analysis/futures/stored_curves.py`) — the module the workstation already used.
+
+- **Every curve sentence names its pair**: `CalendarSpread.sentence()` →
+  `ZSF27 1243.25 / ZSH27 1244.25: Mar +1.00 cents/bu (+0.37 USD/MT) over Jan,
+  session 2026-11-25`. Cross-session legs print both prices and "spread not
+  struck" (invariant 8). Units come from `pipeline.units.unit_key_label`.
+- **Structure is pair-wise**: `contango`/`backwardation` only when every
+  consecutive pair agrees, else `nearby carry` / `nearby inversion` / `mixed`;
+  `mild contango`/`mild backwardation` are gone. `CurveAnalysis.reading` locates
+  each run by month; `is_inverted` now means the *nearby* pair is inverted.
+- **Workstation alert** names each inverted pair and the nearby pair; it tells
+  a stored position it is unpaid only when a supplied `carry_window`'s own pair
+  is inverted (no desk carry period exists today, so it never does), gross of
+  storage and financing.
+- **Steep-carry driver** now fires on the nearby pair's annualised carry
+  (`config.CURVE_STEEP_CARRY_ANNUALISED_PCT` = 5.0) for a strip in carry along
+  every pair, replacing the 5% first-vs-last test.
+- **Snapshot schema v6**: `forward_curve` archives the one-session legs only
+  (components, per the snapshot rule) — the reading is re-derived from them;
+  v1–v5 `spread`/`spread_pct`/`structure` are not comparable.
+- Headline block 06 cards are Structure / Front / Next / Nearby spread, with
+  the named-pair sentence and the located reading as captions.
+- The workstation header chip was a front-to-back slope (−0.60 USD/MT per
+  month on the 2026-11-25 strip, beside a nearby pair in carry); it is now the
+  nearby pair's carry per month, named. `CurveAnalysis.slope_per_month_usd_mt`
+  is removed.
+- `test_net_inverted_curve_is_backwardation_even_with_up_moves` is replaced,
+  not made to pass: it pinned the defect (a four-up, one-down strip as
+  backwardation). Its replacement regression is the real 2026-11-25 strip
+  (`tests/test_curve_named_pair_671.py`, `tests/test_futures_curve.py`).
+
 ## Unreleased — Layer 37: MATIF rapeseed delayed trades, private desk edition only (2026-11-05)
 
 Owner decision 2026-11-05 ("ingest MATIF delayed settlements, private

@@ -2466,6 +2466,13 @@ COT_CROWDED_PERCENTILE = 90
 COT_CROWDED_LOOKBACK_DAYS = 365 * 3
 COT_CROWDED_MIN_OBSERVATIONS = 26
 
+# Briefing "steep carry" driver (#671): fires only for a strip in carry along
+# every listed pair, on the *nearby* pair's carry annualised over the business
+# days between the two contracts' last trade dates (analysis.futures.curve). It
+# replaced a 5% first-against-last-fetched-month test whose number moved with
+# the strip's length; 5%/yr keeps the old order of magnitude on a named pair.
+CURVE_STEEP_CARRY_ANNUALISED_PCT = 5.0
+
 # "China buying pace strong" needs two things a one-week share cannot give:
 # the latest week's absolute China net sales above this multiple of the
 # trailing mean (prior weeks, at least the floor of them), AND total

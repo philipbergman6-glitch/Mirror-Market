@@ -37,27 +37,42 @@ def test_each_price_row_names_its_own_session(patched_db):
     assert "session 2026-11-23" in _row(text, "Cotton")
 
 
-def test_each_forward_curve_line_names_its_observation_date(monkeypatch):
-    curve = pd.DataFrame({
-        "commodity": ["Soybeans", "Soybeans", "Cotton", "Cotton"],
-        "contract_month": ["2027-01-01", "2027-03-01", "2026-12-01", "2027-03-01"],
-        "label": ["Jan 2027", "Mar 2027", "Dec 2026", "Mar 2027"],
-        "close": [1183.0, 1191.25, 66.5, 67.9],
-        "observation_date": pd.to_datetime(["2026-11-24", "2026-11-24", "2026-11-23", "2026-11-23"]),
-    })
-    monkeypatch.setattr(forward_curve_section, "read_forward_curve", lambda: curve)
+def _seed_curve(db, rows):
+    """rows: (commodity, contract_month, label, ticker, close, observation_date)."""
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.executemany(
+        "INSERT INTO forward_curve (commodity, contract_month, label, ticker, close, "
+        "observation_date, fetched_date) VALUES (?, ?, ?, ?, ?, ?, '2026-11-25')",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_each_forward_curve_line_names_its_observation_date(patched_db):
+    """Two curves on different sessions: each line carries its own (#626),
+    read through the one curve vocabulary since #671."""
+    _seed_curve(patched_db, [
+        ("Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", 1183.0, "2026-11-24"),
+        ("Soybeans", "2027-03-01", "Mar 2027", "ZSH27.CBT", 1191.25, "2026-11-24"),
+        ("Corn", "2027-03-01", "Mar 2027", "ZCH27.CBT", 445.0, "2026-11-23"),
+        ("Corn", "2027-05-01", "May 2027", "ZCK27.CBT", 452.5, "2026-11-23"),
+    ])
     text = forward_curve_section.format()
     assert "observed 2026-11-24" in _row(text, "Soybeans")
-    assert "observed 2026-11-23" in _row(text, "Cotton")
+    assert "observed 2026-11-23" in _row(text, "Corn")
 
 
-def test_a_curve_without_an_observation_date_says_so(monkeypatch):
-    curve = pd.DataFrame({
-        "commodity": ["Sugar", "Sugar"],
-        "contract_month": ["2027-03-01", "2027-05-01"],
-        "label": ["Mar 2027", "May 2027"],
-        "close": [18.1, 17.5],
-        "observation_date": [None, None],
-    })
-    monkeypatch.setattr(forward_curve_section, "read_forward_curve", lambda: curve)
-    assert "observation date not recorded" in _row(forward_curve_section.format(), "Sugar")
+def test_a_curve_without_an_observation_date_is_never_dated_by_guess(patched_db):
+    """An undated leg is dropped by the provider's coherence check, so an
+    all-undated curve prints no line at all — never a fetch date standing in
+    for the session (invariant 2)."""
+    _seed_curve(patched_db, [
+        ("Soybeans", "2027-01-01", "Jan 2027", "ZSF27.CBT", 1183.0, None),
+        ("Soybeans", "2027-03-01", "Mar 2027", "ZSH27.CBT", 1191.25, None),
+    ])
+    text = forward_curve_section.format()
+    assert "2026-11-25" not in text
+    assert not any(line.strip().startswith("Soybeans:") for line in text.splitlines())

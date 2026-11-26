@@ -32,7 +32,6 @@ import pandas as pd
 import config
 from analysis import weather_alerts
 from analysis.crop_year import psd_year_for_crop_year, psd_year_label
-from analysis.forward_curve import analyze_curve, calendar_spread
 from analysis.futures.domain import contracts_from
 from analysis.loaders import adjusted_commodities, load_currencies, load_prices
 from analysis.nass_crush import latest_crush
@@ -70,7 +69,6 @@ from pipeline.query import (
     read_economic,
     read_eia_data,
     read_export_sales,
-    read_forward_curve,
     read_freshness,
     read_india_domestic,
     read_inspections,
@@ -1601,66 +1599,26 @@ def seasonal_analysis() -> dict:
 # Analyst 8: Forward Curve — term structure for soy complex
 # ---------------------------------------------------------------------------
 
-def _curve_as_of(subset: pd.DataFrame) -> str | None:
-    """As-of date for one commodity's forward curve.
-
-    Prefers observation_date — every leg of a curve carries the same one
-    (enforced in fetchers/forward_curve.py) — and falls back to fetched_date
-    for rows stored before that column existed.
-    """
-    for col in ("observation_date", "fetched_date"):
-        if col not in subset.columns:
-            continue
-        stamps = subset[col].dropna()
-        stamps = stamps[stamps.astype(str).str.strip() != ""]
-        if not stamps.empty:
-            return _asof(stamps.max())
-    return None
-
-
 def forward_curve_analysis() -> dict:
-    """
-    Forward curve analysis for all 3 soy legs.
+    """The stored curve for each soy leg, read by named pairs (#671).
 
-    Returns dict per leg with:
-        curve_data: raw forward curve DataFrame
-        analysis: contango/backwardation assessment
-        calendar_spreads: front-month spreads
+    Returns per leg ``{"curve": CurveAnalysis, "unit": ..., "as_of": ...}``:
+    the same :mod:`analysis.futures.curve` reading the workstation and the
+    briefing print, so the headline block, the desk page and the morning
+    briefing cannot give three different Jan–Mar answers. ``as_of`` is the
+    session the legs printed, not the run date.
     """
-    fc = read_forward_curve()
+    from analysis.futures.stored_curves import read_stored_curves
+
     result: dict[str, Any] = {}
-
-    if fc.empty:
-        return result
-
-    for leg in SOY_LEGS:
-        subset = fc[fc["commodity"] == leg].sort_values("contract_month")
-        if len(subset) < 2:
+    for leg, analysis in read_stored_curves(SOY_LEGS).items():
+        if len(analysis.legs) < 2:
             continue
-
-        curve_analysis = analyze_curve(subset)
-        cal_spread = calendar_spread(subset, 0, 1) if len(subset) >= 2 else {}
-
-        # Convert forward curve prices to USD/MT
-        subset_mt = subset.copy()
-        if "close" in subset_mt.columns:
-            from pipeline.units import CONVERSION_FACTORS
-            factor = CONVERSION_FACTORS.get(leg)
-            if factor:
-                subset_mt["close"] = subset_mt["close"] * factor
-
         result[leg] = {
-            "curve_data": subset,
-            "curve_data_mt": subset_mt,
-            "analysis": curve_analysis,
-            "calendar_spread": cal_spread,
+            "curve": analysis,
             "unit": mt_label(leg),
-            # The session the curve was observed at, not the run date —
-            # they differ on any run landing before settlement. Falls back to
-            # fetched_date for legacy rows stored before observation_date.
-            "as_of": _curve_as_of(subset),
+            "as_of": analysis.observation_date.isoformat() if analysis.observation_date else None,
         }
-
     return result
 
 

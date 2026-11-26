@@ -197,11 +197,61 @@ def inverted():
     ])
 
 
-def test_an_inverted_curve_says_what_it_costs_a_storage_position():
+def test_an_inversion_alert_names_the_pair_and_stops_without_a_carry_window():
+    """No desk carry period is known, so the alert says which pair is inverted
+    and does not tell a stored position anything about its own carry (#671)."""
     alerts = curve_alerts(inverted())
     assert alerts and alerts[0].kind == "curve_inversion"
-    assert "no longer being paid to carry" in alerts[0].message
-    assert alerts[0].detail["front"] == "ZSX26"
+    assert "ZSX26 1200.00 / ZSF27 1150.00" in alerts[0].message
+    assert "not being paid" not in alerts[0].message
+    assert alerts[0].detail["inverted_pairs"] == ["ZSX26-ZSF27"]
+
+
+#: The stored strip on session 2026-11-25 (#671): carry Jan→Jul, Aug lower.
+def strip_2026_11_25():
+    observed = date(2026, 11, 25)
+    return curve("Soybeans", [
+        quote("Soybeans", 2027, month, price, observed=observed)
+        for month, price in ((1, 1243.25), (3, 1244.25), (5, 1248.50), (7, 1251.50), (8, 1231.75))
+    ])
+
+
+def test_a_deferred_inversion_is_located_and_the_nearby_pair_stated():
+    """The alert used to say "mild backwardation — a stored position is no
+    longer being paid to carry" for a strip in carry from Jan through Jul."""
+    alerts = curve_alerts(strip_2026_11_25())
+    inversion = [a for a in alerts if a.kind == "curve_inversion"]
+    assert len(inversion) == 1
+    message = inversion[0].message
+    assert "ZSN27 1251.50 / ZSQ27 1231.75" in message
+    assert "Jul 2027→Aug 2027" in message
+    assert "ZSF27 1243.25 / ZSH27 1244.25: Mar +1.00 cents/bu" in message   # nearby, in carry
+    assert "backwardation" not in message
+    assert "not being paid" not in message
+
+
+def test_a_carry_window_inside_the_carry_segment_is_not_told_it_is_unpaid():
+    alerts = curve_alerts(strip_2026_11_25(), carry_window=("ZSF27", "ZSN27"))
+    message = next(a.message for a in alerts if a.kind == "curve_inversion")
+    assert "not being paid" not in message
+
+
+def test_a_carry_window_spanning_the_inversion_is_told_so_by_pair():
+    """Jan→Aug: 1231.75 - 1243.25 = -11.50 cents/bu across the window."""
+    alerts = curve_alerts(strip_2026_11_25(), carry_window=("ZSF27", "ZSQ27"))
+    message = next(a.message for a in alerts if a.kind == "curve_inversion")
+    assert "ZSF27 1243.25 / ZSQ27 1231.75: Aug -11.50 cents/bu" in message
+    assert "not being paid to carry" in message
+    assert "gross of storage and financing" in message
+
+
+def test_a_curve_in_carry_along_every_pair_raises_no_inversion():
+    observed = date(2026, 11, 25)
+    analysis = curve("Soybeans", [
+        quote("Soybeans", 2027, 1, 1243.25, observed=observed),
+        quote("Soybeans", 2027, 3, 1244.25, observed=observed),
+    ])
+    assert [a for a in curve_alerts(analysis) if a.kind == "curve_inversion"] == []
 
 
 def test_an_incoherent_curve_suppresses_the_inversion_reading_rather_than_reporting_it():
