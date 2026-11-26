@@ -3,8 +3,9 @@
 The guard exists because a pipeline run landing mid-session stored an
 unfinished Yahoo bar as the day's close (observed: ZS=F 2026-08-07 stored
 at 1181.25 vs a 1156.50 settlement, a 2.1% error). These tests pin the
-contract: before the venue settles, the current session's row must not
-survive; after it settles, nothing is touched.
+contract: until the provider has finished a bar, its row must not survive;
+once finished, nothing is touched. For futures "finished" is 00:00 New York
+on the day after the label, not the settlement (B47 #622).
 
 The clock is injected everywhere — these must not depend on when they run.
 """
@@ -12,7 +13,7 @@ The clock is injected everywhere — these must not depend on when they run.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pandas as pd
 import pandas.testing as pdt
@@ -23,18 +24,18 @@ from fetchers._settlement import (
     FX_SESSION,
     SessionRule,
     drop_unsettled_session,
-    session_is_settled,
+    session_is_finished,
 )
 
-# 2026-08-07 was a Friday, CDT (UTC-5): settlement 18:15 UTC,
-# guard cutoff 14:30 CT = 19:30 UTC.
+# 2026-08-07 was a Friday, CDT (UTC-5): settlement 18:15 UTC; Yahoo's bar
+# is final at 00:00 EDT on 08-08 = 04:00 UTC.
 MIDSESSION = datetime(2026, 8, 7, 14, 15, tzinfo=timezone.utc)   # 09:15 CT
-AFTER_SETTLE = datetime(2026, 8, 7, 21, 0, tzinfo=timezone.utc)  # 16:00 CT
+AFTER_SETTLE = datetime(2026, 8, 7, 21, 0, tzinfo=timezone.utc)  # 16:00 CT, last trade
+BAR_FINAL = datetime(2026, 8, 8, 4, 0, tzinfo=timezone.utc)      # 00:00 EDT Saturday
 
-# 2026-12-04 was a Friday, CST (UTC-6): settlement 19:15 UTC,
-# guard cutoff 14:30 CT = 20:30 UTC.
-WINTER_EARLY = datetime(2026, 12, 4, 20, 0, tzinfo=timezone.utc)  # 14:00 CT
-WINTER_LATE = datetime(2026, 12, 4, 21, 0, tzinfo=timezone.utc)   # 15:00 CT
+# 2026-12-04 was a Friday, CST (UTC-6): final at 00:00 EST on 12-05 = 05:00 UTC.
+WINTER_EARLY = datetime(2026, 12, 5, 4, 30, tzinfo=timezone.utc)  # 23:30 EST Friday
+WINTER_LATE = datetime(2026, 12, 5, 5, 0, tzinfo=timezone.utc)    # 00:00 EST Saturday
 
 
 def _frame(dates: list[str]) -> pd.DataFrame:
@@ -57,14 +58,21 @@ def test_drops_current_session_before_cutoff():
     assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-05", "2026-08-06"]
 
 
-def test_keeps_current_session_after_cutoff():
+def test_drops_current_session_after_settlement_until_the_bar_is_final():
+    """16:00 CT: settled at 13:15, but Yahoo's row still holds the last trade."""
     df = _frame(["2026-08-05", "2026-08-06", "2026-08-07"])
     out = drop_unsettled_session(df, label="ZS=F", now=AFTER_SETTLE)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-05", "2026-08-06"]
+
+
+def test_keeps_current_session_once_the_bar_is_final():
+    df = _frame(["2026-08-05", "2026-08-06", "2026-08-07"])
+    out = drop_unsettled_session(df, label="ZS=F", now=BAR_FINAL)
     pdt.assert_frame_equal(out, df)
 
 
 def test_cutoff_follows_us_dst_not_a_fixed_utc_offset():
-    """20:00 UTC is past the cutoff in CDT but not in CST."""
+    """04:30 UTC is past New York midnight in EDT but not in EST."""
     df = _frame(["2026-12-03", "2026-12-04"])
 
     early = drop_unsettled_session(df, now=WINTER_EARLY)
@@ -74,11 +82,16 @@ def test_cutoff_follows_us_dst_not_a_fixed_utc_offset():
     pdt.assert_frame_equal(late, df)
 
 
-def test_run_spilling_past_utc_midnight_keeps_the_settled_bar():
-    """00:30 UTC Saturday is 19:30 Friday in Chicago — Friday has settled."""
+def test_run_spilling_past_utc_midnight_does_not_keep_the_live_bar():
+    """00:30 UTC Saturday is 20:30 Friday in New York — Friday's bar is live.
+
+    Before B47 (#622) this test pinned the opposite: Chicago had settled, so
+    the bar was kept. It was the last trade, not the settlement.
+    """
     df = _frame(["2026-08-06", "2026-08-07"])
     saturday_utc = datetime(2026, 8, 8, 0, 30, tzinfo=timezone.utc)
-    pdt.assert_frame_equal(drop_unsettled_session(df, now=saturday_utc), df)
+    out = drop_unsettled_session(df, now=saturday_utc)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-06"]
 
 
 def test_no_row_for_the_current_session_is_a_noop():
@@ -123,11 +136,20 @@ def test_naive_now_is_treated_as_utc():
 
 
 @pytest.mark.parametrize(
-    "now,expected",
-    [(MIDSESSION, False), (AFTER_SETTLE, True), (WINTER_EARLY, False), (WINTER_LATE, True)],
+    "session,now,expected",
+    [
+        (date(2026, 8, 7), MIDSESSION, False),
+        (date(2026, 8, 7), AFTER_SETTLE, False),
+        (date(2026, 8, 7), BAR_FINAL, True),
+        (date(2026, 8, 6), MIDSESSION, True),
+        (date(2026, 12, 4), WINTER_EARLY, False),
+        (date(2026, 12, 4), WINTER_LATE, True),
+    ],
 )
-def test_session_is_settled(now, expected):
-    assert session_is_settled(now) is expected
+def test_session_is_finished_is_the_guards_own_answer(session, now, expected):
+    assert session_is_finished(session, now) is expected
+    kept = drop_unsettled_session(_frame([session.isoformat()]), now=now)
+    assert (not kept.empty) is expected
 
 
 # ---------------------------------------------------------------------------
@@ -224,16 +246,17 @@ def test_session_rule_rejects_a_negative_close_day_offset():
 
 
 def test_futures_overnight_session_bar_is_dropped():
-    """CME opens the next trade date at 19:00 CT; that bar is not a close.
+    """CME opens the next trade date at 19:00 CT; neither row is a close.
 
-    The old rule dropped rows *equal to* the Chicago local date, so a bar
-    labelled D+1 emitted during D's evening compared unequal and survived —
-    while `session_is_settled` simultaneously said yes.
+    The first rule dropped rows *equal to* the Chicago local date, so a bar
+    labelled D+1 compared unequal and survived. Its successor (14:30 CT,
+    2026-08-19) dropped the D+1 row but kept D — which, until New York
+    midnight, carries that same overnight trading (B47 #622).
     """
     now = datetime(2026, 8, 19, 1, 30, tzinfo=timezone.utc)  # 20:30 CT on 08-18
     df = _frame(["2026-08-17", "2026-08-18", "2026-08-19"])
     out = drop_unsettled_session(df, label="ZS=F", now=now, rule=EXCHANGE_SESSION)
-    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-17", "2026-08-18"]
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-17"]
 
 
 def test_weekend_run_touches_nothing():
@@ -379,3 +402,76 @@ def test_exchange_rule_has_no_weekday_filter():
 def test_session_rule_rejects_an_impossible_weekday():
     with pytest.raises(ValueError, match="session_weekdays"):
         SessionRule(name="bad", timezone="UTC", close_local=(0, 0), session_weekdays=frozenset({7}))
+
+
+# ---------------------------------------------------------------------------
+# B47 (#622): Yahoo's futures bar labelled D is final only at 00:00 New York
+# on D+1
+# ---------------------------------------------------------------------------
+#
+# Measured over 89 committed snapshots of data/history/contract_bars.csv
+# (research/2026-11-25-cbot-close-revisions.md, re-measured for every venue
+# by #622's fix). Before New York midnight the row labelled D holds D's
+# day-session *last trade* (14:30-19:00 CT) or live overnight trades of trade
+# date D+1 (19:00 CT onwards), folded into D — Yahoo serves no D+1 row yet,
+# so there is nothing labelled D+1 to drop. After New York midnight no CBOT
+# or CME value was ever revised.
+
+
+def _evening(dates: list[str], close_of_d: float) -> pd.DataFrame:
+    df = _frame(dates).astype(float)
+    df.loc[pd.Timestamp(dates[-1]), "Close"] = close_of_d
+    return df
+
+
+@pytest.mark.parametrize(
+    "now",
+    [
+        # 21:09 CST on Tue 2026-11-24 — run 45536043506 stored ZLF27 57.99
+        # (an overnight print) as the 11-24 close; final 58.32.
+        datetime(2026, 11, 25, 3, 9, tzinfo=timezone.utc),
+        # 23:59 EST: the last minute the row is still live.
+        datetime(2026, 11, 25, 4, 59, tzinfo=timezone.utc),
+        # 15:00 CST: past the old 14:30 cutoff, the row holds the last trade.
+        datetime(2026, 11, 24, 21, 0, tzinfo=timezone.utc),
+    ],
+    ids=["overnight-21:09CT", "23:59ET", "last-trade-15:00CT"],
+)
+def test_cbot_bar_is_unfinished_before_new_york_midnight_in_cst(now):
+    df = _evening(["2026-11-23", "2026-11-24"], close_of_d=57.99)
+    out = drop_unsettled_session(df, label="ZLF27.CBT", now=now, rule=EXCHANGE_SESSION)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-11-23"]
+
+
+def test_cbot_bar_is_final_after_new_york_midnight_in_cst():
+    """00:01 EST on 11-25 = 05:01 UTC: the 11-24 bar is the settlement."""
+    df = _evening(["2026-11-23", "2026-11-24"], close_of_d=58.32)
+    now = datetime(2026, 11, 25, 5, 1, tzinfo=timezone.utc)
+    pdt.assert_frame_equal(drop_unsettled_session(df, label="ZLF27.CBT", now=now), df)
+
+
+def test_cbot_bar_is_unfinished_before_new_york_midnight_in_cdt():
+    """The worst case, 2026-08-27 21:37 CDT (02:37 UTC 08-28): ZLZ26 stored
+    69.96 against a final 68.51, +31.97 USD/MT, labelled the 08-27 close."""
+    df = _evening(["2026-08-26", "2026-08-27"], close_of_d=69.96)
+    for now in (
+        datetime(2026, 8, 28, 2, 37, tzinfo=timezone.utc),
+        datetime(2026, 8, 28, 3, 59, tzinfo=timezone.utc),  # 23:59 EDT
+    ):
+        out = drop_unsettled_session(df, label="ZLZ26.CBT", now=now)
+        assert list(out.index.strftime("%Y-%m-%d")) == ["2026-08-26"], now
+
+
+def test_cbot_bar_is_final_after_new_york_midnight_in_cdt():
+    df = _evening(["2026-08-26", "2026-08-27"], close_of_d=68.51)
+    now = datetime(2026, 8, 28, 4, 1, tzinfo=timezone.utc)  # 00:01 EDT
+    pdt.assert_frame_equal(drop_unsettled_session(df, label="ZLZ26.CBT", now=now), df)
+
+
+def test_the_overnight_row_after_new_york_midnight_is_still_dropped():
+    """After NY midnight Yahoo opens the D+1 row (observed: the 11-17 push run
+    at 04:00 CT dropped ZS=F/ZL=F/ZM=F 11-17 rows); it is not a close."""
+    df = _frame(["2026-11-16", "2026-11-17"])
+    now = datetime(2026, 11, 17, 10, 0, tzinfo=timezone.utc)  # 04:00 CST, 05:00 EST
+    out = drop_unsettled_session(df, label="ZS=F", now=now)
+    assert list(out.index.strftime("%Y-%m-%d")) == ["2026-11-16"]

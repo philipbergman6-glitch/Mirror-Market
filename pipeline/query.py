@@ -514,6 +514,44 @@ def read_opportunity_detections(rule_id: str | None = None) -> pd.DataFrame:
     )
 
 
+def read_board_sessions(commodities: tuple[str, ...]) -> dict[str, dict[str, str | None]]:
+    """The newest session each board leg holds, per commodity, as stored.
+
+    ``prices``: the newest ``Date`` per commodity. ``forward_curve``: the
+    ``observation_date`` of each commodity's newest snapshot (one date per
+    curve, enforced by the fetcher; MIN so a mixed snapshot reads as its
+    oldest leg). None where nothing is stored — never learned, never
+    defaulted (invariant 2). Read per commodity, not from data_freshness:
+    a layer's observed_at is the max over all its tickers, so it can name a
+    session the soy legs do not have (review of #630). A missing table or
+    database raises: the caller decides what an unreadable store means.
+    """
+    out: dict[str, dict[str, str | None]] = {
+        "prices": dict.fromkeys(commodities),
+        "forward_curve": dict.fromkeys(commodities),
+    }
+    if not os.path.exists(DB_PATH):
+        raise FileNotFoundError(DB_PATH)
+    marks = ",".join("?" * len(commodities))
+    with managed_connection(get_connection()) as conn:
+        cur = conn.cursor()
+        for commodity, newest in cur.execute(
+            f"SELECT commodity, MAX(Date) FROM prices WHERE commodity IN ({marks}) "  # noqa: S608 — placeholders only
+            "GROUP BY commodity",
+            commodities,
+        ):
+            out["prices"][commodity] = newest
+        for commodity, observed in cur.execute(
+            "SELECT f.commodity, MIN(f.observation_date) FROM forward_curve f "
+            f"WHERE f.commodity IN ({marks}) AND f.fetched_date = "  # noqa: S608 — placeholders only
+            "(SELECT MAX(g.fetched_date) FROM forward_curve g WHERE g.commodity = f.commodity) "
+            "GROUP BY f.commodity",
+            commodities,
+        ):
+            out["forward_curve"][commodity] = observed
+    return out
+
+
 def read_freshness() -> pd.DataFrame:
     """
     Read data freshness timestamps for all layers.

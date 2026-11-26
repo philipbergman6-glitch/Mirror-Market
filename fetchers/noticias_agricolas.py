@@ -13,7 +13,7 @@ Indicators fetched (see ``NOTICIAS_AGRICOLAS_URLS`` in config.py):
     * ESALQ/B3 Paranaguá      — port-side indicator, cross-checks AgRural
 
 Units: the site quotes BRL per 60 kg sack; we store BRL/MT
-(``price × 1000 / 60``), matching the historical CEPEA rows already in
+(``pipeline.units.per_sack_to_per_metric_ton``: price × 1000 / 60), matching the historical CEPEA rows already in
 ``brazil_spot_prices``.
 
 Parser strategy: hard-fail with ``ScraperShapeError`` on structural
@@ -37,6 +37,7 @@ from config import MAX_RETRIES, NOTICIAS_AGRICOLAS_URLS, REQUEST_TIMEOUT
 from fetchers._backoff import retry_sleep
 from fetchers.cepea import _parse_brl_price
 from pipeline.results import FetchResult, ScraperShapeError
+from pipeline.units import per_sack_to_per_metric_ton
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ _SOURCE_MARKERS = ("cepea", "esalq")
 _COMMODITY_MARKER = "soja"
 _HEADING_TAGS = ("h1", "h2", "h3", "h4", "caption")
 
-_SACK_KG = 60.0
 # Plausibility band, BRL per 60 kg sack. Soy has traded ~70–180 for a
 # decade; corn sits ~50–90 (why the band alone can't catch a corn
 # redirect) and a silent switch to R$/MT (~2300) or R$/kg (~2.3) lands
@@ -148,7 +148,7 @@ def _parse_indicator_page(html: str) -> pd.DataFrame:
                 )
             rows.append({
                 "Date": parsed_date.isoformat(),
-                "price_brl_mt": round(price_per_sack * 1000.0 / _SACK_KG, 2),
+                "price_brl_mt": round(per_sack_to_per_metric_ton(price_per_sack), 2),
                 "Unit": "BRL/MT",
             })
 

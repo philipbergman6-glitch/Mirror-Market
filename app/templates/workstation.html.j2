@@ -503,7 +503,7 @@ tr.tv-panel > td { padding: 0; }
         <td class="num">{{ '{:+,.2f}'.format(p.net_quantity) }}</td>
         <td class="num">{{ '{:+,.1f}'.format(p.net_mt) }}</td>
         <td class="num">{% if p.average_cost is none %}<span class="muted">n/a</span>{% else %}{{ '{:,.2f}'.format(p.average_cost) }}{% endif %}</td>
-        <td class="num">{% if p.mark is none %}<span class="muted">unmarked</span>{% else %}{{ '{:,.2f}'.format(p.mark) }}{% endif %}</td>
+        <td class="num">{% if p.mark is none %}<span class="muted">unmarked</span>{% else %}{{ '{:,.2f}'.format(p.mark) }}{% if p.mark_date %}<br><span class="muted">session {{ p.mark_date }}</span>{% endif %}{% endif %}</td>
         <td><span class="ptype">{{ p.mark_label }}</span></td>
         <td class="num">{% if p.unrealised_usd is none %}<span class="muted">n/a</span>{% else %}{{ '{:+,.0f}'.format(p.unrealised_usd) }}{% endif %}</td>
         <td class="num">{{ '{:+,.0f}'.format(p.realised_usd) }}</td>

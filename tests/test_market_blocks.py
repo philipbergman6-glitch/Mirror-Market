@@ -411,6 +411,213 @@ def _seed_india_mandi(conn) -> None:
     conn.commit()
 
 
+def test_a_still_filling_mh_day_is_stored_but_the_reader_shows_the_last_complete_one(
+    seeded, registry
+):
+    """#621: MSAMB's newest day is read while APMC lots are still arriving
+    (11-24: 22 lots @ ₹77,025 at read, 37 @ ₹76,500 by D+1 afternoon). It stays
+    stored, but block 01 and the ledger leg show the last complete day, under
+    its own date. NULL — never learned — is not a reason to hide a row."""
+    _seed_india_mandi(seeded.conn)
+    seeded.conn.execute(
+        "INSERT INTO india_domestic_prices (Date, commodity, Close, unit, filling) VALUES (?,?,?,?,?)",
+        (_day(1), "Soybean (Mandi MH)", 66000.0, "INR/MT", 0),
+    )
+    seeded.conn.execute(
+        "UPDATE india_domestic_prices SET filling = 1 WHERE commodity = 'Soybean (Mandi MH)' AND Date = ?",
+        (_day(0),),
+    )
+    seeded.conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                        ("INR/USD", _day(1), 0.0105))
+    seeded.conn.commit()
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+
+    price = _block(build_blocks(registry["india"], None, ctx, markets=registry), "price")
+    legs = {leg["key"]: leg for leg in price.data["legs"]}
+    assert legs["Soybean (Mandi MH)"]["as_of"] == _day(1)
+    assert legs["Soybean (Mandi MH)"]["home_value"] == 66000.0
+    assert legs["Soybean (NCDEX Indore spot)"]["as_of"] == _day(0)  # NULL flag: shown
+
+    leg = next(leg for leg in registry["india"].ledger.legs if leg.key == "Soybean (Mandi MH)")
+    assert ctx.leg_prints(leg)[-1][:2] == (date.fromisoformat(_day(1)), 66000.0)
+    stored = seeded.conn.execute(
+        "SELECT COUNT(*) FROM india_domestic_prices WHERE commodity = 'Soybean (Mandi MH)'"
+    ).fetchone()[0]
+    assert stored == 2  # nothing dropped
+
+
+def test_every_registry_filling_column_is_a_column_of_its_table(registry):
+    """The unwindowed read swallows a SQL error as "no data", so a mistyped
+    `filling_column` would blank a price block silently. Pinned here instead."""
+    conn = sqlite3.connect(":memory:")
+    for ddl in schema.ALL_SCHEMAS:
+        conn.executescript(ddl)
+    declared = [
+        source
+        for market in registry.values()
+        for source in (market.price, market.basis)
+        if source is not None and source.filling_column is not None
+    ]
+    assert declared, "India's price leg declares one (#621)"
+    for source in declared:
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({source.table})")}
+        assert source.filling_column in cols, (source.table, source.filling_column)
+
+
+# ---------------------------------------------------------------------------
+# #370 — the MH thin-day label, and #621's filling reason on the ledger leg
+# ---------------------------------------------------------------------------
+MH = "Soybean (Mandi MH)"
+FILLING_REASON = "MSAMB fills through D+1"
+
+
+def _seed_mh_history(conn, *, newest_lots: float | None, filling_lots: float | None = None) -> None:
+    """Two weeks of complete MSAMB days at MSAMB's own shape (weekdays 120
+    lots, Saturday 85, Sunday 18), then the newest complete day at
+    ``newest_lots`` on ``_day(1)``, and optionally a still-filling ``_day(0)``.
+    Every date sits after the 2026-11-10 count break while the clock does."""
+    for offset in range(15, 1, -1):
+        day = TODAY - timedelta(days=offset)
+        lots = {5: 85.0, 6: 18.0}.get(day.weekday(), 120.0)
+        conn.execute(
+            "INSERT INTO india_domestic_prices (Date, commodity, Close, Volume, unit, filling) "
+            "VALUES (?,?,?,?,?,?)", (day.isoformat(), MH, 66000.0, lots, "INR/MT", 0))
+    conn.execute(
+        "INSERT INTO india_domestic_prices (Date, commodity, Close, Volume, unit, filling) "
+        "VALUES (?,?,?,?,?,?)", (_day(1), MH, 66500.0, newest_lots, "INR/MT", 0))
+    if filling_lots is not None:
+        conn.execute(
+            "INSERT INTO india_domestic_prices (Date, commodity, Close, Volume, unit, filling) "
+            "VALUES (?,?,?,?,?,?)", (_day(0), MH, 99000.0, filling_lots, "INR/MT", 1))
+    conn.execute("INSERT INTO india_domestic_prices (Date, commodity, Close, unit) VALUES (?,?,?,?)",
+                 (_day(0), "Soybean (NCDEX Indore spot)", 67250.0, "INR/MT"))
+    for offset in range(0, 16):
+        conn.execute("INSERT INTO currencies (pair, Date, Close) VALUES (?,?,?)",
+                     ("INR/USD", _day(offset), 0.0105))
+    conn.commit()
+
+
+def _india_views(seeded, registry):
+    ctx = SiteContext(conn=seeded.conn, today=TODAY)
+    blocks = build_blocks(registry["india"], None, ctx, markets=registry)
+    price, ledger = _block(blocks, "price"), _block(blocks, "ledger")
+    assert price.state == "ok" and ledger.state == "ok", (price.reason, ledger.reason)
+    legs = {leg["key"]: leg for leg in price.data["legs"]}
+    rows = {row["leg_id"]: row for row in ledger.data["rows"]}
+    return price, legs, rows
+
+
+def test_a_thin_mh_day_is_labelled_on_block_01_and_the_ledger_leg_and_still_shown(
+    seeded, registry
+):
+    """#370 option 2: label, never drop or patch — the 18-lot day is still the
+    print, at its own price, with the count and the baseline beside it."""
+    _seed_mh_history(seeded.conn, newest_lots=18.0)
+    _, legs, rows = _india_views(seeded, registry)
+    label = "thin day · 18 lots (typical weekday ~120)"
+    assert legs[MH]["as_of"] == _day(1) and legs[MH]["home_value"] == 66500.0
+    assert legs[MH]["thin_day"] == label
+    assert rows["india:mandi_mh"]["as_of"] == _day(1)
+    assert rows["india:mandi_mh"]["thin_day"] == label
+    # NCDEX declares no thin-day rule: one poll is not a median over lots.
+    assert legs["Soybean (NCDEX Indore spot)"]["thin_day"] is None
+    assert rows["india:ncdex_indore"]["thin_day"] is None
+
+
+def test_an_mh_day_at_or_above_half_the_weekday_median_carries_no_label(seeded, registry):
+    _seed_mh_history(seeded.conn, newest_lots=60.0)  # exactly half of 120: not under
+    _, legs, rows = _india_views(seeded, registry)
+    assert legs[MH]["thin_day"] is None
+    assert rows["india:mandi_mh"]["thin_day"] is None
+
+
+def test_a_filling_day_is_never_labelled_thin_and_only_the_ledger_leg_names_it(
+    seeded, registry
+):
+    """#621 owner decision: the ledger leg says why the shown day is not the
+    newest stored one; never the partial count or price, never block 01."""
+    _seed_mh_history(seeded.conn, newest_lots=120.0, filling_lots=5.0)
+    price, legs, rows = _india_views(seeded, registry)
+    mh_row = rows["india:mandi_mh"]
+    assert legs[MH]["as_of"] == _day(1) and legs[MH]["thin_day"] is None
+    assert mh_row["thin_day"] is None
+    d1, d0 = (TODAY - timedelta(days=1)), TODAY
+    assert mh_row["filling_note"] == (
+        f"last complete {d1:%m-%d} · {d0:%m-%d} stored, still filling ({FILLING_REASON})"
+    )
+    assert "99000" not in mh_row["filling_note"] and "5 lots" not in mh_row["filling_note"]
+    assert rows["india:ncdex_indore"]["filling_note"] is None
+    assert "still filling" not in repr(price.data)
+
+
+def test_no_filling_note_once_the_day_is_complete(seeded, registry):
+    _seed_mh_history(seeded.conn, newest_lots=120.0)
+    _, _, rows = _india_views(seeded, registry)
+    assert rows["india:mandi_mh"]["filling_note"] is None
+
+
+def _render_india(conn, tmp_path):
+    """The real India page. A weather pin makes it a full page (ledger, basis,
+    weather), so the propagation ledger renders beside block 01."""
+    from scripts import generate_site
+
+    conn.execute("INSERT INTO weather (region, Date, temp_max, temp_min, precipitation) "
+                 "VALUES (?,?,?,?,?)", ("India Madhya Pradesh", _day(0), 30.0, 18.0, 0.0))
+    conn.commit()
+    results = generate_site.generate_site(output_dir=tmp_path, only="india")
+    assert all(result.ok for result in results), results
+    return (tmp_path / "markets" / "india.html").read_text(encoding="utf-8")
+
+
+def test_the_thin_label_reaches_the_india_page_in_block_01_and_the_ledger(
+    seeded, registry, tmp_path
+):
+    _seed_mh_history(seeded.conn, newest_lots=18.0)
+    html = _render_india(seeded.conn, tmp_path)
+    assert 'class="tier-pill page"' in html or "tier-pill page" in html
+    assert html.count("18 lots (typical weekday ~120)") == 2  # block 01 + ledger leg
+
+
+@pytest.mark.parametrize("newest_lots, filling_lots", [(60.0, None), (120.0, 5.0)])
+def test_no_public_page_labels_a_day_above_threshold_or_a_filling_day(
+    seeded, registry, tmp_path, newest_lots, filling_lots
+):
+    """The label must never fire where the rule says it cannot: a complete day
+    at or over half the weekday median, or a 5-lot day still filling."""
+    _seed_mh_history(seeded.conn, newest_lots=newest_lots, filling_lots=filling_lots)
+    html = _render_india(seeded.conn, tmp_path)
+    assert "thin day" not in html
+    if filling_lots is not None:
+        assert html.count("still filling") == 1  # the ledger leg, nowhere else
+
+
+def test_an_unmigrated_db_fails_loudly_and_a_missing_table_stays_empty(registry):
+    """#624 review nit 1: the unwindowed read swallowed every SQL error, so a DB
+    `init_database()` never migrated blanked the whole India block — NCDEX
+    headline included — with no error. Only a missing table is data."""
+    source = registry["india"].price
+    conn = sqlite3.connect(":memory:")
+    assert SiteContext(conn=conn, today=TODAY).series(source) == {key: [] for key in source.keys}
+    conn.execute(
+        "CREATE TABLE india_domestic_prices (Date TEXT, commodity TEXT, Close REAL, Volume REAL)"
+    )
+    with pytest.raises(sqlite3.OperationalError, match="no such column"):
+        SiteContext(conn=conn, today=TODAY).series(source)
+
+
+def test_a_thin_day_rule_must_name_keys_the_source_carries(registry):
+    raw = dict(config.MARKETS["india"]["price"])
+    raw["thin_day"] = {**raw["thin_day"], "keys": ["Soybean (Mandi XX)"]}
+    with pytest.raises(ValueError, match="thin_day"):
+        markets_mod._source(raw, slug="india", block="price")
+
+
+def test_a_filling_column_must_carry_its_reason(registry):
+    raw = {k: v for k, v in config.MARKETS["india"]["price"].items() if k != "filling_reason"}
+    with pytest.raises(ValueError, match="filling_reason"):
+        markets_mod._source(raw, slug="india", block="price")
+
+
 def test_indias_basis_carries_its_policy_spread_caveat(seeded, registry):
     """M19 #222: the number alone cannot show that no cargo can close it."""
     _seed_india_mandi(seeded.conn)

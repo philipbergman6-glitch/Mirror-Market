@@ -16,7 +16,12 @@ Key concepts for learning:
 
 import json
 import logging
+import os
+import re
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
@@ -26,14 +31,98 @@ from config import (
     GROWING_REGIONS,
     MAX_RETRIES,
     OPENMETEO_BASIS,
+    OPENMETEO_FORECAST_PATH,
     OPENMETEO_FORECAST_URL,
+    OPENMETEO_GRID_MATCH_MAX_DEG,
+    OPENMETEO_PROXY_TOKEN_ENV,
+    OPENMETEO_PROXY_URL_ENV,
     REQUEST_TIMEOUT,
     WEATHER_DAILY_VARS,
     WEATHER_SECOND_PASS_DELAY_S,
 )
 from fetchers._backoff import retry_sleep
+from pipeline.results import UpstreamRateLimited
 
 logger = logging.getLogger(__name__)
+
+# The Worker contract (infra/openmeteo-worker/src/worker.js): the shared
+# secret travels in this header, and the Worker marks its *own* refusals
+# with the second one so they can never be read as Open-Meteo's.
+PROXY_TOKEN_HEADER = "X-Proxy-Token"
+PROXY_ERROR_HEADER = "X-Mirror-Proxy-Error"
+# Stamped by the Worker on every answer it relays from Open-Meteo. Through the
+# Worker, a response without it came from Cloudflare (or whatever answered the
+# hostname), not from Open-Meteo — so its 429 is not Open-Meteo's quota and
+# its 200 is not weather (#658 review, 2026-11-25).
+PROXY_UPSTREAM_HEADER = "X-Mirror-Proxy-Upstream"
+# The paid customer API's monthly-allowance refusal: HTTP 403 with this reason
+# (open-meteo docs/api-rate-limiting.md @ aeab72e, L134: "Review your usage and
+# subscription rather than repeatedly retrying that error").
+_OVER_QUOTA_403 = "over quota"
+# What a token may be: visible ASCII, no space (the wizard's is 64 hex). Any
+# other byte makes ``requests`` raise ``InvalidHeader``, whose message quotes
+# the value — a transient-looking error that would log the token (#667 review).
+_TOKEN_RE = re.compile(r"[!-~]+")
+
+
+class OpenMeteoProxyError(RuntimeError):
+    """The Worker route is misconfigured — half-set, not https, or refused by the Worker.
+
+    A configuration error, not weather: raised, never retried, and never
+    answered by quietly going direct, which would put the layer back on the
+    shared quota while the config claims otherwise (invariant 1). The
+    message never carries the token.
+    """
+
+
+@dataclass(frozen=True)
+class _Route:
+    """Where the one batched request goes, and what its quota is."""
+
+    url: str
+    label: str
+    quota: str
+    via_worker: bool
+    headers: dict[str, str] = field(default_factory=dict, repr=False)
+
+
+def _route() -> _Route:
+    """Read the proxy configuration now (not at import), both or neither (#637)."""
+    base = (os.getenv(OPENMETEO_PROXY_URL_ENV) or "").strip()
+    token = (os.getenv(OPENMETEO_PROXY_TOKEN_ENV) or "").strip()
+    if not base and not token:
+        return _Route(
+            url=OPENMETEO_FORECAST_URL,
+            label="direct to api.open-meteo.com (free quota shared with every tenant of this IP)",
+            quota="the free quota is shared per outgoing IP, and GitHub runners share IPs",
+            via_worker=False,
+        )
+    if not (base and token):
+        missing = OPENMETEO_PROXY_TOKEN_ENV if base else OPENMETEO_PROXY_URL_ENV
+        raise OpenMeteoProxyError(
+            f"Open-Meteo Worker route needs both {OPENMETEO_PROXY_URL_ENV} and "
+            f"{OPENMETEO_PROXY_TOKEN_ENV}; {missing} is unset. Set both, or unset "
+            "both to go direct on the shared quota."
+        )
+    if not _TOKEN_RE.fullmatch(token):
+        raise OpenMeteoProxyError(
+            f"{OPENMETEO_PROXY_TOKEN_ENV} holds a space, control or non-ASCII "
+            "character, so it cannot travel in a header; re-run "
+            "scripts/setup_openmeteo_worker.sh to generate one (value not shown)"
+        )
+    parts = urlsplit(base)
+    if parts.scheme != "https" or not parts.hostname:
+        raise OpenMeteoProxyError(
+            f"{OPENMETEO_PROXY_URL_ENV} must be an https:// URL (got scheme "
+            f"{parts.scheme or '(none)'!r}); the token is never sent in clear"
+        )
+    return _Route(
+        url=base.rstrip("/") + OPENMETEO_FORECAST_PATH,
+        label=f"via Worker {parts.hostname} (this Worker's own Open-Meteo quota)",
+        quota=f"the quota is Worker {parts.hostname}'s own, not the runner IP's",
+        via_worker=True,
+        headers={PROXY_TOKEN_HEADER: token},
+    )
 
 
 def fetch_region_weather(
@@ -48,22 +137,8 @@ def fetch_region_weather(
     """
     Fetch recent history + forecast for a single growing region.
 
-    Open-Meteo's forecast endpoint can return both past data and
-    future forecasts in a single request — very convenient.
-
-    Parameters
-    ----------
-    region_name : str
-        Human-readable name (for logging).
-    lat, lon : float
-        WGS84 coordinates of the region center.
-    past_days : int
-        Days of recent history to include (max 92).
-    forecast_days : int
-        Days of forecast to include (max 16).
-    now : pd.Timestamp, optional
-        Timezone-aware wall clock (default: the current UTC instant). The
-        test seam for the day boundary.
+    A batch of one (see `_fetch_batch`): the production path asks for every
+    pin in one request, this is the single-pin view of the same parse.
 
     Returns
     -------
@@ -79,15 +154,45 @@ def fetch_region_weather(
     ValueError
         `now` is naive, or the response names no resolvable timezone — the
         day boundary cannot be placed without one.
+    UpstreamRateLimited
+        Open-Meteo refused the request for quota (HTTP 429) — never retried.
+    """
+    regions = {region_name: {"lat": lat, "lon": lon}}
+    return _fetch_batch(
+        regions, now, past_days=past_days, forecast_days=forecast_days,
+    )[region_name]
+
+
+def _fetch_batch(
+    regions: Mapping[str, Mapping[str, float]],
+    now: pd.Timestamp | None,
+    *,
+    past_days: int = 30,
+    forecast_days: int = 7,
+) -> dict[str, pd.DataFrame]:
+    """One Open-Meteo request for every pin in `regions` (#637).
+
+    Open-Meteo takes comma-separated coordinates and answers a list in
+    request order, each entry carrying its own `timezone` (`timezone=auto`
+    resolves per location) and, from the second entry on, a `location_id`.
+    The quota cost is unchanged — weight is summed per location, 1 call per
+    pin at 3 variables × 37 days — but a run is 1 HTTP request instead of
+    24, and a refused run 1 instead of 144.
+
+    Transport failures (timeout, 5xx, a concurrency 429) are retried with
+    backoff; after MAX_RETRIES every pin comes back empty for the caller's
+    second pass. A quota 429 raises `UpstreamRateLimited` at once.
     """
     if now is None:
         now = pd.Timestamp.now(tz="UTC")
     if now.tzinfo is None:
         raise ValueError("fetch_region_weather: `now` must be timezone-aware")
 
+    route = _route()
+    names = list(regions)
     params: dict[str, str | float | int] = {
-        "latitude":      lat,
-        "longitude":     lon,
+        "latitude":      ",".join(str(regions[n]["lat"]) for n in names),
+        "longitude":     ",".join(str(regions[n]["lon"]) for n in names),
         "daily":         WEATHER_DAILY_VARS,
         "past_days":     past_days,
         "forecast_days": forecast_days,
@@ -97,67 +202,239 @@ def fetch_region_weather(
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info(
-                "Requesting weather for %s (attempt %d) ...",
-                region_name, attempt,
+                "Requesting weather for %d region(s) in one request (attempt %d), %s ...",
+                len(names), attempt, route.label,
             )
             resp = requests.get(
-                OPENMETEO_FORECAST_URL,
+                route.url,
                 params=params,
                 timeout=REQUEST_TIMEOUT,
+                headers=route.headers,
+                # requests keeps a custom header across a redirect (it strips
+                # only Authorization), so the token route never follows one.
+                allow_redirects=not route.via_worker,
             )
+
+            if route.via_worker and 300 <= resp.status_code < 400:
+                raise OpenMeteoProxyError(
+                    f"the Open-Meteo Worker route answered HTTP {resp.status_code} "
+                    f"(a redirect); not followed, so the token goes nowhere but "
+                    f"{OPENMETEO_PROXY_URL_ENV} — check it is the Worker's own URL"
+                )
+
+            proxy_error = resp.headers.get(PROXY_ERROR_HEADER) if route.via_worker else None
+            if proxy_error:
+                raise OpenMeteoProxyError(
+                    f"the Open-Meteo Worker refused the request itself: HTTP "
+                    f"{resp.status_code} {proxy_error} — check {OPENMETEO_PROXY_URL_ENV} "
+                    f"and that {OPENMETEO_PROXY_TOKEN_ENV} matches the Worker's PROXY_TOKEN secret"
+                )
+
+            relayed = not route.via_worker or bool(resp.headers.get(PROXY_UPSTREAM_HEADER))
+            if not relayed and resp.status_code == 429:
+                raise UpstreamRateLimited("weather", _cloudflare_reason(resp))
+            if not relayed and resp.status_code == 200:
+                raise OpenMeteoProxyError(
+                    f"HTTP 200 not relayed by the Worker (no {PROXY_UPSTREAM_HEADER}): "
+                    f"{_page_title(resp)} — check {OPENMETEO_PROXY_URL_ENV} points at the Worker"
+                )
+
+            if resp.status_code == 403 and relayed:
+                upstream = _upstream_reason(resp)
+                if _OVER_QUOTA_403 in upstream.lower():
+                    raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream, route))
+
+            if resp.status_code == 429:
+                upstream = _upstream_reason(resp)
+                if _is_concurrency_rejection(upstream):
+                    # Queue pressure on the shared IP, not a quota: uncharged,
+                    # and it clears as earlier requests finish.
+                    logger.warning("HTTP 429 (concurrency): %s", upstream)
+                    if attempt < MAX_RETRIES:
+                        retry_sleep(attempt)
+                        continue
+                    break
+                raise UpstreamRateLimited("weather", _rate_limit_reason(resp, upstream, route))
 
             if resp.status_code != 200:
                 logger.warning("HTTP %d: %s", resp.status_code, resp.text[:200])
                 if attempt < MAX_RETRIES:
                     retry_sleep(attempt)
                     continue
-                return pd.DataFrame()
+                break
 
-            data = resp.json()
-            daily = data.get("daily", {})
-
-            if not daily or "time" not in daily:
-                logger.warning("No daily data in response for %s", region_name)
-                return pd.DataFrame()
-
-            df = pd.DataFrame({
-                "Date":          daily["time"],
-                "temp_max":      daily.get("temperature_2m_max"),
-                "temp_min":      daily.get("temperature_2m_min"),
-                "precipitation": daily.get("precipitation_sum"),
-            })
-
-            # `time` is the pin's local calendar (timezone=auto), so today is
-            # the pin's today, not the runner's. Today itself is a running
-            # total — unfinished max, partial precip sum — so it is flagged
-            # with the forecast rows: the elapsed side ends at D−1, and the
-            # 08:00 and 23:30 UTC slots no longer disagree about an
-            # "observed" day. Downstream z-scores and alerts exclude both.
-            pin_today = _pin_today(region_name, data.get("timezone"), now)
-            df["is_forecast"] = (
-                pd.to_datetime(df["Date"]) >= pin_today
-            ).astype(int)
-            df["basis"] = OPENMETEO_BASIS
-
-            logger.info(
-                "Got %d days of weather for %s (%.1f°, %.1f°)",
-                len(df), region_name, lat, lon,
-            )
-            return df
+            _log_quota(resp)
+            return _parse_batch(names, regions, resp.json(), now)
 
         except (requests.RequestException, json.JSONDecodeError) as exc:
             logger.warning(
-                "Attempt %d/%d failed for weather %s: %s",
-                attempt, MAX_RETRIES, region_name, exc,
+                "Attempt %d/%d failed for weather (%d regions): %s",
+                attempt, MAX_RETRIES, len(names), exc,
             )
             if attempt < MAX_RETRIES:
                 retry_sleep(attempt)
 
     logger.error(
-        "All %d attempts failed for weather %s — returning empty DataFrame",
-        MAX_RETRIES, region_name,
+        "All %d attempts failed for weather (%s) — returning empty DataFrames",
+        MAX_RETRIES, ", ".join(names),
     )
-    return pd.DataFrame()
+    return {name: pd.DataFrame() for name in names}
+
+
+def _parse_batch(
+    names: list[str],
+    regions: Mapping[str, Mapping[str, float]],
+    payload: object,
+    now: pd.Timestamp,
+) -> dict[str, pd.DataFrame]:
+    """Map a (multi-)location response back onto the pins, by position.
+
+    One location answers an object, several a list. Hard-fails on a count,
+    a `location_id`, or a returned grid cell that does not match the request:
+    a mis-mapped entry would put one region's rain on another's card
+    (invariant 11). The coordinate check is what holds when `location_id` is
+    absent — Open-Meteo documents it for CSV/XLSX only, and entry 0 never
+    carries one.
+    """
+    entries = payload if isinstance(payload, list) else [payload]
+    if len(entries) != len(names):
+        raise ValueError(
+            f"Open-Meteo answered {len(entries)} location(s) for {len(names)} "
+            "requested; the pins cannot be matched to the response"
+        )
+    out: dict[str, pd.DataFrame] = {}
+    for index, (name, entry) in enumerate(zip(names, entries, strict=True)):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Open-Meteo entry {index} for {name} is not an object")
+        location_id = entry.get("location_id")
+        if location_id is not None and location_id != index:
+            raise ValueError(
+                f"Open-Meteo entry {index} for {name} carries location_id "
+                f"{location_id!r}; the response is not in request order"
+            )
+        _check_grid_cell(index, name, regions[name], entry)
+        out[name] = _region_frame(name, regions[name], entry, now)
+    return out
+
+
+def _check_grid_cell(index: int, name: str, pin: Mapping[str, float], entry: dict) -> None:
+    """The entry's grid cell must be the pin's: within the snap tolerance on both axes."""
+    lat, lon = entry.get("latitude"), entry.get("longitude")
+    if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+        raise ValueError(
+            f"Open-Meteo entry {index} for {name} names no grid cell "
+            f"(latitude {lat!r}, longitude {lon!r}); it cannot be matched to the pin"
+        )
+    if (abs(lat - pin["lat"]) > OPENMETEO_GRID_MATCH_MAX_DEG
+            or abs(lon - pin["lon"]) > OPENMETEO_GRID_MATCH_MAX_DEG):
+        raise ValueError(
+            f"Open-Meteo entry {index} for {name} answers grid cell ({lat}, {lon}), "
+            f"more than {OPENMETEO_GRID_MATCH_MAX_DEG}° from the pin ({pin['lat']}, {pin['lon']}); "
+            "the response is not in request order"
+        )
+
+
+def _region_frame(
+    region_name: str,
+    coords: Mapping[str, float],
+    data: dict,
+    now: pd.Timestamp,
+) -> pd.DataFrame:
+    daily = data.get("daily", {})
+    if not daily or "time" not in daily:
+        logger.warning("No daily data in response for %s", region_name)
+        return pd.DataFrame()
+
+    df = pd.DataFrame({
+        "Date":          daily["time"],
+        "temp_max":      daily.get("temperature_2m_max"),
+        "temp_min":      daily.get("temperature_2m_min"),
+        "precipitation": daily.get("precipitation_sum"),
+    })
+
+    # `time` is the pin's local calendar (timezone=auto), so today is
+    # the pin's today, not the runner's. Today itself is a running
+    # total — unfinished max, partial precip sum — so it is flagged
+    # with the forecast rows: the elapsed side ends at D−1, and the
+    # 08:00 and 23:30 UTC slots no longer disagree about an
+    # "observed" day. Downstream z-scores and alerts exclude both.
+    pin_today = _pin_today(region_name, data.get("timezone"), now)
+    df["is_forecast"] = (
+        pd.to_datetime(df["Date"]) >= pin_today
+    ).astype(int)
+    df["basis"] = OPENMETEO_BASIS
+
+    logger.info(
+        "Got %d days of weather for %s (%.1f°, %.1f°)",
+        len(df), region_name, coords["lat"], coords["lon"],
+    )
+    return df
+
+
+def _upstream_reason(resp: requests.Response) -> str:
+    """Open-Meteo's own `reason` text, or the raw body when it sent none."""
+    try:
+        body = resp.json()
+    except (ValueError, json.JSONDecodeError):
+        body = None
+    if isinstance(body, dict) and isinstance(body.get("reason"), str):
+        return body["reason"]
+    return (resp.text or "").strip()[:200] or "(no reason given)"
+
+
+def _is_concurrency_rejection(reason: str) -> bool:
+    return "concurrent" in reason.lower()
+
+
+def _page_title(resp: requests.Response) -> str:
+    """A non-Open-Meteo page, named by its <title> (or first text), tags stripped."""
+    text = resp.text or ""
+    match = re.search(r"<title[^>]*>(.*?)</title>", text, re.IGNORECASE | re.DOTALL)
+    raw = match.group(1) if match else re.sub(r"<[^>]+>", " ", text)
+    return " ".join(raw.split())[:200] or "(empty body)"
+
+
+def _cloudflare_reason(resp: requests.Response) -> str:
+    """A 429 Cloudflare served in the Worker's place — its limit, not Open-Meteo's."""
+    return (
+        f"Cloudflare HTTP 429: {_page_title(resp)} — answered by Cloudflare, not "
+        "relayed from Open-Meteo: the Worker's own Cloudflare limit (Workers Free "
+        "100,000 requests/day, reset 00:00 UTC), not the Open-Meteo quota"
+    )
+
+
+def _rate_limit_reason(resp: requests.Response, upstream: str, route: _Route) -> str:
+    """The `rate_limited` reason a reader sees: what, until when, and whose quota."""
+    parts = [f"Open-Meteo HTTP {resp.status_code}: {upstream}"]
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
+        parts.append(f"Retry-After {retry_after} s")
+    window = resp.headers.get("X-RateLimit-Window")
+    if window:
+        parts.append(f"window {window} s")
+    if resp.status_code == 403:
+        parts.append("the paid API key's monthly allowance is used up; review usage and subscription")
+    else:
+        parts.append(route.quota)
+    return " — ".join(parts)
+
+
+def _log_quota(resp: requests.Response) -> None:
+    """Record what the request cost and what the shared quota has left.
+
+    Open-Meteo reports both on every free-API answer (`X-RateLimit-Cost`,
+    `X-RateLimit-Remaining`, `X-RateLimit-Window`); logging them is how a
+    run says how close the shared IP was to the wall.
+    """
+    headers = resp.headers
+    cost = headers.get("X-RateLimit-Cost")
+    remaining = headers.get("X-RateLimit-Remaining")
+    if cost is None and remaining is None:
+        return
+    logger.info(
+        "Open-Meteo quota: this request cost %s call(s); %s remaining in the %s s window",
+        cost or "?", remaining or "?", headers.get("X-RateLimit-Window") or "?",
+    )
 
 
 def _pin_today(region_name: str, timezone: object, now: pd.Timestamp) -> pd.Timestamp:
@@ -177,27 +454,29 @@ def _pin_today(region_name: str, timezone: object, now: pd.Timestamp) -> pd.Time
     return now.tz_convert(tz).normalize().tz_localize(None)
 
 
-def fetch_all_regions() -> dict[str, pd.DataFrame]:
+def fetch_all_regions(*, now: pd.Timestamp | None = None) -> dict[str, pd.DataFrame]:
     """
     Fetch weather for every growing region in config.GROWING_REGIONS.
+
+    One batched request (#637), then — only for pins it left empty — one
+    more batched request after `WEATHER_SECOND_PASS_DELAY_S` (#577).
 
     Returns
     -------
     dict[str, pd.DataFrame]
         {region_name: DataFrame} — past 30 days + 7-day forecast.
+
+    Raises
+    ------
+    UpstreamRateLimited
+        A quota 429 on either pass; it carries the rows the first pass got.
     """
-    results = {}
-    for region_name, coords in GROWING_REGIONS.items():
-        df = fetch_region_weather(
-            region_name,
-            lat=coords["lat"],
-            lon=coords["lon"],
-        )
-        results[region_name] = df
+    results = _fetch_batch(GROWING_REGIONS, now)
 
     # Second pass (#577): transient upstream throttling, not the region,
     # explains a key lost to all retries — so retry it once the window has
-    # had time to clear. A key still empty after this stays empty.
+    # had time to clear. A key still empty after this stays empty. A quota
+    # refusal never gets here: retrying it answers the same 429.
     missing = [name for name, df in results.items() if df.empty]
     if missing:
         logger.warning(
@@ -205,11 +484,13 @@ def fetch_all_regions() -> dict[str, pd.DataFrame]:
             len(missing), ", ".join(missing), WEATHER_SECOND_PASS_DELAY_S,
         )
         time.sleep(WEATHER_SECOND_PASS_DELAY_S)
-        for region_name in missing:
-            coords = GROWING_REGIONS[region_name]
-            results[region_name] = fetch_region_weather(
-                region_name, lat=coords["lat"], lon=coords["lon"],
-            )
+        try:
+            results.update(_fetch_batch({n: GROWING_REGIONS[n] for n in missing}, now))
+        except UpstreamRateLimited as exc:
+            raise UpstreamRateLimited(
+                exc.layer, exc.reason,
+                data={n: df for n, df in results.items() if not df.empty},
+            ) from exc
     return results
 
 

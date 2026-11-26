@@ -32,8 +32,9 @@ from trust.cbot_benchmarks import (
 from trust.domain import DatasetResultStatus, EligibilityScope, SettlementState
 from trust.registry import RawRetention, RightsAction, RightsDecision
 
-# 20:00 UTC is 15:00 in Chicago — past the 14:30 settlement cutoff, so a bar
-# dated the same day is a finished session.
+# 20:00 UTC is 15:00 in Chicago — after the 13:15 settlement, but Yahoo's bar
+# labelled 08-13 is final only at 00:00 New York on 08-14 (B47 #622). SESSION
+# (08-12) is final at both instants.
 AFTER_SETTLEMENT = datetime(2026, 8, 13, 20, 0, tzinfo=timezone.utc)
 BEFORE_SETTLEMENT = datetime(2026, 8, 13, 15, 0, tzinfo=timezone.utc)
 SESSION = date(2026, 8, 12)
@@ -223,8 +224,45 @@ def test_meal_and_oil_carry_their_own_commodity_product_form_and_native_unit() -
 def test_a_past_session_is_settled_and_the_session_in_progress_is_not() -> None:
     assert settlement_state_for(date(2026, 8, 12), BEFORE_SETTLEMENT) is SettlementState.SETTLED
     assert settlement_state_for(date(2026, 8, 13), BEFORE_SETTLEMENT) is SettlementState.OPEN
-    assert settlement_state_for(date(2026, 8, 13), AFTER_SETTLEMENT) is SettlementState.SETTLED
     assert settlement_state_for(date(2026, 8, 14), AFTER_SETTLEMENT) is SettlementState.PRE_OPEN
+
+
+@pytest.mark.parametrize(
+    "now",
+    [
+        datetime(2026, 8, 13, 20, 0, tzinfo=timezone.utc),  # 15:00 CDT: the last trade
+        datetime(2026, 8, 14, 2, 37, tzinfo=timezone.utc),  # 21:37 CDT: overnight D+1 trades
+        datetime(2026, 8, 14, 3, 59, tzinfo=timezone.utc),  # 23:59 EDT
+    ],
+    ids=["last-trade", "overnight", "23:59ET"],
+)
+def test_the_session_is_open_until_new_york_midnight_after_the_settlement(now) -> None:
+    """B47 (#622): the trusted path asked the v1 guard's old question — has
+    14:30 CT passed? — and so stamped SETTLED on the bars it measured wrong."""
+    assert settlement_state_for(date(2026, 8, 13), now) is SettlementState.OPEN
+
+
+def test_the_session_is_settled_from_new_york_midnight() -> None:
+    now = datetime(2026, 8, 14, 4, 0, tzinfo=timezone.utc)  # 00:00 EDT on 08-14
+    assert settlement_state_for(date(2026, 8, 13), now) is SettlementState.SETTLED
+
+
+def test_an_overnight_capture_cannot_become_an_accepted_revision(tmp_path) -> None:
+    """The ticket fixture: ZLF27 captured 21:09 CST on 11-24, stored 57.99
+    against a final 58.32. The trusted path must reject it, not accept it."""
+    store = repository(tmp_path)
+    captured = datetime(2026, 11, 25, 3, 9, tzinfo=timezone.utc)
+    replay = artifact_from_bars(
+        "Soybeans", [bar("ZSF27.CBT", day=date(2026, 11, 24))], retrieved_at=captured
+    )
+
+    ingestion = ingest_cbot_benchmark_replays(store, [replay], ingested_at=captured)
+
+    dataset = ingestion.dataset("Soybeans")
+    assert dataset.accepted_revision_ids == ()
+    assert len(dataset.rejected_revision_ids) == 1
+    (stored,) = store.all_observation_revisions()
+    assert stored.settlement_state is SettlementState.OPEN
 
 
 def test_an_unfinished_session_bar_cannot_become_an_accepted_revision(tmp_path) -> None:

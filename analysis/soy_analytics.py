@@ -29,6 +29,7 @@ from typing import Any
 
 import pandas as pd
 
+import config
 from analysis import weather_alerts
 from analysis.crop_year import psd_year_for_crop_year, psd_year_label
 from analysis.futures.domain import contracts_from
@@ -44,6 +45,7 @@ from analysis.spreads import (
     strike_cross_venue_spread,
 )
 from analysis.stocks_to_use import compute_stocks_to_use, detect_tight_supply
+from analysis.thin_day import rule_from_spec, thin_day
 from config import (
     CEC_ATTRIBUTION,
     CEC_PSD_COUNTERPARTS,
@@ -192,6 +194,40 @@ def _india_msp_on(day: date) -> tuple[float, str] | None:
         return None
     _, inr_mt, season, _source = max(in_force, key=lambda entry: entry[0])
     return inr_mt, season
+
+
+def _complete_days(rows: pd.DataFrame) -> pd.DataFrame:
+    """Rows whose day was complete when read (#621): ``filling`` 0 or NULL.
+
+    ``filling = 1`` marks a day read while its publisher was still filling it
+    (MSAMB gains APMC lots through all of D+1); the row is stored, never shown
+    as the latest day. NULL — or no column, a frame from before #621 — is
+    "never learned" and stays, as in ``app.block_builders._complete_clause``.
+    """
+    if "filling" not in rows.columns:
+        return rows
+    return rows[rows["filling"].ne(1)]
+
+
+def _mh_thin_day(complete: pd.DataFrame) -> str | None:
+    """#370: the newest complete MH day's thin-day label, or None.
+
+    The rule is the India price descriptor's own (``config.MARKETS``), parsed
+    by the same ``analysis.thin_day.rule_from_spec`` the market registry uses.
+    """
+    spec = (config.MARKETS["india"]["price"].get("thin_day") or {})
+    if MANDI_SERIES_MH not in (spec.get("keys") or ()):
+        return None
+    rule = rule_from_spec(spec)
+    if rule.count_column not in complete.columns:
+        return None  # a frame without counts has learned none — no claim
+    days = pd.to_datetime(complete["Date"]).dt.date
+    counts = [
+        (day, None if pd.isna(n) else float(n))
+        for day, n in zip(days, complete[rule.count_column], strict=True)
+    ]
+    label = thin_day(counts, days.iloc[-1], rule)
+    return label.text if label is not None else None
 
 
 _ARRIVALS_WINDOW_DAYS = 7
@@ -1832,8 +1868,12 @@ def emerging_markets_analysis() -> dict:
                 # Maharashtra — #1 producing state since 2025-26; secondary
                 # series alongside the MP (Indore hub) headline benchmark.
                 mh_df = read_india_domestic(MANDI_SERIES_MH)
-                if not mh_df.empty:
-                    mh_rows = mh_df.sort_values("Date")
+                # #621: a row read while MSAMB was still filling its day is
+                # stored but never the card's latest — the pace below keeps
+                # every row, its window already ends the day before the newest.
+                mh_complete = _complete_days(mh_df)
+                if not mh_complete.empty:
+                    mh_rows = mh_complete.sort_values("Date")
                     india_domestic_entry["soybean_mandi_mh_inr"] = float(
                         mh_rows["Close"].iloc[-1]
                     )
@@ -1845,7 +1885,13 @@ def emerging_markets_analysis() -> dict:
                         india_domestic_entry["soybean_mandi_mh_usd"] = round(
                             aligned[0], 2
                         )
-                    pace = _mandi_arrivals_pace(mh_rows, every_day=True)
+                    # #370: the shown day, labelled when few lots stand behind
+                    # its median. Same rule and baseline as block 01 and the
+                    # ledger leg, over the same complete days.
+                    thin = _mh_thin_day(mh_rows)
+                    if thin is not None:
+                        india_domestic_entry["soybean_mandi_mh_thin"] = thin
+                    pace = _mandi_arrivals_pace(mh_df.sort_values("Date"), every_day=True)
                     if pace is not None:
                         india_domestic_entry.update(pace)
 

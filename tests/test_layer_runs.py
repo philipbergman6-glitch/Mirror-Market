@@ -147,14 +147,17 @@ def test_store_is_not_a_snapshot_history_table() -> None:
 @pytest.mark.parametrize(
     ("moment", "expected"),
     [
-        # Monday 21:00 UTC — CBOT settled (14:30 CT cutoff) → Monday.
-        (datetime(2026, 10, 19, 21, 0, tzinfo=timezone.utc), date(2026, 10, 19)),
+        # Monday 21:00 UTC — CBOT settled, but Yahoo's bar is final only at
+        # New York midnight (B47 #622) → the guard serves Friday.
+        (datetime(2026, 10, 19, 21, 0, tzinfo=timezone.utc), date(2026, 10, 16)),
         # Monday 15:00 UTC — before the cutoff → the guard serves Friday.
         (datetime(2026, 10, 19, 15, 0, tzinfo=timezone.utc), date(2026, 10, 16)),
         # Saturday dispatch → Friday's session.
         (datetime(2026, 10, 17, 21, 0, tzinfo=timezone.utc), date(2026, 10, 16)),
-        # Tuesday 03:00 UTC is still Monday evening in Chicago → Monday.
-        (datetime(2026, 10, 20, 3, 0, tzinfo=timezone.utc), date(2026, 10, 19)),
+        # Tuesday 03:59 UTC is still Monday in New York → Friday.
+        (datetime(2026, 10, 20, 3, 59, tzinfo=timezone.utc), date(2026, 10, 16)),
+        # Tuesday 04:00 UTC is New York midnight (EDT) → Monday.
+        (datetime(2026, 10, 20, 4, 0, tzinfo=timezone.utc), date(2026, 10, 19)),
     ],
 )
 def test_session_date_is_the_settlement_guard_session_on_a_weekday(moment: datetime, expected: date) -> None:
@@ -177,7 +180,8 @@ def test_rows_for_run_covers_every_production_layer_once() -> None:
         evidence=_evidence(), requested=None, rendered_at=None,
     )
     assert [r.layer_name for r in rows] == list(config.PRODUCTION_LAYER_KEYS)
-    assert {r.session_date for r in rows} == {date(2026, 10, 19)}
+    # 20:00 UTC Monday: Monday's bar is not final until New York midnight.
+    assert {r.session_date for r in rows} == {date(2026, 10, 16)}
 
 
 def test_rows_for_run_reads_this_runs_grade_and_observation() -> None:

@@ -193,6 +193,51 @@ def test_stored_rows_behind_a_broken_ingest_are_withheld_not_blamed_on_the_calen
     assert "our comexstat ingest" in exports["reason"]
 
 
+def test_a_failed_rerun_after_a_same_session_success_still_draws_the_stored_month(ctx):
+    """#632 (owner option B on #518): a usable run stored these rows on the
+    session the failed re-run served, and a failed Comex Stat run (zero
+    products back) stores nothing — so the rows are that success's, not an
+    outage's. The block renders; the re-run stays visible as a status mark
+    and in the manifest's ``failed_runs``."""
+    _seed(ctx.conn)
+    ctx.conn.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?,?,?,?,?)", ("comexstat", "2026-11-19 11:04:00", "2026-11-19 12:50:00", 0, "failed"))
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "ok"
+    assert exports["data"]["month"] == str(LATEST)
+
+
+@pytest.mark.parametrize("status", ["stale", "incomplete"])
+def test_a_stale_or_incomplete_rerun_after_a_same_session_success_is_still_withheld(ctx, status):
+    """#632 review: unlike ``failed``, a stale or incomplete run *stored* rows,
+    and ``save_brazil_exports`` is not an upsert — it deletes the product's
+    window from the incoming first month and rewrites it. So the success's
+    rows may be gone (incomplete: 1-2 products rewritten, the rest left on
+    another month), and the block keeps withholding with our ingest named."""
+    _seed(ctx.conn)
+    ctx.conn.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?,?,?,?,?)", ("comexstat", "2026-11-19 11:04:00", "2026-11-19 12:50:00", 1, status))
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "empty"
+    assert "our comexstat ingest" in exports["reason"]
+
+
+def test_a_session_with_nothing_usable_since_the_last_success_is_still_withheld(ctx):
+    # Last success served the 11-17 session; the 11-18 session only failed.
+    _seed(ctx.conn)
+    ctx.conn.execute(
+        "INSERT INTO data_freshness (layer_name, last_success, last_attempt, rows_fetched, status) "
+        "VALUES (?,?,?,?,?)", ("comexstat", "2026-11-18 11:04:00", "2026-11-19 12:50:00", 0, "failed"))
+    ctx.conn.commit()
+    _, exports = _exports(ctx)
+    assert exports["state"] == "empty"
+    assert "our comexstat ingest failed upstream; last good run 2026-11-18" in exports["reason"]
+
+
 def test_a_newest_month_past_the_age_budget_is_withheld(ctx):
     old = pd.Period(TODAY, freq="M") - 6
     _insert(ctx.conn, old, "12019000", "Soybeans", "China", 1_000_000_000, 400_000_000)

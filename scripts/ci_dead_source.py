@@ -71,11 +71,12 @@ def run_url() -> str:
 def _line(streak: Streak) -> str:
     tag = " — **decision-impairing** (availability basket)" if streak.layer in config.AVAILABILITY_BASKET else ""
     if streak.opens_at_record_start:
-        # The record cannot see past its own first session, so the streak is a
-        # floor; printing that session as the start would date the outage (#566).
+        # The layer's record cannot see past its own first session, so the
+        # streak is a floor; printing that session as the start would date the
+        # outage (#566). It is the layer's first row, never earlier (#633).
         span = (
             f"at least {streak.sessions} consecutive sessions — every one on record "
-            f"(the record begins {streak.first_session.isoformat()}; through "
+            f"(its record begins {streak.first_session.isoformat()}; through "
             f"{streak.last_session.isoformat()})"
         )
     else:
@@ -119,9 +120,15 @@ def main(argv: list[str] | None = None) -> int:
     rows = layer_runs.read_runs()
     run_id, _workflow = layer_runs.run_identity(os.environ)
     now = reliability.dead_layers(rows)
-    before = reliability.dead_layers([r for r in rows if r.run_id != run_id])
+    earlier = [r for r in rows if r.run_id != run_id]
+    before = reliability.dead_layers(earlier)
     newly = sorted(set(now) - set(before))
-    recovered = {name: before[name] for name in sorted(set(before) - set(now))}
+    # A layer with no row before this run is appearing, not recovering (#633
+    # review): "before" had nothing of it to count, so the streak it read there
+    # was the record's silence before the roster carried the layer — the
+    # 2026-11-06 "`afex` is available again after 15 sessions" line.
+    seen_before = {r.layer_name for r in earlier}
+    recovered = {name: before[name] for name in sorted(set(before) - set(now)) if name in seen_before}
     existing = find_open_issue()
 
     if not now:

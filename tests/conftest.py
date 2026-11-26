@@ -60,6 +60,18 @@ def _network_marker(request: pytest.FixtureRequest):
         _guards.set_network_allowed(False)
 
 
+@pytest.fixture(autouse=True)
+def _no_openmeteo_proxy(monkeypatch: pytest.MonkeyPatch):
+    """Weather tests start on the direct path, whatever the local .env says (#637).
+
+    config.py loads .env into os.environ, so a desk with the Worker configured
+    would otherwise route every weather test's stubbed request differently
+    from CI. A test that wants the proxy sets both variables itself.
+    """
+    monkeypatch.delenv("OPENMETEO_PROXY_URL", raising=False)
+    monkeypatch.delenv("OPENMETEO_PROXY_TOKEN", raising=False)
+
+
 @pytest.fixture
 def synthetic_ohlcv() -> pd.DataFrame:
     """300 business days of seeded random-walk OHLCV.

@@ -244,8 +244,8 @@ def _legacy_frame(commodity: str, download, *, today: date | None, now: datetime
     the same ``drop_unsettled_session`` call, the same ``EXCHANGE_SESSION``
     rule, then ``build_curve`` — rather than a call to ``fetch_forward_curve``
     itself, for one reason: the guard's clock has to be the *run's* instant.
-    ``fetch_one`` reads the wall clock, so a run straddling the 14:30 Chicago
-    cutoff would judge the two paths at two different moments and report the
+    ``fetch_one`` reads the wall clock, so a run straddling the New York
+    midnight cutoff (B47 #622) would judge the two paths at two different moments and report the
     difference as a divergence. Nothing else about v1's policy is restated
     here; the rule, the drop and the parse are all imported, and no module
     global is rebound for the run.

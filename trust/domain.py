@@ -768,9 +768,10 @@ class CandidateObservation:
     effective_date_inferred: bool = False
     settlement_state: SettlementState | None = None
     # The candle the value came off, where the source publishes one. Carried on
-    # the candidate and not only on the revision because ``ohlc.relationship``
-    # is a *candidate* rule: an impossible candle has to be refusable before
-    # anything is appended to the ledger, not diagnosed after the fact.
+    # the candidate and not only on the revision because ``ohlc.complete`` and
+    # ``ohlc.relationship`` are *candidate* rules: an incomplete candle has to be
+    # refusable, and a range violation recorded, before anything is appended to
+    # the ledger, not diagnosed after the fact.
     open_value: Decimal | int | str | None = None
     high_value: Decimal | int | str | None = None
     low_value: Decimal | int | str | None = None

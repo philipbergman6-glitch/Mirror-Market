@@ -1,0 +1,9 @@
+{
+  "name": "mirror-market-openmeteo-worker",
+  "private": true,
+  "type": "module",
+  "description": "Pass-through to api.open-meteo.com so Layer 5 has its own free quota (#637).",
+  "scripts": {
+    "test": "node --test test/worker.test.mjs"
+  }
+}

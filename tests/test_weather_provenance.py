@@ -25,6 +25,8 @@ from pipeline.store import _migrate_weather_basis
 
 def _fetch(dates: list[str], timezone: str | None, now: pd.Timestamp) -> pd.DataFrame:
     payload: dict = {
+        # Open-Meteo always answers the grid cell it used (#658 review check).
+        "latitude": 0.0, "longitude": 0.0,
         "daily": {
             "time": dates,
             "temperature_2m_max": [30.0] * len(dates),

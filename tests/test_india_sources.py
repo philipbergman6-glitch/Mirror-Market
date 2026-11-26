@@ -11,6 +11,7 @@ import pytest
 import requests
 
 import fetchers.india_prices as india_prices
+import fetchers.msamb as msamb
 from config import MANDI_SERIES_MH, NCDEX_SPOT_SERIES
 from fetchers.mandi import _aggregate
 from fetchers.msamb import _assert_code_is_soybean, _completed, _parse_grid
@@ -79,6 +80,24 @@ def test_msamb_only_todays_lots_is_not_a_completed_day() -> None:
     records = _parse_grid("<tr><td>17/11/2026</td></tr>" + _lot("A", "क्विंटल", "1", "7000"))
     with pytest.raises(ScraperShapeError, match="no completed"):
         _completed(records, _TODAY)
+
+
+def _stub_msamb(monkeypatch, grid: str) -> None:
+    page = '<select><option value="04017">सोयाबिन</option></select>'
+    monkeypatch.setattr(msamb, "_get", lambda url, params=None: grid if params else page)
+
+
+def test_msamb_yesterday_is_stored_but_flagged_as_still_filling(monkeypatch) -> None:
+    """#621: an MSAMB day gains APMC lots through all of D+1 (11-24 read on
+    11-25 at 08:39 IST: 22 lots @ ₹77,025; by 16:32 IST: 37 @ ₹76,500). The
+    row is stored — save first, grade second — but says it is still filling;
+    a day read on D+2 or later is complete."""
+    _stub_msamb(monkeypatch, _grid())
+    df = msamb.fetch_msamb_soybean(_TODAY)
+    by_day = dict(zip(df["Date"], df["filling"], strict=True))
+    assert by_day["2026-11-16"] == 1                      # read on D+1: filling
+    assert {by_day[f"2026-11-{d}"] for d in range(10, 16)} == {0}  # read on D+2+
+    assert "2026-11-17" not in by_day                     # today is never stored
 
 
 def test_msamb_commodity_code_must_still_label_soybean() -> None:

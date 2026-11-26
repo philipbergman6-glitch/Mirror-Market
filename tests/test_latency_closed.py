@@ -225,6 +225,7 @@ def test_the_scoped_gate_passes_a_closed_venue_and_says_so(tmp_path, capsys):
         "edition": {"mode": "fast", "generated_at": "2026-10-07T15:24:11+00:00"},
         "latency": {"layers": [
             {"layer": "dce", "class": "board_price", "verdict": "closed",
+             "acquisition_verdict": "breaches",
              "closure_basis": "DCE notice of 2025-12-17 …"},
             {"layer": "cot", "class": "fundamentals", "verdict": "breaches"},
         ]},

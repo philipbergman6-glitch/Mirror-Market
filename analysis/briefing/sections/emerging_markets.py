@@ -30,7 +30,10 @@ def _format_india_domestic(em_countries: dict) -> str:
     if mh_inr:
         mh_usd = dom.get("soybean_mandi_mh_usd")
         usd_str = f" / ${mh_usd:,.1f}/MT" if mh_usd else ""
-        lines.append(f"  Soybean (MH mandi median):   ₹{mh_inr:,.0f}/MT{usd_str}")
+        # #370: a median over few lots says so on the same line.
+        thin = dom.get("soybean_mandi_mh_thin")
+        thin_str = f" · {thin}" if thin else ""
+        lines.append(f"  Soybean (MH mandi median):   ₹{mh_inr:,.0f}/MT{usd_str}{thin_str}")
 
     cbot_usd = dom.get("cbot_bean_usd")
     if cbot_usd is not None:

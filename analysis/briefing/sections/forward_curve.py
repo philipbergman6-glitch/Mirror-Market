@@ -5,6 +5,11 @@ listed month, far − near, native units and USD/MT, the session) and where the
 strip is in carry and where it is inverted, by month (#671). Read through
 ``analysis.futures.curve`` — the vocabulary the workstation uses — so the two
 surfaces cannot give different Jan–Mar readings.
+
+Every line also names the curve's own session (B48 #626): commodities are
+observed on different sessions — ICE US one weekday after CBOT — so the
+edition date is not this line's. A leg with no observation date never reaches
+a line: the provider's coherence check drops it, so no date is ever guessed.
 """
 
 from analysis.futures.stored_curves import read_stored_curves
@@ -26,6 +31,8 @@ def format() -> str:  # noqa: A001
         line += f" — {analysis.structure.implication}"
         if not analysis.coherent:
             line += f" [off-session legs dropped: {analysis.coherence_note}]"
+        observed = analysis.observation_date
+        line += f" — observed {observed.isoformat()}" if observed else " — observation date not recorded"
         lines.append(line)
 
     if len(lines) == 1:
