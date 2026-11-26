@@ -120,6 +120,11 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
     ("priced_from", "Board and FX priced from data <age> old",
      "The age of the oldest board or FX observation feeding the headline. Stated so "
      "'Generated' cannot read as fresher than the numbers are."),
+    ("decision_read", "Decision read",
+     "Three answers beside the layer count (#673): can two origins be compared FOB "
+     "for the default window, do beans, meal and oil share one session close, and did "
+     "board, FX and freight land within their objectives. Ready is plain, degraded "
+     "amber, not ready red; the line under the masthead names the input and its date."),
     ("stale", "Stale",
      "A layer past its publishing budget (`LAYER_MAX_DATA_AGE_DAYS`). Its last rows still "
      "render, dated; nothing is padded forward."),

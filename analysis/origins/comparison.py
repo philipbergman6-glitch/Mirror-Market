@@ -190,7 +190,7 @@ def build_ranking(
     )
 
 
-def _fob_eligible(ranking: OriginRanking) -> tuple[LandedCost, ...]:
+def fob_eligible(ranking: OriginRanking) -> tuple[LandedCost, ...]:
     """Rows that can each stand on the FOB board, before the set-level spread rule.
 
     A row's own ``comparability`` is not the gate here, because it carries
@@ -218,7 +218,7 @@ def fob_board_refusal(ranking: OriginRanking) -> str | None:
     as by the market, and dropping the oldest row would publish a board that
     looks tighter than the data behind it.
     """
-    spread = _observation_spread(_fob_eligible(ranking))
+    spread = _observation_spread(fob_eligible(ranking))
     if spread is None or spread <= config.ORIGIN_MAX_OBSERVATION_SPREAD_DAYS:
         return None
     return (
@@ -248,7 +248,7 @@ def fob_board(ranking: OriginRanking) -> tuple[LandedCost, ...]:
     """
     if fob_board_refusal(ranking) is not None:
         return ()
-    return tuple(sorted(_fob_eligible(ranking), key=lambda row: row.fob_equivalent.amount))  # type: ignore[union-attr]
+    return tuple(sorted(fob_eligible(ranking), key=lambda row: row.fob_equivalent.amount))  # type: ignore[union-attr]
 
 
 def fob_advantage(ranking: OriginRanking) -> tuple[float | None, float | None]:
@@ -284,5 +284,6 @@ __all__ = [
     "fob_advantage",
     "fob_board",
     "fob_board_refusal",
+    "fob_eligible",
     "select_quote",
 ]

@@ -744,8 +744,11 @@ def command_center() -> dict:
     ):
         try:
             crush_info = front_month_crush(beans, oil, meal)
-        except Exception:
+        except Exception as exc:
             logger.warning("Command-center crush computation failed", exc_info=True)
+            # Said, not just logged: "no crush" must not read as "the legs
+            # never shared a session" downstream (#673's three-leg close).
+            crush_info = {"available": False, "error": type(exc).__name__}
 
     # --- Key metrics ---
     key_metrics = {}

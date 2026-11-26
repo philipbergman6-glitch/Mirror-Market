@@ -1,0 +1,34 @@
+{#
+  Decision readiness (#673) — three answers beside the layer count.
+
+  Built by app/decision_readiness.py; the states are the masthead's existing
+  three tallies, so no class or colour is new: ready renders plain with the
+  word bold, like "N/M layers on schedule"; degraded is `.mast-partial`
+  amber; not ready is `.mast-critical` red (DESIGN.md decision 2026-10-07:
+  green is complete, amber degraded-but-current, red late or broken).
+
+  The reason is the point of a non-ok state, so it is printed, not only
+  tooltipped: the masthead line carries the three words, and the existing
+  `.stale-note` line under the masthead carries each non-ok reason.
+#}
+{% macro readiness_line(readiness) -%}
+{%- if readiness and readiness.indicators -%}
+<div>Decision read ·
+  {%- for i in readiness.indicators %} {{ i.data.name }}
+  {%- if i.state == "ok" %} <b>{{ i.data.label }}</b>
+  {%- elif i.state == "degraded" %} <span class="mast-partial" title="{{ i.reason }}">{{ i.data.label }}</span>
+  {%- else %} <span class="mast-critical" title="{{ i.reason }}">{{ i.data.label }}</span>
+  {%- endif %}
+  {%- if i.data.session_label %} ({{ i.data.session_label }}){% endif %}
+  {{- " ·" if not loop.last }}
+  {%- endfor %}</div>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro readiness_note(readiness) -%}
+{%- if readiness and readiness.attention -%}
+<div class="stale-note"><b>Decision read:</b>
+  {%- for i in readiness.attention %} {{ i.data.name }} {{ i.data.label }} — {{ i.reason }}{{ ";" if not loop.last }}{% endfor %}
+</div>
+{%- endif -%}
+{%- endmacro %}
