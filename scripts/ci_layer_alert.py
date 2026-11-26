@@ -89,6 +89,9 @@ ALERT_CLASS_LABELS = (
     ("upstream_failure", "Upstream or ingest failure"),
     ("stale_last_known_good", "Stale last-known-good data"),
     ("incomplete_key_coverage", "Incomplete key coverage"),
+    # #637: refused by a quota (Open-Meteo's is shared per outgoing IP), so
+    # the upstream's own reason is printed beside the layer.
+    ("rate_limited", "Rate-limited by upstream quota"),
 )
 
 
@@ -129,11 +132,17 @@ def build_alert_body(status: dict | None) -> str:
             f"import failure or an unhandled exception).\n\nRun: {run_url()}"
         )
     classes = _alert_classes(status)
+    reasons = status.get("rate_limited_detail") or {}
     lines = ["The data pipeline finished with degraded production layers or held-back revisions:", ""]
     for key, heading in ALERT_CLASS_LABELS:
         layers = classes.get(key, [])
         if layers:
-            lines += [f"**{heading}:**", *[f"- `{layer}`" for layer in layers], ""]
+            items = [
+                f"- `{layer}` — {reasons[layer]}" if key == "rate_limited" and reasons.get(layer)
+                else f"- `{layer}`"
+                for layer in layers
+            ]
+            lines += [f"**{heading}:**", *items, ""]
     no_publication = classes.get("no_publication", [])
     if no_publication:
         lines += [
