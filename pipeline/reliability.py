@@ -26,6 +26,10 @@ Consumers, and which verdict each reads (#518):
   unchanged by the rule.
 - ``decision_cutoff_report``: per promoted edition by design (the whole
   basket in one run by the cutoff), so neither session rule applies.
+- The render-time readers that react to an outage-graded latest run — the
+  opportunity board's ``ingest_outage`` blocker and block 07's customs
+  exports — ask ``recovered_in_session`` of ``data_freshness`` (#632, owner
+  option B): the same rule, read from the one row that state keeps.
 A weekday inside the record with no row for a layer is ``no_run`` and
 counts as unavailable — absence is never a quiet day (invariant 1). The
 record's first session bounds every window: before it there is no record,
@@ -60,7 +64,12 @@ from zoneinfo import ZoneInfo
 
 import config
 from pipeline import grading
-from pipeline.layer_runs import STATUS_NOT_RUN, STATUS_SKIPPED_UNCONFIGURED, LayerRun
+from pipeline.layer_runs import (
+    STATUS_NOT_RUN,
+    STATUS_SKIPPED_UNCONFIGURED,
+    LayerRun,
+    session_date_for,
+)
 
 #: §3: a session is available when its last run graded one of these. Every
 #: other word — ``stale``, ``failed``, ``incomplete``, ``disabled``,
@@ -198,6 +207,37 @@ def _session_status(runs: Sequence[LayerRun]) -> str:
     """
     available = [r.status for r in runs if r.status in AVAILABLE_STATUSES]
     return available[-1] if available else runs[-1].status
+
+
+def recovered_in_session(last_success: str | None, last_attempt: str | None) -> bool:
+    """Did a usable run store rows on the session the latest attempt served?
+
+    The render-time mirror of ``_session_status`` (#632, owner option B on
+    #518), read from the only state a renderer has: ``data_freshness`` keeps
+    the latest attempt and ``last_success``, which only ``success`` and
+    ``usable_partial`` advance (``grading.ADVANCES_LAST_SUCCESS``). When both
+    stamps serve the same CBOT session (``layer_runs.session_date_for``, the
+    record's own session, so this follows whatever the settlement guard's
+    ``EXCHANGE_SESSION`` says — never a second clock), that session already
+    holds a usable run's rows. A later ``failed`` re-run stored nothing over
+    them, so a reader has no outage of ours to withhold or block on; the
+    failed run stays visible as a status mark and in the manifest's
+    ``failed_runs`` (invariant 1). Callers ask this only of ``failed``: a
+    ``stale`` or ``incomplete`` run saved rows of its own (Comex Stat's save
+    rewrites a product's window, #632 review), so its session is not
+    "recovered" by an earlier success.
+
+    ``False`` when either stamp is missing: a layer that never succeeded, or
+    a row with no attempt, has shown no recovery. ``no_publication`` is
+    available to the record but stores nothing and does not advance
+    ``last_success``, so it never counts here — the withholding direction.
+    An unreadable stamp raises rather than guessing a session.
+    """
+    if not last_success or not last_attempt:
+        return False
+    success = datetime.fromisoformat(str(last_success).replace("Z", "+00:00"))
+    attempt = datetime.fromisoformat(str(last_attempt).replace("Z", "+00:00"))
+    return session_date_for(success) == session_date_for(attempt)
 
 
 def _verdicts(runs_by_session: dict[date, list[LayerRun]], sessions: Sequence[date]) -> list[tuple[str, str]]:
