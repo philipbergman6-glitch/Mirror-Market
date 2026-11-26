@@ -324,6 +324,18 @@ cause. An `ok` measured on an older edition than the candidate is "measured
 another edition". All of them still fail the run: a probe that did not
 measure is never a pass, and the budget is unchanged.
 
+**The marker no longer waits for a frame (#678).** `pending` on
+`workstation.html` (deploy 45817327395) was a race, not a slow script.
+Headless `--dump-dom` waits for `load` and only then starts the virtual-time
+budget (Chromium `headless_command.js`). Virtual time then fast-forwards while
+frames arrive on the real clock, so a report deferred to
+`requestAnimationFrame` could miss the dump when DOMContentLoaded and `load`
+fell close together. On the heaviest page its frame came 22 ms to 1.65 s after
+DOMContentLoaded. The base template now measures synchronously at
+DOMContentLoaded and again at `load`, before the budget starts.
+`tests/test_overflow_marker_frameless.py` probes it in Chrome with no frames
+at all. Gate, budget and failure classes are unchanged.
+
 **Both deploying workflows retry the Pages deploy.** `deploy-pages` lists the
 run's artifacts ~0.5 s after the upload finalizes, and the listing can lag
 ("No artifacts named github-pages"): four Refresh Prices runs (11-17, 3× 11-24)

@@ -341,8 +341,14 @@ body { background: var(--paper); color: var(--ink); font-family: var(--font); fo
     const overflow = Math.max(root.scrollWidth, document.body.scrollWidth) - root.clientWidth;
     meta.content = overflow > 1 ? `overflow:${overflow}` : 'ok';
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(report));
-  else requestAnimationFrame(report);
+  // Measured synchronously, never in a requestAnimationFrame (#678): reading
+  // scrollWidth forces layout, so no frame is needed. Headless --dump-dom
+  // starts its virtual-time budget at `load`, and frames arrive on the real
+  // clock, so a frame-deferred report raced the dump and left 'pending'.
+  // Re-measured at `load`, once fonts and images are in.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', report);
+  else report();
+  window.addEventListener('load', report);
 })();
 </script>
 </body>
