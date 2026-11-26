@@ -47,6 +47,8 @@ def test_fetcher_flags_today_and_future_rows_as_forecast():
     dates = [today - pd.Timedelta(days=2), today, today + pd.Timedelta(days=2)]
     payload = {
         "timezone": "UTC",
+        # Open-Meteo always answers the grid cell it used (#658 review check).
+        "latitude": 0.0, "longitude": 0.0,
         "daily": {
             "time": [d.strftime("%Y-%m-%d") for d in dates],
             "temperature_2m_max": [30.0, 31.0, 32.0],

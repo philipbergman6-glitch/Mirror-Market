@@ -65,8 +65,11 @@ def test_every_layer_the_catalog_names_is_a_production_layer() -> None:
     for name, spec in API_KEY_CATALOG.items():
         for key in spec.skips + spec.degrades:
             assert key in PRODUCTION_LAYER_KEYS, f"{name} names unknown layer {key!r}"
-        assert spec.skips or spec.degrades, f"{name} gates nothing"
+        for key in spec.routes:
+            assert key in PRODUCTION_LAYER_KEYS, f"{name} names unknown layer {key!r}"
+        assert spec.skips or spec.degrades or spec.routes, f"{name} gates nothing"
         assert not set(spec.skips) & set(spec.degrades), f"{name} lists a layer as both"
+        assert not set(spec.routes) & set(spec.skips + spec.degrades), f"{name} lists a routed layer as gated"
         assert spec.signup.startswith("https://"), f"{name} has no signup URL"
 
 
@@ -105,6 +108,38 @@ def test_the_deploy_workflow_passes_every_catalogued_key() -> None:
         assert f"{name}: ${{{{ secrets.{name} }}}}" in workflow, name
 
 
+def test_the_refresh_workflow_passes_the_open_meteo_worker_pair() -> None:
+    """A dispatched `--layers weather` refresh must take the same route as the deploy (#637)."""
+    workflow = (config.ENV_FILE.parent / ".github" / "workflows" / "refresh-prices.yml").read_text()
+    for name in ("OPENMETEO_PROXY_URL", "OPENMETEO_PROXY_TOKEN"):
+        assert f"{name}: ${{{{ secrets.{name} }}}}" in workflow, name
+
+
+# ── The Open-Meteo Worker pair (#637) ───────────────────────────────────────
+
+
+def test_the_open_meteo_worker_pair_is_catalogued_as_an_optional_route() -> None:
+    """Unset, Layer 5 still runs — direct, on the shared quota — so the pair
+    neither skips nor degrades it, and a missing pair must not fail the deploy."""
+    for name in ("OPENMETEO_PROXY_URL", "OPENMETEO_PROXY_TOKEN"):
+        spec = API_KEY_CATALOG[name]
+        assert spec.routes == ("weather",)
+        assert spec.skips == () and spec.degrades == ()
+        assert not spec.required_in_ci
+        assert spec.ci_exports
+    assert API_KEY_LAYERS["OPENMETEO_PROXY_URL"].startswith("Layer 5")
+
+
+def test_a_missing_worker_pair_says_the_layer_goes_direct(monkeypatch) -> None:
+    _set_all(monkeypatch)
+    monkeypatch.delenv("OPENMETEO_PROXY_URL")
+    monkeypatch.delenv("OPENMETEO_PROXY_TOKEN")
+    code, out = _run(monkeypatch)
+    assert code == 0
+    assert "still runs, routed differently: Layer 5 (weather)" in out
+    assert "scripts/setup_openmeteo_worker.sh" in out
+
+
 # ── Output coverage ─────────────────────────────────────────────────────────
 
 
@@ -114,7 +149,7 @@ def test_output_covers_every_catalogued_key_and_the_layers_it_gates(monkeypatch)
     for name, spec in API_KEY_CATALOG.items():
         assert name in out
         assert spec.unlocks in out
-        for key in spec.skips + spec.degrades:
+        for key in spec.skips + spec.degrades + spec.routes:
             assert f"Layer {config.LAYER_NUMBERS[key]}" in out, (name, key)
 
 

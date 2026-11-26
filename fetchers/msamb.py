@@ -32,6 +32,11 @@ Guards (each raises ScraperShapeError — the source changed, not the market):
 * ``_aggregate``'s ₹/quintal band catches a silent unit switch.
 
 Completed IST days only (``MANDI_MIN_AGE_DAYS``): today fills APMC by APMC.
+And yesterday is not finished either (#621): an MSAMB day gains lots through
+all of D+1, so a day read before ``MSAMB_FILL_DAYS`` have passed is stored —
+save first, grade second — with ``filling = 1``, and the readers skip it. The
+next run's re-read of the ~8-day window clears the flag; a missed run cannot,
+so a partial row never turns into a complete one by the clock alone.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from bs4 import BeautifulSoup
 from config import (
     MANDI_MIN_AGE_DAYS,
     MAX_RETRIES,
+    MSAMB_FILL_DAYS,
     MSAMB_GRID_URL,
     MSAMB_PAGE_URL,
     MSAMB_QUINTAL_UNIT,
@@ -57,6 +63,7 @@ from config import (
 from fetchers._backoff import retry_sleep
 from fetchers.mandi import _aggregate, _ist_today
 from pipeline.results import ScraperShapeError
+from pipeline.units import quintals_to_metric_tons
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +75,6 @@ _HEADERS = {
 _SOYBEAN_LABEL = "सोयाबिन"
 _DATE_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 _LOT_CELLS = 7
-_QUINTALS_PER_MT = 10.0
 
 
 def _get(url: str, params: dict[str, str] | None = None) -> str:
@@ -132,7 +138,7 @@ def _parse_grid(fragment: str) -> list[dict]:
         records.append({
             "arrival_date": day,
             "modal_price": _number(cells[6], "modal price", cells),
-            "arrivals": arrivals_qtl / _QUINTALS_PER_MT if arrivals_qtl >= 0 else None,
+            "arrivals": quintals_to_metric_tons(arrivals_qtl) if arrivals_qtl >= 0 else None,
         })
     if other_units:
         logger.info("MSAMB: %s lot(s) in a non-quintal unit dropped, not pooled", other_units)
@@ -164,6 +170,8 @@ def fetch_msamb_soybean(today: date | None = None) -> pd.DataFrame:
     _assert_code_is_soybean(_get(MSAMB_PAGE_URL))
     fragment = _get(MSAMB_GRID_URL, {"commodityCode": MSAMB_SOYBEAN_CODE, "apmcCode": "null"})
     df = _aggregate(_completed(_parse_grid(fragment), today))
+    fill_edge = (today - timedelta(days=MSAMB_FILL_DAYS)).isoformat()
+    df["filling"] = (df["Date"] > fill_edge).astype(int)
     logger.info(
         "MSAMB: Maharashtra — %d completed day(s), latest %s ₹%.0f/MT across %d lots",
         len(df), df["Date"].iloc[-1], df["Close"].iloc[-1], int(df["Volume"].iloc[-1]),

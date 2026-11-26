@@ -332,3 +332,43 @@ def test_the_report_says_cny_reconciles_a_series_v1_no_longer_reads() -> None:
     assert run.to_dict()["v1_source_differs"] == [
         {"pair": "CNY/USD", "v1_source": "ECB reference cross (EUR legs)"}
     ]
+
+
+def _shift_close(monkeypatch, only_pair: str) -> None:
+    import trust.fx_ingestion as adapter
+
+    original = adapter.legacy_currency_frame
+
+    def shifted(pair: str, provider_frame, **kwargs):
+        result = original(pair, provider_frame, **kwargs)
+        if pair == only_pair and not result.empty:
+            result.loc[result.index[-1], "Close"] = float(result.iloc[-1]["Close"]) + 0.001
+        return result
+
+    monkeypatch.setattr("scripts.reconcile_fx.legacy_currency_frame", shifted)
+
+
+def test_a_cny_divergence_is_not_graded_because_v1_reads_another_source(monkeypatch) -> None:
+    """Owner decision on #239 (G5): CNY compares Yahoo with Yahoo, so it is
+    reported "not compared: v1 source differs" and never fails the run."""
+    _shift_close(monkeypatch, "CNY/USD")
+
+    run = reconcile_once(download=sessions([date(2026, 8, 12)]), now=AFTER_FX_CLOSE)
+
+    assert run.status == STATUS_RECONCILED
+    assert run.exit_code == EXIT_OK
+    payload = run.to_dict()
+    assert payload["not_compared"] == [
+        {"pair": "CNY/USD", "dataset_key": "fx-cny-usd", "reason": "not compared: v1 source differs"}
+    ]
+    assert payload["diverged_pairs"] == []
+
+
+def test_a_graded_pair_still_fails_beside_an_ungraded_cny(monkeypatch) -> None:
+    _shift_close(monkeypatch, "ZAR/USD")
+
+    run = reconcile_once(download=sessions([date(2026, 8, 12)]), now=AFTER_FX_CLOSE)
+
+    assert run.status == STATUS_DIVERGED
+    assert run.exit_code == EXIT_DIVERGED
+    assert run.to_dict()["diverged_pairs"] == ["ZAR/USD"]

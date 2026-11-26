@@ -27,6 +27,7 @@ from typing import Any
 import pandas as pd
 
 from config import (
+    API_KEY_CATALOG,
     DCE_NAMED_MONTH_KEYS,
     DEFAULT_HISTORY_PERIOD,
     FAST_REFRESH_HISTORY_PERIOD,
@@ -124,7 +125,7 @@ from pipeline.clean import (
 from pipeline.grading import missing_catalog_keys, read_partial_streaks
 from pipeline.history import HistoryImportError, export_history, import_history
 from pipeline.query import captured_contract_tickers, read_matif_instruments, read_prices
-from pipeline.results import FetchResult
+from pipeline.results import FetchResult, UpstreamRateLimited
 from pipeline.store import (
     init_database,
     repair_forward_curve,
@@ -194,6 +195,11 @@ _INCOMPLETE_KEY_COVERAGE: set[str] = set()
 # Not a hard failure: the layer rendered and last_success advanced. Carried
 # separately so the run summary can tally amber apart from green and red.
 _USABLE_PARTIAL: set[str] = set()
+# Refused by the upstream's quota (#637), layer -> the upstream's reason. Also
+# in _HARD_FAILURES (no fresh rows, last_success held), but classified apart
+# from upstream_failure: the fix for a shared quota is not the fix for a
+# broken API.
+_RATE_LIMITED: dict[str, str] = {}
 
 
 def _mark_failed(
@@ -218,6 +224,24 @@ def _mark_failed(
         )
     except Exception:
         logger.exception("Could not record failed-freshness row for %s", layer)
+
+
+def _mark_rate_limited(layer: str, reason: str, data: dict) -> None:
+    """Record a layer the upstream refused for quota (#637) — `rate_limited`.
+
+    The freshness word is ``failed`` (A3's vocabulary; last_success is not
+    stamped), and the run summary carries the distinct class with the
+    upstream's reason, which the CI alert prints beside the layer. Rows that
+    arrived before the refusal were saved by the caller and are counted here.
+    """
+    logger.error("[%s] rate-limited by upstream: %s", layer, reason)
+    _RATE_LIMITED[layer] = reason
+    expected = layer_expected_keys(layer)
+    returned = sum(1 for v in data.values() if not v.empty) if expected is not None else None
+    _mark_failed(
+        layer, rows_fetched=sum(len(v) for v in data.values()),
+        keys_returned=returned, keys_expected=expected,
+    )
 
 
 def _mark_empty(layer: str) -> None:
@@ -462,6 +486,31 @@ def _mark_usable_partial(
     )
 
 
+def _outcome_classes() -> dict[str, Any]:
+    """The run's degradation classes, each layer in exactly one (#637 split rate_limited out).
+
+    ``degraded`` is their union — the run summary's ``failed`` list.
+    """
+    rate_limited = set(_RATE_LIMITED) - DISABLED_LAYERS
+    upstream = (
+        _HARD_FAILURES
+        - _STALE_LAST_KNOWN_GOOD
+        - _INCOMPLETE_KEY_COVERAGE
+        - rate_limited
+        - DISABLED_LAYERS
+    )
+    return {
+        "upstream_failure": sorted(upstream),
+        "stale_last_known_good": sorted(_STALE_LAST_KNOWN_GOOD),
+        "incomplete_key_coverage": sorted(_INCOMPLETE_KEY_COVERAGE),
+        "rate_limited": sorted(rate_limited),
+        "rate_limited_detail": {k: _RATE_LIMITED[k] for k in sorted(rate_limited)},
+        "degraded": sorted(
+            upstream | _STALE_LAST_KNOWN_GOOD | _INCOMPLETE_KEY_COVERAGE | rate_limited
+        ),
+    }
+
+
 def _write_pipeline_status(payload: dict) -> None:
     """Write the run summary JSON next to the DB (data/storage/ — gitignored).
 
@@ -631,16 +680,18 @@ def _run_dict_layer(layer: DictLayer) -> bool:
         # it would claim otherwise.
         clock = run_clock.start(layer.key)
         logger.info("[%s] Fetching %s ...", layer.label, layer.desc)
-        data = layer.fetch()
+        try:
+            data = layer.fetch()
+        except UpstreamRateLimited as exc:
+            clock.fetched()
+            # Save first, grade second: keys an earlier pass got are stored.
+            partial = _clean_and_save(layer, exc.data)
+            clock.stored()
+            _mark_rate_limited(layer.key, exc.reason, partial)
+            return False
         clock.fetched()
 
-        if layer.clean is not None and data:
-            logger.info("[Cleaning] Processing %s data ...", layer.key)
-            for name in data:
-                data[name] = layer.clean(name, data[name])
-
-        for name, df in data.items():
-            layer.save(name, df)
+        _clean_and_save(layer, data)
         clock.stored()
 
         return _finalize_layer(layer.key, data, empty_fails=layer.empty_fails)
@@ -648,6 +699,18 @@ def _run_dict_layer(layer: DictLayer) -> bool:
         logger.exception("[%s] %s failed — see error above", layer.label, layer.desc)
         _mark_failed(layer.key)
         return False
+
+
+def _clean_and_save(layer: DictLayer, data: dict) -> dict:
+    """Clean every frame in place, then save each; returns `data`."""
+    if layer.clean is not None and data:
+        logger.info("[Cleaning] Processing %s data ...", layer.key)
+        for name in data:
+            data[name] = layer.clean(name, data[name])
+
+    for name, df in data.items():
+        layer.save(name, df)
+    return data
 
 
 def _run_scraper_layer(
@@ -1253,11 +1316,16 @@ def run(
     # later, but scattered across a full run those read as ordinary noise;
     # the reason a run is degraded belongs at the top of it.
     for name, layers in missing_api_keys().items():
-        logger.warning("%s is not set — %s will run degraded or skip", name, layers)
+        if API_KEY_CATALOG[name].skips or API_KEY_CATALOG[name].degrades:
+            logger.warning("%s is not set — %s will run degraded or skip", name, layers)
+        else:
+            # A route, not a gate (#637): the layer runs in full, on its fallback.
+            logger.warning("%s is not set — %s runs on its fallback route", name, layers)
     _HARD_FAILURES.clear()
     _NO_PUBLICATION.clear()
     _STALE_LAST_KNOWN_GOOD.clear()
     _INCOMPLETE_KEY_COVERAGE.clear()
+    _RATE_LIMITED.clear()
     quarantine.reset()
     run_clock.reset()
 
@@ -1373,17 +1441,12 @@ def run(
     # Green is full success only (A3 #300 §5); usable_partial is its own tally.
     succeeded = [name for name, ok in results.items() if ok and name not in _USABLE_PARTIAL]
     no_publication = sorted(_NO_PUBLICATION)
-    stale_last_known_good = sorted(_STALE_LAST_KNOWN_GOOD)
-    incomplete_key_coverage = sorted(_INCOMPLETE_KEY_COVERAGE)
-    upstream_failures = sorted(
-        _HARD_FAILURES
-        - _STALE_LAST_KNOWN_GOOD
-        - _INCOMPLETE_KEY_COVERAGE
-        - DISABLED_LAYERS
-    )
-    degraded = sorted(
-        set(upstream_failures) | _STALE_LAST_KNOWN_GOOD | _INCOMPLETE_KEY_COVERAGE
-    )
+    outcome = _outcome_classes()
+    stale_last_known_good = outcome["stale_last_known_good"]
+    incomplete_key_coverage = outcome["incomplete_key_coverage"]
+    upstream_failures = outcome["upstream_failure"]
+    rate_limited = outcome["rate_limited"]
+    degraded = outcome["degraded"]
 
     logger.info("-" * 60)
     if succeeded:
@@ -1400,6 +1463,11 @@ def run(
         logger.warning(
             "Upstream/ingest failure (%d/%d): %s",
             len(upstream_failures), len(results), ", ".join(upstream_failures),
+        )
+    if rate_limited:
+        logger.warning(
+            "Rate-limited by upstream quota (%d/%d): %s",
+            len(rate_limited), len(results), ", ".join(rate_limited),
         )
     if stale_last_known_good:
         logger.warning(
@@ -1456,6 +1524,7 @@ def run(
             "no_publication": no_publication,
             "stale_last_known_good": stale_last_known_good,
             "incomplete_key_coverage": incomplete_key_coverage,
+            "rate_limited": rate_limited,
             "usable_partial": usable_partial,
             "catalog_drift": catalog_drift,
         },
@@ -1466,6 +1535,8 @@ def run(
         # alerter when it failed.
         "forward_curve_repair": curve_repair,
         "usable_partial_detail": usable_partial_detail,
+        # The upstream's own refusal text, per rate-limited layer (#637).
+        "rate_limited_detail": outcome["rate_limited_detail"],
         # What the record step files this run under (B38 #535): this run's
         # roster and per-key configured booleans, never the checkout's or the
         # record step's own env.

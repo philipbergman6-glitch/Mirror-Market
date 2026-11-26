@@ -6,7 +6,12 @@ are about what a *consumer* gets.
 The switch is the first: `open_provider` must return the v1 SQLite provider
 until every soy dataset is named, and must fall back rather than fail when the
 ledger is unreachable — a storage migration that can take the workstation down
-is a worse trade than one that quietly stays on v1 and says so in the log.
+is a worse trade than one that quietly stays on v1 and says so in the log. Two
+configurations are the exception and raise instead: an *absent or empty*
+ledger (#656), because that is a cutover nothing can serve, not a ledger that
+broke; and an *unknown key* in the switch (owner ruling on #664), because a
+typo that quietly read v1 would leave the operator believing a cutover
+happened.
 
 The provider is the second: a quarantined leg is *absent* from the curve and a
 corrected leg returns the correction. Those are the two answers that differ
@@ -24,7 +29,7 @@ from decimal import Decimal
 import pandas as pd
 import pytest
 
-from analysis.futures.providers import SqliteQuoteProvider, open_provider
+from analysis.futures.providers import SqliteQuoteProvider, TrustedLedgerEmptyError, open_provider
 from analysis.futures.trusted_provider import (
     TRUSTED_LEDGER_YFINANCE,
     TrustedNamedContractProvider,
@@ -37,7 +42,7 @@ from trust.cbot_benchmarks import (
     artifact_from_bars,
     ingest_cbot_benchmark_replays,
 )
-from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, TRUSTED_READ_ENV_VAR
+from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, TRUSTED_READ_ENV_VAR, TrustedReadSwitchError
 
 AFTER_SETTLEMENT = datetime(2026, 8, 13, 20, 0, tzinfo=timezone.utc)
 SESSION = date(2026, 8, 12)
@@ -106,11 +111,62 @@ def test_a_partial_cutover_does_not_move_the_curve_read(conn, monkeypatch) -> No
     assert isinstance(open_provider(conn), SqliteQuoteProvider)
 
 
+def ingest_legs(store, legs, *, at=AFTER_SETTLEMENT):
+    """One ingestion run over several soy legs (one run id, so one call)."""
+    replays = [artifact_from_bars(commodity, [bar(symbol)], retrieved_at=at) for commodity, symbol in legs]
+    return ingest_cbot_benchmark_replays(store, replays, ingested_at=at)
+
+
+def _every_soy_leg(store) -> None:
+    ingest_legs(store, [("Soybeans", "ZSU26.CBT"), ("Soybean Meal", "ZMU26.CBT"), ("Soybean Oil", "ZLU26.CBT")])
+
+
 def test_naming_every_soy_dataset_moves_the_read_to_the_ledger(conn, tmp_path, monkeypatch) -> None:
     monkeypatch.setenv(TRUSTED_READ_ENV_VAR, ",".join(CBOT_BENCHMARK_DATASET_KEYS))
     store = TemporaryDirectoryTrustRepository(tmp_path)
+    _every_soy_leg(store)
 
     assert isinstance(open_provider(conn, repository=store), TrustedNamedContractProvider)
+
+
+def test_a_cutover_over_an_empty_ledger_fails_the_build_rather_than_serving_empty_curves(
+    conn, tmp_path, monkeypatch
+) -> None:
+    # #656: before this, every open_provider caller withheld together and no
+    # build signal said why. A cutover that cannot be served is an invalid
+    # configuration (invariant 1); the rollback is still unsetting the variable.
+    monkeypatch.setenv(TRUSTED_READ_ENV_VAR, ",".join(CBOT_BENCHMARK_DATASET_KEYS))
+    store = TemporaryDirectoryTrustRepository(tmp_path)
+
+    with pytest.raises(TrustedLedgerEmptyError, match="no accepted revisions") as raised:
+        open_provider(conn, repository=store)
+
+    for key in CBOT_BENCHMARK_DATASET_KEYS:
+        assert key in str(raised.value)
+
+
+def test_a_cutover_missing_one_leg_names_that_leg(conn, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(TRUSTED_READ_ENV_VAR, ",".join(CBOT_BENCHMARK_DATASET_KEYS))
+    store = TemporaryDirectoryTrustRepository(tmp_path)
+    ingest_legs(store, [("Soybeans", "ZSU26.CBT"), ("Soybean Meal", "ZMU26.CBT")])
+
+    with pytest.raises(TrustedLedgerEmptyError) as raised:
+        open_provider(conn, repository=store)
+
+    message = str(raised.value)
+    assert "cbot-soybean-oil-named-contracts" in message
+    assert "cbot-soybean-named-contracts" not in message.split("no accepted revisions")[1]
+
+
+def test_a_cutover_with_no_ledger_directory_names_the_absent_path(conn, tmp_path, monkeypatch) -> None:
+    # The production case observed on #656: data/v2/ does not exist.
+    monkeypatch.setenv(TRUSTED_READ_ENV_VAR, ",".join(CBOT_BENCHMARK_DATASET_KEYS))
+    monkeypatch.setattr("analysis.futures.providers._project_root", lambda: tmp_path)
+
+    with pytest.raises(TrustedLedgerEmptyError, match="absent") as raised:
+        open_provider(conn)
+
+    assert str(tmp_path / "data" / "v2") in str(raised.value)
 
 
 def test_an_unreadable_ledger_falls_back_instead_of_failing_the_build(conn, monkeypatch) -> None:
@@ -125,10 +181,23 @@ def test_an_unreadable_ledger_falls_back_instead_of_failing_the_build(conn, monk
     assert isinstance(open_provider(conn), SqliteQuoteProvider)
 
 
-def test_a_typo_in_the_switch_falls_back_rather_than_half_cutting_over(conn, monkeypatch) -> None:
+def test_a_typo_in_the_switch_fails_the_build_rather_than_quietly_reading_v1(conn, monkeypatch) -> None:
+    # Owner ruling on #664 (2026-11-26): a misspelt key is an operator who
+    # believes a cutover happened. Falling back would make that belief silently
+    # false, so the switch's own error propagates the way an empty ledger does.
     monkeypatch.setenv(TRUSTED_READ_ENV_VAR, "cbot-soybean-namd-contracts")
 
-    assert isinstance(open_provider(conn), SqliteQuoteProvider)
+    with pytest.raises(TrustedReadSwitchError, match="cbot-soybean-namd-contracts"):
+        open_provider(conn)
+
+
+def test_a_refused_fx_key_in_the_switch_fails_the_build_too(conn, monkeypatch) -> None:
+    # The switch's other refusal (B25 #495: v1 reads the ECB cross) is the same
+    # error and takes the same path — refused by name, never served as v1.
+    monkeypatch.setenv(TRUSTED_READ_ENV_VAR, "fx-cny-usd")
+
+    with pytest.raises(TrustedReadSwitchError, match="fx-cny-usd"):
+        open_provider(conn)
 
 
 # ---------------------------------------------------------------------------

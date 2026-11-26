@@ -85,6 +85,65 @@ seam open for it, and nothing should be.
   `pricing.semantics.PROVEN_SETTLEMENT_SOURCES` is empty and invariant 3 keeps
   it that way.
 
+## Pre-sale replacements
+
+Things that are free today only because nothing is sold. Each one is swapped out
+when the trigger above fires, *before* the first paid edition. None is
+speculative work to start now. Licensing gates publishing for money, not
+building (invariant 9; A18).
+
+### Open-Meteo customer key (Layer 5 weather)
+
+Since #637 (owner decision 2026-11-25), Layer 5 goes through our own free
+Cloudflare Worker (`infra/openmeteo-worker/`). Open-Meteo counts that Worker's
+quota separately from the GitHub runner IP's shared one. The Worker fixes the
+quota. It does not fix the licence: Open-Meteo's free API is **non-commercial
+only**, and its terms name "Commercial products or promotional activities" as
+commercial use (<https://open-meteo.com/en/terms>, read 2026-11-25).
+
+Before selling, take these three steps:
+
+1. Buy an Open-Meteo API subscription. As listed 2026-11-25 the cheapest is
+   API Standard: €29/month for 1M calls/month. We use about 24 weighted calls
+   per run.
+2. Point the fetcher at `customer-api.open-meteo.com`, with the same syntax
+   plus an `apikey`.
+3. Retire the Worker, along with the `OPENMETEO_PROXY_*` secrets.
+
+The earlier licence ticket is #366, which was closed under the A18 build-first
+stance.
+
+## Decision · 2026-11-25 (#239): trusted reader cutover
+
+**The reader cutover onto the trusted ledger (`trust/`) is not proceeding.** It
+is parked here with a named trigger. Record, evidence and the 2027-03-01
+checkpoint (default: excise) are in
+`docs/plans/trusted-path-decision-2026-11-25.md`. Until then the
+`reconcile-trusted` job is a drift detector only, and its alarm is an issue,
+never a red run.
+
+### Why parked, not built
+
+A cutover would show buyers the same delayed Yahoo number with better
+provenance. It would also need a production dual-write in `main.py` and a
+durable ledger: `data/v2/` committed by the deploy workflow, a second git
+persistence surface beside `data/history/` that invariant 6 and
+`history-guard` do not cover today. Revision history is already measurable
+from the committed `data/history/` snapshots (#622/#626). Whether a number is
+*right* is the accuracy verifier's job (#639 → V7), not parse parity's.
+
+### The trigger
+
+**A paying buyer needs an audit trail or revision history that git snapshots
+can't give, or Yahoo is replaced** (so a second ingestion path has to be
+proven).
+
+When it fires, the DT-16 cutover criterion still applies before any reader
+moves (#239 Q2). That criterion is a continuous reconciled stretch covering a
+roll week, an expiry and **at least one quarantine**. Switching
+`MIRROR_TRUSTED_READ_DATASETS` on before a production ledger exists fails the
+build by name (`TrustedLedgerEmptyError`, #656) instead of serving empty curves.
+
 ## Prior benchmark research
 
 `research/2026-08-14-soy-trader-bloomberg-replacement-benchmark.md` costs the
