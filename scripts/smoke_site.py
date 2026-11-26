@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -133,13 +134,82 @@ def _chrome_binary(explicit: str | None) -> str | None:
     return next((candidate for candidate in candidates if Path(candidate).exists() or shutil.which(candidate)), None)
 
 
-def _viewport_failures(base_url: str, chrome: str) -> list[str]:
+VIRTUAL_TIME_BUDGET_MS = 1500
+_PAGE_LOAD_FAILED = re.compile(r"Page load failed: (\S+)")
+
+
+def _probe_failure(
+    width: int,
+    path: str,
+    stdout: str,
+    stderr: str,
+    *,
+    expected: datetime | None = None,
+) -> str | None:
+    """One browser probe's verdict: None when it measured a fit, else why not.
+
+    Only a probe that *measured* something may say "viewport overflow". The
+    page's own script writes `overflow:<px>` or `ok` into the `qa-overflow`
+    marker. Anything else means nothing was measured, and that is a different
+    failure with its own message — never an overflow and never a pass (#617):
+
+    * Headless Chrome exits 0 when navigation fails: empty DOM, the reason
+      only on stderr (`Page load failed: net::ERR_…`).
+    * A page with no marker at all is not our page — a CDN error page, say
+      GitHub's 404 ("Page not found · GitHub Pages"), which Chrome also dumps
+      with exit 0. Before #617 both read as "viewport overflow (missing)".
+    * `pending` is the template's default: the dump happened before the
+      reporting script ran within the virtual-time budget.
+    * With `expected`, a probe that measured an older edition than the
+      candidate measured the wrong page, so its `ok` does not count.
+    """
+    where = f"at {width}px: {path}"
+    load_failed = _PAGE_LOAD_FAILED.search(stderr)
+    if load_failed:
+        return f"viewport probe incomplete {where} — page load failed ({load_failed.group(1)}); nothing measured"
+    soup = BeautifulSoup(stdout, "html.parser")
+    meta = soup.select_one('meta[name="qa-overflow"]')
+    if meta is None:
+        title = soup.title.get_text(strip=True) if soup.title else ""
+        shown = f"title {title!r}" if title else "empty document"
+        return (
+            f"viewport probe incomplete {where} — the browser rendered a page without "
+            f"the qa-overflow marker ({shown}); nothing measured"
+        )
+    state = str(meta.get("content", ""))
+    if state == "pending":
+        return (
+            f"viewport probe incomplete {where} — marker still 'pending' when the "
+            f"{VIRTUAL_TIME_BUDGET_MS} ms virtual-time budget ended; nothing measured"
+        )
+    if state.startswith("overflow:"):
+        return f"viewport overflow {where} ({state})"
+    if state != "ok":
+        return f"viewport probe unreadable {where} — marker {state!r}; nothing measured"
+    if expected is not None:
+        served = _generated_at(stdout)
+        if served is None or served < expected:
+            return (
+                f"viewport probe measured another edition {where} — browser saw "
+                f"{served.isoformat() if served else 'no stamp'}, candidate is "
+                f"{expected.isoformat()}"
+            )
+    return None
+
+
+def _viewport_failures(
+    base_url: str,
+    chrome: str,
+    *,
+    expected: datetime | None = None,
+) -> list[str]:
     failures: list[str] = []
     for width, height in ((1440, 1000), (390, 844)):
         for path in expected_site_paths():
             command = [
                 chrome, "--headless=new", "--disable-gpu", "--no-sandbox",
-                "--run-all-compositor-stages-before-draw", "--virtual-time-budget=1500",
+                "--run-all-compositor-stages-before-draw",
+                f"--virtual-time-budget={VIRTUAL_TIME_BUDGET_MS}",
                 f"--window-size={width},{height}", "--dump-dom",
                 base_url.rstrip("/") + "/" + path,
             ]
@@ -151,13 +221,11 @@ def _viewport_failures(base_url: str, chrome: str) -> list[str]:
                 failures.append(f"browser timed out at {width}px: {path}")
                 continue
             if result.returncode:
-                failures.append(f"browser failed at {width}px: {path}")
+                failures.append(f"browser failed at {width}px: {path} (exit {result.returncode})")
                 continue
-            soup = BeautifulSoup(result.stdout, "html.parser")
-            meta = soup.select_one('meta[name="qa-overflow"]')
-            state = meta.get("content", "missing") if meta else "missing"
-            if state != "ok":
-                failures.append(f"viewport overflow at {width}px: {path} ({state})")
+            failure = _probe_failure(width, path, result.stdout, result.stderr or "", expected=expected)
+            if failure:
+                failures.append(failure)
     return failures
 
 
@@ -273,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 base_url = args.url
             try:
-                failures.extend(_viewport_failures(base_url, chrome))
+                failures.extend(_viewport_failures(base_url, chrome, expected=expected))
             finally:
                 if server:
                     server.shutdown()

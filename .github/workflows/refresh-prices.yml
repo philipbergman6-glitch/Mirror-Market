@@ -231,7 +231,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -326,14 +326,50 @@ jobs:
         if: ${{ steps.db_push.outcome == 'failure' }}
         run: echo "::error title=DB snapshot not saved::This refresh's verified database is not in R2; the next run starts from the previous seed. See the Advance the verified seed step."
 
+      # Named per attempt: a re-run uploads again while the first attempt's
+      # artifact still exists, and deploy-pages refuses two of one name
+      # ("Multiple artifacts named github-pages", re-run of 44065512441).
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: ${{ runner.temp }}/mirror-market-candidate/
 
+      # The artifact listing lags the upload: on 2026-11-17 and in three runs
+      # on 11-24, deploy-pages listed this run's artifacts ~0.5 s after the
+      # upload finalized and did not find it ("No artifacts named ..."); the
+      # 11-25 daily build hit the same and its retry 30 s later found it (#617).
+      # Same bounded retry as the daily build; the last attempt is not continue-on-error, so three misses
+      # are still a red run.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait before deploy retry 1
+        if: ${{ steps.deployment.outcome == 'failure' }}
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (retry 1)
+        id: deployment-retry1
+        if: steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait before deploy retry 2
+        if: steps.deployment.outcome == 'failure' && steps.deployment-retry1.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (retry 2)
+        id: deployment-retry2
+        if: steps.deployment.outcome == 'failure' && steps.deployment-retry1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
       # `--candidate` makes the smoke wait (bounded) until the public index
       # carries the stamp it just uploaded: Pages reports a deploy done before
@@ -342,7 +378,7 @@ jobs:
       - name: Smoke the deployed public artifact
         run: >-
           python scripts/smoke_site.py
-          --url "${{ steps.deployment.outputs.page_url }}"
+          --url "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}"
           --candidate "$RUNNER_TEMP/mirror-market-candidate"
           --browser
 
@@ -364,5 +400,5 @@ jobs:
             LATE_START="--late-start-is-not-a-breach"
           fi
           python scripts/latency_report.py \
-            --manifest "${{ steps.deployment.outputs.page_url }}manifest.json" \
+            --manifest "${{ steps.deployment.outputs.page_url || steps.deployment-retry1.outputs.page_url || steps.deployment-retry2.outputs.page_url }}manifest.json" \
             ${GATE:+--fail-on-breach-layers "$GATE"} $LATE_START
