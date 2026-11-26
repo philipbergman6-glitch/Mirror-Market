@@ -95,9 +95,10 @@ and ~6 seconds at 1mo.
 | | Cron | Observed landing |
 |---|---|---|
 | Daily build | `0 19 * * 1-5` | ~21:10 to ~04:10 UTC: +130 to +549 min over the 61 scheduled runs since 2026-09-01, median +227; +224 to +549, median +304, over the 22 since 10-26 (re-measured 2026-11-25, B47 #622; first measured +64 to +298 over 30 runs). Every one landed before Yahoo finishes the CBOT bar, so under the corrected guard all 61 carry CBOT D−1 |
-| DCE refresh | none — `workflow_dispatch` with `layers=dce`, fired at **10:30 UTC** weekdays by cron-job.org | on time by construction; GitHub's scheduler is not in the path |
+| DCE refresh | none — `workflow_dispatch` with `layers=dce`, fired at **10:30 UTC** weekdays by cron-job.org | on time by construction; GitHub's scheduler is not in the path. Also the **board backstop**: on a Tue–Fri where no `board` dispatch delivered since 00:00 New York, it fetches `prices,forward_curve` too and goes red on its own step (§4) |
+| **Board refresh** (#622) | none — `workflow_dispatch` with `slot=board`, fired at **01:00 America/New_York, Tue–Sat** by cron-job.org (job timezone `America/New_York`, so DST is handled there) | 05:00 UTC (EDT) / 06:00 UTC (EST), on time by construction; 1 h after Yahoo finishes the CBOT bar. **Not yet operational**: the cron-job.org job is created by `scripts/setup_cbot_board_trigger.sh` after merge |
 | DCE backstop | `0 8 * * 1-5` | 13:15–16:38 UTC (+5h15 to +8h38, seven runs 2026-09-21 to 09-29) — past the 13:00 UTC deadline every time, which is why it is only a backstop |
-| Fast refresh | `7 20 * * 1-5` | 22:01–23:42 UTC expected, from the +1h54 to +3h35 delay this slot showed over thirteen runs, 2026-09-11 to 09-29, while it was still `30 21`. Before the London FX close in GMT always, in BST mostly: carries D−1 FX and, since B47 #622, D−1 CBOT; its latency gate covers nothing (the board's objective is below its provider floor — owner's call on #622) |
+| Fast refresh | `7 20 * * 1-5` | 22:01–23:42 UTC expected, from the +1h54 to +3h35 delay this slot showed over thirteen runs, 2026-09-11 to 09-29, while it was still `30 21`. Before the London FX close in GMT always, in BST mostly: carries D−1 FX and, since B47 #622, D−1 CBOT; its latency gate covers nothing — the board is proven on the `board` slot |
 | Catch-up refresh | `30 23 * * 1-5` | 01:11–02:38 UTC; past the London FX close in both seasons, so **the slot where FX day D first arrives** and the one whose gate covers FX. For CBOT it still lands before New York midnight on nearly every run (3 of 46 evening refreshes since 10-26 landed after it) |
 
 ---
@@ -110,7 +111,7 @@ days old is an outage.
 
 | Class | acquisition | pipeline | end to end |
 |---|---|---|---|
-| **Board price** (CBOT, curve, DCE) | ≤ 6 h | ≤ 25 min | ≤ 6 h 25 m |
+| **Board price** (CBOT, curve, DCE) | ≤ 12 h | ≤ 25 min | ≤ 12 h 25 m |
 | **FX** | ≤ 6 h | ≤ 25 min | ≤ 6 h 25 m |
 | **Physical origin** (CEPEA, AgRural, Gulf, MAGyP, SAFEX, mandi, EC) | ≤ 8 h | ≤ 25 min | ≤ 8 h 25 m |
 | **Fundamentals** (USDA, CFTC, FAS, EIA, GTR, FRED) | ≤ 24 h | ≤ 25 min | ≤ 24 h 25 m |
@@ -122,16 +123,30 @@ is a number somebody made up.
 
 Two of these deserve their reasoning stated here:
 
-- **Board price is 6 h, not 4 h — and for CBOT that is now below the floor.**
-  It was set when the guard's floor was ~1h15m (a 14:30 CT cutoff after a
-  13:15 CT settlement): four hours would have been the tightest achievable and
-  missed on a third of runs because GitHub's scheduler varies by nearly four
-  hours. B47 (#622) measured that cutoff wrong. Yahoo finishes the CBOT bar at
-  00:00 New York on D+1, so the floor for `prices` and `forward_curve` is
-  **9h45m**, above the target: CBOT breaches it on every run, and no refresh
-  slot gates the board until the owner re-sets the objective or the schedule
-  (#622). DCE still fits six hours. The number is left as it was because the
-  objective is an owner call; the floor is a measurement.
+- **Board price is 12 h** (owner decision on #622, 2026-11-25, Option A). It
+  was 6 h, set when the guard's floor was ~1h15m (a 14:30 CT cutoff after a
+  13:15 CT settlement) plus GitHub's scheduler spread. B47 (#622) measured that
+  cutoff wrong: Yahoo finishes the CBOT bar at 00:00 New York on D+1, so the
+  floor for `prices` and `forward_curve` is **9h45m**, above 6 h — a breach on
+  every run. The board now has its own slot, a cron-job.org dispatch at
+  **01:00 New York, Tue–Sat**: 10h45m after the settlement, ~10h50m once the
+  run has started and fetched. Twelve hours is that plus ~70 minutes for a
+  queued Pages deploy or a late dispatch; the 10:30 UTC backstop (~16 h) still
+  breaches, as it must. **Why 01:00 and not 00:15:** NY-midnight finality is
+  inferred from committed captures, few of which landed in the first minutes
+  after midnight, and a slot fifteen minutes past a thinly sampled boundary is
+  where the rule could print a wrong number every day.
+  `scripts/measure_cbot_bar_finality.py` samples ZS/ZL/ZM at 23:50, 00:00,
+  00:05, 00:15, 00:30 and 01:00 New York; only a week with no Close change
+  after 00:00 moves the slot to 00:15 (and lets this target tighten to about
+  11 h). If the board job misses more than about 1 run in 20, the fallback is
+  to fire the daily build itself from cron-job.org after New York midnight.
+  **DCE shares the class**, so it is held to 12 h as well: its 10:30 UTC
+  dispatch lands ~3h30m after the 15:00 CST close, far inside either number.
+  The one thing the 6 h number did for DCE — turning the 08:00 backstop's
+  13:15–16:38 UTC landing red — the backstop now does explicitly (§4).
+  `tests/test_refresh_slot.py` checks the fire time against this target for
+  every weekday of 2026 in both seasons.
 - **One pipeline budget for all five classes.** The work after a fetch does not
   know what class the number belongs to: the same clean, store, generate and
   deploy path carries all of them. Five copies of one fact would be five things
@@ -174,9 +189,10 @@ physical origin, not merely a stale FX cell. Deliberately excluded:
 - **DCE** — closes 15:00 CST = 07:00 UTC, hours before either evening slot,
   so it gets its own morning run instead, which passes `--layers dce` and
   fetches nothing else. Without it the only DCE fetch was the evening daily
-  build, 13–17h after the close — a guaranteed daily breach of the 6h board
-  objective. That run is **dispatched from outside GitHub**, not scheduled
-  inside it: the fetch has to land in 07:00–13:00 UTC, and the `0 8` cron
+  build, 13–17h after the close — a guaranteed daily breach of the board
+  objective as it then stood (6 h; 12 h since #622). That run is
+  **dispatched from outside GitHub**, not scheduled inside it: the fetch had
+  to land in 07:00–13:00 UTC, and the `0 8` cron
   was started 13:15–16:38 UTC on all seven weekdays from 2026-09-21 to
   09-29 — a delay wider than the window, so no cron time fixes it.
   cron-job.org calls the `workflow_dispatch` API with `layers=dce` at
@@ -205,10 +221,59 @@ physical origin, not merely a stale FX cell. Deliberately excluded:
   upstreams trades reliability for freshness that is not there. The 2026-08-11
   data.gov.in throttle blackout is the standing example.
 
+**The board slot** (owner decision on #622, 2026-11-25). Yahoo's CBOT bar
+labelled D is final only at 00:00 New York on D+1, and every GitHub-scheduled
+slot lands before that on nearly every run, so the board gets its own
+dispatch from outside GitHub, like DCE: cron-job.org calls the
+`workflow_dispatch` API with `slot=board` at **01:00 New York, Tuesday to
+Saturday** (Monday's bar finishes on Tuesday, Friday's on Saturday). **The
+cron-job.org job must be scheduled in the `America/New_York` timezone**, not
+UTC: the bar finishes at New York midnight, so the trigger follows New York's
+clock changes, landing at 05:00 UTC in EDT and 06:00 UTC in EST. The run is
+titled `Refresh Prices (board)`, fetches `prices,forward_curve` only and gates
+on exactly those against the 12 h objective (§3). It does not refetch
+`currencies`: FX day D already arrived on the 23:30 slot, and a second fetch
+hours later would re-stamp an on-time number as a later one. The routing is
+`scripts/refresh_slot.py`, tested in `tests/test_refresh_slot.py`.
+
+- **Backstop.** The 10:30 UTC dce dispatch is also the board's backstop, the
+  same pattern the 08:00 cron is for DCE. On a New York Tue–Sat at least one
+  hour past 01:00, if no `Refresh Prices (board)` run *delivered* since 00:00
+  New York, it fetches `dce,prices,forward_curve`, gates dce as usual, and a
+  separate final step, **Gate the board backstop**, prints the board report and
+  goes red with `CBOT board not delivered on time` — the trigger did not
+  fire, or its run failed its own gate (a board run after a CBOT holiday
+  does, until CBOT has a calendar: one red for the breach, one for the
+  backstop). "Delivered" means the run's
+  own `Gate the published edition's latency` step succeeded — not the run's
+  conclusion — so a dce run that was red only on the board half still counts
+  as dce delivered, and the 08:00 backstop does not refetch dce late.
+  Saturday has no 10:30 run, so a Saturday miss is not backstopped: Friday's
+  session then waits for Monday evening's daily build. The red Saturday run
+  (or cron-job.org's failure e-mail) is the alarm.
+- **Set up and diagnosis.** `scripts/setup_cbot_board_trigger.sh` (a wizard:
+  token, API key, creates the job through cron-job.org's API so the timezone
+  cannot be mistyped) runs once after merge; it refuses to start until main
+  has the `slot` input, because GitHub answers an unknown input with 422.
+  `scripts/check_cbot_board_trigger.sh` reads the job and its execution
+  history, rotates the token and re-saves the canonical job.
+- **Known exposures.** CBOT has no closure calendar in `latency/calendars.py`,
+  so the board run after a CBOT holiday (e.g. Friday 27 November 2026, after
+  Thanksgiving) holds the previous session and reads as a breach — red on
+  correct data, the same gap DCE had before #399. A board run queued behind a
+  running deploy is in the `pages` concurrency group, where a newer pending run
+  replaces it; the 10:30 backstop then catches it.
+
 **The latency gate.** Every refresh slot ends by reading the published
 edition's `manifest.json` through `scripts/latency_report.py
 --fail-on-breach-layers <the layers that slot fetched>` — a breach in a layer
-the run was responsible for is a red run, not a log line. The gate is scoped
+the run was responsible for is a red run, not a log line. So is a gated layer
+the run cannot show an age for (no observation, no fetch stamp, or no row in
+the manifest): `UNMEASURED` fails the gate, because `unknown` never silently
+meets. The test is the acquisition leg, not the overall verdict, which on a
+published manifest is always `unknown` — the manifest is written before its
+own deploy (review of #630: a failed curve fetch otherwise passed the board
+gate and the backstop read the run as delivered). The gate is scoped
 on purpose: an unscoped `--fail-on-breach` would be red every day on layers
 whose acquisition breaches structurally (COT carries a 3-day provider delay
 against a 24h target; the evening daily build re-stamps `dce` 13–17h after
@@ -233,9 +298,11 @@ reads the published manifest, which is written before its own deploy and so
 carries the pipeline leg as `unknown`. The first two conditions carry the
 weight.) The edition *was* late; the line says so and
 names the cause. The 08:00 DCE backstop never opts in: it fetches only when no
-dispatched `Refresh Prices (dce)` run succeeded that day, so its red is the
-alarm that the cron-job.org trigger did not fire, and the gate step now says
-that first in an `::error` annotation.
+dispatched `Refresh Prices (dce)` run delivered that day, so its red is the
+alarm that the cron-job.org trigger did not fire. Since #622 that red is
+explicit — the gate step exits 1 after an `::error` annotation, whatever the
+report says — because under the 12 h objective the backstop's 13:15–16:38 UTC
+landing would otherwise meet it and pass the miss silently.
 
 **The post-deploy smoke waits for the CDN.** `deploy-pages` reports done
 before GitHub's CDN serves the new edition everywhere: on 2026-09-17 the
@@ -324,7 +391,7 @@ refused by gate 2, and the live site stays as it was.
 
 | Surface | Shows |
 |---|---|
-| Masthead (every page) | generation time, plus **"Board and FX priced from data N old"** — the worst board or FX observation age, because generation time alone reads as observation time and on this site they are routinely a day apart |
+| Masthead (headline and briefing) | generation time, plus **"Board and FX priced from data N old"** — the worst board or FX observation age, because generation time alone reads as observation time and on this site they are routinely a day apart — and beside it **"CBOT session Tue 24 Nov"**, the CBOT board's session date (oldest of `prices` and `forward_curve`; #622), because an age alone does not say which close a buyer is reading and an evening edition holds D−1 by design |
 | Layer Freshness table | **Observed**, **Fetched**, **Age** and **Last Success** as four separate columns. "Last Success" answers *when we ran*; "Observed" answers *what the number is dated*. One column alone read "0h ago" for a day-old price |
 | `docs/manifest.json` | the machine-readable edition record: mode, generation time, per-layer coverage, and the full latency chain with every verdict and basis string |
 | `scripts/latency_report.py` | operator report from the live DB, or from a published manifest with `--manifest URL`; `--fail-on-breach` for CI |
@@ -466,15 +533,16 @@ Not the provider's. This is what a reader gets.
 **Board price (CBOT, forward curve).** Yahoo finishes the bar for a 13:15 CT
 settlement only at 00:00 New York the next day (B47 #622), so a CBOT close is
 **never publicly readable sooner than 9 h 45 m** after it settles, plus our
-fetch and publish. On the current schedule it is later still: every evening
-build and refresh lands before that midnight, so the daily edition carries
-**D−1** — all 61 scheduled daily builds since 2026-09-01 would have — and a
-settlement first reaches a reader on the next evening's build, about 26–34 h
-after it. That breaches the 6 h objective on every run. Until B47 the page
-showed day D sooner, but the number was the last trade or an overnight print,
-not the settlement: a wrong number is worse than a gap (invariant 11). Which
-slot should carry day D, and the objective it is held to, is the owner's open
-call on #622.
+fetch and publish. The `board` slot (§4, owner decision on #622) fetches at
+01:00 New York, Tue–Sat: **about 11 h** after the settlement, against a 12 h
+objective, before the Europe, Africa and India desk mornings. Every evening
+build and refresh still lands before that midnight and carries **D−1**, so
+from the evening refresh until the next 01:00 run the page shows the previous
+session; the masthead names it ("CBOT session …"). Until the cron-job.org job
+exists, the board reaches a reader on the next evening's build, about 26–34 h
+after it settles — accepted by the owner as invariant 11's intended trade. A
+wrong number is worse than a gap: before B47 the page showed day D sooner, but
+the number was the last trade or an overnight print, not the settlement.
 
 **FX.** The London-day close (23:00 UTC in BST, 00:00 UTC in GMT) is publicly
 readable in **1 h 11 m to 3 h 38 m** via the 23:30 catch-up (a 01:11–02:38 UTC
@@ -497,11 +565,12 @@ release: under 24 h.
 **Weather.** Under 12 h for observed rows; forecast rows have negative age by
 construction, and the measurement reports the negative rather than clamping it.
 
-**The whole product.** Excluding CEPEA and, since B47 #622, the CBOT board,
-**a number observed anywhere in the world is publicly readable on this site
-within six and a half hours, and the share of that we control — fetch to
-public page — is under twenty-five minutes.** CEPEA and CBOT are the named
-exceptions at D−1 on the current schedule.
+**The whole product.** Excluding CEPEA and the CBOT board, **a number
+observed anywhere in the world is publicly readable on this site within six
+and a half hours, and the share of that we control — fetch to public page — is
+under twenty-five minutes.** CEPEA is the named exception at D−1; the CBOT
+board is the other, at about 11 h on the `board` slot because its provider
+floor alone is 9 h 45 m.
 
 Two things this is not. It is not real-time and no part of it is: the fastest
 possible path from a CBOT settlement to a reader is 9 h 45 m, floored by when

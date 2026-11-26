@@ -136,6 +136,10 @@ _AGE_ENTRIES: tuple[tuple[str, str, str], ...] = (
     ("priced_from", "Board and FX priced from data <age> old",
      "The age of the oldest board or FX observation feeding the headline. Stated so "
      "'Generated' cannot read as fresher than the numbers are."),
+    ("cbot_session", "CBOT session <date>",
+     "The CBOT session the board prices close, beside their age. Yahoo finishes a CBOT "
+     "bar only at midnight New York, so an evening edition shows the previous session by "
+     "design; the 01:00 New York board refresh brings the newest one (#622)."),
     ("stale", "Stale",
      "A layer past its publishing budget (`LAYER_MAX_DATA_AGE_DAYS`). Its last rows still "
      "render, dated; nothing is padded forward."),
