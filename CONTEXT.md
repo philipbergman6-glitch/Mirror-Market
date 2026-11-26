@@ -72,6 +72,20 @@ The participant who decides the first-screen contract with the desk before the t
 The one-page confidentiality instrument a participant signs: what is recorded, where it lives, that only the aggregate projection is ever shared, and the right to withdraw and have records deleted.
 _Avoid_: NDA (a vendor instrument this effort does not use), consent form
 
+## Term structure
+
+**Nearby pair**
+The front contract month against the next listed one, far − near (#671). The headline curve number on every surface, always printed with both symbols, both prices, native units and USD/MT, and the session: `ZSF27 1243.25 / ZSH27 1244.25: Mar +1.00 cents/bu (+0.37 USD/MT) over Jan, session 2026-11-25`.
+_Avoid_: "front–next" for any other pair; first-vs-last fetched month as "the spread"
+
+**Carry / inverted (of a pair)**
+A pair is in **carry** when the far month is over the near, **inverted** when it is under. A carry reading is gross of storage and financing unless a desk cost of carry is supplied.
+_Avoid_: "paid to store" without "gross of storage and financing"
+
+**Curve structure**
+Read pair by pair over consecutive listed months. **Contango** / **backwardation** only when every pair agrees; otherwise named by the nearby pair — **nearby carry** (an inversion further out) or **nearby inversion** (carry further out), or **mixed** when the nearby pair is flat — with the turning months stated: `carry Jan 2027→Jul 2027 (ZSF27→ZSN27); inverted Jul 2027→Aug 2027 (ZSN27→ZSQ27)`. A deferred inversion is located by month, never read as nearby tightness.
+_Avoid_: "mild backwardation", "prompt tightness" for a curve whose nearby pair is in carry
+
 ## Relationships
 
 - A **desk assumption** and a **policy rate** are both inputs to a landed total; a **lapsed input** of either kind blocks it until a **renewal**.

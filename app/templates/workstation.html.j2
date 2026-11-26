@@ -287,7 +287,8 @@ tr.tv-panel > td { padding: 0; }
       <span class="ptype">{{ '{:+.2f}'.format(c.slope_usd_mt_per_month) }} USD/MT per month</span>
       {% endif %}
     </div>
-    <div class="spec-line">{{ c.implication }}</div>
+    {% if c.nearby %}<div class="spec-line">Nearby pair: {{ c.nearby }}</div>{% endif %}
+    <div class="spec-line">{% if c.reading %}{{ c.reading }} — {% endif %}{{ c.implication }}</div>
     {% if not c.coherent %}
     <div class="incoherent">
       Not every contract month printed on one session, so the off-session legs were

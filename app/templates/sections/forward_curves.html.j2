@@ -1,19 +1,17 @@
-{# 06 Forward curves — one snapshot per leg, contango or backwardation. #}
+{# 06 Forward curves — one snapshot per leg, read by its named pairs (#671). #}
 {% import 'sections/_cards.html.j2' as c %}
 {% for leg in s.legs %}
 <div class="subhdr">{{ leg.name }}</div>
 {% if leg.as_of %}<div class="caption">Curve snapshot as of {{ leg.as_of }}</div>{% endif %}
-{% if leg.has_analysis %}
 <div class="grid grid-4">
   <div class="mc"><div class="mc-label">Structure</div><div class="mc-val">{{ leg.structure }}</div></div>
-  <div class="mc"><div class="mc-label">Front</div><div class="mc-val">{{ '{:,.1f}'.format(leg.front_mt) }}</div></div>
-  <div class="mc"><div class="mc-label">Back</div><div class="mc-val">{{ '{:,.1f}'.format(leg.back_mt) }}</div></div>
-  <div class="mc"><div class="mc-label">Spread</div><div class="mc-val">{{ c.pct(leg.spread_pct) }}</div></div>
+  <div class="mc"><div class="mc-label">Front {{ leg.front_symbol }}</div><div class="mc-val">{{ '{:,.1f}'.format(leg.front_mt) }}</div></div>
+  <div class="mc"><div class="mc-label">Next {{ leg.next_symbol }}</div><div class="mc-val">{{ '{:,.1f}'.format(leg.next_mt) }}</div></div>
+  <div class="mc"><div class="mc-label">Nearby spread USD/MT</div><div class="mc-val">{{ c.signed(leg.nearby_mt, 2) }}</div></div>
 </div>
-{% endif %}
 <div class="chart-box">{{ leg.chart_html | safe }}</div>
-{% if leg.calendar %}
-<div class="caption">Front spread: {{ leg.calendar.near }} -&gt; {{ leg.calendar.far }}: {{ c.signed(leg.calendar.spread, 2) }} ({{ c.pct(leg.calendar.spread_pct) }})</div>
-{% endif %}
+<div class="caption">Nearby pair: {{ leg.nearby }}</div>
+{% if leg.reading %}<div class="caption">{{ leg.reading }} — {{ leg.implication }}</div>{% endif %}
+{% if leg.coherence_note %}<div class="caption">Off-session legs dropped: {{ leg.coherence_note }}</div>{% endif %}
 <hr class="divider">
 {% endfor %}

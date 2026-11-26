@@ -20,7 +20,6 @@ it is an artifact from a library. Everything around it is data.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -405,8 +404,14 @@ def _correlations_panel() -> dict | None:
 # 06 Forward curves
 # ---------------------------------------------------------------------------
 def forward_curves_section(data: dict | None) -> dict:
+    """Each soy leg's curve, read by its named pairs (#671).
+
+    The cards are the front and next listed months and the nearby spread
+    between them — never first against last fetched month, whose number moved
+    with the strip's length. The captions name the pair in full and say where
+    the strip is in carry and where it is inverted, by month.
+    """
     from app.charts import build_forward_curve_chart
-    from pipeline.units import to_metric_tons
 
     if not data:
         return _empty("the forward-curve analyst returned nothing — check the forward_curve layer")
@@ -416,32 +421,32 @@ def forward_curves_section(data: dict | None) -> dict:
         leg = data.get(name)
         if not leg:
             continue
-        curve = leg.get("curve_data_mt", leg.get("curve_data"))
-        if curve is None or curve.empty:
+        analysis = leg["curve"]
+        nearby = analysis.nearby
+        if nearby is None:
             continue
-        analysis = leg.get("analysis") or {}
+        spec = analysis.legs[0].contract.spec
         unit = leg.get("unit", "USD/MT")
-
-        front, back = analysis.get("front_price", 0), analysis.get("back_price", 0)
-        # An unknown commodity keeps its native number rather than losing it.
-        with contextlib.suppress(Exception):
-            front, back = to_metric_tons(front, name), to_metric_tons(back, name)
-
-        calendar = leg.get("calendar_spread") or {}
+        # The chart draws exactly the legs the reading was struck on — the
+        # one-session set — so an off-session leg the provider dropped cannot
+        # reappear on the line beside a reading that excluded it.
+        curve = pd.DataFrame({
+            "label": [cl.contract.label for cl in analysis.legs],
+            "close": [spec.native_to_usd_per_mt(cl.quote.price) for cl in analysis.legs],
+        })
         legs.append({
             "name": name,
             "as_of": leg.get("as_of"),
-            "structure": (analysis.get("structure") or "n/a").title(),
-            "front_mt": front,
-            "back_mt": back,
-            "spread_pct": analysis.get("spread_pct"),
-            "has_analysis": bool(analysis),
-            "calendar": {
-                "near": calendar.get("near_label", ""),
-                "far": calendar.get("far_label", ""),
-                "spread": calendar.get("spread"),
-                "spread_pct": calendar.get("spread_pct"),
-            } if calendar else None,
+            "structure": analysis.structure.value.capitalize(),
+            "front_symbol": nearby.near.symbol,
+            "front_mt": spec.native_to_usd_per_mt(nearby.near_price),
+            "next_symbol": nearby.far.symbol,
+            "next_mt": spec.native_to_usd_per_mt(nearby.far_price),
+            "nearby_mt": nearby.usd_per_mt,
+            "nearby": nearby.sentence(),
+            "reading": analysis.reading,
+            "implication": analysis.structure.implication,
+            "coherence_note": "" if analysis.coherent else analysis.coherence_note,
             # A curve is one snapshot of a dozen contract months — already
             # small, and clipping it would drop the back of the curve.
             "chart_html": _chart(

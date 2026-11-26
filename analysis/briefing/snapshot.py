@@ -21,7 +21,13 @@ as there having been none. v5 (#560) lets an ``argentina_fob`` product carry
 no spot: where every band printed on the session had ended (B41 #550) the
 product archives ``withheld: ALL_SAILED`` and the ``reason`` in place of the
 ``spot_*`` keys, as ``crush_spread`` archives ``{withheld, reason}``, and keeps
-its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. Design
+its whole ``curve``; a v1–v4 row may hold a sailed band as its spot. v6
+(#671) reshapes ``forward_curve``: each commodity archives its one-session
+``legs`` (symbol, contract month, native price), the ``nearby`` pair (front
+against the next listed month, far − near in native units and USD/MT), the
+``inverted_pairs`` by symbol and the pair-wise ``structure``. A v1–v5 block's
+``spread``/``spread_pct`` were last *fetched* month minus first and its
+``structure`` came from that sign — they are not comparable with v6's. Design
 rules carried by the schema:
 
 - raw numbers and components are stored, never display labels, regime
@@ -59,7 +65,7 @@ from analysis.briefing.sections.weather import _LOOKBACK as _WEATHER_LOOKBACK
 from analysis.briefing.types import BriefingData
 from analysis.correlations import commodity_correlation_matrix, commodity_vs_currency
 from analysis.crop_year import is_split_crop_year, psd_year_for_crop_year
-from analysis.forward_curve import analyze_curve, curve_slope
+from analysis.futures.stored_curves import read_stored_curves
 from analysis.health import run_health_check
 from analysis.nass_crush import latest_crush
 from analysis.origins.domain import ShipmentWindow
@@ -100,7 +106,6 @@ from pipeline.query import (
     read_economic,
     read_eia_data,
     read_export_sales,
-    read_forward_curve,
     read_gulf_bids,
     read_inspection_destinations,
     read_inspections,
@@ -117,7 +122,7 @@ from pipeline.units import to_metric_tons
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # The ``build_snapshot`` call in progress collects its failed blocks here;
 # outside one, ``_safe`` only logs.
@@ -856,25 +861,34 @@ def _dce_block(price_data: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]
     return out
 
 
-def _forward_curve_block() -> dict[str, dict[str, Any]]:
-    curve = read_forward_curve()
-    if curve.empty:
-        return {}
+def _forward_curve_block(as_of: date | None = None) -> dict[str, dict[str, Any]]:
+    """Each stored curve's one-session legs and its named-pair reading (v6, #671)."""
     out: dict[str, dict[str, Any]] = {}
-    for commodity, subset in curve.groupby("commodity"):
-        if len(subset) < 2:
+    for commodity, analysis in read_stored_curves(as_of=as_of).items():
+        if len(analysis.legs) < 2:
             continue
-        result = analyze_curve(subset)
-        if not result:
-            continue
-        out[str(commodity)] = {
-            "structure": result.get("structure"),
-            "front_price": _num(result.get("front_price")),
-            "back_price": _num(result.get("back_price")),
-            "spread": _num(result.get("spread")),
-            "spread_pct": _num(result.get("spread_pct")),
-            "num_contracts": int(result["num_contracts"]) if result.get("num_contracts") else None,
-            "slope_per_month": _num(curve_slope(subset)),
+        nearby = analysis.nearby
+        out[commodity] = {
+            "observation_date": (
+                analysis.observation_date.isoformat() if analysis.observation_date else None
+            ),
+            "coherent": analysis.coherent,
+            "structure": analysis.structure.value,
+            "legs": [
+                {
+                    "symbol": leg.contract.symbol,
+                    "contract_month": leg.contract.contract_month_date.isoformat(),
+                    "price": _num(leg.quote.price),
+                }
+                for leg in analysis.legs
+            ],
+            "nearby": None if nearby is None else {
+                "near": nearby.near.symbol,
+                "far": nearby.far.symbol,
+                "value": _num(nearby.value),
+                "usd_per_mt": _num(nearby.usd_per_mt),
+            },
+            "inverted_pairs": [spread.symbols for spread in analysis.inversions],
         }
     return out
 

@@ -1,15 +1,24 @@
-"""Curve analytics over named contracts (Phase 3).
+"""Curve analytics over named contracts — the one curve vocabulary.
 
-``analysis/forward_curve.py`` answers "is this contango or backwardation" from
-a DataFrame of closes. That is the right question for a briefing paragraph and
-the wrong one for a hedger, who needs to know *which month* to hedge in, what
-the carry between two named months is worth per tonne per month, whether that
-spread is wide or narrow against its own history, and how many sessions are
-left before the contract they are looking at stops trading.
+Every surface that reads a term structure reads it here: the workstation, the
+daily briefing (its drivers, its forward-curve section and its snapshot) and
+the headline forward-curve block. A hedger needs to know *which month* to hedge
+in, what the carry between two named months is worth per tonne per month,
+whether that spread is wide or narrow against its own history, and how many
+sessions are left before the contract they are looking at stops trading; a
+briefing reader needs to know whether the nearby pair pays to carry. Both are
+answers about named pairs, so both come from the same objects.
 
-This module answers those. It takes a :class:`~analysis.futures.providers.
-CurveObservation` and returns values, never DataFrames, so the hedge
-calculator and the page read the same objects.
+It takes a :class:`~analysis.futures.providers.CurveObservation` and returns
+values, never DataFrames, so the hedge calculator and the page read the same
+objects.
+
+**Every curve sentence names its pair** (#671). The headline spread is the
+*nearby* pair — front against the next listed month — never first against
+last fetched month, which moved whenever the strip length changed and labelled
+a curve in carry through Jul "backwardation" because Aug sat lower. Structure is
+read pair by pair: where the strip is in carry, where it is inverted, and the
+months at which it changes (:attr:`CurveAnalysis.reading`).
 
 Three deliberate refusals:
 
@@ -43,6 +52,7 @@ from enum import Enum
 from typing import Any
 
 from analysis.futures.domain import (
+    MONTH_ABBR,
     ContractQuote,
     NamedContract,
     business_days_between,
@@ -62,23 +72,57 @@ BUSINESS_DAYS_PER_YEAR = 252
 MIN_HISTORY_FOR_PERCENTILE = 20
 
 
+#: What a carry reading is gross of. No desk cost of carry reaches the curve
+#: today, so every rendered storage conclusion says so rather than implying the
+#: board spread is what a stored tonne earns.
+GROSS_OF_CARRY_COSTS = "gross of storage and financing"
+
+
 class CurveStructure(str, Enum):
-    CONTANGO = "contango"
-    MILD_CONTANGO = "mild contango"
-    BACKWARDATION = "backwardation"
-    MILD_BACKWARDATION = "mild backwardation"
+    """The term structure, read pair by pair over consecutive listed months.
+
+    ``contango`` / ``backwardation`` are kept for a strip that goes one way
+    along *every* pair. A strip that changes direction is named by its nearby
+    pair — ``nearby carry`` or ``nearby inversion`` — because that is the pair
+    a prompt buyer or a storer is pricing, and the months where it turns are
+    stated in :attr:`CurveAnalysis.reading` rather than folded into one label.
+    """
+
+    CONTANGO = "contango"                   # every consecutive pair in carry
+    BACKWARDATION = "backwardation"         # every consecutive pair inverted
+    NEARBY_CARRY = "nearby carry"           # nearby pair in carry; an inversion further out
+    NEARBY_INVERSION = "nearby inversion"   # nearby pair inverted; carry further out
+    MIXED = "mixed"                         # nearby pair flat; carry and inversion further out
     FLAT = "flat"
     UNDETERMINED = "undetermined"
 
     @property
     def implication(self) -> str:
-        if "backwardation" in self.value:
-            return "tight nearby supply or strong prompt demand — storage is not being paid for"
-        if "contango" in self.value:
-            return "adequate supply; the market is paying to carry it forward"
+        if self is CurveStructure.CONTANGO:
+            return (
+                "every listed month is over the one before it — the board pays to carry along "
+                f"the whole strip, {GROSS_OF_CARRY_COSTS}"
+            )
+        if self is CurveStructure.BACKWARDATION:
+            return (
+                "every listed month is under the one before it — the board pays for prompt "
+                "delivery along the whole strip and pays nothing to store"
+            )
+        if self is CurveStructure.NEARBY_CARRY:
+            return (
+                f"the nearby pair pays to carry ({GROSS_OF_CARRY_COSTS}); the inversion sits "
+                "further out, at the named months — not a reading on nearby supply"
+            )
+        if self is CurveStructure.NEARBY_INVERSION:
+            return (
+                "the nearby pair is inverted — the board pays for prompt delivery over the next "
+                "listed month; carry resumes further out, at the named months"
+            )
+        if self is CurveStructure.MIXED:
+            return "the nearby pair is flat; carry and inversion sit further out, at the named months"
         if self is CurveStructure.FLAT:
             return "no term premium either way"
-        return "not enough legs to read a structure"
+        return "not enough same-session legs to read a structure"
 
 
 @dataclass(frozen=True)
@@ -117,8 +161,50 @@ class CalendarSpread:
         return None if self.value is None else self.value > 0
 
     @property
+    def is_inverted(self) -> bool | None:
+        """True when the far month is under the near. None when nothing was struck."""
+        return None if self.value is None else self.value < 0
+
+    @property
     def label(self) -> str:
         return f"{self.near.label} / {self.far.label}"
+
+    @property
+    def months(self) -> str:
+        """The pair by month, near first: ``Jul 2027→Aug 2027``."""
+        return f"{self.near.label}→{self.far.label}"
+
+    def sentence(self) -> str:
+        """The pair as a trader reads it, both legs and the convention stated.
+
+        ``ZSF27 1243.25 / ZSH27 1244.25: Mar +1.00 cents/bu (+0.37 USD/MT) over
+        Jan, session 2026-11-25`` — far minus near, in the venue's own unit and
+        in USD/MT, on the one session both legs printed. Across two sessions the
+        two prices are still printed and the spread is refused in words
+        (invariant 8), never given a sign.
+        """
+        from pipeline.units import unit_key_label
+
+        unit = unit_key_label(self.near.spec.native_unit.value)
+        legs = f"{self.near.symbol} {self.near_price:.2f} / {self.far.symbol} {self.far_price:.2f}"
+        if self.value is None or self.usd_per_mt is None or self.observation_date is None:
+            return f"{legs}: spread not struck — the two legs are not one session"
+        far_month = MONTH_ABBR[self.far.month]
+        near_month = MONTH_ABBR[self.near.month]
+        if self.value > 0:
+            relation = "over"
+        elif self.value < 0:
+            relation = "under"
+        else:
+            return (
+                f"{legs}: {far_month} level with {near_month}, "
+                f"session {self.observation_date.isoformat()}"
+            )
+        return (
+            f"{legs}: {far_month} {_signed(self.value)} {unit} "
+            f"({_signed(self.usd_per_mt)} USD/MT) {relation} {near_month}, "
+            f"session {self.observation_date.isoformat()}"
+        )
 
     @property
     def symbols(self) -> str:
@@ -144,6 +230,7 @@ class CalendarSpread:
                 None if self.usd_per_mt_per_month is None else round(self.usd_per_mt_per_month, 3)
             ),
             "is_carry": self.is_carry,
+            "sentence": self.sentence(),
         }
 
 
@@ -241,8 +328,43 @@ class CurveAnalysis:
         return self.legs[0] if self.legs else None
 
     @property
+    def nearby(self) -> CalendarSpread | None:
+        """Front against the next listed month — the headline pair."""
+        return self.spreads[0] if self.spreads else None
+
+    @property
+    def inversions(self) -> tuple[CalendarSpread, ...]:
+        """Every consecutive pair whose far month is under its near month."""
+        return tuple(spread for spread in self.spreads if spread.is_inverted)
+
+    @property
     def is_inverted(self) -> bool:
-        return self.structure in (CurveStructure.BACKWARDATION, CurveStructure.MILD_BACKWARDATION)
+        """The *nearby* pair is inverted. A deferred inversion alone is not this."""
+        nearby = self.nearby
+        return bool(nearby is not None and nearby.is_inverted)
+
+    @property
+    def reading(self) -> str:
+        """Where the strip is in carry and where it is inverted, by month.
+
+        Consecutive pairs of one sign are run together: ``carry Jan 2027→Jul 2027
+        (ZSF27→ZSN27); inverted Jul 2027→Aug 2027 (ZSN27→ZSQ27)``. Empty when no
+        pair was struck.
+        """
+        runs: list[tuple[str, CalendarSpread, CalendarSpread]] = []
+        for spread in self.spreads:
+            if spread.value is None:
+                return ""
+            kind = "carry" if spread.value > 0 else "inverted" if spread.value < 0 else "flat"
+            if runs and runs[-1][0] == kind:
+                runs[-1] = (kind, runs[-1][1], spread)
+            else:
+                runs.append((kind, spread, spread))
+        return "; ".join(
+            f"{kind} {first.near.label}→{last.far.label} "
+            f"({first.near.symbol}→{last.far.symbol})"
+            for kind, first, last in runs
+        )
 
     def spread(self, near_symbol: str, far_symbol: str) -> CalendarSpread | None:
         wanted = (near_symbol.upper(), far_symbol.upper())
@@ -258,6 +380,9 @@ class CurveAnalysis:
             "structure": self.structure.value,
             "implication": self.structure.implication,
             "inverted": self.is_inverted,
+            "reading": self.reading,
+            "nearby": None if self.nearby is None else self.nearby.to_dict(),
+            "inversions": [s.to_dict() for s in self.inversions],
             "observation_date": self.observation_date.isoformat() if self.observation_date else None,
             "coherent": self.coherent,
             "coherence_note": self.coherence_note,
@@ -295,6 +420,12 @@ OPEN_INTEREST_AGGREGATE_NOTE = (
     "beside the curve rather than on a leg, because it belongs to the product and to that "
     "Tuesday — not to any one contract month or to the session the prices came from."
 )
+
+
+def _signed(value: float) -> str:
+    """``+1.00`` / ``−19.75`` — a typographic minus, two places."""
+    text = f"{value:+.2f}"
+    return text.replace("-", "\u2212", 1)
 
 
 def _calendar_months(near: NamedContract, far: NamedContract) -> int:
@@ -345,27 +476,32 @@ def build_spread(near: ContractQuote, far: ContractQuote) -> CalendarSpread:
     )
 
 
-def _structure(legs: tuple[CurveLeg, ...]) -> CurveStructure:
-    """Contango vs backwardation, sign-first.
+def _structure(spreads: tuple[CalendarSpread, ...]) -> CurveStructure:
+    """Structure from the consecutive pairs, named by the nearby one.
 
-    The sign of the front→back spread decides, and monotonicity only sets the
-    strength — the rule ``analysis/forward_curve.py`` arrived at after a
-    move-count majority labelled a 13%-inverted curve "contango" because the
-    inversion happened in one step.
+    Neither a move count nor the first-against-last sign: the first labelled a
+    13%-inverted curve "contango" because the inversion came in one step, and
+    the second labelled a curve in carry from Jan to Jul "backwardation" because
+    Aug sat lower (#671). A strip going one way along every pair is contango or
+    backwardation; one that changes direction is named by its nearby pair, and
+    the months where it turns are :attr:`CurveAnalysis.reading`.
     """
-    if len(legs) < 2:
+    if not spreads or any(spread.value is None for spread in spreads):
         return CurveStructure.UNDETERMINED
-    prices = [leg.quote.price for leg in legs]
-    spread = prices[-1] - prices[0]
-    ups = sum(1 for a, b in zip(prices, prices[1:], strict=False) if b > a)
-    downs = sum(1 for a, b in zip(prices, prices[1:], strict=False) if b < a)
-    if ups == downs == 0:
+    values = [spread.value for spread in spreads if spread.value is not None]
+    carry = any(value > 0 for value in values)
+    inverted = any(value < 0 for value in values)
+    if not carry and not inverted:
         return CurveStructure.FLAT
-    if spread > 0:
-        return CurveStructure.CONTANGO if downs == 0 else CurveStructure.MILD_CONTANGO
-    if spread < 0:
-        return CurveStructure.BACKWARDATION if ups == 0 else CurveStructure.MILD_BACKWARDATION
-    return CurveStructure.FLAT
+    if not inverted:
+        return CurveStructure.CONTANGO
+    if not carry:
+        return CurveStructure.BACKWARDATION
+    if values[0] > 0:
+        return CurveStructure.NEARBY_CARRY
+    if values[0] < 0:
+        return CurveStructure.NEARBY_INVERSION
+    return CurveStructure.MIXED
 
 
 def _slope_usd_mt_per_month(legs: tuple[CurveLeg, ...]) -> float | None:
@@ -411,7 +547,7 @@ def analyse_curve(
     return CurveAnalysis(
         commodity=observation.commodity,
         legs=legs,
-        structure=_structure(legs),
+        structure=_structure(spreads),
         observation_date=observation.observation_date,
         coherent=observation.coherent,
         coherence_note=observation.coherence_note,
@@ -538,6 +674,7 @@ __all__ = [
     "CurveAnalysis",
     "CurveLeg",
     "CurveStructure",
+    "GROSS_OF_CARRY_COSTS",
     "SpreadHistory",
     "analyse_curve",
     "build_histories",

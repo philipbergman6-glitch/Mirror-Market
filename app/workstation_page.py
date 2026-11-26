@@ -660,6 +660,10 @@ def _curve_section(
             "structure": analysis.structure.value,
             "implication": analysis.structure.implication,
             "inverted": analysis.is_inverted,
+            # The same named-pair sentence and located reading the briefing
+            # prints (#671), so the two surfaces give one Jan–Mar answer.
+            "nearby": None if analysis.nearby is None else analysis.nearby.sentence(),
+            "reading": analysis.reading,
             "coherent": analysis.coherent,
             "coherence_note": analysis.coherence_note,
             "slope_usd_mt_per_month": (
