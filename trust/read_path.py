@@ -26,7 +26,11 @@ Three rules:
   ``all``.
 - **An unknown name is an error, not a no-op.** A typo in the variable would
   otherwise read as "still on v1" — the switch silently doing nothing while the
-  operator believes the cutover happened. Unknown names raise.
+  operator believes the cutover happened. Unknown names raise
+  ``TrustedReadSwitchError``, and ``open_provider`` lets it propagate, so a
+  typo fails the build by name rather than falling back to v1 (owner ruling on
+  #664, 2026-11-26). A key in ``V1_SOURCE_DIFFERS`` raises the same error and
+  takes the same path.
 
 The variable takes a comma-separated list of registry dataset *keys*::
 

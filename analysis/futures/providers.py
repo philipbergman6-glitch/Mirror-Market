@@ -619,7 +619,8 @@ def _coherence(
 class TrustedLedgerEmptyError(RuntimeError):
     """The trusted-read switch is on, but the ledger has nothing to serve it.
 
-    Raised, never caught by :func:`open_provider`'s fallback (#656). A switch
+    Raised, never caught by :func:`open_provider`'s fallback (#656) — nor is
+    the switch's own ``TrustedReadSwitchError`` for an unknown key. A switch
     naming every soy benchmark over an absent ``data/v2/``, or over a ledger
     with no accepted revision for one of them, is a cutover that cannot be
     served. Serving it would blank every ``open_provider`` caller at once with
@@ -638,20 +639,35 @@ def open_provider(conn: sqlite3.Connection, *, repository=None) -> QuoteProvider
     — a curve mixing a trusted bean with a v1 oil would put two provenances
     inside one crush — and the rollback is unsetting that variable.
 
-    A switch over an **absent or empty** ledger raises
-    :class:`TrustedLedgerEmptyError` (#656, owner decision on #239): nothing
-    writes ``data/v2/`` in production, so that configuration is an operator
-    asking for a cutover that cannot be served. Any *other* failure to open
-    or read the ledger falls back to v1 with a loud log line rather than
-    failing the build.
+    Two configurations fail the build instead of serving anything, each
+    naming its reason, because each is an operator who believes a cutover
+    happened when it cannot have:
+
+    - an **unknown key** in the switch raises
+      :class:`trust.read_path.TrustedReadSwitchError` (owner ruling on #664,
+      2026-11-26) — a typo that quietly read v1 would make that belief
+      silently false;
+    - a switch over an **absent or empty** ledger raises
+      :class:`TrustedLedgerEmptyError` (#656, owner decision on #239): nothing
+      writes ``data/v2/`` in production, so that is a cutover that cannot be
+      served.
+
+    Any *other* failure to import ``trust`` or to open or read the ledger
+    falls back to v1 with a loud log line rather than failing the build.
     """
     fallback = SqliteQuoteProvider(conn=conn)
     try:
         from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, TRUSTED_READ_ENV_VAR, load_trusted_read_switch
+    except Exception:  # noqa: BLE001 — a broken trust/ import must degrade, not fail the build
+        log.exception("trusted read path unavailable — falling back to the v1 forward_curve tables")
+        return fallback
 
-        if not load_trusted_read_switch().enabled_for_all(CBOT_BENCHMARK_DATASET_KEYS):
-            return fallback
+    # Read outside the fallback: an unknown key raises TrustedReadSwitchError
+    # to the caller, the way an empty ledger does (owner ruling on #664).
+    if not load_trusted_read_switch().enabled_for_all(CBOT_BENCHMARK_DATASET_KEYS):
+        return fallback
 
+    try:
         from analysis.futures.trusted_provider import TrustedNamedContractProvider
         from trust.repository import GitDirectoryTrustRepository
 

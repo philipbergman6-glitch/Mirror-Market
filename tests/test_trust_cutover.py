@@ -6,9 +6,12 @@ are about what a *consumer* gets.
 The switch is the first: `open_provider` must return the v1 SQLite provider
 until every soy dataset is named, and must fall back rather than fail when the
 ledger is unreachable — a storage migration that can take the workstation down
-is a worse trade than one that quietly stays on v1 and says so in the log. An
-*absent or empty* ledger is the exception: it raises (#656), because that is a
-cutover nothing can serve, not a ledger that broke.
+is a worse trade than one that quietly stays on v1 and says so in the log. Two
+configurations are the exception and raise instead: an *absent or empty*
+ledger (#656), because that is a cutover nothing can serve, not a ledger that
+broke; and an *unknown key* in the switch (owner ruling on #664), because a
+typo that quietly read v1 would leave the operator believing a cutover
+happened.
 
 The provider is the second: a quarantined leg is *absent* from the curve and a
 corrected leg returns the correction. Those are the two answers that differ
@@ -39,7 +42,7 @@ from trust.cbot_benchmarks import (
     artifact_from_bars,
     ingest_cbot_benchmark_replays,
 )
-from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, TRUSTED_READ_ENV_VAR
+from trust.read_path import CBOT_BENCHMARK_DATASET_KEYS, TRUSTED_READ_ENV_VAR, TrustedReadSwitchError
 
 AFTER_SETTLEMENT = datetime(2026, 8, 13, 20, 0, tzinfo=timezone.utc)
 SESSION = date(2026, 8, 12)
@@ -178,10 +181,23 @@ def test_an_unreadable_ledger_falls_back_instead_of_failing_the_build(conn, monk
     assert isinstance(open_provider(conn), SqliteQuoteProvider)
 
 
-def test_a_typo_in_the_switch_falls_back_rather_than_half_cutting_over(conn, monkeypatch) -> None:
+def test_a_typo_in_the_switch_fails_the_build_rather_than_quietly_reading_v1(conn, monkeypatch) -> None:
+    # Owner ruling on #664 (2026-11-26): a misspelt key is an operator who
+    # believes a cutover happened. Falling back would make that belief silently
+    # false, so the switch's own error propagates the way an empty ledger does.
     monkeypatch.setenv(TRUSTED_READ_ENV_VAR, "cbot-soybean-namd-contracts")
 
-    assert isinstance(open_provider(conn), SqliteQuoteProvider)
+    with pytest.raises(TrustedReadSwitchError, match="cbot-soybean-namd-contracts"):
+        open_provider(conn)
+
+
+def test_a_refused_fx_key_in_the_switch_fails_the_build_too(conn, monkeypatch) -> None:
+    # The switch's other refusal (B25 #495: v1 reads the ECB cross) is the same
+    # error and takes the same path — refused by name, never served as v1.
+    monkeypatch.setenv(TRUSTED_READ_ENV_VAR, "fx-cny-usd")
+
+    with pytest.raises(TrustedReadSwitchError, match="fx-cny-usd"):
+        open_provider(conn)
 
 
 # ---------------------------------------------------------------------------
