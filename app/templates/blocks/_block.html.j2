@@ -7,7 +7,9 @@
   on every full page. A missing block is a labelled empty state here, never a
   gap and never a renumber (M1 #143).
 #}
-<section class="block" id="block-{{ block.id }}">
+{#- AL1 #640: a basket-grade block names its stratum for the verifier. A
+    locator only — the verifier reads every value from the visible text. -#}
+<section class="block" id="block-{{ block.id }}"{% if block.verify_stratum %} data-verify-stratum="{{ block.verify_stratum }}"{% endif %}>
   <div class="block-head">
     {% if block.no %}<span class="block-no">{{ block.no }}</span>{% endif %}
     <h2>{{ block.title }}</h2>

@@ -3611,9 +3611,11 @@ def build_blocks(
     """
     blocks: list[Block] = []
     for block_id in block_ids:
+        stratum = config.AVAILABILITY_BASKET_BLOCKS.get((market.slug, block_id))
+        located = (market.slug, block_id) in config.VERIFY_LOCATED_BLOCKS
         absent = absent_reason(market, block_id)
         if absent:
-            blocks.append(make_block(block_id, state=STATE_ABSENT, reason=absent))
+            blocks.append(make_block(block_id, state=STATE_ABSENT, reason=absent, verify_stratum=stratum))
             continue
         try:
             state, reason, data = BUILDERS[block_id](market, ctx, markets=markets)
@@ -3626,6 +3628,8 @@ def build_blocks(
             reason=reason,
             data=data or None,
             kind=_kind(market, block_id),
+            verify_stratum=stratum,
+            verify_located=located,
         ))
     return blocks
 

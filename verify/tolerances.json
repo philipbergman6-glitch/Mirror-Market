@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "since": "2026-11-25",
+  "source": "Spec #639 'Basket v1' and 'Materiality and grading'; owner decisions 2026-11-25 on #477 (Q1 thresholds, Q3 CBOT exact) and #479 (tolerances live here); per-stratum values from research/2026-11-25-accuracy-v4-v6-proposals.md section 1.2 and 1.4 (PR #619).",
+  "rules": [
+    "A delta is material when it exceeds the native tolerance AND the economic threshold. A metadata fail (date, contract, window, grade, incoterm, unit, FX date) is material at any delta.",
+    "kind exact: same definition; tolerance = the publisher's rounding plus our display and conversion rounding. kind band: different definition, compared inside a stated explained band. kind recompute: Tier 3 arithmetic from the displayed legs.",
+    "A record stamps the tolerance_version it was graded under. Past records are never re-graded. Each change is a 'Tolerance changes' ledger row; loosening needs measured evidence, not a failing sample."
+  ],
+  "economic_thresholds_note": "Each stratum's threshold_usd_mt is the one a grade reads: a number for every leg, or a table keyed by product (bean, meal, oil) with an optional default. A product the table neither names nor defaults is refused. Owner, 2026-11-25 (#477 Q1): 0.5 USD/MT for bean-scale and every derived number, 1.5 for oil legs. Pre-buyer numbers, open to revision in the A12 session (#406).",
+  "leg_products_note": "A leg's product is read from its displayed label: it must contain the words of exactly one product. A label naming none, or two, is refused (owner 2026-11-26, #663).",
+  "leg_products": {"bean": ["Soybeans", "Soybean No."], "meal": ["Meal"], "oil": ["Oil"]},
+  "strata": {
+    "1": {
+      "name": "CBOT ZS/ZL/ZM named-contract closes",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "human, weekly",
+      "verifying_publisher": "cme_bulletin",
+      "native_tolerance": {"value": 0, "unit": "ticks", "plus": "display and conversion rounding"},
+      "threshold_usd_mt": {"bean": 0.5, "meal": 0.5, "oil": 1.5},
+      "band": null,
+      "identity_checks": ["contract month", "session date"],
+      "since": "2026-11-25",
+      "notes": "Owner #477 Q3: exact, 0 ticks. 'Final bar = settlement' rests on 7 meal sessions, so it is a hypothesis: list every non-zero delta and never widen. Depends on #627 (#622); editions before it grade as pre-final captures."
+    },
+    "1b": {
+      "name": "CBOT ZS only, daily: AMS report 3147 futures price",
+      "tier": "2",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "usda_ams",
+      "native_tolerance": {"value": 0, "unit": "ticks", "plus": "display and conversion rounding"},
+      "threshold_usd_mt": 0.5,
+      "band": null,
+      "identity_checks": ["contract month", "session date"],
+      "since": "2026-11-25",
+      "notes": "Labelled 'AMS report 3147 futures price' under AMS's name; never 'settlement', never 'CME'. Never used for ZL/ZM."
+    },
+    "2": {
+      "name": "DCE No.2 / meal / oil",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script (headless browser)",
+      "verifying_publisher": "dce",
+      "native_tolerance": {"value": 0, "unit": "CNY/MT", "plus": "display rounding", "grid": "1 CNY/MT; oil 2 CNY/MT"},
+      "threshold_usd_mt": {"default": 0.5, "oil": 1.5},
+      "band": null,
+      "identity_checks": ["session date"],
+      "since": "2026-11-25",
+      "notes": "Contract month is inferred for block 01 and shown as a weakness, never a pass of the month check."
+    },
+    "3": {
+      "name": "CEPEA Paraná / Paranaguá",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "cepea",
+      "native_tolerance": {"value": 0.005, "unit": "BRL/sc", "plus": "display rounding"},
+      "threshold_usd_mt": 0.5,
+      "band": null,
+      "identity_checks": ["indicator name (Paraná is not Paranaguá)", "date"],
+      "since": "2026-11-25",
+      "notes": "Exact in BRL; the USD leg is graded under stratum 6."
+    },
+    "3u": {
+      "name": "AgRural Paranaguá",
+      "tier": "unverifiable",
+      "kind": "unverifiable",
+      "verifier": null,
+      "verifying_publisher": null,
+      "native_tolerance": null,
+      "threshold_usd_mt": null,
+      "band": null,
+      "identity_checks": [],
+      "since": "2026-11-25",
+      "notes": "No publisher of record: a port bid, not FOB (B21 #483). Carried as unverifiable with its reason, never a pass."
+    },
+    "4": {
+      "name": "MAGyP official FOB, one window",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "magyp",
+      "native_tolerance": {"value": 0, "unit": "USD/MT", "plus": "none: whole dollars"},
+      "threshold_usd_mt": {"default": 0.5, "oil": 1.5},
+      "band": null,
+      "identity_checks": ["window/band", "product position code", "date"],
+      "since": "2026-11-26",
+      "notes": "Whole dollars, so any non-zero delta is a discrepancy; it is material above 0.5 USD/MT on beans and meal, 1.5 on the soybean-oil and sunflower-oil legs (owner 2026-11-26 on #663, #477 Q1; set before any stratum-4 record existed). Republication lag is an availability fact (retry), not a band."
+    },
+    "5": {
+      "name": "US Gulf basis + local leg (AMS 3147)",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "usda_ams",
+      "native_tolerance": {"leg": {"value": 0.00005, "unit": "USD/bu"}, "basis_recompute": {"value": 0.05, "unit": "USD/MT"}},
+      "threshold_usd_mt": 0.5,
+      "band": null,
+      "identity_checks": ["delivery slot", "the named CBOT contract the slot quotes over", "report date"],
+      "since": "2026-11-25",
+      "notes": "Exact on the leg, recompute on the basis. Same document as the fetcher, independent parser: transport says so."
+    },
+    "6": {
+      "name": "FX",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "ecb",
+      "native_tolerance": {"value": 0, "unit": "displayed unit", "plus": "display rounding"},
+      "threshold_usd_mt": {"default": 0.5, "oil": 1.5, "applied_to": "the leg the rate moves"},
+      "band": null,
+      "identity_checks": ["FX date = price date, or a labelled prior close at most 3 days old (A1)"],
+      "since": "2026-11-25",
+      "pairs": {
+        "CNY/USD": {
+          "tier": "1",
+          "kind": "exact",
+          "verifying_publisher": "ecb",
+          "notes": "Since B25 #495 the ECB is CNY's publisher of record: ECB USD per EUR / CNY per EUR, both legs from one reference date. Both ECB legs are fixed 4 dp and the product strikes the same cross, so the only allowance is our display rounding."
+        },
+        "BRL/USD": {
+          "tier": "2 (definition differs: London-day bar vs ECB 14:10 CET fix)",
+          "kind": "band",
+          "verifying_publisher": "ecb",
+          "band": {"rule": "volatile-day: the fix lies inside the displayed bar's [Low, High]", "cap_pct": 1.4},
+          "also": {"verifying_publisher": "bcb_ptax"},
+          "notes": "Default V4-Q4. Graded on the leg it moves."
+        },
+        "ZAR/USD": {
+          "tier": "2 (definition differs: London-day bar vs ECB 14:10 CET fix)",
+          "kind": "band",
+          "verifying_publisher": "ecb",
+          "band": {"rule": "volatile-day: the fix lies inside the displayed bar's [Low, High]", "cap_pct": 0.8},
+          "notes": "Default V4-Q4. Graded on the leg it moves."
+        },
+        "INR/USD": {
+          "tier": "2 (definition differs: London-day bar vs ECB 14:10 CET fix)",
+          "kind": "band",
+          "verifying_publisher": "ecb",
+          "band": {"rule": "volatile-day: the fix lies inside the displayed bar's [Low, High]", "cap_pct": null},
+          "notes": "No V3 band was measured for INR, so there is no % cap yet: AL8 #647 sets one from evidence or leaves it null."
+        }
+      }
+    },
+    "7": {
+      "name": "Board crush (CBOT named) + DCE crush (named months)",
+      "tier": "3",
+      "kind": "recompute",
+      "verifier": "script",
+      "verifying_publisher": null,
+      "native_tolerance": {"rule": "propagated rounding of the legs as displayed", "unit": "USD/MT"},
+      "threshold_usd_mt": 0.5,
+      "band": null,
+      "identity_checks": ["all legs on one session (invariant 8)", "named months as labelled"],
+      "since": "2026-11-25",
+      "notes": "Verified only when every leg's own record verified."
+    },
+    "8": {
+      "name": "One landed origin to destination row",
+      "tier": "3",
+      "kind": "recompute",
+      "verifier": "script",
+      "verifying_publisher": null,
+      "native_tolerance": {"value": 0.05, "unit": "USD/MT per summed leg"},
+      "threshold_usd_mt": 0.5,
+      "band": null,
+      "identity_checks": ["route", "window", "assumption vintage"],
+      "since": "2026-11-25",
+      "notes": "Today nothing is displayed (fail-closed): recorded as 'nothing to verify', neither a pass nor unverifiable."
+    },
+    "9": {
+      "name": "AMS 3511 cash oil / meal",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "usda_ams",
+      "native_tolerance": {"rule": "AMS decimals (cents/lb 2 dp; USD/st 2 dp) plus conversion", "value": 0.05, "unit": "USD/MT"},
+      "threshold_usd_mt": {"meal": 0.5, "oil": 1.5},
+      "band": null,
+      "identity_checks": ["location", "terms (FOB truck/rail)", "week", "board contract"],
+      "since": "2026-11-25",
+      "notes": "The fetcher reads MARS; the verifier reads the AMS 3511 PDF."
+    },
+    "10": {
+      "name": "SAFEX soybean last traded (ZAR/MT)",
+      "tier": "1",
+      "kind": "exact",
+      "verifier": "script",
+      "verifying_publisher": "grain_sa_jse",
+      "native_tolerance": {"value": 0, "unit": "ZAR/MT", "plus": "display rounding"},
+      "threshold_usd_mt": 0.5,
+      "band": null,
+      "identity_checks": ["contract month", "date"],
+      "since": "2026-11-25",
+      "notes": "Spec reading of the owner's 'add SAFEX to V5' (owner may override). Same document as the fetcher. Last traded, not a settlement or MTM."
+    }
+  }
+}

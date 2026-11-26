@@ -6,7 +6,9 @@
 {% set d = block.data %}
 <div class="grid grid-{{ [d.legs|length, 3]|min }}">
   {% for leg in d.legs %}
-  <div class="mc">
+  {#- AL1 #640: each leg card is located for the verifier on a basket-grade
+      block; its visible home print is the leg an FX rate moves. -#}
+  <div class="mc"{% if block.verify_located %} data-verify-leg="{{ leg.key }}"{% endif %}>
     <div class="mc-label">{{ leg.key }}{% if leg.is_headline %} · headline{% endif %}</div>
     {% if leg.label %}<div class="mc-delta muted">{{ leg.label }}</div>{% endif %}
     {#- B30 #504: a venue printing several shipment windows a session has

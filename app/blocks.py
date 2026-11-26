@@ -70,6 +70,14 @@ class Block:
     data: Any = None
     kind: str | None = None   # board / physical / administered / weekly_assessment
     extra: dict = field(default_factory=dict)
+    # AL1 #640: the basket v1 stratum when this is a basket-grade block
+    # (`config.AVAILABILITY_BASKET_BLOCKS`), else None. The template turns it
+    # into `data-verify-*` locators — they locate a number for the verifier
+    # and assert nothing about it.
+    verify_stratum: int | None = None
+    # True when this block is in `config.VERIFY_LOCATED_BLOCKS`: each number
+    # in it is marked as well as its section.
+    verify_located: bool = False
 
     def __post_init__(self) -> None:
         if self.state not in STATES:

@@ -2,14 +2,18 @@
    rather than buried, because the conversion is ours and not the venue's. #}
 {% import 'blocks/_macros.html.j2' as f %}
 {% set d = block.data %}
+{#- AL1 #640: the two rate cards are basket numbers (stratum 6) on a
+    basket-grade page. The verifier reads value, "X per Y" unit and the as-of
+    date from the visible text; the attributes only find the card. -#}
+{% set loc %}{% if block.verify_located %} data-verify-figure="fx-rate" data-verify-series="{{ d.pair }}"{% endif %}{% endset %}
 <div class="grid grid-3">
-  <div class="mc">
+  <div class="mc"{{ loc }}>
     <div class="mc-label">{{ d.pair }}</div>
     <div class="mc-val">{{ '%.4f'|format(d.usd_per_home) }}</div>
     <div class="mc-delta muted">USD per {{ d.home_currency }}</div>
     {{ f.asof(d.as_of, d.age_days) }}
   </div>
-  <div class="mc">
+  <div class="mc"{{ loc }}>
     <div class="mc-label">{{ d.home_currency }} per USD</div>
     <div class="mc-val">{{ f.num(d.home_per_usd, 2) }}</div>
   </div>
