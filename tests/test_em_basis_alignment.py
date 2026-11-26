@@ -170,3 +170,25 @@ def test_usd_display_degrades_to_aligned_fx_when_cbot_missing(
     assert "cbot_bean_usd" not in dom
     # Mandi INR (07-31) × INR/USD of the same date — not the fresh 0.0115.
     assert dom["soybean_spot_usd"] == round(MANDI_INR_MT * 0.0120, 2)
+
+
+def test_india_card_shows_the_last_complete_mh_day_not_the_one_still_filling(
+    stalled_spot_em, monkeypatch
+):
+    """#621: the newest MH row was read while MSAMB was still filling it
+    (`filling = 1`). The card — and the briefing line built from it — shows
+    the last complete day under its own date; NULL (never learned) counts as
+    shown, as on every other reader."""
+    mh = pd.DataFrame({
+        "Date": ["2026-07-30", STALL_DATE, "2026-08-06"],
+        "Close": [41000.0, MANDI_INR_MT, 99000.0],
+        "filling": [None, 0, 1],
+    })
+    monkeypatch.setattr(
+        soy_analytics, "read_india_domestic",
+        lambda key=None: mh if key == soy_analytics.MANDI_SERIES_MH else _mandi_df(),
+    )
+    dom = soy_analytics.emerging_markets_analysis()["countries"]["India"]["india_domestic"]
+    assert dom["soybean_mandi_mh_inr"] == MANDI_INR_MT
+    assert dom["soybean_mandi_mh_date"] == STALL_DATE
+    assert dom["soybean_mandi_mh_usd"] == round(MANDI_INR_MT * 0.0120, 2)

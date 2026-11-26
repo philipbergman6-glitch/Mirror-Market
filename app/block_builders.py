@@ -794,6 +794,13 @@ def _proof_clause(proof_column: str | None) -> str:
     return f"AND ({proof_column} IS NULL OR {proof_column} > 0) " if proof_column else ""
 
 
+def _complete_clause(source: Source) -> str:
+    # #621: a row read while its day was still filling is stored, not shown.
+    # NULL is "never learned" and stays — hiding it would invent a gap.
+    col = source.filling_column
+    return f"AND ({col} IS NULL OR {col} = 0) " if col else ""
+
+
 def _read_windowed(
     conn,
     source: Source,
@@ -830,6 +837,7 @@ def _read_windowed(
         f"WHERE {source.key_column} IN ({placeholders}) "
         f"AND {source.date_column} >= ? AND {source.value_column} IS NOT NULL "
         f"{_proof_clause(proof_column)}"
+        f"{_complete_clause(source)}"
         f"ORDER BY {source.date_column}"
     )
     try:
@@ -890,6 +898,7 @@ def _read_series(
         f"WHERE {source.key_column} IN ({placeholders}) "
         f"AND {source.date_column} >= ? AND {source.value_column} IS NOT NULL "
         f"{proof_clause}"
+        f"{_complete_clause(source)}"
         f"GROUP BY {source.key_column}, {source.date_column} "
         f"ORDER BY {source.date_column}"
     )

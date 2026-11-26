@@ -779,6 +779,45 @@ def test_init_database_adds_futures_month_high_to_legacy_gulf_bids(patched_db):
     assert _fetchall(patched_db, "SELECT futures_month_high FROM gulf_bids") == [(11,)]
 
 
+def test_india_filling_flag_round_trips_and_is_null_when_never_learned(patched_db):
+    """#621: the fetcher's `filling` flag is stored as read; a frame without
+    one (NCDEX spot, which has no fill window) stores NULL, not 0."""
+    store.init_database()
+    df = pd.DataFrame({
+        "Date": ["2026-11-23", "2026-11-24"],
+        "Open": [float("nan")] * 2, "High": [float("nan")] * 2, "Low": [float("nan")] * 2,
+        "Close": [76855.0, 77025.0], "Volume": [118.0, 22.0], "Unit": ["INR/MT"] * 2,
+        "filling": [0, 1],
+    })
+    store.save_india_domestic("Soybean (Mandi MH)", df)
+    store.save_india_domestic("Soybean (NCDEX Indore spot)", df.drop(columns="filling"))
+    mh = query.read_india_domestic("Soybean (Mandi MH)")
+    assert list(mh["filling"]) == [0, 1]
+    assert query.read_india_domestic("Soybean (NCDEX Indore spot)")["filling"].isna().all()
+
+
+def test_init_db_adds_filling_to_a_pre_filling_india_table(patched_db):
+    """A DB (or committed CSV) from before #621 gains the column, NULL-filled."""
+    conn = sqlite3.connect(str(patched_db))
+    conn.execute("DROP TABLE india_domestic_prices")
+    conn.execute(
+        "CREATE TABLE india_domestic_prices (Date TEXT NOT NULL, commodity TEXT NOT NULL, "
+        "Open REAL, High REAL, Low REAL, Close REAL, Volume REAL, unit TEXT, arrivals_mt REAL, "
+        "PRIMARY KEY (Date, commodity))"
+    )
+    conn.execute(
+        "INSERT INTO india_domestic_prices (Date, commodity, Close) "
+        "VALUES ('2026-11-24', 'Soybean (Mandi MH)', 77025.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    store.init_database()
+    store.init_database()  # idempotent
+
+    assert _fetchall(patched_db, "SELECT Close, filling FROM india_domestic_prices") == [(77025.0, None)]
+
+
 def test_init_db_adds_arrivals_to_a_pre_arrivals_india_table(patched_db):
     """A DB created before arrivals existed gains the column, NULL-filled."""
     conn = sqlite3.connect(str(patched_db))

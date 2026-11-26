@@ -196,6 +196,19 @@ def _india_msp_on(day: date) -> tuple[float, str] | None:
     return inr_mt, season
 
 
+def _complete_days(rows: pd.DataFrame) -> pd.DataFrame:
+    """Rows whose day was complete when read (#621): ``filling`` 0 or NULL.
+
+    ``filling = 1`` marks a day read while its publisher was still filling it
+    (MSAMB gains APMC lots through all of D+1); the row is stored, never shown
+    as the latest day. NULL — or no column, a frame from before #621 — is
+    "never learned" and stays, as in ``app.block_builders._complete_clause``.
+    """
+    if "filling" not in rows.columns:
+        return rows
+    return rows[rows["filling"].ne(1)]
+
+
 _ARRIVALS_WINDOW_DAYS = 7
 
 
@@ -1874,8 +1887,12 @@ def emerging_markets_analysis() -> dict:
                 # Maharashtra — #1 producing state since 2025-26; secondary
                 # series alongside the MP (Indore hub) headline benchmark.
                 mh_df = read_india_domestic(MANDI_SERIES_MH)
-                if not mh_df.empty:
-                    mh_rows = mh_df.sort_values("Date")
+                # #621: a row read while MSAMB was still filling its day is
+                # stored but never the card's latest — the pace below keeps
+                # every row, its window already ends the day before the newest.
+                mh_complete = _complete_days(mh_df)
+                if not mh_complete.empty:
+                    mh_rows = mh_complete.sort_values("Date")
                     india_domestic_entry["soybean_mandi_mh_inr"] = float(
                         mh_rows["Close"].iloc[-1]
                     )
@@ -1887,7 +1904,7 @@ def emerging_markets_analysis() -> dict:
                         india_domestic_entry["soybean_mandi_mh_usd"] = round(
                             aligned[0], 2
                         )
-                    pace = _mandi_arrivals_pace(mh_rows, every_day=True)
+                    pace = _mandi_arrivals_pace(mh_df.sort_values("Date"), every_day=True)
                     if pace is not None:
                         india_domestic_entry.update(pace)
 

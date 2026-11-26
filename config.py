@@ -1852,6 +1852,13 @@ MSAMB_SOYBEAN_CODE = "04017"     # सोयाबिन in the page's commodity
 # The quantity unit a row must carry to be read: rows in नग (pieces) price a
 # different unit and are excluded, never pooled.
 MSAMB_QUINTAL_UNIT = "क्विंटल"
+# #621: an MSAMB day keeps gaining APMC lots through the whole of the next IST
+# day, so a day read fewer than this many IST days after it is stored but
+# flagged `filling` and never rendered as the latest day. Measured from the
+# 2026-11 history snapshots: 10 of 11 D+1 reads were short of the final count
+# (by 3–29%, one as late as 17:30 IST: 11-16, 128 → 132), and every read on
+# D+2 or later matched it. No hour inside D+1 was ever shown complete.
+MSAMB_FILL_DAYS = 2
 NCDEX_SPOT_PAGE_URL = "https://www.ncdex.com/markets/spotprices"
 NCDEX_SPOT_DATA_URL = "https://www.ncdex.com/spotprices/get_data"
 NCDEX_SPOT_SERIES = "Soybean (NCDEX Indore spot)"
@@ -3430,6 +3437,10 @@ MARKETS: dict[str, dict[str, Any]] = {
             "quote_kind": "physical",
             "value_column": "Close",
             "unit": "home_per_mt",
+            # #621: MSAMB's newest day is read while still filling; the MH leg
+            # shows the last complete day (`MSAMB_FILL_DAYS`). NCDEX rows carry
+            # NULL (one poll, no fill window) and are unaffected.
+            "filling_column": "filling",
         },
         "crush": None,
         "crush_absent_reason": (

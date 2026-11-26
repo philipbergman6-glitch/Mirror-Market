@@ -152,6 +152,24 @@ def _migrate_india_domestic_arrivals(conn) -> None:
             logger.warning("Could not add arrivals_mt column to india_domestic_prices: %s", exc)
 
 
+def _migrate_india_domestic_filling(conn) -> None:
+    """Add the filling column to india_domestic_prices if absent. Idempotent.
+
+    #621: 1 = read while the publisher was still filling the day, 0 = read
+    after its fill window closed, NULL = never learned (rows stored before the
+    column, or a source with no measured fill window).
+    """
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(india_domestic_prices)").fetchall()}
+    except Exception:
+        return
+    if cols and "filling" not in cols:
+        try:
+            conn.execute("ALTER TABLE india_domestic_prices ADD COLUMN filling INTEGER")
+        except Exception as exc:
+            logger.warning("Could not add filling column to india_domestic_prices: %s", exc)
+
+
 def _migrate_gulf_bids_price_change(conn) -> None:
     """Add the price_change column to gulf_bids if absent. Idempotent.
 
@@ -443,6 +461,7 @@ def init_database():
         _migrate_weather_is_forecast(conn)
         _migrate_weather_basis(conn)
         _migrate_india_domestic_arrivals(conn)
+        _migrate_india_domestic_filling(conn)
         _migrate_safex_contract(conn)
         _migrate_gulf_bids_price_change(conn)
         _migrate_gulf_bids_futures_month_high(conn)
@@ -1555,7 +1574,9 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
 
     Serves the mandi (Agmarknet) series since 2026-08; the retired NCDEX
     rows share the table under their own commodity keys, never spliced.
-    ``arrivals_mt`` (the day's total tonnes) is NULL when the frame has none.
+    ``arrivals_mt`` (the day's total tonnes) is NULL when the frame has none,
+    and so is ``filling`` (#621: 1 = the publisher was still filling the day
+    when it was read) — never learned, not "complete".
     """
     if df.empty:
         return
@@ -1569,9 +1590,11 @@ def save_india_domestic(commodity: str, df: pd.DataFrame):
         df["unit"] = "INR/MT"
     if "arrivals_mt" not in df.columns:
         df["arrivals_mt"] = float("nan")
+    if "filling" not in df.columns:
+        df["filling"] = pd.NA
     _save("india_domestic_prices",
           df[["Date", "commodity", "Open", "High", "Low", "Close", "Volume", "unit",
-              "arrivals_mt"]],
+              "arrivals_mt", "filling"]],
           ["Date", "commodity"], f"india_domestic/{commodity}")
 
 

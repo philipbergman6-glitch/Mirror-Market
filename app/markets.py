@@ -238,6 +238,12 @@ class Source:
     # neither; `_source` refuses anything less.
     contract_board: str | None = None
     contract_columns: tuple[str, ...] = ()
+    # #621: a column the fetcher sets to 1 on a row read while the publisher
+    # was still filling that day (MSAMB gains APMC lots through all of D+1).
+    # Every read skips those rows, so the latest print is the last complete
+    # day under its own date; the row stays stored. NULL proves nothing and
+    # the row stays, as with a trade-proof column (`_proof_clause`).
+    filling_column: str | None = None
 
     def parse_window(self, raw: tuple, session: date) -> ShipmentWindow | None:
         """One stored row's shipment window, or None where it is unreadable."""
@@ -698,6 +704,7 @@ def _source(raw: dict, *, slug: str, block: str) -> Source:
         window_columns=window_columns,
         contract_board=contract_board,
         contract_columns=contract_columns,
+        filling_column=raw.get("filling_column"),
     )
 
 
