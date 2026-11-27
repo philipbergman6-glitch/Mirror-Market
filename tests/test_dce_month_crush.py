@@ -475,7 +475,7 @@ def test_layer9_named_months_round_trip_into_the_crush(monkeypatch, patched_db):
     closes = {c: (close, vol, oi) for rows in OCT16.values() for c, close, vol, oi in rows}
     asked: list[str] = []
 
-    def fake_fetch_one(symbol: str) -> pd.DataFrame:
+    def fake_fetch_one(symbol: str, *, deadline: float | None = None) -> pd.DataFrame:
         asked.append(symbol)
         if symbol not in closes:
             return pd.DataFrame()

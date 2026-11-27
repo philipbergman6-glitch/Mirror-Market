@@ -16,6 +16,9 @@ Key concepts for learning:
 """
 
 import logging
+import threading
+import time
+from collections.abc import Callable
 from datetime import date
 
 import akshare as ak
@@ -23,10 +26,12 @@ import pandas as pd
 import requests
 
 from config import (
+    AKSHARE_CALL_TIMEOUT,
     DCE_CONTRACTS,
     DCE_CRUSH_MONTH_ROOTS,
     DCE_CRUSH_MONTHS,
     DCE_CRUSH_MONTHS_AHEAD,
+    DCE_FETCH_BUDGET_S,
     DCE_NAMED_MONTH_KEYS,
     MAX_RETRIES,
 )
@@ -35,7 +40,36 @@ from fetchers._backoff import retry_sleep
 logger = logging.getLogger(__name__)
 
 
-def fetch_one(symbol: str) -> pd.DataFrame:
+class _CallTimedOut(TimeoutError):
+    """An AKShare call gave no answer within its deadline."""
+
+
+def _call_with_deadline(fn: Callable[[], pd.DataFrame], seconds: float) -> pd.DataFrame:
+    """Run ``fn`` on a daemon thread; raise ``_CallTimedOut`` past ``seconds``.
+
+    AKShare offers no timeout parameter, so the deadline is enforced from
+    outside. A timed-out thread is abandoned, not killed: it is a daemon, so
+    it can never hold the process open, and its late answer is discarded.
+    """
+    outcome: dict[str, object] = {}
+
+    def run() -> None:
+        try:
+            outcome["value"] = fn()
+        except BaseException as exc:  # re-raised on the caller's thread below
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=run, name="akshare-call", daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        raise _CallTimedOut(f"no answer within {seconds:g}s")
+    if "error" in outcome:
+        raise outcome["error"]  # type: ignore[misc]
+    return outcome["value"]  # type: ignore[return-value]
+
+
+def fetch_one(symbol: str, *, deadline: float | None = None) -> pd.DataFrame:
     """
     Download daily futures data for a single DCE contract.
 
@@ -44,6 +78,9 @@ def fetch_one(symbol: str) -> pd.DataFrame:
     symbol : str
         AKShare symbol, e.g. "B0" for Soybean No.2 continuous (the
         imported/GMO bean Chinese crushers actually crush).
+    deadline : float, optional
+        A ``time.monotonic()`` instant past which no attempt starts and no
+        attempt runs: the enclosing fetch's budget (#689).
 
     Returns
     -------
@@ -51,8 +88,20 @@ def fetch_one(symbol: str) -> pd.DataFrame:
         Columns: date, open, high, low, close, volume, hold, settle
     """
     for attempt in range(1, MAX_RETRIES + 1):
+        allowed: float = AKSHARE_CALL_TIMEOUT
+        if deadline is not None:
+            allowed = min(allowed, deadline - time.monotonic())
+            if allowed <= 0:
+                logger.error(
+                    "DCE %s not attempted — the fetch's %ss budget is spent "
+                    "(attempt %d/%d); returning empty DataFrame",
+                    symbol, DCE_FETCH_BUDGET_S, attempt, MAX_RETRIES,
+                )
+                return pd.DataFrame()
         try:
-            data = ak.futures_zh_daily_sina(symbol=symbol)
+            data = _call_with_deadline(
+                lambda: ak.futures_zh_daily_sina(symbol=symbol), allowed
+            )
 
             if data is None or data.empty:
                 logger.warning("No data returned for DCE symbol %s", symbol)
@@ -60,10 +109,13 @@ def fetch_one(symbol: str) -> pd.DataFrame:
 
             return data
 
-        except (requests.RequestException, ValueError, KeyError, AttributeError) as exc:
+        except (
+            _CallTimedOut, requests.RequestException, ValueError, KeyError, AttributeError,
+        ) as exc:
             # AKShare wraps the upstream Sina API; observed failure modes are
-            # transport errors, schema drift (KeyError), and intermittent
-            # AttributeError when the response payload is malformed.
+            # transport errors, schema drift (KeyError), intermittent
+            # AttributeError when the response payload is malformed, and a
+            # request that never answers (#689).
             logger.warning(
                 "Attempt %d/%d failed for DCE %s: %s",
                 attempt, MAX_RETRIES, symbol, exc,
@@ -88,10 +140,11 @@ def fetch_dce_futures() -> dict[str, pd.DataFrame]:
         {contract_name: DataFrame} — e.g. {"DCE Soybean No.2": DataFrame}
     """
     results = {}
+    deadline = time.monotonic() + DCE_FETCH_BUDGET_S
 
     for name, symbol in DCE_CONTRACTS.items():
         logger.info("Fetching %s (DCE %s) ...", name, symbol)
-        df = fetch_one(symbol)
+        df = fetch_one(symbol, deadline=deadline)
         results[name] = df
         if not df.empty:
             logger.info(
@@ -132,12 +185,13 @@ def fetch_dce_crush_months(today: date | None = None) -> dict[str, pd.DataFrame]
     months = crush_delivery_months(today)
     names = {name: key for key, name in DCE_NAMED_MONTH_KEYS.items()}
     results: dict[str, pd.DataFrame] = {}
+    deadline = time.monotonic() + DCE_FETCH_BUDGET_S
     for name, (root, _) in DCE_CRUSH_MONTH_ROOTS.items():
         frames = []
         for delivery_month in months:
             symbol = f"{root}{delivery_month[2:4]}{delivery_month[5:7]}"
             logger.info("Fetching %s (DCE %s) ...", name, symbol)
-            df = fetch_one(symbol)
+            df = fetch_one(symbol, deadline=deadline)
             if df.empty:
                 logger.warning("DCE %s returned no bars — %s %s is absent", symbol, name, delivery_month)
                 continue

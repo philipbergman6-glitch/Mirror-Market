@@ -68,6 +68,13 @@ def setup_logging(level=logging.INFO):
 # ---------------------------------------------------------------------------
 REQUEST_TIMEOUT = 30    # seconds — used by every fetcher's HTTP calls
 MAX_RETRIES = 3         # how many times to retry a failed request
+# AKShare (Layer 9) calls requests.get with no timeout, so a hung Sina answer
+# would block until the job's own timeout kills the run (#689: run 45802035610,
+# 2026-11-26, 15 min on DCE Y0). Each call gets a wall-clock deadline, and each
+# fetch a budget: 23 calls (8 continuous + 3 products × 5 months) × MAX_RETRIES × the deadline would otherwise still
+# outlast the 15-minute refresh job when Sina is down outright.
+AKSHARE_CALL_TIMEOUT = REQUEST_TIMEOUT   # seconds per attempt
+DCE_FETCH_BUDGET_S = 180                 # seconds per fetch_dce_* call
 
 # Minimum non-empty keys for a multi-key layer to count as fully healthy.
 # Below the floor the layer is recorded as failed freshness ("partial") —
