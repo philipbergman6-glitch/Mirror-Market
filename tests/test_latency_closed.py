@@ -65,12 +65,27 @@ def test_a_year_not_entered_is_unknown_not_empty():
 def test_an_unknown_venue_raises():
     with pytest.raises(ValueError, match="no closure calendar for venue 'cbot'"):
         venue_closures("cbot", 2026)
-    assert KNOWN_VENUES == ("dce",)
+    assert KNOWN_VENUES == ("dce", "cme")
 
 
-def test_only_the_dce_clock_names_a_venue():
+def test_the_board_clocks_name_their_venues():
     assert LAYER_LATENCY_BY_KEY["dce"].clock.venue == "dce"
-    assert LAYER_LATENCY_BY_KEY["prices"].clock.venue is None
+    assert LAYER_LATENCY_BY_KEY["prices"].clock.venue == "cme"
+    assert LAYER_LATENCY_BY_KEY["forward_curve"].clock.venue == "cme"
+    assert LAYER_LATENCY_BY_KEY["currencies"].clock.venue is None
+
+
+def test_cme_2026_calendar_holds_the_exchange_closures():
+    closures = venue_closures("cme", 2026)
+    assert closures is not None
+    assert date(2026, 11, 26) in closures            # Thanksgiving
+    assert date(2026, 11, 27) not in closures        # early close, trades
+    assert date(2026, 12, 25) in closures
+    assert date(2026, 12, 24) not in closures        # early close, trades
+    assert date(2026, 7, 3) in closures              # 4 Jul is a Saturday
+    assert date(2026, 4, 3) in closures              # Good Friday
+    assert date(2027, 1, 1) in (venue_closures("cme", 2027) or frozenset())
+    assert venue_closures("cme", 2028) is None       # not entered: unknown
 
 
 # ---------------------------------------------------------------------------
@@ -173,16 +188,16 @@ def test_a_year_without_a_calendar_falls_back_to_breaches():
 
 
 def test_a_venue_without_a_calendar_is_unchanged():
-    """CBOT on Christmas: no venue, so a holiday still reads as a breach."""
+    """FX on Christmas: no venue, so a holiday still reads as a breach."""
     row = {
         "status": "success",
-        "observed_at": datetime(2026, 12, 24, tzinfo=UTC),
+        "observed_at": datetime(2026, 12, 23, tzinfo=UTC),
         "fetch_started_at": None,
-        "fetch_completed_at": datetime(2026, 12, 25, 22, 0, tzinfo=UTC),
-        "stored_at": datetime(2026, 12, 25, 22, 1, tzinfo=UTC),
+        "fetch_completed_at": datetime(2026, 12, 26, 22, 0, tzinfo=UTC),
+        "stored_at": datetime(2026, 12, 26, 22, 1, tzinfo=UTC),
         "last_attempt": None,
     }
-    m = measure_from_rows({"prices": row}, specs=(LAYER_LATENCY_BY_KEY["prices"],))[0]
+    m = measure_from_rows({"currencies": row}, specs=(LAYER_LATENCY_BY_KEY["currencies"],))[0]
     assert m.venue_closed is False
     assert m.verdict is Verdict.BREACHES
 
@@ -238,3 +253,49 @@ def test_the_scoped_gate_passes_a_closed_venue_and_says_so(tmp_path, capsys):
     assert "venue closed: dce — DCE notice" in out
     # A real breach elsewhere still fails the unscoped flag.
     assert report_main(["--manifest", str(path), "--fail-on-breach"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# CME (#688): the CBOT board over Thanksgiving 2026
+# ---------------------------------------------------------------------------
+
+PRICES = (LAYER_LATENCY_BY_KEY["prices"],)
+
+
+def _prices(observed: datetime, fetched: datetime, published: datetime | None = None):
+    """A prices row as the 27 Nov board run stored it (manifest 06:01Z)."""
+    row = {
+        "status": "success",
+        "observed_at": observed,
+        "fetch_started_at": fetched - timedelta(seconds=4),
+        "fetch_completed_at": fetched,
+        "stored_at": fetched,
+        "last_attempt": fetched,
+    }
+    return measure_from_rows({"prices": row}, published_at=published, specs=PRICES)[0]
+
+
+def test_thanksgiving_board_run_holding_wednesday_is_not_a_breach():
+    """Run 45949106979 replayed: CME shut Thu 26 Nov; Wed 25 Nov 13:15 CT is the newest bar."""
+    m = _prices(datetime(2026, 11, 25, 19, 15, tzinfo=UTC),
+                datetime(2026, 11, 27, 6, 1, tzinfo=UTC))
+    assert m.acquisition_verdict is Verdict.BREACHES   # 34 h against its objective
+    assert m.venue_closed is True
+    assert m.verdict is Verdict.UNKNOWN                 # pipeline unmeasured, as live
+    assert "Thanksgiving" in (m.closure_basis or "")
+
+
+def test_thanksgiving_with_a_measured_pipeline_is_closed():
+    m = _prices(datetime(2026, 11, 25, 19, 15, tzinfo=UTC),
+                datetime(2026, 11, 27, 6, 1, tzinfo=UTC),
+                published=datetime(2026, 11, 27, 6, 3, tzinfo=UTC))
+    assert m.verdict is Verdict.CLOSED
+
+
+def test_cbot_missing_an_ordinary_session_still_breaches():
+    """Tue 1 Dec 06:01Z still holding Fri 27 Nov: Mon 30 Nov was a session — a real miss."""
+    m = _prices(datetime(2026, 11, 27, 19, 15, tzinfo=UTC),
+                datetime(2026, 12, 1, 6, 1, tzinfo=UTC),
+                published=datetime(2026, 12, 1, 6, 3, tzinfo=UTC))
+    assert m.venue_closed is False
+    assert m.verdict is Verdict.BREACHES

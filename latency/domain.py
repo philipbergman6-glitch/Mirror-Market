@@ -342,7 +342,7 @@ class LayerLatency:
         return OBJECTIVES[self.latency_class]
 
 
-_CBOT = ObservationClock("America/Chicago", (13, 15))
+_CBOT = ObservationClock("America/Chicago", (13, 15), venue="cme")
 # The same instant the settlement guard closes the bar at — read from config,
 # never restated, so the age and the guard cannot disagree.
 _FX_CLOSE = ObservationClock(
