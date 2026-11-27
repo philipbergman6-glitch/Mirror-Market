@@ -168,6 +168,18 @@ The gate (`--fail-on-breach-layers`) does not fail on `closed`, and both reports
 print the layer with the calendar's source line. Entering the next year's
 notice is a maintenance act: the DCE publishes it each December.
 
+**CME joined on 2026-11-27 (#688).** Thanksgiving made the gap real for the
+CBOT board: run 45949106979 (Fri 06:00Z) published the correct Wednesday bar
+and still went red with `BREACH in gated layer(s): forward_curve, prices`. The
+`prices` and `forward_curve` clocks now name `venue="cme"`. Their closures are
+not a second list: they come from `analysis.futures.domain.exchange_holidays`,
+the CME full-day rule set the expiry arithmetic already depends on. They are
+declared per year (2026 and 2027 at present), so a year nobody has entered
+still reads as `breaches`. Early-close days (the Friday after Thanksgiving,
+Christmas Eve) trade, and are not closures. Extending the calendar means
+adding the year to `_CME_YEARS` after checking it against CME's published
+holiday schedule.
+
 ---
 
 ## 4. The fast refresh
@@ -242,9 +254,7 @@ hours later would re-stamp an on-time number as a later one. The routing is
   New York, it fetches `dce,prices,forward_curve`, gates dce as usual, and a
   separate final step, **Gate the board backstop**, prints the board report and
   goes red with `CBOT board not delivered on time` — the trigger did not
-  fire, or its run failed its own gate (a board run after a CBOT holiday
-  does, until CBOT has a calendar: one red for the breach, one for the
-  backstop). "Delivered" means the run's
+  fire, or its run failed its own gate. "Delivered" means the run's
   own `Gate the published edition's latency` step succeeded — not the run's
   conclusion — so a dce run that was red only on the board half still counts
   as dce delivered, and the 08:00 backstop does not refetch dce late.
@@ -257,10 +267,10 @@ hours later would re-stamp an on-time number as a later one. The routing is
   has the `slot` input, because GitHub answers an unknown input with 422.
   `scripts/check_cbot_board_trigger.sh` reads the job and its execution
   history, rotates the token and re-saves the canonical job.
-- **Known exposures.** CBOT has no closure calendar in `latency/calendars.py`,
-  so the board run after a CBOT holiday (e.g. Friday 27 November 2026, after
-  Thanksgiving) holds the previous session and reads as a breach — red on
-  correct data, the same gap DCE had before #399. A board run queued behind a
+- **Known exposures.** Until #688 CBOT had no closure calendar, so the board
+  run after Thanksgiving 2026 (Friday 27 November) read as a breach on correct
+  data. It now reads `closed`, or `unknown` while its pipeline leg is
+  unmeasured, for every CME year entered in `latency/calendars.py`. A board run queued behind a
   running deploy is in the `pages` concurrency group, where a newer pending run
   replaces it; the 10:30 backstop then catches it.
 
