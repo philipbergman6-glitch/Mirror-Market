@@ -14,6 +14,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,All India,2026-11-25,114.52,986.0,112.909
 2025,All India,2026-11-26,114.52,986.0,112.909
 2025,All India,2026-11-27,114.52,986.0,112.909
+2025,All India,2026-11-28,114.52,986.0,112.909
 2025,Chhattisgarh,2026-10-21,0.27,685.0,0.185
 2025,Chhattisgarh,2026-10-22,0.27,685.0,0.185
 2025,Chhattisgarh,2026-10-23,0.27,685.0,0.185
@@ -29,6 +30,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Chhattisgarh,2026-11-25,0.27,685.0,0.185
 2025,Chhattisgarh,2026-11-26,0.27,685.0,0.185
 2025,Chhattisgarh,2026-11-27,0.27,685.0,0.185
+2025,Chhattisgarh,2026-11-28,0.27,685.0,0.185
 2025,Gujarat,2026-10-21,2.775,875.0,2.428
 2025,Gujarat,2026-10-22,2.775,875.0,2.428
 2025,Gujarat,2026-10-23,2.775,875.0,2.428
@@ -44,6 +46,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Gujarat,2026-11-25,2.775,875.0,2.428
 2025,Gujarat,2026-11-26,2.775,875.0,2.428
 2025,Gujarat,2026-11-27,2.775,875.0,2.428
+2025,Gujarat,2026-11-28,2.775,875.0,2.428
 2025,Karnataka,2026-10-21,4.22,865.0,3.65
 2025,Karnataka,2026-10-22,4.22,865.0,3.65
 2025,Karnataka,2026-10-23,4.22,865.0,3.65
@@ -59,6 +62,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Karnataka,2026-11-25,4.22,865.0,3.65
 2025,Karnataka,2026-11-26,4.22,865.0,3.65
 2025,Karnataka,2026-11-27,4.22,865.0,3.65
+2025,Karnataka,2026-11-28,4.22,865.0,3.65
 2025,Madhya Pradesh,2026-10-21,48.64,889.0,43.247
 2025,Madhya Pradesh,2026-10-22,48.64,889.0,43.247
 2025,Madhya Pradesh,2026-10-23,48.64,889.0,43.247
@@ -74,6 +78,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Madhya Pradesh,2026-11-25,48.64,889.0,43.247
 2025,Madhya Pradesh,2026-11-26,48.64,889.0,43.247
 2025,Madhya Pradesh,2026-11-27,48.64,889.0,43.247
+2025,Madhya Pradesh,2026-11-28,48.64,889.0,43.247
 2025,Maharashtra,2026-10-21,44.683,1169.0,52.229
 2025,Maharashtra,2026-10-22,44.683,1169.0,52.229
 2025,Maharashtra,2026-10-23,44.683,1169.0,52.229
@@ -89,6 +94,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Maharashtra,2026-11-25,47.063,1166.0,54.871
 2025,Maharashtra,2026-11-26,47.063,1166.0,54.871
 2025,Maharashtra,2026-11-27,47.063,1166.0,54.871
+2025,Maharashtra,2026-11-28,47.063,1166.0,54.871
 2025,Rajasthan,2026-10-21,9.068,705.0,6.394
 2025,Rajasthan,2026-10-22,9.068,705.0,6.394
 2025,Rajasthan,2026-10-23,9.068,705.0,6.394
@@ -104,6 +110,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Rajasthan,2026-11-25,9.068,705.0,6.394
 2025,Rajasthan,2026-11-26,9.068,705.0,6.394
 2025,Rajasthan,2026-11-27,9.068,705.0,6.394
+2025,Rajasthan,2026-11-28,9.068,705.0,6.394
 2025,Rest Of India,2026-10-21,1.036,850.0,0.881
 2025,Rest Of India,2026-10-22,1.036,850.0,0.881
 2025,Rest Of India,2026-10-23,1.036,850.0,0.881
@@ -119,6 +126,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Rest Of India,2026-11-25,1.036,850.0,0.881
 2025,Rest Of India,2026-11-26,1.036,850.0,0.881
 2025,Rest Of India,2026-11-27,1.036,850.0,0.881
+2025,Rest Of India,2026-11-28,1.036,850.0,0.881
 2025,Telangana,2026-10-21,1.448,865.0,1.253
 2025,Telangana,2026-10-22,1.448,865.0,1.253
 2025,Telangana,2026-10-23,1.448,865.0,1.253
@@ -134,6 +142,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2025,Telangana,2026-11-25,1.448,865.0,1.253
 2025,Telangana,2026-11-26,1.448,865.0,1.253
 2025,Telangana,2026-11-27,1.448,865.0,1.253
+2025,Telangana,2026-11-28,1.448,865.0,1.253
 2026,All India,2026-11-06,109.978,981.0,107.93
 2026,All India,2026-11-07,109.978,981.0,107.93
 2026,All India,2026-11-16,109.978,981.0,107.93
@@ -146,6 +155,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,All India,2026-11-25,109.978,981.0,107.93
 2026,All India,2026-11-26,109.978,981.0,107.93
 2026,All India,2026-11-27,109.978,981.0,107.93
+2026,All India,2026-11-28,109.978,981.0,107.93
 2026,Chhattisgarh,2026-11-06,0.199,784.0,0.156
 2026,Chhattisgarh,2026-11-07,0.199,784.0,0.156
 2026,Chhattisgarh,2026-11-16,0.199,784.0,0.156
@@ -158,6 +168,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Chhattisgarh,2026-11-25,0.199,784.0,0.156
 2026,Chhattisgarh,2026-11-26,0.199,784.0,0.156
 2026,Chhattisgarh,2026-11-27,0.199,784.0,0.156
+2026,Chhattisgarh,2026-11-28,0.199,784.0,0.156
 2026,Gujarat,2026-11-06,2.971,805.0,2.391
 2026,Gujarat,2026-11-07,2.971,805.0,2.391
 2026,Gujarat,2026-11-16,2.971,805.0,2.391
@@ -170,6 +181,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Gujarat,2026-11-25,2.971,805.0,2.391
 2026,Gujarat,2026-11-26,2.971,805.0,2.391
 2026,Gujarat,2026-11-27,2.971,805.0,2.391
+2026,Gujarat,2026-11-28,2.971,805.0,2.391
 2026,Karnataka,2026-11-06,2.918,705.0,2.057
 2026,Karnataka,2026-11-07,2.918,705.0,2.057
 2026,Karnataka,2026-11-16,2.918,705.0,2.057
@@ -182,6 +194,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Karnataka,2026-11-25,2.918,705.0,2.057
 2026,Karnataka,2026-11-26,2.918,705.0,2.057
 2026,Karnataka,2026-11-27,2.918,705.0,2.057
+2026,Karnataka,2026-11-28,2.918,705.0,2.057
 2026,Madhya Pradesh,2026-11-06,51.564,1109.0,57.16
 2026,Madhya Pradesh,2026-11-07,51.564,1109.0,57.16
 2026,Madhya Pradesh,2026-11-16,51.564,1109.0,57.16
@@ -194,6 +207,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Madhya Pradesh,2026-11-25,51.564,1109.0,57.16
 2026,Madhya Pradesh,2026-11-26,51.564,1109.0,57.16
 2026,Madhya Pradesh,2026-11-27,51.564,1109.0,57.16
+2026,Madhya Pradesh,2026-11-28,51.564,1109.0,57.16
 2026,Maharashtra,2026-11-06,40.779,855.0,34.883
 2026,Maharashtra,2026-11-07,40.779,855.0,34.883
 2026,Maharashtra,2026-11-16,40.779,855.0,34.883
@@ -206,6 +220,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Maharashtra,2026-11-25,40.779,855.0,34.883
 2026,Maharashtra,2026-11-26,40.779,855.0,34.883
 2026,Maharashtra,2026-11-27,40.779,855.0,34.883
+2026,Maharashtra,2026-11-28,40.779,855.0,34.883
 2026,Rajasthan,2026-11-06,8.984,1054.0,9.472
 2026,Rajasthan,2026-11-07,8.984,1054.0,9.472
 2026,Rajasthan,2026-11-16,8.984,1054.0,9.472
@@ -218,6 +233,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Rajasthan,2026-11-25,8.984,1054.0,9.472
 2026,Rajasthan,2026-11-26,8.984,1054.0,9.472
 2026,Rajasthan,2026-11-27,8.984,1054.0,9.472
+2026,Rajasthan,2026-11-28,8.984,1054.0,9.472
 2026,Rest Of India,2026-11-06,1.447,785.0,1.136
 2026,Rest Of India,2026-11-07,1.447,785.0,1.136
 2026,Rest Of India,2026-11-16,1.447,785.0,1.136
@@ -230,6 +246,7 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Rest Of India,2026-11-25,1.447,785.0,1.136
 2026,Rest Of India,2026-11-26,1.447,785.0,1.136
 2026,Rest Of India,2026-11-27,1.447,785.0,1.136
+2026,Rest Of India,2026-11-28,1.447,785.0,1.136
 2026,Telangana,2026-11-06,1.116,605.0,0.675
 2026,Telangana,2026-11-07,1.116,605.0,0.675
 2026,Telangana,2026-11-16,1.116,605.0,0.675
@@ -242,3 +259,4 @@ crop_year,state,fetched_date,area_lakh_ha,yield_kg_ha,production_lakh_t
 2026,Telangana,2026-11-25,1.116,605.0,0.675
 2026,Telangana,2026-11-26,1.116,605.0,0.675
 2026,Telangana,2026-11-27,1.116,605.0,0.675
+2026,Telangana,2026-11-28,1.116,605.0,0.675
